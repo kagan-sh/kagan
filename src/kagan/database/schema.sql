@@ -29,3 +29,46 @@ FOR EACH ROW
 BEGIN
     UPDATE tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
 END;
+
+-- Knowledge base for learnings from completed tickets
+CREATE TABLE IF NOT EXISTS knowledge (
+    ticket_id TEXT PRIMARY KEY,
+    summary TEXT NOT NULL,
+    tags TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- FTS5 index for full-text search on knowledge
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+    ticket_id,
+    summary,
+    tags,
+    content='knowledge',
+    content_rowid='rowid',
+    tokenize='porter'
+);
+
+-- Triggers to keep FTS in sync
+CREATE TRIGGER IF NOT EXISTS knowledge_ai AFTER INSERT ON knowledge BEGIN
+    INSERT INTO knowledge_fts(rowid, ticket_id, summary, tags)
+    VALUES (NEW.rowid, NEW.ticket_id, NEW.summary, NEW.tags);
+END;
+
+CREATE TRIGGER IF NOT EXISTS knowledge_ad AFTER DELETE ON knowledge BEGIN
+    INSERT INTO knowledge_fts(knowledge_fts, rowid, ticket_id, summary, tags)
+    VALUES ('delete', OLD.rowid, OLD.ticket_id, OLD.summary, OLD.tags);
+END;
+
+CREATE TRIGGER IF NOT EXISTS knowledge_au AFTER UPDATE ON knowledge BEGIN
+    INSERT INTO knowledge_fts(knowledge_fts, rowid, ticket_id, summary, tags)
+    VALUES ('delete', OLD.rowid, OLD.ticket_id, OLD.summary, OLD.tags);
+    INSERT INTO knowledge_fts(rowid, ticket_id, summary, tags)
+    VALUES (NEW.rowid, NEW.ticket_id, NEW.summary, NEW.tags);
+END;
+
+-- Scratchpads for agent iteration memory
+CREATE TABLE IF NOT EXISTS scratchpads (
+    ticket_id TEXT PRIMARY KEY REFERENCES tickets(id) ON DELETE CASCADE,
+    content TEXT DEFAULT '',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

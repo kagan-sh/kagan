@@ -11,7 +11,14 @@ from textual.widgets import Footer, Static
 
 from kagan.constants import COLUMN_ORDER
 from kagan.database.models import Ticket, TicketCreate, TicketStatus, TicketUpdate
-from kagan.ui.modals import ConfirmModal, ModalAction, TicketDetailsModal, TicketFormModal
+from kagan.ui.modals import (
+    AgentOutputModal,
+    ConfirmModal,
+    ModalAction,
+    TicketDetailsModal,
+    TicketFormModal,
+)
+from kagan.ui.screens.chat import ChatScreen
 from kagan.ui.widgets.card import TicketCard
 from kagan.ui.widgets.column import KanbanColumn
 from kagan.ui.widgets.header import KaganHeader
@@ -49,7 +56,11 @@ class KanbanScreen(Screen):
         Binding("ctrl+l", "move_forward", "Move->", show=False),
         Binding("ctrl+h", "move_backward", "Move<-", show=False),
         Binding("enter", "view_details", "View details"),
+        Binding("o", "view_agent_output", "Agent output"),
+        Binding("s", "start_agent", "Start agent"),
+        Binding("x", "stop_agent", "Stop agent"),
         Binding("escape", "deselect", "Deselect", show=False),
+        Binding("c", "open_chat", "Chat"),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -261,6 +272,75 @@ class KanbanScreen(Screen):
             self.action_edit_ticket()
         elif action == ModalAction.DELETE:
             self.action_delete_ticket()
+
+    def action_view_agent_output(self) -> None:
+        """View agent output for the selected ticket."""
+        card = self._get_focused_card()
+        if not card or not card.ticket:
+            self.notify("No ticket selected", severity="warning")
+            return
+
+        agent = self.kagan_app.agent_manager.get(card.ticket.id)
+        if not agent:
+            self.notify("No agent running for this ticket", severity="warning")
+            return
+
+        self.app.push_screen(AgentOutputModal(agent))
+
+    def action_open_chat(self) -> None:
+        """Open the planner chat screen."""
+        self.app.push_screen(ChatScreen())
+
+    async def action_start_agent(self) -> None:
+        """Start an agent on the focused ticket."""
+        card = self._get_focused_card()
+        if not card or not card.ticket:
+            return
+        ticket = card.ticket
+
+        if ticket.status != TicketStatus.IN_PROGRESS:
+            self.notify("Move ticket to IN_PROGRESS first", severity="warning")
+            return
+
+        manager = self.kagan_app.agent_manager
+        if manager.get(ticket.id):
+            self.notify("Agent already running for this ticket", severity="warning")
+            return
+
+        worktree = self.kagan_app.worktree_manager
+        wt_path = await worktree.get_path(ticket.id)
+        if wt_path is None:
+            base_branch = self.kagan_app.config.general.default_base_branch
+            wt_path = await worktree.create(ticket.id, ticket.title, base_branch)
+
+        config = self.kagan_app.config
+        hat = config.get_default_hat()
+        if hat is None:
+            command = "claude"
+        else:
+            _, hat_config = hat
+            command = hat_config.agent_command
+            if hat_config.args:
+                command += " " + " ".join(hat_config.args)
+
+        await manager.spawn(ticket.id, command, wt_path)
+        self.notify(f"Started agent for {ticket.id}")
+
+    async def action_stop_agent(self) -> None:
+        """Stop the agent on the focused ticket."""
+        card = self._get_focused_card()
+        if not card or not card.ticket:
+            return
+        ticket = card.ticket
+
+        manager = self.kagan_app.agent_manager
+        agent = manager.get(ticket.id)
+        if not agent:
+            self.notify("No agent running for this ticket", severity="warning")
+            return
+
+        await manager.terminate(ticket.id)
+        self.notify(f"Stopped agent for {ticket.id}")
 
     # Message handlers
 

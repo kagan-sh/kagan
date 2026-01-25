@@ -234,3 +234,16 @@ from kagan.constants import DEFAULT_DB_PATH, DEFAULT_CONFIG_PATH
 3. **Property assertions** - Use `@property` with `assert` for required state
 4. **ModalAction enum** - Use `src/kagan/ui/modals/actions.py` for modal actions
 5. **Async database** - All DB operations are async via `aiosqlite`
+
+## Git Commit Rules
+
+**Disable GPG signing when creating commits:**
+- When making commits in tests or agent workflows, always disable GPG signing to avoid timeouts
+- Use `git config commit.gpgsign false` in the repository before committing
+- For test fixtures, configure git locally:
+  ```python
+  await asyncio.create_subprocess_exec(
+      "git", "config", "commit.gpgsign", "false",
+      cwd=repo_path, ...
+  )
+  ```

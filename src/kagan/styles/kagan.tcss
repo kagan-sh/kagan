@@ -346,3 +346,90 @@ ConfirmModal .confirm-hint {
     text-align: center;
     color: $text-muted;
 }
+
+/* AgentOutputModal styles */
+AgentOutputModal {
+    align: center middle;
+}
+
+#agent-output-container {
+    width: 90%;
+    height: 80%;
+    background: $surface;
+    border: thick $primary;
+    padding: 1 2;
+}
+
+#agent-output-container .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+}
+
+#output-log {
+    height: 1fr;
+    background: $surface-darken-2;
+    border: round $primary-darken-1;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+#agent-status {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#agent-output-container .button-row {
+    padding-top: 1;
+    align: center middle;
+}
+
+#agent-output-container Button {
+    margin: 0 1;
+}
+
+/* ChatScreen styles */
+ChatScreen {
+    layout: vertical;
+}
+
+#chat-container {
+    width: 100%;
+    height: 1fr;
+    padding: 1;
+}
+
+#chat-header {
+    width: 100%;
+    height: 1;
+    text-style: bold;
+    text-align: center;
+    padding-bottom: 1;
+}
+
+#chat-status {
+    width: 100%;
+    height: 1;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+#chat-log {
+    width: 100%;
+    height: 1fr;
+    background: $surface-darken-1;
+    border: round $primary-darken-1;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+#chat-input-row {
+    width: 100%;
+    height: auto;
+    padding-top: 1;
+}
+
+#chat-input-row Input {
+    width: 100%;
+}

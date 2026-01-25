@@ -46,6 +46,12 @@ class StateManager:
             await self._connection.close()
             self._connection = None
 
+    @property
+    def connection(self) -> aiosqlite.Connection:
+        """Get database connection (must be initialized first)."""
+        assert self._connection is not None, "StateManager not initialized"
+        return self._connection
+
     async def _get_connection(self) -> aiosqlite.Connection:
         """Get or create database connection."""
         if self._connection is None:
@@ -209,3 +215,61 @@ class StateManager:
             if row["updated_at"]
             else datetime.now(),
         )
+
+    # Scratchpad operations
+
+    async def get_scratchpad(self, ticket_id: str) -> str:
+        """Get scratchpad content for a ticket."""
+        conn = await self._get_connection()
+        async with conn.execute(
+            "SELECT content FROM scratchpads WHERE ticket_id = ?", (ticket_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else ""
+
+    async def update_scratchpad(self, ticket_id: str, content: str) -> None:
+        """Update or create scratchpad for a ticket."""
+        conn = await self._get_connection()
+        # Limit content size to prevent unbounded growth
+        content = content[-50000:] if len(content) > 50000 else content
+        async with self._lock:
+            await conn.execute(
+                """INSERT INTO scratchpads (ticket_id, content, updated_at)
+                   VALUES (?, ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(ticket_id) DO UPDATE SET
+                   content = excluded.content, updated_at = CURRENT_TIMESTAMP""",
+                (ticket_id, content),
+            )
+            await conn.commit()
+
+    async def delete_scratchpad(self, ticket_id: str) -> None:
+        """Delete scratchpad when ticket is completed."""
+        conn = await self._get_connection()
+        async with self._lock:
+            await conn.execute("DELETE FROM scratchpads WHERE ticket_id = ?", (ticket_id,))
+            await conn.commit()
+
+    # Knowledge operations
+
+    async def add_knowledge(
+        self, ticket_id: str, summary: str, tags: list[str] | None = None
+    ) -> None:
+        """Add knowledge entry from completed ticket."""
+        conn = await self._get_connection()
+        async with self._lock:
+            await conn.execute(
+                "INSERT OR REPLACE INTO knowledge (ticket_id, summary, tags) VALUES (?, ?, ?)",
+                (ticket_id, summary, ",".join(tags or [])),
+            )
+            await conn.commit()
+
+    async def search_knowledge(self, query: str, limit: int = 5) -> list[tuple[str, str]]:
+        """Search knowledge base using FTS5."""
+        conn = await self._get_connection()
+        async with conn.execute(
+            """SELECT ticket_id, summary FROM knowledge_fts
+               WHERE knowledge_fts MATCH ? ORDER BY rank LIMIT ?""",
+            (query, limit),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [(str(row[0]), str(row[1])) for row in rows]

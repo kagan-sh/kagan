@@ -1,9 +1,11 @@
 """CLI entry point for Kagan."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
-from kagan.constants import DEFAULT_CONFIG_PATH, DEFAULT_DB_PATH
+from kagan.constants import DEFAULT_CONFIG_PATH, DEFAULT_DB_PATH, DEFAULT_LOCK_PATH
 
 
 def main() -> int:
@@ -39,11 +41,30 @@ def main() -> int:
         return 0
 
     # Import here to avoid slow startup for --help/--version
-    from kagan.app import KaganApp
+    from kagan.lock import InstanceLock, InstanceLockError
 
-    app = KaganApp(db_path=args.db, config_path=args.config)
-    app.run()
-    return 0
+    # Try to acquire the instance lock
+    lock = InstanceLock(DEFAULT_LOCK_PATH)
+    try:
+        lock.acquire()
+    except InstanceLockError:
+        # Another instance is running - show the locked screen
+        from kagan.ui.screens.locked import InstanceLockedApp
+
+        app = InstanceLockedApp()
+        app.run()
+        return 1
+
+    # Lock acquired - run the main app
+    try:
+        from kagan.app import KaganApp
+
+        app = KaganApp(db_path=args.db, config_path=args.config)
+        app._instance_lock = lock
+        app.run()
+        return 0
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

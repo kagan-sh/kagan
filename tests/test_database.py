@@ -214,3 +214,47 @@ class TestTicketCounts:
         assert counts[TicketStatus.IN_PROGRESS] == 1
         assert counts[TicketStatus.REVIEW] == 0
         assert counts[TicketStatus.DONE] == 3
+
+
+class TestScratchpads:
+    """Tests for scratchpad operations."""
+
+    async def test_get_scratchpad_empty(self, state_manager: StateManager):
+        """Returns empty string for nonexistent scratchpad."""
+        result = await state_manager.get_scratchpad("nonexistent")
+        assert result == ""
+
+    async def test_update_and_get_scratchpad(self, state_manager: StateManager):
+        """Can create and retrieve scratchpad."""
+        ticket = await state_manager.create_ticket(TicketCreate(title="Test"))
+        await state_manager.update_scratchpad(ticket.id, "Progress notes")
+
+        result = await state_manager.get_scratchpad(ticket.id)
+        assert result == "Progress notes"
+
+    async def test_update_scratchpad_overwrites(self, state_manager: StateManager):
+        """Updates overwrite existing content."""
+        ticket = await state_manager.create_ticket(TicketCreate(title="Test"))
+        await state_manager.update_scratchpad(ticket.id, "First")
+        await state_manager.update_scratchpad(ticket.id, "Second")
+
+        result = await state_manager.get_scratchpad(ticket.id)
+        assert result == "Second"
+
+    async def test_delete_scratchpad(self, state_manager: StateManager):
+        """Can delete scratchpad."""
+        ticket = await state_manager.create_ticket(TicketCreate(title="Test"))
+        await state_manager.update_scratchpad(ticket.id, "Content")
+        await state_manager.delete_scratchpad(ticket.id)
+
+        result = await state_manager.get_scratchpad(ticket.id)
+        assert result == ""
+
+    async def test_scratchpad_size_limit(self, state_manager: StateManager):
+        """Scratchpad content is truncated at 50000 chars."""
+        ticket = await state_manager.create_ticket(TicketCreate(title="Test"))
+        long_content = "x" * 60000
+        await state_manager.update_scratchpad(ticket.id, long_content)
+
+        result = await state_manager.get_scratchpad(ticket.id)
+        assert len(result) == 50000

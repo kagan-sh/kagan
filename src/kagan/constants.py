@@ -2,6 +2,7 @@ from kagan.database.models import TicketPriority, TicketStatus
 
 DEFAULT_DB_PATH = ".kagan/state.db"
 DEFAULT_CONFIG_PATH = ".kagan/config.toml"
+DEFAULT_LOCK_PATH = ".kagan/kagan.lock"
 
 COLUMN_ORDER = [
     TicketStatus.BACKLOG,
