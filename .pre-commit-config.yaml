@@ -1,0 +1,30 @@
+repos:
+  # UV lock file sync
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.26
+    hooks:
+      - id: uv-lock
+
+  # Local hooks using uv and poe tasks
+  - repo: local
+    hooks:
+      - id: lint
+        name: ruff lint
+        entry: uv run poe lint
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: format
+        name: ruff format
+        entry: uv run poe format
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: typecheck
+        name: pyrefly typecheck
+        entry: uv run poe typecheck
+        language: system
+        types: [python]
+        pass_filenames: false

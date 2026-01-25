@@ -1,0 +1,348 @@
+/* Kagan TUI Styles */
+
+/* Global app styles */
+Screen {
+    background: $background;
+}
+
+/* Header styles */
+KaganHeader {
+    width: 100%;
+    height: 3;
+    background: $primary;
+    color: $text;
+    padding: 1;
+}
+
+KaganHeader .header-title {
+    text-style: bold;
+    width: auto;
+}
+
+KaganHeader .header-stats {
+    dock: right;
+    width: auto;
+    padding-right: 2;
+}
+
+KaganHeader .header-help {
+    dock: right;
+    width: auto;
+    padding-right: 1;
+    color: $text-muted;
+}
+
+/* Footer styles */
+Footer {
+    background: $primary-background;
+}
+
+/* Kanban board styles */
+.board-container {
+    width: 100%;
+    height: 1fr;
+    padding: 1;
+}
+
+.board {
+    width: 100%;
+    height: 100%;
+}
+
+/* Column styles */
+KanbanColumn {
+    width: 1fr;
+    height: 100%;
+    border: solid $primary-background;
+    padding: 0;
+    margin: 0 1;
+}
+
+KanbanColumn .column-header {
+    width: 100%;
+    height: 3;
+    padding: 1;
+    background: $primary-background;
+    text-align: center;
+}
+
+KanbanColumn .column-header-text {
+    text-style: bold;
+}
+
+KanbanColumn .column-count {
+    color: $text-muted;
+}
+
+KanbanColumn .column-content {
+    width: 100%;
+    height: 1fr;
+    padding: 1;
+}
+
+KanbanColumn .empty-message {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding: 2;
+}
+
+/* Card styles */
+TicketCard {
+    width: 100%;
+    height: auto;
+    max-height: 6;
+    margin: 0 0 1 0;
+    padding: 0;
+    border: solid $primary;
+    background: $surface;
+}
+
+TicketCard:focus {
+    border: double $accent;
+    background: $surface-lighten-1;
+}
+
+TicketCard:hover {
+    background: $surface-lighten-1;
+}
+
+TicketCard.dragging {
+    border: dashed $warning;
+    opacity: 0.7;
+}
+
+TicketCard .card-title {
+    width: 100%;
+    height: 1;
+    text-style: bold;
+}
+
+TicketCard .card-desc {
+    width: 100%;
+    height: 1;
+    color: $text-muted;
+}
+
+TicketCard .card-desc.high {
+    color: $error;
+}
+
+TicketCard .card-desc.medium {
+    color: $warning;
+}
+
+TicketCard .card-desc.low {
+    color: $text-muted;
+}
+
+TicketCard .card-meta {
+    width: 100%;
+    height: 1;
+    color: $text-muted;
+}
+
+/* Modal styles */
+TicketFormModal {
+    align: center middle;
+}
+
+TicketFormModal > Container {
+    width: 60;
+    height: auto;
+    max-height: 80%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+TicketFormModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+    border-bottom: solid $primary-background;
+    margin-bottom: 1;
+}
+
+TicketFormModal .form-field {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+TicketFormModal .form-label {
+    width: 100%;
+    height: 1;
+    padding-bottom: 0;
+}
+
+TicketFormModal Input {
+    width: 100%;
+}
+
+TicketFormModal TextArea {
+    width: 100%;
+    height: 6;
+}
+
+TicketFormModal Select {
+    width: 100%;
+}
+
+TicketFormModal .button-row {
+    width: 100%;
+    height: auto;
+    padding-top: 1;
+    align: center middle;
+}
+
+TicketFormModal Button {
+    margin: 0 1;
+}
+
+/* Ticket details modal */
+TicketDetailsModal {
+    align: center middle;
+}
+
+TicketDetailsModal > Vertical {
+    width: 70;
+    height: auto;
+    max-height: 90%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+TicketDetailsModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+}
+
+TicketDetailsModal .badge {
+    padding: 0 1;
+    margin-right: 1;
+}
+
+TicketDetailsModal .badge-priority-high {
+    background: $error;
+    color: $text;
+}
+
+TicketDetailsModal .badge-priority-medium {
+    background: $warning;
+    color: $background;
+}
+
+TicketDetailsModal .badge-priority-low {
+    background: $surface-lighten-1;
+    color: $text-muted;
+}
+
+TicketDetailsModal .badge-status {
+    background: $primary;
+    color: $text;
+}
+
+TicketDetailsModal .section-title {
+    text-style: bold;
+    color: $text-muted;
+}
+
+TicketDetailsModal .ticket-title {
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+TicketDetailsModal .ticket-description {
+    padding: 0 1;
+    background: $surface-darken-1;
+    min-height: 1;
+    max-height: 5;
+}
+
+TicketDetailsModal .ticket-meta {
+    color: $text-muted;
+    padding-top: 1;
+}
+
+TicketDetailsModal .button-row {
+    padding-top: 1;
+    align: center middle;
+}
+
+TicketDetailsModal Button {
+    margin: 0 1;
+}
+
+/* Empty state */
+.empty-state {
+    width: 100%;
+    height: 100%;
+    align: center middle;
+}
+
+.empty-message {
+    text-align: center;
+    color: $text-muted;
+    padding: 2;
+}
+
+/* KanbanScreen styles */
+KanbanScreen {
+    layout: vertical;
+}
+
+KanbanScreen .size-warning {
+    width: 100%;
+    height: 100%;
+    align: center middle;
+    background: $surface;
+    display: none;
+}
+
+KanbanScreen .size-warning-text {
+    text-align: center;
+    color: $warning;
+    text-style: bold;
+}
+
+KanbanScreen.too-small .board-container {
+    display: none;
+}
+
+KanbanScreen.too-small .size-warning {
+    display: block;
+}
+
+/* ConfirmModal styles */
+ConfirmModal {
+    align: center middle;
+}
+
+ConfirmModal > Container {
+    width: 50;
+    height: auto;
+    border: thick $error;
+    background: $surface;
+    padding: 2;
+}
+
+ConfirmModal .confirm-title {
+    text-style: bold;
+    text-align: center;
+    padding-bottom: 1;
+}
+
+ConfirmModal .confirm-message {
+    text-align: center;
+    padding-bottom: 1;
+}
+
+ConfirmModal .confirm-hint {
+    text-align: center;
+    color: $text-muted;
+}
