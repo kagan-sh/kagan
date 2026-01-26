@@ -72,14 +72,17 @@ class TicketCard(Widget):
         desc_text = f"{priority_icon} {self._truncate_title(desc, 15)}"
         yield Label(desc_text, classes=f"card-desc {priority_class}")
 
-        # Line 3: hat + ID + date
+        # Line 3: backend/hat + ID + date
         hat = getattr(self.ticket, "assigned_hat", None) or ""
         hat_display = hat[:8] if hat else ""  # Truncate hat to 8 chars
         ticket_id = f"#{self.ticket.short_id[:4]}"  # Short 4-char ID
         date_str = self.ticket.created_at.strftime("%m/%d")
+        backend = getattr(self.ticket, "agent_backend", None) or ""
 
         # Build meta line with spacing
-        if hat_display:
+        if backend:
+            meta_text = f"{backend[:6]} {ticket_id} {date_str}"
+        elif hat_display:
             meta_text = f"{hat_display}  {ticket_id} {date_str}"
         else:
             meta_text = f"{ticket_id} {date_str}"

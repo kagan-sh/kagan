@@ -39,6 +39,9 @@ class GeneralConfig(BaseModel):
     auto_start: bool = Field(default=False)
     max_iterations: int = Field(default=10)
     iteration_delay_seconds: float = Field(default=2.0)
+    default_worker_agent: str = Field(default="claude")
+    default_review_agent: str = Field(default="claude")
+    default_requirements_agent: str = Field(default="claude")
 
 
 class HatConfig(BaseModel):
@@ -104,6 +107,18 @@ class KaganConfig(BaseModel):
             if agent.active:
                 return name, agent
         return None
+
+    def get_worker_agent(self) -> AgentConfig | None:
+        """Get the configured worker agent."""
+        return self.get_agent(self.general.default_worker_agent)
+
+    def get_review_agent(self) -> AgentConfig | None:
+        """Get the configured review agent."""
+        return self.get_agent(self.general.default_review_agent)
+
+    def get_requirements_agent(self) -> AgentConfig | None:
+        """Get the configured requirements agent."""
+        return self.get_agent(self.general.default_requirements_agent)
 
 
 def load_config() -> KaganConfig:

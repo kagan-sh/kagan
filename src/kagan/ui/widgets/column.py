@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.containers import ScrollableContainer, Vertical
+from textual.containers import Container, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Label
@@ -28,6 +28,11 @@ class _NSVertical(Vertical):
 
 
 class _NSScrollable(ScrollableContainer):
+    ALLOW_SELECT = False
+    can_focus = False
+
+
+class _NSContainer(Container):
     ALLOW_SELECT = False
     can_focus = False
 
@@ -56,7 +61,8 @@ class KanbanColumn(Widget):
                     for ticket in self.tickets:
                         yield TicketCard(ticket)
                 else:
-                    yield _NSLabel("No tickets", classes="empty-message")
+                    with _NSContainer(classes="column-empty"):
+                        yield _NSLabel("No tickets", classes="empty-message")
 
     def get_cards(self) -> list[TicketCard]:
         return list(self.query(TicketCard))

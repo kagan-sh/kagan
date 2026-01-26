@@ -1,4 +1,3 @@
-
 from kagan.database.models import TicketPriority, TicketStatus
 
 DEFAULT_DB_PATH = ".kagan/state.db"

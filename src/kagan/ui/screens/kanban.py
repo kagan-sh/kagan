@@ -12,7 +12,6 @@ from textual.widgets import Footer, Static
 from kagan.constants import COLUMN_ORDER
 from kagan.database.models import Ticket, TicketCreate, TicketStatus, TicketUpdate
 from kagan.ui.modals import (
-    AgentOutputModal,
     ConfirmModal,
     ModalAction,
     TicketDetailsModal,
@@ -54,7 +53,7 @@ class KanbanScreen(Screen):
         Binding("right_square_bracket", "move_forward", "Move->"),
         Binding("left_square_bracket", "move_backward", "Move<-"),
         Binding("enter", "view_details", "View details"),
-        Binding("o", "view_agent_output", "Agent output"),
+        Binding("o", "open_streams", "Streams"),
         Binding("s", "start_agent", "Start agent"),
         Binding("x", "stop_agent", "Stop agent"),
         Binding("escape", "deselect", "Deselect", show=False),
@@ -95,6 +94,15 @@ class KanbanScreen(Screen):
         self._focus_first_card()
         self.set_interval(1.0, self._update_active_cards)
 
+        # Fetch git branch for header
+        from kagan.ui.widgets.header import _get_git_branch
+
+        header = self.query_one(KaganHeader)
+        config_path = self.kagan_app.config_path
+        repo_root = config_path.parent.parent
+        branch = await _get_git_branch(repo_root)
+        header.update_branch(branch)
+
     def on_resize(self, event: events.Resize) -> None:
         """Handle terminal resize."""
         self._check_screen_size()
@@ -114,6 +122,10 @@ class KanbanScreen(Screen):
     def _update_active_cards(self) -> None:
         """Update agent active state and iteration info for all cards."""
         active_ids = set(self.kagan_app.agent_manager.list_active())
+
+        # Update header with agent count
+        header = self.query_one(KaganHeader)
+        header.update_agents(len(active_ids), self.kagan_app.config.general.max_concurrent_agents)
 
         # Build iteration info dict
         iterations: dict[str, str] = {}
@@ -294,21 +306,11 @@ class KanbanScreen(Screen):
         elif action == ModalAction.DELETE:
             self.action_delete_ticket()
 
-    def action_view_agent_output(self) -> None:
-        """View agent output for the selected ticket."""
-        card = self._get_focused_card()
-        if not card or not card.ticket:
-            self.notify("No ticket selected", severity="warning")
-            return
+    def action_open_streams(self) -> None:
+        """Open the agent streams screen."""
+        from kagan.ui.screens.streams import AgentStreamsScreen
 
-        agent = self.kagan_app.agent_manager.get(card.ticket.id)
-        if not agent:
-            self.notify("No agent running for this ticket", severity="warning")
-            return
-
-        self.app.push_screen(
-            AgentOutputModal(agent, card.ticket.id, project_root=agent.project_root)
-        )
+        self.app.push_screen(AgentStreamsScreen())
 
     def action_open_chat(self) -> None:
         """Open the planner chat screen."""
@@ -337,19 +339,24 @@ class KanbanScreen(Screen):
             wt_path = await worktree.create(ticket.id, ticket.title, base_branch)
 
         config = self.kagan_app.config
-        agent_result = config.get_default_agent()
-        if agent_result is None:
-            # Create a default AgentConfig for claude
-            from kagan.config import AgentConfig
+        # Use ticket's agent_backend if set, otherwise default
+        agent_config = None
+        if ticket.agent_backend:
+            agent_config = config.get_agent(ticket.agent_backend)
+        if agent_config is None:
+            agent_result = config.get_default_agent()
+            if agent_result is None:
+                # Create a default AgentConfig for claude
+                from kagan.config import AgentConfig
 
-            agent_config = AgentConfig(
-                identity="anthropic.claude",
-                name="Claude",
-                short_name="claude",
-                run_command={"*": "claude"},
-            )
-        else:
-            _, agent_config = agent_result
+                agent_config = AgentConfig(
+                    identity="anthropic.claude",
+                    name="Claude",
+                    short_name="claude",
+                    run_command={"*": "claude"},
+                )
+            else:
+                agent_config = agent_result[1]
 
         agent = await manager.spawn(ticket.id, agent_config, wt_path)
         self.notify(f"Started agent for {ticket.id}")

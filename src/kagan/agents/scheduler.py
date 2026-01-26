@@ -123,13 +123,22 @@ class Scheduler:
                 )
             log.info(f"Worktree path: {wt_path}")
 
-            # Get agent config - prefer assigned, fall back to default
+            # Get agent config with priority: agent_backend > assigned_hat > default
             agent_config: AgentConfig | None = None
-            if ticket.assigned_hat:
-                # Try to find agent with matching name
-                agent_config = self._config.get_agent(ticket.assigned_hat)
-                log.debug(f"Using assigned agent config: {ticket.assigned_hat}")
 
+            # Priority 1: ticket's agent_backend field (NEW)
+            if ticket.agent_backend:
+                agent_config = self._config.get_agent(ticket.agent_backend)
+                if agent_config:
+                    log.debug(f"Using agent_backend config: {ticket.agent_backend}")
+
+            # Priority 2: assigned_hat (backward compat)
+            if agent_config is None and ticket.assigned_hat:
+                agent_config = self._config.get_agent(ticket.assigned_hat)
+                if agent_config:
+                    log.debug(f"Using assigned_hat agent config: {ticket.assigned_hat}")
+
+            # Priority 3: default agent
             if agent_config is None:
                 default = self._config.get_default_agent()
                 if default:

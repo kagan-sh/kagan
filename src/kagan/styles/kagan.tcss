@@ -1,40 +1,115 @@
-/* Kagan TUI Styles */
+/* Kagan TUI Styles - Khagan Night Theme */
+/* Uses Textual design tokens for theme compatibility */
 
 /* Global app styles */
 Screen {
     background: $background;
 }
 
-/* Header styles */
+/* Custom KaganHeader styles - Khagan Night theme */
 KaganHeader {
+    dock: top;
     width: 100%;
     height: 3;
-    background: $primary;
+    background: $panel;
     color: $text;
+    layout: horizontal;
     padding: 1;
 }
 
-KaganHeader .header-title {
-    text-style: bold;
+KaganHeader .header-logo {
     width: auto;
+    color: $secondary;
+    text-style: bold;
+    padding-right: 1;
 }
 
-KaganHeader .header-stats {
-    dock: right;
+KaganHeader .header-title {
+    width: auto;
+    color: $primary;
+    text-style: bold;
+}
+
+KaganHeader .header-version {
+    width: auto;
+    color: $text-muted;
+    padding-left: 1;
+}
+
+KaganHeader .header-spacer {
+    width: 1fr;
+}
+
+KaganHeader .header-branch {
+    width: auto;
+    color: $text-muted;
+    padding-right: 2;
+}
+
+KaganHeader .header-agents {
     width: auto;
     padding-right: 2;
 }
 
-KaganHeader .header-help {
-    dock: right;
-    width: auto;
-    padding-right: 1;
+KaganHeader .header-agents.agents-idle {
     color: $text-muted;
 }
 
-/* Footer styles */
+KaganHeader .header-agents.agents-working {
+    color: $success;
+}
+
+KaganHeader .header-agents.agents-full {
+    color: $warning;
+}
+
+KaganHeader .header-stats {
+    width: auto;
+    color: $text;
+}
+
+/* Chat header styles */
+#chat-header {
+    dock: top;
+    width: 100%;
+    height: 3;
+    background: $panel;
+    color: $text;
+    padding: 1;
+}
+
+#chat-header .header-logo {
+    width: auto;
+    color: $secondary;
+    text-style: bold;
+    padding-right: 1;
+}
+
+#chat-header .header-title {
+    width: auto;
+    color: $primary;
+    text-style: bold;
+    padding-right: 2;
+}
+
+#chat-header .header-subtitle {
+    width: auto;
+    color: $text-muted;
+}
+
+/* Footer styles - subtle appearance */
 Footer {
-    background: $primary-background;
+    background: $surface;
+}
+
+FooterKey > .footer-key--key {
+    background: transparent;
+    color: $text-muted;
+    text-style: bold;
+}
+
+FooterKey > .footer-key--description {
+    color: $text-disabled;
 }
 
 /* Kanban board styles */
@@ -42,6 +117,7 @@ Footer {
     width: 100%;
     height: 1fr;
     padding: 1;
+    background: $background;
 }
 
 .board {
@@ -53,21 +129,23 @@ Footer {
 KanbanColumn {
     width: 1fr;
     height: 100%;
-    border: solid $primary-background;
+    border: solid $border;
     padding: 0;
     margin: 0 1;
+    background: $surface;
 }
 
 KanbanColumn .column-header {
     width: 100%;
     height: 3;
     padding: 1;
-    background: $primary-background;
+    background: $panel;
     text-align: center;
 }
 
 KanbanColumn .column-header-text {
     text-style: bold;
+    color: $text;
 }
 
 KanbanColumn .column-count {
@@ -78,6 +156,12 @@ KanbanColumn .column-content {
     width: 100%;
     height: 1fr;
     padding: 1;
+}
+
+KanbanColumn .column-empty {
+    width: 100%;
+    height: 1fr;
+    align: center middle;
 }
 
 KanbanColumn .empty-message {
@@ -94,17 +178,18 @@ TicketCard {
     max-height: 7;
     margin: 0 0 1 0;
     padding: 0;
-    border: solid $primary;
-    background: $surface;
+    border: solid $border;
+    background: $background;
+    color: $text;
 }
 
 TicketCard:focus {
-    border: double $accent;
-    background: $surface-lighten-1;
+    border: double $primary;
+    background: $panel;
 }
 
 TicketCard:hover {
-    background: $surface-lighten-1;
+    background: $panel;
 }
 
 TicketCard.dragging {
@@ -116,6 +201,7 @@ TicketCard .card-title {
     width: 100%;
     height: 1;
     text-style: bold;
+    color: $text;
 }
 
 TicketCard .card-desc {
@@ -154,13 +240,15 @@ TicketFormModal {
     align: center middle;
 }
 
-TicketFormModal > Container {
-    width: 60;
+TicketFormModal > Container,
+TicketFormModal #ticket-form-container {
+    width: 70;
     height: auto;
-    max-height: 80%;
-    border: thick $accent;
+    max-height: 85%;
+    border: thick $primary;
     background: $surface;
     padding: 1 2;
+    overflow-y: auto;
 }
 
 TicketFormModal .modal-title {
@@ -168,8 +256,9 @@ TicketFormModal .modal-title {
     text-style: bold;
     width: 100%;
     padding-bottom: 1;
-    border-bottom: solid $primary-background;
+    border-bottom: solid $border;
     margin-bottom: 1;
+    color: $secondary;
 }
 
 TicketFormModal .form-field {
@@ -179,18 +268,34 @@ TicketFormModal .form-field {
 }
 
 TicketFormModal .form-label {
-    width: 100%;
+    width: auto;
     height: 1;
     padding-bottom: 0;
+    color: $text-muted;
 }
 
 TicketFormModal Input {
     width: 100%;
+    background: $background;
+    color: $text;
+    border: solid $border;
+}
+
+TicketFormModal Input:focus {
+    border: solid $primary;
 }
 
 TicketFormModal TextArea {
     width: 100%;
-    height: 6;
+    height: 10;
+    min-height: 6;
+    background: $background;
+    color: $text;
+    border: solid $border;
+}
+
+TicketFormModal TextArea:focus {
+    border: solid $primary;
 }
 
 TicketFormModal Select {
@@ -208,18 +313,51 @@ TicketFormModal Button {
     margin: 0 1;
 }
 
+/* Horizontal field row for Priority/Agent */
+TicketFormModal .field-row {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+TicketFormModal .field-half {
+    width: 1fr;
+    margin-right: 1;
+}
+
+TicketFormModal .field-half:last-child {
+    margin-right: 0;
+}
+
+/* Description header with expand button */
+TicketFormModal .description-header {
+    width: 100%;
+    height: 1;
+}
+
+TicketFormModal .header-spacer {
+    width: 1fr;
+}
+
+TicketFormModal .expand-hint {
+    width: auto;
+    color: $primary;
+}
+
 /* Ticket details modal */
 TicketDetailsModal {
     align: center middle;
 }
 
-TicketDetailsModal > Vertical {
-    width: 70;
+TicketDetailsModal > Vertical,
+TicketDetailsModal #ticket-details-container {
+    width: 80;
     height: auto;
     max-height: 90%;
-    border: thick $accent;
+    border: thick $primary;
     background: $surface;
     padding: 1 2;
+    overflow-y: auto;
 }
 
 TicketDetailsModal .modal-title {
@@ -227,6 +365,17 @@ TicketDetailsModal .modal-title {
     text-style: bold;
     width: 100%;
     padding-bottom: 1;
+    color: $secondary;
+}
+
+TicketDetailsModal Rule {
+    margin: 1 0;
+    color: $border;
+}
+
+TicketDetailsModal .badge-row {
+    width: 100%;
+    height: auto;
 }
 
 TicketDetailsModal .badge {
@@ -245,35 +394,70 @@ TicketDetailsModal .badge-priority-medium {
 }
 
 TicketDetailsModal .badge-priority-low {
-    background: $surface-lighten-1;
+    background: $border;
     color: $text-muted;
 }
 
 TicketDetailsModal .badge-status {
     background: $primary;
-    color: $text;
+    color: $background;
+}
+
+.badge-agent {
+    background: $secondary;
+    color: $background;
 }
 
 TicketDetailsModal .section-title {
     text-style: bold;
     color: $text-muted;
+    width: auto;
 }
 
 TicketDetailsModal .ticket-title {
     text-style: bold;
-    padding-bottom: 1;
+    padding: 0 1;
+    color: $text;
+    background: $background;
+}
+
+TicketDetailsModal .description-header {
+    width: 100%;
+    height: 1;
+}
+
+TicketDetailsModal .header-spacer {
+    width: 1fr;
+}
+
+TicketDetailsModal .expand-hint {
+    width: auto;
+    color: $primary;
 }
 
 TicketDetailsModal .ticket-description {
-    padding: 0 1;
-    background: $surface-darken-1;
-    min-height: 1;
-    max-height: 5;
+    padding: 1;
+    background: $background;
+    min-height: 8;
+    max-height: 15;
+    height: auto;
+    color: $text;
+    overflow-y: auto;
+}
+
+TicketDetailsModal .meta-row {
+    width: 100%;
+    height: auto;
 }
 
 TicketDetailsModal .ticket-meta {
     color: $text-muted;
-    padding-top: 1;
+    width: auto;
+}
+
+TicketDetailsModal .meta-separator {
+    width: auto;
+    color: $border;
 }
 
 TicketDetailsModal .button-row {
@@ -283,6 +467,75 @@ TicketDetailsModal .button-row {
 
 TicketDetailsModal Button {
     margin: 0 1;
+}
+
+/* Full-screen description editor modal */
+DescriptionEditorModal {
+    align: center middle;
+}
+
+DescriptionEditorModal #description-editor-container {
+    width: 90%;
+    height: 90%;
+    border: thick $primary;
+    background: $surface;
+    padding: 0;
+}
+
+DescriptionEditorModal #description-editor-header {
+    width: 100%;
+    height: 3;
+    padding: 1 2;
+    background: $panel;
+}
+
+DescriptionEditorModal #editor-title {
+    width: auto;
+    text-style: bold;
+    color: $secondary;
+}
+
+DescriptionEditorModal #header-spacer {
+    width: 1fr;
+}
+
+DescriptionEditorModal #editor-hint {
+    width: auto;
+    color: $primary;
+}
+
+DescriptionEditorModal #description-textarea {
+    width: 100%;
+    height: 1fr;
+    background: $background;
+    color: $text;
+    border: none;
+    padding: 0;
+}
+
+DescriptionEditorModal #description-textarea:focus {
+    border: none;
+}
+
+DescriptionEditorModal #description-editor-status {
+    width: 100%;
+    height: 1;
+    padding: 0 2;
+    background: $panel;
+}
+
+DescriptionEditorModal #cursor-position {
+    width: auto;
+    color: $text-muted;
+}
+
+DescriptionEditorModal #status-spacer {
+    width: 1fr;
+}
+
+DescriptionEditorModal #line-count {
+    width: auto;
+    color: $text-muted;
 }
 
 /* Empty state */
@@ -301,6 +554,7 @@ TicketDetailsModal Button {
 /* KanbanScreen styles */
 KanbanScreen {
     layout: vertical;
+    background: $background;
 }
 
 KanbanScreen .size-warning {
@@ -342,11 +596,13 @@ ConfirmModal .confirm-title {
     text-style: bold;
     text-align: center;
     padding-bottom: 1;
+    color: $error;
 }
 
 ConfirmModal .confirm-message {
     text-align: center;
     padding-bottom: 1;
+    color: $text;
 }
 
 ConfirmModal .confirm-hint {
@@ -372,12 +628,13 @@ AgentOutputModal {
     text-style: bold;
     width: 100%;
     padding-bottom: 1;
+    color: $secondary;
 }
 
 #output-log {
     height: 1fr;
-    background: $surface-darken-2;
-    border: round $primary-darken-1;
+    background: $background;
+    border: round $border;
     padding: 0 1;
     scrollbar-gutter: stable;
 }
@@ -399,20 +656,13 @@ AgentOutputModal {
 /* ChatScreen styles */
 ChatScreen {
     layout: vertical;
+    background: $background;
 }
 
 #chat-container {
     width: 100%;
     height: 1fr;
     padding: 1;
-}
-
-#chat-header {
-    width: 100%;
-    height: 1;
-    text-style: bold;
-    text-align: center;
-    padding-bottom: 1;
 }
 
 #chat-status {
@@ -422,11 +672,27 @@ ChatScreen {
     padding-bottom: 1;
 }
 
+#chat-log-container {
+    width: 100%;
+    height: 2fr;
+    background: $surface;
+    border: round $border;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
 #chat-log {
     width: 100%;
+    height: auto;
+    padding: 1;
+}
+
+#chat-status-log {
+    width: 100%;
     height: 1fr;
-    background: $surface-darken-1;
-    border: round $primary-darken-1;
+    max-height: 10;
+    background: $surface;
+    border: round $border;
     padding: 0 1;
     scrollbar-gutter: stable;
 }
@@ -439,6 +705,12 @@ ChatScreen {
 
 #chat-input-row Input {
     width: 100%;
+    background: $background;
+    border: solid $border;
+}
+
+#chat-input-row Input:focus {
+    border: solid $primary;
 }
 
 /* Permission Modal */
@@ -458,6 +730,7 @@ PermissionModal {
 #request-description {
     text-style: bold;
     margin-bottom: 1;
+    color: $secondary;
 }
 
 #tool-details {
@@ -479,7 +752,7 @@ PermissionModal {
 }
 
 .permission-allow:hover {
-    background: $success-darken-1;
+    background: $success 80%;
 }
 
 .permission-reject {
@@ -487,7 +760,7 @@ PermissionModal {
 }
 
 .permission-reject:hover {
-    background: $error-darken-1;
+    background: $error 80%;
 }
 
 /* Agent running indicator - pulsating border effect */
@@ -502,10 +775,221 @@ TicketCard.agent-active.agent-pulse {
 
 /* Ensure focus still takes precedence */
 TicketCard.agent-active:focus {
-    border: double $accent;
+    border: double $primary;
 }
 
 TicketCard.agent-active.agent-pulse:focus {
-    border: double $accent;
+    border: double $primary;
     background: $success 8%;
+}
+
+/* Agent Streams Screen */
+AgentStreamsScreen {
+    layout: vertical;
+    background: $background;
+}
+
+#streams-header {
+    dock: top;
+    height: 3;
+    background: $panel;
+    padding: 1;
+    layout: horizontal;
+}
+
+#streams-tabs {
+    width: 100%;
+    height: 1fr;
+}
+
+AgentStreamPane RichLog, ReviewerPane RichLog {
+    height: 1fr;
+    background: $surface;
+    border: round $border;
+    scrollbar-gutter: stable;
+}
+
+#streams-tabs Tab.-active {
+    background: $primary;
+    color: $background;
+}
+
+/* Welcome Screen Styles */
+WelcomeScreen {
+    align: center middle;
+    background: $background;
+}
+
+/* Instance Locked Screen */
+#lock-container {
+    width: 100%;
+    height: 1fr;
+    align: center middle;
+}
+
+#lock-card {
+    width: 60;
+    height: auto;
+    border: thick $error;
+    background: $surface;
+    padding: 2 4;
+}
+
+#lock-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+}
+
+#lock-message {
+    text-align: center;
+    width: 100%;
+    color: $text-muted;
+}
+
+#lock-hint {
+    text-align: center;
+    width: 100%;
+    padding-top: 1;
+    color: $text-muted;
+}
+
+#welcome-container {
+    width: 95%;
+    max-width: 70;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: round $primary;
+    background: $surface;
+    overflow-y: auto;
+}
+
+#logo {
+    width: 100%;
+    text-align: center;
+    color: $primary;
+    padding: 0 0 1 0;
+}
+
+#subtitle {
+    text-align: center;
+    margin-bottom: 1;
+    color: $text;
+    width: 100%;
+}
+
+#mode-toggle {
+    width: 100%;
+    height: auto;
+    margin: 1 0;
+    align: center middle;
+}
+
+#mode-tabs {
+    width: auto;
+    height: auto;
+}
+
+#mode-tabs .mode-tab {
+    min-width: 12;
+    height: 3;
+    padding: 0 2;
+    background: $background;
+    color: $text-muted;
+    border: solid $border;
+    margin: 0;
+}
+
+#mode-tabs .mode-tab:hover {
+    background: $panel;
+}
+
+#mode-tabs .mode-tab.-active {
+    background: $primary;
+    color: $background;
+    border: solid $primary;
+    text-style: bold;
+}
+
+.section-label {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+/* Agent Select dropdowns */
+#simple-section Select,
+#granular-section Select {
+    width: 100%;
+    margin: 0 0 1 0;
+}
+
+/* Agent Grid - for potential future use */
+AgentGrid {
+    height: auto;
+    max-height: 10;
+    grid-size: 4;
+    grid-gutter: 1;
+    margin: 1 0;
+}
+
+/* Agent Cards - constrained height */
+AgentCard {
+    width: 1fr;
+    height: 5;
+    padding: 0 1;
+    border: tall transparent;
+    background: $background;
+}
+
+AgentCard.-selected {
+    border: tall $primary;
+    background: $panel;
+}
+
+AgentCard:focus {
+    border: tall $accent;
+}
+
+AgentCard .card-name {
+    text-style: bold;
+    color: $text;
+}
+
+AgentCard .card-separator {
+    color: $border;
+}
+
+AgentCard .card-author {
+    color: $secondary;
+    text-style: italic;
+}
+
+AgentCard .card-desc {
+    color: $text-muted;
+}
+
+#auto-start {
+    margin: 1 0;
+}
+
+#buttons {
+    margin-top: 2;
+    margin-bottom: 2;
+    width: 100%;
+    align: center middle;
+}
+
+#buttons Button {
+    min-width: 20;
+}
+
+/* Welcome screen footer positioning */
+WelcomeScreen Footer {
+    dock: bottom;
+}
+
+.hidden {
+    display: none;
 }

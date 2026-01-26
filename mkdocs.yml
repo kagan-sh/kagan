@@ -1,0 +1,23 @@
+site_name: ᘚᘛ KAGAN
+site_description: AI-powered Kanban TUI for autonomous development workflows.
+docs_dir: docs
+site_dir: site
+repo_url: https://github.com/aorumbayev/kagan
+repo_name: GitHub
+
+theme:
+  name: mkdocs
+  color_mode: dark
+  nav_style: dark
+  highlightjs: true
+  hljs_style: github
+  hljs_style_dark: github-dark
+
+extra_css:
+  - styles/kagan.css
+
+nav:
+  - Home: index.md
+  - User Guide: user-guide.md
+  - Configuration: config.md
+  - Contributing: contributing.md

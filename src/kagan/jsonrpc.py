@@ -9,7 +9,7 @@ import logging
 from asyncio import Future
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast, get_type_hints
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, get_type_hints
 from weakref import WeakValueDictionary
 
 from typeguard import check_type
@@ -571,7 +571,7 @@ class API:
             log.warning("Response ID is not an integer: %s", raw_id)
             return
 
-        call = self._calls.get(cast("int", raw_id))
+        call = self._calls.get(raw_id)
         if call is None:
             log.warning("Received response for unknown request ID: %s", raw_id)
             return

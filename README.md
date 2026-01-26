@@ -31,6 +31,12 @@ uv run poe fix          # Auto-fix lint issues
 | j/k | Navigate up/down |
 | h/l | Navigate left/right |
 | n | New ticket |
+| e | Edit ticket |
+| d | Delete ticket |
+| [ / ] | Move ticket backward/forward |
 | Enter | View ticket details |
-| p | Planner chat |
+| o | Agent output |
+| s | Start agent |
+| x | Stop agent |
+| c | Planner chat |
 | q | Quit |

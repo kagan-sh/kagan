@@ -52,6 +52,7 @@ class Ticket(BaseModel):
     priority: TicketPriority = Field(default=TicketPriority.MEDIUM)
     assigned_hat: str | None = Field(default=None)
     parent_id: str | None = Field(default=None)
+    agent_backend: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
@@ -81,6 +82,7 @@ class TicketCreate(BaseModel):
     assigned_hat: str | None = Field(default=None)
     status: TicketStatus = Field(default=TicketStatus.BACKLOG)
     parent_id: str | None = Field(default=None)
+    agent_backend: str | None = Field(default=None)
 
 
 class TicketUpdate(BaseModel):
@@ -92,3 +94,4 @@ class TicketUpdate(BaseModel):
     assigned_hat: str | None = Field(default=None)
     status: TicketStatus | None = Field(default=None)
     parent_id: str | None = Field(default=None)
+    agent_backend: str | None = Field(default=None)

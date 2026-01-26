@@ -1,0 +1,260 @@
+:root {
+    --kagan-bg: #0f1419;
+    --kagan-surface: #171c24;
+    --kagan-panel: #1e2530;
+    --kagan-border: #2a3342;
+    --kagan-text: #c5cdd9;
+    --kagan-muted: #5c6773;
+    --kagan-primary: #3fb58e;
+    --kagan-secondary: #d4a84b;
+    --kagan-accent: #4ec9b0;
+    --kagan-link: #6fa3d4;
+    --kagan-link-hover: #4ec9b0;
+    --kagan-code-bg: #121820;
+}
+
+html,
+body {
+    background: var(--kagan-bg) !important;
+    color: var(--kagan-text);
+}
+
+body {
+    font-family: "Iosevka", "JetBrains Mono", "Fira Mono", "SFMono-Regular", "Menlo",
+        "Consolas", "Liberation Mono", monospace;
+    line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+    color: var(--kagan-text);
+    letter-spacing: 0.02em;
+}
+
+h1 {
+    color: var(--kagan-primary);
+}
+
+h2 {
+    color: var(--kagan-secondary);
+}
+
+h3 {
+    color: var(--kagan-accent);
+}
+
+a {
+    color: var(--kagan-link);
+}
+
+a:hover,
+a:focus {
+    color: var(--kagan-link-hover);
+}
+
+hr {
+    border-color: var(--kagan-border);
+}
+
+.navbar,
+.navbar.bg-primary {
+    background: var(--kagan-panel) !important;
+    border-bottom: 1px solid var(--kagan-border);
+}
+
+.navbar-brand,
+.navbar-dark .navbar-nav .nav-link,
+.navbar-nav .nav-link {
+    color: var(--kagan-text) !important;
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    word-spacing: -0.12em;
+    color: var(--kagan-primary) !important;
+}
+
+.navbar-dark .navbar-nav .nav-link:hover,
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-nav .nav-link:hover,
+.navbar-nav .nav-link:focus {
+    color: var(--kagan-primary) !important;
+}
+
+.navbar-nav .active > .nav-link,
+.navbar-nav .nav-link.active {
+    color: var(--kagan-secondary) !important;
+}
+
+.navbar .fa,
+.navbar .glyphicon {
+    color: var(--kagan-muted);
+}
+
+.navbar .fa:hover,
+.navbar .glyphicon:hover {
+    color: var(--kagan-primary);
+}
+
+.navbar .navbar-toggler {
+    border-color: var(--kagan-border);
+}
+
+.bs-sidebar {
+    background: var(--kagan-surface);
+    border: 1px solid var(--kagan-border);
+    border-radius: 8px;
+    padding: 0.5rem 0.25rem;
+}
+
+.col-md-9 {
+    background: var(--kagan-panel);
+    border: 1px solid var(--kagan-border);
+    border-radius: 10px;
+    padding: 1.5rem 2rem;
+}
+
+.col-md-9 > :first-child {
+    margin-top: 0;
+}
+
+.col-md-9 > :last-child {
+    margin-bottom: 0;
+}
+
+.bs-sidebar .nav-link,
+.bs-sidebar .nav > li > a {
+    color: var(--kagan-text);
+}
+
+.bs-sidebar .nav-link:hover,
+.bs-sidebar .nav-link:focus,
+.bs-sidebar .nav > li > a:hover,
+.bs-sidebar .nav > li > a:focus {
+    background: rgba(63, 181, 142, 0.12);
+    color: var(--kagan-primary);
+}
+
+.bs-sidebar .nav-item.active > .nav-link,
+.bs-sidebar .nav > li.active > a {
+    background: rgba(63, 181, 142, 0.18);
+    color: var(--kagan-primary);
+    border-left: 2px solid var(--kagan-primary);
+}
+
+.tocify,
+.toc {
+    border-left: 1px solid var(--kagan-border);
+}
+
+code,
+pre,
+kbd,
+samp {
+    color: var(--kagan-text);
+}
+
+code {
+    background: var(--kagan-code-bg);
+    border: 1px solid var(--kagan-border);
+    border-radius: 4px;
+    padding: 0.1rem 0.25rem;
+}
+
+pre {
+    background: var(--kagan-code-bg);
+    border: 1px solid var(--kagan-border);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+}
+
+pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+}
+
+kbd {
+    background: var(--kagan-panel);
+    border: 1px solid var(--kagan-border);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+}
+
+.form-control {
+    background: var(--kagan-surface);
+    border: 1px solid var(--kagan-border);
+    color: var(--kagan-text);
+}
+
+.form-control:focus {
+    background: var(--kagan-panel);
+    border-color: var(--kagan-primary);
+    color: var(--kagan-text);
+    box-shadow: none;
+}
+
+.hljs {
+    background: var(--kagan-code-bg) !important;
+}
+
+table {
+    border-color: var(--kagan-border);
+}
+
+table th,
+table td {
+    border-color: var(--kagan-border) !important;
+}
+
+table thead th {
+    background: var(--kagan-panel);
+    color: var(--kagan-text);
+}
+
+table tbody tr:nth-child(odd) {
+    background: var(--kagan-surface);
+}
+
+blockquote {
+    border-left: 3px solid var(--kagan-secondary);
+    color: var(--kagan-muted);
+    background: var(--kagan-surface);
+    padding: 0.5rem 1rem;
+}
+
+.btn-primary,
+.btn-primary:active,
+.btn-primary:focus {
+    background: var(--kagan-primary) !important;
+    border-color: var(--kagan-primary) !important;
+    color: #0f1419 !important;
+}
+
+.btn-primary:hover {
+    background: var(--kagan-accent) !important;
+    border-color: var(--kagan-accent) !important;
+}
+
+.alert,
+.admonition {
+    background: var(--kagan-surface);
+    border: 1px solid var(--kagan-border);
+    color: var(--kagan-text);
+}
+
+footer {
+    color: var(--kagan-muted);
+    margin-top: 1rem;
+    margin-bottom: 0;
+    padding: 0.25rem 0;
+    line-height: 1.2;
+}
+
+footer a {
+    color: var(--kagan-link);
+}

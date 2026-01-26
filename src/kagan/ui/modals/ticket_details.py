@@ -5,10 +5,11 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, Static
+from textual.widgets import Button, Label, Rule, Static
 
 from kagan.database.models import Ticket, TicketPriority, TicketStatus
 from kagan.ui.modals.actions import ModalAction
+from kagan.ui.modals.description_editor import DescriptionEditorModal
 
 
 class TicketDetailsModal(ModalScreen[ModalAction | None]):
@@ -18,6 +19,7 @@ class TicketDetailsModal(ModalScreen[ModalAction | None]):
         Binding("escape", "close", "Close"),
         Binding("e", "edit", "Edit"),
         Binding("d", "delete", "Delete"),
+        Binding("f", "expand_description", "Expand Description"),
     ]
 
     def __init__(self, ticket: Ticket, **kwargs) -> None:
@@ -26,10 +28,12 @@ class TicketDetailsModal(ModalScreen[ModalAction | None]):
 
     def compose(self) -> ComposeResult:
         """Compose the details layout."""
-        with Vertical():
+        with Vertical(id="ticket-details-container"):
             yield Label("Ticket Details", classes="modal-title")
 
-            with Horizontal():
+            yield Rule(line_style="heavy")
+
+            with Horizontal(classes="badge-row"):
                 yield Label(
                     self._get_priority_label(),
                     classes=f"badge {self._get_priority_class()}",
@@ -38,16 +42,41 @@ class TicketDetailsModal(ModalScreen[ModalAction | None]):
                     self._format_status(self.ticket.status),
                     classes="badge badge-status",
                 )
+                if self.ticket.agent_backend:
+                    yield Label(
+                        self.ticket.agent_backend,
+                        classes="badge badge-agent",
+                    )
+
+            yield Rule()
 
             yield Label("Title", classes="section-title")
-            yield Label(self.ticket.title, classes="ticket-title")
+            yield Static(self.ticket.title, classes="ticket-title")
 
-            yield Label("Description", classes="section-title")
+            yield Rule()
+
+            with Horizontal(classes="description-header"):
+                yield Label("Description", classes="section-title")
+                yield Static("", classes="header-spacer")
+                yield Static("[f] Expand", classes="expand-hint", id="expand-btn")
+
             description = self.ticket.description or "(No description)"
-            yield Static(description, classes="ticket-description")
+            yield Static(description, classes="ticket-description", id="description-content")
 
-            yield Label(f"Created: {self.ticket.created_at:%Y-%m-%d %H:%M}", classes="ticket-meta")
-            yield Label(f"Updated: {self.ticket.updated_at:%Y-%m-%d %H:%M}", classes="ticket-meta")
+            yield Rule()
+
+            with Horizontal(classes="meta-row"):
+                yield Label(
+                    f"Created: {self.ticket.created_at:%Y-%m-%d %H:%M}",
+                    classes="ticket-meta",
+                )
+                yield Static("  |  ", classes="meta-separator")
+                yield Label(
+                    f"Updated: {self.ticket.updated_at:%Y-%m-%d %H:%M}",
+                    classes="ticket-meta",
+                )
+
+            yield Rule()
 
             with Horizontal(classes="button-row"):
                 yield Button("[Esc] Close", id="close-btn")
@@ -101,3 +130,14 @@ class TicketDetailsModal(ModalScreen[ModalAction | None]):
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+    def action_expand_description(self) -> None:
+        """Open the description in a full-screen read-only viewer."""
+        description = self.ticket.description or ""
+        self.app.push_screen(
+            DescriptionEditorModal(
+                description=description,
+                readonly=True,
+                title="View Description",
+            )
+        )

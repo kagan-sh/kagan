@@ -30,6 +30,7 @@ dev = [
     "pytest-sugar>=1.1.1",
     "pytest-textual-snapshot>=1.0.0",
     "textual-dev>=1.8.0",
+    "mkdocs>=1.6.0",
 ]
 
 [tool.ruff]
@@ -62,6 +63,8 @@ lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
 typecheck = "pyrefly check src/ tests/"
 check = ["lint", "typecheck", "test"]
+docs-serve = "mkdocs serve"
+docs-build = "mkdocs build"
 
 [tool.poe.tasks.fix]
 help = "Fix linting issues and format code"

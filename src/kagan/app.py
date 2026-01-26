@@ -14,6 +14,7 @@ from kagan.config import KaganConfig
 from kagan.constants import DEFAULT_CONFIG_PATH, DEFAULT_DB_PATH, DEFAULT_LOCK_PATH
 from kagan.database import KnowledgeBase, StateManager
 from kagan.lock import InstanceLock, exit_if_already_running
+from kagan.theme import KAGAN_THEME
 from kagan.ui.screens.kanban import KanbanScreen
 
 
@@ -27,12 +28,13 @@ class TicketChanged(Message):
 class KaganApp(App):
     """Kagan TUI Application - AI-powered Kanban board."""
 
-    TITLE = "KAGAN"
+    TITLE = "ᘚᘛ KAGAN"
     CSS_PATH = "styles/kagan.tcss"
 
     BINDINGS = [
         Binding("q", "quit", "Quit", show=True),
-        Binding("?", "help", "Help", show=True),
+        Binding("?", "command_palette", "Help", show=True),
+        Binding("ctrl+p", "command_palette", show=False),  # Hide from footer, still works
     ]
 
     def __init__(
@@ -42,6 +44,10 @@ class KaganApp(App):
         lock_path: str | None = DEFAULT_LOCK_PATH,
     ):
         super().__init__()
+        # Register the Kagan theme before anything else
+        self.register_theme(KAGAN_THEME)
+        self.theme = "kagan"
+
         self.db_path = Path(db_path)
         self.config_path = Path(config_path)
         self.lock_path = Path(lock_path) if lock_path else None
@@ -80,6 +86,19 @@ class KaganApp(App):
 
     async def on_mount(self) -> None:
         """Initialize app on mount."""
+        # Check for first boot (no config.toml file)
+        # Note: .kagan folder may already exist (created by lock file),
+        # so we check for config.toml specifically
+        if not self.config_path.exists():
+            from kagan.ui.screens.welcome import WelcomeScreen
+
+            await self.push_screen(WelcomeScreen())
+            return  # _continue_after_welcome will be called when welcome finishes
+
+        await self._initialize_app()
+
+    async def _initialize_app(self) -> None:
+        """Initialize all app components."""
         self.config = KaganConfig.load(self.config_path)
         self.log("Config loaded", path=str(self.config_path))
 
@@ -113,6 +132,14 @@ class KaganApp(App):
         await self.push_screen(KanbanScreen())
         self.log("KanbanScreen pushed, app ready")
 
+    def _continue_after_welcome(self) -> None:
+        """Called when welcome screen completes to continue app initialization."""
+        self.call_later(self._run_init_after_welcome)
+
+    async def _run_init_after_welcome(self) -> None:
+        """Run initialization after welcome screen."""
+        await self._initialize_app()
+
     async def _scheduler_tick(self) -> None:
         """Called periodically to run scheduler tick."""
         await self.scheduler.tick()
@@ -135,14 +162,6 @@ class KaganApp(App):
             await self._state_manager.close()
         if self._instance_lock:
             self._instance_lock.release()
-
-    def action_help(self) -> None:
-        """Show help screen."""
-        self.notify(
-            "h/l=columns, j/k=cards, n=new, e=edit, d=delete, m/M=move, s=start, x=stop",
-            title="Help",
-            timeout=5,
-        )
 
 
 def run() -> None:
