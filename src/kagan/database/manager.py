@@ -68,6 +68,7 @@ class StateManager:
             description=ticket.description,
             priority=ticket.priority,
             status=ticket.status,
+            assigned_hat=ticket.assigned_hat,
             parent_id=ticket.parent_id,
         )
 
@@ -75,8 +76,9 @@ class StateManager:
             await conn.execute(
                 """
                 INSERT INTO tickets
-                    (id, title, description, status, priority, parent_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, title, description, status, priority,
+                     assigned_hat, parent_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     new_ticket.id,
@@ -88,6 +90,7 @@ class StateManager:
                     new_ticket.priority.value
                     if isinstance(new_ticket.priority, TicketPriority)
                     else new_ticket.priority,
+                    new_ticket.assigned_hat,
                     new_ticket.parent_id,
                     new_ticket.created_at.isoformat(),
                     new_ticket.updated_at.isoformat(),
@@ -153,6 +156,7 @@ class StateManager:
             "status": update.status.value
             if isinstance(update.status, TicketStatus)
             else update.status,
+            "assigned_hat": update.assigned_hat,
             "parent_id": update.parent_id,
         }
 
@@ -207,6 +211,7 @@ class StateManager:
             description=row["description"] or "",
             status=TicketStatus(row["status"]),
             priority=TicketPriority(row["priority"]),
+            assigned_hat=row["assigned_hat"],
             parent_id=row["parent_id"],
             created_at=datetime.fromisoformat(row["created_at"])
             if row["created_at"]

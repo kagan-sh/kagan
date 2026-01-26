@@ -103,6 +103,13 @@ class WorktreeManager:
         if worktree_path.exists():
             raise WorktreeError(f"Worktree already exists for ticket {ticket_id}")
 
+        # Check if branch already exists from a previous failed attempt
+        # and delete it if so
+        stdout, _ = await self._run_git("branch", "--list", branch_name, check=False)
+        if stdout.strip():
+            # Branch exists, delete it before creating worktree
+            await self._run_git("branch", "-D", branch_name, check=False)
+
         # Create worktree with new branch
         try:
             await self._run_git(
@@ -181,3 +188,177 @@ class WorktreeManager:
                 ticket_ids.append(entry.name)
 
         return sorted(ticket_ids)
+
+    async def get_branch_name(self, ticket_id: str) -> str | None:
+        """Get the branch name for a ticket's worktree.
+
+        Args:
+            ticket_id: Unique ticket identifier
+
+        Returns:
+            Branch name if worktree exists, None otherwise
+        """
+        wt_path = await self.get_path(ticket_id)
+        if wt_path is None:
+            return None
+
+        try:
+            stdout, _ = await self._run_git(
+                "rev-parse", "--abbrev-ref", "HEAD", cwd=wt_path, check=False
+            )
+            return stdout if stdout else None
+        except WorktreeError:
+            return None
+
+    async def get_commit_log(self, ticket_id: str, base_branch: str = "main") -> list[str]:
+        """Get list of commit messages from the worktree branch since diverging from base.
+
+        Args:
+            ticket_id: Unique ticket identifier
+            base_branch: Base branch to compare against
+
+        Returns:
+            List of commit message strings (one-line format)
+        """
+        wt_path = await self.get_path(ticket_id)
+        if wt_path is None:
+            return []
+
+        try:
+            stdout, _ = await self._run_git(
+                "log", "--oneline", f"{base_branch}..HEAD", cwd=wt_path, check=False
+            )
+            if not stdout:
+                return []
+            return [line.strip() for line in stdout.split("\n") if line.strip()]
+        except WorktreeError:
+            return []
+
+    async def generate_semantic_commit(self, ticket_id: str, title: str, commits: list[str]) -> str:
+        """Generate a semantic commit message from ticket info and commits.
+
+        Args:
+            ticket_id: Unique ticket identifier
+            title: Ticket title
+            commits: List of commit messages to include
+
+        Returns:
+            Formatted semantic commit message
+        """
+        title_lower = title.lower()
+
+        # Infer commit type from title
+        if any(kw in title_lower for kw in ("fix", "bug", "issue")):
+            commit_type = "fix"
+        elif any(kw in title_lower for kw in ("add", "create", "implement", "new")):
+            commit_type = "feat"
+        elif any(kw in title_lower for kw in ("refactor", "clean", "improve")):
+            commit_type = "refactor"
+        elif any(kw in title_lower for kw in ("doc", "readme")):
+            commit_type = "docs"
+        elif "test" in title_lower:
+            commit_type = "test"
+        else:
+            commit_type = "chore"
+
+        # Extract scope from title if present (e.g., "Fix database connection" -> "database")
+        scope = ""
+        scope_match = re.match(r"^\w+\s+(\w+)", title)
+        if scope_match:
+            potential_scope = scope_match.group(1).lower()
+            # Only use as scope if it's a reasonable component name
+            if len(potential_scope) > 2 and potential_scope not in (
+                "the",
+                "for",
+                "and",
+                "with",
+                "from",
+                "into",
+            ):
+                scope = potential_scope
+
+        # Format header
+        header = f"{commit_type}({scope}): {title}" if scope else f"{commit_type}: {title}"
+
+        # Format body with commit list
+        if commits:
+            # Strip commit hashes (first word) from oneline format
+            body_lines = []
+            for commit in commits:
+                parts = commit.split(" ", 1)
+                msg = parts[1] if len(parts) > 1 else commit
+                body_lines.append(f"- {msg}")
+            body = "\n".join(body_lines)
+            return f"{header}\n\n{body}"
+
+        return header
+
+    async def merge_to_main(
+        self, ticket_id: str, base_branch: str = "main", squash: bool = True
+    ) -> tuple[bool, str]:
+        """Merge the worktree branch back to the base branch.
+
+        Args:
+            ticket_id: Unique ticket identifier
+            base_branch: Target branch for merge
+            squash: If True, squash all commits into one with semantic message
+
+        Returns:
+            Tuple of (success, message)
+        """
+        # Get worktree path and branch
+        wt_path = await self.get_path(ticket_id)
+        if wt_path is None:
+            return False, f"Worktree not found for ticket {ticket_id}"
+
+        branch_name = await self.get_branch_name(ticket_id)
+        if branch_name is None:
+            return False, f"Could not determine branch for ticket {ticket_id}"
+
+        try:
+            # Get commit log for semantic message
+            commits = await self.get_commit_log(ticket_id, base_branch)
+            if not commits:
+                return False, f"No commits to merge for ticket {ticket_id}"
+
+            # Read ticket title from branch name slug (fallback)
+            title = branch_name.split("/", 1)[-1]  # Remove kagan/ prefix
+            if "-" in title:
+                # Extract title part after ticket ID
+                parts = title.split("-", 1)
+                if len(parts) > 1:
+                    title = parts[1].replace("-", " ").title()
+
+            # Checkout base branch in main repo
+            await self._run_git("checkout", base_branch)
+
+            # Merge the worktree branch
+            if squash:
+                stdout, stderr = await self._run_git("merge", "--squash", branch_name, check=False)
+                # Check for merge conflicts
+                status_out, _ = await self._run_git("status", "--porcelain", check=False)
+                if "UU " in status_out or "AA " in status_out or "DD " in status_out:
+                    # Abort the merge
+                    await self._run_git("merge", "--abort", check=False)
+                    return False, "Merge conflict detected. Please resolve manually."
+
+                # Generate semantic commit message
+                commit_msg = await self.generate_semantic_commit(ticket_id, title, commits)
+
+                # Commit the squashed changes
+                await self._run_git("commit", "-m", commit_msg)
+            else:
+                # Regular merge
+                stdout, stderr = await self._run_git(
+                    "merge", branch_name, "-m", f"Merge branch '{branch_name}'", check=False
+                )
+                if "CONFLICT" in stderr or "CONFLICT" in stdout:
+                    await self._run_git("merge", "--abort", check=False)
+                    return False, "Merge conflict detected. Please resolve manually."
+
+            return True, f"Successfully merged {branch_name} to {base_branch}"
+
+        except WorktreeError as e:
+            return False, f"Merge failed: {e}"
+        except Exception as e:
+            return False, f"Unexpected error during merge: {e}"

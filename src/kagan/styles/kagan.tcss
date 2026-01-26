@@ -91,7 +91,7 @@ KanbanColumn .empty-message {
 TicketCard {
     width: 100%;
     height: auto;
-    max-height: 6;
+    max-height: 7;
     margin: 0 0 1 0;
     padding: 0;
     border: solid $primary;
@@ -140,6 +140,13 @@ TicketCard .card-meta {
     width: 100%;
     height: 1;
     color: $text-muted;
+}
+
+TicketCard .card-iteration {
+    width: 100%;
+    height: 1;
+    color: $success;
+    text-style: italic;
 }
 
 /* Modal styles */
@@ -432,4 +439,73 @@ ChatScreen {
 
 #chat-input-row Input {
     width: 100%;
+}
+
+/* Permission Modal */
+PermissionModal {
+    align: center middle;
+}
+
+#permission-container {
+    width: 60;
+    height: auto;
+    max-height: 80%;
+    background: $surface;
+    border: tall $primary;
+    padding: 1 2;
+}
+
+#request-description {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#tool-details {
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#options-container {
+    margin: 1 0;
+}
+
+#options-container Button {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+.permission-allow {
+    background: $success;
+}
+
+.permission-allow:hover {
+    background: $success-darken-1;
+}
+
+.permission-reject {
+    background: $error;
+}
+
+.permission-reject:hover {
+    background: $error-darken-1;
+}
+
+/* Agent running indicator - pulsating border effect */
+TicketCard.agent-active {
+    border: solid $success;
+}
+
+TicketCard.agent-active.agent-pulse {
+    border: double $success;
+    background: $success 8%;
+}
+
+/* Ensure focus still takes precedence */
+TicketCard.agent-active:focus {
+    border: double $accent;
+}
+
+TicketCard.agent-active.agent-pulse:focus {
+    border: double $accent;
+    background: $success 8%;
 }

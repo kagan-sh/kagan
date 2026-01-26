@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     description TEXT,
     status TEXT DEFAULT 'BACKLOG' CHECK(status IN ('BACKLOG', 'IN_PROGRESS', 'REVIEW', 'DONE')),
     priority INTEGER DEFAULT 1 CHECK(priority IN (0, 1, 2)),  -- 0=low, 1=medium, 2=high
+    assigned_hat TEXT,             -- Agent/hat identifier for this ticket
     parent_id TEXT REFERENCES tickets(id) ON DELETE SET NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

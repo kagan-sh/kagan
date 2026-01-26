@@ -150,7 +150,7 @@ class TestMoveTicket:
 
             assert app.focused is not None
 
-            await pilot.press("m")
+            await pilot.press("right_square_bracket")
             await pilot.pause()
 
             updated = await sm.get_ticket(ticket.id)
@@ -173,7 +173,7 @@ class TestMoveTicket:
             cards[0].focus()
             await pilot.pause()
 
-            await pilot.press("shift+m")
+            await pilot.press("left_square_bracket")
             await pilot.pause()
 
             updated = await sm.get_ticket(ticket.id)
@@ -194,7 +194,7 @@ class TestMoveTicket:
             cards[0].focus()
             await pilot.pause()
 
-            await pilot.press("m")
+            await pilot.press("right_square_bracket")
             await pilot.pause()
 
             updated = await sm.get_ticket(ticket.id)

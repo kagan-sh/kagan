@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from textual import events
     from textual.app import ComposeResult
 
-    from kagan.app import KaganApp
+    from kagan.app import KaganApp, TicketChanged
 
 # Minimum terminal size for proper display
 MIN_WIDTH = 80
@@ -51,10 +51,8 @@ class KanbanScreen(Screen):
         Binding("n", "new_ticket", "New ticket"),
         Binding("e", "edit_ticket", "Edit ticket"),
         Binding("d", "delete_ticket", "Delete ticket"),
-        Binding("m", "move_forward", "Move->"),
-        Binding("shift+m", "move_backward", "Move<-"),
-        Binding("ctrl+l", "move_forward", "Move->", show=False),
-        Binding("ctrl+h", "move_backward", "Move<-", show=False),
+        Binding("right_square_bracket", "move_forward", "Move->"),
+        Binding("left_square_bracket", "move_backward", "Move<-"),
         Binding("enter", "view_details", "View details"),
         Binding("o", "view_agent_output", "Agent output"),
         Binding("s", "start_agent", "Start agent"),
@@ -95,10 +93,15 @@ class KanbanScreen(Screen):
         self._check_screen_size()
         await self._refresh_board()
         self._focus_first_card()
+        self.set_interval(1.0, self._update_active_cards)
 
     def on_resize(self, event: events.Resize) -> None:
         """Handle terminal resize."""
         self._check_screen_size()
+
+    async def on_screen_resume(self) -> None:
+        """Refresh board when returning from another screen."""
+        await self._refresh_board()
 
     def _check_screen_size(self) -> None:
         """Check if terminal is large enough and show warning if not."""
@@ -107,6 +110,24 @@ class KanbanScreen(Screen):
             self.add_class("too-small")
         else:
             self.remove_class("too-small")
+
+    def _update_active_cards(self) -> None:
+        """Update agent active state and iteration info for all cards."""
+        active_ids = set(self.kagan_app.agent_manager.list_active())
+
+        # Build iteration info dict
+        iterations: dict[str, str] = {}
+        if hasattr(self.kagan_app, "_scheduler") and self.kagan_app._scheduler:
+            scheduler = self.kagan_app._scheduler
+            max_iter = self.kagan_app.config.general.max_iterations
+            for ticket_id in active_ids:
+                current = scheduler.get_iteration(ticket_id)
+                if current is not None:
+                    iterations[ticket_id] = f"Iter {current}/{max_iter}"
+
+        for column in self._get_columns():
+            column.update_active_states(active_ids)
+            column.update_iterations(iterations)
 
     async def _refresh_board(self) -> None:
         self._tickets = await self.kagan_app.state_manager.get_all_tickets()
@@ -285,7 +306,9 @@ class KanbanScreen(Screen):
             self.notify("No agent running for this ticket", severity="warning")
             return
 
-        self.app.push_screen(AgentOutputModal(agent))
+        self.app.push_screen(
+            AgentOutputModal(agent, card.ticket.id, project_root=agent.project_root)
+        )
 
     def action_open_chat(self) -> None:
         """Open the planner chat screen."""
@@ -314,17 +337,25 @@ class KanbanScreen(Screen):
             wt_path = await worktree.create(ticket.id, ticket.title, base_branch)
 
         config = self.kagan_app.config
-        hat = config.get_default_hat()
-        if hat is None:
-            command = "claude"
-        else:
-            _, hat_config = hat
-            command = hat_config.agent_command
-            if hat_config.args:
-                command += " " + " ".join(hat_config.args)
+        agent_result = config.get_default_agent()
+        if agent_result is None:
+            # Create a default AgentConfig for claude
+            from kagan.config import AgentConfig
 
-        await manager.spawn(ticket.id, command, wt_path)
+            agent_config = AgentConfig(
+                identity="anthropic.claude",
+                name="Claude",
+                short_name="claude",
+                run_command={"*": "claude"},
+            )
+        else:
+            _, agent_config = agent_result
+
+        agent = await manager.spawn(ticket.id, agent_config, wt_path)
         self.notify(f"Started agent for {ticket.id}")
+
+        # Run the agent loop in a background worker
+        self.run_worker(self._run_agent_task(ticket, agent), exclusive=False)
 
     async def action_stop_agent(self) -> None:
         """Stop the agent on the focused ticket."""
@@ -341,6 +372,46 @@ class KanbanScreen(Screen):
 
         await manager.terminate(ticket.id)
         self.notify(f"Stopped agent for {ticket.id}")
+
+    async def _run_agent_task(self, ticket: Ticket, agent) -> None:
+        """Background task to run the agent and send prompt."""
+        from kagan.agents.prompt import build_prompt
+        from kagan.agents.signals import Signal, parse_signal
+
+        try:
+            # Wait for agent to be ready
+            await agent.wait_ready(timeout=60.0)
+            self.notify("Agent ready, sending prompt...")
+
+            # Build and send prompt
+            config = self.kagan_app.config
+            hat = config.get_hat(ticket.assigned_hat) if ticket.assigned_hat else None
+            prompt = build_prompt(ticket, 1, 1, "", hat)
+            stop_reason = await agent.send_prompt(prompt)
+
+            # Parse the response
+            output = agent.get_response_text()
+            result = parse_signal(output)
+
+            if result.signal == Signal.COMPLETE:
+                await self.kagan_app.state_manager.update_ticket(
+                    ticket.id, TicketUpdate(status=TicketStatus.REVIEW)
+                )
+                self.notify(f"Agent completed ticket {ticket.id}")
+            elif result.signal == Signal.BLOCKED:
+                self.notify(f"Agent blocked on ticket {ticket.id}", severity="warning")
+            else:
+                self.notify(f"Agent finished: {stop_reason}")
+
+            await self._refresh_board()
+
+        except TimeoutError:
+            self.notify("Agent failed to start (timeout)", severity="error")
+        except Exception as e:
+            self.notify(f"Agent error: {e}", severity="error")
+        finally:
+            # Clean up
+            await self.kagan_app.agent_manager.terminate(ticket.id)
 
     # Message handlers
 
@@ -368,3 +439,7 @@ class KanbanScreen(Screen):
             await self._refresh_board()
             self.notify(f"Moved #{message.ticket.id} to {message.target_status.value}")
             self._focus_column(message.target_status)
+
+    async def on_ticket_changed(self, message: TicketChanged) -> None:
+        """Handle ticket status change from scheduler - refresh the board."""
+        await self._refresh_board()

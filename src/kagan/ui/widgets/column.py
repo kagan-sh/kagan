@@ -1,6 +1,9 @@
 """KanbanColumn widget for displaying a status column."""
 
-from textual.app import ComposeResult
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from textual.containers import ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.widget import Widget
@@ -9,6 +12,9 @@ from textual.widgets import Label
 from kagan.constants import STATUS_LABELS
 from kagan.database.models import Ticket, TicketStatus
 from kagan.ui.widgets.card import TicketCard
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 
 class _NSLabel(Label):
@@ -73,3 +79,15 @@ class KanbanColumn(Widget):
 
     def update_tickets(self, tickets: list[Ticket]) -> None:
         self.tickets = [t for t in tickets if t.status == self.status]
+
+    def update_active_states(self, active_ids: set[str]) -> None:
+        """Update active agent state for all cards in this column."""
+        for card in self.query(TicketCard):
+            if card.ticket is not None:
+                card.is_agent_active = card.ticket.id in active_ids
+
+    def update_iterations(self, iterations: dict[str, str]) -> None:
+        """Update iteration display on cards."""
+        for card in self.query(TicketCard):
+            if card.ticket:
+                card.iteration_info = iterations.get(card.ticket.id, "")

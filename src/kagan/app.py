@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from textual.app import App
 from textual.binding import Binding
+from textual.message import Message
 
 from kagan.agents import AgentManager, Scheduler, WorktreeManager
 from kagan.config import KaganConfig
@@ -13,6 +15,13 @@ from kagan.constants import DEFAULT_CONFIG_PATH, DEFAULT_DB_PATH, DEFAULT_LOCK_P
 from kagan.database import KnowledgeBase, StateManager
 from kagan.lock import InstanceLock, exit_if_already_running
 from kagan.ui.screens.kanban import KanbanScreen
+
+
+@dataclass
+class TicketChanged(Message):
+    """Posted when a ticket status changes, to trigger UI refresh."""
+
+    pass
 
 
 class KaganApp(App):
@@ -72,30 +81,47 @@ class KaganApp(App):
     async def on_mount(self) -> None:
         """Initialize app on mount."""
         self.config = KaganConfig.load(self.config_path)
+        self.log("Config loaded", path=str(self.config_path))
+
+        auto_start = self.config.general.auto_start
+        max_agents = self.config.general.max_concurrent_agents
+        self.log.debug("Config settings", auto_start=auto_start, max_agents=max_agents)
 
         self._state_manager = StateManager(self.db_path)
         await self._state_manager.initialize()
+        self.log("Database initialized", path=str(self.db_path))
 
         self._knowledge_base = KnowledgeBase(self._state_manager.connection)
 
         self._agent_manager = AgentManager()
-        self._worktree_manager = WorktreeManager()
+        # Project root is the parent of .kagan directory (where config lives)
+        project_root = self.config_path.parent.parent
+        self._worktree_manager = WorktreeManager(repo_root=project_root)
 
         self._scheduler = Scheduler(
             state_manager=self._state_manager,
             agent_manager=self._agent_manager,
             worktree_manager=self._worktree_manager,
             config=self.config,
+            on_ticket_changed=self._on_ticket_changed,
         )
 
         if self.config.general.auto_start:
+            self.log("auto_start enabled, starting scheduler interval")
             self.set_interval(2.0, self._scheduler_tick)
 
         await self.push_screen(KanbanScreen())
+        self.log("KanbanScreen pushed, app ready")
 
     async def _scheduler_tick(self) -> None:
         """Called periodically to run scheduler tick."""
         await self.scheduler.tick()
+
+    def _on_ticket_changed(self) -> None:
+        """Called by scheduler when a ticket status changes."""
+        # Post to the current screen so it receives the message
+        if self.screen:
+            self.screen.post_message(TicketChanged())
 
     async def on_unmount(self) -> None:
         """Clean up on unmount."""

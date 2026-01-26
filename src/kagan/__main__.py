@@ -40,6 +40,18 @@ def main() -> int:
         print(f"kagan {__version__}")
         return 0
 
+    # If config is specified but db is not, derive db path from config path
+    # (db should be in the same directory as config)
+    from pathlib import Path
+
+    config_path = Path(args.config)
+    if args.db == DEFAULT_DB_PATH and args.config != DEFAULT_CONFIG_PATH:
+        # User specified a custom config but not a custom db
+        # Derive db path from config's parent directory
+        db_path = str(config_path.parent / "state.db")
+    else:
+        db_path = args.db
+
     # Import here to avoid slow startup for --help/--version
     from kagan.lock import InstanceLock, InstanceLockError
 
@@ -59,7 +71,7 @@ def main() -> int:
     try:
         from kagan.app import KaganApp
 
-        app = KaganApp(db_path=args.db, config_path=args.config)
+        app = KaganApp(db_path=db_path, config_path=args.config)
         app._instance_lock = lock
         app.run()
         return 0

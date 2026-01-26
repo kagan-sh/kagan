@@ -1,9 +1,10 @@
 """TicketCard widget for displaying a Kanban ticket."""
 
-from dataclasses import dataclass
+from __future__ import annotations
 
-from textual import events
-from textual.app import ComposeResult
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
@@ -12,6 +13,11 @@ from textual.widgets import Label
 from kagan.constants import COLUMN_ORDER
 from kagan.database.models import Ticket, TicketPriority, TicketStatus
 
+if TYPE_CHECKING:
+    from textual import events
+    from textual.app import ComposeResult
+    from textual.timer import Timer
+
 
 class TicketCard(Widget):
     """A card widget representing a single ticket on the Kanban board."""
@@ -19,8 +25,11 @@ class TicketCard(Widget):
     can_focus = True
 
     ticket: reactive[Ticket | None] = reactive(None)
+    is_agent_active: reactive[bool] = reactive(False)
+    iteration_info: reactive[str] = reactive("")
     _dragging: bool = False
     _drag_start_x: int = 0
+    _pulse_timer: Timer | None = None
 
     @dataclass
     class Selected(Message):
@@ -77,6 +86,10 @@ class TicketCard(Widget):
 
         yield Label(meta_text, classes="card-meta")
 
+        # Line 4: Iteration info (if agent is running)
+        if self.iteration_info:
+            yield Label(self.iteration_info, classes="card-iteration")
+
     def _get_priority_class(self) -> str:
         """Get CSS class for priority."""
         if self.ticket is None:
@@ -131,3 +144,19 @@ class TicketCard(Widget):
             return COLUMN_ORDER[column_index]
         except Exception:
             return None
+
+    def watch_is_agent_active(self, active: bool) -> None:
+        """React to agent active state changes."""
+        if active:
+            self.add_class("agent-active")
+            self._pulse_timer = self.set_interval(0.6, self._toggle_pulse)
+        else:
+            if self._pulse_timer is not None:
+                self._pulse_timer.stop()
+                self._pulse_timer = None
+            self.remove_class("agent-active")
+            self.remove_class("agent-pulse")
+
+    def _toggle_pulse(self) -> None:
+        """Toggle the pulse class for animation effect."""
+        self.toggle_class("agent-pulse")

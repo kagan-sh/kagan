@@ -213,6 +213,11 @@ class Ticket(BaseModel):
 
 Line length: 100 chars. Key rules enabled: E, F, I, UP, B, SIM, TCH, RUF.
 
+**Always run auto-formatting first:**
+- Before manually editing code to fix ruff warnings/errors, run `uv run poe fix` first
+- Ruff can auto-fix many issues (import sorting, unused imports, formatting, etc.)
+- Only manually edit code for issues that ruff cannot auto-fix
+
 Ignored:
 - `RUF012`: Textual class attributes (BINDINGS, etc.) don't need ClassVar
 - `SIM102`: Allow nested if for readability

@@ -5,16 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from textual import on
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Input, Label, RichLog, Static
 
-from kagan.agents import AgentProcess, AgentState
+from kagan.acp import messages
+from kagan.agents.planner import build_planner_prompt, parse_ticket_from_response
+from kagan.config import AgentConfig
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
+    from kagan.acp.agent import Agent
     from kagan.app import KaganApp
 
 PLANNER_SESSION_ID = "planner"
@@ -30,8 +34,9 @@ class ChatScreen(Screen):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._agent: AgentProcess | None = None
-        self._timer = None
+        self._agent: Agent | None = None
+        self._is_running = False
+        self._accumulated_response: list[str] = []
 
     @property
     def kagan_app(self) -> KaganApp:
@@ -56,48 +61,43 @@ class ChatScreen(Screen):
 
         # Check if already running
         existing = manager.get(PLANNER_SESSION_ID)
-        if existing and existing.state == AgentState.RUNNING:
+        if existing:
             self._agent = existing
-            self._start_output_timer()
+            self._is_running = True
+            # Set ourselves as message target to receive streaming updates
+            existing.set_message_target(self)
+            self._update_status()
             return
 
-        # Get planner command from config
+        # Get agent config from config
         config = self.kagan_app.config
-        hat = config.get_hat("planner")
-        if hat:
-            command = hat.agent_command
-            if hat.args:
-                command += " " + " ".join(hat.args)
+        agent_result = config.get_default_agent()
+
+        if agent_result is None:
+            # Create a default AgentConfig for claude
+            agent_config = AgentConfig(
+                identity="anthropic.claude",
+                name="Claude Planner",
+                short_name="claude",
+                run_command={"*": "claude"},
+            )
         else:
-            command = "claude"
+            _, agent_config = agent_result
 
         # Spawn in current directory (no worktree for planner)
         cwd = Path.cwd()
 
         try:
-            self._agent = await manager.spawn(PLANNER_SESSION_ID, command, cwd)
+            # Pass self as message_target to receive streaming updates
+            self._agent = await manager.spawn(PLANNER_SESSION_ID, agent_config, cwd, self)
+            self._is_running = True
             self._update_status()
-            self._start_output_timer()
         except ValueError:
+            # Agent already running
             self._agent = manager.get(PLANNER_SESSION_ID)
             if self._agent:
-                self._start_output_timer()
-
-    def _start_output_timer(self) -> None:
-        """Start polling for agent output."""
-        if self._timer is None:
-            self._timer = self.set_interval(0.3, self._poll_output)
-
-    def _poll_output(self) -> None:
-        """Poll and display agent output."""
-        if not self._agent:
-            return
-        output, _ = self._agent.get_output()
-        log = self.query_one("#chat-log", RichLog)
-        log.clear()
-        log.write(output)
-        log.scroll_end(animate=False)
-        self._update_status()
+                self._is_running = True
+                self._update_status()
 
     def _update_status(self) -> None:
         """Update status display."""
@@ -105,16 +105,85 @@ class ChatScreen(Screen):
         if not self._agent:
             status.update("Status: Not started")
             return
-        state = self._agent.state
-        match state:
-            case AgentState.RUNNING:
-                status.update("Status: [bold green]RUNNING[/]")
-            case AgentState.FINISHED:
-                status.update(f"Status: [bold blue]FINISHED[/] (exit: {self._agent.return_code})")
-            case AgentState.FAILED:
-                status.update(f"Status: [bold red]FAILED[/] (exit: {self._agent.return_code})")
-            case _:
-                status.update(f"Status: {state.value}")
+        if self._is_running:
+            status.update("Status: [bold green]RUNNING[/]")
+        else:
+            status.update("Status: [bold blue]STOPPED[/]")
+
+    def _append_output(self, text: str, style: str = "") -> None:
+        """Append text to the chat log."""
+        log = self.query_one("#chat-log", RichLog)
+        if style:
+            log.write(f"[{style}]{text}[/{style}]")
+        else:
+            log.write(text)
+        log.scroll_end(animate=False)
+
+    # Message handlers for ACP agent events
+
+    @on(messages.AgentUpdate)
+    def on_agent_update(self, message: messages.AgentUpdate) -> None:
+        """Handle agent text output."""
+        self._accumulated_response.append(message.text)
+        self._append_output(message.text)
+
+    @on(messages.Thinking)
+    def on_agent_thinking(self, message: messages.Thinking) -> None:
+        """Handle agent thinking/reasoning."""
+        self._append_output(message.text, style="dim italic")
+
+    @on(messages.ToolCall)
+    def on_tool_call(self, message: messages.ToolCall) -> None:
+        """Handle tool call start."""
+        title = message.tool_call.get("title", "Tool call")
+        kind = message.tool_call.get("kind", "")
+        self._append_output(f"\n[bold cyan]> {title}[/bold cyan]")
+        if kind:
+            self._append_output(f"  [dim]({kind})[/dim]")
+
+    @on(messages.ToolCallUpdate)
+    def on_tool_call_update(self, message: messages.ToolCallUpdate) -> None:
+        """Handle tool call update."""
+        status = message.update.get("status")
+        if status:
+            style = "green" if status == "completed" else "yellow"
+            self._append_output(f"  [{style}]{status}[/{style}]")
+
+    @on(messages.AgentReady)
+    def on_agent_ready(self, message: messages.AgentReady) -> None:
+        """Handle agent ready."""
+        self._append_output("[green]Agent ready[/green]\n")
+
+    @on(messages.AgentFail)
+    def on_agent_fail(self, message: messages.AgentFail) -> None:
+        """Handle agent failure."""
+        self._is_running = False
+        self._update_status()
+        self._append_output(f"[red bold]Error: {message.message}[/red bold]")
+        if message.details:
+            self._append_output(f"[red]{message.details}[/red]")
+
+    async def _try_create_ticket_from_response(self) -> None:
+        """Parse accumulated response and create ticket if found."""
+        if not self._accumulated_response:
+            return
+
+        full_response = "".join(self._accumulated_response)
+        parsed = parse_ticket_from_response(full_response)
+
+        if parsed is None:
+            return
+
+        try:
+            ticket = await self.kagan_app.state_manager.create_ticket(parsed.ticket)
+            self.notify(
+                f"Created ticket [{ticket.short_id}]: {ticket.title[:50]}",
+                severity="information",
+            )
+            self._append_output(f"\n[bold green]✓ Created ticket {ticket.short_id}[/bold green]\n")
+        except Exception as e:
+            self.notify(f"Failed to create ticket: {e}", severity="error")
+            self._append_output(f"[red]Failed to create ticket: {e}[/red]")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user input submission."""
@@ -127,26 +196,40 @@ class ChatScreen(Screen):
         log = self.query_one("#chat-log", RichLog)
         log.write(f"\n[bold cyan]You:[/] {text}\n")
 
-        if self._agent and self._agent.state == AgentState.RUNNING:
-            await self._agent.send_input(text + "\n")
+        if self._agent and self._is_running:
+            # Use send_prompt for ACP agents
+            self.run_worker(self._send_prompt(text))
         else:
             self.notify("Planner not running", severity="warning")
 
+    async def _send_prompt(self, text: str) -> None:
+        """Send prompt to agent asynchronously."""
+        if self._agent:
+            # Clear accumulated response before sending new prompt
+            self._accumulated_response.clear()
+
+            # Build planner prompt with system instructions
+            prompt = build_planner_prompt(text)
+
+            try:
+                await self._agent.send_prompt(prompt)
+                # After prompt completes, try to create ticket from response
+                await self._try_create_ticket_from_response()
+            except Exception as e:
+                self._append_output(f"[red]Error sending prompt: {e}[/red]")
+
     async def action_interrupt(self) -> None:
-        """Send interrupt signal to planner."""
-        if self._agent and self._agent.state == AgentState.RUNNING:
-            await self._agent.interrupt()
-            self.notify("Sent interrupt (Ctrl+C)")
+        """Send cancel signal to planner."""
+        if self._agent and self._is_running:
+            await self._agent.cancel()
+            self.notify("Sent cancel request")
 
     def action_back(self) -> None:
         """Return to Kanban screen."""
-        if self._timer:
-            self._timer.stop()
-            self._timer = None
         self.app.pop_screen()
 
     async def on_unmount(self) -> None:
-        """Cleanup on screen exit."""
-        if self._timer:
-            self._timer.stop()
-            self._timer = None
+        """Cleanup on screen exit - do not terminate the planner."""
+        # Clear ourselves as message target but keep the agent running for reuse
+        if self._agent:
+            self._agent.set_message_target(None)
