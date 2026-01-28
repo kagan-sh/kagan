@@ -165,3 +165,6 @@ Thumbs.db
 references/
 
 snapshot_report.html
+
+# Kagan MCP config (auto-generated)
+.mcp.json
