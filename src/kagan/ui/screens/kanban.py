@@ -2,24 +2,26 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from textual import getters
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
-from textual.timer import Timer
 from textual.widgets import Footer, Static
 
-from kagan.agents.roles import AgentRole
+from kagan.agents.worktree import WorktreeError
 from kagan.constants import COLUMN_ORDER
 from kagan.database.models import Ticket, TicketCreate, TicketStatus, TicketUpdate
+from kagan.sessions.tmux import TmuxError
 from kagan.ui.modals import (
     ConfirmModal,
+    DiffModal,
     ModalAction,
     TicketDetailsModal,
 )
 from kagan.ui.screens.base import KaganScreen
-from kagan.ui.screens.chat import ChatScreen
+from kagan.ui.screens.planner import PlannerScreen
 from kagan.ui.widgets.card import TicketCard
 from kagan.ui.widgets.column import KanbanColumn
 from kagan.ui.widgets.header import KaganHeader
@@ -52,13 +54,15 @@ class KanbanScreen(KaganScreen):
         Binding("k", "focus_up", "Up", show=False),
         Binding("n", "new_ticket", "New ticket"),
         Binding("e", "edit_ticket", "Edit ticket"),
-        Binding("d", "delete_ticket", "Delete ticket"),
+        Binding("x", "delete_ticket", "Delete ticket"),
         Binding("right_square_bracket", "move_forward", "Move->"),
         Binding("left_square_bracket", "move_backward", "Move<-"),
-        Binding("enter", "view_details", "View details"),
-        Binding("o", "open_streams", "Streams"),
-        Binding("s", "start_agent", "Start agent"),
-        Binding("x", "stop_agent", "Stop agent"),
+        Binding("enter", "open_session", "Open Session"),
+        Binding("v", "view_details", "View details"),
+        Binding("m", "merge", "Merge", show=False),
+        Binding("d", "view_diff", "View Diff", show=False),
+        Binding("r", "reject", "Reject", show=False),
+        Binding("s", "rerun_checks", "Re-run checks", show=False),
         Binding("escape", "deselect", "Deselect", show=False),
         Binding("c", "open_chat", "Chat"),
     ]
@@ -70,7 +74,6 @@ class KanbanScreen(KaganScreen):
         self._tickets: list[Ticket] = []
         self._pending_delete_ticket: Ticket | None = None
         self._editing_ticket_id: str | None = None
-        self._card_update_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the Kanban board layout."""
@@ -93,8 +96,8 @@ class KanbanScreen(KaganScreen):
         self._check_screen_size()
         await self._refresh_board()
         self._focus_first_card()
-        self._card_update_timer = self.set_interval(1.0, self._update_active_cards)
-
+        # Subscribe to ticket changes from any source (UI, MCP, external)
+        self.kagan_app.ticket_changed_signal.subscribe(self, self._on_ticket_changed)
         # Fetch git branch for header
         from kagan.ui.widgets.header import _get_git_branch
 
@@ -103,11 +106,9 @@ class KanbanScreen(KaganScreen):
         branch = await _get_git_branch(repo_root)
         self.header.update_branch(branch)
 
-    def on_unmount(self) -> None:
-        """Clean up timers on unmount."""
-        if self._card_update_timer:
-            self._card_update_timer.stop()
-            self._card_update_timer = None
+    async def _on_ticket_changed(self, _ticket_id: str) -> None:
+        """Handle ticket change signal - refresh the board."""
+        await self._refresh_board()
 
     def on_resize(self, event: events.Resize) -> None:
         """Handle terminal resize."""
@@ -125,35 +126,14 @@ class KanbanScreen(KaganScreen):
         else:
             self.remove_class("too-small")
 
-    def _update_active_cards(self) -> None:
-        """Update agent active state and iteration info for all cards."""
-        active_ids = set(self.kagan_app.agent_manager.list_active(role=AgentRole.WORKER))
-
-        # Update header with agent count
-        self.header.update_agents(
-            len(active_ids), self.kagan_app.config.general.max_concurrent_agents
-        )
-
-        # Build iteration info dict
-        iterations: dict[str, str] = {}
-        if hasattr(self.kagan_app, "_scheduler") and self.kagan_app._scheduler:
-            scheduler = self.kagan_app._scheduler
-            max_iter = self.kagan_app.config.general.max_iterations
-            for ticket_id in active_ids:
-                current = scheduler.get_iteration(ticket_id)
-                if current is not None:
-                    iterations[ticket_id] = f"Iter {current}/{max_iter}"
-
-        for column in self._get_columns():
-            column.update_active_states(active_ids)
-            column.update_iterations(iterations)
-
     async def _refresh_board(self) -> None:
         self._tickets = await self.kagan_app.state_manager.get_all_tickets()
         for status in COLUMN_ORDER:
             column = self.query_one(f"#column-{status.value.lower()}", KanbanColumn)
             column.update_tickets([t for t in self._tickets if t.status == status])
         self.header.update_count(len(self._tickets))
+        active_sessions = sum(1 for ticket in self._tickets if ticket.session_active)
+        self.header.update_sessions(active_sessions)
 
     def _get_columns(self) -> list[KanbanColumn]:
         return [self.query_one(f"#column-{s.value.lower()}", KanbanColumn) for s in COLUMN_ORDER]
@@ -304,113 +284,108 @@ class KanbanScreen(KaganScreen):
                 callback=self._on_ticket_modal_result,
             )
 
-    def action_open_streams(self) -> None:
-        """Open the agent streams screen."""
-        from kagan.ui.screens.streams import AgentStreamsScreen
-
-        self.app.push_screen(AgentStreamsScreen())
-
-    def action_open_chat(self) -> None:
-        """Open the planner chat screen."""
-        self.app.push_screen(ChatScreen())
-
-    async def action_start_agent(self) -> None:
-        """Start an agent on the focused ticket."""
+    async def action_open_session(self) -> None:
+        """Open tmux session for selected ticket."""
         card = self._get_focused_card()
         if not card or not card.ticket:
             return
-        ticket = card.ticket
 
-        if ticket.status != TicketStatus.IN_PROGRESS:
-            self.notify("Move ticket to IN_PROGRESS first", severity="warning")
+        ticket = card.ticket
+        worktree = self.kagan_app.worktree_manager
+
+        try:
+            wt_path = await worktree.get_path(ticket.id)
+            if wt_path is None:
+                base = self.kagan_app.config.general.default_base_branch
+                wt_path = await worktree.create(ticket.id, ticket.title, base)
+
+            session_manager = self.kagan_app.session_manager
+            if not await session_manager.session_exists(ticket.id):
+                await session_manager.create_session(ticket, wt_path)
+
+            if ticket.status == TicketStatus.BACKLOG:
+                await self.kagan_app.state_manager.move_ticket(ticket.id, TicketStatus.IN_PROGRESS)
+                await self._refresh_board()
+
+            await session_manager.attach_session(ticket.id)
+        except (TmuxError, WorktreeError) as exc:
+            self.notify(f"Failed to open session: {exc}", severity="error")
+
+    def action_open_chat(self) -> None:
+        """Open the planner chat screen."""
+        self.app.push_screen(PlannerScreen())
+
+    def _get_review_ticket(self) -> Ticket | None:
+        """Get the focused ticket if in REVIEW."""
+        card = self._get_focused_card()
+        if not card or not card.ticket:
+            return None
+        if card.ticket.status != TicketStatus.REVIEW:
+            self.notify("Ticket is not in REVIEW", severity="warning")
+            return None
+        return card.ticket
+
+    async def action_merge(self) -> None:
+        """Merge ticket worktree to main branch."""
+        ticket = self._get_review_ticket()
+        if not ticket:
             return
 
-        manager = self.kagan_app.agent_manager
-        if manager.get(ticket.id):
-            self.notify("Agent already running for this ticket", severity="warning")
+        worktree = self.kagan_app.worktree_manager
+        base = self.kagan_app.config.general.default_base_branch
+        success, message = await worktree.merge_to_main(ticket.id, base_branch=base)
+        if success:
+            await worktree.delete(ticket.id, delete_branch=True)
+            await self.kagan_app.session_manager.kill_session(ticket.id)
+            await self.kagan_app.state_manager.move_ticket(ticket.id, TicketStatus.DONE)
+            await self._refresh_board()
+            self.notify(f"Merged and completed: {ticket.title}")
+        else:
+            self.notify(message, severity="error")
+
+    async def action_view_diff(self) -> None:
+        """View diff for a review ticket."""
+        ticket = self._get_review_ticket()
+        if not ticket:
+            return
+
+        worktree = self.kagan_app.worktree_manager
+        base = self.kagan_app.config.general.default_base_branch
+        diff_text = await worktree.get_diff(ticket.id, base_branch=base)
+        title = f"Diff: {ticket.short_id} {ticket.title[:40]}"
+        await self.app.push_screen(DiffModal(title=title, diff_text=diff_text))
+
+    async def action_reject(self) -> None:
+        """Reject a review ticket back to IN_PROGRESS."""
+        ticket = self._get_review_ticket()
+        if not ticket:
+            return
+        await self.kagan_app.state_manager.move_ticket(ticket.id, TicketStatus.IN_PROGRESS)
+        await self._refresh_board()
+        self.notify(f"Moved back to IN_PROGRESS: {ticket.title}")
+
+    async def action_rerun_checks(self) -> None:
+        """Re-run acceptance checks for a review ticket."""
+        ticket = self._get_review_ticket()
+        if not ticket:
             return
 
         worktree = self.kagan_app.worktree_manager
         wt_path = await worktree.get_path(ticket.id)
         if wt_path is None:
-            base_branch = self.kagan_app.config.general.default_base_branch
-            wt_path = await worktree.create(ticket.id, ticket.title, base_branch)
-
-        config = self.kagan_app.config
-        # Use ticket's agent_backend if set, otherwise default
-        agent_config = None
-        if ticket.agent_backend:
-            agent_config = config.get_agent(ticket.agent_backend)
-        if agent_config is None:
-            agent_result = config.get_default_agent()
-            if agent_result is None:
-                from kagan.config import get_fallback_agent_config
-
-                agent_config = get_fallback_agent_config()
-            else:
-                agent_config = agent_result[1]
-
-        agent = await manager.spawn(ticket.id, agent_config, wt_path, role=AgentRole.WORKER)
-        self.notify(f"Started agent for {ticket.id}")
-
-        # Run the agent loop in a background worker
-        self.run_worker(self._run_agent_task(ticket, agent), exclusive=False)
-
-    async def action_stop_agent(self) -> None:
-        """Stop the agent on the focused ticket."""
-        card = self._get_focused_card()
-        if not card or not card.ticket:
-            return
-        ticket = card.ticket
-
-        manager = self.kagan_app.agent_manager
-        agent = manager.get(ticket.id)
-        if not agent:
-            self.notify("No agent running for this ticket", severity="warning")
+            self.notify("Worktree not found for ticket", severity="error")
             return
 
-        await manager.terminate(ticket.id)
-        self.notify(f"Stopped agent for {ticket.id}")
-
-    async def _run_agent_task(self, ticket: Ticket, agent) -> None:
-        """Background task to run the agent and send prompt."""
-        from kagan.agents.prompt import build_prompt
-        from kagan.agents.signals import Signal, parse_signal
-
-        try:
-            # Wait for agent to be ready
-            await agent.wait_ready(timeout=60.0)
-            self.notify("Agent ready, sending prompt...")
-
-            # Build and send prompt
-            config = self.kagan_app.config
-            hat = config.get_hat(ticket.assigned_hat) if ticket.assigned_hat else None
-            prompt = build_prompt(ticket, 1, 1, "", hat)
-            stop_reason = await agent.send_prompt(prompt)
-
-            # Parse the response
-            output = agent.get_response_text()
-            result = parse_signal(output)
-
-            if result.signal == Signal.COMPLETE:
-                await self.kagan_app.state_manager.update_ticket(
-                    ticket.id, TicketUpdate(status=TicketStatus.REVIEW)
-                )
-                self.notify(f"Agent completed ticket {ticket.id}")
-            elif result.signal == Signal.BLOCKED:
-                self.notify(f"Agent blocked on ticket {ticket.id}", severity="warning")
-            else:
-                self.notify(f"Agent finished: {stop_reason}")
-
-            await self._refresh_board()
-
-        except TimeoutError:
-            self.notify("Agent failed to start (timeout)", severity="error")
-        except Exception as e:
-            self.notify(f"Agent error: {e}", severity="error")
-        finally:
-            # Clean up
-            await self.kagan_app.agent_manager.terminate(ticket.id)
+        command = ticket.check_command or "pytest && ruff check ."
+        process = await asyncio.create_subprocess_shell(command, cwd=wt_path)
+        return_code = await process.wait()
+        checks_passed = return_code == 0
+        await self.kagan_app.state_manager.update_ticket(
+            ticket.id, TicketUpdate(checks_passed=checks_passed)
+        )
+        await self._refresh_board()
+        status = "passed" if checks_passed else "failed"
+        self.notify(f"Checks {status} for {ticket.short_id}")
 
     # Message handlers
 
@@ -440,5 +415,5 @@ class KanbanScreen(KaganScreen):
             self._focus_column(message.target_status)
 
     async def on_ticket_changed(self, message: TicketChanged) -> None:
-        """Handle ticket status change from scheduler - refresh the board."""
+        """Handle ticket status change from background updates - refresh the board."""
         await self._refresh_board()

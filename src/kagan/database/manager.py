@@ -1,8 +1,12 @@
 """Async database manager for Kagan state."""
 
+from __future__ import annotations
+
 import asyncio
+import json
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiosqlite
 
@@ -14,16 +18,29 @@ from kagan.database.models import (
     TicketUpdate,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 
 class StateManager:
     """Async state manager for SQLite database operations."""
 
-    def __init__(self, db_path: str | Path = ".kagan/state.db"):
+    def __init__(
+        self,
+        db_path: str | Path = ".kagan/state.db",
+        on_change: Callable[[str], None] | None = None,
+    ):
         self.db_path = Path(db_path)
         self._connection: aiosqlite.Connection | None = None
         self._lock = asyncio.Lock()
+        self._on_change = on_change
+
+    def _notify_change(self, ticket_id: str) -> None:
+        """Notify listeners of ticket change via callback."""
+        if self._on_change:
+            self._on_change(ticket_id)
 
     async def initialize(self) -> None:
         """Initialize the database and create tables."""
@@ -71,6 +88,11 @@ class StateManager:
             assigned_hat=ticket.assigned_hat,
             agent_backend=ticket.agent_backend,
             parent_id=ticket.parent_id,
+            acceptance_criteria=ticket.acceptance_criteria,
+            check_command=ticket.check_command,
+            review_summary=ticket.review_summary,
+            checks_passed=ticket.checks_passed,
+            session_active=ticket.session_active,
         )
 
         async with self._lock:
@@ -78,8 +100,11 @@ class StateManager:
                 """
                 INSERT INTO tickets
                     (id, title, description, status, priority,
-                     assigned_hat, agent_backend, parent_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     assigned_hat, agent_backend, parent_id,
+                     acceptance_criteria, check_command, review_summary,
+                     checks_passed, session_active,
+                     created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     new_ticket.id,
@@ -94,12 +119,20 @@ class StateManager:
                     new_ticket.assigned_hat,
                     new_ticket.agent_backend,
                     new_ticket.parent_id,
+                    self._serialize_acceptance_criteria(new_ticket.acceptance_criteria),
+                    new_ticket.check_command,
+                    new_ticket.review_summary,
+                    None
+                    if new_ticket.checks_passed is None
+                    else (1 if new_ticket.checks_passed else 0),
+                    1 if new_ticket.session_active else 0,
                     new_ticket.created_at.isoformat(),
                     new_ticket.updated_at.isoformat(),
                 ),
             )
             await conn.commit()
 
+        self._notify_change(new_ticket.id)
         return new_ticket
 
     async def get_ticket(self, ticket_id: str) -> Ticket | None:
@@ -161,6 +194,19 @@ class StateManager:
             "assigned_hat": update.assigned_hat,
             "agent_backend": update.agent_backend,
             "parent_id": update.parent_id,
+            "acceptance_criteria": (
+                self._serialize_acceptance_criteria(update.acceptance_criteria)
+                if update.acceptance_criteria is not None
+                else None
+            ),
+            "check_command": update.check_command,
+            "review_summary": update.review_summary,
+            "checks_passed": (
+                (1 if update.checks_passed else 0) if update.checks_passed is not None else None
+            ),
+            "session_active": (
+                (1 if update.session_active else 0) if update.session_active is not None else None
+            ),
         }
 
         updates, values = [], []
@@ -177,6 +223,7 @@ class StateManager:
             await conn.execute(f"UPDATE tickets SET {', '.join(updates)} WHERE id = ?", values)
             await conn.commit()
 
+        self._notify_change(ticket_id)
         return await self.get_ticket(ticket_id)
 
     async def delete_ticket(self, ticket_id: str) -> bool:
@@ -185,11 +232,26 @@ class StateManager:
         async with self._lock:
             cursor = await conn.execute("DELETE FROM tickets WHERE id = ?", (ticket_id,))
             await conn.commit()
-            return cursor.rowcount > 0
+            deleted = cursor.rowcount > 0
+        if deleted:
+            self._notify_change(ticket_id)
+        return deleted
 
     async def move_ticket(self, ticket_id: str, new_status: TicketStatus) -> Ticket | None:
         """Move a ticket to a new status."""
         return await self.update_ticket(ticket_id, TicketUpdate(status=new_status))
+
+    async def mark_session_active(self, ticket_id: str, active: bool) -> Ticket | None:
+        """Mark a ticket's session as active or inactive."""
+        return await self.update_ticket(ticket_id, TicketUpdate(session_active=active))
+
+    async def set_review_summary(
+        self, ticket_id: str, summary: str, checks_passed: bool | None
+    ) -> Ticket | None:
+        """Set the review summary and check status for a ticket."""
+        return await self.update_ticket(
+            ticket_id, TicketUpdate(review_summary=summary, checks_passed=checks_passed)
+        )
 
     async def get_ticket_counts(self) -> dict[TicketStatus, int]:
         """Get count of tickets per status."""
@@ -217,6 +279,11 @@ class StateManager:
             assigned_hat=row["assigned_hat"],
             agent_backend=row["agent_backend"],
             parent_id=row["parent_id"],
+            acceptance_criteria=self._deserialize_acceptance_criteria(row["acceptance_criteria"]),
+            check_command=row["check_command"],
+            review_summary=row["review_summary"],
+            checks_passed=None if row["checks_passed"] is None else bool(row["checks_passed"]),
+            session_active=bool(row["session_active"]),
             created_at=datetime.fromisoformat(row["created_at"])
             if row["created_at"]
             else datetime.now(),
@@ -224,6 +291,24 @@ class StateManager:
             if row["updated_at"]
             else datetime.now(),
         )
+
+    @staticmethod
+    def _serialize_acceptance_criteria(criteria: list[str]) -> str:
+        """Serialize acceptance criteria list for storage."""
+        return json.dumps(criteria)
+
+    @staticmethod
+    def _deserialize_acceptance_criteria(raw: str | None) -> list[str]:
+        """Deserialize acceptance criteria from storage."""
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+        except json.JSONDecodeError:
+            return [raw]
+        return []
 
     # Scratchpad operations
 
@@ -250,6 +335,7 @@ class StateManager:
                 (ticket_id, content),
             )
             await conn.commit()
+        self._notify_change(ticket_id)
 
     async def delete_scratchpad(self, ticket_id: str) -> None:
         """Delete scratchpad when ticket is completed."""

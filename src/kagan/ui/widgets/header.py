@@ -53,8 +53,7 @@ class KaganHeader(Widget):
     """Header widget displaying app logo, title, version, and stats."""
 
     ticket_count: reactive[int] = reactive(0)
-    active_agents: reactive[int] = reactive(0)
-    max_agents: reactive[int] = reactive(3)
+    active_sessions: reactive[int] = reactive(0)
     git_branch: reactive[str] = reactive("")
 
     def __init__(self, ticket_count: int = 0, **kwargs) -> None:
@@ -67,18 +66,17 @@ class KaganHeader(Widget):
         yield Label(f"v{_get_version()}", classes="header-version")
         yield Label("", classes="header-spacer")
         yield Label("", id="header-branch", classes="header-branch")
-        yield Label("", id="header-agents", classes="header-agents")
+        yield Label("", id="header-sessions", classes="header-sessions")
         yield Label(f"Tickets: {self.ticket_count}", id="header-stats", classes="header-stats")
 
     def watch_ticket_count(self, count: int) -> None:
         with suppress(NoMatches):
             self.query_one("#header-stats", Label).update(f"Tickets: {count}")
 
-    def watch_active_agents(self, count: int) -> None:
-        self._update_agents_display()
-
-    def watch_max_agents(self, max_count: int) -> None:
-        self._update_agents_display()
+    def watch_active_sessions(self, count: int) -> None:
+        with suppress(NoMatches):
+            label = self.query_one("#header-sessions", Label)
+            label.update(f"Sessions: {count}")
 
     def watch_git_branch(self, branch: str) -> None:
         with suppress(NoMatches):
@@ -88,25 +86,11 @@ class KaganHeader(Widget):
             else:
                 label.update("")
 
-    def _update_agents_display(self) -> None:
-        with suppress(NoMatches):
-            label = self.query_one("#header-agents", Label)
-            label.update(f"Worker Agents: {self.active_agents}/{self.max_agents}")
-            # Update style based on utilization
-            label.remove_class("agents-idle", "agents-working", "agents-full")
-            if self.active_agents == 0:
-                label.add_class("agents-idle")
-            elif self.active_agents >= self.max_agents:
-                label.add_class("agents-full")
-            else:
-                label.add_class("agents-working")
-
     def update_count(self, count: int) -> None:
         self.ticket_count = count
 
-    def update_agents(self, active: int, max_agents: int) -> None:
-        self.active_agents = active
-        self.max_agents = max_agents
+    def update_sessions(self, active: int) -> None:
+        self.active_sessions = active
 
     def update_branch(self, branch: str) -> None:
         self.git_branch = branch

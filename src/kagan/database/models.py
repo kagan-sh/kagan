@@ -1,5 +1,7 @@
 """Pydantic models for database entities."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from uuid import uuid4
@@ -16,7 +18,7 @@ class TicketStatus(str, Enum):
     DONE = "DONE"
 
     @classmethod
-    def next_status(cls, current: "TicketStatus") -> "TicketStatus | None":
+    def next_status(cls, current: TicketStatus) -> TicketStatus | None:
         """Get the next status in the workflow."""
         order = [cls.BACKLOG, cls.IN_PROGRESS, cls.REVIEW, cls.DONE]
         idx = order.index(current)
@@ -25,7 +27,7 @@ class TicketStatus(str, Enum):
         return None
 
     @classmethod
-    def prev_status(cls, current: "TicketStatus") -> "TicketStatus | None":
+    def prev_status(cls, current: TicketStatus) -> TicketStatus | None:
         """Get the previous status in the workflow."""
         order = [cls.BACKLOG, cls.IN_PROGRESS, cls.REVIEW, cls.DONE]
         idx = order.index(current)
@@ -63,6 +65,11 @@ class Ticket(BaseModel):
     assigned_hat: str | None = Field(default=None)
     parent_id: str | None = Field(default=None)
     agent_backend: str | None = Field(default=None)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    check_command: str | None = Field(default=None)
+    review_summary: str | None = Field(default=None)
+    checks_passed: bool | None = Field(default=None)
+    session_active: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
@@ -92,6 +99,11 @@ class TicketCreate(BaseModel):
     status: TicketStatus = Field(default=TicketStatus.BACKLOG)
     parent_id: str | None = Field(default=None)
     agent_backend: str | None = Field(default=None)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    check_command: str | None = Field(default=None)
+    review_summary: str | None = Field(default=None)
+    checks_passed: bool | None = Field(default=None)
+    session_active: bool = Field(default=False)
 
 
 class TicketUpdate(BaseModel):
@@ -104,3 +116,8 @@ class TicketUpdate(BaseModel):
     status: TicketStatus | None = Field(default=None)
     parent_id: str | None = Field(default=None)
     agent_backend: str | None = Field(default=None)
+    acceptance_criteria: list[str] | None = Field(default=None)
+    check_command: str | None = Field(default=None)
+    review_summary: str | None = Field(default=None)
+    checks_passed: bool | None = Field(default=None)
+    session_active: bool | None = Field(default=None)

@@ -10,10 +10,12 @@ dependencies = [
     "rich>=13.0.0",
     "psutil>=6.0.0",
     "typeguard>=4.0.0",
+    "mcp",
 ]
 
 [project.scripts]
 kagan = "kagan.__main__:main"
+kagan-mcp = "kagan.mcp:main"
 
 [build-system]
 requires = ["hatchling"]

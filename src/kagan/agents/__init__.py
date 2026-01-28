@@ -1,23 +1,18 @@
-"""Agent management for Kagan."""
+"""Planner and worktree utilities for Kagan."""
 
-from kagan.acp.agent import Agent
-from kagan.acp.messages import AgentFail, AgentReady
-from kagan.agents.manager import AgentManager
+from kagan.agents.planner import ParsedTicket, build_planner_prompt, parse_ticket_from_response
 from kagan.agents.prompt_loader import PromptLoader, dump_default_prompts
-from kagan.agents.roles import AgentRole
-from kagan.agents.scheduler import Scheduler
 from kagan.agents.worktree import WorktreeError, WorktreeManager, slugify
+from kagan.sessions import SessionManager
 
 __all__ = [
-    "Agent",
-    "AgentFail",
-    "AgentManager",
-    "AgentReady",
-    "AgentRole",
+    "ParsedTicket",
     "PromptLoader",
-    "Scheduler",
+    "SessionManager",
     "WorktreeError",
     "WorktreeManager",
+    "build_planner_prompt",
     "dump_default_prompts",
+    "parse_ticket_from_response",
     "slugify",
 ]

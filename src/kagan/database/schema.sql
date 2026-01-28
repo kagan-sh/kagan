@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS tickets (
     assigned_hat TEXT,             -- Agent/hat identifier for this ticket
     agent_backend TEXT,            -- Agent backend to use (e.g., 'claude', 'opencode')
     parent_id TEXT REFERENCES tickets(id) ON DELETE SET NULL,
+    acceptance_criteria TEXT,      -- Acceptance criteria for the ticket
+    check_command TEXT,            -- Command to run for verification
+    review_summary TEXT,           -- Summary from code review
+    checks_passed INTEGER CHECK(checks_passed IN (0, 1)),  -- NULL=not run, 0=false, 1=true
+    session_active INTEGER DEFAULT 0 CHECK(session_active IN (0, 1)),  -- 0=false, 1=true
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

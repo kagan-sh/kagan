@@ -61,7 +61,8 @@ class KanbanColumn(Widget):
                     for ticket in self._tickets:
                         yield TicketCard(ticket)
                 else:
-                    with _NSContainer(classes="column-empty", id=f"empty-{self.status.value.lower()}"):
+                    empty_id = f"empty-{self.status.value.lower()}"
+                    with _NSContainer(classes="column-empty", id=empty_id):
                         yield _NSLabel("No tickets", classes="empty-message")
 
     def get_cards(self) -> list[TicketCard]:

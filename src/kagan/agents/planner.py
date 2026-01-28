@@ -12,14 +12,7 @@ if TYPE_CHECKING:
     from kagan.agents.prompt_loader import PromptLoader
 
 # Pattern to extract ticket blocks from planner response
-TICKET_PATTERN = re.compile(
-    r"<ticket>\s*"
-    r"<title>(?P<title>.+?)</title>\s*"
-    r"<description>(?P<description>.*?)</description>\s*"
-    r"(?:<priority>(?P<priority>low|medium|high)</priority>\s*)?"
-    r"</ticket>",
-    re.IGNORECASE | re.DOTALL,
-)
+TICKET_PATTERN = re.compile(r"<ticket>(?P<body>.*?)</ticket>", re.IGNORECASE | re.DOTALL)
 
 # Customizable preamble - users can modify this part
 PLANNER_PREAMBLE = """\
@@ -49,10 +42,13 @@ You MUST output your ticket in this exact XML format:
 <description>
 Detailed description including:
 - What needs to be done
-- Acceptance criteria
 - Technical considerations
 - Any relevant context
 </description>
+<acceptance_criteria>
+  <criterion>List each acceptance criterion</criterion>
+</acceptance_criteria>
+<check_command>pytest tests/</check_command>
 <priority>medium</priority>
 </ticket>
 
@@ -87,9 +83,14 @@ def parse_ticket_from_response(response: str) -> ParsedTicket | None:
     if not match:
         return None
 
-    title = match.group("title").strip()
-    description = match.group("description").strip()
-    priority_str = (match.group("priority") or "medium").lower()
+    body = match.group("body")
+    title = _extract_tag(body, "title")
+    description = _extract_tag(body, "description")
+    if not title or not description:
+        return None
+    priority_str = (_extract_tag(body, "priority") or "medium").lower()
+    acceptance_criteria = _extract_acceptance_criteria(body)
+    check_command = _extract_tag(body, "check_command")
 
     priority_map = {
         "low": TicketPriority.LOW,
@@ -102,9 +103,32 @@ def parse_ticket_from_response(response: str) -> ParsedTicket | None:
         title=title[:200],  # Enforce max length
         description=description,
         priority=priority,
+        acceptance_criteria=acceptance_criteria,
+        check_command=check_command,
     )
 
     return ParsedTicket(ticket=ticket, raw_match=match.group(0))
+
+
+def _extract_tag(body: str, tag: str) -> str | None:
+    """Extract a tag's content from the ticket body."""
+    match = re.search(rf"<{tag}>(?P<content>.*?)</{tag}>", body, flags=re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None
+    return match.group("content").strip()
+
+
+def _extract_acceptance_criteria(body: str) -> list[str]:
+    """Extract acceptance criteria entries from ticket body."""
+    criteria_block = _extract_tag(body, "acceptance_criteria")
+    if not criteria_block:
+        return []
+    entries = re.findall(
+        r"<criterion>(?P<content>.*?)</criterion>",
+        criteria_block,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    return [entry.strip() for entry in entries if entry.strip()]
 
 
 def build_planner_prompt(
@@ -122,9 +146,7 @@ def build_planner_prompt(
     """
     # Load preamble: prompt_loader > hardcoded default
     # Note: We always append PLANNER_OUTPUT_FORMAT to ensure parsing works
-    preamble = (
-        prompt_loader.get_planner_prompt() if prompt_loader else PLANNER_PREAMBLE
-    )
+    preamble = prompt_loader.get_planner_prompt() if prompt_loader else PLANNER_PREAMBLE
 
     return f"""{preamble}
 

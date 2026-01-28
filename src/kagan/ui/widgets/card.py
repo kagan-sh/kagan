@@ -90,6 +90,15 @@ class TicketCard(Widget):
 
         yield Label(meta_text, classes="card-meta")
 
+        # Review info for REVIEW tickets
+        if self.ticket.status == TicketStatus.REVIEW:
+            summary = self.ticket.review_summary or "No summary"
+            yield Label(
+                self._truncate_title(f"Summary: {summary}", 18),
+                classes="card-review",
+            )
+            yield Label(self._format_checks_status(), classes="card-checks")
+
         # Line 4: Iteration info (if agent is running)
         if self.iteration_info:
             yield Label(self.iteration_info, classes="card-iteration")
@@ -108,6 +117,16 @@ class TicketCard(Widget):
         if len(title) <= max_length:
             return title
         return title[: max_length - 3] + "..."
+
+    def _format_checks_status(self) -> str:
+        """Format checks status for review display."""
+        if self.ticket is None:
+            return "Checks: unknown"
+        if self.ticket.checks_passed is True:
+            return "Checks: passed"
+        if self.ticket.checks_passed is False:
+            return "Checks: failed"
+        return "Checks: not run"
 
     def on_mouse_down(self, event: events.MouseDown) -> None:
         """Start potential drag operation."""

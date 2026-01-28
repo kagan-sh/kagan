@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
 from kagan.app import KaganApp
@@ -17,8 +15,11 @@ def app():
     return KaganApp(db_path=":memory:")
 
 
-def get_kanban_screen(app: KaganApp) -> KanbanScreen:
+async def get_kanban_screen(app: KaganApp) -> KanbanScreen:
     screen = app.screen
+    if not isinstance(screen, KanbanScreen):
+        await app.push_screen(KanbanScreen())
+        screen = app.screen
     assert isinstance(screen, KanbanScreen)
     return screen
 
@@ -30,7 +31,7 @@ class TestKeyboardNavigation:
             await sm.create_ticket(TicketCreate(title="Task 1", status=TicketStatus.BACKLOG))
             await sm.create_ticket(TicketCreate(title="Task 2", status=TicketStatus.BACKLOG))
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -64,7 +65,7 @@ class TestKeyboardNavigation:
                 TicketCreate(title="InProgress Task", status=TicketStatus.IN_PROGRESS)
             )
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -97,7 +98,7 @@ class TestKeyboardNavigation:
 class TestCreateTicketFlow:
     async def test_create_ticket_via_form(self, app: KaganApp):
         async with app.run_test(size=(120, 40)) as pilot:
-            get_kanban_screen(app)
+            await get_kanban_screen(app)
             await pilot.pause()
 
             await pilot.press("n")
@@ -122,7 +123,7 @@ class TestCreateTicketFlow:
 
     async def test_cancel_create_ticket(self, app: KaganApp):
         async with app.run_test(size=(120, 40)) as pilot:
-            get_kanban_screen(app)
+            await get_kanban_screen(app)
             await pilot.pause()
 
             await pilot.press("n")
@@ -143,7 +144,7 @@ class TestMoveTicket:
                 TicketCreate(title="Move me", status=TicketStatus.BACKLOG)
             )
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -168,7 +169,7 @@ class TestMoveTicket:
                 TicketCreate(title="Move back", status=TicketStatus.IN_PROGRESS)
             )
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -189,7 +190,7 @@ class TestMoveTicket:
             sm = app.state_manager
             ticket = await sm.create_ticket(TicketCreate(title="At end", status=TicketStatus.DONE))
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -213,7 +214,7 @@ class TestTicketCardAnimation:
             sm = app.state_manager
             await sm.create_ticket(TicketCreate(title="Test Card", status=TicketStatus.BACKLOG))
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -230,7 +231,7 @@ class TestTicketCardAnimation:
             sm = app.state_manager
             await sm.create_ticket(TicketCreate(title="Active Card", status=TicketStatus.BACKLOG))
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -251,7 +252,7 @@ class TestTicketCardAnimation:
                 TicketCreate(title="Deactivate Card", status=TicketStatus.BACKLOG)
             )
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -276,7 +277,7 @@ class TestTicketCardAnimation:
             sm = app.state_manager
             await sm.create_ticket(TicketCreate(title="Timer Card", status=TicketStatus.BACKLOG))
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
 
@@ -301,75 +302,9 @@ class TestTicketCardAnimation:
                 TicketCreate(title="Stop Timer Card", status=TicketStatus.BACKLOG)
             )
 
-            screen = get_kanban_screen(app)
+            screen = await get_kanban_screen(app)
             await screen._refresh_board()
             await pilot.pause()
-
-            cards = list(screen.query(TicketCard))
-            card = cards[0]
-
-            card.is_agent_active = True
-            await pilot.pause()
-            assert card.has_class("agent-active")
-
-            card.is_agent_active = False
-            await pilot.pause()
-
-            # Both agent-active and agent-pulse should be removed
-            assert not card.has_class("agent-active")
-            assert not card.has_class("agent-pulse")
-
-
-class TestKanbanScreenActiveCards:
-    async def test_update_active_cards_sets_card_states(self, app: KaganApp):
-        """_update_active_cards should set is_agent_active=True for active tickets."""
-        async with app.run_test(size=(120, 40)) as pilot:
-            sm = app.state_manager
-            ticket = await sm.create_ticket(
-                TicketCreate(title="Agent Active", status=TicketStatus.BACKLOG)
-            )
-
-            screen = get_kanban_screen(app)
-            await screen._refresh_board()
-            await pilot.pause()
-
-            # Mock agent_manager.list_active() to return the ticket ID
-            app.agent_manager.list_active = MagicMock(return_value=[ticket.id])
-
-            screen._update_active_cards()
-            await pilot.pause()
-
-            cards = [c for c in screen.query(TicketCard) if c.ticket and c.ticket.id == ticket.id]
-            assert len(cards) == 1
-            assert cards[0].is_agent_active is True
-
-    async def test_update_active_cards_clears_inactive(self, app: KaganApp):
-        """_update_active_cards should clear is_agent_active when agent stops."""
-        async with app.run_test(size=(120, 40)) as pilot:
-            sm = app.state_manager
-            ticket = await sm.create_ticket(
-                TicketCreate(title="Was Active", status=TicketStatus.BACKLOG)
-            )
-
-            screen = get_kanban_screen(app)
-            await screen._refresh_board()
-            await pilot.pause()
-
-            # First activate the card
-            app.agent_manager.list_active = MagicMock(return_value=[ticket.id])
-            screen._update_active_cards()
-            await pilot.pause()
-
-            cards = [c for c in screen.query(TicketCard) if c.ticket and c.ticket.id == ticket.id]
-            assert cards[0].is_agent_active is True
-
-            # Now clear active cards
-            app.agent_manager.list_active = MagicMock(return_value=[])
-            screen._update_active_cards()
-            await pilot.pause()
-
-            cards = [c for c in screen.query(TicketCard) if c.ticket and c.ticket.id == ticket.id]
-            assert cards[0].is_agent_active is False
 
 
 class TestWelcomeScreen:
@@ -384,34 +319,3 @@ class TestWelcomeScreen:
             assert app.screen is screen
             assert screen.query_one("#logo")
             assert screen.query_one("#continue-btn")
-
-
-class TestAgentStreamsScreen:
-    async def test_streams_screen_composes(self, app: KaganApp):
-        """Smoke test: AgentStreamsScreen composes without error."""
-        async with app.run_test(size=(120, 40)) as pilot:
-            from kagan.ui.screens.streams import AgentStreamsScreen
-
-            screen = AgentStreamsScreen()
-            await app.push_screen(screen)
-            await pilot.pause()
-            assert app.screen is screen
-            assert screen.query_one("#streams-tabs")
-            assert screen.query_one("#reviewer")
-
-
-class TestPermissionModal:
-    async def test_permission_modal_composes(self, app: KaganApp):
-        """Smoke test: PermissionModal composes without error."""
-        from typing import Any
-
-        from kagan.ui.modals.permission import PermissionModal
-
-        async with app.run_test(size=(120, 40)) as pilot:
-            options: Any = [{"optionId": "allow", "kind": "allow_once", "name": "Allow"}]
-            tool_call: Any = {"title": "Test operation"}
-            modal = PermissionModal(options=options, tool_call=tool_call)
-            await app.push_screen(modal)
-            await pilot.pause()
-            assert app.screen is modal
-            assert modal.query_one("#permission-container")

@@ -37,27 +37,15 @@ class GeneralConfig(BaseModel):
     max_concurrent_agents: int = Field(default=3)
     default_base_branch: str = Field(default="main")
     auto_start: bool = Field(default=False)
+    auto_merge: bool = Field(default=False)
     max_iterations: int = Field(default=10)
     iteration_delay_seconds: float = Field(default=2.0)
     default_worker_agent: str = Field(default="claude")
-    default_review_agent: str = Field(default="claude")
-    default_requirements_agent: str = Field(default="claude")
-
-
-class HatConfig(BaseModel):
-    """Configuration for a hat (agent role)."""
-
-    agent_command: str = Field(default="claude")
-    args: list[str] = Field(default_factory=list)
-    system_prompt: str = Field(default="")
-    prompt_file: str = Field(default="")  # Path to .md file in .kagan/prompts/roles/
 
 
 class PromptsConfig(BaseModel):
     """Configuration for prompt customization."""
 
-    worker_system_prompt: str = Field(default="")
-    reviewer_system_prompt: str = Field(default="")
     planner_system_prompt: str = Field(default="")
 
 
@@ -80,7 +68,6 @@ class KaganConfig(BaseModel):
 
     general: GeneralConfig = Field(default_factory=GeneralConfig)
     prompts: PromptsConfig = Field(default_factory=PromptsConfig)
-    hats: dict[str, HatConfig] = Field(default_factory=dict)
     agents: dict[str, AgentConfig] = Field(default_factory=dict)
 
     @classmethod
@@ -95,10 +82,6 @@ class KaganConfig(BaseModel):
             return cls.model_validate(data)
 
         return cls()
-
-    def get_hat(self, name: str) -> HatConfig | None:
-        """Get hat configuration by name."""
-        return self.hats.get(name)
 
     def get_agent(self, name: str) -> AgentConfig | None:
         """Get agent configuration by name."""

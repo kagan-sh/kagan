@@ -75,55 +75,18 @@ KaganHeader .header-branch {
     padding-right: 2;
 }
 
-KaganHeader .header-agents {
+KaganHeader .header-sessions {
     width: auto;
     padding-right: 2;
 }
 
-KaganHeader .header-agents.agents-idle {
+KaganHeader .header-sessions {
     color: $text-muted;
-}
-
-KaganHeader .header-agents.agents-working {
-    color: $success;
-}
-
-KaganHeader .header-agents.agents-full {
-    color: $warning;
 }
 
 KaganHeader .header-stats {
     width: auto;
     color: $text;
-}
-
-/* Chat header styles */
-#chat-header {
-    dock: top;
-    width: 100%;
-    height: 3;
-    background: $panel;
-    color: $text;
-    padding: 1;
-}
-
-#chat-header .header-logo {
-    width: auto;
-    color: $secondary;
-    text-style: bold;
-    padding-right: 1;
-}
-
-#chat-header .header-title {
-    width: auto;
-    color: $primary;
-    text-style: bold;
-    padding-right: 2;
-}
-
-#chat-header .header-subtitle {
-    width: auto;
-    color: $text-muted;
 }
 
 /* Footer styles - subtle appearance */
@@ -263,6 +226,18 @@ TicketCard .card-meta {
     width: 100%;
     height: 1;
     color: $text-muted;
+}
+
+TicketCard .card-review {
+    width: 100%;
+    height: 1;
+    color: $text;
+}
+
+TicketCard .card-checks {
+    width: 100%;
+    height: 1;
+    color: $success;
 }
 
 TicketCard .card-iteration {
@@ -634,12 +609,12 @@ ConfirmModal .confirm-hint {
     color: $text-muted;
 }
 
-/* AgentOutputModal styles */
-AgentOutputModal {
+/* DiffModal styles */
+DiffModal {
     align: center middle;
 }
 
-#agent-output-container {
+#diff-container {
     width: 90%;
     height: 80%;
     background: $surface;
@@ -647,15 +622,7 @@ AgentOutputModal {
     padding: 1 2;
 }
 
-#agent-output-container .modal-title {
-    text-align: center;
-    text-style: bold;
-    width: 100%;
-    padding-bottom: 1;
-    color: $secondary;
-}
-
-#output-log {
+#diff-log {
     height: 1fr;
     background: $background;
     border: round $border;
@@ -663,189 +630,48 @@ AgentOutputModal {
     scrollbar-gutter: stable;
 }
 
-#agent-status {
-    height: 1;
-    margin-bottom: 1;
-}
-
-#agent-output-container .button-row {
-    padding-top: 1;
-    align: center middle;
-}
-
-#agent-output-container Button {
-    margin: 0 1;
-}
-
-/* ChatScreen styles */
-ChatScreen {
+/* PlannerScreen styles */
+PlannerScreen {
     layout: vertical;
     background: $background;
 }
 
-#chat-container {
+#planner-container {
     width: 100%;
     height: 1fr;
     padding: 1;
 }
 
-#chat-status {
+#planner-header {
     width: 100%;
     height: 1;
-    color: $text-muted;
+    color: $text;
     padding-bottom: 1;
+    text-style: bold;
 }
 
-#chat-output {
+#planner-output {
     width: 100%;
     height: 1fr;
     background: $surface;
     border: round $border;
 }
 
-#chat-output > ScrollableContainer {
+#planner-output > ScrollableContainer {
     height: 1fr;
     padding: 0 1;
     scrollbar-gutter: stable;
 }
 
-#chat-output > RichLog {
-    height: auto;
-    max-height: 10;
-    border-top: solid $border;
-    padding: 0 1;
-    scrollbar-gutter: stable;
-}
-
-#chat-input-row {
+#planner-input {
     width: 100%;
-    height: auto;
     padding-top: 1;
-}
-
-#chat-input-row Input {
-    width: 100%;
     background: $background;
     border: solid $border;
 }
 
-#chat-input-row Input:focus {
+#planner-input:focus {
     border: solid $primary;
-}
-
-/* Permission Modal */
-PermissionModal {
-    align: center middle;
-}
-
-#permission-container {
-    width: 60;
-    height: auto;
-    max-height: 80%;
-    background: $surface;
-    border: tall $primary;
-    padding: 1 2;
-}
-
-#request-description {
-    text-style: bold;
-    margin-bottom: 1;
-    color: $secondary;
-}
-
-#tool-details {
-    color: $text-muted;
-    margin-bottom: 1;
-}
-
-#options-container {
-    margin: 1 0;
-}
-
-#options-container Button {
-    width: 100%;
-    margin-bottom: 1;
-}
-
-.permission-allow {
-    background: $success;
-}
-
-.permission-allow:hover {
-    background: $success 80%;
-}
-
-.permission-reject {
-    background: $error;
-}
-
-.permission-reject:hover {
-    background: $error 80%;
-}
-
-/* Agent running indicator - pulsating border effect */
-TicketCard.agent-active {
-    border: solid $success;
-}
-
-TicketCard.agent-active.agent-pulse {
-    border: double $success;
-    background: $success 8%;
-}
-
-/* Ensure focus still takes precedence */
-TicketCard.agent-active:focus {
-    border: double $primary;
-}
-
-TicketCard.agent-active.agent-pulse:focus {
-    border: double $primary;
-    background: $success 8%;
-}
-
-/* Agent Streams Screen */
-AgentStreamsScreen {
-    layout: vertical;
-    background: $background;
-}
-
-#streams-header {
-    dock: top;
-    height: 3;
-    background: $panel;
-    padding: 1;
-    layout: horizontal;
-}
-
-#streams-tabs {
-    width: 100%;
-    height: 1fr;
-}
-
-AgentStreamPane StreamingOutput, ReviewerPane StreamingOutput {
-    height: 1fr;
-    background: $surface;
-    border: round $border;
-}
-
-AgentStreamPane StreamingOutput > ScrollableContainer,
-ReviewerPane StreamingOutput > ScrollableContainer {
-    height: 1fr;
-    border: none;
-    scrollbar-gutter: stable;
-}
-
-AgentStreamPane StreamingOutput > RichLog,
-ReviewerPane StreamingOutput > RichLog {
-    height: auto;
-    max-height: 10;
-    border-top: solid $border;
-    scrollbar-gutter: stable;
-}
-
-#streams-tabs Tab.-active {
-    background: $primary;
-    color: $background;
 }
 
 /* =============================================================================
@@ -953,98 +779,9 @@ WelcomeScreen {
     width: 100%;
 }
 
-#mode-toggle {
-    width: 100%;
-    height: auto;
-    margin: 1 0;
-    align: center middle;
-}
-
-#mode-tabs {
-    width: auto;
-    height: auto;
-}
-
-#mode-tabs .mode-tab {
-    min-width: 12;
-    height: 3;
-    padding: 0 2;
-    background: $background;
-    color: $text-muted;
-    border: solid $border;
-    margin: 0;
-}
-
-#mode-tabs .mode-tab:hover {
-    background: $panel;
-}
-
-#mode-tabs .mode-tab.-active {
-    background: $primary;
-    color: $background;
-    border: solid $primary;
-    text-style: bold;
-}
-
 .section-label {
     margin-top: 1;
     color: $text-muted;
-}
-
-/* Agent Select dropdowns */
-#simple-section Select,
-#granular-section Select {
-    width: 100%;
-    margin: 0 0 1 0;
-}
-
-/* Agent Grid - for potential future use */
-AgentGrid {
-    height: auto;
-    max-height: 10;
-    grid-size: 4;
-    grid-gutter: 1;
-    margin: 1 0;
-}
-
-/* Agent Cards - constrained height */
-AgentCard {
-    width: 1fr;
-    height: 5;
-    padding: 0 1;
-    border: tall transparent;
-    background: $background;
-}
-
-AgentCard.-selected {
-    border: tall $primary;
-    background: $panel;
-}
-
-AgentCard:focus {
-    border: tall $accent;
-}
-
-AgentCard .card-name {
-    text-style: bold;
-    color: $text;
-}
-
-AgentCard .card-separator {
-    color: $border;
-}
-
-AgentCard .card-author {
-    color: $secondary;
-    text-style: italic;
-}
-
-AgentCard .card-desc {
-    color: $text-muted;
-}
-
-#auto-start {
-    margin: 1 0;
 }
 
 #base-branch-select {

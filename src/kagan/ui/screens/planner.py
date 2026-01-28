@@ -1,4 +1,4 @@
-"""Chat screen for planner agent interaction."""
+"""Planner screen for chat-first ticket creation."""
 
 from __future__ import annotations
 
@@ -7,32 +7,29 @@ from typing import TYPE_CHECKING
 
 from textual import on
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Input, Label, Static
+from textual.containers import Vertical
+from textual.widgets import Footer, Input, Static
 
 from kagan.acp import messages
+from kagan.acp.agent import Agent
 from kagan.agents.planner import build_planner_prompt, parse_ticket_from_response
 from kagan.agents.prompt_loader import PromptLoader
-from kagan.agents.roles import AgentRole
 from kagan.config import get_fallback_agent_config
 from kagan.ui.screens.base import KaganScreen
 from kagan.ui.widgets import StreamingOutput
-from kagan.ui.widgets.header import KAGAN_LOGO
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
-    from kagan.acp.agent import Agent
-
 PLANNER_SESSION_ID = "planner"
 
 
-class ChatScreen(KaganScreen):
-    """Chat screen for planner agent interaction."""
+class PlannerScreen(KaganScreen):
+    """Chat-first planner for creating tickets."""
 
     BINDINGS = [
-        Binding("escape", "back", "Back"),
-        Binding("ctrl+c", "interrupt", "Interrupt", show=False),
+        Binding("escape", "to_board", "Go to Board"),
+        Binding("ctrl+c", "cancel", "Cancel", show=False),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -42,35 +39,20 @@ class ChatScreen(KaganScreen):
         self._accumulated_response: list[str] = []
 
     def compose(self) -> ComposeResult:
-        with Horizontal(id="chat-header"):
-            yield Label(KAGAN_LOGO, classes="header-logo")
-            yield Label("KAGAN", classes="header-title")
-            yield Label("Planner Chat", classes="header-subtitle")
-        with Vertical(id="chat-container"):
-            yield Static("Status: Not started", id="chat-status")
-            yield StreamingOutput(show_status_log=True, id="chat-output")
-            with Horizontal(id="chat-input-row"):
-                yield Input(placeholder="Describe your goal...", id="chat-input")
+        """Compose the planner screen layout."""
+        with Vertical(id="planner-container"):
+            yield Static("What do you want to build?", id="planner-header")
+            yield StreamingOutput(id="planner-output")
+            yield Input(placeholder="Describe your feature or task...", id="planner-input")
         yield Footer()
 
     async def on_mount(self) -> None:
+        """Start planner agent and focus input on mount."""
         await self._start_planner()
-        self.query_one("#chat-input", Input).focus()
+        self.query_one("#planner-input", Input).focus()
 
     async def _start_planner(self) -> None:
         """Start the planner agent."""
-        manager = self.kagan_app.agent_manager
-
-        # Check if already running
-        existing = manager.get(PLANNER_SESSION_ID)
-        if existing:
-            self._agent = existing
-            self._is_running = True
-            # Subscribe for streaming updates
-            manager.subscribe(PLANNER_SESSION_ID, self)
-            self._update_status()
-            return
-
         # Get agent config from config (uses user's selection from welcome screen)
         config = self.kagan_app.config
         agent_config = config.get_worker_agent()
@@ -81,39 +63,18 @@ class ChatScreen(KaganScreen):
         # Spawn in current directory (no worktree for planner)
         cwd = Path.cwd()
 
-        try:
-            # Pass self as message_target to receive streaming updates
-            self._agent = await manager.spawn(
-                PLANNER_SESSION_ID,
-                agent_config,
-                cwd,
-                self,
-                role=AgentRole.PLANNER,
-            )
-            self._is_running = True
-            self._update_status()
-        except ValueError:
-            # Agent already running
-            self._agent = manager.get(PLANNER_SESSION_ID)
-            if self._agent:
-                self._is_running = True
-                manager.subscribe(PLANNER_SESSION_ID, self)
-                self._update_status()
+        self._agent = Agent(cwd, agent_config)
+        self._agent.start(self)
+        self._is_running = True
+        self._update_status()
 
     def _update_status(self) -> None:
-        """Update status display."""
-        status = self.query_one("#chat-status", Static)
-        if not self._agent:
-            status.update("Status: Not started")
-            return
-        if self._is_running:
-            status.update("Status: [bold green]RUNNING[/]")
-        else:
-            status.update("Status: [bold blue]STOPPED[/]")
+        """Update status display (no-op for simplified UI)."""
+        pass
 
     def _get_output(self) -> StreamingOutput:
         """Get the streaming output widget."""
-        return self.query_one("#chat-output", StreamingOutput)
+        return self.query_one("#planner-output", StreamingOutput)
 
     # Message handlers for ACP agent events
 
@@ -130,37 +91,38 @@ class ChatScreen(KaganScreen):
         await self._get_output().write(f"*{message.text}*")
 
     @on(messages.ToolCall)
-    def on_tool_call(self, message: messages.ToolCall) -> None:
+    async def on_tool_call(self, message: messages.ToolCall) -> None:
         """Handle tool call start."""
         output = self._get_output()
         title = message.tool_call.get("title", "Tool call")
         kind = message.tool_call.get("kind", "")
-        output.write_status(f"\n[bold cyan]> {title}[/bold cyan]")
+        await output.write(f"\n[bold cyan]> {title}[/bold cyan]")
         if kind:
-            output.write_status(f"  [dim]({kind})[/dim]")
+            await output.write(f"  [dim]({kind})[/dim]")
 
     @on(messages.ToolCallUpdate)
-    def on_tool_call_update(self, message: messages.ToolCallUpdate) -> None:
+    async def on_tool_call_update(self, message: messages.ToolCallUpdate) -> None:
         """Handle tool call update."""
         status = message.update.get("status")
         if status:
             style = "green" if status == "completed" else "yellow"
-            self._get_output().write_status(f"  [{style}]{status}[/{style}]")
+            output = self._get_output()
+            await output.write(f"  [{style}]{status}[/{style}]")
 
     @on(messages.AgentReady)
-    def on_agent_ready(self, message: messages.AgentReady) -> None:
+    async def on_agent_ready(self, message: messages.AgentReady) -> None:
         """Handle agent ready."""
-        self._get_output().write_status("[green]Agent ready[/green]\n")
+        await self._get_output().write("[green]Agent ready[/green]\n")
 
     @on(messages.AgentFail)
-    def on_agent_fail(self, message: messages.AgentFail) -> None:
+    async def on_agent_fail(self, message: messages.AgentFail) -> None:
         """Handle agent failure."""
         self._is_running = False
         self._update_status()
         output = self._get_output()
-        output.write_status(f"[red bold]Error: {message.message}[/red bold]")
+        await output.write(f"[red bold]Error: {message.message}[/red bold]")
         if message.details:
-            output.write_status(f"[red]{message.details}[/red]")
+            await output.write(f"[red]{message.details}[/red]")
 
     async def _try_create_ticket_from_response(self) -> None:
         """Parse accumulated response and create ticket if found."""
@@ -179,12 +141,14 @@ class ChatScreen(KaganScreen):
                 f"Created ticket [{ticket.short_id}]: {ticket.title[:50]}",
                 severity="information",
             )
-            self._get_output().write_status(
+            await self._get_output().write(
                 f"\n[bold green]✓ Created ticket {ticket.short_id}[/bold green]\n"
             )
+            # After creating ticket, navigate to board
+            await self.action_to_board()
         except Exception as e:
             self.notify(f"Failed to create ticket: {e}", severity="error")
-            self._get_output().write_status(f"[red]Failed to create ticket: {e}[/red]")
+            await self._get_output().write(f"[red]Failed to create ticket: {e}[/red]")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle user input submission."""
@@ -214,24 +178,27 @@ class ChatScreen(KaganScreen):
             prompt = build_planner_prompt(text, prompt_loader)
 
             try:
+                await self._agent.wait_ready(timeout=30.0)
                 await self._agent.send_prompt(prompt)
                 # After prompt completes, try to create ticket from response
                 await self._try_create_ticket_from_response()
             except Exception as e:
-                self._get_output().write_status(f"[red]Error sending prompt: {e}[/red]")
+                await self._get_output().write(f"[red]Error sending prompt: {e}[/red]")
 
-    async def action_interrupt(self) -> None:
+    async def action_cancel(self) -> None:
         """Send cancel signal to planner."""
         if self._agent and self._is_running:
             await self._agent.cancel()
             self.notify("Sent cancel request")
 
-    def action_back(self) -> None:
-        """Return to Kanban screen."""
-        self.app.pop_screen()
+    async def action_to_board(self) -> None:
+        """Navigate to Kanban board screen."""
+        from kagan.ui.screens.kanban import KanbanScreen
+
+        await self.app.push_screen(KanbanScreen())
 
     async def on_unmount(self) -> None:
-        """Cleanup on screen exit - do not terminate the planner."""
-        # Clear ourselves as subscriber but keep the agent running for reuse
+        """Cleanup on screen exit."""
         if self._agent:
-            self.kagan_app.agent_manager.unsubscribe(PLANNER_SESSION_ID, self)
+            await self._agent.stop()
+            self._is_running = False

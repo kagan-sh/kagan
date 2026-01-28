@@ -16,9 +16,16 @@ from kagan.ui.screens.kanban import KanbanScreen
 
 def test_empty_board(snap_compare):
     """Empty kanban board with 4 columns."""
+
+    async def setup(pilot):
+        # Push KanbanScreen explicitly (empty board would normally show PlannerScreen)
+        await pilot.app.push_screen(KanbanScreen())
+        await pilot.pause()
+
     assert snap_compare(
         app=KaganApp(db_path=":memory:"),
         terminal_size=(100, 30),
+        run_before=setup,
     )
 
 

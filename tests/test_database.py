@@ -1,5 +1,7 @@
 """Tests for database operations."""
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 
@@ -258,3 +260,127 @@ class TestScratchpads:
 
         result = await state_manager.get_scratchpad(ticket.id)
         assert len(result) == 50000
+
+
+class TestTicketNewFields:
+    """Tests for new ticket fields.
+
+    Fields: acceptance_criteria, check_command, review_summary,
+    checks_passed, session_active.
+    """
+
+    async def test_create_ticket_with_new_fields(self, state_manager: StateManager):
+        """Test creating a ticket with new fields."""
+        create = TicketCreate(
+            title="Test ticket",
+            acceptance_criteria=["All tests pass"],
+            check_command="pytest tests/",
+            checks_passed=True,
+            session_active=True,
+        )
+        ticket = await state_manager.create_ticket(create)
+
+        assert ticket.acceptance_criteria == ["All tests pass"]
+        assert ticket.check_command == "pytest tests/"
+        assert ticket.checks_passed is True
+        assert ticket.session_active is True
+        assert ticket.review_summary is None
+
+    async def test_get_ticket_with_new_fields(self, state_manager: StateManager):
+        """Test retrieving a ticket with new fields."""
+        create = TicketCreate(
+            title="Test",
+            acceptance_criteria=["Criteria"],
+            check_command="cmd",
+            review_summary="Looks good",
+            checks_passed=True,
+            session_active=False,
+        )
+        created = await state_manager.create_ticket(create)
+
+        ticket = await state_manager.get_ticket(created.id)
+
+        assert ticket is not None
+        assert ticket.acceptance_criteria == ["Criteria"]
+        assert ticket.check_command == "cmd"
+        assert ticket.review_summary == "Looks good"
+        assert ticket.checks_passed is True
+        assert ticket.session_active is False
+
+    async def test_update_ticket_new_fields(self, state_manager: StateManager):
+        """Test updating new fields on a ticket."""
+        create = TicketCreate(title="Original")
+        ticket = await state_manager.create_ticket(create)
+
+        update = TicketUpdate(
+            acceptance_criteria=["New criteria"],
+            check_command="new command",
+            checks_passed=True,
+        )
+        updated = await state_manager.update_ticket(ticket.id, update)
+
+        assert updated is not None
+        assert updated.acceptance_criteria == ["New criteria"]
+        assert updated.check_command == "new command"
+        assert updated.checks_passed is True
+        assert updated.session_active is False  # Default value
+
+    async def test_mark_session_active(self, state_manager: StateManager):
+        """Test marking a ticket's session as active."""
+        create = TicketCreate(title="Test")
+        ticket = await state_manager.create_ticket(create)
+
+        assert ticket.session_active is False
+
+        updated = await state_manager.mark_session_active(ticket.id, True)
+        assert updated is not None
+        assert updated.session_active is True
+
+        updated = await state_manager.mark_session_active(ticket.id, False)
+        assert updated is not None
+        assert updated.session_active is False
+
+    async def test_set_review_summary(self, state_manager: StateManager):
+        """Test setting review summary for a ticket."""
+        create = TicketCreate(title="Test")
+        ticket = await state_manager.create_ticket(create)
+
+        assert ticket.review_summary is None
+
+        updated = await state_manager.set_review_summary(ticket.id, "Great work!", True)
+        assert updated is not None
+        assert updated.review_summary == "Great work!"
+        assert updated.checks_passed is True
+
+        updated = await state_manager.set_review_summary(ticket.id, "Updated review", False)
+        assert updated is not None
+        assert updated.review_summary == "Updated review"
+        assert updated.checks_passed is False
+
+    async def test_new_fields_defaults(self, state_manager: StateManager):
+        """Test that new fields have correct defaults."""
+        create = TicketCreate(title="Test")
+        ticket = await state_manager.create_ticket(create)
+
+        assert ticket.acceptance_criteria == []
+        assert ticket.check_command is None
+        assert ticket.review_summary is None
+        assert ticket.checks_passed is None
+        assert ticket.session_active is False
+
+    async def test_update_partial_new_fields(self, state_manager: StateManager):
+        """Test partial update preserves other new fields."""
+        create = TicketCreate(
+            title="Test",
+            acceptance_criteria=["Original"],
+            checks_passed=True,
+        )
+        ticket = await state_manager.create_ticket(create)
+
+        update = TicketUpdate(check_command="new command")
+        updated = await state_manager.update_ticket(ticket.id, update)
+
+        assert updated is not None
+        assert updated.acceptance_criteria == ["Original"]  # Preserved
+        assert updated.check_command == "new command"  # Updated
+        assert updated.checks_passed is True  # Preserved
