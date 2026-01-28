@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from kagan.agents.signals import Signal, SignalResult, parse_signal
+from kagan.agents.signals import Signal, parse_signal
 
 
 class TestSignalParsing:
@@ -61,9 +61,9 @@ class TestSignalParsing:
         - Added the new feature
         - Updated tests
         - All tests pass
-        
+
         <complete/>
-        
+
         Let me know if you need anything else.
         """
         result = parse_signal(text)
@@ -73,29 +73,3 @@ class TestSignalParsing:
         """Test that first matching signal is returned."""
         result = parse_signal("<complete/> <continue/> <blocked reason='test'/>")
         assert result.signal == Signal.COMPLETE
-
-
-class TestSignalResult:
-    """Tests for SignalResult dataclass."""
-
-    @pytest.mark.parametrize(
-        ("r1", "r2", "expected_equal"),
-        [
-            (SignalResult(Signal.COMPLETE, ""), SignalResult(Signal.COMPLETE, ""), True),
-            (SignalResult(Signal.COMPLETE, ""), SignalResult(Signal.CONTINUE, ""), False),
-            (
-                SignalResult(Signal.BLOCKED, "reason 1"),
-                SignalResult(Signal.BLOCKED, "reason 2"),
-                False,
-            ),
-        ],
-    )
-    def test_signal_result_equality(self, r1: SignalResult, r2: SignalResult, expected_equal: bool):
-        """Test SignalResult equality comparisons."""
-        assert (r1 == r2) == expected_equal
-
-    def test_signal_result_not_equal_to_other_types(self):
-        """Test SignalResult not equal to non-SignalResult."""
-        r = SignalResult(Signal.COMPLETE, "")
-        assert r != "complete"
-        assert r != Signal.COMPLETE

@@ -44,12 +44,6 @@ class GeneralConfig(BaseModel):
     default_worker_agent: str = Field(default="claude")
 
 
-class PromptsConfig(BaseModel):
-    """Configuration for prompt customization."""
-
-    planner_system_prompt: str = Field(default="")
-
-
 class AgentConfig(BaseModel):
     """Configuration for an ACP agent."""
 
@@ -72,7 +66,6 @@ class KaganConfig(BaseModel):
     """Root configuration model."""
 
     general: GeneralConfig = Field(default_factory=GeneralConfig)
-    prompts: PromptsConfig = Field(default_factory=PromptsConfig)
     agents: dict[str, AgentConfig] = Field(default_factory=dict)
 
     @classmethod
@@ -91,13 +84,6 @@ class KaganConfig(BaseModel):
     def get_agent(self, name: str) -> AgentConfig | None:
         """Get agent configuration by name."""
         return self.agents.get(name)
-
-    def get_default_agent(self) -> tuple[str, AgentConfig] | None:
-        """Get the first active agent as default."""
-        for name, agent in self.agents.items():
-            if agent.active:
-                return name, agent
-        return None
 
     def get_worker_agent(self) -> AgentConfig | None:
         """Get the configured worker agent."""

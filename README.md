@@ -1,42 +1,78 @@
-# Kagan
-
-AI-powered Kanban TUI for autonomous development workflows.
-
-## Quick Start
-
-```bash
-uv run kagan
+```
+██╗  ██╗ █████╗  ██████╗  █████╗ ███╗   ██╗
+██║ ██╔╝██╔══██╗██╔════╝ ██╔══██╗████╗  ██║
+█████╔╝ ███████║██║  ███╗███████║██╔██╗ ██║
+██╔═██╗ ██╔══██║██║   ██║██╔══██║██║╚██╗██║
+██║  ██╗██║  ██║╚██████╔╝██║  ██║██║ ╚████║
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝
 ```
 
-## Development
+> AI-powered Kanban TUI for autonomous development workflows
+
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/aorumbayev/kagan)](https://github.com/aorumbayev/kagan/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/kagan.svg)](https://badge.fury.io/py/kagan)
+
+Kagan is a terminal-based Kanban board that integrates AI agents to help you complete development tasks autonomously or collaboratively.
+
+![Kagan Screenshot](https://i.imgur.com/dZRl5V7.png)
+
+## Supported AI CLIs
+
+Available now:
+
+- Claude Code
+- OpenCode
+
+Coming soon:
+
+- Gemini
+- Codex
+- More providers
+
+## Install
+
+### Quick Install (with uv)
 
 ```bash
-uv run poe dev          # Dev mode with hot reload
-uv run poe check        # Lint + typecheck + test
-uv run poe fix          # Auto-fix lint issues
+uv tool install kagan
 ```
 
-## Architecture
+### All-in-One Install (includes uv + Python)
 
-- `src/kagan/app.py` - Main application
-- `src/kagan/ui/` - Textual screens, widgets, modals
-- `src/kagan/database/` - SQLite state management
-- `src/kagan/acp/` - Agent Client Protocol implementation
-- `src/kagan/agents/` - Agent scheduling and management
+```bash
+curl -fsSL https://uvget.me/install.sh | bash -s -- kagan
+```
 
-## Key Bindings
+> [!NOTE]
+> The all-in-one installer automatically installs `uv` and Python if needed, then installs Kagan via `uv tool install`.
 
-| Key | Action |
-|-----|--------|
-| j/k | Navigate up/down |
-| h/l | Navigate left/right |
-| n | New ticket |
-| e | Edit ticket |
-| d | Delete ticket |
-| [ / ] | Move ticket backward/forward |
-| Enter | View ticket details |
-| o | Agent output |
-| s | Start agent |
-| x | Stop agent |
-| c | Planner chat |
-| q | Quit |
+## Usage
+
+```bash
+kagan                  # Launch TUI
+kagan mcp             # Run as MCP server
+kagan --help          # Show all options
+```
+
+## Documentation
+
+See the [docs/](docs/) folder for detailed documentation:
+
+- [User Guide](docs/user-guide.md) - Full walkthrough of workflows
+- [Configuration](docs/config.md) - Agent setup and options
+- [Contributing](CONTRIBUTING.md) - Development guidelines
+
+## License
+
+[MIT](LICENSE)
+
+## Star History
+
+<a href="https://www.star-history.com/#aorumbayev/kagan&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date&legend=top-left" />
+ </picture>
+</a>

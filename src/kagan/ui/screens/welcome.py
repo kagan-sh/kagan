@@ -9,7 +9,6 @@ from textual.containers import Center, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Label, Select, Switch
 
-from kagan.agents.prompt_loader import dump_default_prompts
 from kagan.data.builtin_agents import BUILTIN_AGENTS, list_builtin_agents
 from kagan.git_utils import get_current_branch, has_git_repo, list_local_branches
 
@@ -197,9 +196,6 @@ default_worker_agent = "{worker}"
 '''
 
         (kagan_dir / "config.toml").write_text(config_content)
-
-        # Dump default prompt templates for user customization
-        dump_default_prompts(kagan_dir / "prompts")
 
     def _ensure_gitignored(self) -> bool:
         """Add .kagan/ to .gitignore if not already present.

@@ -6,15 +6,11 @@ to test, with fixed data (no dynamic dates) to ensure reproducible snapshots.
 
 from __future__ import annotations
 
-import tempfile
 from datetime import datetime
-from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 
-from kagan.app import KaganApp
-from kagan.database.manager import StateManager
 from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketType
 from kagan.ui.widgets.card import TicketCard
 
@@ -57,13 +53,13 @@ class CardSnapshotApp(App):
         layout: horizontal;
         padding: 1;
     }
-    
+
     .card-column {
         width: 1fr;
         height: auto;
         padding: 0 1;
     }
-    
+
     /* Import card styles from main app */
     TicketCard {
         width: 100%;
@@ -75,25 +71,25 @@ class CardSnapshotApp(App):
         background: #0f1419;
         border: solid #2a3342;
     }
-    
+
     TicketCard:focus {
         border: solid #e75535;
         background: #171c24;
     }
-    
+
     TicketCard.session-active {
         border: solid #98c379;
     }
-    
+
     TicketCard.agent-active {
         border: solid #c678dd;
     }
-    
+
     TicketCard.agent-pulse {
         border: solid #e5c07b;
         background: #171c24;
     }
-    
+
     TicketCard .card-title {
         width: 100%;
         height: 1;
@@ -101,43 +97,43 @@ class CardSnapshotApp(App):
         color: #dfe0e1;
         padding: 0;
     }
-    
+
     TicketCard .card-title-continued {
         width: 100%;
         height: 1;
         color: #dfe0e1;
     }
-    
+
     TicketCard .card-desc {
         width: 100%;
         height: 1;
         color: #5c6773;
     }
-    
+
     TicketCard .card-desc.high {
         color: #e75535;
     }
-    
+
     TicketCard .card-desc.medium {
         color: #e5c07b;
     }
-    
+
     TicketCard .card-desc.low {
         color: #98c379;
     }
-    
+
     TicketCard .card-meta {
         width: 100%;
         height: 1;
         color: #5c6773;
     }
-    
+
     TicketCard .card-review {
         width: 100%;
         height: 1;
         color: #56b6c2;
     }
-    
+
     TicketCard .card-checks {
         width: 100%;
         height: 1;
@@ -306,24 +302,3 @@ class TestCardSnapshots:
         ]
         app = CardSnapshotApp(tickets)
         assert snap_compare(app, terminal_size=(50, 26))
-
-
-class TestEmptyStateSnapshot:
-    """Snapshot tests for empty Kanban board."""
-
-    def test_empty_board_snapshot(self, snap_compare):
-        """Snapshot test for empty Kanban board."""
-        import asyncio
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / ".kagan" / "state.db"
-            db_path.parent.mkdir(parents=True, exist_ok=True)
-
-            async def setup():
-                manager = StateManager(str(db_path))
-                await manager.initialize()
-                await manager.close()
-
-            asyncio.run(setup())
-            app = KaganApp(db_path=str(db_path))
-            assert snap_compare(app, terminal_size=(120, 40))

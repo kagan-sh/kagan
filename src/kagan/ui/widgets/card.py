@@ -41,19 +41,6 @@ class TicketCard(Widget):
     class Selected(Message):
         ticket: Ticket
 
-    @dataclass
-    class MoveRequested(Message):
-        ticket: Ticket
-        forward: bool = True
-
-    @dataclass
-    class EditRequested(Message):
-        ticket: Ticket
-
-    @dataclass
-    class DeleteRequested(Message):
-        ticket: Ticket
-
     def __init__(self, ticket: Ticket, **kwargs) -> None:
         super().__init__(id=f"card-{ticket.id}", **kwargs)
         self.ticket = ticket

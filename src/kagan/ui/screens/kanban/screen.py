@@ -41,8 +41,6 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.timer import Timer
 
-    from kagan.messages import TicketChanged
-
 # Leader key timeout in seconds
 LEADER_TIMEOUT = 0.8
 
@@ -75,18 +73,18 @@ class KanbanScreen(KaganScreen):
         Binding("down", "focus_down", "Down", show=False),
         Binding("up", "focus_up", "Up", show=False),
         # Ticket management
-        Binding("a", "start_agent", "Start"),
+        Binding("a", "start_agent", "Start agent"),
         # Hidden specialized (will move to leader key)
-        Binding("w", "watch_agent", "Watch", show=False),
+        Binding("w", "watch_agent", "Watch agent", show=False),
         Binding("D", "view_diff", "Diff", show=False),
         Binding("r", "open_review", "Review", show=False),
-        Binding("p", "open_planner", "Plan Mode", show=False),
+        Binding("p", "open_planner", "Plan Mode", show=True),
         # Hidden utility
         Binding("escape", "deselect", show=False),
         Binding("ctrl+c", "interrupt", show=False),
-        Binding("ctrl+comma", "open_settings", "Settings", show=False),
-        Binding("ctrl+d", "delete_ticket_direct", "Delete", show=False),
-        Binding("ctrl+m", "merge_direct", "Merge", show=False),
+        Binding("ctrl+comma", "open_settings", "Settings", show=True),
+        Binding("ctrl+d", "delete_ticket_direct", "Delete", show=True),
+        Binding("ctrl+m", "merge_direct", "Merge PR", show=True),
     ]
 
     header = getters.query_one(KaganHeader)
@@ -103,8 +101,6 @@ class KanbanScreen(KaganScreen):
         # Leader key state
         self._leader_active: bool = False
         self._leader_timer: Timer | None = None
-        # Shift key state
-        self._shift_active: bool = False
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         card = focus.get_focused_card(self)
@@ -775,18 +771,3 @@ class KanbanScreen(KaganScreen):
     # Message handlers
     def on_ticket_card_selected(self, message: TicketCard.Selected) -> None:
         self.action_view_details()
-
-    async def on_ticket_card_move_requested(self, message: TicketCard.MoveRequested) -> None:
-        if message.forward:
-            await self.action_move_forward()
-        else:
-            await self.action_move_backward()
-
-    def on_ticket_card_edit_requested(self, message: TicketCard.EditRequested) -> None:
-        self.action_edit_ticket()
-
-    def on_ticket_card_delete_requested(self, message: TicketCard.DeleteRequested) -> None:
-        self.action_delete_ticket()
-
-    async def on_ticket_changed(self, message: TicketChanged) -> None:
-        await self._refresh_board()

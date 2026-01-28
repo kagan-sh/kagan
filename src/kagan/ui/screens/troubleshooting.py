@@ -29,6 +29,8 @@ class IssueType(Enum):
     INSTANCE_LOCKED = "instance_locked"
     TMUX_MISSING = "tmux_missing"
     AGENT_MISSING = "agent_missing"
+    NPX_MISSING = "npx_missing"
+    ACP_AGENT_MISSING = "acp_agent_missing"
 
 
 class IssueSeverity(Enum):
@@ -95,6 +97,33 @@ ISSUE_PRESETS: dict[IssueType, IssuePreset] = {
         message="The default agent was not found in PATH.",
         hint="Install the agent to continue",
     ),
+    IssueType.NPX_MISSING: IssuePreset(
+        type=IssueType.NPX_MISSING,
+        severity=IssueSeverity.BLOCKING,
+        icon="[!]",
+        title="npx Not Available",
+        message=(
+            "npx is required to run claude-code-acp but was not found.\n"
+            "Either install Node.js (which includes npx) or install\n"
+            "claude-code-acp globally."
+        ),
+        hint=(
+            "Option 1: Install Node.js from https://nodejs.org\n"
+            "Option 2: npm install -g @zed-industries/claude-code-acp"
+        ),
+        url="https://github.com/zed-industries/claude-code-acp",
+    ),
+    IssueType.ACP_AGENT_MISSING: IssuePreset(
+        type=IssueType.ACP_AGENT_MISSING,
+        severity=IssueSeverity.BLOCKING,
+        icon="[!]",
+        title="ACP Agent Not Available",
+        message=(
+            "The ACP agent executable was not found.\n"
+            "Neither npx nor a global installation is available."
+        ),
+        hint="Install the agent globally or ensure npx is available",
+    ),
 }
 
 
@@ -116,6 +145,162 @@ class PreflightResult:
     def has_blocking_issues(self) -> bool:
         """Check if any blocking issues were detected."""
         return any(issue.preset.severity == IssueSeverity.BLOCKING for issue in self.issues)
+
+
+@dataclass
+class ACPCommandResolution:
+    """Result of resolving an ACP command.
+
+    This handles the case where a command like "npx claude-code-acp" needs
+    to be resolved to either:
+    1. Use npx if available
+    2. Use the global binary (claude-code-acp) if installed globally
+    3. Report an error if neither is available
+    """
+
+    resolved_command: str | None
+    issue: DetectedIssue | None
+    used_fallback: bool = False
+
+
+def _is_npx_command(command: str) -> bool:
+    """Check if a command uses npx."""
+    try:
+        parts = shlex.split(command)
+        return len(parts) > 0 and parts[0] == "npx"
+    except ValueError:
+        return command.startswith("npx ")
+
+
+def _get_npx_package_binary(command: str) -> str | None:
+    """Extract the binary name from an npx command.
+
+    For "npx claude-code-acp", returns "claude-code-acp".
+    For "npx @anthropic-ai/claude-code-acp", returns "claude-code-acp".
+    """
+    try:
+        parts = shlex.split(command)
+        if len(parts) < 2:
+            return None
+        package = parts[1]
+        # Handle scoped packages like @anthropic-ai/claude-code-acp
+        if "/" in package:
+            return package.split("/")[-1]
+        return package
+    except ValueError:
+        return None
+
+
+def resolve_acp_command(
+    run_command: str,
+    agent_name: str = "Claude Code",
+) -> ACPCommandResolution:
+    """Resolve an ACP command, handling npx fallback scenarios.
+
+    Logic:
+    1. If the command uses npx (e.g., "npx claude-code-acp"):
+       a. If the binary is globally installed, use it directly
+       b. Else if npx is available, use the original npx command
+       c. Else report an error with installation instructions
+    2. If the command doesn't use npx, check if the binary exists
+
+    Args:
+        run_command: The configured ACP run command (e.g., "npx claude-code-acp")
+        agent_name: Display name for error messages
+
+    Returns:
+        ACPCommandResolution with the resolved command or an issue
+    """
+    if _is_npx_command(run_command):
+        binary_name = _get_npx_package_binary(run_command)
+        if binary_name is None:
+            # Malformed npx command
+            preset = IssuePreset(
+                type=IssueType.ACP_AGENT_MISSING,
+                severity=IssueSeverity.BLOCKING,
+                icon="[!]",
+                title="Invalid ACP Command",
+                message=f"The ACP command '{run_command}' appears to be malformed.",
+                hint="Check your agent configuration",
+            )
+            return ACPCommandResolution(
+                resolved_command=None,
+                issue=DetectedIssue(preset=preset, details=agent_name),
+            )
+
+        # Check if the binary is globally installed
+        if shutil.which(binary_name) is not None:
+            # Great! Use the global binary directly
+            # Preserve any additional args from the original command
+            try:
+                parts = shlex.split(run_command)
+                # Replace "npx <package>" with just "<binary>"
+                resolved = " ".join([binary_name, *parts[2:]])
+            except ValueError:
+                resolved = binary_name
+            return ACPCommandResolution(
+                resolved_command=resolved,
+                issue=None,
+                used_fallback=True,
+            )
+
+        # Check if npx is available
+        if shutil.which("npx") is not None:
+            # Use the original npx command
+            return ACPCommandResolution(
+                resolved_command=run_command,
+                issue=None,
+                used_fallback=False,
+            )
+
+        # Neither global binary nor npx is available
+        preset = IssuePreset(
+            type=IssueType.NPX_MISSING,
+            severity=IssueSeverity.BLOCKING,
+            icon="[!]",
+            title="npx Not Available",
+            message=(
+                f"The {agent_name} ACP agent requires npx or a global installation.\n"
+                f"npx was not found and '{binary_name}' is not installed globally."
+            ),
+            hint=(
+                f"Option 1: Install Node.js from https://nodejs.org (includes npx)\n"
+                f"Option 2: npm install -g {binary_name}"
+            ),
+            url="https://github.com/zed-industries/claude-code-acp",
+        )
+        return ACPCommandResolution(
+            resolved_command=None,
+            issue=DetectedIssue(preset=preset, details=agent_name),
+        )
+
+    # Non-npx command: just check if the executable exists
+    try:
+        parts = shlex.split(run_command)
+        executable = parts[0] if parts else run_command
+    except ValueError:
+        executable = run_command
+
+    if shutil.which(executable) is not None:
+        return ACPCommandResolution(
+            resolved_command=run_command,
+            issue=None,
+            used_fallback=False,
+        )
+
+    # Executable not found
+    preset = IssuePreset(
+        type=IssueType.ACP_AGENT_MISSING,
+        severity=IssueSeverity.BLOCKING,
+        icon="[!]",
+        title=f"{agent_name} ACP Agent Not Found",
+        message=f"The ACP agent executable '{executable}' was not found in PATH.",
+        hint=f"Ensure '{executable}' is installed and available in PATH",
+    )
+    return ACPCommandResolution(
+        resolved_command=None,
+        issue=DetectedIssue(preset=preset, details=agent_name),
+    )
 
 
 def _check_windows() -> DetectedIssue | None:
@@ -199,19 +384,27 @@ def detect_issues(
     if tmux_issue:
         issues.append(tmux_issue)
 
-    # 4. Agent check
+    # 4. Agent check (interactive command for PAIR mode)
     if agent_config:
         from kagan.config import get_os_value
 
-        run_command = get_os_value(agent_config.interactive_command)
-        if run_command:
+        interactive_cmd = get_os_value(agent_config.interactive_command)
+        if interactive_cmd:
             agent_issue = _check_agent(
-                agent_command=run_command,
+                agent_command=interactive_cmd,
                 agent_name=agent_name,
                 install_command=agent_install_command,
             )
             if agent_issue:
                 issues.append(agent_issue)
+
+        # 5. ACP command check (run_command for AUTO mode)
+        # This uses smart detection for npx-based commands
+        acp_cmd = get_os_value(agent_config.run_command)
+        if acp_cmd:
+            acp_resolution = resolve_acp_command(acp_cmd, agent_name)
+            if acp_resolution.issue:
+                issues.append(acp_resolution.issue)
 
     return PreflightResult(issues=issues)
 

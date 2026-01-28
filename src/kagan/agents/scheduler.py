@@ -10,7 +10,7 @@ from textual import log
 from kagan.acp.agent import Agent
 from kagan.agents.config_resolver import resolve_agent_config
 from kagan.agents.prompt import build_prompt
-from kagan.agents.prompt_loader import PromptLoader
+from kagan.agents.prompt_loader import get_review_prompt
 from kagan.agents.signals import Signal, SignalResult, parse_signal
 from kagan.constants import MODAL_TITLE_MAX_LENGTH
 from kagan.database.models import TicketStatus, TicketType, TicketUpdate
@@ -52,7 +52,6 @@ class Scheduler:
         self._tasks: set[asyncio.Task[None]] = set()
         self._on_ticket_changed = on_ticket_changed
         self._on_iteration_changed = on_iteration_changed
-        self._prompt_loader = PromptLoader(config)
 
     def _notify_ticket_changed(self) -> None:
         """Notify that a ticket has changed status."""
@@ -207,7 +206,6 @@ class Scheduler:
             iteration=iteration,
             max_iterations=max_iterations,
             scratchpad=scratchpad,
-            prompt_loader=self._prompt_loader,
         )
 
         # Send prompt and get response
@@ -300,7 +298,7 @@ class Scheduler:
         commits = await self._worktrees.get_commit_log(ticket.id, base)
         diff_summary = await self._worktrees.get_diff_stats(ticket.id, base)
 
-        return self._prompt_loader.load_review_prompt(
+        return get_review_prompt(
             title=ticket.title,
             ticket_id=ticket.id,
             description=ticket.description or "",

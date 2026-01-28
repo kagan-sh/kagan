@@ -1,0 +1,121 @@
+name: Continuous Delivery
+
+run-name: ${{ inputs.production_release && 'Production Release' || 'Beta Release' }}
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+  workflow_dispatch:
+    inputs:
+      production_release:
+        description: "Production release?"
+        type: boolean
+        required: true
+        default: false
+
+concurrency: release
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    permissions:
+      # IMPORTANT: mandatory for trusted publishing and GitHub releases
+      id-token: write
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.BOT_ID }}
+          private-key: ${{ secrets.BOT_SK }}
+
+      - uses: actions/checkout@v4
+        with:
+          # Fetch entire repository history so we can determine version number from it
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run tests and quality checks
+        run: |
+          set -o pipefail
+          uv run poe check
+
+      - name: Get branch name
+        shell: bash
+        run: echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+        id: get_branch
+
+      - name: Python Semantic Release - Beta (non-prod)
+        id: release-beta
+        if: steps.get_branch.outputs.branch == 'main' && !inputs.production_release
+        uses: python-semantic-release/python-semantic-release@v10.3.1
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          prerelease: true
+
+      - name: Python Semantic Release - Production
+        id: release-prod
+        if: steps.get_branch.outputs.branch == 'main' && inputs.production_release
+        uses: python-semantic-release/python-semantic-release@v10.3.1
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+
+      - name: Publish to PyPI
+        if: (steps.release-beta.outputs.released == 'true') || (steps.release-prod.outputs.released == 'true')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
+
+  publish-docs:
+    name: Publish Documentation
+    needs: release
+    # Only publish docs for production releases
+    if: inputs.production_release && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Build documentation
+        run: uv run mkdocs build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

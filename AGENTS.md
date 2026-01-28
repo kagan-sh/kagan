@@ -50,6 +50,7 @@ src/kagan/
 ## Code Style
 
 ### Imports
+
 Order: stdlib → third-party → local. Use `from __future__ import annotations`.
 
 ```python
@@ -57,52 +58,57 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 from textual.app import ComposeResult
 from kagan.constants import COLUMN_ORDER
-from kagan.database.models import Ticket
 
 if TYPE_CHECKING:
     from kagan.app import KaganApp
 ```
 
 ### Type Annotations
+
 - Always annotate function signatures and class attributes
 - Use `X | None` union syntax (not `Optional[X]`)
 - Use `TYPE_CHECKING` block for type-only imports
 - Use `cast()` for type narrowing: `return cast("KaganApp", self.app)`
 
 ### Naming Conventions
-| Type | Convention | Example |
-|------|------------|---------|
-| Classes | PascalCase | `TicketCard`, `KanbanScreen` |
-| Functions | snake_case | `get_all_tickets`, `_refresh_board` |
-| Private | underscore prefix | `_get_focused_card` |
-| Constants | UPPER_SNAKE | `COLUMN_ORDER`, `MIN_WIDTH` |
-| Enums | PascalCase/UPPER | `TicketStatus.BACKLOG` |
+
+| Type      | Convention        | Example                             |
+| --------- | ----------------- | ----------------------------------- |
+| Classes   | PascalCase        | `TicketCard`, `KanbanScreen`        |
+| Functions | snake_case        | `get_all_tickets`, `_refresh_board` |
+| Private   | underscore prefix | `_get_focused_card`                 |
+| Constants | UPPER_SNAKE       | `COLUMN_ORDER`, `MIN_WIDTH`         |
+| Enums     | PascalCase/UPPER  | `TicketStatus.BACKLOG`              |
 
 ### Enums (database-safe)
+
 ```python
 class TicketStatus(str, Enum):
     BACKLOG = "BACKLOG"
-    IN_PROGRESS = "IN_PROGRESS"
+
 
 class TicketPriority(int, Enum):
     LOW = 0
-    MEDIUM = 1
 ```
 
 ### Textual Patterns
+
 ```python
 # Messages as dataclasses
 @dataclass
 class Selected(Message):
     ticket: Ticket
 
+
 # Button handlers with @on decorator
 @on(Button.Pressed, "#save-btn")
 def on_save(self) -> None:
     self.action_submit()
 
+
 # Reactive with recompose
 tickets: reactive[list[Ticket]] = reactive(list, recompose=True)
+
 
 # Widget IDs in __init__
 def __init__(self, ticket: Ticket, **kwargs) -> None:
@@ -110,8 +116,10 @@ def __init__(self, ticket: Ticket, **kwargs) -> None:
 ```
 
 ### Error Handling
+
 ```python
 from textual.css.query import NoMatches
+
 try:
     widget = self.query_one("#my-widget", MyWidget)
 except NoMatches:
@@ -119,11 +127,11 @@ except NoMatches:
 ```
 
 ### Pydantic Models
+
 ```python
 class Ticket(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex[:8])
     title: str = Field(..., min_length=1, max_length=200)
-    status: TicketStatus = Field(default=TicketStatus.BACKLOG)
     model_config = ConfigDict(use_enum_values=True)
 ```
 
@@ -131,14 +139,7 @@ class Ticket(BaseModel):
 
 **Framework**: pytest with pytest-asyncio (auto mode), pytest-cov, pytest-textual-snapshot
 
-**Test Types**:
-- E2E smoke tests (`test_e2e_smoke.py`) - UI regression coverage
-- Unit tests - Business logic (database, models, planner)
-- Interaction tests (`test_interactions.py`) - Keyboard shortcuts
-
-**Patterns**:
 ```python
-# Async fixture with temp database
 @pytest.fixture
 async def state_manager():
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -148,17 +149,16 @@ async def state_manager():
         yield manager
         await manager.close()
 
-# In-memory database for UI tests
+
 @pytest.fixture
 def app():
     return KaganApp(db_path=":memory:")
 
-# UI tests with pilot
+
 async def test_navigation(self, app: KaganApp):
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.press("j")
         await pilot.pause()
-        assert app.focused is not None
 ```
 
 ## Ruff Configuration
@@ -167,28 +167,18 @@ Line length: 100. Rules: E, F, I, UP, B, SIM, TCH, RUF.
 
 **Always run `uv run poe fix` before manual edits** - ruff auto-fixes most issues.
 
-Ignored rules:
-- `RUF012`: Textual class attrs (BINDINGS) don't need ClassVar
-- `SIM102/SIM117`: Allow nested if/with for readability
+Ignored: `RUF012` (Textual class attrs), `SIM102/SIM117` (nested if/with allowed).
 
 ## Key Rules
 
 1. **CSS in `.tcss` only** - All styles in `kagan.tcss`, never use `DEFAULT_CSS`
-2. **Async database** - All DB operations via aiosqlite StateManager
-3. **Constants module** - Use `kagan.constants` for shared values
-4. **Property assertions** - Use `@property` with `assert` for required state
-5. **Module size limits** - Keep modules ~150-250 LOC; test files < 200 LOC
-
-## Git Commit Rules
-
-Disable GPG signing in agent workflows to avoid timeouts:
-```bash
-git config commit.gpgsign false
-```
+1. **Async database** - All DB operations via aiosqlite StateManager
+1. **Constants module** - Use `kagan.constants` for shared values
+1. **Property assertions** - Use `@property` with `assert` for required state
+1. **Module size limits** - Keep modules ~150-250 LOC; test files < 200 LOC
 
 For test fixtures:
+
 ```python
-await asyncio.create_subprocess_exec(
-    "git", "config", "commit.gpgsign", "false", cwd=repo_path
-)
+await asyncio.create_subprocess_exec("git", "config", "commit.gpgsign", "false", cwd=repo_path)
 ```

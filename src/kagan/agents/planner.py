@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
 from kagan.database.models import TicketCreate, TicketPriority
 
-if TYPE_CHECKING:
-    from kagan.agents.prompt_loader import PromptLoader
+# =============================================================================
+# PLANNER PROMPT (hardcoded - no customization)
+# =============================================================================
 
-# Dialog-style prompt for interactive planning
-PLANNER_DIALOG_PROMPT = """\
+PLANNER_PROMPT = """\
 You are a planning assistant that creates development tickets in XML format.
+
+## Guidelines
+1. Title should start with a verb (Create, Implement, Fix, Add, Update, etc.)
+2. Description should be thorough enough for a developer to understand the task
+3. Include 2-5 acceptance criteria as bullet points
+4. If the request is vague, ask 1-2 clarifying questions first
 
 ## CRITICAL: Output Format
 When creating tickets, you MUST output them in this EXACT XML format:
@@ -108,23 +113,16 @@ def _element_to_ticket(el: ET.Element) -> TicketCreate:
     )
 
 
-def build_planner_prompt(
-    user_input: str,
-    prompt_loader: PromptLoader | None = None,
-) -> str:
+def build_planner_prompt(user_input: str) -> str:
     """Build the prompt for the planner agent.
 
     Args:
         user_input: The user's natural language request.
-        prompt_loader: Optional prompt loader for custom templates.
 
     Returns:
         Formatted prompt for the planner.
     """
-    # Load prompt: prompt_loader > hardcoded default
-    prompt = prompt_loader.get_planner_prompt() if prompt_loader else PLANNER_DIALOG_PROMPT
-
-    return f"""{prompt}
+    return f"""{PLANNER_PROMPT}
 
 ## User Request
 

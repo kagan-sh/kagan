@@ -59,8 +59,15 @@ class Agent:
     @property
     def command(self) -> str | None:
         from kagan import get_os_value
+        from kagan.ui.screens.troubleshooting import resolve_acp_command
 
-        return get_os_value(self._agent_config.run_command)
+        raw_command = get_os_value(self._agent_config.run_command)
+        if raw_command is None:
+            return None
+
+        # Use smart resolution to handle npx fallback
+        resolution = resolve_acp_command(raw_command, self._agent_config.name)
+        return resolution.resolved_command
 
     def set_message_target(self, target: MessagePump | None) -> None:
         self._message_target = target

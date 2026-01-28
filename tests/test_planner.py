@@ -7,12 +7,12 @@ from pathlib import Path  # noqa: TC003
 
 import pytest
 
-from kagan.agents.planner import parse_plan
+from kagan.agents.planner import build_planner_prompt, parse_plan
 from kagan.app import KaganApp
 from kagan.database.manager import StateManager
 from kagan.database.models import TicketPriority, TicketType
 from kagan.ui.screens.kanban import KanbanScreen
-from kagan.ui.screens.planner import PLANNER_SESSION_ID, PlannerScreen
+from kagan.ui.screens.planner import PlannerScreen
 
 
 class FakeAgent:
@@ -37,16 +37,38 @@ class FakeAgent:
 
 
 @pytest.fixture
-async def app_with_mock_planner(monkeypatch) -> AsyncGenerator[KaganApp, None]:
+async def app_with_mock_planner(monkeypatch, tmp_path) -> AsyncGenerator[KaganApp, None]:
     """Create app with mock planner agent and state manager."""
     monkeypatch.setattr("kagan.ui.screens.planner.Agent", FakeAgent)
     app = KaganApp(db_path=":memory:")
     app._state_manager = StateManager(":memory:")
     await app._state_manager.initialize()
+
     # Create a minimal config
+    from kagan.agents.scheduler import Scheduler
+    from kagan.agents.worktree import WorktreeManager
     from kagan.config import KaganConfig
+    from kagan.sessions.manager import SessionManager
 
     app.config = KaganConfig()
+
+    # Initialize required managers for KanbanScreen
+    project_root = tmp_path / "test_project"
+    project_root.mkdir(exist_ok=True)
+
+    app._worktree_manager = WorktreeManager(repo_root=project_root)
+    app._session_manager = SessionManager(
+        project_root=project_root, state=app._state_manager, config=app.config
+    )
+    app._scheduler = Scheduler(
+        state_manager=app._state_manager,
+        worktree_manager=app._worktree_manager,
+        config=app.config,
+        session_manager=app._session_manager,
+        on_ticket_changed=lambda: None,
+        on_iteration_changed=lambda tid, it: None,
+    )
+
     yield app
     await app._state_manager.close()
 
@@ -75,10 +97,6 @@ class TestPlannerScreen:
             await pilot.pause()
 
             assert isinstance(app_with_mock_planner.screen, KanbanScreen)
-
-    async def test_planner_session_id_constant(self):
-        """Test planner session ID is defined."""
-        assert PLANNER_SESSION_ID == "planner"
 
     async def test_input_submission_triggers_planner(self, app_with_mock_planner: KaganApp):
         """Test submitting input triggers planner agent."""
@@ -181,6 +199,32 @@ class TestParsePlan:
         assert tickets[0].ticket_type == TicketType.PAIR
         assert tickets[0].priority == TicketPriority.HIGH
         assert len(tickets[0].acceptance_criteria) == 2
+
+
+class TestBuildPlannerPrompt:
+    """Test build_planner_prompt always includes format instructions."""
+
+    def test_format_instructions_always_included(self) -> None:
+        """Format instructions (AUTO/PAIR, XML format) must always be present."""
+        prompt = build_planner_prompt("Create a login feature")
+
+        # Must include XML format instructions
+        assert "<plan>" in prompt
+        assert "<ticket>" in prompt
+        assert "<type>AUTO or PAIR</type>" in prompt
+
+        # Must include AUTO/PAIR guidance
+        assert "**AUTO**" in prompt
+        assert "**PAIR**" in prompt
+        assert "Bug fixes with clear steps" in prompt
+        assert "New feature design" in prompt
+
+    def test_user_request_included(self) -> None:
+        """User request should be included in the final prompt."""
+        prompt = build_planner_prompt("Implement OAuth login with Google")
+
+        assert "Implement OAuth login with Google" in prompt
+        assert "## User Request" in prompt
 
     def test_parse_multiple_tickets(self) -> None:
         """Parse a plan with multiple tickets."""

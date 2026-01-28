@@ -24,11 +24,6 @@ class SignalResult:
     signal: Signal
     reason: str = ""
 
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, SignalResult):
-            return self.signal == other.signal and self.reason == other.reason
-        return NotImplemented
-
 
 # Patterns for parsing signals from agent output
 _PATTERNS = [

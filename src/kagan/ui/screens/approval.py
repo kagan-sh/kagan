@@ -12,17 +12,17 @@ from textual.widgets import Button, DataTable, Static
 
 from kagan.constants import APPROVAL_TITLE_MAX_LENGTH
 from kagan.database.models import TicketCreate, TicketType
+from kagan.ui.screens.ticket_editor import TicketEditorScreen
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 
-class ApprovalScreen(ModalScreen[list[TicketCreate] | str | None]):
+class ApprovalScreen(ModalScreen[list[TicketCreate] | None]):
     """Review and approve proposed tickets.
 
     Returns:
         list[TicketCreate]: Approved tickets (possibly with modified types)
-        "refine": User wants to continue refining with agent
         None: User cancelled
     """
 
@@ -119,8 +119,18 @@ class ApprovalScreen(ModalScreen[list[TicketCreate] | str | None]):
 
     @on(Button.Pressed, "#refine")
     def on_refine(self) -> None:
-        """Request refinement."""
-        self.dismiss("refine")
+        """Open ticket editor for refinement."""
+        self.app.push_screen(
+            TicketEditorScreen(self._tickets),
+            self._on_editor_result,
+        )
+
+    def _on_editor_result(self, result: list[TicketCreate] | None) -> None:
+        """Handle result from ticket editor screen."""
+        if result is not None:
+            # Update tickets with edited versions
+            self._tickets = result
+            self._refresh_table()
 
     @on(Button.Pressed, "#cancel")
     def on_cancel(self) -> None:

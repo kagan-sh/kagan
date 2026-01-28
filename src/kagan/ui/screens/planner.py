@@ -13,7 +13,6 @@ from textual.widgets import Footer, Input, Static
 from kagan.acp import messages
 from kagan.acp.agent import Agent
 from kagan.agents.planner import build_planner_prompt, parse_plan
-from kagan.agents.prompt_loader import PromptLoader
 from kagan.config import get_fallback_agent_config
 from kagan.constants import PLANNER_TITLE_MAX_LENGTH
 from kagan.limits import AGENT_TIMEOUT
@@ -26,8 +25,6 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
     from kagan.database.models import TicketCreate
-
-PLANNER_SESSION_ID = "planner"
 
 
 class PlannerScreen(KaganScreen):
@@ -56,10 +53,13 @@ class PlannerScreen(KaganScreen):
             )
             yield EmptyState()
             yield StreamingOutput(id="planner-output")
-            yield StatusBar()
-            yield Input(
-                placeholder="Describe your feature or task...", id="planner-input", disabled=True
-            )
+            with Vertical(id="planner-bottom"):
+                yield StatusBar()
+                yield Input(
+                    placeholder="Describe your feature or task...",
+                    id="planner-input",
+                    disabled=True,
+                )
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -214,25 +214,13 @@ class PlannerScreen(KaganScreen):
             )
         # If no <plan> block found, agent is still gathering info - continue conversation
 
-    async def _on_approval_result(self, result: list[TicketCreate] | str | None) -> None:
+    async def _on_approval_result(self, result: list[TicketCreate] | None) -> None:
         """Handle approval screen result."""
         if result is None:
             # Cancelled - clear and continue
             self._accumulated_response.clear()
             await self._get_output().clear()
             await self._get_output().write("Plan cancelled. Describe what you want to build.\n\n")
-            return
-
-        if result == "refine":
-            # User wants to refine - prompt agent to adjust
-            await self._get_output().write("\n**Refining plan...**\n\n")
-            self._accumulated_response.clear()
-            refine_prompt = "Please adjust the plan based on my feedback. What changes?"
-            await self._send_prompt(refine_prompt)
-            return
-
-        # At this point, result must be list[TicketCreate] (not None or str)
-        if isinstance(result, str):
             return
 
         # Approved - create all tickets
@@ -283,13 +271,16 @@ class PlannerScreen(KaganScreen):
 
     async def _send_prompt(self, text: str) -> None:
         """Send prompt to agent asynchronously."""
+        from contextlib import suppress
+
+        from textual.css.query import NoMatches
+
         if self._agent:
             # Clear accumulated response before sending new prompt
             self._accumulated_response.clear()
 
-            # Build planner prompt with system instructions using PromptLoader
-            prompt_loader = PromptLoader(self.kagan_app.config)
-            prompt = build_planner_prompt(text, prompt_loader)
+            # Build planner prompt with system instructions
+            prompt = build_planner_prompt(text)
 
             try:
                 await self._agent.wait_ready(timeout=AGENT_TIMEOUT)
@@ -298,6 +289,11 @@ class PlannerScreen(KaganScreen):
                 await self._try_create_ticket_from_response()
             except Exception as e:
                 await self._get_output().write(f"**Error sending prompt:** {e}")
+            finally:
+                # Reset status bar to ready state after prompt completes
+                with suppress(NoMatches):
+                    status_bar = self.query_one(StatusBar)
+                    status_bar.update_status("ready", "Press H for help")
 
     async def action_cancel(self) -> None:
         """Send cancel signal to planner."""
@@ -309,7 +305,7 @@ class PlannerScreen(KaganScreen):
         """Navigate to Kanban board screen."""
         from kagan.ui.screens.kanban import KanbanScreen
 
-        await self.app.push_screen(KanbanScreen())
+        await self.app.switch_screen(KanbanScreen())
 
     async def on_unmount(self) -> None:
         """Cleanup on screen exit."""
