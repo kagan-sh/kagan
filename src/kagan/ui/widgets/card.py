@@ -12,7 +12,7 @@ from textual.widget import Widget
 from textual.widgets import Label
 
 from kagan.constants import COLUMN_ORDER
-from kagan.database.models import Ticket, TicketPriority, TicketStatus
+from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketType
 
 if TYPE_CHECKING:
     from textual import events
@@ -63,8 +63,10 @@ class TicketCard(Widget):
         if self.ticket is None:
             return
 
-        # Line 1: Title (truncated to fit)
-        yield Label(self._truncate_title(self.ticket.title, 18), classes="card-title")
+        # Line 1: Type badge + Title (truncated to fit)
+        type_badge = self._get_type_badge()
+        title_text = f"{type_badge} {self._truncate_title(self.ticket.title, 16)}"
+        yield Label(title_text, classes="card-title")
 
         # Line 2: Priority icon + description
         priority_class = self._get_priority_class()
@@ -111,6 +113,17 @@ class TicketCard(Widget):
         if isinstance(priority, int):
             priority = TicketPriority(priority)
         return priority.css_class
+
+    def _get_type_badge(self) -> str:
+        """Get type badge indicator for ticket type."""
+        if self.ticket is None:
+            return "👤"
+        ticket_type = self.ticket.ticket_type
+        if isinstance(ticket_type, str):
+            ticket_type = TicketType(ticket_type)
+        if ticket_type == TicketType.AUTO:
+            return "⚡"  # AUTO mode
+        return "👤"  # PAIR mode (human)
 
     def _truncate_title(self, title: str, max_length: int) -> str:
         """Truncate title if too long."""

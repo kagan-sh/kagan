@@ -54,6 +54,13 @@ class TicketPriority(int, Enum):
         return {self.LOW: "low", self.MEDIUM: "medium", self.HIGH: "high"}[self]
 
 
+class TicketType(str, Enum):
+    """Ticket execution type."""
+
+    AUTO = "AUTO"  # Autonomous execution via ACP scheduler
+    PAIR = "PAIR"  # Pair programming via tmux session
+
+
 class Ticket(BaseModel):
     """Ticket model representing a Kanban card."""
 
@@ -62,6 +69,7 @@ class Ticket(BaseModel):
     description: str = Field(default="")
     status: TicketStatus = Field(default=TicketStatus.BACKLOG)
     priority: TicketPriority = Field(default=TicketPriority.MEDIUM)
+    ticket_type: TicketType = Field(default=TicketType.PAIR)
     assigned_hat: str | None = Field(default=None)
     parent_id: str | None = Field(default=None)
     agent_backend: str | None = Field(default=None)
@@ -95,6 +103,7 @@ class TicketCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="")
     priority: TicketPriority = Field(default=TicketPriority.MEDIUM)
+    ticket_type: TicketType = Field(default=TicketType.PAIR)
     assigned_hat: str | None = Field(default=None)
     status: TicketStatus = Field(default=TicketStatus.BACKLOG)
     parent_id: str | None = Field(default=None)
@@ -112,6 +121,7 @@ class TicketUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None)
     priority: TicketPriority | None = Field(default=None)
+    ticket_type: TicketType | None = Field(default=None)
     assigned_hat: str | None = Field(default=None)
     status: TicketStatus | None = Field(default=None)
     parent_id: str | None = Field(default=None)

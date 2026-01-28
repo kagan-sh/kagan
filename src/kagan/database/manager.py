@@ -15,6 +15,7 @@ from kagan.database.models import (
     TicketCreate,
     TicketPriority,
     TicketStatus,
+    TicketType,
     TicketUpdate,
 )
 
@@ -84,6 +85,7 @@ class StateManager:
             title=ticket.title,
             description=ticket.description,
             priority=ticket.priority,
+            ticket_type=ticket.ticket_type,
             status=ticket.status,
             assigned_hat=ticket.assigned_hat,
             agent_backend=ticket.agent_backend,
@@ -99,12 +101,12 @@ class StateManager:
             await conn.execute(
                 """
                 INSERT INTO tickets
-                    (id, title, description, status, priority,
+                    (id, title, description, status, priority, ticket_type,
                      assigned_hat, agent_backend, parent_id,
                      acceptance_criteria, check_command, review_summary,
                      checks_passed, session_active,
                      created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     new_ticket.id,
@@ -116,6 +118,9 @@ class StateManager:
                     new_ticket.priority.value
                     if isinstance(new_ticket.priority, TicketPriority)
                     else new_ticket.priority,
+                    new_ticket.ticket_type.value
+                    if isinstance(new_ticket.ticket_type, TicketType)
+                    else new_ticket.ticket_type,
                     new_ticket.assigned_hat,
                     new_ticket.agent_backend,
                     new_ticket.parent_id,
@@ -188,6 +193,9 @@ class StateManager:
             "priority": update.priority.value
             if isinstance(update.priority, TicketPriority)
             else update.priority,
+            "ticket_type": update.ticket_type.value
+            if isinstance(update.ticket_type, TicketType)
+            else update.ticket_type,
             "status": update.status.value
             if isinstance(update.status, TicketStatus)
             else update.status,
@@ -270,12 +278,20 @@ class StateManager:
 
     def _row_to_ticket(self, row: aiosqlite.Row) -> Ticket:
         """Convert a database row to a Ticket model."""
+        # Handle ticket_type - default to PAIR for backward compatibility
+        try:
+            ticket_type_raw = row["ticket_type"]
+            ticket_type = TicketType(ticket_type_raw) if ticket_type_raw else TicketType.PAIR
+        except (KeyError, IndexError):
+            ticket_type = TicketType.PAIR
+
         return Ticket(
             id=row["id"],
             title=row["title"],
             description=row["description"] or "",
             status=TicketStatus(row["status"]),
             priority=TicketPriority(row["priority"]),
+            ticket_type=ticket_type,
             assigned_hat=row["assigned_hat"],
             agent_backend=row["agent_backend"],
             parent_id=row["parent_id"],

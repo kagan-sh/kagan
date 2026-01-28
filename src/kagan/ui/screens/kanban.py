@@ -12,7 +12,7 @@ from textual.widgets import Footer, Static
 
 from kagan.agents.worktree import WorktreeError
 from kagan.constants import COLUMN_ORDER
-from kagan.database.models import Ticket, TicketCreate, TicketStatus, TicketUpdate
+from kagan.database.models import Ticket, TicketCreate, TicketStatus, TicketType, TicketUpdate
 from kagan.sessions.tmux import TmuxError
 from kagan.ui.modals import (
     ConfirmModal,
@@ -59,6 +59,8 @@ class KanbanScreen(KaganScreen):
         Binding("left_square_bracket", "move_backward", "Move<-"),
         Binding("enter", "open_session", "Open Session"),
         Binding("v", "view_details", "View details"),
+        Binding("t", "toggle_type", "Toggle Type"),
+        Binding("w", "watch_agent", "Watch", show=False),
         Binding("m", "merge", "Merge", show=False),
         Binding("d", "view_diff", "View Diff", show=False),
         Binding("r", "reject", "Reject", show=False),
@@ -305,15 +307,71 @@ class KanbanScreen(KaganScreen):
 
             if ticket.status == TicketStatus.BACKLOG:
                 await self.kagan_app.state_manager.move_ticket(ticket.id, TicketStatus.IN_PROGRESS)
-                await self._refresh_board()
 
-            await session_manager.attach_session(ticket.id)
+            # Suspend TUI, attach to tmux, resume TUI when detached
+            with self.app.suspend():
+                session_manager.attach_session(ticket.id)
+
+            # Refresh board after returning from tmux
+            await self._refresh_board()
         except (TmuxError, WorktreeError) as exc:
             self.notify(f"Failed to open session: {exc}", severity="error")
 
     def action_open_chat(self) -> None:
         """Open the planner chat screen."""
         self.app.push_screen(PlannerScreen())
+
+    async def action_toggle_type(self) -> None:
+        """Toggle ticket type between AUTO and PAIR."""
+        card = self._get_focused_card()
+        if not card or not card.ticket:
+            return
+
+        ticket = card.ticket
+        current_type = ticket.ticket_type
+        if isinstance(current_type, str):
+            current_type = TicketType(current_type)
+
+        # Toggle between AUTO and PAIR
+        new_type = TicketType.PAIR if current_type == TicketType.AUTO else TicketType.AUTO
+
+        await self.kagan_app.state_manager.update_ticket(
+            ticket.id, TicketUpdate(ticket_type=new_type)
+        )
+        await self._refresh_board()
+        type_label = "AUTO ⚡" if new_type == TicketType.AUTO else "PAIR 👤"
+        self.notify(f"Changed {ticket.short_id} to {type_label}")
+
+    async def action_watch_agent(self) -> None:
+        """Watch an AUTO ticket's agent progress."""
+        card = self._get_focused_card()
+        if not card or not card.ticket:
+            return
+
+        ticket = card.ticket
+
+        # Check if it's an AUTO ticket
+        ticket_type = ticket.ticket_type
+        if isinstance(ticket_type, str):
+            ticket_type = TicketType(ticket_type)
+        if ticket_type != TicketType.AUTO:
+            self.notify("Watch is only for AUTO tickets", severity="warning")
+            return
+
+        # Check if agent is running
+        scheduler = self.kagan_app.scheduler
+        if not scheduler.is_running(ticket.id):
+            self.notify("No agent running for this ticket", severity="warning")
+            return
+
+        # Open the agent output modal
+        from kagan.ui.modals.agent_output import AgentOutputModal
+
+        agent = scheduler.get_running_agent(ticket.id)
+        iteration = scheduler.get_iteration_count(ticket.id)
+        await self.app.push_screen(
+            AgentOutputModal(ticket=ticket, agent=agent, iteration=iteration)
+        )
 
     def _get_review_ticket(self) -> Ticket | None:
         """Get the focused ticket if in REVIEW."""

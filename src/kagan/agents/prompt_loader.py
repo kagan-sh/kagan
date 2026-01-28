@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from kagan.config import KaganConfig
 
 # Default prompts directory (user overrides)
@@ -68,6 +70,32 @@ class PromptLoader:
         # Priority 3: Built-in default (hardcoded in planner.py)
         return _get_default_planner_prompt()
 
+    def get_worker_prompt(self) -> str:
+        """Load worker/iteration prompt template.
+
+        Looks for .kagan/prompts/iteration.md, falls back to built-in.
+        """
+        # Priority 1: User file override
+        user_file = self._prompts_dir / "iteration.md"
+        if user_file.exists():
+            return user_file.read_text()
+
+        # Priority 2: Built-in template
+        return _load_builtin_template("iteration.md") or _get_default_iteration_prompt()
+
+    def get_hat_instructions(self, hat: Any | None) -> str:
+        """Get hat-specific instructions.
+
+        Args:
+            hat: Optional hat configuration object with system_prompt attribute.
+
+        Returns:
+            The system prompt for the hat, or empty string.
+        """
+        if hat and hasattr(hat, "system_prompt") and hat.system_prompt:
+            return hat.system_prompt
+        return ""
+
 
 @cache
 def _load_builtin_template(filename: str) -> str:
@@ -84,6 +112,31 @@ def _load_builtin_template(filename: str) -> str:
         return template_path.read_text()
 
     return ""
+
+
+def _get_default_iteration_prompt() -> str:
+    """Get the default iteration prompt template."""
+    return """\
+# Iteration {iteration} of {max_iterations}
+
+## Task: {title}
+
+{description}
+
+{hat_instructions}
+
+## Your Progress So Far
+{scratchpad}
+
+## CRITICAL: Response Signal Required
+
+You MUST end your response with exactly ONE of these XML signals:
+- `<complete/>` - Task is FULLY DONE and verified working
+- `<continue/>` - Made progress, need another iteration
+- `<blocked reason="why"/>` - Cannot proceed without human help
+
+**If you completed the task, output `<complete/>` as the last thing in your response.**
+"""
 
 
 def _get_default_planner_prompt() -> str:

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     description TEXT,
     status TEXT DEFAULT 'BACKLOG' CHECK(status IN ('BACKLOG', 'IN_PROGRESS', 'REVIEW', 'DONE')),
     priority INTEGER DEFAULT 1 CHECK(priority IN (0, 1, 2)),  -- 0=low, 1=medium, 2=high
+    ticket_type TEXT DEFAULT 'PAIR' CHECK(ticket_type IN ('AUTO', 'PAIR')),  -- AUTO=scheduler, PAIR=tmux
     assigned_hat TEXT,             -- Agent/hat identifier for this ticket
     agent_backend TEXT,            -- Agent backend to use (e.g., 'claude', 'opencode')
     parent_id TEXT REFERENCES tickets(id) ON DELETE SET NULL,

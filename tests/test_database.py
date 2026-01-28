@@ -12,6 +12,7 @@ from kagan.database.models import (
     TicketCreate,
     TicketPriority,
     TicketStatus,
+    TicketType,
     TicketUpdate,
 )
 
@@ -384,3 +385,81 @@ class TestTicketNewFields:
         assert updated.acceptance_criteria == ["Original"]  # Preserved
         assert updated.check_command == "new command"  # Updated
         assert updated.checks_passed is True  # Preserved
+
+
+class TestTicketType:
+    """Tests for ticket_type field."""
+
+    async def test_default_ticket_type_is_pair(self, state_manager: StateManager):
+        """Test that default ticket_type is PAIR."""
+        create = TicketCreate(title="Test")
+        ticket = await state_manager.create_ticket(create)
+
+        assert ticket.ticket_type == TicketType.PAIR
+
+    async def test_create_auto_ticket(self, state_manager: StateManager):
+        """Test creating an AUTO ticket."""
+        create = TicketCreate(
+            title="Auto ticket",
+            ticket_type=TicketType.AUTO,
+        )
+        ticket = await state_manager.create_ticket(create)
+
+        assert ticket.ticket_type == TicketType.AUTO
+
+    async def test_create_pair_ticket(self, state_manager: StateManager):
+        """Test creating a PAIR ticket explicitly."""
+        create = TicketCreate(
+            title="Pair ticket",
+            ticket_type=TicketType.PAIR,
+        )
+        ticket = await state_manager.create_ticket(create)
+
+        assert ticket.ticket_type == TicketType.PAIR
+
+    async def test_get_ticket_preserves_type(self, state_manager: StateManager):
+        """Test that ticket type is preserved on get."""
+        create = TicketCreate(
+            title="Auto ticket",
+            ticket_type=TicketType.AUTO,
+        )
+        created = await state_manager.create_ticket(create)
+
+        ticket = await state_manager.get_ticket(created.id)
+
+        assert ticket is not None
+        assert ticket.ticket_type == TicketType.AUTO
+
+    async def test_update_ticket_type(self, state_manager: StateManager):
+        """Test updating ticket type."""
+        create = TicketCreate(
+            title="Test",
+            ticket_type=TicketType.PAIR,
+        )
+        ticket = await state_manager.create_ticket(create)
+        assert ticket.ticket_type == TicketType.PAIR
+
+        update = TicketUpdate(ticket_type=TicketType.AUTO)
+        updated = await state_manager.update_ticket(ticket.id, update)
+
+        assert updated is not None
+        assert updated.ticket_type == TicketType.AUTO
+
+    async def test_toggle_ticket_type(self, state_manager: StateManager):
+        """Test toggling ticket type back and forth."""
+        create = TicketCreate(title="Test", ticket_type=TicketType.PAIR)
+        ticket = await state_manager.create_ticket(create)
+
+        # Toggle to AUTO
+        updated = await state_manager.update_ticket(
+            ticket.id, TicketUpdate(ticket_type=TicketType.AUTO)
+        )
+        assert updated is not None
+        assert updated.ticket_type == TicketType.AUTO
+
+        # Toggle back to PAIR
+        updated = await state_manager.update_ticket(
+            ticket.id, TicketUpdate(ticket_type=TicketType.PAIR)
+        )
+        assert updated is not None
+        assert updated.ticket_type == TicketType.PAIR

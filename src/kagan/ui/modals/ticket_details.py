@@ -19,6 +19,7 @@ from kagan.database.models import (
     TicketCreate,
     TicketPriority,
     TicketStatus,
+    TicketType,
     TicketUpdate,
 )
 from kagan.ui.modals.actions import ModalAction
@@ -95,6 +96,11 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
                     id="priority-badge",
                 )
                 yield Label(
+                    self._get_type_label(),
+                    classes="badge badge-type",
+                    id="type-badge",
+                )
+                yield Label(
                     self._format_status(
                         self.ticket.status if self.ticket else TicketStatus.BACKLOG
                     ),
@@ -110,7 +116,7 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
 
             # Edit mode fields (hidden initially for view mode)
             with Horizontal(classes="field-row edit-fields", id="edit-fields-row"):
-                with Vertical(classes="form-field field-half"):
+                with Vertical(classes="form-field field-third"):
                     yield Label("Priority:", classes="form-label")
                     current_priority = (
                         self.ticket.priority if self.ticket else TicketPriority.MEDIUM
@@ -123,7 +129,21 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
                         id="priority-select",
                     )
 
-                with Vertical(classes="form-field field-half"):
+                with Vertical(classes="form-field field-third"):
+                    yield Label("Type:", classes="form-label")
+                    current_type = self.ticket.ticket_type if self.ticket else TicketType.PAIR
+                    if isinstance(current_type, str):
+                        current_type = TicketType(current_type)
+                    yield Select(
+                        options=[
+                            ("👤 Pair (tmux)", TicketType.PAIR.value),
+                            ("⚡ Auto (ACP)", TicketType.AUTO.value),
+                        ],
+                        value=current_type.value,
+                        id="type-select",
+                    )
+
+                with Vertical(classes="form-field field-third"):
                     yield Label("Agent:", classes="form-label")
                     agent_options = self._build_agent_options()
                     current_backend = self.ticket.agent_backend if self.ticket else ""
@@ -244,6 +264,17 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
             priority = TicketPriority(priority)
         return f"badge-priority-{priority.css_class}"
 
+    def _get_type_label(self) -> str:
+        """Get type label text."""
+        if not self.ticket:
+            return "👤 PAIR"
+        ticket_type = self.ticket.ticket_type
+        if isinstance(ticket_type, str):
+            ticket_type = TicketType(ticket_type)
+        if ticket_type == TicketType.AUTO:
+            return "⚡ AUTO"
+        return "👤 PAIR"
+
     def _format_status(self, status: TicketStatus | str) -> str:
         if isinstance(status, str):
             status = TicketStatus(status)
@@ -325,6 +356,10 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
             if isinstance(priority, int):
                 priority = TicketPriority(priority)
             self.query_one("#priority-select", Select).value = priority.value
+            ticket_type = self.ticket.ticket_type
+            if isinstance(ticket_type, str):
+                ticket_type = TicketType(ticket_type)
+            self.query_one("#type-select", Select).value = ticket_type.value
             self.query_one("#agent-backend-select", Select).value = self.ticket.agent_backend or ""
         except NoMatches:
             pass
@@ -354,6 +389,14 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
             return
         priority = TicketPriority(cast("int", priority_value))
 
+        # Get ticket type selection
+        type_select: Select[str] = self.query_one("#type-select", Select)
+        type_value = type_select.value
+        if type_value is Select.BLANK:
+            ticket_type = TicketType.PAIR
+        else:
+            ticket_type = TicketType(cast("str", type_value))
+
         # Get agent backend selection
         agent_backend_select: Select[str] = self.query_one("#agent-backend-select", Select)
         agent_backend_value = agent_backend_select.value
@@ -371,6 +414,7 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
                 title=title,
                 description=description,
                 priority=priority,
+                ticket_type=ticket_type,
                 status=status,
                 agent_backend=agent_backend or None,
             )
@@ -379,6 +423,7 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
                 title=title,
                 description=description,
                 priority=priority,
+                ticket_type=ticket_type,
                 agent_backend=agent_backend or None,
             )
 

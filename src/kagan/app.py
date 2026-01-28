@@ -10,6 +10,7 @@ from textual.app import App
 from textual.binding import Binding
 from textual.signal import Signal
 
+from kagan.agents.scheduler import Scheduler
 from kagan.agents.worktree import WorktreeManager
 from kagan.config import KaganConfig, get_os_value
 from kagan.constants import DEFAULT_CONFIG_PATH, DEFAULT_DB_PATH, DEFAULT_LOCK_PATH
@@ -56,6 +57,7 @@ class KaganApp(App):
         self._knowledge_base: KnowledgeBase | None = None
         self._worktree_manager: WorktreeManager | None = None
         self._session_manager: SessionManager | None = None
+        self._scheduler: Scheduler | None = None
         self._instance_lock: InstanceLock | None = None
         self.config: KaganConfig = KaganConfig()
 
@@ -78,6 +80,11 @@ class KaganApp(App):
     def session_manager(self) -> SessionManager:
         assert self._session_manager is not None
         return self._session_manager
+
+    @property
+    def scheduler(self) -> Scheduler:
+        assert self._scheduler is not None
+        return self._scheduler
 
     async def on_mount(self) -> None:
         """Initialize app on mount."""
@@ -131,6 +138,16 @@ class KaganApp(App):
             self._session_manager = SessionManager(
                 project_root=project_root, state=self._state_manager
             )
+        if self._scheduler is None:
+            self._scheduler = Scheduler(
+                state_manager=self._state_manager,
+                worktree_manager=self._worktree_manager,
+                config=self.config,
+                on_ticket_changed=lambda: self.ticket_changed_signal.publish(""),
+            )
+            # Start scheduler tick loop (every 5 seconds)
+            self.set_interval(5.0, self._scheduler_tick)
+            self.log("Scheduler initialized", auto_start=self.config.general.auto_start)
 
         # Chat-first boot: show PlannerScreen if board is empty, else KanbanScreen
         tickets = await self._state_manager.get_all_tickets()
@@ -155,8 +172,15 @@ class KaganApp(App):
         """Clean up on unmount."""
         await self.cleanup()
 
+    async def _scheduler_tick(self) -> None:
+        """Run one scheduler tick."""
+        if self._scheduler:
+            await self._scheduler.tick()
+
     async def cleanup(self) -> None:
         """Terminate all agents and close resources."""
+        if self._scheduler:
+            await self._scheduler.stop()
         if self._state_manager:
             await self._state_manager.close()
         if self._instance_lock:

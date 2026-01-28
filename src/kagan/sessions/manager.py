@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import os
+import contextlib
+import subprocess
 from pathlib import Path  # noqa: TC003
 
 from kagan.database.manager import StateManager  # noqa: TC001
 from kagan.database.models import Ticket  # noqa: TC001
 from kagan.sessions.context import build_context
-from kagan.sessions.tmux import run_tmux
+from kagan.sessions.tmux import TmuxError, run_tmux
 
 
 class SessionManager:
@@ -41,20 +42,29 @@ class SessionManager:
 
         await self._write_context_files(ticket, worktree_path)
         await self._state.mark_session_active(ticket.id, True)
+
+        # Auto-launch Claude Code in the session
+        await run_tmux("send-keys", "-t", session_name, "claude", "Enter")
+
         return session_name
 
-    async def attach_session(self, ticket_id: str) -> None:
-        """Attach to session (suspends TUI via execvp)."""
-        os.execvp("tmux", ["tmux", "attach-session", "-t", f"kagan-{ticket_id}"])
+    def attach_session(self, ticket_id: str) -> None:
+        """Attach to session (blocks until detach, then returns to TUI)."""
+        subprocess.run(["tmux", "attach-session", "-t", f"kagan-{ticket_id}"])
 
     async def session_exists(self, ticket_id: str) -> bool:
         """Check if session exists."""
-        output = await run_tmux("list-sessions", "-F", "#{session_name}")
-        return f"kagan-{ticket_id}" in output.split("\n")
+        try:
+            output = await run_tmux("list-sessions", "-F", "#{session_name}")
+            return f"kagan-{ticket_id}" in output.split("\n")
+        except TmuxError:
+            # No tmux server running = no sessions exist
+            return False
 
     async def kill_session(self, ticket_id: str) -> None:
         """Kill session and mark inactive."""
-        await run_tmux("kill-session", "-t", f"kagan-{ticket_id}")
+        with contextlib.suppress(TmuxError):
+            await run_tmux("kill-session", "-t", f"kagan-{ticket_id}")
         await self._state.mark_session_active(ticket_id, False)
 
     async def _write_context_files(self, ticket: Ticket, worktree_path: Path) -> None:

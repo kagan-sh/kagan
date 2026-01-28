@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator  # noqa: TC003
+from contextlib import contextmanager
 from pathlib import Path  # noqa: TC003
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -14,6 +15,12 @@ from kagan.database.manager import StateManager
 from kagan.database.models import TicketCreate, TicketStatus
 from kagan.ui.screens.kanban import KanbanScreen
 from kagan.ui.widgets.card import TicketCard
+
+
+@contextmanager
+def mock_suspend():
+    """Mock suspend context manager for testing."""
+    yield
 
 
 class MockWorktreeManager:
@@ -66,7 +73,9 @@ class TestKanbanFlow:
             cards[0].focus()
             await pilot.pause()
 
-            await screen.action_open_session()
+            # Mock app.suspend to avoid SuspendNotSupported in tests
+            with patch.object(app_with_mocks, "suspend", mock_suspend):
+                await screen.action_open_session()
             await pilot.pause(0.3)
 
             updated = await app_with_mocks.state_manager.get_ticket(ticket.id)

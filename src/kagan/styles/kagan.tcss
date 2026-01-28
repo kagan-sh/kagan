@@ -310,6 +310,11 @@ TicketDetailsModal .badge-status {
     color: $background;
 }
 
+TicketDetailsModal .badge-type {
+    background: $secondary;
+    color: $background;
+}
+
 .badge-agent {
     background: $secondary;
     color: $background;
@@ -461,6 +466,15 @@ TicketDetailsModal .field-half {
 }
 
 TicketDetailsModal .field-half:last-child {
+    margin-right: 0;
+}
+
+TicketDetailsModal .field-third {
+    width: 1fr;
+    margin-right: 1;
+}
+
+TicketDetailsModal .field-third:last-child {
     margin-right: 0;
 }
 
@@ -628,6 +642,60 @@ DiffModal {
     border: round $border;
     padding: 0 1;
     scrollbar-gutter: stable;
+}
+
+/* AgentOutputModal styles */
+AgentOutputModal {
+    align: center middle;
+}
+
+#agent-output-container {
+    width: 90%;
+    height: 80%;
+    background: $surface;
+    border: thick $secondary;
+    padding: 1 2;
+}
+
+AgentOutputModal .modal-title {
+    width: 100%;
+    text-align: center;
+    text-style: bold;
+    color: $secondary;
+    padding-bottom: 0;
+}
+
+AgentOutputModal .modal-subtitle {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+AgentOutputModal .modal-hint {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
+}
+
+#agent-output {
+    height: 1fr;
+    background: $background;
+    border: round $border;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+AgentOutputModal .button-row {
+    layout: horizontal;
+    align: center middle;
+    height: auto;
+    padding-top: 1;
+}
+
+AgentOutputModal .button-row Button {
+    margin: 0 1;
 }
 
 /* PlannerScreen styles */
