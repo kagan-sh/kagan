@@ -122,13 +122,13 @@ class TestTicketDeletion:
 class TestScreenNavigation:
     """Test navigation between screens."""
 
-    async def test_c_opens_chat_planner(self, e2e_app_with_tickets: KaganApp):
-        """Pressing 'c' opens the planner/chat screen."""
+    async def test_p_opens_planner(self, e2e_app_with_tickets: KaganApp):
+        """Pressing 'p' opens the planner screen."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
             assert is_on_screen(pilot, "KanbanScreen")
 
-            await pilot.press("c")
+            await pilot.press("p")
             await pilot.pause()
 
             assert is_on_screen(pilot, "PlannerScreen")
@@ -138,7 +138,7 @@ class TestScreenNavigation:
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
 
-            await pilot.press("c")
+            await pilot.press("p")
             await pilot.pause()
             assert is_on_screen(pilot, "PlannerScreen")
 

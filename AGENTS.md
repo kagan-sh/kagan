@@ -2,16 +2,11 @@
 
 AI-powered Kanban TUI for autonomous development workflows. Python 3.12+ with Textual framework.
 
-> **Architecture: Session-First Model**
-> User drives development in tmux sessions, AI assists via MCP tools, Kagan orchestrates context.
-> See `kagan_session-first_rewrite_*.plan.md` for full migration details.
-
 ## Build & Development Commands
 
 ```bash
 # Run application
 uv run kagan                    # Production mode
-uv run kagan-mcp                # MCP server (STDIO, spawned by Claude Code)
 uv run poe dev                  # Dev mode with hot reload
 
 # Testing
@@ -21,9 +16,9 @@ uv run pytest tests/test_database.py::TestTicketCRUD -v    # Single class
 uv run pytest tests/test_database.py::TestTicketCRUD::test_create_ticket -v  # Single test
 
 # Linting & Formatting
+uv run poe fix                  # Auto-fix + format (run this first!)
 uv run poe lint                 # Run ruff linter
 uv run poe format               # Format with ruff
-uv run poe fix                  # Auto-fix + format (run this first!)
 uv run poe typecheck            # Run pyrefly type checker
 uv run poe check                # lint + typecheck + test
 
@@ -36,24 +31,15 @@ UPDATE_SNAPSHOTS=1 uv run pytest tests/test_snapshots.py --snapshot-update
 ```
 src/kagan/
 ├── app.py              # Main KaganApp class
-├── constants.py        # COLUMN_ORDER, STATUS_LABELS, PRIORITY_LABELS, paths
-├── config.py           # Configuration models (session config, base branch)
+├── constants.py        # COLUMN_ORDER, STATUS_LABELS, PRIORITY_LABELS
+├── config.py           # Configuration models
 ├── database/
 │   ├── models.py       # Pydantic models: Ticket, TicketCreate, TicketUpdate
 │   ├── manager.py      # StateManager async database operations
-│   └── schema.sql      # SQLite schema (includes session-first fields)
+│   └── schema.sql      # SQLite schema
 ├── mcp/                # MCP server for AI tool communication
-│   ├── __init__.py     # main() entry point for kagan-mcp command
-│   ├── server.py       # FastMCP STDIO server implementation
-│   └── tools.py        # get_context, update_scratchpad, request_review
 ├── sessions/           # tmux session management
-│   ├── manager.py      # SessionManager class
-│   ├── tmux.py         # tmux subprocess helpers
-│   └── context.py      # CONTEXT.md generation for worktrees
 ├── agents/             # Planner agent + worktree management
-│   ├── planner.py      # Breaks requirements into tickets via ACP
-│   ├── worktree.py     # Git worktree operations + merge_to_main()
-│   └── prompt_loader.py
 ├── styles/kagan.tcss   # ALL CSS here (no DEFAULT_CSS in Python!)
 └── ui/
     ├── screens/        # kanban.py, planner.py, welcome.py
@@ -121,16 +107,9 @@ tickets: reactive[list[Ticket]] = reactive(list, recompose=True)
 # Widget IDs in __init__
 def __init__(self, ticket: Ticket, **kwargs) -> None:
     super().__init__(id=f"card-{ticket.id}", **kwargs)
-
-# Property-based state access
-@property
-def state_manager(self) -> StateManager:
-    assert self._state_manager is not None
-    return self._state_manager
 ```
 
 ### Error Handling
-Use specific exceptions. For Textual widget queries:
 ```python
 from textual.css.query import NoMatches
 try:
@@ -148,15 +127,16 @@ class Ticket(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 ```
 
-## Testing Strategy
+## Testing
 
-- **pytest-cov enabled by default** - Coverage reports on every test run
-- **E2E smoke tests** (`test_e2e_smoke.py`) - Primary UI regression coverage for critical user journeys
-- **Unit tests** - Business logic validation (database, models, planner, scheduler)
-- **Interaction tests** (`test_interactions.py`) - Keyboard shortcut coverage
+**Framework**: pytest with pytest-asyncio (auto mode), pytest-cov, pytest-textual-snapshot
 
-## Testing Patterns
+**Test Types**:
+- E2E smoke tests (`test_e2e_smoke.py`) - UI regression coverage
+- Unit tests - Business logic (database, models, planner)
+- Interaction tests (`test_interactions.py`) - Keyboard shortcuts
 
+**Patterns**:
 ```python
 # Async fixture with temp database
 @pytest.fixture
@@ -196,58 +176,8 @@ Ignored rules:
 1. **CSS in `.tcss` only** - All styles in `kagan.tcss`, never use `DEFAULT_CSS`
 2. **Async database** - All DB operations via aiosqlite StateManager
 3. **Constants module** - Use `kagan.constants` for shared values
-4. **ModalAction enum** - Use `ui/modals/actions.py` for modal actions
-5. **Property assertions** - Use `@property` with `assert` for required state
-6. **Module size limits** - Keep modules ~150-250 LOC; test files < 200 LOC, individual tests < 20 lines
-
-## Session-First Migration Notes
-
-When implementing the session-first rewrite (see `kagan_session-first_rewrite_*.plan.md`):
-
-### New Schema Fields (Batch A)
-```python
-# Ticket model additions
-acceptance_criteria: list[str] = Field(default_factory=list)
-review_summary: str | None = None
-checks_passed: bool | None = None
-session_active: bool = False
-```
-
-### MCP Server (Batch B)
-- Uses STDIO transport via `kagan-mcp` command (no HTTP ports)
-- Tools: `get_context`, `update_scratchpad`, `request_review`
-- Finds `.kagan/` by traversing up from cwd
-
-### Session Manager (Batch C)
-- Creates tmux sessions with context injection
-- Generates `CONTEXT.md` in worktrees with ticket info
-- Environment vars: `KAGAN_TICKET_ID`, `KAGAN_WORKTREE_PATH`
-
-### Files to REMOVE (Batch F)
-```
-src/kagan/agents/{scheduler,manager,message_bus,reviewer,roles,signals,prompt}.py
-src/kagan/ui/screens/streams.py
-src/kagan/ui/widgets/{agent_card,agent_grid}.py
-src/kagan/ui/modals/{agent_output,permission}.py
-```
-
-### Testing with Mocks
-```python
-# Mock tmux for session tests
-@pytest.fixture
-def mock_tmux(monkeypatch):
-    sessions = {}
-    async def fake_run_tmux(*args): ...
-    monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_run_tmux)
-    return sessions
-
-# Mock ACP for planner tests
-@pytest.fixture
-def mock_acp_agent():
-    class MockAgent:
-        async def send_prompt(self, prompt: str) -> str: ...
-    return MockAgent
-```
+4. **Property assertions** - Use `@property` with `assert` for required state
+5. **Module size limits** - Keep modules ~150-250 LOC; test files < 200 LOC
 
 ## Git Commit Rules
 

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.containers import Horizontal, Vertical
+from textual.containers import Center, Vertical
 from textual.widget import Widget
 from textual.widgets import Static
 
-from kagan.constants import BOX_DRAWING, PLANNER_EXAMPLE_PROMPTS, PLANNER_PRO_TIPS
+from kagan.constants import BOX_DRAWING
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -21,48 +21,36 @@ class EmptyState(Widget):
 
     def compose(self) -> ComposeResult:
         """Compose the empty state layout."""
-        yield Static("Ready to Build?", classes="empty-state-title")
-
-        with Horizontal(classes="empty-state-cards"):
-            # Left card: Example Prompts
+        with Center():
             with Vertical(classes="empty-state-card"):
-                yield Static("Examples", classes="empty-card-title")
-                for prompt in PLANNER_EXAMPLE_PROMPTS:
-                    yield Static(
-                        f"{BOX_DRAWING['BULLET']} {prompt}",
-                        classes="card-item",
-                    )
+                yield Static("Getting Started", classes="empty-card-title")
 
-            # Right card: Process
-            with Vertical(classes="empty-state-card"):
-                yield Static("Process", classes="empty-card-title")
+                # How it works
+                yield Static("How it works:", classes="empty-card-section")
                 yield Static(
-                    f"{BOX_DRAWING['BULLET']} 1. AI analyzes your requirements",
-                    classes="card-item",
+                    f"  {BOX_DRAWING['BULLET']} Describe your feature below",
+                    classes="card-item-compact",
                 )
                 yield Static(
-                    f"{BOX_DRAWING['BULLET']} 2. Asks clarifying questions",
-                    classes="card-item",
+                    f"  {BOX_DRAWING['BULLET']} AI analyzes & asks questions",
+                    classes="card-item-compact",
                 )
                 yield Static(
-                    f"{BOX_DRAWING['BULLET']} 3. Generates structured tickets",
-                    classes="card-item",
-                )
-                yield Static(
-                    f"{BOX_DRAWING['BULLET']} 4. You review & approve",
-                    classes="card-item",
+                    f"  {BOX_DRAWING['BULLET']} Generates tickets for review",
+                    classes="card-item-compact",
                 )
 
-        # Bottom card: Pro Tips (full width)
-        with Vertical(classes="empty-state-card empty-state-tips"):
-            yield Static("Tips", classes="empty-card-title")
-            for tip in PLANNER_PRO_TIPS:
+                # Tips
+                yield Static("Tips:", classes="empty-card-section")
                 yield Static(
-                    f"{BOX_DRAWING['BULLET']} {tip}",
-                    classes="card-item",
+                    f"  {BOX_DRAWING['BULLET']} Be specific about requirements",
+                    classes="card-item-compact",
                 )
-
-        yield Static(
-            "Begin by describing your feature below",
-            classes="empty-state-footer",
-        )
+                yield Static(
+                    f"  {BOX_DRAWING['BULLET']} Mention tech stack/constraints",
+                    classes="card-item-compact",
+                )
+                yield Static(
+                    f"  {BOX_DRAWING['BULLET']} Press Esc to return to board",
+                    classes="card-item-compact",
+                )

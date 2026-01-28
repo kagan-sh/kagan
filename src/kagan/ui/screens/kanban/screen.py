@@ -80,7 +80,7 @@ class KanbanScreen(KaganScreen):
         Binding("w", "watch_agent", "Watch", show=False),
         Binding("D", "view_diff", "Diff", show=False),
         Binding("r", "open_review", "Review", show=False),
-        Binding("c", "open_chat", "Chat", show=False),
+        Binding("p", "open_planner", "Plan Mode", show=False),
         # Hidden utility
         Binding("escape", "deselect", show=False),
         Binding("ctrl+c", "interrupt", show=False),
@@ -165,7 +165,7 @@ class KanbanScreen(KaganScreen):
         with Container(classes="size-warning"):
             yield Static(SIZE_WARNING_MESSAGE, classes="size-warning-text")
         yield Static(
-            "g: h=Ticket← l=Ticket→ c=Chat d=Diff r=Review w=Watch | Esc=Cancel",
+            "g: h=Ticket← l=Ticket→ d=Diff r=Review w=Watch | Esc=Cancel",
             classes="leader-hint",
         )
         yield Footer()
@@ -338,7 +338,6 @@ class KanbanScreen(KaganScreen):
 
         # Map leader key sequences
         leader_actions = {
-            "c": "open_chat",
             "d": "view_diff",
             "h": "move_backward",
             "l": "move_forward",
@@ -640,7 +639,7 @@ class KanbanScreen(KaganScreen):
         except (TmuxError, WorktreeError) as exc:
             self.notify(f"Failed to open session: {exc}", severity="error")
 
-    def action_open_chat(self) -> None:
+    def action_open_planner(self) -> None:
         self.app.push_screen(PlannerScreen())
 
     async def action_open_settings(self) -> None:

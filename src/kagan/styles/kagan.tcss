@@ -811,6 +811,7 @@ PlannerScreen {
     width: 100%;
     height: 1fr;
     padding: 1;
+    layout: vertical;
 }
 
 #planner-header {
@@ -843,6 +844,7 @@ PlannerScreen {
 }
 
 #planner-input {
+    dock: bottom;
     width: 100%;
     padding: 1;
     background: transparent;
@@ -868,69 +870,40 @@ PlannerScreen {
 .empty-state {
     width: 100%;
     height: auto;
-    max-height: 1fr;
     align: center middle;
     content-align: center middle;
     padding: 2;
-    margin-top: 2;
-}
-
-.empty-state-title {
-    width: 100%;
-    text-align: center;
-    text-style: bold underline;
-    color: $secondary;
-    padding-bottom: 3;
-}
-
-.empty-state-cards {
-    width: 100%;
-    height: auto;
-    layout: horizontal;
-    align: center middle;
-    content-align: center middle;
 }
 
 .empty-state-card {
-    min-width: 35;
     width: auto;
+    min-width: 42;
+    max-width: 60;
     height: auto;
     border: round $border;
     background: $surface;
-    padding: 1 2;
-    margin: 0 1;
-}
-
-.empty-state-tips {
-    width: 60;
-    height: auto;
-    border: solid $border;
-    background: $surface;
-    padding: 1;
-    margin-top: 2;
+    padding: 1 3;
 }
 
 .empty-card-title {
     text-style: bold underline;
-    color: $text-muted;
-    padding-bottom: 2;
+    color: $secondary;
+    padding-bottom: 1;
 }
 
-.card-item {
+.empty-card-section {
+    color: $text-muted;
+    text-style: bold;
+    padding-top: 1;
+}
+
+.card-item-compact {
     color: $text;
-    padding: 0 0 1 2;
-}
-
-.empty-state-footer {
-    width: 100%;
-    text-align: center;
-    color: $text-muted;
-    text-style: italic;
-    padding-top: 2;
 }
 
 /* StatusBar widget */
 StatusBar {
+    dock: bottom;
     height: 1;
     background: $panel;
     layout: horizontal;

@@ -368,11 +368,11 @@ class TestTicketMovementRules:
 class TestScreenNavigation:
     """Test screen navigation keybindings."""
 
-    async def test_c_opens_planner(self, e2e_app_with_tickets: KaganApp):
-        """Pressing 'c' opens the chat/planner screen."""
+    async def test_p_opens_planner(self, e2e_app_with_tickets: KaganApp):
+        """Pressing 'p' opens the planner screen."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            await pilot.press("c")
+            await pilot.press("p")
             await pilot.pause()
             assert is_on_screen(pilot, "PlannerScreen")
 
@@ -399,7 +399,7 @@ class TestPlannerScreen:
 
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            await pilot.press("c")  # Open planner
+            await pilot.press("p")  # Open planner
             await pilot.pause()
             assert is_on_screen(pilot, "PlannerScreen")
             # Check header is present
@@ -414,7 +414,7 @@ class TestPlannerScreen:
 
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            await pilot.press("c")  # Open planner
+            await pilot.press("p")  # Open planner
             await pilot.pause()
             assert is_on_screen(pilot, "PlannerScreen")
 
@@ -434,7 +434,7 @@ class TestPlannerScreen:
         """Pressing escape on planner should navigate to board."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            await pilot.press("c")  # Open planner
+            await pilot.press("p")  # Open planner
             await pilot.pause()
             assert is_on_screen(pilot, "PlannerScreen")
             await pilot.press("escape")

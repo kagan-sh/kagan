@@ -51,9 +51,7 @@ class PlannerScreen(KaganScreen):
         yield KaganHeader()
         with Vertical(id="planner-container"):
             yield Static(
-                "AI Planner\n"
-                "Describe your feature in natural language. "
-                "The AI will analyze, ask questions, and generate tickets.",
+                "Plan Mode",
                 id="planner-header",
             )
             yield EmptyState()
