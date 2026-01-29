@@ -4,12 +4,25 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketType
+from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketType, TicketUpdate
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import aiosqlite
+
+
+def _get_row_value(
+    row: aiosqlite.Row,
+    key: str,
+    default: object | None = None,
+) -> object | None:
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
 
 
 def row_to_ticket(row: aiosqlite.Row) -> Ticket:
@@ -20,6 +33,16 @@ def row_to_ticket(row: aiosqlite.Row) -> Ticket:
     except (KeyError, IndexError):
         ticket_type = TicketType.PAIR
 
+    assigned_hat = cast("str | None", _get_row_value(row, "assigned_hat"))
+    agent_backend = cast("str | None", _get_row_value(row, "agent_backend"))
+    parent_id = cast("str | None", _get_row_value(row, "parent_id"))
+    acceptance_criteria = cast("str | None", _get_row_value(row, "acceptance_criteria"))
+    review_summary = cast("str | None", _get_row_value(row, "review_summary"))
+    checks_passed_raw = _get_row_value(row, "checks_passed")
+    session_active_raw = _get_row_value(row, "session_active")
+    created_at_raw = cast("str | None", _get_row_value(row, "created_at"))
+    updated_at_raw = cast("str | None", _get_row_value(row, "updated_at"))
+
     return Ticket(
         id=row["id"],
         title=row["title"],
@@ -27,19 +50,15 @@ def row_to_ticket(row: aiosqlite.Row) -> Ticket:
         status=TicketStatus(row["status"]),
         priority=TicketPriority(row["priority"]),
         ticket_type=ticket_type,
-        assigned_hat=row["assigned_hat"],
-        agent_backend=row["agent_backend"],
-        parent_id=row["parent_id"],
-        acceptance_criteria=deserialize_acceptance_criteria(row["acceptance_criteria"]),
-        review_summary=row["review_summary"],
-        checks_passed=None if row["checks_passed"] is None else bool(row["checks_passed"]),
-        session_active=bool(row["session_active"]),
-        created_at=(
-            datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.now()
-        ),
-        updated_at=(
-            datetime.fromisoformat(row["updated_at"]) if row["updated_at"] else datetime.now()
-        ),
+        assigned_hat=assigned_hat,
+        agent_backend=agent_backend,
+        parent_id=parent_id,
+        acceptance_criteria=deserialize_acceptance_criteria(acceptance_criteria),
+        review_summary=review_summary,
+        checks_passed=None if checks_passed_raw is None else bool(checks_passed_raw),
+        session_active=bool(session_active_raw),
+        created_at=(datetime.fromisoformat(created_at_raw) if created_at_raw else datetime.now()),
+        updated_at=(datetime.fromisoformat(updated_at_raw) if updated_at_raw else datetime.now()),
     )
 
 
@@ -61,8 +80,12 @@ def deserialize_acceptance_criteria(raw: str | None) -> list[str]:
     return []
 
 
-def build_update_params(update, serialize_fn) -> tuple[list[str], list]:
+def build_update_params(
+    update: TicketUpdate,
+    serialize_fn: Callable[[list[str]], str],
+) -> tuple[list[str], list[object | None]]:
     """Build SQL UPDATE parameters from TicketUpdate model."""
+    fields_set = update.model_fields_set
     priority_val = (
         update.priority.value if isinstance(update.priority, TicketPriority) else update.priority
     )
@@ -95,14 +118,17 @@ def build_update_params(update, serialize_fn) -> tuple[list[str], list]:
 
     updates, values = [], []
     for field, value in fields.items():
-        if value is not None:
+        if field in fields_set:
             updates.append(f"{field} = ?")
             values.append(value)
 
     return updates, values
 
 
-def build_insert_params(ticket, serialize_fn) -> tuple:
+def build_insert_params(
+    ticket: Ticket,
+    serialize_fn: Callable[[list[str]], str],
+) -> tuple[object, ...]:
     """Build INSERT parameters for a new ticket."""
     return (
         ticket.id,

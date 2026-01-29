@@ -362,7 +362,7 @@ class WorktreeManager:
 
             # Merge the worktree branch
             if squash:
-                stdout, stderr = await self._run_git("merge", "--squash", branch_name, check=False)
+                await self._run_git("merge", "--squash", branch_name, check=False)
                 # Check for merge conflicts
                 status_out, _ = await self._run_git("status", "--porcelain", check=False)
                 if "UU " in status_out or "AA " in status_out or "DD " in status_out:
