@@ -50,14 +50,15 @@ active = true
 "*" = "claude"
 ```
 
-| Field                 | Purpose               |
-| --------------------- | --------------------- |
-| `identity`            | Unique agent ID       |
-| `name`                | Display name          |
-| `short_name`          | Compact label         |
-| `active`              | Enable agent          |
-| `run_command`         | AUTO mode ACP command |
-| `interactive_command` | PAIR mode CLI command |
+| Field                 | Purpose                      |
+| --------------------- | ---------------------------- |
+| `identity`            | Unique agent ID              |
+| `name`                | Display name                 |
+| `short_name`          | Compact label                |
+| `protocol`            | Protocol type (default: acp) |
+| `active`              | Enable agent                 |
+| `run_command`         | AUTO mode ACP command        |
+| `interactive_command` | PAIR mode CLI command        |
 
 ### Multiple agents
 

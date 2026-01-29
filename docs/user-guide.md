@@ -13,16 +13,8 @@ Kagan is a keyboard-first Kanban TUI for AI-assisted development.
 
 ## Supported AI CLIs
 
-Available now:
-
 - Claude Code
 - OpenCode
-
-Coming soon:
-
-- Gemini
-- Codex
-- More providers
 
 ## Install & run
 
@@ -135,11 +127,11 @@ Press `p`, describe a goal, approve or refine the proposed tickets.
 
 ## MCP tools
 
-| Tool                                    | Purpose                              |
-| --------------------------------------- | ------------------------------------ |
-| `get_context(ticket_id)`                | Ticket context + acceptance criteria |
-| `update_scratchpad(ticket_id, content)` | Append notes                         |
-| `request_review(ticket_id, summary)`    | Move to REVIEW                       |
+| Tool                                    | Purpose                                                                              |
+| --------------------------------------- | ------------------------------------------------------------------------------------ |
+| `get_context(ticket_id)`                | Get ticket context including title, description, acceptance criteria, and scratchpad |
+| `update_scratchpad(ticket_id, content)` | Append notes to ticket scratchpad                                                    |
+| `request_review(ticket_id, summary)`    | Move PAIR ticket to REVIEW (requires all changes to be committed)                    |
 
 Run server:
 

@@ -4,7 +4,7 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
-        exclude: ^tests/__snapshots__/
+        exclude: ^(tests/__snapshots__/|CNAME$)
       - id: trailing-whitespace
         exclude: ^tests/__snapshots__/
       - id: check-yaml
@@ -19,7 +19,7 @@ repos:
     rev: 1.0.0
     hooks:
       - id: mdformat
-        exclude: ^(\.github/|README\.md$)
+        exclude: ^(\.github/|README\.md$|CNAME$|CHANGELOG\.md$)
         additional_dependencies:
           - mdformat-gfm
           - mdformat-ruff

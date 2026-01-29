@@ -15,16 +15,8 @@ uv run kagan
 
 ## Supported AI CLIs
 
-Available now:
-
 - Claude Code
 - OpenCode
-
-Coming soon:
-
-- Gemini
-- Codex
-- More providers
 
 ## Key bindings (cheat sheet)
 
