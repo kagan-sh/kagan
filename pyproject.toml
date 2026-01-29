@@ -2,6 +2,26 @@
 name = "kagan"
 version = "0.1.0-beta.1"
 description = "AI-powered Kanban TUI for autonomous development workflows"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Altynbek Orumbayev", email = "altynbek.orumbayev@makerx.com.au" }
+]
+keywords = ["kanban", "tui", "terminal", "ai", "textual", "project-management", "autonomous"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Terminals",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
 requires-python = ">=3.12"
 dependencies = [
     "textual>=7.0.0",
@@ -16,6 +36,13 @@ dependencies = [
 
 [project.scripts]
 kagan = "kagan.__main__:cli"
+
+[project.urls]
+Homepage = "https://kagan.sh"
+Documentation = "https://docs.kagan.sh"
+Repository = "https://github.com/aorumbayev/kagan"
+Issues = "https://github.com/aorumbayev/kagan/issues"
+Changelog = "https://github.com/aorumbayev/kagan/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
