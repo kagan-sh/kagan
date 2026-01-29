@@ -1,6 +1,6 @@
 name: Continuous Delivery
 
-run-name: ${{ inputs.production_release && 'Production Release' || 'Beta Release' }}
+run-name: ${{ inputs.docs_only && 'Docs Only' || (inputs.production_release && 'Production Release' || 'Beta Release') }}
 
 on:
   push:
@@ -16,6 +16,11 @@ on:
         type: boolean
         required: true
         default: false
+      docs_only:
+        description: "Publish docs only (skip release and PyPI)?"
+        type: boolean
+        required: true
+        default: false
 
 concurrency: release
 
@@ -26,6 +31,8 @@ permissions:
 jobs:
   release:
     name: Semantic Release
+    # Skip release job when docs_only flag is set
+    if: ${{ !inputs.docs_only }}
     runs-on: ubuntu-latest
     permissions:
       # IMPORTANT: mandatory for trusted publishing and GitHub releases
@@ -86,9 +93,9 @@ jobs:
 
   publish-docs:
     name: Publish Documentation
+    # Conditionally depend on release job (only when not docs_only mode)
     needs: release
-    # Only publish docs for production releases
-    if: inputs.production_release && github.ref == 'refs/heads/main'
+    if: always() && !cancelled() && (needs.release.result == 'success' || needs.release.result == 'skipped') && ((inputs.production_release && github.ref == 'refs/heads/main' && !inputs.docs_only) || inputs.docs_only)
     runs-on: ubuntu-latest
     permissions:
       contents: read
