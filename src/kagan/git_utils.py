@@ -114,20 +114,21 @@ def init_git_repo(repo_root: Path, base_branch: str) -> bool:
     if not gitkeep.exists():
         gitkeep.write_text("")
 
-    subprocess.run(
+    add_result = subprocess.run(
         ["git", "add", ".gitkeep"],
         cwd=repo_root,
         capture_output=True,
         text=True,
         check=False,
     )
+    if add_result.returncode != 0:
+        return False
 
-    subprocess.run(
+    commit_result = subprocess.run(
         ["git", "commit", "-m", "Initial commit (kagan)"],
         cwd=repo_root,
         capture_output=True,
         text=True,
         check=False,
     )
-
-    return True
+    return commit_result.returncode == 0
