@@ -4,15 +4,15 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
-        exclude: ^(tests/__snapshots__/|CNAME$)
+        exclude: ^(tests/snapshot/__snapshots__/|CNAME$)
       - id: trailing-whitespace
-        exclude: ^tests/__snapshots__/
+        exclude: ^tests/snapshot/__snapshots__/
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: mixed-line-ending
         args: [--fix=lf]
-        exclude: ^tests/__snapshots__/
+        exclude: ^tests/snapshot/__snapshots__/
 
   # Markdown formatter
   - repo: https://github.com/hukkin/mdformat

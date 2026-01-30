@@ -24,6 +24,8 @@ from tests.helpers.pages import (
 if TYPE_CHECKING:
     from kagan.app import KaganApp
 
+pytestmark = pytest.mark.e2e
+
 
 class TestTicketLifecycle:
     """Test complete ticket lifecycle: create -> progress -> review -> done."""
@@ -112,7 +114,7 @@ class TestTicketDeletion:
             assert initial_count >= 1
 
             await focus_first_ticket(pilot)
-            await pilot.press("ctrl+d")
+            await pilot.press("x")
             await pilot.pause()
 
             final_count = get_ticket_count(pilot)
@@ -148,27 +150,11 @@ class TestScreenNavigation:
 
 
 class TestFreshProjectWorktree:
-    """Test worktree creation in a fresh project (no pre-existing git repo).
-
-    This tests the critical scenario where a user runs kagan in an empty folder.
-    Kagan initializes git, and when the user creates a PAIR ticket and presses
-    Enter, a worktree must be created successfully.
-
-    Bug caught: init_git_repo() was not creating an initial commit, so
-    `git worktree add -b <branch> <path> main` failed with "fatal: invalid reference: main"
-    """
+    """Test worktree creation in a fresh project (no pre-existing git repo)."""
 
     @pytest.mark.slow
     async def test_pair_ticket_worktree_creation_fresh_repo(self, e2e_app_fresh: KaganApp):
-        """PAIR ticket can create worktree in a freshly initialized git repo.
-
-        This is the critical user journey that was failing:
-        1. User runs kagan in empty folder
-        2. Kagan initializes git (via init_git_repo)
-        3. User creates a PAIR ticket
-        4. User presses Enter to open session
-        5. Worktree should be created successfully
-        """
+        """PAIR ticket can create worktree in a freshly initialized git repo."""
         async with e2e_app_fresh.run_test(size=(120, 40)) as pilot:
             await navigate_to_kanban(pilot)
             await pilot.pause()
@@ -196,8 +182,6 @@ class TestFreshProjectWorktree:
             in_progress = await get_tickets_by_status(pilot, TicketStatus.IN_PROGRESS)
             assert len(in_progress) >= 1, "Ticket should have moved to IN_PROGRESS"
 
-            # Verify worktree directory exists (worktree may or may not be created
-            # on just moving status - the real test is pressing Enter which
-            # triggers _open_pair_session)
+            # Verify worktree directory exists
             worktree_dir = project_root / ".kagan" / "worktrees"
-            _ = worktree_dir.exists()  # Check existence without needing result
+            _ = worktree_dir.exists()

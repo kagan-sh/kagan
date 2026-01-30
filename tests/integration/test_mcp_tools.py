@@ -9,6 +9,8 @@ import pytest
 from kagan.database.models import TicketCreate, TicketStatus
 from kagan.mcp.tools import KaganMCPServer
 
+pytestmark = pytest.mark.integration
+
 
 class TestMCPTools:
     """Tests for MCP tool handlers."""
@@ -82,47 +84,6 @@ class TestMCPTools:
         updated = await state_manager.get_ticket(ticket.id)
         assert updated is not None
         assert updated.status == TicketStatus.BACKLOG
-
-
-@pytest.fixture
-def git_repo(tmp_path: Path):
-    """Create a git repository for testing uncommitted changes."""
-    import subprocess
-
-    repo = tmp_path / "repo"
-    repo.mkdir()
-
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "commit.gpgsign", "false"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    # Create initial commit
-    (repo / "README.md").write_text("# Test")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "Initial"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    return repo
 
 
 class TestCheckUncommittedChanges:

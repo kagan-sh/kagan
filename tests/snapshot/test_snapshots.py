@@ -8,14 +8,40 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 
 from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketType
 from kagan.ui.widgets.card import TicketCard
 
+pytestmark = pytest.mark.snapshot
+
 # Fixed date for reproducible snapshots
 FIXED_DATE = datetime(2025, 1, 15, 12, 0, 0)
+
+# Card styles for test app
+CARD_TEST_CSS = """
+Screen { layout: horizontal; padding: 1; }
+.card-column { width: 1fr; height: auto; padding: 0 1; }
+TicketCard {
+    width: 100%; height: auto; max-height: 10; min-height: 4;
+    padding: 0 1; margin: 0 0 1 0; background: #0f1419; border: solid #2a3342;
+}
+TicketCard:focus { border: solid #e75535; background: #171c24; }
+TicketCard.session-active { border: solid #98c379; }
+TicketCard.agent-active { border: solid #c678dd; }
+TicketCard.agent-pulse { border: solid #e5c07b; background: #171c24; }
+TicketCard .card-title { width: 100%; height: 1; text-style: bold; color: #dfe0e1; padding: 0; }
+TicketCard .card-title-continued { width: 100%; height: 1; color: #dfe0e1; }
+TicketCard .card-desc { width: 100%; height: 1; color: #5c6773; }
+TicketCard .card-desc.high { color: #e75535; }
+TicketCard .card-desc.medium { color: #e5c07b; }
+TicketCard .card-desc.low { color: #98c379; }
+TicketCard .card-meta { width: 100%; height: 1; color: #5c6773; }
+TicketCard .card-review { width: 100%; height: 1; color: #56b6c2; }
+TicketCard .card-checks { width: 100%; height: 1; color: #5c6773; }
+"""
 
 
 def make_ticket(
@@ -48,98 +74,7 @@ def make_ticket(
 class CardSnapshotApp(App):
     """Test app that displays TicketCards in isolation for snapshot testing."""
 
-    CSS = """
-    Screen {
-        layout: horizontal;
-        padding: 1;
-    }
-
-    .card-column {
-        width: 1fr;
-        height: auto;
-        padding: 0 1;
-    }
-
-    /* Import card styles from main app */
-    TicketCard {
-        width: 100%;
-        height: auto;
-        max-height: 10;
-        min-height: 4;
-        padding: 0 1;
-        margin: 0 0 1 0;
-        background: #0f1419;
-        border: solid #2a3342;
-    }
-
-    TicketCard:focus {
-        border: solid #e75535;
-        background: #171c24;
-    }
-
-    TicketCard.session-active {
-        border: solid #98c379;
-    }
-
-    TicketCard.agent-active {
-        border: solid #c678dd;
-    }
-
-    TicketCard.agent-pulse {
-        border: solid #e5c07b;
-        background: #171c24;
-    }
-
-    TicketCard .card-title {
-        width: 100%;
-        height: 1;
-        text-style: bold;
-        color: #dfe0e1;
-        padding: 0;
-    }
-
-    TicketCard .card-title-continued {
-        width: 100%;
-        height: 1;
-        color: #dfe0e1;
-    }
-
-    TicketCard .card-desc {
-        width: 100%;
-        height: 1;
-        color: #5c6773;
-    }
-
-    TicketCard .card-desc.high {
-        color: #e75535;
-    }
-
-    TicketCard .card-desc.medium {
-        color: #e5c07b;
-    }
-
-    TicketCard .card-desc.low {
-        color: #98c379;
-    }
-
-    TicketCard .card-meta {
-        width: 100%;
-        height: 1;
-        color: #5c6773;
-    }
-
-    TicketCard .card-review {
-        width: 100%;
-        height: 1;
-        color: #56b6c2;
-    }
-
-    TicketCard .card-checks {
-        width: 100%;
-        height: 1;
-        color: #5c6773;
-    }
-    """
+    CSS = CARD_TEST_CSS
 
     def __init__(self, tickets: list[tuple[Ticket, dict]], **kwargs):
         """Initialize with list of (ticket, state_flags) tuples."""
@@ -152,7 +87,6 @@ class CardSnapshotApp(App):
             with Vertical(classes="card-column"):
                 for ticket, flags in self.tickets:
                     card = TicketCard(ticket)
-                    # Apply state flags after creation
                     if flags.get("session_active"):
                         card.is_session_active = True
                     if flags.get("agent_active"):
@@ -166,7 +100,6 @@ class TestCardSnapshots:
     def test_card_types_and_priorities(self, snap_compare):
         """Test card rendering with different types and priorities."""
         tickets = [
-            # AUTO ticket with high priority
             (
                 make_ticket(
                     "Implement auth",
@@ -177,7 +110,6 @@ class TestCardSnapshots:
                 ),
                 {},
             ),
-            # PAIR ticket with medium priority
             (
                 make_ticket(
                     "Fix database bug",
@@ -188,7 +120,6 @@ class TestCardSnapshots:
                 ),
                 {},
             ),
-            # Low priority ticket
             (
                 make_ticket(
                     "Update documentation",
@@ -199,8 +130,7 @@ class TestCardSnapshots:
                 {},
             ),
         ]
-        app = CardSnapshotApp(tickets)
-        assert snap_compare(app, terminal_size=(50, 20))
+        assert snap_compare(CardSnapshotApp(tickets), terminal_size=(50, 20))
 
     def test_card_long_title_wrapping(self, snap_compare):
         """Test card with long title that wraps to multiple lines."""
@@ -213,31 +143,14 @@ class TestCardSnapshots:
                 ),
                 {},
             ),
-            (
-                make_ticket(
-                    "Short",
-                    "Short title for comparison",
-                    ticket_id="shrt2222",
-                ),
-                {},
-            ),
+            (make_ticket("Short", "Short title for comparison", ticket_id="shrt2222"), {}),
         ]
-        app = CardSnapshotApp(tickets)
-        assert snap_compare(app, terminal_size=(50, 16))
+        assert snap_compare(CardSnapshotApp(tickets), terminal_size=(50, 16))
 
     def test_card_session_states(self, snap_compare):
         """Test card rendering with different session states."""
         tickets = [
-            # Normal card (no session)
-            (
-                make_ticket(
-                    "Normal card",
-                    "No session active",
-                    ticket_id="norm1111",
-                ),
-                {},
-            ),
-            # Session active (tmux session exists)
+            (make_ticket("Normal card", "No session active", ticket_id="norm1111"), {}),
             (
                 make_ticket(
                     "Session active",
@@ -247,23 +160,16 @@ class TestCardSnapshots:
                 ),
                 {"session_active": True},
             ),
-            # Agent active (AI working)
             (
-                make_ticket(
-                    "Agent working",
-                    "AI actively working",
-                    ticket_id="agnt3333",
-                ),
+                make_ticket("Agent working", "AI actively working", ticket_id="agnt3333"),
                 {"agent_active": True},
             ),
         ]
-        app = CardSnapshotApp(tickets)
-        assert snap_compare(app, terminal_size=(50, 20))
+        assert snap_compare(CardSnapshotApp(tickets), terminal_size=(50, 20))
 
     def test_card_review_status(self, snap_compare):
         """Test card rendering in review status with summary and checks."""
         tickets = [
-            # Review with passed checks
             (
                 make_ticket(
                     "Feature ready",
@@ -275,7 +181,6 @@ class TestCardSnapshots:
                 ),
                 {},
             ),
-            # Review with failed checks
             (
                 make_ticket(
                     "Needs fixes",
@@ -287,7 +192,6 @@ class TestCardSnapshots:
                 ),
                 {},
             ),
-            # Review with no checks run
             (
                 make_ticket(
                     "Pending checks",
@@ -300,5 +204,4 @@ class TestCardSnapshots:
                 {},
             ),
         ]
-        app = CardSnapshotApp(tickets)
-        assert snap_compare(app, terminal_size=(50, 26))
+        assert snap_compare(CardSnapshotApp(tickets), terminal_size=(50, 26))

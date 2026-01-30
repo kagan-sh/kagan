@@ -6,6 +6,8 @@ import pytest
 
 from kagan.agents.signals import Signal, parse_signal
 
+pytestmark = pytest.mark.unit
+
 
 class TestSignalParsing:
     """Tests for parse_signal function."""

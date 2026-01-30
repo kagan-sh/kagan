@@ -1,5 +1,7 @@
 """Tests for instance lock mechanism."""
 
+from __future__ import annotations
+
 import os
 import subprocess
 import sys
@@ -9,6 +11,8 @@ from pathlib import Path
 import pytest
 
 from kagan.lock import InstanceLock, InstanceLockError
+
+pytestmark = pytest.mark.integration
 
 
 class TestInstanceLock:
@@ -162,7 +166,7 @@ except InstanceLockError as e:
                 ],
                 capture_output=True,
                 text=True,
-                cwd=Path(__file__).parent.parent,
+                cwd=Path(__file__).parent.parent.parent,
             )
 
             assert "BLOCKED:" in result.stdout
@@ -200,7 +204,7 @@ except InstanceLockError:
                 ],
                 capture_output=True,
                 text=True,
-                cwd=Path(__file__).parent.parent,
+                cwd=Path(__file__).parent.parent.parent,
             )
 
             assert "ACQUIRED" in result.stdout
