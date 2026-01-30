@@ -11,14 +11,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
-from textual.binding import Binding
 from textual.containers import Center, Container, Middle, VerticalScroll
 from textual.widgets import Footer, Static
 
+from kagan.constants import KAGAN_LOGO
+from kagan.keybindings import TROUBLESHOOTING_BINDINGS, to_textual_bindings
 from kagan.theme import KAGAN_THEME
-from kagan.ui.screens.welcome import KAGAN_LOGO
+from kagan.ui.utils.clipboard import copy_with_notification
 
 if TYPE_CHECKING:
+    from textual.events import Click
+
     from kagan.config import AgentConfig
 
 
@@ -409,6 +412,34 @@ def detect_issues(
     return PreflightResult(issues=issues)
 
 
+class CopyableHint(Static):
+    """Hint text that copies on single-click."""
+
+    DEFAULT_CLASSES = "issue-card-hint"
+
+    def __init__(self, hint: str) -> None:
+        super().__init__(f"Hint: {hint}")
+        self._hint = hint
+
+    async def _on_click(self, event: Click) -> None:
+        """Copy hint text on single-click."""
+        copy_with_notification(self.app, self._hint, "Hint")
+
+
+class CopyableUrl(Static):
+    """URL that copies on single-click."""
+
+    DEFAULT_CLASSES = "issue-card-url"
+
+    def __init__(self, url: str) -> None:
+        super().__init__(f"More info: {url}")
+        self._url = url
+
+    async def _on_click(self, event: Click) -> None:
+        """Copy URL on single-click."""
+        copy_with_notification(self.app, self._url, "URL")
+
+
 class IssueCard(Static):
     """Widget displaying a single issue."""
 
@@ -420,9 +451,9 @@ class IssueCard(Static):
         preset = self._issue.preset
         yield Static(f"{preset.icon} {preset.title}", classes="issue-card-title")
         yield Static(preset.message, classes="issue-card-message")
-        yield Static(f"Hint: {preset.hint}", classes="issue-card-hint")
+        yield CopyableHint(preset.hint)
         if preset.url:
-            yield Static(f"More info: {preset.url}", classes="issue-card-url")
+            yield CopyableUrl(preset.url)
 
 
 class TroubleshootingApp(App):
@@ -431,11 +462,7 @@ class TroubleshootingApp(App):
     TITLE = "KAGAN"
     CSS_PATH = str(Path(__file__).resolve().parents[2] / "styles" / "kagan.tcss")
 
-    BINDINGS = [
-        Binding("q", "quit", "Quit"),
-        Binding("escape", "quit", "Quit"),
-        Binding("enter", "quit", "Quit"),
-    ]
+    BINDINGS = to_textual_bindings(TROUBLESHOOTING_BINDINGS)
 
     def __init__(self, issues: list[DetectedIssue]) -> None:
         super().__init__()

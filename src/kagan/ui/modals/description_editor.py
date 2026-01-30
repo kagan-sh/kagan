@@ -1,19 +1,23 @@
 """Full-screen description editor modal."""
 
-from textual.app import ComposeResult
-from textual.binding import Binding
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Label, Static, TextArea
+
+from kagan.keybindings import DESCRIPTION_EDITOR_BINDINGS, to_textual_bindings
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 
 class DescriptionEditorModal(ModalScreen[str | None]):
     """Full-screen modal for editing long descriptions."""
 
-    BINDINGS = [
-        Binding("escape", "done", "Done"),
-        Binding("ctrl+s", "done", "Save"),
-    ]
+    BINDINGS = to_textual_bindings(DESCRIPTION_EDITOR_BINDINGS)
 
     def __init__(
         self,

@@ -9,7 +9,6 @@ from textual.message import Message
 
 if TYPE_CHECKING:
     import asyncio
-    from collections.abc import Mapping
 
     from kagan.acp import protocol
 
@@ -20,14 +19,6 @@ class Mode(NamedTuple):
     id: str
     name: str
     description: str | None
-
-
-class TerminalState(NamedTuple):
-    """Terminal output state."""
-
-    output: str
-    truncated: bool
-    return_code: int | None
 
 
 class Answer(NamedTuple):
@@ -102,49 +93,6 @@ class RequestPermission(AgentMessage):
     options: list[protocol.PermissionOption]
     tool_call: protocol.ToolCall | protocol.ToolCallUpdatePermissionRequest
     result_future: asyncio.Future[Answer]
-
-
-@dataclass
-class CreateTerminal(AgentMessage):
-    """Agent wants to run a terminal command."""
-
-    terminal_id: str
-    command: str
-    result_future: asyncio.Future[bool]
-    args: list[str] | None = None
-    cwd: str | None = None
-    env: Mapping[str, str] | None = None
-    output_byte_limit: int | None = None
-
-
-@dataclass
-class KillTerminal(AgentMessage):
-    """Kill a terminal process."""
-
-    terminal_id: str
-
-
-@dataclass
-class GetTerminalState(AgentMessage):
-    """Get the state of a terminal."""
-
-    terminal_id: str
-    result_future: asyncio.Future[TerminalState]
-
-
-@dataclass
-class ReleaseTerminal(AgentMessage):
-    """Release a terminal."""
-
-    terminal_id: str
-
-
-@dataclass
-class WaitForTerminalExit(AgentMessage):
-    """Wait for terminal to exit."""
-
-    terminal_id: str
-    result_future: asyncio.Future[tuple[int, str | None]]
 
 
 @dataclass

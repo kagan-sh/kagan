@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Label, RichLog
+
+from kagan.keybindings import DIFF_BINDINGS, to_textual_bindings
+from kagan.ui.utils.clipboard import copy_with_notification
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -16,9 +18,7 @@ if TYPE_CHECKING:
 class DiffModal(ModalScreen[None]):
     """Modal for showing a ticket diff."""
 
-    BINDINGS = [
-        Binding("escape", "close", "Close"),
-    ]
+    BINDINGS = to_textual_bindings(DIFF_BINDINGS)
 
     def __init__(self, title: str, diff_text: str, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -38,3 +38,7 @@ class DiffModal(ModalScreen[None]):
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+    def action_copy(self) -> None:
+        """Copy diff content to clipboard."""
+        copy_with_notification(self.app, self._diff_text, "Diff")

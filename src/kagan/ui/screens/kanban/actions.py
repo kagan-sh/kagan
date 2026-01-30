@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from kagan.database.models import TicketStatus, TicketType, TicketUpdate
+from kagan.database.models import TicketStatus, TicketUpdate
 
 if TYPE_CHECKING:
     from kagan.app import KaganApp
@@ -40,21 +40,6 @@ async def merge_ticket(app: KaganApp, ticket: Ticket) -> tuple[bool, str]:
         await app.state_manager.move_ticket(ticket.id, TicketStatus.DONE)
 
     return success, message
-
-
-async def reopen_ticket(app: KaganApp, ticket: Ticket) -> None:
-    """Reopen a ticket from DONE to BACKLOG."""
-    ticket_type = ticket.ticket_type
-    if isinstance(ticket_type, str):
-        ticket_type = TicketType(ticket_type)
-
-    if ticket_type == TicketType.AUTO:
-        await app.state_manager.update_ticket(
-            ticket.id,
-            TicketUpdate(status=TicketStatus.BACKLOG, review_summary=None, checks_passed=None),
-        )
-    else:
-        await app.state_manager.move_ticket(ticket.id, TicketStatus.BACKLOG)
 
 
 async def apply_rejection_feedback(app: KaganApp, ticket: Ticket, feedback: str | None) -> None:

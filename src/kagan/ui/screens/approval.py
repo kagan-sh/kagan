@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from textual import on
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Static
 
 from kagan.constants import APPROVAL_TITLE_MAX_LENGTH
 from kagan.database.models import TicketCreate, TicketType
+from kagan.keybindings import APPROVAL_BINDINGS, to_textual_bindings
 from kagan.ui.screens.ticket_editor import TicketEditorScreen
 
 if TYPE_CHECKING:
@@ -26,11 +26,7 @@ class ApprovalScreen(ModalScreen[list[TicketCreate] | None]):
         None: User cancelled
     """
 
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("enter", "approve", "Approve"),
-        Binding("t", "toggle_type", "Toggle Type"),
-    ]
+    BINDINGS = to_textual_bindings(APPROVAL_BINDINGS)
 
     def __init__(self, tickets: list[TicketCreate]) -> None:
         super().__init__()

@@ -32,7 +32,7 @@ class TicketCard(Widget):
     can_focus = True
 
     ticket: reactive[Ticket | None] = reactive(None, recompose=True)
-    is_agent_active: var[bool] = var(False, toggle_class="agent-active")
+    is_agent_active: var[bool] = var(False, toggle_class="agent-active", always_update=True)
     is_session_active: var[bool] = var(False, toggle_class="session-active")
     iteration_info: reactive[str] = reactive("", recompose=True)
     _pulse_timer: Timer | None = None
@@ -71,7 +71,7 @@ class TicketCard(Widget):
         desc_text = f"{priority_icon} {self._truncate_title(desc, CARD_DESC_MAX_LENGTH)}"
         yield Label(desc_text, classes=f"card-desc {priority_class}")
 
-        # Meta line: session indicator + backend/hat + ID + date
+        # Meta line: session indicator + backend/hat + AC count + ID + date
         session_indicator = self._get_session_indicator()
         hat = getattr(self.ticket, "assigned_hat", None) or ""
         hat_display = hat[:CARD_HAT_MAX_LENGTH] if hat else ""
@@ -87,6 +87,10 @@ class TicketCard(Widget):
             meta_parts.append(backend[:CARD_BACKEND_MAX_LENGTH])
         elif hat_display:
             meta_parts.append(hat_display)
+        # Show acceptance criteria count if present
+        ac_count = len(self.ticket.acceptance_criteria) if self.ticket.acceptance_criteria else 0
+        if ac_count:
+            meta_parts.append(f"[AC:{ac_count}]")
         meta_parts.append(ticket_id)
         meta_parts.append(date_str)
 
@@ -116,14 +120,19 @@ class TicketCard(Widget):
         return priority.css_class
 
     def _get_type_badge(self) -> str:
-        """Get type badge indicator for ticket type."""
+        """Get type badge indicator for ticket type with agent state."""
         if self.ticket is None:
             return "👤"
         ticket_type = self.ticket.ticket_type
         if isinstance(ticket_type, str):
             ticket_type = TicketType(ticket_type)
         if ticket_type == TicketType.AUTO:
-            return "⚡"  # AUTO mode
+            # Show running state for AUTO tickets
+            if self.is_agent_active:
+                return "🔄"  # Running indicator
+            if self.ticket.status == TicketStatus.IN_PROGRESS:
+                return "⏳"  # Waiting/pending indicator
+            return "⚡"  # Normal AUTO badge
         return "👤"  # PAIR mode (human)
 
     def _truncate_title(self, title: str, max_length: int) -> str:
@@ -200,6 +209,8 @@ class TicketCard(Widget):
 
     def watch_is_agent_active(self, active: bool) -> None:
         """Start/stop pulse animation timer when agent state changes."""
+        # Trigger recompose to update badge
+        self.refresh(recompose=True)
         if active:
             self._pulse_timer = self.set_interval(0.6, self._toggle_pulse)
         else:

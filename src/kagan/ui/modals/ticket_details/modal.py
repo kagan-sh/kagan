@@ -6,7 +6,6 @@ import contextlib
 from typing import TYPE_CHECKING
 
 from textual import on
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.reactive import reactive
@@ -21,9 +20,11 @@ from kagan.database.models import (
     TicketType,
     TicketUpdate,
 )
+from kagan.keybindings import TICKET_DETAILS_BINDINGS, to_textual_bindings
 from kagan.ui.modals.actions import ModalAction
 from kagan.ui.modals.description_editor import DescriptionEditorModal
 from kagan.ui.modals.ticket_details import form
+from kagan.ui.utils.clipboard import copy_with_notification
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -36,13 +37,7 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
 
     editing = reactive(False)
 
-    BINDINGS = [
-        Binding("escape", "close_or_cancel", "Close/Cancel"),
-        Binding("e", "toggle_edit", "Edit", show=True),
-        Binding("d", "delete", "Delete", show=True),
-        Binding("f", "expand_description", "Expand", show=True),
-        Binding("ctrl+s", "save", "Save", show=False),
-    ]
+    BINDINGS = to_textual_bindings(TICKET_DETAILS_BINDINGS)
 
     def __init__(
         self, ticket: Ticket | None = None, *, start_editing: bool = False, **kwargs
@@ -50,6 +45,16 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
         super().__init__(**kwargs)
         self.ticket = ticket
         self.is_create = ticket is None
+        # Check if ticket is in Done status (normalize string/enum)
+        self._is_done = False
+        if ticket is not None:
+            status = ticket.status
+            if isinstance(status, str):
+                status = TicketStatus(status)
+            self._is_done = status == TicketStatus.DONE
+        # Never allow editing Done tickets
+        if self._is_done:
+            start_editing = False
         self._initial_editing = self.is_create or start_editing
 
     def on_mount(self) -> None:
@@ -182,7 +187,17 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
                     show_line_numbers=True,
                 )
 
-            yield Rule()
+            # Acceptance criteria section
+            if self.ticket and self.ticket.acceptance_criteria:
+                with Vertical(classes="acceptance-criteria-section view-only", id="ac-section"):
+                    yield Label("Acceptance Criteria", classes="section-title")
+                    for criterion in self.ticket.acceptance_criteria:
+                        yield Static(f"  - {criterion}", classes="ac-item")
+
+            with Vertical(classes="form-field edit-fields", id="ac-field"):
+                yield Label("Acceptance Criteria (one per line):", classes="form-label")
+                ac_text = "\n".join(self.ticket.acceptance_criteria) if self.ticket else ""
+                yield TextArea(ac_text, id="ac-input")
 
             if form.has_review_data(self.ticket):
                 with Vertical(classes="review-results-section view-only", id="review-section"):
@@ -213,7 +228,7 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
 
             with Horizontal(classes="button-row view-only", id="view-buttons"):
                 yield Button("[Esc] Close", id="close-btn")
-                yield Button("[e] Edit", id="edit-btn")
+                yield Button("[e] Edit", id="edit-btn", disabled=self._is_done)
                 yield Button("[d] Delete", variant="error", id="delete-btn")
 
             with Horizontal(classes="button-row edit-fields", id="edit-buttons"):
@@ -258,6 +273,9 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
         self.action_close_or_cancel()
 
     def action_toggle_edit(self) -> None:
+        if self._is_done:
+            self.app.notify("Done tickets cannot be edited", severity="warning")
+            return
         if not self.editing and not self.is_create:
             self.editing = True
 
@@ -282,6 +300,16 @@ class TicketDetailsModal(ModalScreen[ModalAction | TicketCreate | TicketUpdate |
         result = form.validate_and_build_result(self, self.ticket, self.is_create)
         if result is not None:
             self.dismiss(result)
+
+    def action_copy(self) -> None:
+        """Copy ticket details to clipboard."""
+        if not self.ticket:
+            self.app.notify("No ticket to copy", severity="warning")
+            return
+        content = f"#{self.ticket.short_id}: {self.ticket.title}"
+        if self.ticket.description:
+            content += f"\n\n{self.ticket.description}"
+        copy_with_notification(self.app, content, "Ticket")
 
     def action_expand_description(self) -> None:
         if self.editing:

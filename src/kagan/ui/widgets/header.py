@@ -12,13 +12,12 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Label
 
+from kagan.constants import KAGAN_LOGO_SMALL
+
 if TYPE_CHECKING:
     from pathlib import Path
 
     from textual.app import ComposeResult
-
-# Khagan logo using Canadian Aboriginal syllabics
-KAGAN_LOGO = "ᘚᘛ"
 
 
 def _get_version() -> str:
@@ -61,7 +60,7 @@ class KaganHeader(Widget):
         self.ticket_count = ticket_count
 
     def compose(self) -> ComposeResult:
-        yield Label(KAGAN_LOGO, classes="header-logo")
+        yield Label(KAGAN_LOGO_SMALL, classes="header-logo")
         yield Label("KAGAN", classes="header-title")
         yield Label(f"v{_get_version()}", classes="header-version")
         yield Label("", classes="header-spacer")

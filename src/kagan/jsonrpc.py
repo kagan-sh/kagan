@@ -49,9 +49,8 @@ def expose(name: str | None = None, prefix: str | None = None) -> Callable[[T], 
     """
 
     def decorator(func: T) -> T:
-        method_name = name
-        if method_name is None:
-            method_name = func.__name__.replace("_", "/")  # type: ignore[union-attr]
+        func_name: str = getattr(func, "__name__", "unknown")
+        method_name = name if name is not None else func_name.replace("_", "/")
         if prefix:
             method_name = f"{prefix}/{method_name}"
         setattr(func, EXPOSE_ATTR, method_name)
@@ -348,7 +347,19 @@ class MethodCall[ReturnType]:
     method: str
     id: int | None
     parameters: dict[str, Any] = field(default_factory=dict)
-    future: Future[ReturnType] = field(default_factory=Future)  # type: ignore[type-arg]
+    _future: Future[ReturnType] | None = field(default=None, repr=False)
+
+    @property
+    def future(self) -> Future[ReturnType]:
+        """Lazily create and return the future for this call."""
+        if self._future is None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # No running loop - create a new one for sync context
+                loop = asyncio.new_event_loop()
+            self._future = loop.create_future()
+        return self._future
 
     @property
     def as_json_object(self) -> JSONObject:

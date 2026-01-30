@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from textual import on
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Label, Rule, TextArea
 
 from kagan.constants import MODAL_TITLE_MAX_LENGTH
+from kagan.keybindings import REJECTION_INPUT_BINDINGS, to_textual_bindings
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -19,10 +19,7 @@ if TYPE_CHECKING:
 class RejectionInputModal(ModalScreen[str | None]):
     """Modal for entering rejection feedback."""
 
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("ctrl+s", "submit", "Submit"),
-    ]
+    BINDINGS = to_textual_bindings(REJECTION_INPUT_BINDINGS)
 
     def __init__(self, ticket_title: str, **kwargs) -> None:
         super().__init__(**kwargs)

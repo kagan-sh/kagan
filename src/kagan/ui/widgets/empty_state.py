@@ -8,7 +8,7 @@ from textual.containers import Center, Vertical
 from textual.widget import Widget
 from textual.widgets import Static
 
-from kagan.constants import BOX_DRAWING
+from kagan.constants import BOX_DRAWING, KAGAN_LOGO
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -23,6 +23,11 @@ class EmptyState(Widget):
         """Compose the empty state layout."""
         with Center():
             with Vertical(classes="empty-state-card"):
+                # Centered logo - wrapped in Center for proper alignment
+                with Center():
+                    yield Static(KAGAN_LOGO, id="empty-state-logo")
+
+                # Getting Started label centered below logo
                 yield Static("Getting Started", classes="empty-card-title")
 
                 # How it works
@@ -52,5 +57,9 @@ class EmptyState(Widget):
                 )
                 yield Static(
                     f"  {BOX_DRAWING['BULLET']} Press Esc to return to board",
+                    classes="card-item-compact",
+                )
+                yield Static(
+                    f"  {BOX_DRAWING['BULLET']} Use CTRL+e to AI enhance you input prompt",
                     classes="card-item-compact",
                 )

@@ -132,7 +132,17 @@ async def handle_request_permission(
         messages.RequestPermission(options, deepcopy(agent.tool_calls[tool_call_id]), result_future)
     )
 
-    answer = await result_future
+    try:
+        answer = await asyncio.wait_for(result_future, timeout=330.0)
+    except TimeoutError:
+        log.warning("[RPC] session/request_permission: timeout, auto-rejecting")
+        for opt in options:
+            if "reject" in opt.get("kind", ""):
+                return {"outcome": {"optionId": opt["optionId"], "outcome": "selected"}}
+        if options:
+            return {"outcome": {"optionId": options[0]["optionId"], "outcome": "selected"}}
+        return {"outcome": {"outcome": "cancelled"}}
+
     log.info(f"[RPC] session/request_permission: UI responded with {answer.id}")
     return {"outcome": {"optionId": answer.id, "outcome": "selected"}}
 
@@ -164,6 +174,10 @@ def handle_read_text_file(
 
 def handle_write_text_file(agent: Agent, sessionId: str, path: str, content: str) -> None:
     """Write a file in the project."""
+    if agent._read_only:
+        log.warning(f"[RPC] fs/write_text_file: BLOCKED in read-only mode (path={path})")
+        raise ValueError("Write operations not permitted in read-only mode")
+
     log.info(f"[RPC] fs/write_text_file: path={path}, content_len={len(content)}")
     write_path = agent.project_root / path
     log.debug(f"[RPC] fs/write_text_file: writing to {write_path}")
@@ -183,6 +197,10 @@ async def handle_terminal_create(
     sessionId: str | None = None,
 ) -> protocol.CreateTerminalResponse:
     """Agent wants to create a terminal."""
+    if agent._read_only:
+        log.warning(f"[RPC] terminal/create: BLOCKED in read-only mode (command={command})")
+        raise ValueError("Terminal operations not permitted in read-only mode")
+
     terminal_id, cmd_display = await agent._terminals.create(
         command=command,
         args=args,

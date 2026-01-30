@@ -69,6 +69,20 @@ PRIORITY_LABELS = {
 }
 
 # Box Drawing Characters
+# ASCII Art Logos
+# Large block letter ASCII art logo - single source of truth
+KAGAN_LOGO = """\
+ᘚᘛ  ██╗  ██╗ █████╗  ██████╗  █████╗ ███╗   ██╗  ᘚᘛ
+ᘚᘛ  ██║ ██╔╝██╔══██╗██╔════╝ ██╔══██╗████╗  ██║  ᘚᘛ
+ᘚᘛ  █████╔╝ ███████║██║  ███╗███████║██╔██╗ ██║  ᘚᘛ
+ᘚᘛ  ██╔═██╗ ██╔══██║██║   ██║██╔══██║██║╚██╗██║  ᘚᘛ
+ᘚᘛ  ██║  ██╗██║  ██║╚██████╔╝██║  ██║██║ ╚████║  ᘚᘛ
+ᘚᘛ  ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝  ᘚᘛ"""
+
+# Small logo using Canadian Aboriginal syllabics (for header)
+KAGAN_LOGO_SMALL = "ᘚᘛ"
+
+# Box Drawing Characters
 BOX_DRAWING = {
     "THICK_TL": "┏",
     "THICK_TR": "┓",
@@ -110,6 +124,8 @@ __all__ = [
     "DEFAULT_LOCK_PATH",
     "DIFF_MAX_LENGTH",
     "KAGAN_GENERATED_PATTERNS",
+    "KAGAN_LOGO",
+    "KAGAN_LOGO_SMALL",
     "MESSAGE_BUFFER",
     "MIN_SCREEN_HEIGHT",
     "MIN_SCREEN_WIDTH",

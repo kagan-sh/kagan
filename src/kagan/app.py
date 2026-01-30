@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from textual.app import App
-from textual.binding import Binding
 from textual.signal import Signal
 
 from kagan.agents.scheduler import Scheduler
@@ -19,6 +18,7 @@ from kagan.constants import (
 )
 from kagan.database import StateManager
 from kagan.git_utils import has_git_repo, init_git_repo
+from kagan.keybindings import APP_BINDINGS, to_textual_bindings
 from kagan.lock import InstanceLock, exit_if_already_running
 from kagan.sessions import SessionManager
 from kagan.theme import KAGAN_THEME
@@ -31,11 +31,7 @@ class KaganApp(App):
     TITLE = "ᘚᘛ KAGAN"
     CSS_PATH = "styles/kagan.tcss"
 
-    BINDINGS = [
-        Binding("q", "quit", "Quit", show=True),
-        Binding("?", "command_palette", "Help", show=True),
-        Binding("ctrl+p", "command_palette", show=False),  # Hide from footer, still works
-    ]
+    BINDINGS = to_textual_bindings(APP_BINDINGS)
 
     def __init__(
         self,
@@ -203,6 +199,12 @@ class KaganApp(App):
             await self._state_manager.close()
         if self._instance_lock:
             self._instance_lock.release()
+
+    def action_show_help(self) -> None:
+        """Open the help modal."""
+        from kagan.ui.modals import HelpModal
+
+        self.push_screen(HelpModal())
 
 
 def run() -> None:

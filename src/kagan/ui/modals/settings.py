@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Input, Label, Rule, Switch
+
+from kagan.keybindings import SETTINGS_BINDINGS, to_textual_bindings
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,10 +21,7 @@ if TYPE_CHECKING:
 class SettingsModal(ModalScreen[bool]):
     """Modal for editing application settings."""
 
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("ctrl+s", "save", "Save"),
-    ]
+    BINDINGS = to_textual_bindings(SETTINGS_BINDINGS)
 
     def __init__(self, config: KaganConfig, config_path: Path, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -93,6 +91,17 @@ class SettingsModal(ModalScreen[bool]):
 
             yield Rule()
 
+            # UI Preferences Section
+            yield Label("UI Preferences", classes="section-title")
+            with Horizontal(classes="setting-row"):
+                yield Switch(
+                    value=self._config.ui.skip_tmux_gateway,
+                    id="skip-tmux-gateway-switch",
+                )
+                yield Label("Skip tmux info on session start", classes="setting-label")
+
+            yield Rule()
+
             # Buttons
             with Horizontal(classes="button-row"):
                 yield Button("Save", variant="primary", id="save-btn")
@@ -113,6 +122,7 @@ class SettingsModal(ModalScreen[bool]):
         auto_start = self.query_one("#auto-start-switch", Switch).value
         auto_approve = self.query_one("#auto-approve-switch", Switch).value
         auto_merge = self.query_one("#auto-merge-switch", Switch).value
+        skip_tmux_gateway = self.query_one("#skip-tmux-gateway-switch", Switch).value
         base_branch = self.query_one("#base-branch-input", Input).value
         max_agents_str = self.query_one("#max-agents-input", Input).value
         max_iterations_str = self.query_one("#max-iterations-input", Input).value
@@ -135,6 +145,7 @@ class SettingsModal(ModalScreen[bool]):
         self._config.general.max_concurrent_agents = max_agents
         self._config.general.max_iterations = max_iterations
         self._config.general.iteration_delay_seconds = iteration_delay
+        self._config.ui.skip_tmux_gateway = skip_tmux_gateway
 
         # Write to TOML file
         self._write_config()
@@ -162,6 +173,7 @@ active = true'''
             )
 
         general = self._config.general
+        ui = self._config.ui
         config_content = f"""# Kagan Configuration
 
 [general]
@@ -173,6 +185,9 @@ default_worker_agent = "{general.default_worker_agent}"
 max_concurrent_agents = {general.max_concurrent_agents}
 max_iterations = {general.max_iterations}
 iteration_delay_seconds = {general.iteration_delay_seconds}
+
+[ui]
+skip_tmux_gateway = {str(ui.skip_tmux_gateway).lower()}
 
 {chr(10).join(agent_sections)}
 """

@@ -9,20 +9,13 @@ from textual.containers import Center, Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Label, Select, Switch
 
+from kagan.constants import KAGAN_LOGO
 from kagan.data.builtin_agents import BUILTIN_AGENTS, list_builtin_agents
 from kagan.git_utils import get_current_branch, has_git_repo, list_local_branches
+from kagan.keybindings import WELCOME_BINDINGS, to_textual_bindings
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
-
-# Large block letter ASCII art logo
-KAGAN_LOGO = """\
-ᘚᘛ  ██╗  ██╗ █████╗  ██████╗  █████╗ ███╗   ██╗  ᘚᘛ
-ᘚᘛ  ██║ ██╔╝██╔══██╗██╔════╝ ██╔══██╗████╗  ██║  ᘚᘛ
-ᘚᘛ  █████╔╝ ███████║██║  ███╗███████║██╔██╗ ██║  ᘚᘛ
-ᘚᘛ  ██╔═██╗ ██╔══██║██║   ██║██╔══██║██║╚██╗██║  ᘚᘛ
-ᘚᘛ  ██║  ██╗██║  ██║╚██████╔╝██║  ██║██║ ╚████║  ᘚᘛ
-ᘚᘛ  ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝  ᘚᘛ"""
 
 DEFAULT_BASE_BRANCHES = ("main", "master", "develop", "trunk")
 
@@ -30,9 +23,7 @@ DEFAULT_BASE_BRANCHES = ("main", "master", "develop", "trunk")
 class WelcomeScreen(Screen):
     """First-boot welcome and configuration screen."""
 
-    BINDINGS = [
-        ("escape", "skip", "Continue"),
-    ]
+    BINDINGS = to_textual_bindings(WELCOME_BINDINGS)
 
     def __init__(self) -> None:
         super().__init__()

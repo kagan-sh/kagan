@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from textual import on
-from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Select, TabbedContent, TabPane, TextArea
+from textual.widgets import Button, Input, Label, Select, TabbedContent, TabPane, TextArea
 
 from kagan.database.models import TicketCreate, TicketPriority, TicketType
+from kagan.keybindings import TICKET_EDITOR_BINDINGS, to_textual_bindings
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -24,10 +24,7 @@ class TicketEditorScreen(ModalScreen[list[TicketCreate] | None]):
         None: User cancelled
     """
 
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("ctrl+s", "finish", "Finish Editing"),
-    ]
+    BINDINGS = to_textual_bindings(TICKET_EDITOR_BINDINGS)
 
     def __init__(self, tickets: list[TicketCreate]) -> None:
         super().__init__()
@@ -69,6 +66,19 @@ class TicketEditorScreen(ModalScreen[list[TicketCreate] | None]):
                                 id=f"type-{i}",
                                 classes="ticket-select",
                             )
+                            yield Label(
+                                "Acceptance Criteria (one per line):", classes="ticket-label"
+                            )
+                            ac_text = (
+                                "\n".join(ticket.acceptance_criteria)
+                                if ticket.acceptance_criteria
+                                else ""
+                            )
+                            yield TextArea(
+                                text=ac_text,
+                                id=f"ac-{i}",
+                                classes="ticket-textarea",
+                            )
             yield Button("Finish Editing", id="finish-btn", variant="primary")
 
     def on_mount(self) -> None:
@@ -86,6 +96,11 @@ class TicketEditorScreen(ModalScreen[list[TicketCreate] | None]):
             description_input = self.query_one(f"#description-{i}", TextArea)
             priority_select: Select[int] = self.query_one(f"#priority-{i}", Select)
             type_select: Select[str] = self.query_one(f"#type-{i}", Select)
+            ac_input = self.query_one(f"#ac-{i}", TextArea)
+
+            # Parse acceptance criteria from TextArea
+            ac_lines = ac_input.text.strip().split("\n") if ac_input.text.strip() else []
+            acceptance_criteria = [line.strip() for line in ac_lines if line.strip()]
 
             # Get values with fallbacks
             title = title_input.value.strip() or original.title
@@ -113,7 +128,7 @@ class TicketEditorScreen(ModalScreen[list[TicketCreate] | None]):
                     status=original.status,
                     parent_id=original.parent_id,
                     agent_backend=original.agent_backend,
-                    acceptance_criteria=original.acceptance_criteria,
+                    acceptance_criteria=acceptance_criteria,
                     review_summary=original.review_summary,
                     checks_passed=original.checks_passed,
                     session_active=original.session_active,

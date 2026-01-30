@@ -8,6 +8,7 @@ from textual import log
 
 from kagan import jsonrpc
 from kagan.acp.terminal import TerminalRunner
+from kagan.ansi import clean_terminal_output
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -99,11 +100,12 @@ class TerminalManager:
         return await terminal.wait_for_exit()
 
     def get_final_output(self, terminal_id: str, limit: int = 500) -> str:
-        """Get the last N chars of output for a terminal."""
+        """Get the last N chars of output for a terminal, cleaned for display."""
         terminal = self._terminals.get(terminal_id)
         if terminal is None:
             return ""
-        return terminal.state.output[-limit:]
+        raw_output = terminal.state.output[-limit:]
+        return clean_terminal_output(raw_output)
 
     def cleanup_all(self) -> None:
         """Kill and release all terminals."""

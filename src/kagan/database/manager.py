@@ -58,7 +58,8 @@ class StateManager:
     async def _get_connection(self) -> aiosqlite.Connection:
         if self._connection is None:
             await self.initialize()
-        return self._connection  # type: ignore
+        assert self._connection is not None, "Failed to initialize connection"
+        return self._connection
 
     async def create_ticket(self, ticket: TicketCreate) -> Ticket:
         conn = await self._get_connection()

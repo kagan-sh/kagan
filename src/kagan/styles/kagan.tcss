@@ -422,6 +422,23 @@ TicketDetailsModal .ticket-description {
     overflow-y: auto;
 }
 
+/* Acceptance criteria section */
+TicketDetailsModal .acceptance-criteria-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TicketDetailsModal .ac-item {
+    color: $text;
+    padding-left: 1;
+}
+
+TicketDetailsModal #ac-input {
+    height: 6;
+    min-height: 4;
+}
+
 /* Review results section */
 TicketDetailsModal .review-results-section {
     width: 100%;
@@ -727,6 +744,87 @@ ConfirmModal .confirm-hint {
     color: $text-muted;
 }
 
+/* =============================================================================
+   TMUX GATEWAY MODAL
+   ============================================================================= */
+
+TmuxGatewayModal {
+    align: center middle;
+}
+
+#tmux-gateway-container {
+    width: 70;
+    height: auto;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
+TmuxGatewayModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    color: $secondary;
+    padding-bottom: 1;
+}
+
+TmuxGatewayModal .section-title {
+    text-style: bold;
+    color: $text-muted;
+    width: 100%;
+    text-align: center;
+    padding: 1 0;
+}
+
+.tmux-intro {
+    width: 100%;
+    text-align: center;
+    color: $text;
+    padding: 1 0;
+}
+
+.hotkey-list {
+    width: 100%;
+    padding: 0 2;
+}
+
+.tmux-hotkey-row {
+    width: 100%;
+    height: 1;
+    padding: 0 1;
+}
+
+.tmux-key {
+    width: 16;
+    min-width: 16;
+    color: $primary;
+    text-style: bold;
+}
+
+.tmux-desc {
+    width: 1fr;
+    color: $text;
+}
+
+.tmux-link {
+    width: 100%;
+    text-align: center;
+    color: $secondary;
+    padding: 1 0;
+}
+
+.tmux-link:hover {
+    text-style: bold underline;
+    tint: $primary 10%;
+}
+
+.tmux-hint {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
+}
+
 /* DiffModal styles */
 DiffModal {
     align: center middle;
@@ -828,8 +926,6 @@ PlannerScreen {
     height: auto;
     min-height: 10;
     max-height: 1fr;
-    background: $surface;
-    border: round $border;
     display: none;
 }
 
@@ -852,24 +948,31 @@ PlannerScreen {
 
 #planner-input {
     width: 100%;
-    padding: 1;
+    padding: 0 1;
     background: transparent;
     border: solid $border;
     height: auto;
-    min-height: 3;
+    min-height: 1;
+    max-height: 6;
 }
 
 #planner-input:focus {
     border: solid $primary;
 }
 
-#planner-input:blur {
-    text-opacity: 50%;
-}
-
-#planner-input:disabled {
+#planner-input.-disabled {
     text-opacity: 40%;
     border: solid $border;
+}
+
+/* Refinement mode visual feedback */
+#planner-input.-refining {
+    border: solid $secondary;
+    text-opacity: 60%;
+}
+
+#planner-input.-refining:focus {
+    border: solid $secondary;
 }
 
 /* EmptyState widget */
@@ -883,17 +986,29 @@ PlannerScreen {
 
 .empty-state-card {
     width: auto;
-    min-width: 42;
-    max-width: 60;
+    min-width: 70;
+    max-width: 90;
     height: auto;
-    border: round $border;
-    background: $surface;
-    padding: 1 3;
+    border: none;
+    background: transparent;
+    padding: 1 2;
+    align: center middle;
+}
+
+#empty-state-logo {
+    width: auto;
+    content-align: center middle;
+    text-align: center;
+    color: $primary;
+    padding-bottom: 1;
 }
 
 .empty-card-title {
+    width: 100%;
     text-style: bold underline;
     color: $secondary;
+    text-align: center;
+    content-align: center middle;
     padding-bottom: 1;
 }
 
@@ -901,10 +1016,14 @@ PlannerScreen {
     color: $text-muted;
     text-style: bold;
     padding-top: 1;
+    text-align: center;
+    width: 100%;
 }
 
 .card-item-compact {
     color: $text;
+    text-align: center;
+    width: 100%;
 }
 
 /* StatusBar widget */
@@ -1374,7 +1493,7 @@ SearchBar Input:focus {
     height: 1;
     background: $warning;
     color: $background;
-    text-align: left;
+    text-align: center;
     text-style: bold;
     display: none;
     layer: overlay;
@@ -1541,4 +1660,398 @@ TicketEditorScreen {
     dock: bottom;
     width: 100%;
     margin-top: 1;
+}
+
+/* =============================================================================
+   STREAMING OUTPUT & AGENT CONTENT WIDGETS
+   ============================================================================= */
+
+/* StreamingOutput container (now a VerticalScroll) */
+StreamingOutput {
+    width: 100%;
+    height: auto;
+    min-height: 5;
+    max-height: 1fr;
+    padding: 1;
+    scrollbar-gutter: stable;
+}
+
+/* UserInput widget */
+.user-input {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+.user-input-prompt {
+    width: auto;
+    min-width: 3;
+    color: $primary;
+    text-style: bold;
+    margin-right: 1;
+}
+
+.user-input-content {
+    width: 1fr;
+    height: auto;
+    color: $primary;
+}
+
+.user-input-content > * {
+    margin: 0;
+}
+
+/* AgentResponse widget */
+.agent-response {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+.agent-response > * {
+    margin: 0;
+}
+
+/* AgentThought widget */
+.agent-thought {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+.agent-thought > * {
+    margin: 0;
+}
+
+/* Copyable content hover states */
+.agent-response:hover,
+.agent-thought:hover,
+.user-input:hover {
+    tint: $primary 10%;
+}
+
+ToolCall:hover {
+    tint: $primary 10%;
+}
+
+.plan-entry:hover {
+    tint: $primary 10%;
+}
+
+.issue-card-hint:hover,
+.issue-card-url:hover {
+    tint: $primary 10%;
+}
+
+/* ToolCall widget (expandable tool call display) */
+.tool-call {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+#tool-content {
+    display: none;
+}
+
+ToolCall.-expanded #tool-content {
+    display: block;
+}
+
+ToolCallHeader {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+ToolCallHeader:hover {
+    background: $surface;
+}
+
+TextContent {
+    width: 100%;
+    height: auto;
+    padding: 0 2;
+    color: $text-muted;
+}
+
+/* Streaming notes with status classes */
+.streaming-note {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+.streaming-note.success {
+    color: $success;
+}
+
+.streaming-note.error {
+    color: $error;
+}
+
+.streaming-note.warning {
+    color: $warning;
+}
+
+.streaming-note.info {
+    color: $text-muted;
+}
+
+/* Thinking indicator */
+.thinking-indicator {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* Turn separator */
+.turn-separator {
+    width: 100%;
+    height: 1;
+    margin: 1 0;
+    background: $border;
+}
+
+/* Enhanced plan display */
+.plan-display {
+    width: 100%;
+    height: auto;
+    margin: 1 0;
+    padding: 1;
+    border: round $border;
+    background: $surface;
+}
+
+.plan-display .plan-title {
+    color: $text-muted;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+/* Streaming indicator (awaiting response) */
+.streaming-indicator {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+/* =============================================================================
+   PERMISSION PROMPT WIDGET
+   ============================================================================= */
+
+/* Permission Prompt Widget */
+.permission-prompt {
+    background: $surface;
+    border: round $warning;
+    padding: 1 2;
+    margin: 1 0;
+}
+
+.permission-prompt .permission-header {
+    text-style: bold;
+    color: $warning;
+}
+
+.permission-prompt .permission-tool {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+.permission-prompt .permission-buttons {
+    margin-top: 1;
+    height: auto;
+}
+
+.permission-prompt .permission-buttons Button {
+    margin-right: 1;
+}
+
+.permission-prompt .permission-timer {
+    margin-top: 1;
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* =============================================================================
+   HELP MODAL
+   ============================================================================= */
+
+HelpModal {
+    align: center middle;
+}
+
+#help-container {
+    width: 90%;
+    max-width: 100;
+    height: 85%;
+    background: $surface;
+    border: thick $primary;
+    padding: 1 2;
+}
+
+HelpModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+    color: $primary;
+}
+
+#help-tabs {
+    height: 1fr;
+}
+
+#help-tabs > ContentSwitcher {
+    height: 1fr;
+    padding: 0;
+}
+
+#help-tabs TabPane {
+    padding: 0;
+}
+
+#help-tabs TabPane > VerticalScroll {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+.help-section-title {
+    text-style: bold underline;
+    color: $secondary;
+    padding-top: 1;
+    padding-bottom: 1;
+}
+
+.help-subsection {
+    text-style: bold;
+    color: $text;
+    padding-top: 1;
+}
+
+.help-paragraph {
+    color: $text;
+    padding: 0 1;
+}
+
+.help-paragraph-indented {
+    color: $text;
+    padding: 0 2;
+}
+
+.help-code {
+    color: $text-muted;
+}
+
+.help-key-row {
+    width: 100%;
+    height: 1;
+    padding: 0 1;
+}
+
+.help-key {
+    width: 16;
+    min-width: 16;
+    color: $primary;
+    text-style: bold;
+}
+
+.help-desc {
+    width: 1fr;
+    color: $text;
+}
+
+/* =============================================================================
+   DUPLICATE TICKET MODAL
+   ============================================================================= */
+
+DuplicateTicketModal {
+    align: center middle;
+}
+
+#duplicate-container {
+    width: 60;
+    height: auto;
+    max-height: 80%;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
+DuplicateTicketModal .modal-title {
+    width: 100%;
+    text-align: center;
+    text-style: bold;
+    color: $secondary;
+    padding-bottom: 0;
+}
+
+DuplicateTicketModal .source-ref {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+DuplicateTicketModal .section-title {
+    text-style: bold;
+    color: $text;
+    padding-bottom: 1;
+}
+
+DuplicateTicketModal .form-field {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+DuplicateTicketModal .form-label {
+    width: auto;
+    height: 1;
+    color: $text-muted;
+}
+
+DuplicateTicketModal Input {
+    width: 100%;
+    background: $background;
+    color: $text;
+    border: solid $border;
+}
+
+DuplicateTicketModal Input:focus {
+    border: solid $primary;
+}
+
+DuplicateTicketModal .checkbox-group {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+DuplicateTicketModal Checkbox {
+    width: 100%;
+    height: auto;
+    padding: 0;
+    margin-bottom: 0;
+}
+
+DuplicateTicketModal .button-row {
+    width: 100%;
+    height: auto;
+    padding-top: 1;
+    align: center middle;
+}
+
+DuplicateTicketModal Button {
+    margin: 0 1;
 }

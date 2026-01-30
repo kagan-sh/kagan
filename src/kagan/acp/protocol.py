@@ -2,11 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Literal, Required, TypedDict
 
-
-class SchemaDict(TypedDict, total=False):
-    pass
-
-
 # Capabilities
 
 
@@ -208,11 +203,6 @@ class SessionModeState(TypedDict, total=False):
 class ModelInfo(TypedDict, total=False):
     id: Required[str]
     name: str
-
-
-class SessionModelState(TypedDict, total=False):
-    models: list[ModelInfo]
-    currentModel: str
 
 
 class AvailableCommand(TypedDict, total=False):

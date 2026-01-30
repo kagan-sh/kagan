@@ -91,6 +91,13 @@ def get_checks_class(ticket: Ticket | None) -> str:
     return "badge-checks-passed" if ticket.checks_passed else "badge-checks-failed"
 
 
+def parse_acceptance_criteria(modal) -> list[str]:
+    """Parse acceptance criteria from TextArea (one per line)."""
+    ac_input = modal.query_one("#ac-input", TextArea)
+    lines = ac_input.text.strip().split("\n") if ac_input.text.strip() else []
+    return [line.strip() for line in lines if line.strip()]
+
+
 def validate_and_build_result(
     modal,
     ticket: Ticket | None,
@@ -127,6 +134,8 @@ def validate_and_build_result(
     agent_backend_value = agent_backend_select.value
     agent_backend = str(agent_backend_value) if agent_backend_value is not Select.BLANK else ""
 
+    acceptance_criteria = parse_acceptance_criteria(modal)
+
     if is_create:
         status_select: Select[str] = modal.query_one("#status-select", Select)
         status_value = status_select.value
@@ -142,6 +151,7 @@ def validate_and_build_result(
             ticket_type=ticket_type,
             status=status,
             agent_backend=agent_backend or None,
+            acceptance_criteria=acceptance_criteria,
         )
     else:
         return TicketUpdate(
@@ -150,6 +160,7 @@ def validate_and_build_result(
             priority=priority,
             ticket_type=ticket_type,
             agent_backend=agent_backend or None,
+            acceptance_criteria=acceptance_criteria,
         )
 
 
@@ -169,5 +180,7 @@ def reset_form_fields(modal, ticket: Ticket) -> None:
             ticket_type = TicketType(ticket_type)
         modal.query_one("#type-select", Select).value = ticket_type.value
         modal.query_one("#agent-backend-select", Select).value = ticket.agent_backend or ""
+        ac_text = "\n".join(ticket.acceptance_criteria) if ticket.acceptance_criteria else ""
+        modal.query_one("#ac-input", TextArea).text = ac_text
     except NoMatches:
         pass

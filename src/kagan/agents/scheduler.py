@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import TYPE_CHECKING
 
 from textual import log
@@ -49,7 +50,7 @@ class Scheduler:
         self._running_tickets: set[str] = set()
         self._agents: dict[str, Agent] = {}
         self._iteration_counts: dict[str, int] = {}
-        self._tasks: set[asyncio.Task[None]] = set()
+        self._ticket_tasks: dict[str, asyncio.Task[None]] = {}
         self._on_ticket_changed = on_ticket_changed
         self._on_iteration_changed = on_iteration_changed
 
@@ -57,6 +58,14 @@ class Scheduler:
         """Notify that a ticket has changed status."""
         if self._on_ticket_changed:
             self._on_ticket_changed()
+
+    def _make_task_done_callback(self, ticket_id: str) -> Callable[[asyncio.Task[None]], None]:
+        """Create a done callback that removes the ticket task from tracking."""
+
+        def callback(_task: asyncio.Task[None]) -> None:
+            self._ticket_tasks.pop(ticket_id, None)
+
+        return callback
 
     def get_running_agent(self, ticket_id: str) -> Agent | None:
         """Get the running agent for a ticket (for watch functionality)."""
@@ -69,6 +78,62 @@ class Scheduler:
     def is_running(self, ticket_id: str) -> bool:
         """Check if a ticket is currently being processed."""
         return ticket_id in self._running_tickets
+
+    async def stop_ticket(self, ticket_id: str) -> bool:
+        """Stop a running ticket and its agent. Returns True if stopped."""
+        if ticket_id not in self._running_tickets:
+            return False
+
+        # Stop the agent process
+        agent = self._agents.get(ticket_id)
+        if agent:
+            await agent.stop()
+
+        # Cancel the ticket loop task
+        task = self._ticket_tasks.get(ticket_id)
+        if task and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+        # Cleanup is handled in finally block of _run_ticket_loop,
+        # but ensure immediate removal for responsiveness
+        self._running_tickets.discard(ticket_id)
+        self._agents.pop(ticket_id, None)
+        self._ticket_tasks.pop(ticket_id, None)
+        self._iteration_counts.pop(ticket_id, None)
+
+        if self._on_iteration_changed:
+            self._on_iteration_changed(ticket_id, 0)
+
+        log.info(f"Stopped ticket {ticket_id}")
+        return True
+
+    async def spawn_for_ticket(self, ticket: Ticket) -> bool:
+        """Manually spawn an agent for a ticket (bypasses auto_start check).
+
+        Returns True if agent was spawned, False if already running or ineligible.
+        """
+        if ticket.id in self._running_tickets:
+            return False  # Already running
+
+        if ticket.status != TicketStatus.IN_PROGRESS:
+            return False
+
+        if ticket.ticket_type != TicketType.AUTO:
+            return False
+
+        max_agents = self._config.general.max_concurrent_agents
+        if len(self._running_tickets) >= max_agents:
+            return False  # At capacity
+
+        title = ticket.title[:MODAL_TITLE_MAX_LENGTH]
+        log.info(f"Manually spawning agent for AUTO ticket {ticket.id}: {title}")
+        self._running_tickets.add(ticket.id)
+        task = asyncio.create_task(self._run_ticket_loop(ticket))
+        self._ticket_tasks[ticket.id] = task
+        task.add_done_callback(self._make_task_done_callback(ticket.id))
+        return True
 
     async def tick(self) -> None:
         """Run one scheduling cycle."""
@@ -109,8 +174,8 @@ class Scheduler:
             log.info(f"Spawning agent for AUTO ticket {ticket.id}: {title}")
             self._running_tickets.add(ticket.id)
             task = asyncio.create_task(self._run_ticket_loop(ticket))
-            self._tasks.add(task)
-            task.add_done_callback(self._tasks.discard)
+            self._ticket_tasks[ticket.id] = task
+            task.add_done_callback(self._make_task_done_callback(ticket.id))
             active += 1
 
     async def _run_ticket_loop(self, ticket: Ticket) -> None:
@@ -265,8 +330,8 @@ class Scheduler:
         # Build review prompt from template
         prompt = await self._build_review_prompt(ticket)
 
-        # Spawn agent and send prompt
-        agent = Agent(wt_path, agent_config)
+        # Spawn agent and send prompt (read_only since review only analyzes code)
+        agent = Agent(wt_path, agent_config, read_only=True)
         agent.set_auto_approve(True)  # Auto-approve for review agent
         agent.start()
 
@@ -362,6 +427,6 @@ class Scheduler:
         self._iteration_counts.clear()
 
         # Cancel any running tasks
-        for task in self._tasks:
+        for task in self._ticket_tasks.values():
             task.cancel()
-        self._tasks.clear()
+        self._ticket_tasks.clear()

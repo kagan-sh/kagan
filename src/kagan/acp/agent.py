@@ -33,9 +33,12 @@ VERSION = "0.1.0"
 class Agent:
     """ACP-based agent communication via JSON-RPC over subprocess."""
 
-    def __init__(self, project_root: Path, agent_config: AgentConfig) -> None:
+    def __init__(
+        self, project_root: Path, agent_config: AgentConfig, *, read_only: bool = False
+    ) -> None:
         self.project_root = project_root
         self._agent_config = agent_config
+        self._read_only = read_only
 
         self.server = jsonrpc.Server()
         self.server.expose_instance(self)
@@ -270,10 +273,22 @@ class Agent:
     # ACP protocol methods
     async def _acp_initialize(self) -> None:
         log.info("[_acp_initialize] Sending initialize request to agent...")
+
+        # Build capabilities based on read_only mode
+        fs_caps: protocol.FileSystemCapability = {"readTextFile": True}
+        if not self._read_only:
+            fs_caps["writeTextFile"] = True
+
+        client_caps: protocol.ClientCapabilities = {
+            "fs": fs_caps,
+            "terminal": not self._read_only,
+        }
+        log.info(f"[_acp_initialize] Capabilities: read_only={self._read_only}, caps={client_caps}")
+
         with self.request():
             response = api.initialize(
                 PROTOCOL_VERSION,
-                {"fs": {"readTextFile": True, "writeTextFile": True}, "terminal": True},
+                client_caps,
                 {"name": NAME, "title": TITLE, "version": VERSION},
             )
 

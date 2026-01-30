@@ -31,6 +31,18 @@ def get_os_value[T](matrix: Mapping[str, T]) -> T | None:
     return matrix.get(CURRENT_OS) or matrix.get("*")
 
 
+class RefinementConfig(BaseModel):
+    """Configuration for prompt refinement."""
+
+    enabled: bool = Field(default=True, description="Enable prompt refinement feature")
+    hotkey: str = Field(default="ctrl+e", description="Hotkey to trigger refinement")
+    skip_length_under: int = Field(default=20, description="Skip refinement for short inputs")
+    skip_prefixes: list[str] = Field(
+        default_factory=lambda: ["/", "!", "?"],
+        description="Prefixes that skip refinement (commands, quick questions)",
+    )
+
+
 class GeneralConfig(BaseModel):
     """General configuration settings."""
 
@@ -42,6 +54,15 @@ class GeneralConfig(BaseModel):
     max_iterations: int = Field(default=10)
     iteration_delay_seconds: float = Field(default=2.0)
     default_worker_agent: str = Field(default="claude")
+
+
+class UIConfig(BaseModel):
+    """UI-related user preferences."""
+
+    skip_tmux_gateway: bool = Field(
+        default=False,
+        description="Skip tmux gateway info modal when opening PAIR sessions",
+    )
 
 
 class AgentConfig(BaseModel):
@@ -67,6 +88,8 @@ class KaganConfig(BaseModel):
 
     general: GeneralConfig = Field(default_factory=GeneralConfig)
     agents: dict[str, AgentConfig] = Field(default_factory=dict)
+    refinement: RefinementConfig = Field(default_factory=RefinementConfig)
+    ui: UIConfig = Field(default_factory=UIConfig)
 
     @classmethod
     def load(cls, config_path: Path | None = None) -> KaganConfig:
@@ -88,11 +111,6 @@ class KaganConfig(BaseModel):
     def get_worker_agent(self) -> AgentConfig | None:
         """Get the configured worker agent."""
         return self.get_agent(self.general.default_worker_agent)
-
-
-def load_config() -> KaganConfig:
-    """Load configuration from default location."""
-    return KaganConfig.load()
 
 
 def get_fallback_agent_config() -> AgentConfig:

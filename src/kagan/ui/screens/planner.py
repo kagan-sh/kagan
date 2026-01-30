@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from textual import on
-from textual.binding import Binding
+from textual import events, on
+from textual.binding import Binding, BindingType
 from textual.containers import Vertical
-from textual.widgets import Footer, Input, Static
+from textual.message import Message
+from textual.widgets import Footer, Static, TextArea
 
 from kagan.acp import messages
 from kagan.acp.agent import Agent
-from kagan.agents.planner import build_planner_prompt, parse_plan
+from kagan.agents.planner import build_planner_prompt, parse_plan, parse_todos
+from kagan.agents.refiner import PromptRefiner
 from kagan.config import get_fallback_agent_config
 from kagan.constants import PLANNER_TITLE_MAX_LENGTH
+from kagan.keybindings import PLANNER_BINDINGS, to_textual_bindings
 from kagan.limits import AGENT_TIMEOUT
 from kagan.ui.screens.approval import ApprovalScreen
 from kagan.ui.screens.base import KaganScreen
@@ -24,206 +28,323 @@ from kagan.ui.widgets.header import KaganHeader
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
+    from kagan.acp import protocol
     from kagan.database.models import TicketCreate
+
+MIN_INPUT_HEIGHT = 1
+MAX_INPUT_HEIGHT = 6
+
+
+class PlannerInput(TextArea):
+    """TextArea that submits on Enter (Shift+Enter/Ctrl+J for newline)."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("shift+enter,ctrl+j", "insert_newline", "New Line", show=False, priority=True),
+    ]
+
+    @dataclass
+    class SubmitRequested(Message):
+        text: str
+
+    def action_insert_newline(self) -> None:
+        """Insert a newline character."""
+        self.insert("\n")
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.prevent_default()
+            event.stop()
+            self.post_message(self.SubmitRequested(self.text))
+            return
+        await super()._on_key(event)
 
 
 class PlannerScreen(KaganScreen):
     """Chat-first planner for creating tickets."""
 
-    BINDINGS = [
-        Binding("escape", "to_board", "Go to Board"),
-        Binding("ctrl+c", "cancel", "Cancel", show=False),
-    ]
+    BINDINGS = to_textual_bindings(PLANNER_BINDINGS)
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._agent: Agent | None = None
+        self._refiner: PromptRefiner | None = None
         self._is_running = False
+        self._is_processing = False
+        self._is_refining = False
         self._accumulated_response: list[str] = []
         self._agent_ready = False
         self._has_agent_output = False
+        self._current_mode: str = ""
+        self._available_modes: dict[str, messages.Mode] = {}
+        self._available_commands: list[protocol.AvailableCommand] = []
+        self._todos_displayed = False
+        self._thinking_shown = False
 
     def compose(self) -> ComposeResult:
-        """Compose the planner screen layout."""
         yield KaganHeader()
         with Vertical(id="planner-container"):
-            yield Static(
-                "Plan Mode",
-                id="planner-header",
-            )
+            yield Static("Plan Mode", id="planner-header")
             yield EmptyState()
             yield StreamingOutput(id="planner-output")
             with Vertical(id="planner-bottom"):
                 yield StatusBar()
-                yield Input(
-                    placeholder="Describe your feature or task...",
-                    id="planner-input",
-                    disabled=True,
-                )
+                yield PlannerInput("", id="planner-input", show_line_numbers=False)
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Start planner agent and focus input on mount."""
         from contextlib import suppress
 
         from textual.css.query import NoMatches
 
-        # Update status bar to show initialization
         with suppress(NoMatches):
-            status_bar = self.query_one(StatusBar)
-            status_bar.update_status("initializing", "Initializing agent...")
+            self.query_one(StatusBar).update_status("initializing", "Initializing agent...")
+
+        planner_input = self.query_one("#planner-input", PlannerInput)
+        planner_input.add_class("-disabled")
+        planner_input.read_only = True
 
         await self._start_planner()
-        self.query_one("#planner-input", Input).focus()
+        planner_input.focus()
 
     async def _start_planner(self) -> None:
-        """Start the planner agent."""
-        # Get agent config from config (uses user's selection from welcome screen)
         config = self.kagan_app.config
         agent_config = config.get_worker_agent()
-
         if agent_config is None:
             agent_config = get_fallback_agent_config()
 
-        # Spawn in current directory (no worktree for planner)
-        cwd = Path.cwd()
-
-        self._agent = Agent(cwd, agent_config)
+        self._agent = Agent(Path.cwd(), agent_config, read_only=True)
+        self._agent.set_auto_approve(config.general.auto_approve)
         self._agent.start(self)
         self._is_running = True
-        self._update_status()
-
-    def _update_status(self) -> None:
-        """Update status display (no-op for simplified UI)."""
-        pass
 
     def _get_output(self) -> StreamingOutput:
-        """Get the streaming output widget."""
         return self.query_one("#planner-output", StreamingOutput)
 
-    # Message handlers for ACP agent events
-
-    @on(messages.AgentUpdate)
-    async def on_agent_update(self, message: messages.AgentUpdate) -> None:
-        """Handle agent text output."""
+    def _show_output(self) -> None:
         from contextlib import suppress
 
         from textual.css.query import NoMatches
 
-        # On first update, hide EmptyState and show output
         if not self._has_agent_output:
             self._has_agent_output = True
             with suppress(NoMatches):
-                empty_state = self.query_one(EmptyState)
-                empty_state.add_class("hidden")
+                self.query_one(EmptyState).add_class("hidden")
             with suppress(NoMatches):
-                output = self._get_output()
-                output.add_class("visible")
+                self._get_output().add_class("visible")
 
+    @on(PlannerInput.SubmitRequested)
+    async def on_submit_requested(self, event: PlannerInput.SubmitRequested) -> None:
+        if not self._agent_ready or self._is_processing:
+            return
+        await self._submit_prompt()
+
+    async def _submit_prompt(self) -> None:
+        from contextlib import suppress
+
+        from textual.css.query import NoMatches
+
+        planner_input = self.query_one("#planner-input", PlannerInput)
+        text = planner_input.text.strip()
+        if not text:
+            return
+
+        # Lock input while processing
+        self._is_processing = True
+        planner_input.add_class("-disabled")
+        planner_input.read_only = True
+        planner_input.clear()
+        self._todos_displayed = False
+        self._thinking_shown = False
+
+        with suppress(NoMatches):
+            self.query_one(StatusBar).update_status("thinking", "Processing...")
+
+        self._show_output()
+        output = self._get_output()
+
+        # Add turn separator if there was previous output, then reset for new turn
+        has_previous = output.phase != "idle" or len(list(output.children)) > 0
+        output.reset_turn()
+        if has_previous:
+            await output.post_turn_separator()
+
+        await output.post_user_input(text)
+
+        if self._agent and self._is_running:
+            self.run_worker(self._send_to_agent(text))
+        else:
+            self._unlock_input()
+            self.notify("Planner not running", severity="warning")
+
+    def _unlock_input(self) -> None:
+        """Re-enable input after processing completes."""
+        from contextlib import suppress
+
+        from textual.css.query import NoMatches
+
+        self._is_processing = False
+        with suppress(NoMatches):
+            planner_input = self.query_one("#planner-input", PlannerInput)
+            planner_input.remove_class("-disabled")
+            planner_input.read_only = False
+            planner_input.focus()
+
+    async def _send_to_agent(self, text: str) -> None:
+        from contextlib import suppress
+
+        from textual.css.query import NoMatches
+
+        if not self._agent:
+            self._unlock_input()
+            return
+
+        self._accumulated_response.clear()
+        prompt = build_planner_prompt(text)
+
+        try:
+            await self._agent.wait_ready(timeout=AGENT_TIMEOUT)
+            await self._agent.send_prompt(prompt)
+            await self._try_create_tickets()
+        except Exception as e:
+            await self._get_output().post_note(f"Error: {e}", classes="error")
+        finally:
+            with suppress(NoMatches):
+                self.query_one(StatusBar).update_status("ready", "Press F1 for help")
+            self._unlock_input()
+
+    # ACP Message handlers
+
+    @on(messages.AgentUpdate)
+    async def on_agent_update(self, message: messages.AgentUpdate) -> None:
+        self._show_output()
         self._accumulated_response.append(message.text)
-        await self._get_output().write(message.text)
+        # StreamingOutput now filters XML internally
+        await self._get_output().post_response(message.text)
+
+        # Parse and update plan display (update in-place if exists)
+        if not self._todos_displayed:
+            full_response = "".join(self._accumulated_response)
+            todos = parse_todos(full_response)
+            if todos:
+                self._todos_displayed = True
+                output = self._get_output()
+                if output._plan_display is not None:
+                    output._plan_display.update_entries(todos)
+                else:
+                    await output.post_plan(todos)
 
     @on(messages.Thinking)
     async def on_agent_thinking(self, message: messages.Thinking) -> None:
-        """Handle agent thinking/reasoning."""
-        # Thinking can be chunked, so use main stream with italic formatting
-        await self._get_output().write(f"*{message.text}*")
+        self._show_output()
+        if not self._thinking_shown:
+            self._thinking_shown = True
+            await self._get_output().post_thinking_indicator()
+        await self._get_output().post_thought(message.text)
 
     @on(messages.ToolCall)
     async def on_tool_call(self, message: messages.ToolCall) -> None:
-        """Handle tool call start."""
-        output = self._get_output()
-        title = message.tool_call.get("title", "Tool call")
-        kind = message.tool_call.get("kind", "")
-        await output.write(f"\n**> {title}**")
-        if kind:
-            await output.write(f" *({kind})*")
+        self._show_output()
+        tool_id = str(message.tool_call.get("id", "unknown"))
+        title = str(message.tool_call.get("title", "Tool call"))
+        kind = str(message.tool_call.get("kind", ""))
+        await self._get_output().post_tool_call(tool_id, title, kind)
 
     @on(messages.ToolCallUpdate)
     async def on_tool_call_update(self, message: messages.ToolCallUpdate) -> None:
-        """Handle tool call update."""
-        status = message.update.get("status")
+        tool_id = str(message.update.get("id", "unknown"))
+        status = str(message.update.get("status", ""))
         if status:
-            symbol = "✓" if status == "completed" else "⋯"
-            output = self._get_output()
-            await output.write(f" {symbol} {status}")
+            self._get_output().update_tool_status(tool_id, status)
 
     @on(messages.AgentReady)
     async def on_agent_ready(self, message: messages.AgentReady) -> None:
-        """Handle agent ready."""
         from contextlib import suppress
 
         from textual.css.query import NoMatches
 
         self._agent_ready = True
 
-        # Enable input
-        input_widget = self.query_one("#planner-input", Input)
-        input_widget.disabled = False
+        planner_input = self.query_one("#planner-input", PlannerInput)
+        planner_input.remove_class("-disabled")
+        planner_input.read_only = False
 
-        # Update status bar
         with suppress(NoMatches):
-            status_bar = self.query_one(StatusBar)
-            status_bar.update_status("ready", "Press H for help")
+            self.query_one(StatusBar).update_status("ready", "Press F1 for help")
 
-        # Focus input
-        input_widget.focus()
-
-        # Write to output
-        await self._get_output().write("**Agent ready** ✓\n")
+        planner_input.focus()
 
     @on(messages.AgentFail)
     async def on_agent_fail(self, message: messages.AgentFail) -> None:
-        """Handle agent failure."""
         from contextlib import suppress
 
         from textual.css.query import NoMatches
 
         self._is_running = False
-        self._update_status()
 
-        # Update status bar to error state
         with suppress(NoMatches):
-            status_bar = self.query_one(StatusBar)
-            status_bar.update_status("error", f"Error: {message.message}")
+            self.query_one(StatusBar).update_status("error", f"Error: {message.message}")
 
-        # Disable input
-        input_widget = self.query_one("#planner-input", Input)
-        input_widget.disabled = True
+        planner_input = self.query_one("#planner-input", PlannerInput)
+        planner_input.add_class("-disabled")
+        planner_input.read_only = True
 
-        # Write error to output
+        self._show_output()
         output = self._get_output()
-        await output.write(f"**Error:** {message.message}")
+        await output.post_note(f"Error: {message.message}", classes="error")
         if message.details:
-            await output.write(f"\n{message.details}")
+            await output.post_note(message.details)
 
-    async def _try_create_ticket_from_response(self) -> None:
-        """Parse accumulated response and show approval screen if plan found."""
+    @on(messages.Plan)
+    async def on_plan(self, message: messages.Plan) -> None:
+        """Display plan entries from agent."""
+        self._show_output()
+        await self._get_output().post_plan(message.entries)
+
+    @on(messages.SetModes)
+    def on_set_modes(self, message: messages.SetModes) -> None:
+        """Store available modes from agent."""
+        self._current_mode = message.current_mode
+        self._available_modes = message.modes
+
+    @on(messages.ModeUpdate)
+    def on_mode_update(self, message: messages.ModeUpdate) -> None:
+        """Track mode changes from agent."""
+        self._current_mode = message.current_mode
+
+    @on(messages.AvailableCommandsUpdate)
+    def on_commands_update(self, message: messages.AvailableCommandsUpdate) -> None:
+        """Store available slash commands from agent."""
+        self._available_commands = message.commands
+
+    @on(messages.RequestPermission)
+    async def on_request_permission(self, message: messages.RequestPermission) -> None:
+        """Display inline permission prompt when agent requests it."""
+        self._show_output()
+        await self._get_output().post_permission_request(
+            message.options,
+            message.tool_call,
+            message.result_future,
+            timeout=300.0,
+        )
+
+    async def _try_create_tickets(self) -> None:
         if not self._accumulated_response:
             return
 
         full_response = "".join(self._accumulated_response)
-
-        # Parse as multi-ticket plan (only format supported)
         tickets = parse_plan(full_response)
         if tickets:
-            # Show approval screen for tickets
-            self.app.push_screen(
-                ApprovalScreen(tickets),
-                self._on_approval_result,
-            )
-        # If no <plan> block found, agent is still gathering info - continue conversation
+            self.app.push_screen(ApprovalScreen(tickets), self._on_approval_result)
 
     async def _on_approval_result(self, result: list[TicketCreate] | None) -> None:
-        """Handle approval screen result."""
+        output = self._get_output()
+
         if result is None:
-            # Cancelled - clear and continue
             self._accumulated_response.clear()
-            await self._get_output().clear()
-            await self._get_output().write("Plan cancelled. Describe what you want to build.\n\n")
+            await output.clear()
+            await output.post_note("Plan cancelled. Describe what you want to build.")
             return
 
-        # Approved - create all tickets
         created_count = 0
         for ticket_data in result:
             try:
@@ -236,79 +357,92 @@ class PlannerScreen(KaganScreen):
                 self.notify(f"Failed to create ticket: {e}", severity="error")
 
         if created_count > 0:
-            await self._get_output().write(f"\n**Created {created_count} ticket(s)**\n")
+            await output.post_note(f"Created {created_count} ticket(s)", classes="success")
             await self.action_to_board()
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle user input submission."""
-        from contextlib import suppress
-
-        from textual.css.query import NoMatches
-
-        # Only submit if agent is ready
-        if not self._agent_ready:
-            return
-
-        text = event.value.strip()
-        if not text:
-            return
-
-        event.input.value = ""
-
-        # Update status bar to thinking state
-        with suppress(NoMatches):
-            status_bar = self.query_one(StatusBar)
-            status_bar.update_status("thinking", "Processing...")
-
-        # Write user input to streaming output
-        await self._get_output().write(f"\n\n**You:** {text}\n\n")
-
-        if self._agent and self._is_running:
-            # Use send_prompt for ACP agents
-            self.run_worker(self._send_prompt(text))
-        else:
-            self.notify("Planner not running", severity="warning")
-
-    async def _send_prompt(self, text: str) -> None:
-        """Send prompt to agent asynchronously."""
-        from contextlib import suppress
-
-        from textual.css.query import NoMatches
-
-        if self._agent:
-            # Clear accumulated response before sending new prompt
-            self._accumulated_response.clear()
-
-            # Build planner prompt with system instructions
-            prompt = build_planner_prompt(text)
-
-            try:
-                await self._agent.wait_ready(timeout=AGENT_TIMEOUT)
-                await self._agent.send_prompt(prompt)
-                # After prompt completes, try to create ticket from response
-                await self._try_create_ticket_from_response()
-            except Exception as e:
-                await self._get_output().write(f"**Error sending prompt:** {e}")
-            finally:
-                # Reset status bar to ready state after prompt completes
-                with suppress(NoMatches):
-                    status_bar = self.query_one(StatusBar)
-                    status_bar.update_status("ready", "Press H for help")
-
     async def action_cancel(self) -> None:
-        """Send cancel signal to planner."""
         if self._agent and self._is_running:
             await self._agent.cancel()
             self.notify("Sent cancel request")
 
+    async def action_refine(self) -> None:
+        """Refine the current prompt using dedicated ACP agent (Ctrl+E)."""
+        from contextlib import suppress
+
+        from textual.css.query import NoMatches
+
+        # Guard against invalid states
+        if not self._agent_ready or self._is_processing or self._is_refining:
+            return
+
+        planner_input = self.query_one("#planner-input", PlannerInput)
+        text = planner_input.text.strip()
+
+        if not text:
+            self.notify("Nothing to enhance", severity="warning")
+            return
+
+        # Check refinement config
+        config = self.kagan_app.config
+        refinement_config = config.refinement
+
+        if not refinement_config.enabled:
+            self.notify("Prompt refinement is disabled", severity="warning")
+            return
+
+        # Skip refinement for short inputs
+        if len(text) < refinement_config.skip_length_under:
+            self.notify("Input too short to enhance", severity="warning")
+            return
+
+        # Skip refinement for command-like inputs
+        if any(text.startswith(prefix) for prefix in refinement_config.skip_prefixes):
+            self.notify("Commands cannot be enhanced", severity="warning")
+            return
+
+        # Enter refining state
+        self._is_refining = True
+        planner_input.add_class("-refining")
+
+        with suppress(NoMatches):
+            self.query_one(StatusBar).update_status("refining", "Enhancing prompt...")
+
+        try:
+            # Lazily create refiner with dedicated agent
+            if not self._refiner:
+                agent_config = config.get_worker_agent()
+                if agent_config is None:
+                    agent_config = get_fallback_agent_config()
+                self._refiner = PromptRefiner(Path.cwd(), agent_config)
+
+            # Refine the prompt
+            refined = await self._refiner.refine(text)
+
+            # Replace input content with refined prompt
+            planner_input.clear()
+            planner_input.insert(refined)
+            self.notify("Prompt enhanced - review and press Enter")
+
+        except TimeoutError:
+            self.notify("Refinement timed out", severity="error")
+        except Exception as e:
+            self.notify(f"Refinement failed: {e}", severity="error")
+        finally:
+            self._is_refining = False
+            planner_input.remove_class("-refining")
+            planner_input.focus()
+
+            with suppress(NoMatches):
+                self.query_one(StatusBar).update_status("ready", "Press F1 for help")
+
     async def action_to_board(self) -> None:
-        """Navigate to Kanban board screen."""
         from kagan.ui.screens.kanban import KanbanScreen
 
         await self.app.switch_screen(KanbanScreen())
 
     async def on_unmount(self) -> None:
-        """Cleanup on screen exit."""
+        if self._refiner:
+            await self._refiner.stop()
         if self._agent:
             await self._agent.stop()
             self._is_running = False
