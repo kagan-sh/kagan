@@ -119,3 +119,31 @@ active = true
 
 - Claude Code: `.mcp.json`
 - OpenCode: `opencode.json`
+
+## Refinement
+
+```toml
+[refinement]
+enabled = true
+hotkey = "ctrl+e"
+skip_length_under = 20
+skip_prefixes = ["/", "!", "?"]
+```
+
+| Setting             | Purpose                                        |
+| ------------------- | ---------------------------------------------- |
+| `enabled`           | Enable prompt refinement feature               |
+| `hotkey`            | Hotkey to trigger refinement                   |
+| `skip_length_under` | Skip refinement for inputs shorter than this   |
+| `skip_prefixes`     | Prefixes that skip refinement (commands, etc.) |
+
+## UI
+
+```toml
+[ui]
+skip_tmux_gateway = false
+```
+
+| Setting             | Purpose                                            |
+| ------------------- | -------------------------------------------------- |
+| `skip_tmux_gateway` | Skip tmux gateway info modal when opening sessions |

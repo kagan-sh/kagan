@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from kagan.cli.update import UpdateCheckResult
 
-pytestmark = pytest.mark.e2e
+pytestmark = pytest.mark.integration
 
 
 class TestCheckForUpdatesGate:

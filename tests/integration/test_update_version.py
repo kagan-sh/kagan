@@ -12,7 +12,7 @@ from kagan.cli.update import (
     is_dev_version,
 )
 
-pytestmark = pytest.mark.e2e
+pytestmark = pytest.mark.integration
 
 
 class TestVersionDetection:

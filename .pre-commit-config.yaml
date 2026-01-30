@@ -8,6 +8,7 @@ repos:
       - id: trailing-whitespace
         exclude: ^tests/snapshot/__snapshots__/
       - id: check-yaml
+        exclude: ^mkdocs\.yml$
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: mixed-line-ending

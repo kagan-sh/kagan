@@ -85,11 +85,21 @@ src/kagan/
 ├── lock.py             # Instance lock (single instance)
 ├── git_utils.py        # Git helper functions
 ├── jsonrpc.py          # JSON-RPC implementation
+├── cli/                # CLI commands
+│   └── update.py       # Update command
+├── ansi/               # ANSI escape code handling
+│   └── cleaner.py      # ANSI code cleaning utilities
 ├── database/
 │   ├── models.py       # Pydantic models: Ticket, TicketCreate, TicketUpdate
 │   ├── manager.py      # StateManager async database operations
-│   ├── queries.py      # SQL query helpers
-│   └── schema.sql      # SQLite schema with WAL mode
+│   └── queries.py      # SQL query helpers
+├── keybindings/        # Centralized keybinding registry
+│   ├── registry.py     # KeyBindingDef dataclass + utility functions
+│   ├── app.py          # App-level bindings (quit, help, command palette)
+│   ├── kanban.py       # KanbanScreen bindings + leader key sequences
+│   ├── modals.py       # All modal bindings
+│   ├── screens.py      # Non-kanban screen bindings
+│   └── widgets.py      # Widget-specific bindings
 ├── mcp/                # Model Context Protocol server
 │   ├── server.py       # FastMCP server setup
 │   └── tools.py        # MCP tool implementations
@@ -98,6 +108,8 @@ src/kagan/
 │   └── tmux.py         # tmux command helpers
 ├── agents/             # Planner agent + scheduler
 │   ├── planner.py      # Planner prompt + XML parsing
+│   ├── refiner.py      # Prompt refinement agent
+│   ├── refinement_rules.py  # Refinement rules
 │   ├── scheduler.py    # AUTO mode ticket-to-agent scheduler
 │   ├── worktree.py     # Git worktree management
 │   ├── signals.py      # Agent completion signals parser
@@ -111,12 +123,15 @@ src/kagan/
 │   ├── rpc.py          # RPC endpoint handlers
 │   ├── messages.py     # Textual messages for agent events
 │   ├── terminals.py    # Terminal management for agents
+│   ├── terminal.py     # Single terminal handling
 │   └── buffers.py      # Response buffering
 ├── data/
 │   └── builtin_agents.py   # Built-in agent definitions (Claude, OpenCode)
 ├── styles/
 │   └── kagan.tcss      # ALL CSS here (no DEFAULT_CSS in Python!)
 └── ui/
+    ├── utils/              # UI utilities
+    │   └── clipboard.py    # Clipboard operations
     ├── screens/
     │   ├── base.py         # KaganScreen base class
     │   ├── kanban/         # Main Kanban board
@@ -135,7 +150,11 @@ src/kagan/
     │   ├── status_bar.py   # StatusBar widget
     │   ├── search_bar.py   # SearchBar widget
     │   ├── empty_state.py  # EmptyState widget
-    │   └── streaming_output.py  # StreamingOutput widget
+    │   ├── streaming_output.py  # StreamingOutput widget
+    │   ├── plan_display.py     # Plan display widget
+    │   ├── agent_content.py    # Agent content display
+    │   ├── tool_call.py        # Tool call display
+    │   └── permission_prompt.py # Permission prompt widget
     └── modals/
         ├── ticket_details/     # Unified ticket view/edit/create modal
         │   ├── modal.py
@@ -147,6 +166,9 @@ src/kagan/
         ├── agent_output.py     # Agent output viewer
         ├── rejection_input.py  # Rejection feedback modal
         ├── description_editor.py   # Full-screen description editor
+        ├── help.py             # Help modal
+        ├── tmux_gateway.py     # Tmux gateway info modal
+        ├── duplicate_ticket.py # Duplicate ticket modal
         └── actions.py          # Modal action enums
 ```
 

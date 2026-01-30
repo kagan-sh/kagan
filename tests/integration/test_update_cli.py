@@ -8,7 +8,7 @@ from click.testing import CliRunner
 
 from kagan.cli.update import InstallationInfo, update
 
-pytestmark = pytest.mark.e2e
+pytestmark = pytest.mark.integration
 
 
 class TestUpdateCommand:

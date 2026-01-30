@@ -55,11 +55,45 @@ kagan mcp             # Run as MCP server
 kagan --help          # Show all options
 ```
 
+## Key Shortcuts
+
+Kagan is keyboard-first. Here are the essential shortcuts:
+
+| Key | Action |
+|-----|--------|
+| **Navigation** | |
+| h/j/k/l | Move focus (vim-style) |
+| Tab/Shift+Tab | Cycle columns |
+| **Tickets** | |
+| n | New ticket |
+| v | View details |
+| e | Edit ticket |
+| x | Delete ticket |
+| Enter | Open session (PAIR) / watch agent (AUTO) |
+| a | Start agent (AUTO mode) |
+| w | Watch agent output |
+| **Leader (g + key)** | |
+| g h/l | Move ticket left/right |
+| g r | Review ticket |
+| g d | View diff |
+| **Review** | |
+| D | View diff |
+| r | Open review modal |
+| m | Merge ticket |
+| **Global** | |
+| p | Planner mode |
+| , | Settings |
+| ? | Help |
+| Ctrl+P | Command palette |
+| q | Quit |
+
+See [docs/index.md](docs/index.md) for complete keybindings.
+
 ## Documentation
 
 See the [docs/](docs/) folder for detailed documentation:
 
-- [User Guide](docs/user-guide.md) - Full walkthrough of workflows
+- [User Guide](docs/index.md) - Full walkthrough of workflows
 - [Configuration](docs/config.md) - Agent setup and options
 - [Contributing](CONTRIBUTING.md) - Development guidelines
 

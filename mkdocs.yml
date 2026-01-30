@@ -1,23 +1,100 @@
-site_name: ᘚᘛ KAGAN
-site_description: AI-powered Kanban TUI for autonomous development workflows.
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: KAGAN
+site_description: AI-powered Kanban TUI for autonomous development workflows
+site_url: https://docs.kagan.sh
 docs_dir: docs
 site_dir: site
+
 repo_url: https://github.com/aorumbayev/kagan
-repo_name: GitHub
+repo_name: aorumbayev/kagan
 
 theme:
-  name: mkdocs
-  color_mode: dark
-  nav_style: dark
-  highlightjs: true
-  hljs_style: github
-  hljs_style_dark: github-dark
+  name: material
+
+  # Dark mode only - no toggle
+  palette:
+    scheme: kagan
+
+  logo: assets/logo.svg
+
+  font:
+    text: Space Grotesk
+    code: JetBrains Mono
+
+  features:
+    # Navigation - simplified for single-page focus
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+
+    # Search
+    - search.suggest
+    - search.highlight
+
+    # Content
+    - content.code.copy
+    - content.tabs.link
+
+    # Table of contents
+    - toc.follow
+
+  icon:
+    repo: fontawesome/brands/github
 
 extra_css:
-  - styles/kagan.css
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/aorumbayev/kagan
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/kagan/
+
+  generator: false
+
+copyright: Copyright 2026 Altynbek Orumbayev (<a href="https://makerx.com.au/" target="_blank">MakerX</a>)
+
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+  # Python Markdown Extensions
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search
+  - mermaid2
 
 nav:
   - Home: index.md
-  - User Guide: user-guide.md
   - Configuration: config.md
   - Contributing: contributing.md
