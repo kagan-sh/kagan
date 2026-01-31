@@ -172,7 +172,7 @@ def detect_installation_method(target_version: str) -> InstallationInfo | None:
         if "tool" in dist_path_str or ".local/share/uv/tools" in dist_path_str:
             return InstallationInfo(
                 method="uv tool",
-                upgrade_command=["uv", "tool", "upgrade", f"kagan@{target_version}"],
+                upgrade_command=["uv", "tool", "upgrade", f"kagan=={target_version}"],
             )
         # UV in venv
         return InstallationInfo(
@@ -266,7 +266,7 @@ def prompt_and_update(
     if install_info is None:
         click.secho("Could not detect installation method.", fg="red")
         click.echo("Please upgrade manually using one of:")
-        click.echo(f"  uv tool upgrade kagan@{latest}")
+        click.echo(f"  uv tool upgrade kagan=={latest}")
         click.echo(f"  pipx install kagan=={latest} --force")
         click.echo(f"  pip install kagan=={latest}")
         return False

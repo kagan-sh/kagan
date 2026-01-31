@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+
 import pytest
 from click.testing import CliRunner
 
@@ -75,7 +78,7 @@ class TestUpdateCommand:
         mock_upgrade = mocker.patch("kagan.cli.update.run_upgrade")
         mock_detect.return_value = InstallationInfo(
             method="uv tool",
-            upgrade_command=["uv", "tool", "upgrade", "kagan@2.0.0"],
+            upgrade_command=["uv", "tool", "upgrade", "kagan==2.0.0"],
         )
         mock_upgrade.return_value = (True, "Success")
 
@@ -93,7 +96,7 @@ class TestUpdateCommand:
         mock_detect = mocker.patch("kagan.cli.update.detect_installation_method")
         mock_detect.return_value = InstallationInfo(
             method="uv tool",
-            upgrade_command=["uv", "tool", "upgrade", "kagan@2.0.0"],
+            upgrade_command=["uv", "tool", "upgrade", "kagan==2.0.0"],
         )
 
         runner = CliRunner()
@@ -129,3 +132,82 @@ class TestUpdateCommand:
         assert "uv tool upgrade" in result.output
         assert "pipx install" in result.output
         assert "pip install" in result.output
+
+
+class TestUpgradeCommandSyntax:
+    """Tests that validate upgrade command syntax against real tools.
+
+    These tests actually invoke the package managers to verify that the
+    command syntax we generate is valid and won't fail due to parsing errors.
+    This catches issues like using `pkg@version` vs `pkg==version` syntax.
+    """
+
+    @pytest.mark.skipif(shutil.which("uv") is None, reason="uv not installed")
+    def test_uv_tool_upgrade_command_syntax_is_valid(self):
+        """Verify uv tool upgrade command uses valid version specifier syntax.
+
+        The `uv tool upgrade` command requires `pkg==version` syntax (PEP 440),
+        NOT `pkg@version` which is interpreted as a local path reference.
+
+        This test uses a non-existent package to validate syntax parsing
+        without actually performing an upgrade.
+        """
+        # Directly test the command pattern used for uv tool upgrades
+        # Using a non-existent package ensures we test syntax, not actual upgrade
+        test_command = ["uv", "tool", "upgrade", "nonexistent-test-pkg-kagan==1.0.0"]
+
+        result = subprocess.run(
+            test_command,
+            capture_output=True,
+            text=True,
+        )
+
+        # The command should fail because the package isn't installed,
+        # NOT because of invalid syntax (path interpretation error)
+        assert "Expected path" not in result.stderr, (
+            f"uv interpreted version specifier as path. "
+            f"Use `pkg==version` not `pkg@version`. stderr: {result.stderr}"
+        )
+        assert "file extension" not in result.stderr, (
+            f"uv interpreted version specifier as path. "
+            f"Use `pkg==version` not `pkg@version`. stderr: {result.stderr}"
+        )
+        # Valid syntax should produce "not installed" error
+        assert "not installed" in result.stderr.lower() or "install" in result.stderr.lower()
+
+    @pytest.mark.skipif(shutil.which("uv") is None, reason="uv not installed")
+    def test_uv_tool_upgrade_at_syntax_is_invalid(self):
+        """Verify that @ syntax fails with path interpretation error.
+
+        This documents the incorrect syntax to prevent regression.
+        """
+        test_command = ["uv", "tool", "upgrade", "nonexistent-test-pkg-kagan@1.0.0"]
+
+        result = subprocess.run(
+            test_command,
+            capture_output=True,
+            text=True,
+        )
+
+        # @ syntax should fail with path interpretation error
+        assert "Expected path" in result.stderr or "file extension" in result.stderr, (
+            f"Expected @ syntax to fail with path error. stderr: {result.stderr}"
+        )
+
+    @pytest.mark.skipif(shutil.which("pipx") is None, reason="pipx not installed")
+    def test_pipx_install_command_syntax_is_valid(self):
+        """Verify pipx install command uses valid version specifier syntax."""
+        # pipx uses `pkg==version` syntax with --force for upgrades
+        test_command = ["pipx", "install", "nonexistent-test-pkg-kagan==1.0.0", "--force"]
+
+        result = subprocess.run(
+            test_command,
+            capture_output=True,
+            text=True,
+        )
+
+        # Should fail because package doesn't exist, not syntax error
+        # pipx will try to fetch from PyPI and fail
+        assert result.returncode != 0
+        # Should not be a syntax/parsing error
+        assert "invalid" not in result.stderr.lower() or "specifier" not in result.stderr.lower()

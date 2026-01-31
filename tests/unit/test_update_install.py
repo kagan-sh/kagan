@@ -31,7 +31,7 @@ class TestDetectInstallationMethod:
 
         assert result is not None
         assert result.method == "uv tool"
-        assert result.upgrade_command == ["uv", "tool", "upgrade", "kagan@2.0.0"]
+        assert result.upgrade_command == ["uv", "tool", "upgrade", "kagan==2.0.0"]
 
     def test_detect_pipx_installation(self, mocker):
         """Test detection of pipx installation."""
@@ -138,7 +138,7 @@ class TestPromptAndUpdate:
 
         mock_detect.return_value = InstallationInfo(
             method="uv tool",
-            upgrade_command=["uv", "tool", "upgrade", "kagan@2.0.0"],
+            upgrade_command=["uv", "tool", "upgrade", "kagan==2.0.0"],
         )
         mock_upgrade.return_value = (True, "Success")
 
@@ -155,10 +155,10 @@ class TestInstallationInfo:
         """Test formatting upgrade command as string."""
         info = InstallationInfo(
             method="uv tool",
-            upgrade_command=["uv", "tool", "upgrade", "kagan@2.0.0"],
+            upgrade_command=["uv", "tool", "upgrade", "kagan==2.0.0"],
         )
 
-        assert info.format_command() == "uv tool upgrade kagan@2.0.0"
+        assert info.format_command() == "uv tool upgrade kagan==2.0.0"
 
     def test_format_command_with_pip(self):
         """Test formatting pip upgrade command."""
