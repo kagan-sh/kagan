@@ -2,6 +2,63 @@
 
 <!-- version list -->
 
+## v0.2.0-beta.3 (2026-01-31)
+
+### Bug Fixes
+
+- Add auto-mock for tmux in E2E tests for CI runners without tmux
+  ([#8](https://github.com/aorumbayev/kagan/pull/8),
+  [`6ea7f44`](https://github.com/aorumbayev/kagan/commit/6ea7f449d7af3e63ff97b88e7af0d27c81d00ee9))
+
+- Improves agent detection and troubleshooting UX ([#8](https://github.com/aorumbayev/kagan/pull/8),
+  [`6ea7f44`](https://github.com/aorumbayev/kagan/commit/6ea7f449d7af3e63ff97b88e7af0d27c81d00ee9))
+
+- Include .gitignore in initial commit on first boot
+  ([#8](https://github.com/aorumbayev/kagan/pull/8),
+  [`6ea7f44`](https://github.com/aorumbayev/kagan/commit/6ea7f449d7af3e63ff97b88e7af0d27c81d00ee9))
+
+- Resolve UI freezes from blocking operations ([#8](https://github.com/aorumbayev/kagan/pull/8),
+  [`6ea7f44`](https://github.com/aorumbayev/kagan/commit/6ea7f449d7af3e63ff97b88e7af0d27c81d00ee9))
+
+- Use explicit foreground colors for troubleshooting screen text
+  ([#8](https://github.com/aorumbayev/kagan/pull/8),
+  [`6ea7f44`](https://github.com/aorumbayev/kagan/commit/6ea7f449d7af3e63ff97b88e7af0d27c81d00ee9))
+
+- **ci**: Separate test jobs to fix matrix conditional evaluation
+  ([#9](https://github.com/aorumbayev/kagan/pull/9),
+  [`fe57f66`](https://github.com/aorumbayev/kagan/commit/fe57f663aef153780eadd5699082932d0266ca1a))
+
+- **tests**: Convert update CLI tests to async for proper event loop cleanup
+  ([`769e46e`](https://github.com/aorumbayev/kagan/commit/769e46e5e3d0a6caf73c5f5b6f96bf5593c99afd))
+
+### Chores
+
+- Update GitHub Actions to latest versions ([#9](https://github.com/aorumbayev/kagan/pull/9),
+  [`fe57f66`](https://github.com/aorumbayev/kagan/commit/fe57f663aef153780eadd5699082932d0266ca1a))
+
+### Continuous Integration
+
+- Add macOS ARM64 to PR test matrix ([#9](https://github.com/aorumbayev/kagan/pull/9),
+  [`fe57f66`](https://github.com/aorumbayev/kagan/commit/fe57f663aef153780eadd5699082932d0266ca1a))
+
+### Features
+
+- Add dynamic agent detection and improve troubleshooting UX
+  ([#8](https://github.com/aorumbayev/kagan/pull/8),
+  [`6ea7f44`](https://github.com/aorumbayev/kagan/commit/6ea7f449d7af3e63ff97b88e7af0d27c81d00ee9))
+
+### Performance Improvements
+
+- **ci**: Optimize CI workflow for faster PR feedback
+  ([#9](https://github.com/aorumbayev/kagan/pull/9),
+  [`fe57f66`](https://github.com/aorumbayev/kagan/commit/fe57f663aef153780eadd5699082932d0266ca1a))
+
+### Refactoring
+
+- **ci**: Simplify workflow structure ([#9](https://github.com/aorumbayev/kagan/pull/9),
+  [`fe57f66`](https://github.com/aorumbayev/kagan/commit/fe57f663aef153780eadd5699082932d0266ca1a))
+
+
 ## v0.2.0-beta.2 (2026-01-31)
 
 ### Bug Fixes
