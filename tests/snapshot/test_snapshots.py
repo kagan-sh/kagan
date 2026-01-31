@@ -31,7 +31,6 @@ TicketCard {
 TicketCard:focus { border: solid #e75535; background: #171c24; }
 TicketCard.session-active { border: solid #98c379; }
 TicketCard.agent-active { border: solid #c678dd; }
-TicketCard.agent-pulse { border: solid #e5c07b; background: #171c24; }
 TicketCard .card-title { width: 100%; height: 1; text-style: bold; color: #dfe0e1; padding: 0; }
 TicketCard .card-title-continued { width: 100%; height: 1; color: #dfe0e1; }
 TicketCard .card-desc { width: 100%; height: 1; color: #5c6773; }

@@ -117,23 +117,33 @@ class TestPreflightAgentSelection:
 class TestPreflightDetectIssues:
     """Tests for detect_issues with available agent."""
 
-    def test_detect_issues_passes_with_available_agent(self):
+    async def test_detect_issues_passes_with_available_agent(self):
         """When agent is available, detect_issues should not find agent issues."""
         from kagan.data.builtin_agents import get_first_available_agent
         from kagan.ui.screens.troubleshooting import detect_issues
 
         def mock_which(cmd: str) -> str | None:
-            # Simulate OpenCode available, tmux available
-            if cmd in ("opencode", "tmux"):
+            # Simulate OpenCode available, tmux available, git available
+            if cmd in ("opencode", "tmux", "git"):
                 return f"/usr/local/bin/{cmd}"
             return None
 
-        with patch("shutil.which", side_effect=mock_which):
+        with (
+            patch("shutil.which", side_effect=mock_which),
+            patch(
+                "kagan.ui.screens.troubleshooting._check_git_version",
+                return_value=None,
+            ),
+            patch(
+                "kagan.ui.screens.troubleshooting._check_git_user",
+                return_value=None,
+            ),
+        ):
             agent = get_first_available_agent()
             assert agent is not None
 
             # Run detect_issues with the available agent
-            result = detect_issues(
+            result = await detect_issues(
                 check_lock=False,
                 agent_config=agent.config,
                 agent_name=agent.config.name,
@@ -143,7 +153,7 @@ class TestPreflightDetectIssues:
             # Should not have blocking issues (agent is available)
             assert result.has_blocking_issues is False
 
-    def test_detect_issues_fails_with_unavailable_agent(self):
+    async def test_detect_issues_fails_with_unavailable_agent(self):
         """When agent is not available, detect_issues should report it."""
         from kagan.data.builtin_agents import BUILTIN_AGENTS
         from kagan.ui.screens.troubleshooting import IssueType, detect_issues
@@ -152,13 +162,23 @@ class TestPreflightDetectIssues:
         claude = BUILTIN_AGENTS["claude"]
 
         def mock_which(cmd: str) -> str | None:
-            # Only tmux available, no agents
-            if cmd == "tmux":
-                return "/usr/bin/tmux"
+            # Only tmux and git available, no agents
+            if cmd in ("tmux", "git"):
+                return f"/usr/bin/{cmd}"
             return None
 
-        with patch("shutil.which", side_effect=mock_which):
-            result = detect_issues(
+        with (
+            patch("shutil.which", side_effect=mock_which),
+            patch(
+                "kagan.ui.screens.troubleshooting._check_git_version",
+                return_value=None,
+            ),
+            patch(
+                "kagan.ui.screens.troubleshooting._check_git_user",
+                return_value=None,
+            ),
+        ):
+            result = await detect_issues(
                 check_lock=False,
                 agent_config=claude.config,
                 agent_name=claude.config.name,
@@ -176,7 +196,7 @@ class TestPreflightDetectIssues:
 class TestPreflightFlowIntegration:
     """Integration tests for the complete pre-flight flow logic."""
 
-    def test_preflight_flow_skips_troubleshooting_with_available_agent(self):
+    async def test_preflight_flow_skips_troubleshooting_with_available_agent(self):
         """Complete flow: available agent should skip troubleshooting.
 
         This is the key integration test that would have caught the original bug.
@@ -186,14 +206,24 @@ class TestPreflightFlowIntegration:
         from kagan.ui.screens.troubleshooting import detect_issues
 
         def mock_which(cmd: str) -> str | None:
-            # Simulate: Only OpenCode available (not Claude)
+            # Simulate: Only OpenCode available (not Claude), plus git
             if cmd == "opencode":
                 return "/usr/local/bin/opencode"
-            if cmd == "tmux":
-                return "/usr/bin/tmux"
+            if cmd in ("tmux", "git"):
+                return f"/usr/bin/{cmd}"
             return None  # claude, npx not available
 
-        with patch("shutil.which", side_effect=mock_which):
+        with (
+            patch("shutil.which", side_effect=mock_which),
+            patch(
+                "kagan.ui.screens.troubleshooting._check_git_version",
+                return_value=None,
+            ),
+            patch(
+                "kagan.ui.screens.troubleshooting._check_git_user",
+                return_value=None,
+            ),
+        ):
             # This is the logic from __main__.py
 
             # Step 1: Check if ANY agent is available
@@ -206,7 +236,7 @@ class TestPreflightFlowIntegration:
             assert best_agent.config.short_name == "opencode"
 
             # Step 3: Run detect_issues with the AVAILABLE agent
-            result = detect_issues(
+            result = await detect_issues(
                 check_lock=False,
                 agent_config=best_agent.config,
                 agent_name=best_agent.config.name,

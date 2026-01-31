@@ -2,15 +2,36 @@
 
 from __future__ import annotations
 
-import os
+# Suppress asyncio subprocess cleanup errors on exit.
+# When GC runs after the event loop closes, subprocess transports may try to
+# close their pipes and fail. This was fixed in Python 3.13.1+ and 3.14+ (gh-114177),
+# but we need this workaround for Python 3.12.
 import sys
-from pathlib import Path
 
-import click
+_original_unraisablehook = sys.unraisablehook
 
-from kagan import __version__
-from kagan.cli.update import check_for_updates, prompt_and_update, update
-from kagan.constants import DEFAULT_CONFIG_PATH, DEFAULT_DB_PATH, DEFAULT_LOCK_PATH
+
+def _suppress_event_loop_closed(unraisable: sys.UnraisableHookArgs) -> None:
+    """Suppress 'Event loop is closed' errors from asyncio cleanup."""
+    if isinstance(unraisable.exc_value, RuntimeError) and "Event loop is closed" in str(
+        unraisable.exc_value
+    ):
+        return
+    _original_unraisablehook(unraisable)
+
+
+sys.unraisablehook = _suppress_event_loop_closed
+
+# Standard imports after hook is installed
+import asyncio  # noqa: E402
+import os  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import click  # noqa: E402
+
+from kagan import __version__  # noqa: E402
+from kagan.cli.update import check_for_updates, prompt_and_update, update  # noqa: E402
+from kagan.constants import DEFAULT_CONFIG_PATH, DEFAULT_DB_PATH, DEFAULT_LOCK_PATH  # noqa: E402
 
 
 def _check_for_updates_gate() -> None:
@@ -117,11 +138,13 @@ def tui(db: str, config: str, skip_preflight: bool, skip_update_check: bool) -> 
             agent_config = best_agent.config
 
             # Run pre-flight checks (except lock - we'll check that separately)
-            result = detect_issues(
-                check_lock=False,
-                agent_config=agent_config,
-                agent_name=agent_name,
-                agent_install_command=agent_install,
+            result = asyncio.run(
+                detect_issues(
+                    check_lock=False,
+                    agent_config=agent_config,
+                    agent_name=agent_name,
+                    agent_install_command=agent_install,
+                )
             )
 
             if result.has_blocking_issues:

@@ -23,7 +23,6 @@ from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketTy
 if TYPE_CHECKING:
     from textual import events
     from textual.app import ComposeResult
-    from textual.timer import Timer
 
 
 class TicketCard(Widget):
@@ -35,7 +34,6 @@ class TicketCard(Widget):
     is_agent_active: var[bool] = var(False, toggle_class="agent-active", always_update=True)
     is_session_active: var[bool] = var(False, toggle_class="session-active")
     iteration_info: reactive[str] = reactive("", recompose=True)
-    _pulse_timer: Timer | None = None
 
     @dataclass
     class Selected(Message):
@@ -208,23 +206,6 @@ class TicketCard(Widget):
             self.post_message(self.Selected(self.ticket))
 
     def watch_is_agent_active(self, active: bool) -> None:
-        """Start/stop pulse animation timer when agent state changes."""
+        """Update card display when agent state changes."""
         # Trigger recompose to update badge
         self.refresh(recompose=True)
-        if active:
-            self._pulse_timer = self.set_interval(0.6, self._toggle_pulse)
-        else:
-            if self._pulse_timer is not None:
-                self._pulse_timer.stop()
-                self._pulse_timer = None
-            self.remove_class("agent-pulse")
-
-    def _toggle_pulse(self) -> None:
-        """Toggle the pulse class for animation effect."""
-        self.toggle_class("agent-pulse")
-
-    def on_unmount(self) -> None:
-        """Clean up timer when card is removed."""
-        if self._pulse_timer is not None:
-            self._pulse_timer.stop()
-            self._pulse_timer = None

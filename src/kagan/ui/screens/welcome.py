@@ -221,11 +221,8 @@ class WelcomeScreen(Screen):
         kagan_dir = Path(".kagan")
         kagan_dir.mkdir(exist_ok=True)
 
-        # Ensure .kagan is gitignored in git repos
-        if self._has_git_repo:
-            added = self._ensure_gitignored()
-            if added:
-                self.app.call_later(lambda: self.app.notify("Added .kagan/ to .gitignore"))
+        # Note: .gitignore handling is done in git_utils.init_git_repo()
+        # which is called from app.py after welcome screen completes
 
         # Build agent sections from BUILTIN_AGENTS with correct ACP commands
         agent_sections = []
@@ -253,27 +250,3 @@ default_worker_agent = "{worker}"
 '''
 
         (kagan_dir / "config.toml").write_text(config_content)
-
-    def _ensure_gitignored(self) -> bool:
-        """Add .kagan/ to .gitignore if not already present.
-
-        Returns True if .gitignore was modified, False otherwise.
-        """
-        gitignore = Path(".gitignore")
-
-        if gitignore.exists():
-            content = gitignore.read_text()
-            lines = content.split("\n")
-            # Check if already ignored (with or without trailing slash)
-            if ".kagan" in lines or ".kagan/" in lines:
-                return False
-            # Append to existing file
-            if not content.endswith("\n"):
-                content += "\n"
-            content += "\n# Kagan local state\n.kagan/\n"
-            gitignore.write_text(content)
-        else:
-            # Create new .gitignore
-            gitignore.write_text("# Kagan local state\n.kagan/\n")
-
-        return True

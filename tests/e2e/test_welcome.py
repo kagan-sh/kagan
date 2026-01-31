@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from kagan.git_utils import _ensure_gitignored
 from kagan.ui.screens.welcome import DEFAULT_BASE_BRANCHES, WelcomeScreen
 
 pytestmark = pytest.mark.e2e
@@ -97,60 +98,53 @@ class TestGetDefaultBaseBranch:
 
 
 class TestEnsureGitignored:
-    """Tests for _ensure_gitignored method."""
+    """Tests for _ensure_gitignored function from git_utils."""
 
-    def test_creates_gitignore_if_missing(self, tmp_path: Path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        screen = _create_welcome_screen(has_git_repo=True, repo_root=tmp_path)
+    def test_creates_gitignore_if_missing(self, tmp_path: Path):
+        created, updated = _ensure_gitignored(tmp_path)
 
-        result = screen._ensure_gitignored()
-
-        assert result is True
+        assert created is True
+        assert updated is False
         gitignore = tmp_path / ".gitignore"
         assert gitignore.exists()
         content = gitignore.read_text()
         assert ".kagan/" in content
 
-    def test_appends_to_existing_gitignore(self, tmp_path: Path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_appends_to_existing_gitignore(self, tmp_path: Path):
         gitignore = tmp_path / ".gitignore"
         gitignore.write_text("node_modules/\n")
 
-        screen = _create_welcome_screen(has_git_repo=True, repo_root=tmp_path)
-        result = screen._ensure_gitignored()
+        created, updated = _ensure_gitignored(tmp_path)
 
-        assert result is True
+        assert created is False
+        assert updated is True
         content = gitignore.read_text()
         assert "node_modules/" in content
         assert ".kagan/" in content
 
-    def test_appends_newline_if_missing(self, tmp_path: Path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_appends_newline_if_missing(self, tmp_path: Path):
         gitignore = tmp_path / ".gitignore"
         gitignore.write_text("node_modules/")  # No trailing newline
 
-        screen = _create_welcome_screen(has_git_repo=True, repo_root=tmp_path)
-        screen._ensure_gitignored()
+        _ensure_gitignored(tmp_path)
 
         content = gitignore.read_text()
         assert "\n\n# Kagan local state\n.kagan/" in content
 
-    def test_skips_if_already_ignored_with_slash(self, tmp_path: Path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_skips_if_already_ignored_with_slash(self, tmp_path: Path):
         gitignore = tmp_path / ".gitignore"
         gitignore.write_text(".kagan/\n")
 
-        screen = _create_welcome_screen(has_git_repo=True, repo_root=tmp_path)
-        result = screen._ensure_gitignored()
+        created, updated = _ensure_gitignored(tmp_path)
 
-        assert result is False
+        assert created is False
+        assert updated is False
 
-    def test_skips_if_already_ignored_without_slash(self, tmp_path: Path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def test_skips_if_already_ignored_without_slash(self, tmp_path: Path):
         gitignore = tmp_path / ".gitignore"
         gitignore.write_text(".kagan\n")
 
-        screen = _create_welcome_screen(has_git_repo=True, repo_root=tmp_path)
-        result = screen._ensure_gitignored()
+        created, updated = _ensure_gitignored(tmp_path)
 
-        assert result is False
+        assert created is False
+        assert updated is False

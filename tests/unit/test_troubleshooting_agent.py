@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 class TestDetectIssuesAgent:
     """Test agent availability detection."""
 
-    def test_detects_missing_agent(self, mocker):
+    async def test_detects_missing_agent(self, mocker):
         """Missing agent is detected when agent_config is provided."""
         agent_config = AgentConfig(
             identity="test.ai",
@@ -35,10 +35,27 @@ class TestDetectIssuesAgent:
                 return "/usr/bin/tmux"
             return None  # Agent not found
 
+        # Mock git checks to pass
+        async def mock_git_version():
+            from kagan.git_utils import GitVersion
+
+            return GitVersion(2, 40, 0, "git version 2.40.0")
+
+        async def mock_git_user():
+            return True, None
+
         mocker.patch("kagan.ui.screens.troubleshooting.platform.system", return_value="Darwin")
         mocker.patch("kagan.ui.screens.troubleshooting.shutil.which", side_effect=mock_which)
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_version",
+            return_value=None,
+        )
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_user",
+            return_value=None,
+        )
 
-        result = detect_issues(
+        result = await detect_issues(
             agent_config=agent_config,
             agent_name="Test Agent",
             agent_install_command="pip install test-agent",
@@ -50,7 +67,7 @@ class TestDetectIssuesAgent:
         assert "Test Agent" in agent_issues[0].preset.message
         assert "pip install test-agent" in agent_issues[0].preset.hint
 
-    def test_agent_available_no_issue(self, mocker):
+    async def test_agent_available_no_issue(self, mocker):
         """Available agent produces no issue."""
         agent_config = AgentConfig(
             identity="test.ai",
@@ -65,20 +82,36 @@ class TestDetectIssuesAgent:
 
         mocker.patch("kagan.ui.screens.troubleshooting.platform.system", return_value="Darwin")
         mocker.patch("kagan.ui.screens.troubleshooting.shutil.which", side_effect=mock_which)
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_version",
+            return_value=None,
+        )
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_user",
+            return_value=None,
+        )
 
-        result = detect_issues(
+        result = await detect_issues(
             agent_config=agent_config,
             agent_name="Test Agent",
         )
 
         assert not any(i.preset.type == IssueType.AGENT_MISSING for i in result.issues)
 
-    def test_no_agent_config_skips_check(self, mocker):
+    async def test_no_agent_config_skips_check(self, mocker):
         """No agent_config skips agent check."""
         mocker.patch("kagan.ui.screens.troubleshooting.platform.system", return_value="Darwin")
         mocker.patch("kagan.ui.screens.troubleshooting.shutil.which", return_value="/usr/bin/tmux")
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_version",
+            return_value=None,
+        )
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_user",
+            return_value=None,
+        )
 
-        result = detect_issues(agent_config=None)
+        result = await detect_issues(agent_config=None)
 
         assert not any(i.preset.type == IssueType.AGENT_MISSING for i in result.issues)
 
@@ -86,7 +119,7 @@ class TestDetectIssuesAgent:
 class TestDetectIssuesMultiple:
     """Test multiple issues detected together."""
 
-    def test_multiple_issues_detected(self, mocker):
+    async def test_multiple_issues_detected(self, mocker):
         """Multiple issues can be detected and returned together."""
         agent_config = AgentConfig(
             identity="test.ai",
@@ -98,8 +131,16 @@ class TestDetectIssuesMultiple:
 
         mocker.patch("kagan.ui.screens.troubleshooting.platform.system", return_value="Darwin")
         mocker.patch("kagan.ui.screens.troubleshooting.shutil.which", return_value=None)
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_version",
+            return_value=None,
+        )
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_git_user",
+            return_value=None,
+        )
 
-        result = detect_issues(
+        result = await detect_issues(
             check_lock=True,
             lock_acquired=False,
             agent_config=agent_config,

@@ -12,9 +12,33 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu x86_64 (Intel/AMD)
+          - os: ubuntu-latest
+            name: Ubuntu x86_64
+          # Ubuntu ARM64
+          - os: ubuntu-24.04-arm
+            name: Ubuntu ARM64
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-15
+            name: macOS ARM64
+          # macOS x86_64 (Intel) - macos-13 retired, use macos-15-intel
+          - os: macos-15-intel
+            name: macOS x86_64
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure git user
+        run: |
+          git config --global user.name "CI Bot"
+          git config --global user.email "ci@example.com"
 
       - uses: astral-sh/setup-uv@v7
         with:

@@ -17,7 +17,7 @@ from kagan.constants import (
     TICK_INTERVAL,
 )
 from kagan.database import StateManager
-from kagan.git_utils import has_git_repo, init_git_repo
+from kagan.git_utils import GitInitResult, has_git_repo, init_git_repo
 from kagan.keybindings import APP_BINDINGS, to_textual_bindings
 from kagan.lock import InstanceLock, exit_if_already_running
 from kagan.sessions import SessionManager
@@ -100,10 +100,40 @@ class KaganApp(App):
         project_root = self.config_path.parent.parent
         if not await has_git_repo(project_root):
             base_branch = self.config.general.default_base_branch
-            if await init_git_repo(project_root, base_branch):
+            result: GitInitResult = await init_git_repo(project_root, base_branch)
+            if result.success:
                 self.log("Initialized git repository", base_branch=base_branch)
+                if result.committed:
+                    self.notify("Git repository initialized with .gitignore")
             else:
-                self.log.warning("Failed to initialize git repository", path=str(project_root))
+                # Show error to user
+                error = result.error
+                if error:
+                    self.log.warning(
+                        "Failed to initialize git repository",
+                        path=str(project_root),
+                        error_type=error.error_type,
+                        message=error.message,
+                    )
+                    # Notify user with specific error message
+                    if error.error_type == "version_low":
+                        self.notify(
+                            f"Git error: {error.message}. {error.details or ''}",
+                            severity="error",
+                        )
+                    elif error.error_type == "user_not_configured":
+                        self.notify(
+                            f"Git error: {error.details or error.message}",
+                            severity="error",
+                        )
+                    else:
+                        self.notify(
+                            f"Git initialization failed: {error.message}",
+                            severity="error",
+                        )
+                else:
+                    self.log.warning("Failed to initialize git repository", path=str(project_root))
+                    self.notify("Git initialization failed", severity="error")
 
         # Only initialize managers if not already set (allows test mocking)
         if self._state_manager is None:

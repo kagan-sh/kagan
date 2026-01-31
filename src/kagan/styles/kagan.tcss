@@ -229,25 +229,9 @@ TicketCard.agent-active:focus {
     border: solid $secondary;
 }
 
-/* Pulse state A - bright/highlighted (toggle ON) */
-TicketCard.agent-pulse {
-    border: solid $warning;
-    background: $panel;
-}
-
-TicketCard.agent-pulse:focus {
-    border: solid $warning;
-    background: $panel;
-}
-
-/* Combined: session + agent active - agent pulse takes precedence */
+/* Combined: session + agent active - agent style takes precedence */
 TicketCard.session-active.agent-active {
     border: solid $secondary;
-}
-
-TicketCard.session-active.agent-pulse {
-    border: solid $warning;
-    background: $panel;
 }
 
 /* ============================================
