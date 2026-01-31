@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.2.0-beta.2 (2026-01-31)
+
+### Bug Fixes
+
+- Add packaging as explicit dependency ([#7](https://github.com/aorumbayev/kagan/pull/7),
+  [`1e0e7ea`](https://github.com/aorumbayev/kagan/commit/1e0e7eadf47e11292bf3f42eb1a218a358859b58))
+
+
 ## v0.2.0-beta.1 (2026-01-30)
 
 ### Chores
