@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v0.2.1 (2026-01-31)
+
+### Bug Fixes
+
+- Use PEP 440 version syntax for uv tool upgrade command
+  ([#10](https://github.com/aorumbayev/kagan/pull/10),
+  [`92e4240`](https://github.com/aorumbayev/kagan/commit/92e4240d74501f767db90090c4420f2bec883b2e))
+
+### Documentation
+
+- Update readme
+  ([`ae2c9a2`](https://github.com/aorumbayev/kagan/commit/ae2c9a2a33801184cc02edbbe2ce05dd9e1f6455))
+
+### Refactoring
+
+- **tests**: Mock fetch_latest_version instead of httpx transport
+  ([`db9053a`](https://github.com/aorumbayev/kagan/commit/db9053a0ed4d8a9b503ca03bcf850e0f06112506))
+
+- **tests**: Reduce httpx_mock usage to minimize event loop warnings
+  ([`37332db`](https://github.com/aorumbayev/kagan/commit/37332db58650b42f481039e8a5874d05bb24044e))
+
+
 ## v0.2.0 (2026-01-31)
 
 
