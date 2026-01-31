@@ -558,6 +558,59 @@ def mock_review_agent():
     return agent
 
 
+@pytest.fixture(autouse=True)
+def auto_mock_tmux_for_app_tests(request, monkeypatch):
+    """Auto-mock tmux for tests that use KaganApp fixtures.
+
+    tmux is an external system boundary, so mocking is appropriate per testing_rules.md.
+    This ensures tests don't fail when tmux isn't installed (e.g., some CI runners).
+    """
+    # Check if this test uses any e2e_app fixture
+    fixture_names = request.fixturenames
+    uses_app_fixture = any(name.startswith("e2e_app") or name == "app" for name in fixture_names)
+
+    if not uses_app_fixture:
+        return  # No mocking needed
+
+    # Track fake sessions for realism
+    fake_sessions: dict[str, dict] = {}
+
+    async def fake_run_tmux(*args: str) -> str:
+        """Mock tmux that simulates basic session management."""
+        if not args:
+            return ""
+        command = args[0]
+
+        if command == "list-sessions":
+            return "\n".join(sorted(fake_sessions.keys()))
+
+        if command == "new-session":
+            if "-s" in args:
+                idx = list(args).index("-s")
+                if idx + 1 < len(args):
+                    name = args[idx + 1]
+                    fake_sessions[name] = {"created": True}
+            return ""
+
+        if command == "kill-session":
+            if "-t" in args:
+                idx = list(args).index("-t")
+                if idx + 1 < len(args):
+                    name = args[idx + 1]
+                    fake_sessions.pop(name, None)
+            return ""
+
+        if command == "send-keys":
+            return ""
+
+        return ""
+
+    # Patch BOTH the source module AND the manager's imported binding
+    # (manager.py does `from ... import run_tmux` at module load time)
+    monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_run_tmux)
+    monkeypatch.setattr("kagan.sessions.manager.run_tmux", fake_run_tmux)
+
+
 @pytest.fixture
 def mock_tmux(monkeypatch):
     """Intercept tmux subprocess calls.
