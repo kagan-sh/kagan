@@ -1,101 +1,64 @@
-```
-██╗  ██╗ █████╗  ██████╗  █████╗ ███╗   ██╗
-██║ ██╔╝██╔══██╗██╔════╝ ██╔══██╗████╗  ██║
-█████╔╝ ███████║██║  ███╗███████║██╔██╗ ██║
-██╔═██╗ ██╔══██║██║   ██║██╔══██║██║╚██╗██║
-██║  ██╗██║  ██║╚██████╔╝██║  ██║██║ ╚████║
-╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/logo-light.svg">
+    <img alt="Kagan" src=".github/assets/logo-light.svg" width="480">
+  </picture>
+</p>
 
-> AI-powered Kanban TUI for autonomous development workflows
+<p align="center">
+  <strong>AI-powered Kanban TUI for autonomous development workflows</strong>
+</p>
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/aorumbayev/kagan)](https://github.com/aorumbayev/kagan/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI version](https://badge.fury.io/py/kagan.svg)](https://badge.fury.io/py/kagan)
+<p align="center">
+  <a href="https://github.com/aorumbayev/kagan/releases"><img src="https://img.shields.io/github/v/release/aorumbayev/kagan" alt="GitHub Release"></a>
+  <a href="https://pypi.org/project/kagan/"><img src="https://img.shields.io/pypi/v/kagan" alt="PyPI"></a>
+  <a href="https://opensource.org/license/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/aorumbayev/kagan/stargazers"><img src="https://img.shields.io/github/stars/aorumbayev/kagan?style=flat" alt="Stars"></a>
+</p>
+
+<p align="center">
+  <a href="https://docs.kagan.sh">Documentation</a> •
+  <a href="https://docs.kagan.sh/install">Install</a> •
+  <a href="https://docs.kagan.sh/quickstart">Quickstart</a> •
+  <a href="https://github.com/aorumbayev/kagan/issues">Issues</a>
+</p>
+
+---
+
+<p align="center">
+  <img src="https://i.imgur.com/dZRl5V7.png" alt="Kagan Screenshot" width="700">
+</p>
 
 Kagan is a terminal-based Kanban board that integrates AI agents to help you complete development tasks autonomously or collaboratively.
 
-![Kagan Screenshot](https://i.imgur.com/dZRl5V7.png)
-
-## Supported AI CLIs
-
-Available now:
-
-- Claude Code
-- OpenCode
-
-Coming soon:
-
-- Gemini
-- Codex
-- More providers
-
 ## Install
 
-### Quick Install (with uv)
-
 ```bash
+# Quick install (recommended)
 uv tool install kagan
-```
 
-### All-in-One Install (includes uv + Python)
-
-```bash
+# Or all-in-one (includes uv + Python if needed)
 curl -fsSL https://uvget.me/install.sh | bash -s -- kagan
 ```
-
-> [!NOTE]
-> The all-in-one installer automatically installs `uv` and Python if needed, then installs Kagan via `uv tool install`.
 
 ## Usage
 
 ```bash
-kagan                  # Launch TUI
-kagan mcp             # Run as MCP server
-kagan --help          # Show all options
+kagan              # Launch TUI
+kagan mcp          # Run as MCP server
+kagan --help       # Show all options
 ```
 
-## Key Shortcuts
+## Supported AI CLIs
 
-Kagan is keyboard-first. Here are the essential shortcuts:
-
-| Key | Action |
-|-----|--------|
-| **Navigation** | |
-| h/j/k/l | Move focus (vim-style) |
-| Tab/Shift+Tab | Cycle columns |
-| **Tickets** | |
-| n | New ticket |
-| v | View details |
-| e | Edit ticket |
-| x | Delete ticket |
-| Enter | Open session (PAIR) / watch agent (AUTO) |
-| a | Start agent (AUTO mode) |
-| w | Watch agent output |
-| **Leader (g + key)** | |
-| g h/l | Move ticket left/right |
-| g r | Review ticket |
-| g d | View diff |
-| **Review** | |
-| D | View diff |
-| r | Open review modal |
-| m | Merge ticket |
-| **Global** | |
-| p | Planner mode |
-| , | Settings |
-| ? | Help |
-| Ctrl+P | Command palette |
-| q | Quit |
-
-See [docs/index.md](docs/index.md) for complete keybindings.
+- Claude Code
+- OpenCode
+- *More coming soon*
 
 ## Documentation
 
-See the [docs/](docs/) folder for detailed documentation:
-
-- [User Guide](docs/index.md) - Full walkthrough of workflows
-- [Configuration](docs/config.md) - Agent setup and options
-- [Contributing](CONTRIBUTING.md) - Development guidelines
+**Full documentation available at [docs.kagan.sh](https://docs.kagan.sh)**
 
 ## License
 
@@ -103,10 +66,12 @@ See the [docs/](docs/) folder for detailed documentation:
 
 ---
 
-<a href="https://www.star-history.com/#aorumbayev/kagan&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date&legend=top-left" />
- </picture>
-</a>
+<p align="center">
+  <a href="https://www.star-history.com/#aorumbayev/kagan&type=date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date" />
+      <img alt="Star History" src="https://api.star-history.com/svg?repos=aorumbayev/kagan&type=date" width="600" />
+    </picture>
+  </a>
+</p>
