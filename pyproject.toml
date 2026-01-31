@@ -34,6 +34,7 @@ dependencies = [
     "click>=8.1.0",
     "httpx>=0.27.0",
     "pyperclip>=1.11.0",
+    "packaging>=24.0",
 ]
 
 [project.scripts]
