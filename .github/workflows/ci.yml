@@ -30,32 +30,11 @@ jobs:
       - name: Typecheck
         run: uv run poe typecheck
 
-  # Tests - runs after lint passes
+  # Tests on primary platform (always runs for PRs and main)
   test:
-    name: Test (${{ matrix.name }})
+    name: Test (Ubuntu x86_64)
     needs: lint-typecheck
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Always run on Ubuntu x86_64 (fastest, most common)
-          - os: ubuntu-latest
-            name: Ubuntu x86_64
-            run-always: true
-          # Additional platforms only on main branch pushes
-          - os: ubuntu-24.04-arm
-            name: Ubuntu ARM64
-            run-always: false
-          - os: macos-15
-            name: macOS ARM64
-            run-always: false
-          - os: macos-15-intel
-            name: macOS x86_64
-            run-always: false
-
-    runs-on: ${{ matrix.os }}
-    # Run if: always-run platform OR pushing to main branch
-    if: ${{ matrix.run-always || github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -71,11 +50,40 @@ jobs:
 
       - run: uv sync --dev
 
-      # Run tests - add coverage only on main branch
       - name: Run tests
+        run: uv run pytest tests/ -n auto
+
+  # Additional platform tests - only on main branch pushes
+  test-platforms:
+    name: Test (${{ matrix.name }})
+    needs: lint-typecheck
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04-arm
+            name: Ubuntu ARM64
+          - os: macos-15
+            name: macOS ARM64
+          - os: macos-15-intel
+            name: macOS x86_64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git user
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            uv run pytest tests/ -n auto --cov=src/kagan --cov-report=term-missing
-          else
-            uv run pytest tests/ -n auto
-          fi
+          git config --global user.name "CI Bot"
+          git config --global user.email "ci@example.com"
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - run: uv sync --dev
+
+      - name: Run tests with coverage
+        run: uv run pytest tests/ -n auto --cov=src/kagan --cov-report=term-missing
