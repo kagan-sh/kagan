@@ -4,93 +4,54 @@ on:
   pull_request:
   push:
     branches: [main]
-    paths:
-      - "**.py"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/ci.yml"
 
 jobs:
-  # Fast lint and typecheck - runs first, fails fast
-  lint-typecheck:
-    name: Lint & Typecheck
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
       - run: uv sync --dev
+      - run: uv run poe lint
+      - run: uv run poe typecheck
 
-      - name: Lint
-        run: uv run poe lint
-
-      - name: Typecheck
-        run: uv run poe typecheck
-
-  # Tests on primary platforms (always runs for PRs and main)
   test:
-    name: Test (${{ matrix.name }})
-    needs: lint-typecheck
+    needs: lint
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            name: Ubuntu x86_64
-          - os: macos-15
-            name: macOS ARM64
-
-    runs-on: ${{ matrix.os }}
-
+        os: [ubuntu-latest, macos-15]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Configure git user
-        run: |
-          git config --global user.name "CI Bot"
-          git config --global user.email "ci@example.com"
-
+      - run: git config --global user.name "CI" && git config --global user.email "ci@local"
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
       - run: uv sync --dev
+      - name: Test
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            uv run pytest tests/ -n auto --cov=src/kagan --cov-report=term-missing
+          else
+            uv run pytest tests/ -n auto
+          fi
 
-      - name: Run tests
-        run: uv run pytest tests/ -n auto
-
-  # Additional platform tests - only on main branch pushes
-  test-platforms:
-    name: Test (${{ matrix.name }})
-    needs: lint-typecheck
+  test-all-platforms:
+    needs: lint
     if: github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-24.04-arm
-            name: Ubuntu ARM64
-          - os: macos-15-intel
-            name: macOS x86_64
-
-    runs-on: ${{ matrix.os }}
-
+        os: [ubuntu-24.04-arm, macos-15-intel]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Configure git user
-        run: |
-          git config --global user.name "CI Bot"
-          git config --global user.email "ci@example.com"
-
+      - run: git config --global user.name "CI" && git config --global user.email "ci@local"
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
       - run: uv sync --dev
-
-      - name: Run tests with coverage
-        run: uv run pytest tests/ -n auto --cov=src/kagan --cov-report=term-missing
+      - run: uv run pytest tests/ -n auto --cov=src/kagan --cov-report=term-missing
