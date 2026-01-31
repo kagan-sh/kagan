@@ -1107,30 +1107,35 @@ WelcomeScreen {
     background: $background;
     margin-bottom: 1;
     padding: 1;
+    height: auto;
 }
 
 .issue-card-title {
     text-style: bold;
     color: $warning;
     width: 100%;
+    height: auto;
 }
 
 .issue-card-message {
-    color: $text;
+    color: $foreground;
     width: 100%;
+    height: auto;
     padding-top: 1;
 }
 
 .issue-card-hint {
-    color: $text-muted;
+    color: $foreground 70%;
     text-style: italic;
     width: 100%;
+    height: auto;
     padding-top: 1;
 }
 
 .issue-card-url {
     color: $primary;
     width: 100%;
+    height: auto;
 }
 
 #troubleshoot-resolve-hint {
