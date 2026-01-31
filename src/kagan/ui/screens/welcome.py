@@ -10,7 +10,11 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Label, Select, Switch
 
 from kagan.constants import KAGAN_LOGO
-from kagan.data.builtin_agents import BUILTIN_AGENTS, list_builtin_agents
+from kagan.data.builtin_agents import (
+    BUILTIN_AGENTS,
+    get_all_agent_availability,
+    list_builtin_agents,
+)
 from kagan.git_utils import get_current_branch, has_git_repo, list_local_branches
 from kagan.keybindings import WELCOME_BINDINGS, to_textual_bindings
 
@@ -28,6 +32,7 @@ class WelcomeScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self._agents = list_builtin_agents()
+        self._agent_availability = get_all_agent_availability()
         self._repo_root = Path.cwd()
         self._has_git_repo = has_git_repo(self._repo_root)
         self._branches = list_local_branches(self._repo_root) if self._has_git_repo else []
@@ -58,10 +63,29 @@ class WelcomeScreen(Screen):
 
     def compose(self) -> ComposeResult:
         """Compose the welcome screen layout."""
-        # Build Select options from agents
-        agent_options = [
-            (f"{a.config.name} ({a.author})", a.config.short_name) for a in self._agents
-        ]
+        # Build Select options from agents with availability status
+        # Pre-select first available agent (priority: claude > opencode)
+        agent_options: list[tuple[str, str]] = []
+        default_agent: str | None = None
+
+        for avail in self._agent_availability:
+            agent = avail.agent
+            if avail.is_available:
+                label = f"{agent.config.name} ({agent.author})"
+                if default_agent is None:
+                    default_agent = agent.config.short_name
+            else:
+                label = f"{agent.config.name} [Not Installed]"
+            agent_options.append((label, agent.config.short_name))
+
+        # Fallback to first agent if none available (shouldn't happen in normal flow)
+        if default_agent is None and agent_options:
+            default_agent = agent_options[0][1]
+
+        # Final fallback to "claude" if somehow no options exist
+        if default_agent is None:
+            default_agent = "claude"
+
         base_branch_options = [(name, name) for name in self._branch_options]
 
         with Vertical(id="welcome-container"):
@@ -74,7 +98,7 @@ class WelcomeScreen(Screen):
                 "AI Assistant:",
                 classes="section-label",
             )
-            yield Select(agent_options, value="claude", id="agent-select")
+            yield Select(agent_options, value=default_agent, id="agent-select")
 
             # Base branch selection
             yield Label(

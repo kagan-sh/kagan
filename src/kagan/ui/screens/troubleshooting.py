@@ -34,6 +34,7 @@ class IssueType(Enum):
     AGENT_MISSING = "agent_missing"
     NPX_MISSING = "npx_missing"
     ACP_AGENT_MISSING = "acp_agent_missing"
+    NO_AGENTS_AVAILABLE = "no_agents_available"  # No supported agents installed
 
 
 class IssueSeverity(Enum):
@@ -412,6 +413,33 @@ def detect_issues(
     return PreflightResult(issues=issues)
 
 
+def create_no_agents_issues() -> list[DetectedIssue]:
+    """Create issues showing all available agent install options.
+
+    Used when no supported agents are found on the system. Each agent
+    gets its own issue card with installation instructions.
+
+    Returns:
+        List of DetectedIssue for each supported agent.
+    """
+    from kagan.data.builtin_agents import list_builtin_agents
+
+    issues = []
+    for agent in list_builtin_agents():
+        preset = IssuePreset(
+            type=IssueType.NO_AGENTS_AVAILABLE,
+            severity=IssueSeverity.BLOCKING,
+            icon="[+]",  # Plus icon for "install me"
+            title=f"Install {agent.config.name}",
+            message=f"{agent.description}\nBy {agent.author}",
+            hint=agent.install_command,
+            url=agent.docs_url if agent.docs_url else None,
+        )
+        issues.append(DetectedIssue(preset=preset))
+
+    return issues
+
+
 class CopyableHint(Static):
     """Hint text that copies on single-click."""
 
@@ -470,29 +498,38 @@ class TroubleshootingApp(App):
         self.register_theme(KAGAN_THEME)
         self.theme = "kagan"
 
+    def _is_no_agents_case(self) -> bool:
+        """Check if this is the 'no agents available' case."""
+        return all(issue.preset.type == IssueType.NO_AGENTS_AVAILABLE for issue in self._issues)
+
     def compose(self) -> ComposeResult:
         blocking_count = sum(
             1 for issue in self._issues if issue.preset.severity == IssueSeverity.BLOCKING
         )
+
+        # Determine title and subtitle based on issue type
+        is_no_agents = self._is_no_agents_case()
+        if is_no_agents:
+            title = "No AI Agents Found"
+            subtitle = "Install one of the following to get started:"
+            resolve_hint = "Install an agent and restart Kagan"
+        else:
+            title = "Startup Issues Detected"
+            plural = "s" if blocking_count != 1 else ""
+            subtitle = f"{blocking_count} blocking issue{plural} found"
+            resolve_hint = "Resolve issues and restart Kagan"
 
         with Container(id="troubleshoot-container"):
             with Middle():
                 with Center():
                     with Static(id="troubleshoot-card"):
                         yield Static(KAGAN_LOGO, id="troubleshoot-logo")
-                        yield Static("Startup Issues Detected", id="troubleshoot-title")
-                        plural = "s" if blocking_count != 1 else ""
-                        yield Static(
-                            f"{blocking_count} blocking issue{plural} found",
-                            id="troubleshoot-count",
-                        )
+                        yield Static(title, id="troubleshoot-title")
+                        yield Static(subtitle, id="troubleshoot-count")
                         with VerticalScroll(id="troubleshoot-issues"):
                             for issue in self._issues:
                                 with Container(classes="issue-card"):
                                     yield IssueCard(issue)
-                        yield Static(
-                            "Resolve issues and restart Kagan",
-                            id="troubleshoot-resolve-hint",
-                        )
+                        yield Static(resolve_hint, id="troubleshoot-resolve-hint")
                         yield Static("Press q to exit", id="troubleshoot-exit-hint")
         yield Footer()

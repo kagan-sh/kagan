@@ -133,9 +133,14 @@ class TestPreflightResult:
 class TestIssuePresets:
     """Test that all issue presets are properly defined."""
 
+    # Issue types that are dynamically generated (not in ISSUE_PRESETS)
+    DYNAMIC_ISSUE_TYPES = {IssueType.NO_AGENTS_AVAILABLE}
+
     def test_all_issue_types_have_presets(self):
-        """Every IssueType has a corresponding preset."""
+        """Every IssueType (except dynamic ones) has a corresponding preset."""
         for issue_type in IssueType:
+            if issue_type in self.DYNAMIC_ISSUE_TYPES:
+                continue
             assert issue_type in ISSUE_PRESETS, f"Missing preset for {issue_type}"
 
     def test_all_presets_have_required_fields(self):
