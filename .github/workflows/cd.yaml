@@ -9,6 +9,9 @@ on:
     paths-ignore:
       - "docs/**"
       - "*.md"
+      - ".github/assets/**"
+      - "mkdocs.yml"
+      - ".readthedocs.yaml"
   workflow_dispatch:
     inputs:
       production_release:

@@ -255,3 +255,33 @@ For test fixtures:
 ```python
 await asyncio.create_subprocess_exec("git", "config", "commit.gpgsign", "false", cwd=repo_path)
 ```
+
+## Commit Messages
+
+**IMPORTANT: Follow Conventional Commits strictly.** Semantic release automates versioning based on commit prefixes.
+
+```
+<type>: <description>
+
+[optional body]
+```
+
+| Type        | Version Bump | Changelog | Use When                                  |
+| ----------- | ------------ | --------- | ----------------------------------------- |
+| `feat:`     | Minor        | Yes       | New user-facing feature                   |
+| `fix:`      | Patch        | Yes       | Bug fix affecting users                   |
+| `perf:`     | Patch        | Yes       | Performance improvement users will notice |
+| `refactor:` | None         | Yes       | Code restructure without behavior change  |
+| `docs:`     | None         | No        | Documentation only                        |
+| `test:`     | None         | No        | Adding/updating tests                     |
+| `chore:`    | None         | No        | Maintenance (deps, configs)               |
+| `ci:`       | None         | No        | CI/CD changes                             |
+| `style:`    | None         | No        | Formatting, whitespace                    |
+| `build:`    | None         | No        | Build system changes                      |
+
+**Critical Rules:**
+
+1. User-facing changes MUST use `feat:`, `fix:`, or `perf:` - these trigger releases
+1. Mixed changes (e.g., feature + tests) use the highest-impact type (`feat:`)
+1. Breaking changes add `BREAKING CHANGE:` in body or `!` after type (`feat!:`)
+1. Never use `chore:` or `docs:` for changes that affect user behavior
