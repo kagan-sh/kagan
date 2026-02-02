@@ -8,7 +8,7 @@ from textual.containers import Container
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Label
 
-from kagan.keybindings import CONFIRM_BINDINGS, to_textual_bindings
+from kagan.keybindings import CONFIRM_BINDINGS
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 class ConfirmModal(ModalScreen[bool]):
     """Generic confirmation modal with Yes/No."""
 
-    BINDINGS = to_textual_bindings(CONFIRM_BINDINGS)
+    BINDINGS = CONFIRM_BINDINGS
 
     def __init__(self, title: str = "Confirm?", message: str = "", **kwargs) -> None:
         super().__init__(**kwargs)

@@ -9,7 +9,7 @@ from textual.containers import Horizontal, VerticalGroup
 from textual.reactive import var
 from textual.widgets import Button, Static
 
-from kagan.keybindings import PERMISSION_PROMPT_BINDINGS, to_textual_bindings
+from kagan.keybindings import PERMISSION_PROMPT_BINDINGS
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -22,7 +22,7 @@ class PermissionPrompt(VerticalGroup):
     """Permission request widget with countdown and keyboard bindings."""
 
     DEFAULT_CLASSES = "permission-prompt"
-    BINDINGS = to_textual_bindings(PERMISSION_PROMPT_BINDINGS)
+    BINDINGS = PERMISSION_PROMPT_BINDINGS
 
     remaining_seconds: var[int] = var(300)
 

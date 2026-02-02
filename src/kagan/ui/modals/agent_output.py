@@ -12,7 +12,7 @@ from textual.widgets import Button, Footer, Label, Rule
 from kagan.acp import messages
 from kagan.acp.messages import Answer
 from kagan.constants import MODAL_TITLE_MAX_LENGTH
-from kagan.keybindings import AGENT_OUTPUT_BINDINGS, to_textual_bindings
+from kagan.keybindings import AGENT_OUTPUT_BINDINGS
 from kagan.ui.utils.clipboard import copy_with_notification
 from kagan.ui.widgets import StreamingOutput
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 class AgentOutputModal(ModalScreen[None]):
     """Modal for watching an AUTO ticket's agent progress in real-time."""
 
-    BINDINGS = to_textual_bindings(AGENT_OUTPUT_BINDINGS)
+    BINDINGS = AGENT_OUTPUT_BINDINGS
 
     def __init__(
         self,

@@ -11,18 +11,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding, BindingType
 from textual.containers import Center, Container, Middle, VerticalScroll
-from textual.widgets import Footer, Static
+from textual.screen import ModalScreen
+from textual.widgets import Footer, Label, LoadingIndicator, Select, Static
+from textual.widgets._select import NoSelection
 
 from kagan.constants import KAGAN_LOGO
-from kagan.keybindings import TROUBLESHOOTING_BINDINGS, to_textual_bindings
-from kagan.theme import KAGAN_THEME
+from kagan.keybindings import INSTALL_MODAL_BINDINGS, TROUBLESHOOTING_BINDINGS
+from kagan.terminal import supports_truecolor
+from kagan.theme import KAGAN_THEME, KAGAN_THEME_256
 from kagan.ui.utils.clipboard import copy_with_notification
 
 if TYPE_CHECKING:
     from textual.events import Click
 
     from kagan.config import AgentConfig
+
+# Bindings for the agent selection modal
+AGENT_SELECT_MODAL_BINDINGS: list[BindingType] = [
+    Binding("escape", "cancel", "Cancel"),
+    Binding("enter", "select", "Select"),
+]
 
 
 class IssueType(Enum):
@@ -38,6 +48,7 @@ class IssueType(Enum):
     GIT_VERSION_LOW = "git_version_low"  # Git version too old for worktrees
     GIT_USER_NOT_CONFIGURED = "git_user_not_configured"  # Git user.name/email not set
     GIT_NOT_INSTALLED = "git_not_installed"  # Git is not installed
+    TERMINAL_NO_TRUECOLOR = "terminal_no_truecolor"  # Terminal doesn't support truecolor
 
 
 class IssueSeverity(Enum):
@@ -87,14 +98,15 @@ ISSUE_PRESETS: dict[IssueType, IssuePreset] = {
     ),
     IssueType.TMUX_MISSING: IssuePreset(
         type=IssueType.TMUX_MISSING,
-        severity=IssueSeverity.BLOCKING,
-        icon="[!]",
-        title="tmux Not Available",
+        severity=IssueSeverity.WARNING,
+        icon="[~]",
+        title="tmux Not Installed",
         message=(
-            "tmux is required for PAIR mode but was not found in PATH.\n"
-            "PAIR mode uses tmux for interactive agent sessions."
+            "tmux is not installed.\n\n"
+            "PAIR mode (collaborative sessions) requires tmux.\n"
+            "AUTO mode will work normally without it."
         ),
-        hint="Install tmux: brew install tmux (macOS) or apt install tmux (Linux)",
+        hint="To install: brew install tmux (macOS) or apt install tmux (Linux)",
     ),
     IssueType.AGENT_MISSING: IssuePreset(
         type=IssueType.AGENT_MISSING,
@@ -168,6 +180,22 @@ ISSUE_PRESETS: dict[IssueType, IssuePreset] = {
             '  git config --global user.name "Your Name"\n'
             '  git config --global user.email "your@email.com"'
         ),
+    ),
+    IssueType.TERMINAL_NO_TRUECOLOR: IssuePreset(
+        type=IssueType.TERMINAL_NO_TRUECOLOR,
+        severity=IssueSeverity.WARNING,
+        icon="[~]",
+        title="Using 256-Color Fallback Theme",
+        message=(
+            "Your terminal doesn't appear to support truecolor (24-bit colors).\n"
+            "Kagan is using a 256-color fallback theme for better compatibility."
+        ),
+        hint=(
+            "For optimal colors, use a truecolor terminal:\n"
+            "  • iTerm2, Warp, Kitty, Ghostty, or VS Code terminal\n"
+            "  • Or set: export COLORTERM=truecolor"
+        ),
+        url="https://github.com/aorumbayev/kagan#terminal-requirements",
     ),
 }
 
@@ -445,6 +473,32 @@ async def _check_git_user() -> DetectedIssue | None:
     return None
 
 
+def _check_terminal_truecolor() -> DetectedIssue | None:
+    """Check if terminal supports truecolor (24-bit colors)."""
+    from kagan.terminal import get_terminal_name, supports_truecolor
+
+    if not supports_truecolor():
+        terminal_name = get_terminal_name()
+        preset = IssuePreset(
+            type=IssueType.TERMINAL_NO_TRUECOLOR,
+            severity=IssueSeverity.WARNING,
+            icon="[~]",
+            title="Using 256-Color Fallback Theme",
+            message=(
+                f"Your terminal ({terminal_name}) doesn't appear to support truecolor.\n"
+                "Kagan is using a 256-color fallback theme for better compatibility."
+            ),
+            hint=(
+                "For optimal colors, use a truecolor terminal:\n"
+                "  • iTerm2, Warp, Kitty, Ghostty, or VS Code terminal\n"
+                "  • Or set: export COLORTERM=truecolor"
+            ),
+            url="https://github.com/aorumbayev/kagan#terminal-requirements",
+        )
+        return DetectedIssue(preset=preset, details=terminal_name)
+    return None
+
+
 async def detect_issues(
     *,
     check_lock: bool = False,
@@ -453,6 +507,7 @@ async def detect_issues(
     agent_name: str = "Claude Code",
     agent_install_command: str | None = None,
     check_git: bool = True,
+    check_terminal: bool = True,
 ) -> PreflightResult:
     """Run all pre-flight checks and return detected issues.
 
@@ -463,6 +518,7 @@ async def detect_issues(
         agent_name: Display name of the agent to check.
         agent_install_command: Installation command for the agent.
         check_git: Whether to check git version and configuration.
+        check_terminal: Whether to check terminal truecolor support.
 
     Returns:
         PreflightResult containing all detected issues.
@@ -494,7 +550,13 @@ async def detect_issues(
     if tmux_issue:
         issues.append(tmux_issue)
 
-    # 5. Agent check (interactive command for PAIR mode)
+    # 5. Terminal truecolor check (warning only)
+    if check_terminal:
+        terminal_issue = _check_terminal_truecolor()
+        if terminal_issue:
+            issues.append(terminal_issue)
+
+    # 6. Agent check (interactive command for PAIR mode)
     if agent_config:
         from kagan.config import get_os_value
 
@@ -508,7 +570,7 @@ async def detect_issues(
             if agent_issue:
                 issues.append(agent_issue)
 
-        # 6. ACP command check (run_command for AUTO mode)
+        # 7. ACP command check (run_command for AUTO mode)
         # This uses smart detection for npx-based commands
         acp_cmd = get_os_value(agent_config.run_command)
         if acp_cmd:
@@ -590,40 +652,215 @@ class IssueCard(Static):
             yield CopyableUrl(preset.url)
 
 
+class AgentSelectModal(ModalScreen[str | None]):
+    """Modal for selecting which agent to install."""
+
+    BINDINGS = AGENT_SELECT_MODAL_BINDINGS
+
+    def __init__(self, agents: list[str], **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._agents = agents
+
+    def compose(self) -> ComposeResult:
+        from kagan.data.builtin_agents import get_builtin_agent
+
+        with Container(id="agent-select-modal"):
+            yield Label("Select Agent to Install", classes="install-modal-title")
+            options: list[tuple[str, str]] = []
+            for agent_id in self._agents:
+                info = get_builtin_agent(agent_id)
+                name = info.config.name if info else agent_id.title()
+                options.append((name, agent_id))
+            yield Select[str](
+                options,
+                id="agent-select",
+                value=self._agents[0] if self._agents else NoSelection(),
+            )
+            yield Label(
+                "Press Enter to select, Escape to cancel",
+                classes="install-modal-hint",
+            )
+        yield Footer()
+
+    def action_select(self) -> None:
+        """Select the chosen agent."""
+        select = self.query_one("#agent-select", Select)
+        self.dismiss(str(select.value) if select.value else None)
+
+    def action_cancel(self) -> None:
+        """Cancel and close the modal."""
+        self.dismiss(None)
+
+
+class InstallModal(ModalScreen[bool]):
+    """Modal for installing an AI agent."""
+
+    BINDINGS = INSTALL_MODAL_BINDINGS
+
+    def __init__(self, agent: str = "claude", **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._agent = agent
+        self._is_installing = False
+        self._install_complete = False
+        self._install_success = False
+        self._result_message = ""
+
+    def compose(self) -> ComposeResult:
+        from kagan.agents.installer import get_install_command
+        from kagan.data.builtin_agents import get_builtin_agent
+
+        agent_info = get_builtin_agent(self._agent)
+        agent_name = agent_info.config.name if agent_info else self._agent.title()
+        install_cmd = get_install_command(self._agent)
+
+        with Container(id="install-modal-container"):
+            yield Label(f"Install {agent_name}", classes="install-modal-title")
+            yield Label(
+                "This will run the installation command:",
+                classes="install-modal-subtitle",
+            )
+            yield Label(
+                f"$ {install_cmd}",
+                id="install-command",
+                classes="install-modal-command",
+            )
+            yield LoadingIndicator(id="install-spinner")
+            yield Label("", id="install-status", classes="install-modal-status")
+            yield Label(
+                "Press Enter to install, Escape to cancel",
+                id="install-hint",
+                classes="install-modal-hint",
+            )
+        yield Footer()
+
+    def on_mount(self) -> None:
+        """Hide spinner initially."""
+        self.query_one("#install-spinner", LoadingIndicator).display = False
+
+    async def action_install(self) -> None:
+        """Start the installation process."""
+        if self._is_installing or self._install_complete:
+            return
+
+        from kagan.data.builtin_agents import get_builtin_agent
+
+        self._is_installing = True
+        spinner = self.query_one("#install-spinner", LoadingIndicator)
+        status = self.query_one("#install-status", Label)
+        hint = self.query_one("#install-hint", Label)
+
+        # Get agent name for display
+        agent_info = get_builtin_agent(self._agent)
+        agent_name = agent_info.config.name if agent_info else self._agent.title()
+
+        # Show spinner and update status
+        spinner.display = True
+        status.update(f"Installing {agent_name}...")
+        hint.update("Please wait...")
+
+        # Run installation
+        try:
+            from kagan.agents.installer import install_agent
+
+            success, message = await install_agent(self._agent)
+            self._install_success = success
+            self._result_message = message
+        except Exception as e:
+            self._install_success = False
+            self._result_message = f"Installation error: {e}"
+
+        # Hide spinner and show result
+        spinner.display = False
+        self._install_complete = True
+        self._is_installing = False
+
+        if self._install_success:
+            status.add_class("success")
+            status.update(f"[bold green]Success![/] {self._result_message}")
+            hint.update("Press Enter to restart Kagan, Escape to close")
+        else:
+            status.add_class("error")
+            status.update(f"[bold red]Failed:[/] {self._result_message}")
+            hint.update("Press Escape to close")
+
+    async def action_confirm(self) -> None:
+        """Confirm action - install or dismiss with success."""
+        if self._install_complete:
+            # If installation is complete and successful, dismiss with True to signal restart
+            self.dismiss(self._install_success)
+        else:
+            # Start installation
+            await self.action_install()
+
+    def action_cancel(self) -> None:
+        """Cancel and close the modal."""
+        if self._is_installing:
+            # Can't cancel during installation
+            self.notify("Installation in progress...", severity="warning")
+            return
+        self.dismiss(False)
+
+
 class TroubleshootingApp(App):
-    """Standalone app shown when pre-flight checks fail."""
+    """Standalone app shown when pre-flight checks fail or have warnings."""
 
     TITLE = "KAGAN"
     CSS_PATH = str(Path(__file__).resolve().parents[2] / "styles" / "kagan.tcss")
 
-    BINDINGS = to_textual_bindings(TROUBLESHOOTING_BINDINGS)
+    BINDINGS = TROUBLESHOOTING_BINDINGS
+
+    # Exit codes for different outcomes
+    EXIT_QUIT = 1
+    EXIT_CONTINUE = 0
 
     def __init__(self, issues: list[DetectedIssue]) -> None:
         super().__init__()
         self._issues = issues
+        # Register both themes and select based on terminal capabilities
         self.register_theme(KAGAN_THEME)
-        self.theme = "kagan"
+        self.register_theme(KAGAN_THEME_256)
+        if supports_truecolor():
+            self.theme = "kagan"
+        else:
+            self.theme = "kagan-256"
 
     def _is_no_agents_case(self) -> bool:
         """Check if this is the 'no agents available' case."""
         return all(issue.preset.type == IssueType.NO_AGENTS_AVAILABLE for issue in self._issues)
 
+    def _has_only_warnings(self) -> bool:
+        """Check if all issues are warnings (no blocking issues)."""
+        return all(issue.preset.severity == IssueSeverity.WARNING for issue in self._issues)
+
     def compose(self) -> ComposeResult:
         blocking_count = sum(
             1 for issue in self._issues if issue.preset.severity == IssueSeverity.BLOCKING
         )
+        warning_count = sum(
+            1 for issue in self._issues if issue.preset.severity == IssueSeverity.WARNING
+        )
 
         # Determine title and subtitle based on issue type
         is_no_agents = self._is_no_agents_case()
+        has_only_warnings = self._has_only_warnings()
+
         if is_no_agents:
             title = "No AI Agents Found"
             subtitle = "Install one of the following to get started:"
             resolve_hint = "Install an agent and restart Kagan"
+            exit_hint = "i = Install Agent | q = Quit"
+        elif has_only_warnings:
+            title = "Startup Warnings"
+            plural = "s" if warning_count != 1 else ""
+            subtitle = f"{warning_count} warning{plural} detected"
+            resolve_hint = "You can continue, but some features may not work optimally"
+            exit_hint = "Enter/c = Continue | q = Quit"
         else:
             title = "Startup Issues Detected"
             plural = "s" if blocking_count != 1 else ""
             subtitle = f"{blocking_count} blocking issue{plural} found"
             resolve_hint = "Resolve issues and restart Kagan"
+            exit_hint = "Press q to exit"
 
         with Container(id="troubleshoot-container"):
             with Middle():
@@ -637,5 +874,47 @@ class TroubleshootingApp(App):
                                 with Container(classes="issue-card"):
                                     yield IssueCard(issue)
                         yield Static(resolve_hint, id="troubleshoot-resolve-hint")
-                        yield Static("Press q to exit", id="troubleshoot-exit-hint")
+                        yield Static(exit_hint, id="troubleshoot-exit-hint")
         yield Footer()
+
+    def action_continue_app(self) -> None:
+        """Continue to the main app (only for warning-only cases)."""
+        if self._has_only_warnings():
+            self.exit(self.EXIT_CONTINUE)
+        else:
+            self.notify("Cannot continue - resolve blocking issues first", severity="error")
+
+    def action_install_agent(self) -> None:
+        """Open the agent selection then install modal."""
+        if not self._is_no_agents_case():
+            self.notify(
+                "Install option only available when no agents are found", severity="warning"
+            )
+            return
+
+        # Get list of installable agents
+        from kagan.data.builtin_agents import list_builtin_agents
+
+        agents = [a.config.short_name for a in list_builtin_agents()]
+
+        if len(agents) == 1:
+            # Only one option, skip selection
+            self._show_install_modal(agents[0])
+        else:
+            # Show selection modal first
+            def handle_selection(agent: str | None) -> None:
+                if agent:
+                    self._show_install_modal(agent)
+
+            self.push_screen(AgentSelectModal(agents), handle_selection)
+
+    def _show_install_modal(self, agent: str) -> None:
+        """Show the install modal for a specific agent."""
+
+        def handle_install_result(result: bool | None) -> None:
+            if result:
+                self.notify("Installation complete! Please restart Kagan.", severity="information")
+                # Exit the app so user can restart
+                self.exit(0)
+
+        self.push_screen(InstallModal(agent=agent), handle_install_result)

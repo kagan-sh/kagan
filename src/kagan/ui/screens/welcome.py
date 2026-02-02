@@ -17,7 +17,7 @@ from kagan.data.builtin_agents import (
     list_builtin_agents,
 )
 from kagan.git_utils import get_current_branch, has_git_repo, list_local_branches
-from kagan.keybindings import WELCOME_BINDINGS, to_textual_bindings
+from kagan.keybindings import WELCOME_BINDINGS
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -30,7 +30,7 @@ DEFAULT_BASE_BRANCHES = ("main", "master", "develop", "trunk")
 class WelcomeScreen(Screen):
     """First-boot welcome and configuration screen."""
 
-    BINDINGS = to_textual_bindings(WELCOME_BINDINGS)
+    BINDINGS = WELCOME_BINDINGS
 
     def __init__(self) -> None:
         super().__init__()
@@ -94,6 +94,15 @@ class WelcomeScreen(Screen):
             # Large ASCII art logo
             yield Label(KAGAN_LOGO, id="logo")
             yield Label("Your Development Cockpit", id="subtitle")
+
+            # First-run setup intro text
+            yield Label(
+                "Welcome! This is the first-time setup for Kagan.\n"
+                "Configure your AI assistant, base branch, and auto-mode preferences below.\n"
+                "This only needs to be done once - settings are saved to .kagan/config.toml",
+                id="intro-text",
+                classes="info-label",
+            )
 
             # AI Assistant selection
             yield Label(

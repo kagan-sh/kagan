@@ -8,7 +8,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Label, Rule, Static
 
-from kagan.keybindings import TMUX_GATEWAY_BINDINGS, to_textual_bindings
+from kagan.keybindings import TMUX_GATEWAY_BINDINGS
 from kagan.ui.utils.clipboard import copy_with_notification
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ class TmuxGatewayModal(ModalScreen[str | None]):
         None - User cancelled
     """
 
-    BINDINGS = to_textual_bindings(TMUX_GATEWAY_BINDINGS)
+    BINDINGS = TMUX_GATEWAY_BINDINGS
 
     def __init__(self, ticket_id: str, ticket_title: str, **kwargs) -> None:
         super().__init__(**kwargs)

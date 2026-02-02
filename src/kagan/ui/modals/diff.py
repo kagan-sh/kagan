@@ -8,22 +8,32 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Label, RichLog
 
-from kagan.keybindings import DIFF_BINDINGS, to_textual_bindings
+from kagan.keybindings import DIFF_BINDINGS
 from kagan.ui.utils.clipboard import copy_with_notification
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
+    from kagan.database.models import Ticket
 
-class DiffModal(ModalScreen[None]):
-    """Modal for showing a ticket diff."""
 
-    BINDINGS = to_textual_bindings(DIFF_BINDINGS)
+class DiffModal(ModalScreen[str | None]):
+    """Modal for showing a ticket diff.
 
-    def __init__(self, title: str, diff_text: str, **kwargs) -> None:
+    Returns:
+        str | None:
+            - "approve" if user pressed 'a'
+            - "reject" if user pressed 'r'
+            - None if user just closed the modal
+    """
+
+    BINDINGS = DIFF_BINDINGS
+
+    def __init__(self, title: str, diff_text: str, ticket: Ticket | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._title = title
         self._diff_text = diff_text
+        self._ticket = ticket
 
     def compose(self) -> ComposeResult:
         with Vertical(id="diff-container"):
@@ -37,7 +47,16 @@ class DiffModal(ModalScreen[None]):
             log.write(line)
 
     def action_close(self) -> None:
+        """Close the modal without any action."""
         self.dismiss(None)
+
+    def action_approve(self) -> None:
+        """Approve and dismiss the modal."""
+        self.dismiss("approve")
+
+    def action_reject(self) -> None:
+        """Reject and dismiss the modal."""
+        self.dismiss("reject")
 
     def action_copy(self) -> None:
         """Copy diff content to clipboard."""

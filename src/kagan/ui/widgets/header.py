@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
-from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Label
 
 from kagan.constants import KAGAN_LOGO_SMALL
+from kagan.ui.utils import safe_query_one
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -69,21 +68,16 @@ class KaganHeader(Widget):
         yield Label(f"Tickets: {self.ticket_count}", id="header-stats", classes="header-stats")
 
     def watch_ticket_count(self, count: int) -> None:
-        with suppress(NoMatches):
-            self.query_one("#header-stats", Label).update(f"Tickets: {count}")
+        if stats_label := safe_query_one(self, "#header-stats", Label):
+            stats_label.update(f"Tickets: {count}")
 
     def watch_active_sessions(self, count: int) -> None:
-        with suppress(NoMatches):
-            label = self.query_one("#header-sessions", Label)
-            label.update(f"Sessions: {count}")
+        if sessions_label := safe_query_one(self, "#header-sessions", Label):
+            sessions_label.update(f"Sessions: {count}")
 
     def watch_git_branch(self, branch: str) -> None:
-        with suppress(NoMatches):
-            label = self.query_one("#header-branch", Label)
-            if branch:
-                label.update(f"⎇ {branch}")
-            else:
-                label.update("")
+        if branch_label := safe_query_one(self, "#header-branch", Label):
+            branch_label.update(f"⎇ {branch}" if branch else "")
 
     def update_count(self, count: int) -> None:
         self.ticket_count = count

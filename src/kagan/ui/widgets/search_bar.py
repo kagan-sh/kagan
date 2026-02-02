@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from textual.css.query import NoMatches
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Input
+
+from kagan.ui.utils import safe_query_one
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -37,8 +37,8 @@ class SearchBar(Widget):
 
     def on_mount(self) -> None:
         """Disable focus on the input when mounted (hidden by default)."""
-        with suppress(NoMatches):
-            self.query_one("#search-input", Input).can_focus = False
+        if inp := safe_query_one(self, "#search-input", Input):
+            inp.can_focus = False
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle input text changes."""
@@ -55,20 +55,19 @@ class SearchBar(Widget):
     def show(self) -> None:
         """Show the search bar and focus the input."""
         self.is_visible = True
-        with suppress(NoMatches):
-            inp = self.query_one("#search-input", Input)
+        if inp := safe_query_one(self, "#search-input", Input):
             inp.can_focus = True
             inp.focus()
 
     def hide(self) -> None:
         """Hide the search bar and clear the query."""
         self.is_visible = False
-        with suppress(NoMatches):
-            self.query_one("#search-input", Input).can_focus = False
+        if inp := safe_query_one(self, "#search-input", Input):
+            inp.can_focus = False
         self.clear()
 
     def clear(self) -> None:
         """Clear the search query."""
         self.search_query = ""
-        with suppress(NoMatches):
-            self.query_one("#search-input", Input).value = ""
+        if inp := safe_query_one(self, "#search-input", Input):
+            inp.value = ""

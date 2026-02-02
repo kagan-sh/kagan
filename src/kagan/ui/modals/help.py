@@ -4,51 +4,25 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Label, Rule, Static, TabbedContent, TabPane
 
 from kagan.keybindings import (
-    APP_BINDINGS,
-    CONFIRM_BINDINGS,
-    DESCRIPTION_EDITOR_BINDINGS,
     HELP_BINDINGS,
-    KANBAN_BINDINGS,
     KANBAN_LEADER_BINDINGS,
-    REVIEW_BINDINGS,
-    get_bindings_for_category,
-    get_key_for_action,
-    to_textual_bindings,
 )
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.widget import Widget
 
-    from kagan.keybindings import KeyBindingDef
-
 
 class HelpModal(ModalScreen[None]):
     """Full help system modal with keybindings, concepts, and workflows."""
 
-    BINDINGS = to_textual_bindings(HELP_BINDINGS)
-
-    def _key(
-        self,
-        action: str,
-        bindings: list[KeyBindingDef] | None = None,
-        leader: bool = False,
-    ) -> str:
-        """Get display key for an action.
-
-        Args:
-            action: Action name to look up
-            bindings: Optional binding list (defaults to KANBAN_BINDINGS)
-            leader: If True, prefix with 'g+' for leader sequences
-        """
-        source = bindings or KANBAN_BINDINGS
-        key = get_key_for_action(source, action)
-        return f"g+{key}" if leader else key
+    BINDINGS = HELP_BINDINGS
 
     def compose(self) -> ComposeResult:
         with Vertical(id="help-container"):
@@ -66,92 +40,63 @@ class HelpModal(ModalScreen[None]):
         yield Footer()
 
     def _compose_keybindings(self) -> Vertical:
-        """Compose the keybindings reference section dynamically from registry."""
+        """Compose the keybindings reference section."""
         children: list[Widget] = []
 
-        # Board Navigation - combine vim keys with arrow alternatives
+        # Board Navigation
         children.append(Static("Board Navigation", classes="help-section-title"))
-        nav_bindings = get_bindings_for_category(KANBAN_BINDINGS, "navigation")
-
-        # Group vim + arrow keys together for cleaner display
-        shown_actions = set()
-        key_h = self._key("focus_left")
-        key_j = self._key("focus_down")
-        key_k = self._key("focus_up")
-        key_l = self._key("focus_right")
-
-        for b in nav_bindings:
-            if b.help_group == "vim_horizontal" and b.action == "focus_left":
-                children.append(self._key_row(f"{key_h} / Left", "Move focus to left column"))
-                shown_actions.add("focus_left")
-            elif b.help_group == "vim_horizontal" and b.action == "focus_right":
-                if "focus_right" not in shown_actions:
-                    children.append(self._key_row(f"{key_l} / Right", "Move focus to right column"))
-                    shown_actions.add("focus_right")
-            elif b.help_group == "vim_vertical" and b.action == "focus_down":
-                if "focus_down" not in shown_actions:
-                    children.append(self._key_row(f"{key_j} / Down", "Move focus down in column"))
-                    shown_actions.add("focus_down")
-            elif b.help_group == "vim_vertical" and b.action == "focus_up":
-                if "focus_up" not in shown_actions:
-                    children.append(self._key_row(f"{key_k} / Up", "Move focus up in column"))
-                    shown_actions.add("focus_up")
-            elif not b.help_group:  # Tab navigation
-                display = "Tab" if b.key == "tab" else "Shift+Tab"
-                children.append(self._key_row(display, b.help_description))
+        children.append(self._key_row("h / Left", "Move focus to left column"))
+        children.append(self._key_row("l / Right", "Move focus to right column"))
+        children.append(self._key_row("j / Down", "Move focus down in column"))
+        children.append(self._key_row("k / Up", "Move focus up in column"))
+        children.append(self._key_row("Tab", "Cycle to next column"))
+        children.append(self._key_row("Shift+Tab", "Cycle to previous column"))
         children.append(Rule())
 
-        # Primary Actions from registry
+        # Primary Actions
         children.append(Static("Primary Actions", classes="help-section-title"))
-        primary_order = ["n", "e", "v", "enter", "x", "slash", "p", "comma"]
-        primary_bindings = get_bindings_for_category(KANBAN_BINDINGS, "primary")
-        for key in primary_order:
-            for b in primary_bindings:
-                if b.key == key:
-                    display = b.display_key.capitalize() if b.key == "enter" else b.display_key
-                    children.append(self._key_row(display, b.help_description))
-                    break
+        children.append(self._key_row("n", "Create new ticket"))
+        children.append(self._key_row("e", "Edit selected ticket"))
+        children.append(self._key_row("v", "View ticket details"))
+        children.append(self._key_row("Enter", "Open session (PAIR: tmux, AUTO: agent)"))
+        children.append(self._key_row("x", "Delete ticket"))
+        children.append(self._key_row("/", "Toggle search bar"))
+        children.append(self._key_row("p", "Switch to Plan mode"))
+        children.append(self._key_row(",", "Open settings"))
         children.append(Rule())
 
-        # Leader Key Actions from registry
+        # Leader Key Actions
         children.append(Static("Leader Key (press g, then...)", classes="help-section-title"))
         for b in KANBAN_LEADER_BINDINGS:
-            children.append(self._key_row(f"g {b.display_key}", b.help_description))
+            if isinstance(b, Binding):
+                key = b.key_display or b.key
+                children.append(self._key_row(f"g {key}", b.description))
         children.append(self._key_row("Escape", "Cancel leader mode"))
         children.append(Rule())
 
-        # Context-Specific from registry
+        # Context-Specific
         children.append(Static("Context-Specific", classes="help-section-title"))
-        context_bindings = get_bindings_for_category(KANBAN_BINDINGS, "context")
-        for b in context_bindings:
-            if b.key in ("a", "m"):  # Main context bindings
-                children.append(self._key_row(b.key, b.help_description))
+        children.append(self._key_row("a", "Start agent (AUTO tickets)"))
+        children.append(self._key_row("s", "Stop agent (AUTO tickets)"))
+        children.append(self._key_row("w", "Watch agent output (AUTO tickets)"))
+        children.append(self._key_row("m", "Merge and complete (REVIEW tickets)"))
+        children.append(self._key_row("D", "View diff (REVIEW tickets)"))
+        children.append(self._key_row("r", "Open review modal (REVIEW tickets)"))
         children.append(Rule())
 
-        # Global from registry
+        # Global
         children.append(Static("Global", classes="help-section-title"))
-        # Show F1/? for help (F1 works everywhere, ? when not in text input)
         children.append(self._key_row("F1 / ?", "Open this help screen"))
-        for b in APP_BINDINGS:
-            if b.key == "ctrl+p":
-                children.append(self._key_row("Ctrl+P", b.help_description))
-        for b in APP_BINDINGS:
-            if b.key == "q":
-                children.append(self._key_row("q", b.help_description))
+        children.append(self._key_row("Ctrl+P", "Open command palette"))
+        children.append(self._key_row("q", "Quit application"))
         children.append(self._key_row("Escape", "Close modal / cancel action"))
         children.append(Rule())
 
-        # Modal Patterns (common patterns) - dynamic lookups
-        key_save = get_key_for_action(DESCRIPTION_EDITOR_BINDINGS, "done")
-        key_yes = get_key_for_action(CONFIRM_BINDINGS, "confirm")
-        key_no = get_key_for_action(CONFIRM_BINDINGS, "cancel")
-        # Format ctrl+s nicely
-        save_display = "Ctrl+S" if key_save == "ctrl+s" else key_save
-
+        # Modal Patterns
         children.append(Static("Modal Patterns", classes="help-section-title"))
         children.append(self._key_row("Escape", "Close or cancel (never saves)"))
-        children.append(self._key_row(save_display, "Save (in edit contexts)"))
-        children.append(self._key_row(f"{key_yes} / {key_no}", "Yes / No (confirm dialogs)"))
+        children.append(self._key_row("Ctrl+S", "Save (in edit contexts)"))
+        children.append(self._key_row("y / n", "Yes / No (confirm dialogs)"))
 
         return Vertical(*children, id="keybindings-content")
 
@@ -160,16 +105,9 @@ class HelpModal(ModalScreen[None]):
         # Build leader key list dynamically
         leader_lines = []
         for b in KANBAN_LEADER_BINDINGS:
-            leader_lines.append(
-                f"  g + {b.display_key}  - {b.help_description}",
-            )
-
-        # Get keys from registry
-        key_h = self._key("focus_left")
-        key_j = self._key("focus_down")
-        key_k = self._key("focus_up")
-        key_l = self._key("focus_right")
-        key_leader = self._key("activate_leader")
+            if isinstance(b, Binding):
+                key = b.key_display or b.key
+                leader_lines.append(f"  g + {key}  - {b.description}")
 
         return Vertical(
             Static("Vim-Style Navigation", classes="help-section-title"),
@@ -180,15 +118,15 @@ class HelpModal(ModalScreen[None]):
             ),
             Static(""),
             Static("Movement Keys:", classes="help-subsection"),
-            Static(f"  {key_h} / Left   - Move left between columns", classes="help-code"),
-            Static(f"  {key_j} / Down   - Move down within a column", classes="help-code"),
-            Static(f"  {key_k} / Up     - Move up within a column", classes="help-code"),
-            Static(f"  {key_l} / Right  - Move right between columns", classes="help-code"),
+            Static("  h / Left   - Move left between columns", classes="help-code"),
+            Static("  j / Down   - Move down within a column", classes="help-code"),
+            Static("  k / Up     - Move up within a column", classes="help-code"),
+            Static("  l / Right  - Move right between columns", classes="help-code"),
             Static(""),
             Rule(),
             Static("Leader Key System", classes="help-section-title"),
             Static(
-                f"Press '{key_leader}' to enter leader mode. A hint bar appears showing available "
+                "Press 'g' to enter leader mode. A hint bar appears showing available "
                 "actions. You have 2 seconds to press the next key, or press Escape to cancel.",
                 classes="help-paragraph",
             ),
@@ -267,35 +205,19 @@ class HelpModal(ModalScreen[None]):
 
     def _compose_workflows(self) -> Vertical:
         """Compose the workflows guide section."""
-        # Get keys from registry for workflows
-        key_new = self._key("new_ticket")
-        key_plan = self._key("open_planner")
-        key_open = self._key("open_session")
-        key_watch = self._key("watch_agent")
-        key_move_fwd = self._key("move_forward", KANBAN_LEADER_BINDINGS)
-        key_diff = self._key("view_diff", KANBAN_LEADER_BINDINGS)
-        key_review_modal = self._key("open_review", KANBAN_LEADER_BINDINGS)
-        key_gen_review = self._key("generate_review", REVIEW_BINDINGS)
-        key_approve = self._key("approve", REVIEW_BINDINGS)
-        key_reject = self._key("reject", REVIEW_BINDINGS)
-
-        # Get save key from modal binding
-        key_save = get_key_for_action(DESCRIPTION_EDITOR_BINDINGS, "done")
-        save_display = "Ctrl+S" if key_save == "ctrl+s" else key_save
-
         return Vertical(
             Static("Creating Tickets", classes="help-section-title"),
             Static(""),
-            Static(f"Quick Create ({key_new}):", classes="help-subsection"),
+            Static("Quick Create (n):", classes="help-subsection"),
             Static(
-                f"  Press '{key_new}' to open the ticket form. Fill in title, description, "
-                f"priority, and type. Press {save_display} to save.",
+                "  Press 'n' to open the ticket form. Fill in title, description, "
+                "priority, and type. Press Ctrl+S to save.",
                 classes="help-paragraph-indented",
             ),
             Static(""),
-            Static(f"Plan Mode ({key_plan}):", classes="help-subsection"),
+            Static("Plan Mode (p):", classes="help-subsection"),
             Static(
-                f"  Press '{key_plan}' to enter Plan mode. Describe what you want to build "
+                "  Press 'p' to enter Plan mode. Describe what you want to build "
                 "in natural language. The AI will break it down into tickets.",
                 classes="help-paragraph-indented",
             ),
@@ -305,18 +227,18 @@ class HelpModal(ModalScreen[None]):
             Static(""),
             Static("PAIR Workflow:", classes="help-subsection"),
             Static(
-                f"  1. Select ticket in BACKLOG, press {key_open.capitalize()}\n"
+                "  1. Select ticket in BACKLOG, press Enter\n"
                 "  2. Kagan creates a git worktree and tmux session\n"
                 "  3. Work with your AI agent in the session\n"
-                f"  4. When done, move to REVIEW with g+{key_move_fwd}",
+                "  4. When done, move to REVIEW with g+l",
                 classes="help-paragraph-indented",
             ),
             Static(""),
             Static("AUTO Workflow:", classes="help-subsection"),
             Static(
-                f"  1. Select ticket in BACKLOG, press {key_open.capitalize()}\n"
+                "  1. Select ticket in BACKLOG, press Enter\n"
                 "  2. Agent starts working autonomously\n"
-                f"  3. Press '{key_watch}' or g+{key_watch} to watch progress\n"
+                "  3. Press 'w' or g+w to watch progress\n"
                 "  4. Agent moves ticket to REVIEW when done",
                 classes="help-paragraph-indented",
             ),
@@ -326,11 +248,11 @@ class HelpModal(ModalScreen[None]):
             Static(""),
             Static("Review Process:", classes="help-subsection"),
             Static(
-                f"  1. Select ticket in REVIEW\n"
-                f"  2. Press g+{key_diff} to view the diff\n"
-                f"  3. Press g+{key_review_modal} to open review modal\n"
-                f"  4. Press '{key_gen_review}' to generate AI review\n"
-                f"  5. Press '{key_approve}' to approve or '{key_reject}' to reject",
+                "  1. Select ticket in REVIEW\n"
+                "  2. Press g+d to view the diff\n"
+                "  3. Press g+r to open review modal\n"
+                "  4. Press 'g' to generate AI review\n"
+                "  5. Press 'a' to approve or 'r' to reject",
                 classes="help-paragraph-indented",
             ),
             Static(""),

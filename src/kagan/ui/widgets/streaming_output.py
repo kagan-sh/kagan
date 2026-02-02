@@ -9,8 +9,10 @@ from uuid import uuid4
 from textual.containers import VerticalScroll
 from textual.widgets import Rule, Static
 
+from kagan.ui.utils.animation import WAVE_FRAMES, WAVE_INTERVAL_MS
 from kagan.ui.widgets.agent_content import AgentResponse, AgentThought, UserInput
 from kagan.ui.widgets.permission_prompt import PermissionPrompt
+from kagan.ui.widgets.plan_approval import PlanApprovalWidget
 from kagan.ui.widgets.plan_display import PlanDisplay
 from kagan.ui.widgets.tool_call import ToolCall
 
@@ -22,19 +24,38 @@ if TYPE_CHECKING:
 
     from kagan.acp import protocol
     from kagan.acp.messages import Answer
+    from kagan.database.models import Ticket
 
 # Phase state machine
 StreamPhase = Literal["idle", "thinking", "streaming", "complete"]
 
 # Regex to strip plan/todos XML blocks from response text
 XML_BLOCK_PATTERN = re.compile(r"<(todos|plan)>.*?</\1>", re.DOTALL | re.IGNORECASE)
+# Pattern to detect start of potential XML block (for buffering during streaming)
+XML_PARTIAL_START = re.compile(r"<(todos|plan)", re.IGNORECASE)
 
 
 class ThinkingIndicator(Static):
-    """Simple thinking indicator widget."""
+    """Animated thinking indicator with wave animation."""
 
     def __init__(self, **kwargs) -> None:
-        super().__init__("Thinking...", **kwargs)
+        super().__init__(WAVE_FRAMES[0], **kwargs)
+        self._frame_index = 0
+        self._timer = None
+
+    def on_mount(self) -> None:
+        """Start animation when mounted."""
+        self._timer = self.set_interval(WAVE_INTERVAL_MS / 1000, self._next_frame, pause=False)
+
+    def on_unmount(self) -> None:
+        """Stop animation when unmounted."""
+        if self._timer:
+            self._timer.stop()
+
+    def _next_frame(self) -> None:
+        """Advance to the next animation frame."""
+        self._frame_index = (self._frame_index + 1) % len(WAVE_FRAMES)
+        self.update(WAVE_FRAMES[self._frame_index])
 
 
 class StreamingOutput(VerticalScroll):
@@ -48,6 +69,7 @@ class StreamingOutput(VerticalScroll):
         self._plan_display: PlanDisplay | None = None
         self._thinking_indicator: ThinkingIndicator | None = None
         self._phase: StreamPhase = "idle"
+        self._xml_buffer: str = ""  # Buffer for potential partial XML tags
 
     @property
     def phase(self) -> StreamPhase:
@@ -87,9 +109,9 @@ class StreamingOutput(VerticalScroll):
         self._agent_thought = None
         self._phase = "streaming"
 
-        # Filter out XML blocks from fragment
+        # Filter out XML blocks from fragment (with buffering for partial tags)
         if fragment:
-            fragment = XML_BLOCK_PATTERN.sub("", fragment)
+            fragment = self._filter_xml_content(fragment)
 
         if self._agent_response is None:
             self._agent_response = AgentResponse(fragment)
@@ -98,6 +120,54 @@ class StreamingOutput(VerticalScroll):
             await self._agent_response.append_fragment(fragment)
         self._scroll_to_end()
         return self._agent_response
+
+    def _filter_xml_content(self, fragment: str) -> str:
+        """Filter XML blocks from fragment, buffering partial tags.
+
+        This handles streaming where XML tags may arrive split across fragments.
+        """
+        # Combine buffer with new fragment
+        combined = self._xml_buffer + fragment
+        self._xml_buffer = ""
+
+        # First, remove any complete XML blocks
+        combined = XML_BLOCK_PATTERN.sub("", combined)
+
+        # Check if we're inside an incomplete XML block
+        # Look for opening tag without matching closing tag
+        match = XML_PARTIAL_START.search(combined)
+        if match:
+            tag_name = match.group(1).lower()
+            close_tag = f"</{tag_name}>"
+
+            # Check if there's a closing tag after the opening
+            close_pos = combined.lower().find(close_tag, match.start())
+            if close_pos == -1:
+                # No closing tag found - we're in a partial block
+                # Buffer everything from the start of the XML tag
+                safe_content = combined[: match.start()]
+                self._xml_buffer = combined[match.start() :]
+                return safe_content
+
+        return combined
+
+    def flush_xml_buffer(self) -> str:
+        """Flush any remaining XML buffer content (call at end of stream).
+
+        Returns any non-XML content that was buffered.
+        """
+        if not self._xml_buffer:
+            return ""
+
+        # At end of stream, filter complete blocks and return rest
+        content = XML_BLOCK_PATTERN.sub("", self._xml_buffer)
+        self._xml_buffer = ""
+
+        # If it still looks like an incomplete XML block, discard it
+        if XML_PARTIAL_START.match(content):
+            return ""
+
+        return content
 
     async def post_thought(self, fragment: str) -> AgentThought:
         """Get or create agent thought widget."""
@@ -179,6 +249,22 @@ class StreamingOutput(VerticalScroll):
         widget.focus()
         return widget
 
+    async def post_plan_approval(self, tickets: list[Ticket]) -> PlanApprovalWidget:
+        """Display inline plan approval widget.
+
+        Args:
+            tickets: The generated tickets to approve or dismiss.
+
+        Returns:
+            The mounted PlanApprovalWidget.
+        """
+        await self._remove_thinking_indicator()
+        widget = PlanApprovalWidget(tickets)
+        await self.mount(widget)
+        self._scroll_to_end()
+        widget.focus()
+        return widget
+
     async def post_turn_separator(self) -> Rule:
         """Mount a horizontal divider between conversation turns."""
         rule = Rule(classes="turn-separator")
@@ -191,6 +277,7 @@ class StreamingOutput(VerticalScroll):
         self._agent_response = None
         self._agent_thought = None
         self._plan_display = None
+        self._xml_buffer = ""
         self._phase = "idle"
 
     async def clear(self) -> None:
@@ -201,6 +288,7 @@ class StreamingOutput(VerticalScroll):
         self._tool_calls.clear()
         self._plan_display = None
         self._thinking_indicator = None
+        self._xml_buffer = ""
         self._phase = "idle"
 
     def _scroll_to_end(self) -> None:

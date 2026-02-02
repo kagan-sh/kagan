@@ -8,7 +8,7 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Input, Label, Rule, Switch
 
-from kagan.keybindings import SETTINGS_BINDINGS, to_textual_bindings
+from kagan.keybindings import SETTINGS_BINDINGS
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class SettingsModal(ModalScreen[bool]):
     """Modal for editing application settings."""
 
-    BINDINGS = to_textual_bindings(SETTINGS_BINDINGS)
+    BINDINGS = SETTINGS_BINDINGS
 
     def __init__(self, config: KaganConfig, config_path: Path, **kwargs) -> None:
         super().__init__(**kwargs)

@@ -9,24 +9,24 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, TabbedContent, TabPane, TextArea
 
-from kagan.database.models import TicketCreate, TicketPriority, TicketType
-from kagan.keybindings import TICKET_EDITOR_BINDINGS, to_textual_bindings
+from kagan.database.models import Ticket, TicketPriority, TicketType
+from kagan.keybindings import TICKET_EDITOR_BINDINGS
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
 
-class TicketEditorScreen(ModalScreen[list[TicketCreate] | None]):
+class TicketEditorScreen(ModalScreen[list[Ticket] | None]):
     """Edit proposed tickets before approval.
 
     Returns:
-        list[TicketCreate]: Edited tickets
+        list[Ticket]: Edited tickets
         None: User cancelled
     """
 
-    BINDINGS = to_textual_bindings(TICKET_EDITOR_BINDINGS)
+    BINDINGS = TICKET_EDITOR_BINDINGS
 
-    def __init__(self, tickets: list[TicketCreate]) -> None:
+    def __init__(self, tickets: list[Ticket]) -> None:
         super().__init__()
         self._tickets = list(tickets)  # Mutable copy
 
@@ -87,9 +87,9 @@ class TicketEditorScreen(ModalScreen[list[TicketCreate] | None]):
             first_input = self.query_one("#title-1", Input)
             first_input.focus()
 
-    def _collect_edited_tickets(self) -> list[TicketCreate]:
+    def _collect_edited_tickets(self) -> list[Ticket]:
         """Collect all edited tickets from the form fields."""
-        edited_tickets: list[TicketCreate] = []
+        edited_tickets: list[Ticket] = []
 
         for i, original in enumerate(self._tickets, 1):
             title_input = self.query_one(f"#title-{i}", Input)
@@ -119,7 +119,7 @@ class TicketEditorScreen(ModalScreen[list[TicketCreate] | None]):
                 ticket_type = TicketType(cast("str", type_value))
 
             edited_tickets.append(
-                TicketCreate(
+                Ticket.create(
                     title=title,
                     description=description,
                     priority=priority,

@@ -9,19 +9,17 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Footer, Input, Label, Rule, Static
 
-from kagan.database.models import TicketCreate, TicketPriority, TicketType
-from kagan.keybindings import DUPLICATE_TICKET_BINDINGS, to_textual_bindings
+from kagan.database.models import Ticket
+from kagan.keybindings import DUPLICATE_TICKET_BINDINGS
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
-    from kagan.database.models import Ticket
 
-
-class DuplicateTicketModal(ModalScreen[TicketCreate | None]):
+class DuplicateTicketModal(ModalScreen[Ticket | None]):
     """Modal for duplicating a ticket with selectable fields to copy."""
 
-    BINDINGS = to_textual_bindings(DUPLICATE_TICKET_BINDINGS)
+    BINDINGS = DUPLICATE_TICKET_BINDINGS
 
     def __init__(self, source_ticket: Ticket, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -75,59 +73,41 @@ class DuplicateTicketModal(ModalScreen[TicketCreate | None]):
             self.notify("Title is required", severity="error")
             return
 
-        # Build TicketCreate based on checkbox selections
-        create_data = TicketCreate(title=title)
-
+        # Build Ticket based on checkbox selections
+        description = ""
         if self.query_one("#copy-description", Checkbox).value:
-            create_data = TicketCreate(
-                title=title,
-                description=self.source.description,
-            )
+            description = self.source.description
 
-        # Now update with other optional fields
-        description = create_data.description
-
+        acceptance_criteria: list[str] = []
         if self.query_one("#copy-criteria", Checkbox).value:
-            create_data = TicketCreate(
-                title=title,
-                description=description,
-                acceptance_criteria=list(self.source.acceptance_criteria),
-            )
+            acceptance_criteria = list(self.source.acceptance_criteria)
 
+        priority = None
         if self.query_one("#copy-priority", Checkbox).value:
             priority = self.source.priority
-            if isinstance(priority, int):
-                priority = TicketPriority(priority)
-            create_data = TicketCreate(
-                title=title,
-                description=description,
-                acceptance_criteria=create_data.acceptance_criteria,
-                priority=priority,
-            )
 
+        ticket_type = None
         if self.query_one("#copy-type", Checkbox).value:
             ticket_type = self.source.ticket_type
-            if isinstance(ticket_type, str):
-                ticket_type = TicketType(ticket_type)
-            create_data = TicketCreate(
-                title=title,
-                description=description,
-                acceptance_criteria=create_data.acceptance_criteria,
-                priority=create_data.priority,
-                ticket_type=ticket_type,
-            )
 
+        agent_backend = None
         if self.query_one("#copy-agent", Checkbox).value:
-            create_data = TicketCreate(
-                title=title,
-                description=description,
-                acceptance_criteria=create_data.acceptance_criteria,
-                priority=create_data.priority,
-                ticket_type=create_data.ticket_type,
-                agent_backend=self.source.agent_backend,
-            )
+            agent_backend = self.source.agent_backend
 
-        self.dismiss(create_data)
+        # Build kwargs for Ticket.create, only including set values
+        kwargs: dict = {
+            "title": title,
+            "description": description,
+            "acceptance_criteria": acceptance_criteria,
+        }
+        if priority is not None:
+            kwargs["priority"] = priority
+        if ticket_type is not None:
+            kwargs["ticket_type"] = ticket_type
+        if agent_backend is not None:
+            kwargs["agent_backend"] = agent_backend
+
+        self.dismiss(Ticket.create(**kwargs))
 
     def action_cancel(self) -> None:
         """Cancel and close the modal."""

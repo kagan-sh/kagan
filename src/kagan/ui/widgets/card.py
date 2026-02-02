@@ -18,7 +18,7 @@ from kagan.constants import (
     CARD_REVIEW_MAX_LENGTH,
     CARD_TITLE_LINE_WIDTH,
 )
-from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketType
+from kagan.database.models import Ticket, TicketStatus, TicketType
 
 if TYPE_CHECKING:
     from textual import events
@@ -43,7 +43,7 @@ class TicketCard(Widget):
         super().__init__(id=f"card-{ticket.id}", **kwargs)
         self.ticket = ticket
         # Sync session state from ticket
-        self.is_session_active = getattr(ticket, "session_active", False)
+        self.is_session_active = ticket.session_active
 
     def compose(self) -> ComposeResult:
         """Compose the card layout."""
@@ -71,7 +71,7 @@ class TicketCard(Widget):
 
         # Meta line: session indicator + backend/hat + AC count + ID + date
         session_indicator = self._get_session_indicator()
-        hat = getattr(self.ticket, "assigned_hat", None) or ""
+        hat = self.ticket.assigned_hat or ""
         hat_display = hat[:CARD_HAT_MAX_LENGTH] if hat else ""
         ticket_id = f"#{self.ticket.short_id[:CARD_ID_MAX_LENGTH]}"
         date_str = self.ticket.created_at.strftime("%m.%d.%y")
@@ -112,18 +112,13 @@ class TicketCard(Widget):
         """Get CSS class for priority."""
         if self.ticket is None:
             return "low"
-        priority = self.ticket.priority
-        if isinstance(priority, int):
-            priority = TicketPriority(priority)
-        return priority.css_class
+        return self.ticket.priority.css_class
 
     def _get_type_badge(self) -> str:
         """Get type badge indicator for ticket type with agent state."""
         if self.ticket is None:
             return "👤"
         ticket_type = self.ticket.ticket_type
-        if isinstance(ticket_type, str):
-            ticket_type = TicketType(ticket_type)
         if ticket_type == TicketType.AUTO:
             # Show running state for AUTO tickets
             if self.is_agent_active:
@@ -181,7 +176,7 @@ class TicketCard(Widget):
             return "●"  # Filled circle (will pulse via CSS)
 
         # tmux session exists but not actively working
-        if self.is_session_active or getattr(self.ticket, "session_active", False):
+        if self.is_session_active:
             return "◉"  # Circle with dot (steady state)
 
         return ""
