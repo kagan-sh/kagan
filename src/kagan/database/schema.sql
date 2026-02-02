@@ -1,4 +1,5 @@
 -- Kagan Database Schema
+-- Version: 1 (tracked via PRAGMA user_version in migrations.py)
 -- SQLite with WAL mode for concurrent read/write
 
 -- Enable WAL mode for better concurrency
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     review_summary TEXT,           -- Summary from code review
     checks_passed INTEGER CHECK(checks_passed IN (0, 1)),  -- NULL=not run, 0=false, 1=true
     session_active INTEGER DEFAULT 0 CHECK(session_active IN (0, 1)),  -- 0=false, 1=true
+    total_iterations INTEGER DEFAULT 0,  -- Lifetime iteration counter (monotonically increasing)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
