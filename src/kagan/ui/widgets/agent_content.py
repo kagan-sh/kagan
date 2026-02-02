@@ -56,6 +56,16 @@ class AgentResponse(Markdown):
         self._accumulated_content += fragment
         await self.stream.write(fragment)
 
+    async def on_unmount(self) -> None:
+        """Cleanup markdown stream when widget is unmounted."""
+        if self._stream is not None:
+            try:
+                await self._stream.stop()
+            except Exception:
+                pass  # Ignore errors during cleanup
+            finally:
+                self._stream = None
+
     async def _on_click(self, event: Click) -> None:
         """Handle click events - copy on double-click."""
         if event.chain == 2:
@@ -84,6 +94,16 @@ class AgentThought(Markdown):
         self._accumulated_content += fragment
         await self.stream.write(fragment)
         self.scroll_end(animate=False)
+
+    async def on_unmount(self) -> None:
+        """Cleanup markdown stream when widget is unmounted."""
+        if self._stream is not None:
+            try:
+                await self._stream.stop()
+            except Exception:
+                pass  # Ignore errors during cleanup
+            finally:
+                self._stream = None
 
     async def _on_click(self, event: Click) -> None:
         """Handle click events - copy on double-click."""

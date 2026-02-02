@@ -144,6 +144,7 @@ SETTINGS_BINDINGS: list[BindingType] = [
 DEBUG_LOG_BINDINGS: list[BindingType] = [
     Binding("escape", "close", "Close"),
     Binding("c", "clear_logs", "Clear"),
+    Binding("s", "save_logs", "Save"),
 ]
 
 TICKET_DETAILS_BINDINGS: list[BindingType] = [

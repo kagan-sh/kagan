@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from kagan.limits import MAX_LOG_MESSAGE_LENGTH
+
 
 class LogSource(Enum):
     """Source of the log entry."""
@@ -53,6 +55,10 @@ class KaganLogger:
         if kwargs:
             key_values = " ".join(f"{key}={value!r}" for key, value in kwargs.items())
             output = f"{output} {key_values}" if output else key_values
+
+        # Truncate oversized messages
+        if len(output) > MAX_LOG_MESSAGE_LENGTH:
+            output = output[:MAX_LOG_MESSAGE_LENGTH] + "... [truncated]"
 
         # Store in buffer
         log_buffer.append(
@@ -143,6 +149,36 @@ def clear_log_buffer() -> None:
 def get_buffer_generation() -> int:
     """Get the current buffer generation (incremented on clear)."""
     return _buffer_generation
+
+
+def export_logs_to_file(file_path: str) -> int:
+    """Export all logs from the buffer to a file.
+
+    Args:
+        file_path: Path to write the log file to
+
+    Returns:
+        Number of log entries written
+    """
+    from pathlib import Path
+
+    output_path = Path(file_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", encoding="utf-8") as f:
+        f.write("# Kagan Debug Log Export\n")
+        f.write(f"# Total entries: {len(log_buffer)}\n")
+        f.write(f"# Buffer generation: {_buffer_generation}\n")
+        f.write("# " + "=" * 76 + "\n\n")
+
+        for entry in log_buffer:
+            from datetime import datetime
+
+            ts = datetime.fromtimestamp(entry.timestamp).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            source = "[PY]" if entry.source == LogSource.LOGGING else "[TX]"
+            f.write(f"{ts} {source} [{entry.group}] {entry.message}\n")
+
+    return len(log_buffer)
 
 
 # Create the global logger instance (replaces `from textual import log`)

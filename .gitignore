@@ -189,3 +189,5 @@ secrets*
 .aws/
 .gcloud/
 .azure/
+
+.scratchpad/

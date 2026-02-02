@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Literal
 
+from kagan.limits import MAX_ACCUMULATED_CHUNKS, MAX_CONVERSATION_HISTORY
+
 if TYPE_CHECKING:
     from datetime import datetime
 
@@ -116,6 +118,15 @@ class PlannerState:
 
         new_phase = transitions.get((self.phase, event), self.phase)
 
+        # Trim lists if they exceed bounds
+        accumulated = self.accumulated_response
+        if len(accumulated) > MAX_ACCUMULATED_CHUNKS:
+            accumulated = accumulated[-MAX_ACCUMULATED_CHUNKS:]
+
+        history = self.conversation_history
+        if len(history) > MAX_CONVERSATION_HISTORY:
+            history = history[-MAX_CONVERSATION_HISTORY:]
+
         # Build updated state based on transition
         new_state = PlannerState(
             phase=new_phase,
@@ -124,8 +135,8 @@ class PlannerState:
             thinking_shown=self.thinking_shown if new_phase == self.phase else False,
             todos_displayed=self.todos_displayed if new_phase == self.phase else False,
             has_output=self.has_output,
-            accumulated_response=self.accumulated_response,
-            conversation_history=self.conversation_history,
+            accumulated_response=accumulated,
+            conversation_history=history,
             pending_plan=self.pending_plan,
             input_text=self.input_text,
             agent=self.agent,

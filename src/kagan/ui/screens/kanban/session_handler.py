@@ -11,7 +11,8 @@ from kagan.sessions.tmux import TmuxError
 from kagan.ui.utils import coerce_enum
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Coroutine
+    from typing import Any
 
     from textual.app import App
 
@@ -48,6 +49,7 @@ class SessionHandler:
         self._push_screen = push_screen
         self._refresh_board = refresh_board
         self._skip_tmux_gateway_callback: Callable[[], None] | None = None
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     def set_skip_tmux_gateway_callback(self, callback: Callable[[], None]) -> None:
         """Set callback for saving tmux gateway skip preference.
@@ -56,6 +58,12 @@ class SessionHandler:
             callback: Function to call when user chooses to skip gateway in future.
         """
         self._skip_tmux_gateway_callback = callback
+
+    def _schedule_background_task(self, coro: Coroutine[Any, Any, None]) -> None:
+        """Schedule a background task with proper lifecycle management."""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     async def open_session(self, ticket: Ticket) -> None:
         """Open appropriate session based on ticket type.
@@ -218,23 +226,21 @@ class SessionHandler:
                 if current_ticket.status == TicketStatus.IN_PROGRESS:
                     from kagan.ui.modals import ConfirmModal
 
-                    # Store task references to prevent garbage collection
-                    _background_tasks: set[asyncio.Task] = set()
+                    # Capture self for use in the callback closure
+                    handler = self
 
                     def on_confirm(confirmed: bool | None) -> None:
                         async def move_to_review() -> None:
-                            await self._kagan_app.state_manager.move_ticket(
+                            await handler._kagan_app.state_manager.move_ticket(
                                 ticket.id, TicketStatus.REVIEW
                             )
-                            await self._refresh_board()
-                            self._notify("Moved to REVIEW", "information")
+                            await handler._refresh_board()
+                            handler._notify("Moved to REVIEW", "information")
 
                         if confirmed:
-                            task = asyncio.create_task(move_to_review())
+                            handler._schedule_background_task(move_to_review())
                         else:
-                            task = asyncio.create_task(self._refresh_board())
-                        _background_tasks.add(task)
-                        task.add_done_callback(_background_tasks.discard)
+                            handler._schedule_background_task(handler._refresh_board())
 
                     self._push_screen(
                         ConfirmModal(

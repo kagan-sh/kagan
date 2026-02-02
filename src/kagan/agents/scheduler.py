@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import weakref
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -206,13 +207,7 @@ class Scheduler:
         task = asyncio.create_task(self._run_ticket_loop(ticket))
         state.task = task
 
-        def on_done(_: asyncio.Task[None]) -> None:
-            # Cleanup when task completes - safe because worker loop is separate
-            self._running.pop(ticket.id, None)
-            if self._on_iteration_changed:
-                self._on_iteration_changed(ticket.id, 0)
-
-        task.add_done_callback(on_done)
+        task.add_done_callback(self._make_done_callback(ticket.id))
 
     async def _stop_if_running(self, ticket_id: str) -> None:
         """Stop agent if running. Called only from worker loop."""
@@ -234,6 +229,23 @@ class Scheduler:
 
         if self._on_iteration_changed:
             self._on_iteration_changed(ticket_id, 0)
+
+    def _handle_task_done(self, ticket_id: str, task: asyncio.Task[None]) -> None:
+        """Handle agent task completion."""
+        self._running.pop(ticket_id, None)
+        if self._on_iteration_changed:
+            self._on_iteration_changed(ticket_id, 0)
+
+    def _make_done_callback(self, ticket_id: str) -> Callable[[asyncio.Task[None]], None]:
+        """Create task done callback with weak self reference."""
+        weak_self = weakref.ref(self)
+
+        def on_done(task: asyncio.Task[None]) -> None:
+            scheduler = weak_self()
+            if scheduler is not None:
+                scheduler._handle_task_done(ticket_id, task)
+
+        return on_done
 
     # --- Public API (thread-safe via queue) ---
 
@@ -567,6 +579,9 @@ class Scheduler:
         except Exception as e:
             log.error(f"Agent prompt failed for {ticket.id}: {e}")
             return parse_signal(f'<blocked reason="Agent error: {e}"/>')
+        finally:
+            # Clear tool calls to prevent memory accumulation across iterations
+            agent.clear_tool_calls()
 
         # Get response and parse signal
         response = agent.get_response_text()

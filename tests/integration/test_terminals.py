@@ -171,10 +171,8 @@ class TestTerminalManager:
 
         manager.release(terminal_id)
 
-        # Terminal still exists but is marked as released
-        terminal = manager.get(terminal_id)
-        assert terminal is not None
-        assert terminal.released is True
+        # Terminal should be removed from registry after release
+        assert manager.get(terminal_id) is None
 
     async def test_create_increments_terminal_id(self, tmp_path: Path):
         """Test that terminal IDs increment correctly."""

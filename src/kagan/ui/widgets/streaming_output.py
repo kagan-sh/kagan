@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from textual.containers import VerticalScroll
 from textual.widgets import Rule, Static
 
+from kagan.limits import MAX_TOOL_CALLS
 from kagan.ui.utils.animation import WAVE_FRAMES, WAVE_INTERVAL_MS
 from kagan.ui.widgets.agent_content import AgentResponse, AgentThought, UserInput
 from kagan.ui.widgets.permission_prompt import PermissionPrompt
@@ -65,7 +67,7 @@ class StreamingOutput(VerticalScroll):
         super().__init__(id=id, classes=classes)
         self._agent_response: AgentResponse | None = None
         self._agent_thought: AgentThought | None = None
-        self._tool_calls: dict[str, ToolCall] = {}
+        self._tool_calls: OrderedDict[str, ToolCall] = OrderedDict()
         self._plan_display: PlanDisplay | None = None
         self._thinking_indicator: ThinkingIndicator | None = None
         self._phase: StreamPhase = "idle"
@@ -193,6 +195,12 @@ class StreamingOutput(VerticalScroll):
         tool_data = {"id": tool_id, "title": title, "kind": kind, "status": "pending"}
         widget = ToolCall(tool_data, id=f"tool-{tool_id}")
         self._tool_calls[tool_id] = widget
+
+        # Evict oldest entries if over limit
+        while len(self._tool_calls) > MAX_TOOL_CALLS:
+            _old_id, old_widget = self._tool_calls.popitem(last=False)
+            old_widget.remove()  # Remove from DOM (sync remove is fine)
+
         await self.mount(widget)
         self._scroll_to_end()
         return widget
@@ -273,7 +281,11 @@ class StreamingOutput(VerticalScroll):
         return rule
 
     def reset_turn(self) -> None:
-        """Reset state for a new conversation turn."""
+        """Reset state for a new conversation turn.
+
+        Note: Does NOT clear tool_calls - use clear() for full reset.
+        Tool calls from previous turns remain visible in the conversation.
+        """
         self._agent_response = None
         self._agent_thought = None
         self._plan_display = None

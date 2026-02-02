@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual.containers import Vertical
@@ -13,6 +14,7 @@ from kagan.debug_log import (
     LogEntry,
     LogSource,
     clear_log_buffer,
+    export_logs_to_file,
     get_buffer_generation,
     log_buffer,
 )
@@ -39,7 +41,7 @@ class DebugLogModal(ModalScreen[None]):
         with Vertical(id="debug-log-container"):
             yield Label("Debug Logs", classes="modal-title")
             yield Label(
-                "[dim]F12 to toggle | c to clear | Escape to close[/dim]",
+                "[dim]F12 to toggle | c to clear | s to save | Escape to close[/dim]",
                 classes="modal-subtitle",
             )
             yield Rule()
@@ -58,11 +60,15 @@ class DebugLogModal(ModalScreen[None]):
         await self._update_logs()
         self._log_refresh_timer = self.set_interval(0.5, self._update_logs)
 
-    def on_unmount(self) -> None:
-        """Clean up the timer when modal is closed."""
+    def _cleanup_timer(self) -> None:
+        """Stop and clear the log refresh timer."""
         if self._log_refresh_timer is not None:
             self._log_refresh_timer.stop()
             self._log_refresh_timer = None
+
+    def on_unmount(self) -> None:
+        """Clean up the timer when modal is closed."""
+        self._cleanup_timer()
 
     async def _update_logs(self) -> None:
         """Update the log display with new entries."""
@@ -86,11 +92,12 @@ class DebugLogModal(ModalScreen[None]):
 
         if buffer_len > self._line_count:
             rich_log = self.query_one("#debug-log", RichLog)
-            # Iterate only over new entries from the end of the deque
-            for i, entry in enumerate(log_buffer):
-                if i >= self._line_count:
-                    formatted = self._format_entry(entry)
-                    rich_log.write(formatted)
+            # Convert deque to list once and slice only new entries (O(k) where k = new entries)
+            # This avoids iterating through all old entries
+            new_entries = list(log_buffer)[self._line_count :]
+            for entry in new_entries:
+                formatted = self._format_entry(entry)
+                rich_log.write(formatted)
             self._line_count = buffer_len
 
     def _format_entry(self, entry: LogEntry) -> str:
@@ -116,9 +123,7 @@ class DebugLogModal(ModalScreen[None]):
 
     def action_close(self) -> None:
         """Close the modal."""
-        if self._log_refresh_timer is not None:
-            self._log_refresh_timer.stop()
-            self._log_refresh_timer = None
+        self._cleanup_timer()
         self.dismiss(None)
 
     def action_clear_logs(self) -> None:
@@ -129,3 +134,26 @@ class DebugLogModal(ModalScreen[None]):
         rich_log = self.query_one("#debug-log", RichLog)
         rich_log.clear()
         rich_log.write("[dim]Logs cleared[/dim]")
+
+    def action_save_logs(self) -> None:
+        """Export logs to .kagan/debug.log file."""
+        try:
+            # Find .kagan directory
+            kagan_dir = Path.cwd()
+            while kagan_dir != kagan_dir.parent:
+                if (kagan_dir / ".kagan").is_dir():
+                    log_path = kagan_dir / ".kagan" / "debug.log"
+                    count = export_logs_to_file(str(log_path))
+                    rich_log = self.query_one("#debug-log", RichLog)
+                    rich_log.write(f"[green]✓ Exported {count} log entries to {log_path}[/green]")
+                    return
+                kagan_dir = kagan_dir.parent
+
+            # Fallback to current directory if .kagan not found
+            log_path = Path.cwd() / "kagan_debug.log"
+            count = export_logs_to_file(str(log_path))
+            rich_log = self.query_one("#debug-log", RichLog)
+            rich_log.write(f"[yellow]⚠ .kagan not found, saved to {log_path}[/yellow]")
+        except Exception as e:
+            rich_log = self.query_one("#debug-log", RichLog)
+            rich_log.write(f"[red]✗ Failed to export logs: {e}[/red]")

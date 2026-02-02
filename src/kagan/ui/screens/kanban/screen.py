@@ -146,6 +146,14 @@ class KanbanScreen(KaganScreen):
         branch = await _get_git_branch(self.kagan_app.config_path.parent.parent)
         self.header.update_branch(branch)
 
+    def on_unmount(self) -> None:
+        """Clean up pending state on unmount."""
+        self._pending_delete_ticket = None
+        self._pending_merge_ticket = None
+        self._pending_advance_ticket = None
+        self._editing_ticket_id = None
+        self._filtered_tickets = None
+
     async def _on_ticket_changed(self, _ticket_id: str) -> None:
         await self._refresh_board()
         self._sync_iterations()

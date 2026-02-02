@@ -91,6 +91,7 @@ class TerminalManager:
         if terminal := self._terminals.get(terminal_id):
             terminal.kill()
             terminal.release()
+            del self._terminals[terminal_id]
 
     async def wait_for_exit(self, terminal_id: str) -> tuple[int, str | None]:
         terminal = self._terminals.get(terminal_id)

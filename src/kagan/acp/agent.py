@@ -567,6 +567,10 @@ class Agent:
             log.error(f"[wait_ready] Timeout after {timeout}s waiting for agent")
             raise
 
+    def clear_tool_calls(self) -> None:
+        """Clear accumulated tool calls."""
+        self.tool_calls.clear()
+
     async def send_prompt(self, prompt: str) -> str | None:
         log.info(f"Sending prompt to agent (len={len(prompt)})")
         log.debug(f"Prompt content: {prompt[:500]}...")
