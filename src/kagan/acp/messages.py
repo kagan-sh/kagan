@@ -49,10 +49,17 @@ class AgentFail(AgentMessage):
 
 
 @dataclass
+class AgentComplete(AgentMessage):
+    """Agent completed its response."""
+
+    pass
+
+
+@dataclass
 class AgentUpdate(AgentMessage):
     """Agent sent text content."""
 
-    type: str
+    content_type: str
     text: str
 
 
@@ -60,7 +67,7 @@ class AgentUpdate(AgentMessage):
 class Thinking(AgentMessage):
     """Agent thinking/reasoning content."""
 
-    type: str
+    content_type: str
     text: str
 
 

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from textual import log
 
-from kagan import jsonrpc
+from kagan.acp.jsonrpc import RPCError
 from kagan.acp.terminal import TerminalRunner
 from kagan.ansi import clean_terminal_output
 
@@ -59,21 +59,21 @@ class TerminalManager:
             if not success:
                 log.error(f"[RPC] terminal/create: failed to start terminal {terminal_id}")
                 del self._terminals[terminal_id]
-                raise jsonrpc.JSONRPCError("Failed to start terminal")
+                raise RPCError("Failed to start terminal")
             log.info(f"[RPC] terminal/create: terminal {terminal_id} started successfully")
-        except jsonrpc.JSONRPCError:
+        except RPCError:
             raise
         except Exception as e:
             log.error(f"[RPC] terminal/create: exception starting terminal: {e}")
             self._terminals.pop(terminal_id, None)
-            raise jsonrpc.JSONRPCError(f"Failed to create terminal: {e}") from e
+            raise RPCError(f"Failed to create terminal: {e}") from e
 
         return terminal_id, cmd_display
 
     def get_output(self, terminal_id: str) -> protocol.TerminalOutputResponse:
         terminal = self._terminals.get(terminal_id)
         if terminal is None:
-            raise jsonrpc.JSONRPCError(f"No terminal with id {terminal_id!r}")
+            raise RPCError(f"No terminal with id {terminal_id!r}")
 
         state = terminal.state
         result: protocol.TerminalOutputResponse = {
@@ -96,7 +96,7 @@ class TerminalManager:
     async def wait_for_exit(self, terminal_id: str) -> tuple[int, str | None]:
         terminal = self._terminals.get(terminal_id)
         if terminal is None:
-            raise jsonrpc.JSONRPCError(f"No terminal with id {terminal_id!r}")
+            raise RPCError(f"No terminal with id {terminal_id!r}")
         return await terminal.wait_for_exit()
 
     def get_final_output(self, terminal_id: str, limit: int = 500) -> str:
