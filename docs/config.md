@@ -4,12 +4,12 @@ Kagan configuration lives in `.kagan/config.toml`, created automatically on firs
 
 ## File Locations
 
-| Path                  | Purpose           |
-| --------------------- | ----------------- |
-| `.kagan/config.toml`  | Configuration     |
-| `.kagan/state.db`     | Ticket database   |
-| `.kagan/kagan.lock`   | Single-instance   |
-| `.kagan/worktrees/`   | Git worktrees     |
+| Path                 | Purpose         |
+| -------------------- | --------------- |
+| `.kagan/config.toml` | Configuration   |
+| `.kagan/state.db`    | Ticket database |
+| `.kagan/kagan.lock`  | Single-instance |
+| `.kagan/worktrees/`  | Git worktrees   |
 
 ## General Settings
 
@@ -25,16 +25,16 @@ max_iterations = 10
 iteration_delay_seconds = 2.0
 ```
 
-| Setting                   | Default   | Purpose                                |
-| ------------------------- | --------- | -------------------------------------- |
-| `auto_start`              | `false`   | Auto-run agents for IN_PROGRESS tickets on startup |
-| `auto_approve`            | `false`   | Skip permission prompts for AI actions |
-| `auto_merge`              | `false`   | Auto-merge tickets after review passes |
-| `default_base_branch`     | `"main"`  | Base branch for worktrees and merges   |
-| `default_worker_agent`    | `"claude"`| Default agent for new tickets          |
-| `max_concurrent_agents`   | `3`       | Maximum parallel AUTO agents           |
-| `max_iterations`          | `10`      | Max agent iterations before BACKLOG    |
-| `iteration_delay_seconds` | `2.0`     | Delay between agent iterations         |
+| Setting                   | Default    | Purpose                                            |
+| ------------------------- | ---------- | -------------------------------------------------- |
+| `auto_start`              | `false`    | Auto-run agents for IN_PROGRESS tickets on startup |
+| `auto_approve`            | `false`    | Skip permission prompts for AI actions             |
+| `auto_merge`              | `false`    | Auto-merge tickets after review passes             |
+| `default_base_branch`     | `"main"`   | Base branch for worktrees and merges               |
+| `default_worker_agent`    | `"claude"` | Default agent for new tickets                      |
+| `max_concurrent_agents`   | `3`        | Maximum parallel AUTO agents                       |
+| `max_iterations`          | `10`       | Max agent iterations before BACKLOG                |
+| `iteration_delay_seconds` | `2.0`      | Delay between agent iterations                     |
 
 ## Agent Configuration
 
@@ -53,15 +53,15 @@ active = true
 "*" = "claude"
 ```
 
-| Field                 | Purpose                                    |
-| --------------------- | ------------------------------------------ |
-| `identity`            | Unique agent identifier                    |
-| `name`                | Display name in UI                         |
-| `short_name`          | Compact label for badges                   |
-| `protocol`            | Protocol type (currently only `acp`)       |
-| `active`              | Whether this agent is available            |
-| `run_command`         | OS-specific command for AUTO mode (ACP)    |
-| `interactive_command` | OS-specific command for PAIR mode (CLI)    |
+| Field                 | Purpose                                 |
+| --------------------- | --------------------------------------- |
+| `identity`            | Unique agent identifier                 |
+| `name`                | Display name in UI                      |
+| `short_name`          | Compact label for badges                |
+| `protocol`            | Protocol type (currently only `acp`)    |
+| `active`              | Whether this agent is available         |
+| `run_command`         | OS-specific command for AUTO mode (ACP) |
+| `interactive_command` | OS-specific command for PAIR mode (CLI) |
 
 ### OS-Specific Commands
 
@@ -97,8 +97,8 @@ active = true
 skip_tmux_gateway = false
 ```
 
-| Setting             | Default | Purpose                                            |
-| ------------------- | ------- | -------------------------------------------------- |
+| Setting             | Default | Purpose                                             |
+| ------------------- | ------- | --------------------------------------------------- |
 | `skip_tmux_gateway` | `false` | Skip the tmux info modal when opening PAIR sessions |
 
 ## Refinement Settings
@@ -111,44 +111,44 @@ skip_length_under = 20
 skip_prefixes = ["/", "!", "?"]
 ```
 
-| Setting             | Default              | Purpose                                      |
-| ------------------- | -------------------- | -------------------------------------------- |
-| `enabled`           | `true`               | Enable prompt refinement feature             |
-| `hotkey`            | `"ctrl+e"`           | Hotkey to trigger refinement in planner      |
-| `skip_length_under` | `20`                 | Skip refinement for inputs shorter than this |
-| `skip_prefixes`     | `["/", "!", "?"]`    | Prefixes that skip refinement                |
+| Setting             | Default           | Purpose                                      |
+| ------------------- | ----------------- | -------------------------------------------- |
+| `enabled`           | `true`            | Enable prompt refinement feature             |
+| `hotkey`            | `"ctrl+e"`        | Hotkey to trigger refinement in planner      |
+| `skip_length_under` | `20`              | Skip refinement for inputs shorter than this |
+| `skip_prefixes`     | `["/", "!", "?"]` | Prefixes that skip refinement                |
 
 ## AUTO Mode Signals
 
 Agents communicate state transitions via XML signals:
 
-| Signal                     | Effect                  |
-| -------------------------- | ----------------------- |
-| `<complete/>`              | Move ticket to REVIEW   |
-| `<blocked reason="..."/>`  | Move ticket to BACKLOG  |
-| `<continue/>`              | Continue iteration      |
-| `<approve summary="..."/>` | Approve in review       |
-| `<reject reason="..."/>`   | Reject in review        |
+| Signal                     | Effect                 |
+| -------------------------- | ---------------------- |
+| `<complete/>`              | Move ticket to REVIEW  |
+| `<blocked reason="..."/>`  | Move ticket to BACKLOG |
+| `<continue/>`              | Continue iteration     |
+| `<approve summary="..."/>` | Approve in review      |
+| `<reject reason="..."/>`   | Reject in review       |
 
 ## Environment Variables
 
 These variables are set when agents run:
 
-| Variable              | Description              |
-| --------------------- | ------------------------ |
-| `KAGAN_TICKET_ID`     | Current ticket ID        |
-| `KAGAN_TICKET_TITLE`  | Current ticket title     |
-| `KAGAN_WORKTREE_PATH` | Path to ticket worktree  |
-| `KAGAN_PROJECT_ROOT`  | Root of the repository   |
+| Variable              | Description             |
+| --------------------- | ----------------------- |
+| `KAGAN_TICKET_ID`     | Current ticket ID       |
+| `KAGAN_TICKET_TITLE`  | Current ticket title    |
+| `KAGAN_WORKTREE_PATH` | Path to ticket worktree |
+| `KAGAN_PROJECT_ROOT`  | Root of the repository  |
 
 ## MCP Configuration Files
 
 For MCP server integration, agents look for:
 
-| Agent       | Config File      |
-| ----------- | ---------------- |
-| Claude Code | `.mcp.json`      |
-| OpenCode    | `opencode.json`  |
+| Agent       | Config File     |
+| ----------- | --------------- |
+| Claude Code | `.mcp.json`     |
+| OpenCode    | `opencode.json` |
 
 ## Minimal Config
 

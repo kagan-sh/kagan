@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -13,7 +13,6 @@ from kagan.acp.agent import Agent
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from kagan.acp.protocol import SessionUpdate
     from kagan.config import AgentConfig
 
 pytestmark = pytest.mark.integration
@@ -35,7 +34,7 @@ class TestHandleSessionUpdateAgentMessage:
             "sessionUpdate": "agent_message_chunk",
             "content": {"type": "text", "text": "Hello"},
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         agent._buffers.append_response.assert_called_once_with("Hello")  # type: ignore[union-attr]
 
     def test_agent_message_chunk_posts_message(self, tmp_path: Path, agent_config: AgentConfig):
@@ -44,7 +43,7 @@ class TestHandleSessionUpdateAgentMessage:
             "sessionUpdate": "agent_message_chunk",
             "content": {"type": "text", "text": "Hello"},
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         agent.post_message.assert_called_once()  # type: ignore[union-attr]
         msg = agent.post_message.call_args[0][0]  # type: ignore[union-attr]
         assert isinstance(msg, messages.AgentUpdate)
@@ -55,7 +54,7 @@ class TestHandleSessionUpdateAgentMessage:
     ):
         agent = create_test_agent(tmp_path, agent_config)
         update: dict[str, Any] = {"sessionUpdate": "agent_message_chunk", "content": "string"}
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         agent._buffers.append_response.assert_not_called()  # type: ignore[union-attr]
 
     def test_agent_message_chunk_ignores_missing_content(
@@ -63,7 +62,7 @@ class TestHandleSessionUpdateAgentMessage:
     ):
         agent = create_test_agent(tmp_path, agent_config)
         update: dict[str, Any] = {"sessionUpdate": "agent_message_chunk"}
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         agent._buffers.append_response.assert_not_called()  # type: ignore[union-attr]
 
 
@@ -74,7 +73,7 @@ class TestHandleSessionUpdateThought:
             "sessionUpdate": "agent_thought_chunk",
             "content": {"type": "reasoning", "text": "Let me think..."},
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         msg = agent.post_message.call_args[0][0]  # type: ignore[union-attr]
         assert isinstance(msg, messages.Thinking)
         assert msg.text == "Let me think..."
@@ -82,7 +81,7 @@ class TestHandleSessionUpdateThought:
     def test_agent_thought_chunk_ignores_non_dict(self, tmp_path: Path, agent_config: AgentConfig):
         agent = create_test_agent(tmp_path, agent_config)
         update: dict[str, Any] = {"sessionUpdate": "agent_thought_chunk", "content": None}
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         agent.post_message.assert_not_called()  # type: ignore[union-attr]
 
 
@@ -94,7 +93,7 @@ class TestHandleSessionUpdateToolCall:
             "toolCallId": "call-123",
             "title": "Read file",
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         assert "call-123" in agent.tool_calls
         assert agent.tool_calls["call-123"]["title"] == "Read file"
 
@@ -105,7 +104,7 @@ class TestHandleSessionUpdateToolCall:
             "toolCallId": "call-123",
             "title": "Read file",
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         msg = agent.post_message.call_args[0][0]  # type: ignore[union-attr]
         assert isinstance(msg, messages.ToolCall)
 
@@ -119,7 +118,7 @@ class TestHandleSessionUpdateToolCallUpdate:
             "toolCallId": "call-123",
             "status": "completed",
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         assert agent.tool_calls["call-123"]["status"] == "completed"
 
     def test_tool_call_update_creates_if_missing(self, tmp_path: Path, agent_config: AgentConfig):
@@ -129,7 +128,7 @@ class TestHandleSessionUpdateToolCallUpdate:
             "toolCallId": "new-call",
             "status": "running",
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         assert "new-call" in agent.tool_calls
         assert agent.tool_calls["new-call"]["status"] == "running"
 
@@ -141,7 +140,7 @@ class TestHandleSessionUpdateToolCallUpdate:
             "toolCallId": "call-123",
             "output": "result",
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         msg = agent.post_message.call_args[0][0]  # type: ignore[union-attr]
         assert isinstance(msg, messages.ToolCallUpdate)
 
@@ -151,7 +150,7 @@ class TestHandleSessionUpdatePlan:
         agent = create_test_agent(tmp_path, agent_config)
         entries = [{"id": "1", "title": "Step 1"}, {"id": "2", "title": "Step 2"}]
         update: dict[str, Any] = {"sessionUpdate": "plan", "entries": entries}
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         msg = agent.post_message.call_args[0][0]  # type: ignore[union-attr]
         assert isinstance(msg, messages.Plan)
         assert len(msg.entries) == 2
@@ -159,7 +158,7 @@ class TestHandleSessionUpdatePlan:
     def test_plan_ignores_missing_entries(self, tmp_path: Path, agent_config: AgentConfig):
         agent = create_test_agent(tmp_path, agent_config)
         update: dict[str, Any] = {"sessionUpdate": "plan"}
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         agent.post_message.assert_not_called()  # type: ignore[union-attr]
 
 
@@ -171,14 +170,14 @@ class TestHandleSessionUpdateModes:
             "sessionUpdate": "available_commands_update",
             "availableCommands": cmds,
         }
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         msg = agent.post_message.call_args[0][0]  # type: ignore[union-attr]
         assert isinstance(msg, messages.AvailableCommandsUpdate)
 
     def test_current_mode_posts_message(self, tmp_path: Path, agent_config: AgentConfig):
         agent = create_test_agent(tmp_path, agent_config)
         update: dict[str, Any] = {"sessionUpdate": "current_mode_update", "currentModeId": "code"}
-        agent._rpc_session_update("session-1", cast("SessionUpdate", update))
+        agent._rpc_session_update("session-1", update)
         msg = agent.post_message.call_args[0][0]  # type: ignore[union-attr]
         assert isinstance(msg, messages.ModeUpdate)
         assert msg.current_mode == "code"

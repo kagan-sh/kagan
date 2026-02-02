@@ -1807,19 +1807,43 @@ class TestPendingPlanSubmit:
 class TestRefinerFlow:
     """Tests for the refiner flow that creates/uses the PromptRefiner."""
 
+    @staticmethod
+    def _create_mock_refiner(refine_return_value: str | None = None, refine_side_effect=None):
+        """Create a properly mocked PromptRefiner with all async methods.
+
+        Args:
+            refine_return_value: Value to return from refine() if no side_effect.
+            refine_side_effect: Exception or callable to use as side_effect for refine().
+
+        Returns:
+            Tuple of (mock_instance, mock_class_factory) for use with monkeypatch.
+        """
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_instance = MagicMock()
+        # Mock all async methods
+        mock_instance.refine = AsyncMock(
+            return_value=refine_return_value, side_effect=refine_side_effect
+        )
+        mock_instance.stop = AsyncMock()
+
+        def mock_class(*args, **kwargs):
+            return mock_instance
+
+        return mock_instance, mock_class
+
     async def test_refine_with_mock_refiner_success(
         self, app_with_mock_planner: KaganApp, monkeypatch
     ):
         """Refine successfully updates input with enhanced text."""
-        from unittest.mock import AsyncMock, MagicMock
-
         from kagan.acp import messages
         from kagan.ui.screens.planner import PlannerInput
         from kagan.ui.screens.planner.state import PlannerPhase
 
-        # Create mock refiner
-        mock_refiner = MagicMock()
-        mock_refiner.refine = AsyncMock(return_value="Enhanced: Create a user auth system")
+        mock_refiner, mock_class = self._create_mock_refiner(
+            refine_return_value="Enhanced: Create a user auth system"
+        )
+        monkeypatch.setattr("kagan.ui.screens.planner.screen.PromptRefiner", mock_class)
 
         async with app_with_mock_planner.run_test(size=(120, 40)) as pilot:
             await app_with_mock_planner.push_screen(PlannerScreen())
@@ -1833,9 +1857,6 @@ class TestRefinerFlow:
 
             # Ensure refinement is enabled
             app_with_mock_planner.config.refinement.enabled = True
-
-            # Set up the mock refiner
-            screen._state.refiner = mock_refiner
 
             # Add input that's long enough to refine
             planner_input = screen.query_one("#planner-input", PlannerInput)
@@ -1864,15 +1885,14 @@ class TestRefinerFlow:
         self, app_with_mock_planner: KaganApp, monkeypatch
     ):
         """Refine handles timeout error gracefully."""
-        from unittest.mock import AsyncMock, MagicMock
-
         from kagan.acp import messages
         from kagan.ui.screens.planner import PlannerInput
         from kagan.ui.screens.planner.state import PlannerPhase
 
-        # Create mock refiner that raises timeout
-        mock_refiner = MagicMock()
-        mock_refiner.refine = AsyncMock(side_effect=TimeoutError("Timed out"))
+        mock_refiner, mock_class = self._create_mock_refiner(
+            refine_side_effect=TimeoutError("Timed out")
+        )
+        monkeypatch.setattr("kagan.ui.screens.planner.screen.PromptRefiner", mock_class)
 
         async with app_with_mock_planner.run_test(size=(120, 40)) as pilot:
             await app_with_mock_planner.push_screen(PlannerScreen())
@@ -1886,9 +1906,6 @@ class TestRefinerFlow:
 
             # Ensure refinement is enabled
             app_with_mock_planner.config.refinement.enabled = True
-
-            # Set up the mock refiner
-            screen._state.refiner = mock_refiner
 
             # Add input that's long enough to refine
             planner_input = screen.query_one("#planner-input", PlannerInput)
@@ -1916,15 +1933,14 @@ class TestRefinerFlow:
         self, app_with_mock_planner: KaganApp, monkeypatch
     ):
         """Refine handles general exception gracefully."""
-        from unittest.mock import AsyncMock, MagicMock
-
         from kagan.acp import messages
         from kagan.ui.screens.planner import PlannerInput
         from kagan.ui.screens.planner.state import PlannerPhase
 
-        # Create mock refiner that raises exception
-        mock_refiner = MagicMock()
-        mock_refiner.refine = AsyncMock(side_effect=Exception("Network error"))
+        mock_refiner, mock_class = self._create_mock_refiner(
+            refine_side_effect=Exception("Network error")
+        )
+        monkeypatch.setattr("kagan.ui.screens.planner.screen.PromptRefiner", mock_class)
 
         async with app_with_mock_planner.run_test(size=(120, 40)) as pilot:
             await app_with_mock_planner.push_screen(PlannerScreen())
@@ -1938,9 +1954,6 @@ class TestRefinerFlow:
 
             # Ensure refinement is enabled
             app_with_mock_planner.config.refinement.enabled = True
-
-            # Set up the mock refiner
-            screen._state.refiner = mock_refiner
 
             # Add input that's long enough to refine
             planner_input = screen.query_one("#planner-input", PlannerInput)
@@ -1968,19 +1981,11 @@ class TestRefinerFlow:
         self, app_with_mock_planner: KaganApp, monkeypatch
     ):
         """Refine creates PromptRefiner if not already created."""
-        from unittest.mock import AsyncMock, MagicMock
-
         from kagan.acp import messages
         from kagan.ui.screens.planner import PlannerInput
 
-        # Mock the PromptRefiner class
-        mock_refiner_instance = MagicMock()
-        mock_refiner_instance.refine = AsyncMock(return_value="Enhanced prompt")
-
-        def mock_refiner_class(*args, **kwargs):
-            return mock_refiner_instance
-
-        monkeypatch.setattr("kagan.ui.screens.planner.screen.PromptRefiner", mock_refiner_class)
+        mock_refiner, mock_class = self._create_mock_refiner(refine_return_value="Enhanced prompt")
+        monkeypatch.setattr("kagan.ui.screens.planner.screen.PromptRefiner", mock_class)
 
         async with app_with_mock_planner.run_test(size=(120, 40)) as pilot:
             await app_with_mock_planner.push_screen(PlannerScreen())
@@ -2013,7 +2018,7 @@ class TestRefinerFlow:
             assert screen._state.refiner is not None
 
             # Should have called refine
-            mock_refiner_instance.refine.assert_called_once()
+            mock_refiner.refine.assert_called_once()
 
 
 # =============================================================================

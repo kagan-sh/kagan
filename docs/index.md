@@ -15,7 +15,7 @@ cd your-project && kagan
 ```
 
 !!! info "Requirements"
-    Python 3.12+, terminal (min 80x20), git repo (for worktrees), tmux (for PAIR mode)
+Python 3.12+, terminal (min 80x20), git repo (for worktrees), tmux (for PAIR mode)
 
 ## Essential Shortcuts
 
@@ -52,7 +52,7 @@ Interactive tmux session where you work alongside your AI agent in real-time.
 - Perfect for complex problems requiring back-and-forth
 
 !!! tip "Choosing the right mode"
-    Use **AUTO** for well-defined tasks with clear acceptance criteria. Use **PAIR** when you need to explore, debug, or learn alongside the AI.
+Use **AUTO** for well-defined tasks with clear acceptance criteria. Use **PAIR** when you need to explore, debug, or learn alongside the AI.
 
 Read the [Ticket Modes Guide](ticket-modes.md) for detailed state machines and workflow tips.
 
@@ -71,9 +71,9 @@ Press ++p++ to describe your goal in natural language. The planner breaks it dow
 Built-in code review with AI assistance:
 
 1. Ticket moves to REVIEW when agent completes work
-2. View diffs (++shift+d++), inspect commits, run tests
-3. Approve (++a++) to merge or reject (++r++) with feedback
-4. Auto-merge on approval (configurable)
+1. View diffs (++shift+d++), inspect commits, run tests
+1. Approve (++a++) to merge or reject (++r++) with feedback
+1. Auto-merge on approval (configurable)
 
 ## MCP Integration
 
@@ -159,7 +159,7 @@ stateDiagram-v2
 | **DONE**        | Merged (auto or manual)              | Merged manually         |
 
 !!! note "Key difference"
-    AUTO tickets have automatic state transitions driven by the agent. PAIR tickets are fully manual—you control when they move between columns.
+AUTO tickets have automatic state transitions driven by the agent. PAIR tickets are fully manual—you control when they move between columns.
 
 ## Supported AI CLIs
 

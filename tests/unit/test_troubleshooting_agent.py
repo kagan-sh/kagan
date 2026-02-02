@@ -139,6 +139,11 @@ class TestDetectIssuesMultiple:
             "kagan.ui.screens.troubleshooting._check_git_user",
             return_value=None,
         )
+        # Mock terminal truecolor check to avoid 5th issue
+        mocker.patch(
+            "kagan.ui.screens.troubleshooting._check_terminal_truecolor",
+            return_value=None,
+        )
 
         result = await detect_issues(
             check_lock=True,

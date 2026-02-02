@@ -4,12 +4,12 @@ We welcome contributions to Kagan! This page provides quick links to get started
 
 ## Quick Links
 
-| Resource | Link |
-| -------- | ---- |
+| Resource           | Link                                                                             |
+| ------------------ | -------------------------------------------------------------------------------- |
 | Contributing Guide | [CONTRIBUTING.md](https://github.com/aorumbayev/kagan/blob/main/CONTRIBUTING.md) |
-| Issue Tracker | [GitHub Issues](https://github.com/aorumbayev/kagan/issues) |
-| Pull Requests | [GitHub PRs](https://github.com/aorumbayev/kagan/pulls) |
-| Discussions | [GitHub Discussions](https://github.com/aorumbayev/kagan/discussions) |
+| Issue Tracker      | [GitHub Issues](https://github.com/aorumbayev/kagan/issues)                      |
+| Pull Requests      | [GitHub PRs](https://github.com/aorumbayev/kagan/pulls)                          |
+| Discussions        | [GitHub Discussions](https://github.com/aorumbayev/kagan/discussions)            |
 
 ## Development Setup
 

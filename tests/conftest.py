@@ -423,7 +423,12 @@ def _create_fake_tmux(sessions: dict):
 @pytest.fixture(autouse=True)
 def auto_mock_tmux_for_app_tests(request, monkeypatch):
     """Auto-mock tmux for tests using KaganApp fixtures (external system boundary)."""
-    if not any(n.startswith("e2e_app") or n == "app" for n in request.fixturenames):
+    # Match fixtures that create KaganApp instances
+    app_fixture_patterns = ("e2e_app", "app", "welcome_app", "_fresh_app")
+    if not any(
+        n.startswith(app_fixture_patterns) or n in app_fixture_patterns
+        for n in request.fixturenames
+    ):
         return
     fake = _create_fake_tmux({})
     monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake)

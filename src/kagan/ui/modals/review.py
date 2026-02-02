@@ -281,6 +281,8 @@ Keep your review brief and actionable."""
 
     async def _run_prompt(self, prompt: str, output: StreamingOutput) -> None:
         """Run prompt in background, handle errors."""
+        if self._agent is None:
+            return
         try:
             await self._agent.send_prompt(prompt)
         except Exception as e:

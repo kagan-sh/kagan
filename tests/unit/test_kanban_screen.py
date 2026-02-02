@@ -188,7 +188,8 @@ class TestOnTicketModalResult:
         mock_screen._refresh_board.assert_called_once()
         mock_screen.notify.assert_called_once()
         assert "Ticket updated" in mock_screen.notify.call_args[0][0]
-        assert mock_screen._editing_ticket_id is None
+        editing_id = mock_screen._editing_ticket_id
+        assert editing_id is None
 
     @pytest.mark.asyncio
     async def test_ignores_dict_without_editing_id(self, mock_screen):

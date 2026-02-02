@@ -145,11 +145,11 @@ The **Retry** action resets the iteration counter for a fresh attempt.
 
 ### Tmux Gateway Modal
 
-| Key      | Action             |
-| -------- | ------------------ |
-| `Enter`  | Continue to tmux   |
-| `s`      | Don't show again   |
-| `Escape` | Cancel             |
+| Key      | Action           |
+| -------- | ---------------- |
+| `Enter`  | Continue to tmux |
+| `s`      | Don't show again |
+| `Escape` | Cancel           |
 
 ## Planner Screen
 
@@ -163,9 +163,9 @@ The **Retry** action resets the iteration counter for a fresh attempt.
 
 When an agent requests permission:
 
-| Key      | Action                              |
-| -------- | ----------------------------------- |
-| `y`      | Allow once                          |
-| `a`      | Allow always (for this session)     |
-| `n`      | Deny                                |
-| `Escape` | Deny                                |
+| Key      | Action                          |
+| -------- | ------------------------------- |
+| `y`      | Allow once                      |
+| `a`      | Allow always (for this session) |
+| `n`      | Deny                            |
+| `Escape` | Deny                            |

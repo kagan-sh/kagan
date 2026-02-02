@@ -773,9 +773,9 @@ class TestFormMode:
 
     def test_form_mode_values(self):
         """FormMode should have CREATE, VIEW, and EDIT values."""
-        assert FormMode.CREATE is not None
-        assert FormMode.VIEW is not None
-        assert FormMode.EDIT is not None
+        # Verify all expected modes exist and are accessible
+        modes = {FormMode.CREATE, FormMode.VIEW, FormMode.EDIT}
+        assert len(modes) == 3
         assert len(FormMode) == 3
 
     def test_form_modes_are_distinct(self):
