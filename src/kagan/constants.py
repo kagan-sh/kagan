@@ -7,7 +7,6 @@ from kagan.limits import (
     SCRATCHPAD_LIMIT,
     SHUTDOWN_TIMEOUT,
     SUBPROCESS_LIMIT,
-    TICK_INTERVAL,
 )
 
 # UI Display Constants
@@ -138,5 +137,4 @@ __all__ = [
     "SHUTDOWN_TIMEOUT",
     "STATUS_LABELS",
     "SUBPROCESS_LIMIT",
-    "TICK_INTERVAL",
 ]

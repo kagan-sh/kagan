@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from textual.app import App
 from textual.signal import Signal
@@ -14,15 +15,19 @@ from kagan.constants import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_DB_PATH,
     DEFAULT_LOCK_PATH,
-    TICK_INTERVAL,
 )
 from kagan.database import StateManager
 from kagan.git_utils import GitInitResult, has_git_repo, init_git_repo
-from kagan.keybindings import APP_BINDINGS, to_textual_bindings
+from kagan.keybindings import APP_BINDINGS
 from kagan.lock import InstanceLock, exit_if_already_running
 from kagan.sessions import SessionManager
-from kagan.theme import KAGAN_THEME
+from kagan.terminal import supports_truecolor
+from kagan.theme import KAGAN_THEME, KAGAN_THEME_256
 from kagan.ui.screens.kanban import KanbanScreen
+
+if TYPE_CHECKING:
+    from kagan.database.models import TicketStatus
+    from kagan.ui.screens.planner.state import PersistentPlannerState
 
 
 class KaganApp(App):
@@ -31,7 +36,7 @@ class KaganApp(App):
     TITLE = "ᘚᘛ KAGAN"
     CSS_PATH = "styles/kagan.tcss"
 
-    BINDINGS = to_textual_bindings(APP_BINDINGS)
+    BINDINGS = APP_BINDINGS
 
     def __init__(
         self,
@@ -40,9 +45,15 @@ class KaganApp(App):
         lock_path: str | None = DEFAULT_LOCK_PATH,
     ):
         super().__init__()
-        # Register the Kagan theme before anything else
+        # Register both themes and select based on terminal capabilities
         self.register_theme(KAGAN_THEME)
-        self.theme = "kagan"
+        self.register_theme(KAGAN_THEME_256)
+
+        # Auto-select theme based on truecolor support
+        if supports_truecolor():
+            self.theme = "kagan"
+        else:
+            self.theme = "kagan-256"
 
         # Pub/sub signal for ticket changes - screens subscribe to this
         self.ticket_changed_signal: Signal[str] = Signal(self, "ticket_changed")
@@ -57,6 +68,7 @@ class KaganApp(App):
         self._scheduler: Scheduler | None = None
         self._instance_lock: InstanceLock | None = None
         self.config: KaganConfig = KaganConfig()
+        self.planner_state: PersistentPlannerState | None = None
 
     @property
     def state_manager(self) -> StateManager:
@@ -164,10 +176,15 @@ class KaganApp(App):
                 on_iteration_changed=lambda tid, it: self.iteration_changed_signal.publish(
                     (tid, it)
                 ),
+                on_error=lambda tid, msg: self.notify(f"#{tid}: {msg}", severity="error"),
             )
-            # Start scheduler tick loop
-            self.set_interval(TICK_INTERVAL, self._scheduler_tick)
-            self.log("Scheduler initialized", auto_start=self.config.general.auto_start)
+            # Wire up reactive scheduler: status changes trigger spawns/stops
+            self._state_manager.set_status_change_callback(self._on_ticket_status_change)
+            # Start the scheduler's event processing loop
+            self._scheduler.start()
+            # Spawn agents for any existing IN_PROGRESS AUTO tickets
+            await self._scheduler.initialize_existing_tickets()
+            self.log("Scheduler initialized (reactive mode)")
 
         # Chat-first boot: show PlannerScreen if board is empty, else KanbanScreen
         tickets = await self._state_manager.get_all_tickets()
@@ -192,10 +209,18 @@ class KaganApp(App):
         """Clean up on unmount."""
         await self.cleanup()
 
-    async def _scheduler_tick(self) -> None:
-        """Run one scheduler tick."""
+    def _on_ticket_status_change(
+        self, ticket_id: str, old_status: TicketStatus | None, new_status: TicketStatus | None
+    ) -> None:
+        """Handle ticket status change - forward to scheduler.
+
+        This is called synchronously from StateManager, so we schedule
+        the async handler to run.
+        """
         if self._scheduler:
-            await self._scheduler.tick()
+            self.call_later(
+                lambda: self._scheduler.handle_status_change(ticket_id, old_status, new_status)
+            )
 
     async def _reconcile_sessions(self) -> None:
         """Kill orphaned tmux sessions from previous runs."""
@@ -223,6 +248,12 @@ class KaganApp(App):
 
     async def cleanup(self) -> None:
         """Terminate all agents and close resources."""
+        # Stop planner agent if it's still alive
+        if self.planner_state and self.planner_state.agent:
+            await self.planner_state.agent.stop()
+        if self.planner_state and self.planner_state.refiner:
+            await self.planner_state.refiner.stop()
+
         if self._scheduler:
             await self._scheduler.stop()
         if self._state_manager:

@@ -211,6 +211,8 @@ class SessionManager:
         desc = ticket.description or "No description provided."
         return f"""Hello! I'm starting a pair programming session for ticket **{ticket.id}**.
 
+Act as a Senior Developer collaborating with me on this implementation.
+
 ## Task Overview
 **Title:** {ticket.title}
 
@@ -236,5 +238,5 @@ After confirming MCP access, please:
 1. Summarize your understanding of this task (including acceptance criteria from MCP)
 2. Ask me if I'm ready to proceed with the implementation
 
-**Do not start making changes until I confirm I'm ready to proceed.**
+**Wait for my confirmation before beginning any implementation.**
 """

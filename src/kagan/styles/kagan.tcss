@@ -1136,6 +1136,95 @@ WelcomeScreen {
     padding-top: 1;
 }
 
+/* =============================================================================
+   AGENT SELECT MODAL
+   ============================================================================= */
+
+AgentSelectModal {
+    align: center middle;
+}
+
+#agent-select-modal {
+    width: 60;
+    height: auto;
+    border: thick $primary;
+    background: $surface;
+    padding: 2;
+}
+
+#agent-select-modal Select {
+    width: 100%;
+    margin: 1 0;
+}
+
+/* =============================================================================
+   INSTALL MODAL
+   ============================================================================= */
+
+InstallModal {
+    align: center middle;
+}
+
+#install-modal-container {
+    width: 70;
+    height: auto;
+    border: thick $primary;
+    background: $surface;
+    padding: 2;
+}
+
+.install-modal-title {
+    text-style: bold;
+    text-align: center;
+    width: 100%;
+    color: $secondary;
+    padding-bottom: 1;
+}
+
+.install-modal-subtitle {
+    text-align: center;
+    width: 100%;
+    color: $text;
+    padding-bottom: 1;
+}
+
+.install-modal-command {
+    text-align: center;
+    width: 100%;
+    color: $primary;
+    background: $background;
+    padding: 1;
+    margin-bottom: 1;
+}
+
+#install-spinner {
+    width: 100%;
+    height: 3;
+    padding: 1 0;
+}
+
+.install-modal-status {
+    text-align: center;
+    width: 100%;
+    color: $text;
+    padding: 1 0;
+}
+
+.install-modal-status.success {
+    color: $success;
+}
+
+.install-modal-status.error {
+    color: $error;
+}
+
+.install-modal-hint {
+    text-align: center;
+    width: 100%;
+    color: $text-muted;
+    padding-top: 1;
+}
+
 #welcome-container {
     width: 95%;
     max-width: 70;
@@ -1218,55 +1307,6 @@ WelcomeScreen Footer {
 }
 
 /* =============================================================================
-   APPROVAL SCREEN
-   ============================================================================= */
-
-ApprovalScreen {
-    align: center middle;
-}
-
-ApprovalScreen #approval-container {
-    width: 80%;
-    max-width: 100;
-    height: auto;
-    max-height: 80%;
-    background: $surface;
-    border: thick $primary;
-    padding: 1 2;
-}
-
-ApprovalScreen #approval-title {
-    text-align: center;
-    text-style: bold;
-    width: 100%;
-    padding-bottom: 1;
-}
-
-ApprovalScreen #approval-hint {
-    text-align: center;
-    color: $text-muted;
-    width: 100%;
-    padding-bottom: 1;
-}
-
-ApprovalScreen #ticket-table {
-    height: auto;
-    max-height: 20;
-    margin-bottom: 1;
-}
-
-ApprovalScreen #approval-buttons {
-    width: 100%;
-    height: auto;
-    align: center middle;
-    padding-top: 1;
-}
-
-ApprovalScreen #approval-buttons Button {
-    margin: 0 1;
-}
-
-/* =============================================================================
    REVIEW MODAL
    ============================================================================= */
 
@@ -1280,6 +1320,7 @@ ReviewModal {
     background: $surface;
     border: thick $success;
     padding: 1 2;
+    overflow: hidden;
 }
 
 ReviewModal .modal-title {
@@ -1300,12 +1341,12 @@ ReviewModal .section-title {
 /* Commits section - compact */
 #commits-section {
     height: auto;
-    max-height: 10;
+    max-height: 6;
 }
 
 #commits-log {
     height: auto;
-    max-height: 6;
+    max-height: 4;
     background: $background;
     border: round $border;
     padding: 0 1;
@@ -1321,18 +1362,60 @@ ReviewModal .section-title {
     background: $background;
     border: round $border;
     height: auto;
-    max-height: 6;
+    max-height: 4;
 }
 
 /* AI Review section - expandable, takes remaining space */
 #ai-review-section {
     height: 1fr;
-    min-height: 12;
+    max-height: 100%;
+}
+
+#ai-review-header {
+    width: 100%;
+    height: auto;
+    align: left middle;
+}
+
+#ai-review-header .spacer {
+    width: 1fr;
+}
+
+#ai-review-controls {
+    width: 100%;
+    height: auto;
+    align: left middle;
+    padding: 1 0;
+}
+
+#ai-review-controls Button {
+    margin-right: 1;
+}
+
+.phase-badge {
+    width: auto;
+    padding: 0 1;
+    text-style: bold;
+}
+
+.phase-idle {
+    color: $text-muted;
+}
+
+.phase-thinking {
+    color: $warning;
+}
+
+.phase-streaming {
+    color: $secondary;
+}
+
+.phase-complete {
+    color: $success;
 }
 
 #ai-review-output {
     height: 1fr;
-    min-height: 10;
     background: $background;
     border: round $border;
 }
@@ -1350,9 +1433,11 @@ ReviewModal .hint-label {
 }
 
 ReviewModal .button-row {
+    dock: bottom;
     align: center middle;
     padding-top: 1;
     height: auto;
+    width: 100%;
 }
 
 ReviewModal .button-row Button {
@@ -1793,6 +1878,11 @@ TextContent {
     color: $text-muted;
 }
 
+.streaming-note.dismissed {
+    color: $text-muted;
+    text-style: italic;
+}
+
 /* Thinking indicator */
 .thinking-indicator {
     width: 100%;
@@ -2044,4 +2134,140 @@ DuplicateTicketModal .button-row {
 
 DuplicateTicketModal Button {
     margin: 0 1;
+}
+
+/* =============================================================================
+   SLASH COMPLETE WIDGET (Autocomplete Overlay)
+   ============================================================================= */
+
+/* Slash command autocomplete dropdown overlay - full width, above status bar */
+.slash-complete {
+    dock: bottom;
+    width: 100%;
+    height: auto;
+    max-height: 6;
+    background: $surface;
+    border-top: solid $primary;
+    padding: 0;
+    margin: 0;
+}
+
+.slash-complete #slash-options {
+    width: 100%;
+    height: auto;
+    max-height: 5;
+    background: $surface;
+    scrollbar-gutter: stable;
+}
+
+.slash-complete #slash-options > .option-list--option {
+    padding: 0 1;
+    color: $text;
+}
+
+.slash-complete #slash-options > .option-list--option-highlighted {
+    background: $primary;
+    color: $background;
+}
+
+.slash-complete #slash-options > .option-list--option-hover {
+    background: $panel;
+}
+
+/* =============================================================================
+   PLAN APPROVAL WIDGET (Inline Plan Review)
+   ============================================================================= */
+
+/* Plan approval inline widget - similar pattern to permission-prompt */
+.plan-approval {
+    background: $panel;
+    border: round $primary;
+    padding: 1 2;
+    margin: 1 0;
+    width: 100%;
+    height: auto;
+}
+
+.plan-approval .plan-header {
+    text-style: bold;
+    color: $secondary;
+    padding-bottom: 0;
+}
+
+.plan-approval .plan-hint {
+    color: $text-muted;
+    text-style: italic;
+    padding-bottom: 1;
+}
+
+.plan-approval #ticket-list {
+    width: 100%;
+    height: auto;
+    max-height: 15;
+    padding: 0;
+    margin-bottom: 1;
+}
+
+.plan-approval .ticket-row {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 0;
+    border-left: solid $border;
+}
+
+.plan-approval .ticket-row:hover {
+    background: $surface;
+}
+
+.plan-approval .ticket-row.selected {
+    background: $primary 20%;
+    border-left: thick $primary;
+    color: $text;
+}
+
+/* Priority accent colors for ticket rows */
+.plan-approval .ticket-row.priority-critical {
+    border-left: solid $error;
+    color: $error;
+}
+
+.plan-approval .ticket-row.priority-high {
+    border-left: solid $warning;
+}
+
+.plan-approval .ticket-row.priority-medium {
+    border-left: solid #b8a965;
+}
+
+.plan-approval .ticket-row.priority-low {
+    border-left: solid $success;
+}
+
+.plan-approval .ticket-title-text {
+    color: $text;
+}
+
+.plan-approval .ticket-priority-badge {
+    color: $text-muted;
+    padding-left: 1;
+}
+
+.plan-approval #approval-buttons {
+    width: 100%;
+    height: auto;
+    layout: horizontal;
+    align: center middle;
+    padding-top: 1;
+}
+
+.plan-approval #approval-buttons Button {
+    margin: 0 1;
+}
+
+.plan-approval .approval-hint {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
 }
