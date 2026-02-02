@@ -1,15 +1,17 @@
 # Configuration
 
-Config file: `.kagan/config.toml` (created on first run).
+Kagan configuration lives in `.kagan/config.toml`, created automatically on first run.
 
-## Paths
+## File Locations
 
-- `.kagan/state.db`
-- `.kagan/config.toml`
-- `.kagan/kagan.lock`
-- `.kagan/worktrees/`
+| Path                  | Purpose           |
+| --------------------- | ----------------- |
+| `.kagan/config.toml`  | Configuration     |
+| `.kagan/state.db`     | Ticket database   |
+| `.kagan/kagan.lock`   | Single-instance   |
+| `.kagan/worktrees/`   | Git worktrees     |
 
-## General
+## General Settings
 
 ```toml
 [general]
@@ -23,24 +25,25 @@ max_iterations = 10
 iteration_delay_seconds = 2.0
 ```
 
-| Setting                   | Purpose                          |
-| ------------------------- | -------------------------------- |
-| `auto_start`              | Run AUTO agents automatically    |
-| `auto_approve`            | Auto-approve permission prompts  |
-| `auto_merge`              | Auto-merge after review          |
-| `default_base_branch`     | Base branch for worktrees/merges |
-| `default_worker_agent`    | Default agent for tickets        |
-| `max_concurrent_agents`   | Parallel AUTO agents             |
-| `max_iterations`          | Max iterations per AUTO ticket   |
-| `iteration_delay_seconds` | Delay between iterations         |
+| Setting                   | Default   | Purpose                                |
+| ------------------------- | --------- | -------------------------------------- |
+| `auto_start`              | `false`   | Auto-run agents for IN_PROGRESS tickets on startup |
+| `auto_approve`            | `false`   | Skip permission prompts for AI actions |
+| `auto_merge`              | `false`   | Auto-merge tickets after review passes |
+| `default_base_branch`     | `"main"`  | Base branch for worktrees and merges   |
+| `default_worker_agent`    | `"claude"`| Default agent for new tickets          |
+| `max_concurrent_agents`   | `3`       | Maximum parallel AUTO agents           |
+| `max_iterations`          | `10`      | Max agent iterations before BACKLOG    |
+| `iteration_delay_seconds` | `2.0`     | Delay between agent iterations         |
 
-## Agents
+## Agent Configuration
 
 ```toml
 [agents.claude]
 identity = "claude.com"
 name = "Claude Code"
 short_name = "claude"
+protocol = "acp"
 active = true
 
 [agents.claude.run_command]
@@ -50,17 +53,28 @@ active = true
 "*" = "claude"
 ```
 
-| Field                 | Purpose                      |
-| --------------------- | ---------------------------- |
-| `identity`            | Unique agent ID              |
-| `name`                | Display name                 |
-| `short_name`          | Compact label                |
-| `protocol`            | Protocol type (default: acp) |
-| `active`              | Enable agent                 |
-| `run_command`         | AUTO mode ACP command        |
-| `interactive_command` | PAIR mode CLI command        |
+| Field                 | Purpose                                    |
+| --------------------- | ------------------------------------------ |
+| `identity`            | Unique agent identifier                    |
+| `name`                | Display name in UI                         |
+| `short_name`          | Compact label for badges                   |
+| `protocol`            | Protocol type (currently only `acp`)       |
+| `active`              | Whether this agent is available            |
+| `run_command`         | OS-specific command for AUTO mode (ACP)    |
+| `interactive_command` | OS-specific command for PAIR mode (CLI)    |
 
-### Multiple agents
+### OS-Specific Commands
+
+Commands can be specified per-OS or with a wildcard:
+
+```toml
+[agents.myagent.run_command]
+macos = "my-agent-mac"
+linux = "my-agent-linux"
+"*" = "my-agent"  # Fallback for any OS
+```
+
+### Multiple Agents
 
 ```toml
 [agents.opencode]
@@ -76,17 +90,69 @@ active = true
 "*" = "opencode"
 ```
 
-## AUTO signals
+## UI Settings
 
-| Signal                     | Effect             |
-| -------------------------- | ------------------ |
-| `<complete/>`              | Move to REVIEW     |
-| `<blocked reason="..."/>`  | Move to BACKLOG    |
-| `<continue/>`              | Continue iteration |
-| `<approve summary="..."/>` | Approve review     |
-| `<reject reason="..."/>`   | Reject review      |
+```toml
+[ui]
+skip_tmux_gateway = false
+```
 
-## Minimal config
+| Setting             | Default | Purpose                                            |
+| ------------------- | ------- | -------------------------------------------------- |
+| `skip_tmux_gateway` | `false` | Skip the tmux info modal when opening PAIR sessions |
+
+## Refinement Settings
+
+```toml
+[refinement]
+enabled = true
+hotkey = "ctrl+e"
+skip_length_under = 20
+skip_prefixes = ["/", "!", "?"]
+```
+
+| Setting             | Default              | Purpose                                      |
+| ------------------- | -------------------- | -------------------------------------------- |
+| `enabled`           | `true`               | Enable prompt refinement feature             |
+| `hotkey`            | `"ctrl+e"`           | Hotkey to trigger refinement in planner      |
+| `skip_length_under` | `20`                 | Skip refinement for inputs shorter than this |
+| `skip_prefixes`     | `["/", "!", "?"]`    | Prefixes that skip refinement                |
+
+## AUTO Mode Signals
+
+Agents communicate state transitions via XML signals:
+
+| Signal                     | Effect                  |
+| -------------------------- | ----------------------- |
+| `<complete/>`              | Move ticket to REVIEW   |
+| `<blocked reason="..."/>`  | Move ticket to BACKLOG  |
+| `<continue/>`              | Continue iteration      |
+| `<approve summary="..."/>` | Approve in review       |
+| `<reject reason="..."/>`   | Reject in review        |
+
+## Environment Variables
+
+These variables are set when agents run:
+
+| Variable              | Description              |
+| --------------------- | ------------------------ |
+| `KAGAN_TICKET_ID`     | Current ticket ID        |
+| `KAGAN_TICKET_TITLE`  | Current ticket title     |
+| `KAGAN_WORKTREE_PATH` | Path to ticket worktree  |
+| `KAGAN_PROJECT_ROOT`  | Root of the repository   |
+
+## MCP Configuration Files
+
+For MCP server integration, agents look for:
+
+| Agent       | Config File      |
+| ----------- | ---------------- |
+| Claude Code | `.mcp.json`      |
+| OpenCode    | `opencode.json`  |
+
+## Minimal Config
+
+A minimal working configuration:
 
 ```toml
 [general]
@@ -105,45 +171,3 @@ active = true
 [agents.claude.interactive_command]
 "*" = "claude"
 ```
-
-## Environment variables
-
-| Variable              | Description   |
-| --------------------- | ------------- |
-| `KAGAN_TICKET_ID`     | Ticket ID     |
-| `KAGAN_TICKET_TITLE`  | Ticket title  |
-| `KAGAN_WORKTREE_PATH` | Worktree path |
-| `KAGAN_PROJECT_ROOT`  | Repo root     |
-
-## MCP config files
-
-- Claude Code: `.mcp.json`
-- OpenCode: `opencode.json`
-
-## Refinement
-
-```toml
-[refinement]
-enabled = true
-hotkey = "ctrl+e"
-skip_length_under = 20
-skip_prefixes = ["/", "!", "?"]
-```
-
-| Setting             | Purpose                                        |
-| ------------------- | ---------------------------------------------- |
-| `enabled`           | Enable prompt refinement feature               |
-| `hotkey`            | Hotkey to trigger refinement                   |
-| `skip_length_under` | Skip refinement for inputs shorter than this   |
-| `skip_prefixes`     | Prefixes that skip refinement (commands, etc.) |
-
-## UI
-
-```toml
-[ui]
-skip_tmux_gateway = false
-```
-
-| Setting             | Purpose                                            |
-| ------------------- | -------------------------------------------------- |
-| `skip_tmux_gateway` | Skip tmux gateway info modal when opening sessions |

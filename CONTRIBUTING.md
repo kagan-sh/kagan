@@ -84,22 +84,16 @@ src/kagan/
 ├── theme.py            # Custom Textual theme
 ├── lock.py             # Instance lock (single instance)
 ├── git_utils.py        # Git helper functions
-├── jsonrpc.py          # JSON-RPC implementation
+├── keybindings.py      # Centralized keybinding registry (single file)
 ├── cli/                # CLI commands
-│   └── update.py       # Update command
+│   ├── update.py       # Update command
+│   └── tools.py        # Prompt enhancement tools
 ├── ansi/               # ANSI escape code handling
 │   └── cleaner.py      # ANSI code cleaning utilities
 ├── database/
 │   ├── models.py       # Pydantic models: Ticket, TicketCreate, TicketUpdate
 │   ├── manager.py      # StateManager async database operations
 │   └── queries.py      # SQL query helpers
-├── keybindings/        # Centralized keybinding registry
-│   ├── registry.py     # KeyBindingDef dataclass + utility functions
-│   ├── app.py          # App-level bindings (quit, help, command palette)
-│   ├── kanban.py       # KanbanScreen bindings + leader key sequences
-│   ├── modals.py       # All modal bindings
-│   ├── screens.py      # Non-kanban screen bindings
-│   └── widgets.py      # Widget-specific bindings
 ├── mcp/                # Model Context Protocol server
 │   ├── server.py       # FastMCP server setup
 │   └── tools.py        # MCP tool implementations
@@ -118,9 +112,7 @@ src/kagan/
 │   └── config_resolver.py  # Agent config resolution
 ├── acp/                # Agent Control Protocol
 │   ├── agent.py        # ACP Agent class (JSON-RPC over subprocess)
-│   ├── api.py          # ACP API methods
 │   ├── protocol.py     # ACP protocol types
-│   ├── rpc.py          # RPC endpoint handlers
 │   ├── messages.py     # Textual messages for agent events
 │   ├── terminals.py    # Terminal management for agents
 │   ├── terminal.py     # Single terminal handling
@@ -131,7 +123,8 @@ src/kagan/
 │   └── kagan.tcss      # ALL CSS here (no DEFAULT_CSS in Python!)
 └── ui/
     ├── utils/              # UI utilities
-    │   └── clipboard.py    # Clipboard operations
+    │   ├── clipboard.py    # Clipboard operations
+    │   └── animation.py    # UI animations
     ├── screens/
     │   ├── base.py         # KaganScreen base class
     │   ├── kanban/         # Main Kanban board
@@ -156,9 +149,7 @@ src/kagan/
     │   ├── tool_call.py        # Tool call display
     │   └── permission_prompt.py # Permission prompt widget
     └── modals/
-        ├── ticket_details/     # Unified ticket view/edit/create modal
-        │   ├── modal.py
-        │   └── form.py
+        ├── ticket_details_modal.py  # Unified ticket view/edit/create modal
         ├── review.py           # Review modal with AI review
         ├── settings.py         # Settings modal
         ├── confirm.py          # Confirmation dialog

@@ -8,9 +8,12 @@ AI-powered Kanban TUI for autonomous development workflows. Python 3.12+ with Te
 
 | Action                                                            | Required Reading                                                 |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Understand codebase architecture** (START HERE for exploration) | [docs/internal/ARCHITECTURE.md](docs/internal/ARCHITECTURE.md)   |
 | Modify/create UI code (`ui/`, `app.py`, widgets, screens, modals) | [docs/internal/textual_rules.md](docs/internal/textual_rules.md) |
 | Modify/create any test file                                       | [docs/internal/testing_rules.md](docs/internal/testing_rules.md) |
 | Modify/create CSS styles                                          | [docs/internal/textual_rules.md](docs/internal/textual_rules.md) |
+
+**For codebase exploration queries**: Read `docs/internal/ARCHITECTURE.md` FIRST - it contains the complete architecture reference including project structure, ticket models, keybindings, screen navigation, modal system, state machine, and common patterns. This eliminates the need for full codebase scans.
 
 **Failure to read these docs before making changes will result in incorrect patterns and failed reviews.**
 
@@ -46,17 +49,18 @@ src/kagan/
 ├── app.py              # Main KaganApp class
 ├── constants.py        # COLUMN_ORDER, STATUS_LABELS, PRIORITY_LABELS
 ├── config.py           # Configuration models
+├── keybindings.py      # Centralized keybinding registry (single file)
 ├── database/           # models.py (Pydantic), manager.py (async StateManager)
-├── keybindings/        # Centralized keybinding registry (see below)
+├── cli/                # CLI commands (update.py, tools.py)
 ├── mcp/                # MCP server for AI tool communication
 ├── sessions/           # tmux session management
 ├── agents/             # Planner agent + worktree management
-├── acp/                # Agent Control Protocol
+├── acp/                # Agent Control Protocol (agent.py, protocol.py, terminals.py)
 ├── styles/kagan.tcss   # ALL CSS here (no DEFAULT_CSS in Python!)
 └── ui/
     ├── screens/        # kanban/, planner.py, welcome.py, approval.py
     ├── widgets/        # card.py, column.py, header.py, search_bar.py
-    └── modals/         # ticket_details/, review.py, confirm.py, help.py
+    └── modals/         # ticket_details_modal.py, review.py, confirm.py, help.py
 ```
 
 ## Code Style
@@ -140,7 +144,7 @@ async def test_navigation(self, e2e_app: KaganApp):
 - E2E tests mock at boundaries (network), not internals
 - Avoid tautological tests (mock A, assert A)
 - Use `@pytest.mark.parametrize` to reduce duplication
-- Test files < 200 LOC; check conftest.py before creating fixtures
+- Keep test files compact (never exceed 1000 LOC); check conftest.py before creating fixtures
 
 ## Ruff Configuration
 
@@ -154,8 +158,143 @@ Ignored: `RUF012` (Textual class attrs), `SIM102/SIM117` (nested if/with allowed
 1. **Async database** - All DB operations via aiosqlite StateManager
 1. **Constants module** - Use `kagan.constants` for shared values
 1. **Property assertions** - Use `@property` with `assert` for required state
-1. **Module size limits** - Keep modules ~150-250 LOC; test files < 200 LOC
+1. **Compact modules** - Keep modules compact and focused; never exceed 1000 LOC per file
 1. **Keybindings in registry only** - All bindings defined in `kagan.keybindings`
+
+## Ticket State Machine
+
+Kagan has two ticket modes with fundamentally different behaviors:
+
+### AUTO Mode (Autonomous Execution)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         AUTO TICKET STATE MACHINE                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────┐
+                              │ BACKLOG  │◄─────────────────────────────┐
+                              └────┬─────┘                              │
+                                   │                                    │
+                     User moves to IN_PROGRESS                          │
+                     (or auto_start on launch)                          │
+                                   │                                    │
+                                   ▼                                    │
+                        ┌──────────────────┐                            │
+            ┌──────────►│   IN_PROGRESS    │                            │
+            │           │  ┌────────────┐  │                            │
+            │           │  │   Agent    │  │                            │
+            │           │  │  Running   │  │                            │
+            │           │  └────────────┘  │                            │
+            │           └────────┬─────────┘                            │
+            │                    │                                      │
+            │      ┌─────────────┼─────────────┬────────────────────────┤
+            │      │             │             │                        │
+            │      ▼             ▼             ▼                        │
+            │  <continue/>   <complete/>   <blocked/>              Error/Timeout
+            │      │             │         Max iterations              │
+            │      │             │             │                        │
+            │      │             ▼             │                        │
+            │      │      ┌──────────┐         │                        │
+            │      │      │  REVIEW  │         │                        │
+            │      │      └────┬─────┘         │                        │
+            │      │           │               │                        │
+            │      │     ┌─────┴─────┐         │                        │
+            │      │     │           │         │                        │
+            │      │     ▼           ▼         │                        │
+            │      │  Approved   Rejected      │                        │
+            │      │     │           │         │                        │
+            │      │     │           │         │                        │
+            └──────┘     │           └─────────┴────────────────────────┘
+                         │
+                         ▼ (if auto_merge enabled)
+                    ┌──────────┐
+                    │   DONE   │
+                    └──────────┘
+
+SIGNALS (agent responses):
+  • <continue/> → Stay in IN_PROGRESS, run next iteration
+  • <complete/> → Move to REVIEW, run automated review
+  • <blocked reason="..."/> → Move to BACKLOG with reason
+
+AUTOMATIC BEHAVIORS:
+  • Moving to IN_PROGRESS → Spawns agent automatically
+  • Moving OUT of IN_PROGRESS → Stops agent automatically
+  • On startup (if auto_start=true) → Spawns agents for existing IN_PROGRESS tickets
+  • After <complete/> → Runs automated review agent
+  • If review passes + auto_merge=true → Merges to main, moves to DONE
+```
+
+### PAIR Mode (Human-Driven)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PAIR TICKET STATE MACHINE                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────┐
+                              │ BACKLOG  │◄────────────────────────────┐
+                              └────┬─────┘                             │
+                                   │                                   │
+                             User action                               │
+                                   │                                   │
+                                   ▼                                   │
+                        ┌──────────────────┐                           │
+                        │   IN_PROGRESS    │                           │
+                        │  ┌────────────┐  │                           │
+                        │  │   Human    │  │                           │
+                        │  │  Working   │  │                           │
+                        │  └────────────┘  │                           │
+                        └────────┬─────────┘                           │
+                                 │                                     │
+                           User action                                 │
+                                 │                                     │
+                      ┌──────────┴──────────┐                          │
+                      │                     │                          │
+                      ▼                     ▼                          │
+               ┌──────────┐          ┌──────────┐                      │
+               │  REVIEW  │          │ BACKLOG  │──────────────────────┤
+               └────┬─────┘          └──────────┘                      │
+                    │                                                  │
+              User action                                              │
+                    │                                                  │
+         ┌──────────┴──────────┐                                       │
+         │                     │                                       │
+         ▼                     ▼                                       │
+    ┌──────────┐         ┌──────────┐                                  │
+    │   DONE   │         │ BACKLOG  │──────────────────────────────────┘
+    └──────────┘         └──────────┘
+
+NO AUTOMATIC BEHAVIORS:
+  • All state transitions are manual (user-initiated)
+  • No agent spawning or stopping
+  • No automated review
+  • No auto-merge
+  • Use for human-driven development with optional AI pair assistance
+```
+
+### Transition Summary
+
+| From → To             | AUTO Ticket                        | PAIR Ticket |
+| --------------------- | ---------------------------------- | ----------- |
+| BACKLOG → IN_PROGRESS | **Spawns agent** automatically     | Manual only |
+| IN_PROGRESS → REVIEW  | Agent signals `<complete/>`        | Manual only |
+| IN_PROGRESS → BACKLOG | `<blocked/>`, max iter, or error   | Manual only |
+| REVIEW → DONE         | Auto-merge (if enabled + passed)   | Manual only |
+| REVIEW → BACKLOG      | Manual rejection                   | Manual only |
+| Any → (stop agent)    | Automatic on exit from IN_PROGRESS | N/A         |
+
+### Configuration Options
+
+For the complete configuration reference, see **[docs/config.md](docs/config.md)**.
+
+Key settings affecting agent behavior:
+
+| Setting          | Purpose                                         |
+| ---------------- | ----------------------------------------------- |
+| `auto_start`     | Spawn agents for IN_PROGRESS tickets on startup |
+| `auto_merge`     | Auto-merge to main when review passes           |
+| `max_iterations` | Max agent iterations before moving to BACKLOG   |
 
 ## Agent Roles and Capabilities
 
@@ -193,54 +332,33 @@ This follows the principle: "Give agents the minimal capabilities required for t
 
 ## Keybindings Registry
 
-**All keybindings are defined in `src/kagan/keybindings/`** - this is the single source of truth.
+**All keybindings are defined in `src/kagan/keybindings.py`** - this is the single source of truth for code.
 
-```
-keybindings/
-├── __init__.py     # Public API exports
-├── registry.py     # KeyBindingDef dataclass + utility functions
-├── app.py          # App-level bindings (quit, help, command palette)
-├── kanban.py       # KanbanScreen bindings + leader key sequences
-├── modals.py       # All modal bindings
-├── screens.py      # Non-kanban screen bindings
-└── widgets.py      # Widget-specific bindings
-```
+For the complete list of user-facing keyboard shortcuts, see **[docs/keybindings.md](docs/keybindings.md)**.
 
 ### Adding/Modifying Keybindings
 
-1. **Define in registry** - Add `KeyBindingDef` to the appropriate file
-1. **Use in component** - Import and call `to_textual_bindings()`
-1. **Help modal updates automatically** - Uses `get_key_for_action()` lookups
+The module uses Textual's native `Binding` class directly:
+
+1. **Define in keybindings.py** - Add `Binding` to the appropriate collection (`APP_BINDINGS`, `KANBAN_BINDINGS`, etc.)
+1. **Use in component** - Assign collection to `BINDINGS` class variable
+1. **Update docs/keybindings.md** - Add the new shortcut to the user-facing documentation
 
 ```python
-# In keybindings/kanban.py
-KeyBindingDef(
-    "n",  # Key
-    "new_ticket",  # Action name
-    "New",  # Footer label
-    "primary",  # Category
-    help_text="Create new ticket",
-)
+# In keybindings.py
+KANBAN_BINDINGS: list[BindingType] = [
+    Binding("n", "new_ticket", "New"),
+    Binding("N", "new_auto_ticket", "New AUTO", key_display="Shift+N"),
+    # ...
+]
 
 # In screens/kanban.py
-from kagan.keybindings import KANBAN_BINDINGS, to_textual_bindings
+from kagan.keybindings import KANBAN_BINDINGS
 
 
 class KanbanScreen(Screen):
-    BINDINGS = to_textual_bindings(KANBAN_BINDINGS)
+    BINDINGS = KANBAN_BINDINGS
 ```
-
-### Key Categories
-
-| Category   | Purpose                              |
-| ---------- | ------------------------------------ |
-| navigation | Movement keys (h/j/k/l, arrows, tab) |
-| primary    | Main actions (n, e, v, Enter, etc.)  |
-| leader     | g+key sequences                      |
-| context    | Context-specific (REVIEW only, etc.) |
-| global     | App-wide (quit, help)                |
-| modal      | Modal-specific bindings              |
-| utility    | Internal (escape, ctrl+c)            |
 
 ### Terminal-Safe Keys
 

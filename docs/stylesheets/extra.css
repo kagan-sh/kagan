@@ -79,3 +79,259 @@
     color: #d0d7e0;
     box-shadow: none;
 }
+
+/* Admonition styling - dark theme friendly */
+[data-md-color-scheme="kagan"] .md-typeset .admonition,
+[data-md-color-scheme="kagan"] .md-typeset details {
+    background-color: #0f1419;
+    border: 1px solid #2a3342;
+    border-radius: 4px;
+    box-shadow: none;
+    color: #d0d7e0;
+}
+
+/* Admonition content text */
+[data-md-color-scheme="kagan"] .md-typeset .admonition > *:not(.admonition-title),
+[data-md-color-scheme="kagan"] .md-typeset details > *:not(summary) {
+    color: #d0d7e0;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .admonition p,
+[data-md-color-scheme="kagan"] .md-typeset details p {
+    color: #d0d7e0;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset details summary {
+    background-color: rgba(42, 51, 66, 0.5);
+    border-bottom: 1px solid #2a3342;
+    color: #d0d7e0;
+}
+
+/* Note/Info (default blue) - use accent cyan */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.note,
+[data-md-color-scheme="kagan"] .md-typeset details.note {
+    border-left: 4px solid #5ecfb8;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .note > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .note > summary {
+    background-color: rgba(94, 207, 184, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .note > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .note > summary::before {
+    background-color: #5ecfb8;
+}
+
+/* Tip - use primary teal */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.tip,
+[data-md-color-scheme="kagan"] .md-typeset details.tip,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.hint,
+[data-md-color-scheme="kagan"] .md-typeset details.hint,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.important,
+[data-md-color-scheme="kagan"] .md-typeset details.important {
+    border-left: 4px solid #4aba91;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .tip > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .tip > summary,
+[data-md-color-scheme="kagan"] .md-typeset .hint > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .hint > summary,
+[data-md-color-scheme="kagan"] .md-typeset .important > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .important > summary {
+    background-color: rgba(74, 186, 145, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .tip > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .tip > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .hint > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .hint > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .important > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .important > summary::before {
+    background-color: #4aba91;
+}
+
+/* Warning/Caution - use gold accent */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.warning,
+[data-md-color-scheme="kagan"] .md-typeset details.warning,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.caution,
+[data-md-color-scheme="kagan"] .md-typeset details.caution,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.attention,
+[data-md-color-scheme="kagan"] .md-typeset details.attention {
+    border-left: 4px solid #d4a84b;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .warning > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .warning > summary,
+[data-md-color-scheme="kagan"] .md-typeset .caution > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .caution > summary,
+[data-md-color-scheme="kagan"] .md-typeset .attention > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .attention > summary {
+    background-color: rgba(212, 168, 75, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .warning > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .warning > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .caution > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .caution > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .attention > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .attention > summary::before {
+    background-color: #d4a84b;
+}
+
+/* Danger/Error - use soft red */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.danger,
+[data-md-color-scheme="kagan"] .md-typeset details.danger,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.error,
+[data-md-color-scheme="kagan"] .md-typeset details.error,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.failure,
+[data-md-color-scheme="kagan"] .md-typeset details.failure,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.bug,
+[data-md-color-scheme="kagan"] .md-typeset details.bug {
+    border-left: 4px solid #e06c75;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .danger > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .danger > summary,
+[data-md-color-scheme="kagan"] .md-typeset .error > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .error > summary,
+[data-md-color-scheme="kagan"] .md-typeset .failure > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .failure > summary,
+[data-md-color-scheme="kagan"] .md-typeset .bug > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .bug > summary {
+    background-color: rgba(224, 108, 117, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .danger > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .danger > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .error > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .error > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .failure > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .failure > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .bug > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .bug > summary::before {
+    background-color: #e06c75;
+}
+
+/* Success/Check - use green variant */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.success,
+[data-md-color-scheme="kagan"] .md-typeset details.success,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.check,
+[data-md-color-scheme="kagan"] .md-typeset details.check,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.done,
+[data-md-color-scheme="kagan"] .md-typeset details.done {
+    border-left: 4px solid #98c379;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .success > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .success > summary,
+[data-md-color-scheme="kagan"] .md-typeset .check > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .check > summary,
+[data-md-color-scheme="kagan"] .md-typeset .done > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .done > summary {
+    background-color: rgba(152, 195, 121, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .success > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .success > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .check > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .check > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .done > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .done > summary::before {
+    background-color: #98c379;
+}
+
+/* Info - use purple variant */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.info,
+[data-md-color-scheme="kagan"] .md-typeset details.info {
+    border-left: 4px solid #c98bc5;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .info > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .info > summary {
+    background-color: rgba(201, 139, 197, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .info > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .info > summary::before {
+    background-color: #c98bc5;
+}
+
+/* Question/FAQ - use gold */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.question,
+[data-md-color-scheme="kagan"] .md-typeset details.question,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.faq,
+[data-md-color-scheme="kagan"] .md-typeset details.faq,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.help,
+[data-md-color-scheme="kagan"] .md-typeset details.help {
+    border-left: 4px solid #d4a84b;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .question > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .question > summary,
+[data-md-color-scheme="kagan"] .md-typeset .faq > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .faq > summary,
+[data-md-color-scheme="kagan"] .md-typeset .help > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .help > summary {
+    background-color: rgba(212, 168, 75, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .question > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .question > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .faq > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .faq > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .help > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .help > summary::before {
+    background-color: #d4a84b;
+}
+
+/* Quote/Abstract - use muted colors */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.quote,
+[data-md-color-scheme="kagan"] .md-typeset details.quote,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.abstract,
+[data-md-color-scheme="kagan"] .md-typeset details.abstract,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.summary,
+[data-md-color-scheme="kagan"] .md-typeset details.summary,
+[data-md-color-scheme="kagan"] .md-typeset .admonition.tldr,
+[data-md-color-scheme="kagan"] .md-typeset details.tldr {
+    border-left: 4px solid #6b7685;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .quote > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .quote > summary,
+[data-md-color-scheme="kagan"] .md-typeset .abstract > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .abstract > summary,
+[data-md-color-scheme="kagan"] .md-typeset .summary > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .summary > summary,
+[data-md-color-scheme="kagan"] .md-typeset .tldr > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .tldr > summary {
+    background-color: rgba(107, 118, 133, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .quote > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .quote > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .abstract > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .abstract > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .summary > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .summary > summary::before,
+[data-md-color-scheme="kagan"] .md-typeset .tldr > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .tldr > summary::before {
+    background-color: #6b7685;
+}
+
+/* Example - use cyan accent */
+[data-md-color-scheme="kagan"] .md-typeset .admonition.example,
+[data-md-color-scheme="kagan"] .md-typeset details.example {
+    border-left: 4px solid #5ecfb8;
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .example > .admonition-title,
+[data-md-color-scheme="kagan"] .md-typeset .example > summary {
+    background-color: rgba(94, 207, 184, 0.1);
+}
+
+[data-md-color-scheme="kagan"] .md-typeset .example > .admonition-title::before,
+[data-md-color-scheme="kagan"] .md-typeset .example > summary::before {
+    background-color: #5ecfb8;
+}

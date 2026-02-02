@@ -35,7 +35,10 @@ Kagan is a terminal-based Kanban board that integrates AI agents to help you com
 ## Install
 
 ```bash
-# Quick install (recommended)
+# Standard install
+pip install kagan
+
+# Even faster with uv
 uv tool install kagan
 
 # Or all-in-one (includes uv + Python if needed)

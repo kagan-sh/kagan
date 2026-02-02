@@ -1,14 +1,12 @@
-# Kagan Testing Rules
+# Kagan Testing Rules v2
 
-Guidelines for writing effective, maintainable tests. Follow these rules to avoid common anti-patterns that waste effort and create maintenance burden.
+Hybrid Sociable-Driver Architecture for TUI testing. Synthesizes Fowler's sociable testing, Textual's pilot pattern, and async determinism.
 
-> **Required Reading**: AI agents and developers MUST read this before writing or modifying tests for code in `src/`.
+> **Required Reading**: Read before writing or modifying tests for `src/`.
 
 ______________________________________________________________________
 
 ## 1. Test Classification
-
-### Categories
 
 | Category        | Marker                    | Purpose                    | Mocking Allowed        |
 | --------------- | ------------------------- | -------------------------- | ---------------------- |
@@ -17,470 +15,569 @@ ______________________________________________________________________
 | **e2e**         | `pytest.mark.e2e`         | Full app via Textual pilot | Network calls only     |
 | **snapshot**    | `pytest.mark.snapshot`    | Visual regression          | None                   |
 
-### Classification Rules
-
-1. **If you mock `platform.system`, `shutil.which`, or stdlib** -> UNIT test
-1. **If you mock internal classes (`patch("module.ClassName")`)** -> INTEGRATION, not E2E
-1. **If you use `pilot.press()`, `pilot.click()`** -> E2E
-1. **If no I/O at all** -> UNIT
-
-### WRONG: Unit test in E2E folder
+**Rules**: Mock stdlib → UNIT | Mock internal classes → INTEGRATION | Use pilot → E2E | No I/O → UNIT
 
 ```python
-# tests/e2e/test_detect.py - WRONG LOCATION
-pytestmark = pytest.mark.e2e  # WRONG MARKER
-
-
-def test_windows_detection():
-    with patch("...platform.system", return_value="Windows"):  # This is a UNIT test!
+# WRONG: tests/e2e/test_detect.py with pytest.mark.e2e
+def test_windows():
+    with patch("...platform.system", return_value="Windows"):  # This is UNIT!
         result = detect_issues()
-```
-
-### CORRECT: Proper classification
-
-```python
-# tests/unit/test_detect.py
-pytestmark = pytest.mark.unit
 
 
-def test_windows_detection():
-    with patch("...platform.system", return_value="Windows"):
-        result = detect_issues()
+# CORRECT: tests/unit/test_detect.py with pytest.mark.unit
 ```
 
 ______________________________________________________________________
 
-## 2. Avoid Tautological Tests
+## 2. Hybrid Sociable-Driver Architecture
 
-### Definition
-
-A tautological test mocks input A, then asserts output equals A. These tests provide zero value - they test the mock, not the code.
-
-### WRONG: Tautological test
+| Layer              | %   | Method                   | Target          |
+| ------------------ | --- | ------------------------ | --------------- |
+| Headless Component | 70% | `app.run_test()` + pilot | State, DOM, CSS |
+| PTY Integration    | 20% | Snapshot comparison      | Visual output   |
+| E2E Smoke          | 10% | Full binary              | Exit codes      |
 
 ```python
-def test_get_review_prompt_formats_correctly(self):
-    prompt = get_review_prompt(
-        title="Test Ticket",  # You set this
-    )
-    assert "Test Ticket" in prompt  # Trivially true: str.format() works
+# 70% Headless
+async def test_ticket_creation(e2e_app):
+    async with e2e_app.run_test() as pilot:
+        await pilot.press("n")
+        await pilot.pause()
+        assert pilot.app.screen.query_one("#ticket-editor")
+
+
+# 20% Snapshot
+def test_card_visual(snap_compare):
+    assert snap_compare(CardSnapshotApp(tickets), terminal_size=(50, 20))
 ```
 
-### CORRECT: Test behavior, not string containment
+### 2.1 Fowler Sociable Unit Testing
+
+Test widgets with real children. Mock only I/O boundaries.
+
+| Mock                        | Don't Mock                         |
+| --------------------------- | ---------------------------------- |
+| File I/O, Network, Database | Child widgets, layout, focus chain |
 
 ```python
-def test_get_review_prompt_has_valid_placeholders():
-    # Will raise KeyError if placeholders are missing from template
-    get_review_prompt(title="x", ticket_id="y", description="z", commits="c", diff_summary="d")
-    # No assertion needed - exception IS the test
-```
+# WRONG: Mocking children
+column = KanbanColumn(cards=[MagicMock()])
 
-### WRONG: Testing that constants equal themselves
-
-```python
-@pytest.mark.parametrize(
-    ("error_cls", "code"),
-    [(ParseError, -32700), (InvalidRequest, -32600)],
-)
-def test_error_codes(self, error_cls, code):
-    assert error_cls().code == code  # Just restating source code
-```
-
-### CORRECT: Test error behavior
-
-```python
-def test_parse_error_is_json_serializable():
-    err = ParseError("bad json")
-    assert json.loads(err.to_json())["code"] == -32700
+# CORRECT: Real widget tree
+async with e2e_app_with_tickets.run_test() as pilot:
+    cards = pilot.app.screen.query(TicketCard)
+    assert len(cards) >= 1
 ```
 
 ______________________________________________________________________
 
-## 3. Test-to-Code Ratio
+## 3. Law of Async Quiescence
 
-### Guidelines
+**`time.sleep()` is forbidden.** Await event loop idle.
 
-| Code Complexity        | Acceptable Test:Code Ratio |
-| ---------------------- | -------------------------- |
-| Simple getters/setters | 0:1 (don't test)           |
-| Trivial conditionals   | 0.2:1                      |
-| Business logic         | 1:1 to 2:1                 |
-| Complex algorithms     | 2:1 to 3:1                 |
-| Parsing/serialization  | 1:1 to 1.5:1               |
+| Framework | Method                                  |
+| --------- | --------------------------------------- |
+| Textual   | `await pilot.pause()`                   |
+| Workers   | `await app.workers.wait_for_complete()` |
 
-### Red Flags
+```python
+# WRONG
+await pilot.click("#submit")
+time.sleep(0.1)
 
-- 10+ tests for a 20-line function -> Over-testing
-- Test file larger than source file for trivial code -> Reconsider
-
-### What NOT to Test (type checker catches these)
-
-- Enum values equal their definitions
-- Pydantic model defaults
-- Simple property returns
-- Class inheritance
+# CORRECT
+await pilot.click("#submit")
+await pilot.pause()
+```
 
 ______________________________________________________________________
 
-## 4. Fixture Usage
+## 4. Golden Master Principle
 
-### Rule: Use conftest.py fixtures, don't duplicate
-
-### WRONG: Duplicate fixture in test file
+Snapshots are visual contracts. Changes require human review.
 
 ```python
-# tests/integration/test_scheduler_automerge.py
+FIXED_DATE = datetime(2025, 1, 15, 12, 0, 0)  # Never datetime.now()
+
+
+def make_ticket(title: str) -> Ticket:
+    return Ticket(id="test1234", title=title, created_at=FIXED_DATE, updated_at=FIXED_DATE)
+
+
+def test_card(snap_compare):
+    assert snap_compare(CardSnapshotApp([(make_ticket("Fix bug"), {})]), terminal_size=(50, 20))
+```
+
+```bash
+UPDATE_SNAPSHOTS=1 uv run pytest tests/snapshot/ --snapshot-update
+git diff tests/snapshot/__snapshots__/  # Review before commit
+```
+
+______________________________________________________________________
+
+## 5. Accessibility Gate
+
+TAB traversal must visit all interactive elements and return to start.
+
+```python
+async def test_focus_chain(e2e_app):
+    async with e2e_app.run_test() as pilot:
+        await pilot.pause()
+        start = pilot.app.focused
+        for _ in range(20):
+            await pilot.press("tab")
+            await pilot.pause()
+            if pilot.app.focused == start:
+                break
+        assert pilot.app.focused == start, "Focus chain not closed"
+```
+
+### 5.1 Blind Pilot Mode (Future)
+
+Navigate using semantic labels only, not coordinates or CSS selectors.
+
+______________________________________________________________________
+
+## 6. Boundary Mocking & VCR Pattern
+
+Mock at system boundaries. Use recording over synthetic mocks.
+
+```python
+async def test_api(httpx_mock):
+    httpx_mock.add_response(url="https://api.example.com/status", json={"status": "ok"})
+    result = await check_api_status()
+    assert result.status == "ok"
+```
+
+______________________________________________________________________
+
+## 7. Clean Room Environment
+
+```python
 @pytest.fixture
-def mock_session_manager():  # DUPLICATE - already in conftest.py!
-    manager = MagicMock()
-    manager.kill_session = AsyncMock()
-    return manager
-```
-
-### CORRECT: Use conftest fixture
-
-```python
-# tests/integration/test_scheduler_automerge.py
-async def test_auto_merge(self, mock_session_manager):  # From conftest.py
-    ...
-```
-
-### Available Fixtures (USE THESE)
-
-| Fixture                 | Source      | Purpose                          |
-| ----------------------- | ----------- | -------------------------------- |
-| `state_manager`         | conftest.py | Async StateManager with temp DB  |
-| `git_repo`              | conftest.py | Initialized git repo with commit |
-| `mock_agent`            | conftest.py | Mock ACP agent                   |
-| `mock_worktree_manager` | conftest.py | Mock WorktreeManager             |
-| `mock_session_manager`  | conftest.py | Mock SessionManager              |
-| `config`                | conftest.py | Test KaganConfig                 |
-| `e2e_project`           | conftest.py | Full project setup for E2E       |
-| `e2e_app`               | conftest.py | KaganApp ready for pilot testing |
-
-### Creating New Fixtures
-
-1. Check if fixture exists in `tests/conftest.py` first
-1. Check `tests/helpers/mocks.py` for factory functions
-1. If creating new fixture used by 2+ files -> add to conftest.py
-1. If creating mock factory -> add to `tests/helpers/mocks.py`
-
-______________________________________________________________________
-
-## 5. E2E Test Rules
-
-### Golden Rule
-
-**E2E tests mock at boundaries (network), not internals.**
-
-### WRONG: Mock internal class in E2E
-
-```python
-# This is NOT an E2E test - it's integration at best
-with patch("kagan.agents.scheduler.Agent", return_value=mock_agent):
-    await pilot.press("enter")
-```
-
-### CORRECT: Test real behavior, mock network
-
-```python
-# Use httpx_mock for external API calls only
-httpx_mock.add_response(url="https://api.example.com", json={"version": "2.0"})
-await pilot.press("enter")
-```
-
-### Selector Guidelines
-
-| Avoid                            | Prefer                              |
-| -------------------------------- | ----------------------------------- |
-| `.issue-card` (CSS class)        | `#issue-card-windows` (semantic ID) |
-| `list(app.query(...))` + index   | Helper function in pages.py         |
-| `assert len(cards) == 3` (exact) | `assert len(cards) >= 1` (flexible) |
-
-### Use Page Helpers
-
-```python
-from tests.helpers.pages import navigate_to_kanban, create_ticket_via_ui
+async def clean_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    yield tmp_path
 
 
-async def test_create_ticket(pilot):
-    await navigate_to_kanban(pilot)
-    await create_ticket_via_ui(pilot, "My ticket")
+@pytest.fixture
+async def state_manager(tmp_path):
+    manager = StateManager(tmp_path / "test.db")
+    await manager.initialize()
+    yield manager
+    await manager.close()
 ```
 
 ______________________________________________________________________
 
-## 6. Parametrization
+## 8. Avoid Tautological Tests
 
-### Rule: Use `@pytest.mark.parametrize` to reduce duplication
-
-### WRONG: Duplicate tests for variations
+Don't mock A then assert A.
 
 ```python
-async def test_j_moves_down(self):
-    await pilot.press("j")
-    ...
+# WRONG
+prompt = get_prompt(title="Test")
+assert "Test" in prompt
 
-
-async def test_down_arrow_moves_down(self):
-    await pilot.press("down")
-    ...
+# CORRECT - exception IS the test
+get_prompt(title="x", ticket_id="y", desc="z", commits="c", diff="d")
 ```
 
-### CORRECT: Parametrize
+______________________________________________________________________
+
+## 9. Test-to-Code Ratio
+
+| Complexity         | Ratio      |
+| ------------------ | ---------- |
+| Getters/setters    | 0:1        |
+| Business logic     | 1:1 to 2:1 |
+| Complex algorithms | 2:1 to 3:1 |
+
+**Don't test**: Enum defs, Pydantic defaults, simple properties (type checker handles).
 
 ```python
+# DON'T TEST - type checker handles
+class TicketStatus(Enum):
+    BACKLOG = "backlog"  # Don't assert TicketStatus.BACKLOG.value == "backlog"
+```
+
+______________________________________________________________________
+
+## 10. Fixture Usage
+
+| Fixture         | Purpose                         |
+| --------------- | ------------------------------- |
+| `state_manager` | Async StateManager with temp DB |
+| `git_repo`      | Initialized git repo            |
+| `mock_agent`    | Mock ACP agent                  |
+| `e2e_app`       | KaganApp for pilot testing      |
+
+Check `conftest.py` before creating. If used by 2+ files → add to conftest.
+
+```python
+# WRONG: Duplicate fixture
+@pytest.fixture
+def mock_session_manager():  # Already exists in conftest.py!
+    return MagicMock()
+
+
+# CORRECT: Use existing
+async def test_merge(mock_session_manager): ...  # From conftest
+```
+
+______________________________________________________________________
+
+## 11. Parametrization
+
+```python
+# WRONG
+async def test_j_moves(): ...
+async def test_down_moves(): ...
+
+
+# CORRECT
 @pytest.mark.parametrize("key", ["j", "down"])
-async def test_moves_focus_down(self, key, e2e_app):
+async def test_moves_down(key, e2e_app):
     await pilot.press(key)
-    ...
+    await pilot.pause()
 ```
-
-### When to Parametrize
-
-- Same assertion, different inputs -> Parametrize
-- Same flow, different triggers -> Parametrize
-- Fundamentally different behaviors -> Separate tests
 
 ______________________________________________________________________
 
-## 7. Assertion Guidelines
+## 12. Assertion Guidelines
 
-### Test Observable Behavior, Not Implementation
-
-### WRONG: Assert on internal property
+Test observable behavior, not implementation.
 
 ```python
-editor = modal.query_one("#editor", TextArea)
-assert editor.read_only  # Implementation detail
-```
+# WRONG
+assert editor.read_only
 
-### CORRECT: Assert on user-visible behavior
-
-```python
-editor = modal.query_one("#editor", TextArea)
-original_text = editor.text
+# CORRECT
+original = editor.text
 await pilot.press("a")
-assert editor.text == original_text  # Can't type = effectively readonly
-```
-
-### WRONG: Assert mock was called (only)
-
-```python
-mock_worktree_manager.merge_to_main.assert_called_once()
-# What if merge_to_main was called but failed? Test still passes!
-```
-
-### CORRECT: Assert on result state
-
-```python
-ticket = await state_manager.get_ticket(ticket_id)
-assert ticket.status == TicketStatus.DONE
-# AND optionally verify mock was called
-mock_worktree_manager.merge_to_main.assert_called_once()
+assert editor.text == original  # Can't type = readonly
 ```
 
 ______________________________________________________________________
 
-## 8. File Organization
+## 13. File Organization
 
-### Maximum LOC per Test File: 250
+**Keep test files compact.** Aim for brevity, but never exceed 1000 LOC per file.
 
-### Naming Conventions
+| Pattern                      | Use               |
+| ---------------------------- | ----------------- |
+| `test_{module}.py`           | Main module tests |
+| `test_{module}_{feature}.py` | Feature-specific  |
 
-| Pattern                      | Use For                      |
-| ---------------------------- | ---------------------------- |
-| `test_{module}.py`           | Main tests for a module      |
-| `test_{module}_{feature}.py` | Tests for a specific feature |
+```python
+# If a file grows large, consider splitting into classes:
+# test_scheduler.py
+class TestSchedulerBasics: ...
 
-### WRONG: Split files with duplicated fixtures
 
+class TestSchedulerAgent: ...
+
+
+class TestSchedulerAutoMerge: ...
+
+
+# Move shared fixtures to conftest.py
 ```
-test_scheduler_basics.py      (has scheduler fixture)
-test_scheduler_agent.py       (duplicates scheduler fixture)
-test_scheduler_automerge.py   (duplicates scheduler fixture)
-```
-
-### CORRECT: Single file with shared fixtures OR use conftest
-
-```
-test_scheduler.py
-  class TestSchedulerBasics
-  class TestSchedulerAgent
-  class TestSchedulerAutoMerge
-```
-
-Or if file exceeds 250 LOC, split but move shared fixtures to conftest.py.
 
 ______________________________________________________________________
 
-## 9. Quick Checklist
+## 14. Quick Checklist
 
-Before submitting tests, verify:
-
-- [ ] Correct `pytestmark` for test category (unit/integration/e2e/snapshot)
-- [ ] No duplicate fixtures (check conftest.py first)
-- [ ] No tautological assertions (mock input != assert same output)
-- [ ] No testing trivial logic (type checker covers it)
-- [ ] E2E tests don't mock internal classes
+- [ ] Correct `pytestmark` (unit/integration/e2e/snapshot)
+- [ ] No duplicate fixtures
+- [ ] No tautological assertions
+- [ ] E2E tests don't mock internals
 - [ ] Parametrized where possible
-- [ ] File under 250 LOC
-- [ ] Uses helpers from `tests/helpers/` where available
-- [ ] Assertions verify outcome state, not just mock calls
+- [ ] File is compact (never exceed 1000 LOC)
+- [ ] `await pilot.pause()` after every interaction
+- [ ] Snapshots use fixed dates
+- [ ] No `time.sleep()` in tests
 
 ______________________________________________________________________
 
-## 10. Anti-Pattern Reference
+## 15. Anti-Pattern Reference
 
-| Anti-Pattern                    | Detection                          | Fix                                  |
-| ------------------------------- | ---------------------------------- | ------------------------------------ |
-| **Mock-Heavy Tautology**        | Mock A, assert A                   | Test behavior, not echoed values     |
-| **Fixture Duplication**         | Same fixture in multiple files     | Move to conftest.py                  |
-| **Misclassified Test**          | Unit test with `pytest.mark.e2e`   | Use correct marker and location      |
-| **Trivial Logic Testing**       | Testing `if x == Y` returns Y      | Delete - type checker handles it     |
-| **Over-mocking in E2E**         | `patch("module.Class")` in E2E     | Mock at network boundary only        |
-| **Assertion on Implementation** | `assert obj._internal_prop`        | Assert user-visible outcome          |
-| **Duplicate Scenarios**         | Same test logic, different trigger | Parametrize                          |
-| **Exact Count Assertions**      | `assert len(items) == 3`           | `assert len(items) >= 1` or semantic |
+| Anti-Pattern            | Detection                      | Fix                   |
+| ----------------------- | ------------------------------ | --------------------- |
+| Mock-Heavy Tautology    | Mock A, assert A               | Test behavior         |
+| Fixture Duplication     | Same fixture in multiple files | Move to conftest      |
+| Misclassified Test      | Unit with `pytest.mark.e2e`    | Correct marker        |
+| Over-mocking in E2E     | `patch("module.Class")`        | Mock network only     |
+| Sleep Anti-Pattern      | `time.sleep()`                 | `await pilot.pause()` |
+| Solitary Widget Testing | Mocking children               | Real widgets          |
+| Missing Quiescence      | No `pause()` after action      | Add pause             |
+| Snapshot Fatigue        | Ignoring failures              | Review + update       |
 
 ______________________________________________________________________
 
-## 11. Test Directory Structure
+## 16. Directory Structure
 
 ```
 tests/
-  conftest.py              # Shared fixtures (state_manager, git_repo, mocks)
-  helpers/
-    __init__.py
-    pages.py               # E2E page helpers (navigate_to_kanban, etc.)
-    mocks.py               # Mock factory functions
-    git.py                 # Git test utilities
-    e2e.py                 # E2E utilities
-  unit/                    # Pure logic tests, no I/O
-    test_models.py
-    test_ansi.py
-    test_jsonrpc.py
-    ...
-  integration/             # Real filesystem/DB, mocked externals
-    test_database.py
-    test_worktree.py
-    test_scheduler.py
-    ...
-  snapshot/                # Visual regression
-    test_snapshots.py
-    __snapshots__/
-  e2e/                     # Full app tests via Textual pilot
-    conftest.py            # E2E-specific fixtures
-    test_navigation.py
-    test_ticket_crud.py
-    ...
+  conftest.py
+  strategies.py              # Reusable Hypothesis strategies
+  helpers/{pages.py, mocks.py, git.py, e2e.py}
+  unit/
+  integration/
+  snapshot/__snapshots__/
+  e2e/conftest.py
 ```
 
 ______________________________________________________________________
 
-## 12. Running Tests
+## 17. Running Tests
 
 ```bash
-# Run by category
-uv run pytest tests/unit/ -v           # Unit tests only
-uv run pytest tests/integration/ -v    # Integration only
-uv run pytest tests/e2e/ -v            # E2E only
-uv run pytest -m unit                  # Using markers
-
-# Full suite (sequential - most reliable)
-uv run pytest tests/ -n 0
-
-# Full suite (parallel - faster but may have flaky tests)
-uv run pytest tests/ -n auto
-
-# Update snapshots
+uv run pytest tests/unit/ -v        # Unit only
+uv run pytest tests/ -n 0           # Sequential
+uv run pytest tests/ -n auto        # Parallel
 UPDATE_SNAPSHOTS=1 uv run pytest tests/snapshot/ --snapshot-update
+HYPOTHESIS_PROFILE=ci uv run pytest  # CI profile (100 examples)
 ```
 
 ______________________________________________________________________
 
-## 13. pytest-asyncio Best Practices
+## 18. pytest-asyncio
 
-### Configuration
+Project uses `asyncio_mode = "auto"`:
 
-The project uses pytest-asyncio v1.3.0+ with `asyncio_mode = "auto"`:
-
-```toml
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-```
-
-This means:
-
-- **No `@pytest.mark.asyncio` needed** - all `async def test_*` functions automatically run as async tests
-- **No `@pytest_asyncio.fixture` needed** - all async fixtures are auto-detected
-- **No `event_loop` fixture** - deprecated and removed in v1.0.0
-
-### Patterns to AVOID
-
-| Pattern                                 | Issue                         | Use Instead                                |
-| --------------------------------------- | ----------------------------- | ------------------------------------------ |
-| `asyncio.get_event_loop()`              | Deprecated in Python 3.10+    | `asyncio.get_running_loop()` in async code |
-| `asyncio.new_event_loop()` for futures  | Creates orphan loop           | Create futures in async context            |
-| `@pytest.mark.asyncio`                  | Unnecessary with auto mode    | Just use `async def test_*`                |
-| Custom `event_loop` fixture             | Removed in pytest-asyncio 1.0 | Use default loop management                |
-| `loop.run_until_complete()` in fixtures | Deprecated pattern            | Use async fixtures with `await`            |
-
-### Creating Futures for Testing
+- No `@pytest.mark.asyncio` needed
+- No `event_loop` fixture (deprecated)
+- Use `asyncio.get_running_loop()` not `get_event_loop()`
 
 ```python
-# WRONG - creates future on orphan loop
-def _create_future():
-    loop = asyncio.new_event_loop()
-    return loop.create_future()
-
-
-# CORRECT - create futures in async context
-@pytest.fixture
-async def result_future():
-    return asyncio.get_running_loop().create_future()
-
-
-async def test_something(result_future):
-    # Use the fixture
-    result_future.set_result("done")
-    assert result_future.done()
-```
-
-### Async Fixture Cleanup
-
-```python
-# WRONG - deprecated pattern in sync fixture
-@pytest.fixture
-def state_manager(tmp_path):
-    manager = StateManager(tmp_path / "db")
-    yield manager
-    asyncio.get_event_loop().run_until_complete(manager.close())  # Deprecated!
-
-
-# CORRECT - async fixture with proper cleanup
 @pytest.fixture
 async def state_manager(tmp_path):
     manager = StateManager(tmp_path / "db")
     await manager.initialize()
     yield manager
-    await manager.close()  # Clean async cleanup
-```
+    await manager.close()
 
-### Textual Testing Compatibility
 
-Textual's `run_test()` creates its own event loop context. This works seamlessly with pytest-asyncio because:
-
-1. Each test gets a fresh event loop from pytest-asyncio
-1. `run_test()` is an async context manager that manages Textual's internal loop
-
-```python
-async def test_ui_interaction(self, e2e_app: KaganApp):
-    async with e2e_app.run_test(size=(120, 40)) as pilot:
-        await pilot.pause()  # IMPORTANT: Wait for message processing
+async def test_ui(e2e_app):
+    async with e2e_app.run_test() as pilot:
+        await pilot.pause()
         await pilot.press("j")
         await pilot.pause()
-        # Assert on app state
 ```
 
-**Key rule**: Always use `await pilot.pause()` after interactions to allow Textual's message queue to process.
+______________________________________________________________________
+
+## 19. Hypothesis Property-Based Testing
+
+Use Hypothesis for inputs with large/infinite domains. Complements example-based tests.
+
+### 19.1 When to Use
+
+| Use Hypothesis                   | Use Example-Based                 |
+| -------------------------------- | --------------------------------- |
+| Parsers, encoders, serializers   | UI interactions                   |
+| State machines, transitions      | Specific edge cases               |
+| Functions with many valid inputs | Integration with external systems |
+| Invariants that must always hold | Snapshot tests                    |
+
+### 19.2 Profiles
+
+```python
+# conftest.py - already configured
+settings.register_profile("ci", max_examples=100, deadline=None)
+settings.register_profile("dev", max_examples=20, deadline=500)
+settings.register_profile("debug", max_examples=10, verbosity=Verbosity.verbose)
+```
+
+```bash
+HYPOTHESIS_PROFILE=ci uv run pytest   # CI: thorough
+HYPOTHESIS_PROFILE=debug uv run pytest  # Debug: verbose output
+```
+
+### 19.3 Strategy Design
+
+Define reusable strategies in `tests/strategies.py`. Build composite strategies from atomic ones.
+
+```python
+# ATOMIC: Single domain values
+valid_ticket_titles = st.text(min_size=1, max_size=200).filter(
+    lambda x: x.strip() and "\x00" not in x
+)
+statuses = st.sampled_from(list(TicketStatus))
+
+
+# COMPOSITE: Build from atomics
+@st.composite
+def tickets(draw: st.DrawFn, **overrides) -> Ticket:
+    return Ticket(
+        title=overrides.get("title", draw(valid_ticket_titles)),
+        status=overrides.get("status", draw(statuses)),
+    )
+```
+
+**Strategy Rules:**
+
+- Filter early: `st.text(...).filter(valid)` not `assume(valid(x))`
+- Use `st.sampled_from()` for enums
+- Use `@st.composite` for complex objects
+- Blacklist problematic characters: `\x00`, `\x1b`, surrogates
+
+### 19.4 Test Structure
+
+```python
+from hypothesis import given
+from tests.strategies import tickets, valid_ticket_titles
+
+
+class TestTicketParsing:
+    @given(tickets())
+    def test_roundtrip_serialization(self, ticket: Ticket):
+        """Property: serialize then deserialize = original."""
+        serialized = ticket.to_json()
+        restored = Ticket.from_json(serialized)
+        assert restored == ticket
+
+    @given(valid_ticket_titles)
+    def test_title_preserved(self, title: str):
+        """Property: title is stored exactly as given."""
+        ticket = Ticket.create(title=title, description="")
+        assert ticket.title == title
+```
+
+### 19.5 Stateful Testing
+
+Use `RuleBasedStateMachine` for state machines with invariants.
+
+```python
+from hypothesis.stateful import RuleBasedStateMachine, rule, invariant
+
+
+class StateMachineTest(RuleBasedStateMachine):
+    def __init__(self):
+        super().__init__()
+        self.state = MyState()
+
+    @invariant()
+    def always_valid(self):
+        """Invariant checked after every rule."""
+        assert self.state.is_consistent()
+
+    @rule()
+    def do_action(self):
+        """One possible action in the state machine."""
+        if self.state.can_act():
+            self.state = self.state.act()
+
+
+TestStateMachine = StateMachineTest.TestCase  # pytest discovers this
+```
+
+### 19.6 Common Patterns
+
+```python
+# ROUNDTRIP: encode/decode preserves data
+@given(plain_text)
+def test_ansi_strip_idempotent(self, text: str):
+    once = strip_ansi(text)
+    twice = strip_ansi(once)
+    assert once == twice
+
+
+# ORACLE: compare against known-good implementation
+@given(st.lists(st.integers()))
+def test_sort_matches_builtin(self, items: list[int]):
+    assert my_sort(items) == sorted(items)
+
+
+# INVARIANT: property always holds
+@given(tickets())
+def test_priority_always_valid(self, ticket: Ticket):
+    assert ticket.priority in TicketPriority
+```
+
+### 19.7 Async Hypothesis Tests
+
+Hypothesis works with async but requires care with fixtures.
+
+```python
+@given(tickets())
+async def test_db_insert(self, state_manager, ticket: Ticket):
+    """Async test with hypothesis - fixture must be function-scoped."""
+    await state_manager.create_ticket(ticket)
+    retrieved = await state_manager.get_ticket(ticket.id)
+    assert retrieved.title == ticket.title
+```
+
+**Note:** Database fixtures in hypothesis tests must handle repeated calls. Use `@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])` if needed.
+
+### 19.8 Anti-Patterns
+
+| Anti-Pattern           | Problem                    | Fix                           |
+| ---------------------- | -------------------------- | ----------------------------- |
+| `assume()` overuse     | Discards too many examples | Filter in strategy definition |
+| Slow strategies        | Timeout/deadline failures  | Simplify or increase deadline |
+| Flaky assertions       | Non-deterministic failures | Make assertions deterministic |
+| Testing implementation | Brittle to refactoring     | Test observable properties    |
+| No shrinking           | Hard to debug failures     | Keep `Phase.shrink` enabled   |
+
+### 19.9 Debugging Failures
+
+```python
+# Reproduce a specific failure
+@given(tickets())
+@settings(database=None)  # Disable example database
+@example(Ticket(title="failing case", ...))  # Explicit example
+def test_with_explicit(self, ticket):
+    ...
+
+# Verbose output for debugging
+HYPOTHESIS_PROFILE=debug uv run pytest tests/unit/test_x.py -v
+```
+
+### 19.10 Quick Reference
+
+```python
+# Essential imports
+from hypothesis import given, settings, assume, example
+from hypothesis import strategies as st
+from hypothesis.stateful import RuleBasedStateMachine, rule, invariant
+
+# Common strategies
+st.text(min_size=1, max_size=100)           # Strings
+st.integers(min_value=0, max_value=1000)     # Bounded ints
+st.sampled_from(list(MyEnum))                # Enum values
+st.lists(st.integers(), min_size=1)          # Non-empty lists
+st.one_of(st.none(), st.text())              # Optional values
+st.builds(MyClass, field=st.text())          # Objects from constructors
+
+# Decorators
+@given(strategy)                              # Generate inputs
+@settings(max_examples=50, deadline=1000)     # Override settings
+@example(specific_value)                      # Always test this case
+```
+
+______________________________________________________________________
+
+## 20. Textual Widget Message Testing
+
+When testing widget message posting, use `patch.object` context manager to avoid test hangs.
+
+```python
+# WRONG - causes Textual message loop hang
+widget.post_message = lambda m: messages.append(m)  # Never do this!
+
+# CORRECT - restores original method after test
+from unittest.mock import patch
+from tests.helpers.mocks import MessageCapture
+
+capture = MessageCapture()
+with patch.object(widget, "post_message", capture):
+    widget.action_select()
+
+msg = capture.assert_single(MyWidget.Completed)  # Exactly one message
+msg = capture.assert_contains(MyWidget.Approved)  # At least one of type
+```
+
+**Why:** Permanently replacing `post_message` breaks Textual's internal message queue, causing `async with app.run_test()` to hang on exit.
