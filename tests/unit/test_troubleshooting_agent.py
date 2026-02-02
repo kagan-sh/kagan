@@ -161,9 +161,17 @@ class TestPreflightResult:
 
     def test_has_blocking_issues_true(self):
         """has_blocking_issues returns True when blocking issues exist."""
-        issues = [DetectedIssue(preset=ISSUE_PRESETS[IssueType.TMUX_MISSING])]
+        # Use INSTANCE_LOCKED which is a blocking issue
+        issues = [DetectedIssue(preset=ISSUE_PRESETS[IssueType.INSTANCE_LOCKED])]
         result = PreflightResult(issues=issues)
         assert result.has_blocking_issues
+
+    def test_has_blocking_issues_false_with_warning_only(self):
+        """has_blocking_issues returns False when only warning issues exist."""
+        # TMUX_MISSING is a warning, not blocking
+        issues = [DetectedIssue(preset=ISSUE_PRESETS[IssueType.TMUX_MISSING])]
+        result = PreflightResult(issues=issues)
+        assert not result.has_blocking_issues
 
     def test_has_blocking_issues_false_empty(self):
         """has_blocking_issues returns False when no issues."""
@@ -194,7 +202,17 @@ class TestIssuePresets:
             assert preset.message
             assert preset.hint
 
+    # Issue types that are warnings (not blocking)
+    WARNING_ISSUE_TYPES = {IssueType.TMUX_MISSING, IssueType.TERMINAL_NO_TRUECOLOR}
+
     def test_all_presets_are_blocking(self):
-        """All current presets are blocking severity (per plan)."""
+        """All current presets are blocking severity except for warning types."""
         for preset in ISSUE_PRESETS.values():
-            assert preset.severity == IssueSeverity.BLOCKING
+            if preset.type in self.WARNING_ISSUE_TYPES:
+                assert preset.severity == IssueSeverity.WARNING, (
+                    f"{preset.type} should be WARNING severity"
+                )
+            else:
+                assert preset.severity == IssueSeverity.BLOCKING, (
+                    f"{preset.type} should be BLOCKING severity"
+                )
