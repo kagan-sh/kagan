@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from kagan.acp.jsonrpc import RPCError
 from kagan.acp.terminals import TerminalManager
-from kagan.jsonrpc import JSONRPCError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -62,10 +62,10 @@ class TestTerminalManager:
         assert result is None
 
     async def test_get_output_raises_for_unknown_terminal(self, tmp_path: Path):
-        """Test that get_output() raises JSONRPCError for unknown ID."""
+        """Test that get_output() raises RPCError for unknown ID."""
         manager = TerminalManager(tmp_path)
 
-        with pytest.raises(JSONRPCError, match="No terminal with id"):
+        with pytest.raises(RPCError, match="No terminal with id"):
             manager.get_output("unknown-id")
 
     async def test_kill_terminal(self, tmp_path: Path):
@@ -110,7 +110,7 @@ class TestTerminalManager:
         """Test wait_for_exit raises for unknown terminal."""
         manager = TerminalManager(tmp_path)
 
-        with pytest.raises(JSONRPCError, match="No terminal with id"):
+        with pytest.raises(RPCError, match="No terminal with id"):
             await manager.wait_for_exit("unknown-id")
 
     async def test_get_final_output_cleans_ansi(self, tmp_path: Path):

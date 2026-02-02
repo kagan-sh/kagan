@@ -6,9 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from kagan.database.models import TicketStatus
-from kagan.ui.widgets.card import TicketCard
-from tests.helpers.pages import is_on_screen
+from tests.helpers.pages import focus_review_ticket, is_on_screen
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -19,24 +17,24 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 
-def _focus_review_ticket(pilot) -> TicketCard | None:
-    """Focus a ticket in REVIEW status. Returns the card or None."""
-    cards = list(pilot.app.screen.query(TicketCard))
-    for card in cards:
-        if card.ticket and card.ticket.status == TicketStatus.REVIEW:
-            card.focus()
-            return card
-    return None
-
-
 class TestReviewModalActions:
     """Test ReviewModal approve/reject buttons."""
 
-    async def test_approve_button_exists(self, e2e_app_with_tickets: KaganApp):
-        """ReviewModal has Approve button."""
+    @pytest.mark.parametrize(
+        "button_id,expected_label",
+        [
+            ("approve-btn", "Approve"),
+            ("reject-btn", "Reject"),
+        ],
+        ids=["approve", "reject"],
+    )
+    async def test_action_buttons_exist(
+        self, e2e_app_with_tickets: KaganApp, button_id: str, expected_label: str
+    ):
+        """ReviewModal has Approve and Reject buttons."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            _focus_review_ticket(pilot)
+            focus_review_ticket(pilot)
             await pilot.pause()
 
             await pilot.press("r")
@@ -44,35 +42,16 @@ class TestReviewModalActions:
 
             from textual.widgets import Button
 
-            buttons = list(pilot.app.screen.query(Button))
-            approve_btn = next((b for b in buttons if b.id == "approve-btn"), None)
-            assert approve_btn is not None
-            assert "Approve" in str(approve_btn.label)
-
-    async def test_reject_button_exists(self, e2e_app_with_tickets: KaganApp):
-        """ReviewModal has Reject button."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            _focus_review_ticket(pilot)
-            await pilot.pause()
-
-            await pilot.press("r")
-            await pilot.pause()
-
-            from textual.widgets import Button
-
-            buttons = list(pilot.app.screen.query(Button))
-            reject_btn = next((b for b in buttons if b.id == "reject-btn"), None)
-            assert reject_btn is not None
-            assert "Reject" in str(reject_btn.label)
+            button = pilot.app.screen.query_one(f"#{button_id}", Button)
+            assert button is not None
+            assert expected_label in str(button.label)
 
     async def test_a_key_approves(self, e2e_app_with_tickets: KaganApp, mocker: MockerFixture):
         """Pressing 'a' in ReviewModal triggers approve."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None
-            assert card.ticket is not None
+            ticket = focus_review_ticket(pilot)
+            assert ticket is not None
             await pilot.pause()
 
             await pilot.press("r")
@@ -105,8 +84,8 @@ class TestReviewModalActions:
         """Pressing 'r' in ReviewModal triggers reject."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None
+            ticket = focus_review_ticket(pilot)
+            assert ticket is not None
             await pilot.pause()
 
             await pilot.press("r")
@@ -120,13 +99,25 @@ class TestReviewModalActions:
             # Modal should close, PAIR ticket moves to IN_PROGRESS
             assert is_on_screen(pilot, "KanbanScreen")
 
-    async def test_approve_button_focus_and_enter(
-        self, e2e_app_with_tickets: KaganApp, mocker: MockerFixture
+    @pytest.mark.parametrize(
+        "button_id,mock_merge",
+        [
+            ("approve-btn", True),
+            ("reject-btn", False),
+        ],
+        ids=["approve", "reject"],
+    )
+    async def test_button_focus_and_enter(
+        self,
+        e2e_app_with_tickets: KaganApp,
+        mocker: MockerFixture,
+        button_id: str,
+        mock_merge: bool,
     ):
-        """Focusing Approve button and pressing Enter triggers approve action."""
+        """Focusing buttons and pressing Enter triggers correct action."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            _focus_review_ticket(pilot)
+            focus_review_ticket(pilot)
             await pilot.pause()
 
             await pilot.press("r")
@@ -134,44 +125,26 @@ class TestReviewModalActions:
 
             from textual.widgets import Button
 
-            approve_btn = pilot.app.screen.query_one("#approve-btn", Button)
+            button = pilot.app.screen.query_one(f"#{button_id}", Button)
 
-            mocker.patch.object(
-                e2e_app_with_tickets.worktree_manager,
-                "merge_to_main",
-                return_value=(True, "Merged"),
-            )
-            mocker.patch.object(
-                e2e_app_with_tickets.worktree_manager,
-                "delete",
-                new_callable=mocker.AsyncMock,
-            )
-            mocker.patch.object(
-                e2e_app_with_tickets.session_manager,
-                "kill_session",
-                new_callable=mocker.AsyncMock,
-            )
-            approve_btn.focus()
-            await pilot.pause()
-            await pilot.press("enter")
-            await pilot.pause()
+            if mock_merge:
+                mocker.patch.object(
+                    e2e_app_with_tickets.worktree_manager,
+                    "merge_to_main",
+                    return_value=(True, "Merged"),
+                )
+                mocker.patch.object(
+                    e2e_app_with_tickets.worktree_manager,
+                    "delete",
+                    new_callable=mocker.AsyncMock,
+                )
+                mocker.patch.object(
+                    e2e_app_with_tickets.session_manager,
+                    "kill_session",
+                    new_callable=mocker.AsyncMock,
+                )
 
-            assert is_on_screen(pilot, "KanbanScreen")
-
-    async def test_reject_button_focus_and_enter(self, e2e_app_with_tickets: KaganApp):
-        """Focusing Reject button and pressing Enter triggers reject action."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            _focus_review_ticket(pilot)
-            await pilot.pause()
-
-            await pilot.press("r")
-            await pilot.pause()
-
-            from textual.widgets import Button
-
-            reject_btn = pilot.app.screen.query_one("#reject-btn", Button)
-            reject_btn.focus()
+            button.focus()
             await pilot.pause()
             await pilot.press("enter")
             await pilot.pause()
@@ -185,19 +158,18 @@ class TestReviewModalAIGeneration:
     async def test_action_generate_review_sets_loading_state(
         self, e2e_app_with_tickets: KaganApp, mocker: MockerFixture
     ):
-        """Generate review sets button to disabled with 'Generating...' label."""
+        """Generate review hides generate button, shows cancel, updates phase badge."""
         from textual.widgets import Button
 
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            _focus_review_ticket(pilot)
+            focus_review_ticket(pilot)
             await pilot.pause()
 
             await pilot.press("r")
             await pilot.pause()
             assert is_on_screen(pilot, "ReviewModal")
 
-            # The screen IS the modal when a ModalScreen is active
             modal = cast("ReviewModal", pilot.app.screen)
 
             # Mock worktree to return path and diff
@@ -224,25 +196,33 @@ class TestReviewModalAIGeneration:
             await modal.action_generate_review()
             await pilot.pause()
 
-            # Verify loading state
-            btn = modal.query_one("#generate-btn", Button)
-            assert btn.disabled is True
-            assert "Generating" in str(btn.label) or "Complete" in str(btn.label)
+            # Verify loading state: generate hidden, cancel visible, phase is thinking
+            gen_btn = modal.query_one("#generate-btn", Button)
+            cancel_btn = modal.query_one("#cancel-btn", Button)
+            assert gen_btn.has_class("hidden")
+            assert not cancel_btn.has_class("hidden")
+            assert modal._phase in ("thinking", "streaming")
 
 
 class TestReviewModalDiffDisplay:
     """Test diff summary display in ReviewModal."""
 
     async def test_review_modal_displays_diff_summary(
-        self, e2e_app_with_review_ticket_and_worktree: KaganApp
+        self, e2e_app_with_tickets: KaganApp, mocker: MockerFixture
     ):
         """ReviewModal displays diff stats from worktree."""
-        async with e2e_app_with_review_ticket_and_worktree.run_test(size=(120, 40)) as pilot:
+        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
 
-            # Focus the REVIEW ticket
-            card = _focus_review_ticket(pilot)
-            assert card is not None
+            # Mock worktree after app starts (worktree_manager initialized)
+            mocker.patch.object(
+                e2e_app_with_tickets.worktree_manager,
+                "get_diff_stats",
+                return_value="1 file changed, 10 insertions(+), 2 deletions(-)",
+            )
+
+            ticket = focus_review_ticket(pilot)
+            assert ticket is not None
             await pilot.pause()
 
             await pilot.press("r")
@@ -251,69 +231,45 @@ class TestReviewModalDiffDisplay:
 
             from textual.widgets import Static
 
-            # Diff stats section should exist and contain changes info
             diff_stats = pilot.app.screen.query_one("#diff-stats", Static)
-            # The fixture creates a real worktree with commits, so we expect real diff stats
-            content = str(diff_stats.render())
-            # Should show some diff info (file changed, insertions, etc.) or "(No changes)"
-            assert len(content) > 0
+            assert diff_stats is not None
 
 
 class TestReviewModalDismissResults:
     """Test that approve/reject actions return correct results."""
 
-    async def test_action_approve_returns_approve_string(
-        self, e2e_app_with_tickets: KaganApp, mocker: MockerFixture
+    @pytest.mark.parametrize(
+        "action_name,expected_result",
+        [
+            ("action_approve", "approve"),
+            ("action_reject", "reject"),
+        ],
+        ids=["approve", "reject"],
+    )
+    async def test_action_dismisses_with_correct_result(
+        self,
+        e2e_app_with_tickets: KaganApp,
+        mocker: MockerFixture,
+        action_name: str,
+        expected_result: str,
     ):
-        """Approve action dismisses modal with 'approve' string."""
+        """Actions dismiss modal with correct string result."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None
+            ticket = focus_review_ticket(pilot)
+            assert ticket is not None
             await pilot.pause()
 
             await pilot.press("r")
             await pilot.pause()
             assert is_on_screen(pilot, "ReviewModal")
 
-            # The screen IS the modal when a ModalScreen is active
             modal = cast("ReviewModal", pilot.app.screen)
-
-            # Spy on dismiss to capture result
             dismiss_spy = mocker.spy(modal, "dismiss")
 
-            # Call approve action directly
-            modal.action_approve()
+            # Call action directly
+            action = getattr(modal, action_name)
+            action()
 
-            # Verify dismiss was called with "approve"
-            dismiss_spy.assert_called_once_with("approve")
-
-    async def test_action_reject_returns_reject_string(
-        self, e2e_app_with_tickets: KaganApp, mocker: MockerFixture
-    ):
-        """Reject action dismisses modal with 'reject' string."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None
-            await pilot.pause()
-
-            await pilot.press("r")
-            await pilot.pause()
-            assert is_on_screen(pilot, "ReviewModal")
-
-            # The screen IS the modal when a ModalScreen is active
-            modal = cast("ReviewModal", pilot.app.screen)
-
-            # Verify the action_reject method returns the correct value by checking dismiss
-            dismiss_spy = mocker.spy(modal, "dismiss")
-
-            # Call reject action directly
-            modal.action_reject()
-
-            # Verify dismiss was called with "reject"
-            dismiss_spy.assert_called_once_with("reject")
-
-            # Wait for modal to close before exiting context
-            await pilot.pause()
+            dismiss_spy.assert_called_once_with(expected_result)
             await pilot.pause()

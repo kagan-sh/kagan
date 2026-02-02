@@ -6,7 +6,7 @@ from pathlib import Path  # noqa: TC003
 
 import pytest
 
-from kagan.database.models import TicketCreate, TicketStatus
+from kagan.database.models import Ticket, TicketStatus
 from kagan.mcp.tools import KaganMCPServer
 
 pytestmark = pytest.mark.integration
@@ -18,7 +18,7 @@ class TestMCPTools:
     async def test_get_context(self, state_manager):
         """Get context returns ticket fields and scratchpad."""
         ticket = await state_manager.create_ticket(
-            TicketCreate(
+            Ticket.create(
                 title="Feature",
                 description="Details",
                 acceptance_criteria=["Tests pass"],
@@ -37,7 +37,7 @@ class TestMCPTools:
 
     async def test_update_scratchpad_appends(self, state_manager):
         """update_scratchpad appends to existing content."""
-        ticket = await state_manager.create_ticket(TicketCreate(title="Feature"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Feature"))
         await state_manager.update_scratchpad(ticket.id, "First line")
         server = KaganMCPServer(state_manager)
 
@@ -49,7 +49,7 @@ class TestMCPTools:
 
     async def test_request_review_passes(self, state_manager, monkeypatch):
         """request_review moves ticket to REVIEW on success."""
-        ticket = await state_manager.create_ticket(TicketCreate(title="Feature"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Feature"))
         server = KaganMCPServer(state_manager)
 
         async def _no_uncommitted(*_args) -> bool:
@@ -68,7 +68,7 @@ class TestMCPTools:
 
     async def test_request_review_blocks_uncommitted(self, state_manager, monkeypatch):
         """request_review returns error when uncommitted changes exist."""
-        ticket = await state_manager.create_ticket(TicketCreate(title="Feature"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Feature"))
         server = KaganMCPServer(state_manager)
 
         async def _has_uncommitted(*_args) -> bool:
@@ -178,3 +178,109 @@ class TestCheckUncommittedChanges:
         result = await server._check_uncommitted_changes()
 
         assert result is False
+
+
+class TestMCPToolsEdgeCases:
+    """Edge case tests for MCP tools."""
+
+    async def test_get_context_ticket_not_found(self, state_manager):
+        """get_context raises ValueError for non-existent ticket."""
+        server = KaganMCPServer(state_manager)
+
+        with pytest.raises(ValueError, match="Ticket not found"):
+            await server.get_context("nonexistent-id")
+
+    async def test_get_context_empty_scratchpad(self, state_manager):
+        """get_context returns empty string for empty scratchpad."""
+        ticket = await state_manager.create_ticket(
+            Ticket.create(title="Feature", description="Details")
+        )
+        server = KaganMCPServer(state_manager)
+
+        context = await server.get_context(ticket.id)
+
+        # Empty scratchpad returns empty string (not None)
+        assert context["scratchpad"] == "" or context["scratchpad"] is None
+
+    async def test_update_scratchpad_empty_initial(self, state_manager):
+        """update_scratchpad works with empty initial scratchpad."""
+        ticket = await state_manager.create_ticket(Ticket.create(title="Feature"))
+        server = KaganMCPServer(state_manager)
+
+        result = await server.update_scratchpad(ticket.id, "First entry")
+
+        assert result is True
+        scratchpad = await state_manager.get_scratchpad(ticket.id)
+        assert scratchpad == "First entry"
+
+    async def test_update_scratchpad_multiple_appends(self, state_manager):
+        """update_scratchpad correctly appends multiple times."""
+        ticket = await state_manager.create_ticket(Ticket.create(title="Feature"))
+        server = KaganMCPServer(state_manager)
+
+        await server.update_scratchpad(ticket.id, "Line 1")
+        await server.update_scratchpad(ticket.id, "Line 2")
+        await server.update_scratchpad(ticket.id, "Line 3")
+
+        scratchpad = await state_manager.get_scratchpad(ticket.id)
+        assert scratchpad == "Line 1\nLine 2\nLine 3"
+
+    async def test_update_scratchpad_preserves_whitespace(self, state_manager):
+        """update_scratchpad preserves meaningful whitespace."""
+        ticket = await state_manager.create_ticket(Ticket.create(title="Feature"))
+        server = KaganMCPServer(state_manager)
+
+        await server.update_scratchpad(ticket.id, "Code:\n  indented content")
+
+        scratchpad = await state_manager.get_scratchpad(ticket.id)
+        assert "  indented content" in scratchpad
+
+    async def test_request_review_ticket_not_found(self, state_manager):
+        """request_review raises ValueError for non-existent ticket."""
+        server = KaganMCPServer(state_manager)
+
+        with pytest.raises(ValueError, match="Ticket not found"):
+            await server.request_review("nonexistent-id", "Summary")
+
+    async def test_get_context_with_empty_acceptance_criteria(self, state_manager):
+        """get_context handles tickets with empty acceptance criteria list."""
+        ticket = await state_manager.create_ticket(
+            Ticket.create(title="Feature", acceptance_criteria=[])
+        )
+        server = KaganMCPServer(state_manager)
+
+        context = await server.get_context(ticket.id)
+
+        assert context["acceptance_criteria"] == []
+
+    async def test_get_context_with_special_characters(self, state_manager):
+        """get_context handles special characters in ticket fields."""
+        ticket = await state_manager.create_ticket(
+            Ticket.create(
+                title="Feature with émojis 🎉",
+                description='Description with <html> & "quotes"',
+            )
+        )
+        server = KaganMCPServer(state_manager)
+
+        context = await server.get_context(ticket.id)
+
+        assert context["title"] == "Feature with émojis 🎉"
+        assert '<html> & "quotes"' in context["description"]
+
+    async def test_request_review_empty_summary(self, state_manager, monkeypatch):
+        """request_review accepts empty summary."""
+        ticket = await state_manager.create_ticket(Ticket.create(title="Feature"))
+        server = KaganMCPServer(state_manager)
+
+        async def _no_uncommitted(*_args) -> bool:
+            return False
+
+        monkeypatch.setattr(server, "_check_uncommitted_changes", _no_uncommitted)
+
+        result = await server.request_review(ticket.id, "")
+
+        assert result["status"] == "review"
+        updated = await state_manager.get_ticket(ticket.id)
+        assert updated is not None
+        assert updated.review_summary == ""

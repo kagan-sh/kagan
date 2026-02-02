@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from kagan.config import KaganConfig
-from kagan.database.models import TicketCreate
+from kagan.database.models import Ticket
 from kagan.sessions.manager import SessionManager
 
 pytestmark = pytest.mark.integration
@@ -28,7 +28,7 @@ class TestSessionManager:
         worktree_path.mkdir()
 
         ticket = await state_manager.create_ticket(
-            TicketCreate(
+            Ticket.create(
                 title="Add login",
                 description="Implement OAuth",
                 acceptance_criteria=["Tests pass"],
@@ -70,7 +70,7 @@ class TestSessionManager:
         worktree_path.mkdir()
 
         ticket = await state_manager.create_ticket(
-            TicketCreate(title="OpenCode task", agent_backend="opencode")
+            Ticket.create(title="OpenCode task", agent_backend="opencode")
         )
         config = KaganConfig()
         manager = SessionManager(project_root, state_manager, config)
@@ -104,7 +104,7 @@ class TestSessionManager:
         }
         (worktree_path / ".mcp.json").write_text(json.dumps(existing_config))
 
-        ticket = await state_manager.create_ticket(TicketCreate(title="Task"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Task"))
         config = KaganConfig()
         manager = SessionManager(project_root, state_manager, config)
 
@@ -126,7 +126,7 @@ class TestSessionManager:
         worktree_path.mkdir()
 
         ticket = await state_manager.create_ticket(
-            TicketCreate(title="Test task", description="Do something useful")
+            Ticket.create(title="Test task", description="Do something useful")
         )
         config = KaganConfig()
         manager = SessionManager(project_root, state_manager, config)
@@ -153,7 +153,7 @@ class TestSessionLifecycle:
         project_root.mkdir()
         worktree_path.mkdir()
 
-        ticket = await state_manager.create_ticket(TicketCreate(title="Work"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Work"))
         config = KaganConfig()
         manager = SessionManager(project_root, state_manager, config)
 
@@ -178,7 +178,7 @@ class TestSessionGitignore:
         project_root.mkdir()
         worktree_path.mkdir()
 
-        ticket = await state_manager.create_ticket(TicketCreate(title="Task"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Task"))
         config = KaganConfig()
         manager = SessionManager(project_root, state_manager, config)
 
@@ -203,7 +203,7 @@ class TestSessionGitignore:
         existing_content = "node_modules/\n*.pyc\n"
         (worktree_path / ".gitignore").write_text(existing_content)
 
-        ticket = await state_manager.create_ticket(TicketCreate(title="Task"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Task"))
         config = KaganConfig()
         manager = SessionManager(project_root, state_manager, config)
 
@@ -226,7 +226,7 @@ class TestSessionGitignore:
         existing_content = ".mcp.json\n"
         (worktree_path / ".gitignore").write_text(existing_content)
 
-        ticket = await state_manager.create_ticket(TicketCreate(title="Task"))
+        ticket = await state_manager.create_ticket(Ticket.create(title="Task"))
         config = KaganConfig()
         manager = SessionManager(project_root, state_manager, config)
 

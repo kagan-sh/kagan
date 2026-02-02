@@ -8,7 +8,7 @@ import pytest
 
 from kagan.database.models import TicketStatus
 from kagan.ui.widgets.card import TicketCard
-from tests.helpers.pages import is_on_screen
+from tests.helpers.pages import focus_review_ticket, is_on_screen
 
 if TYPE_CHECKING:
     from kagan.app import KaganApp
@@ -16,44 +16,32 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.integration
 
 
-def _focus_review_ticket(pilot) -> TicketCard | None:
-    """Focus a ticket in REVIEW status. Returns the card or None."""
-    cards = list(pilot.app.screen.query(TicketCard))
-    for card in cards:
-        if card.ticket and card.ticket.status == TicketStatus.REVIEW:
-            card.focus()
-            return card
-    return None
-
-
 class TestReviewModalOpen:
     """Test opening ReviewModal via different keybindings."""
 
-    async def test_r_opens_review_modal(self, e2e_app_with_tickets: KaganApp):
-        """Pressing 'r' on REVIEW ticket opens ReviewModal."""
+    @pytest.mark.parametrize(
+        "keys,expected_modal",
+        [
+            (["r"], True),
+            (["g", "r"], True),
+            (["enter"], True),
+        ],
+        ids=["r_key", "leader_g_r", "enter_key"],
+    )
+    async def test_open_review_modal_on_review_ticket(
+        self, e2e_app_with_tickets: KaganApp, keys: list[str], expected_modal: bool
+    ):
+        """Verify various keybindings open ReviewModal on REVIEW ticket."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None, "Should have a REVIEW ticket"
+            ticket = focus_review_ticket(pilot)
+            assert ticket is not None, "Should have a REVIEW ticket"
             await pilot.pause()
 
-            await pilot.press("r")
+            await pilot.press(*keys)
             await pilot.pause()
 
-            assert is_on_screen(pilot, "ReviewModal")
-
-    async def test_leader_g_r_opens_review_modal(self, e2e_app_with_tickets: KaganApp):
-        """Pressing 'g' then 'r' leader key opens ReviewModal."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None, "Should have a REVIEW ticket"
-            await pilot.pause()
-
-            await pilot.press("g", "r")
-            await pilot.pause()
-
-            assert is_on_screen(pilot, "ReviewModal")
+            assert is_on_screen(pilot, "ReviewModal") == expected_modal
 
     async def test_r_on_non_review_ticket_shows_warning(self, e2e_app_with_tickets: KaganApp):
         """Pressing 'r' on non-REVIEW ticket shows warning, not modal."""
@@ -73,29 +61,40 @@ class TestReviewModalOpen:
             assert not is_on_screen(pilot, "ReviewModal")
             assert is_on_screen(pilot, "KanbanScreen")
 
-    async def test_enter_on_review_ticket_opens_review_modal(self, e2e_app_with_tickets: KaganApp):
-        """Pressing Enter on REVIEW ticket opens ReviewModal."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None, "Should have a REVIEW ticket"
-            await pilot.pause()
-
-            await pilot.press("enter")
-            await pilot.pause()
-
-            assert is_on_screen(pilot, "ReviewModal")
-
 
 class TestReviewModalDisplay:
-    """Test ReviewModal displays commits and diff stats."""
+    """Test ReviewModal displays expected UI elements."""
+
+    @pytest.mark.parametrize(
+        "element_id,element_type",
+        [
+            ("commits-log", "RichLog"),
+            ("diff-stats", "Static"),
+            ("generate-btn", "Button"),
+        ],
+        ids=["commits_section", "diff_stats_section", "ai_review_button"],
+    )
+    async def test_modal_has_expected_elements(
+        self, e2e_app_with_tickets: KaganApp, element_id: str, element_type: str
+    ):
+        """ReviewModal has expected UI elements."""
+        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
+            await pilot.pause()
+            focus_review_ticket(pilot)
+            await pilot.pause()
+
+            await pilot.press("r")
+            await pilot.pause()
+
+            # Query for element by ID
+            element = pilot.app.screen.query_one(f"#{element_id}")
+            assert element is not None
 
     async def test_modal_shows_ticket_title(self, e2e_app_with_tickets: KaganApp):
         """ReviewModal displays the ticket title."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None
+            focus_review_ticket(pilot)
             await pilot.pause()
 
             await pilot.press("r")
@@ -103,51 +102,6 @@ class TestReviewModalDisplay:
 
             labels = list(pilot.app.screen.query(".modal-title"))
             assert len(labels) >= 1, "Modal should have a title label"
-
-    async def test_modal_has_commits_section(self, e2e_app_with_tickets: KaganApp):
-        """ReviewModal has commits log section."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            _focus_review_ticket(pilot)
-            await pilot.pause()
-
-            await pilot.press("r")
-            await pilot.pause()
-
-            from textual.widgets import RichLog
-
-            logs = list(pilot.app.screen.query(RichLog))
-            assert any(log.id == "commits-log" for log in logs)
-
-    async def test_modal_has_diff_stats_section(self, e2e_app_with_tickets: KaganApp):
-        """ReviewModal has diff stats section."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            _focus_review_ticket(pilot)
-            await pilot.pause()
-
-            await pilot.press("r")
-            await pilot.pause()
-
-            from textual.widgets import Static
-
-            statics = list(pilot.app.screen.query(Static))
-            assert any(s.id == "diff-stats" for s in statics)
-
-    async def test_modal_has_ai_review_button(self, e2e_app_with_tickets: KaganApp):
-        """ReviewModal has Generate AI Review button."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            _focus_review_ticket(pilot)
-            await pilot.pause()
-
-            await pilot.press("r")
-            await pilot.pause()
-
-            from textual.widgets import Button
-
-            buttons = list(pilot.app.screen.query(Button))
-            assert any(b.id == "generate-btn" for b in buttons)
 
 
 class TestReviewModalClose:
@@ -157,10 +111,9 @@ class TestReviewModalClose:
         """Pressing Escape closes ReviewModal without action."""
         async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None
-            assert card.ticket is not None
-            ticket_id = card.ticket.id
+            ticket = focus_review_ticket(pilot)
+            assert ticket is not None
+            ticket_id = ticket.id
             await pilot.pause()
 
             await pilot.press("r")
@@ -176,24 +129,3 @@ class TestReviewModalClose:
             ticket = next((t for t in tickets if t.id == ticket_id), None)
             assert ticket is not None
             assert ticket.status == TicketStatus.REVIEW
-
-    async def test_escape_does_not_change_ticket_status(self, e2e_app_with_tickets: KaganApp):
-        """Escape closes modal without modifying ticket."""
-        async with e2e_app_with_tickets.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            card = _focus_review_ticket(pilot)
-            assert card is not None
-            assert card.ticket is not None
-            original_ticket = card.ticket
-            await pilot.pause()
-
-            await pilot.press("r")
-            await pilot.pause()
-            await pilot.press("escape")
-            await pilot.pause()
-
-            tickets = await e2e_app_with_tickets.state_manager.get_all_tickets()
-            ticket = next((t for t in tickets if t.id == original_ticket.id), None)
-            assert ticket is not None
-            assert ticket.status == original_ticket.status
-            assert ticket.title == original_ticket.title

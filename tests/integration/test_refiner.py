@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.helpers.mocks import create_mock_agent, create_test_config
+from tests.helpers.mocks import create_mock_agent
 
 pytestmark = pytest.mark.integration
 
@@ -16,23 +16,18 @@ class TestPromptRefiner:
     """Test PromptRefiner with mocked agent subprocess."""
 
     @pytest.fixture
-    def mock_agent(self) -> MagicMock:
+    def refiner_agent(self) -> MagicMock:
         """Create mock agent that returns refined text."""
         return create_mock_agent(
             response="Analyze the authentication bug in the login module, "
             "identify the root cause, and implement a fix with appropriate tests"
         )
 
-    @pytest.fixture
-    def config(self):
-        """Create test configuration."""
-        return create_test_config()
-
-    async def test_refine_returns_enhanced_prompt(self, mock_agent: MagicMock, config) -> None:
+    async def test_refine_returns_enhanced_prompt(self, refiner_agent: MagicMock, config) -> None:
         """Verify refiner returns agent response as refined prompt."""
         from kagan.agents.refiner import PromptRefiner
 
-        with patch("kagan.agents.refiner.Agent", return_value=mock_agent):
+        with patch("kagan.agents.refiner.Agent", return_value=refiner_agent):
             agent_config = config.get_worker_agent()
             assert agent_config is not None
             refiner = PromptRefiner(Path.cwd(), agent_config)
@@ -40,16 +35,16 @@ class TestPromptRefiner:
             result = await refiner.refine("fix login bug")
 
             assert "authentication" in result.lower()
-            mock_agent.send_prompt.assert_called_once()
+            refiner_agent.send_prompt.assert_called_once()
             await refiner.stop()
 
     async def test_refine_returns_original_on_empty_response(self, config) -> None:
         """Verify original input returned if agent response is empty."""
         from kagan.agents.refiner import PromptRefiner
 
-        mock_agent = create_mock_agent(response="")
+        empty_agent = create_mock_agent(response="")
 
-        with patch("kagan.agents.refiner.Agent", return_value=mock_agent):
+        with patch("kagan.agents.refiner.Agent", return_value=empty_agent):
             agent_config = config.get_worker_agent()
             assert agent_config is not None
             refiner = PromptRefiner(Path.cwd(), agent_config)
@@ -64,9 +59,9 @@ class TestPromptRefiner:
         from kagan.agents.refiner import PromptRefiner
 
         # Response shorter than half the input length
-        mock_agent = create_mock_agent(response="ok")
+        short_agent = create_mock_agent(response="ok")
 
-        with patch("kagan.agents.refiner.Agent", return_value=mock_agent):
+        with patch("kagan.agents.refiner.Agent", return_value=short_agent):
             agent_config = config.get_worker_agent()
             assert agent_config is not None
             refiner = PromptRefiner(Path.cwd(), agent_config)
@@ -77,11 +72,13 @@ class TestPromptRefiner:
             assert result == "fix the authentication bug in login"
             await refiner.stop()
 
-    async def test_refiner_reuses_agent_across_calls(self, mock_agent: MagicMock, config) -> None:
+    async def test_refiner_reuses_agent_across_calls(
+        self, refiner_agent: MagicMock, config
+    ) -> None:
         """Verify agent is initialized once and reused."""
         from kagan.agents.refiner import PromptRefiner
 
-        with patch("kagan.agents.refiner.Agent", return_value=mock_agent) as agent_cls:
+        with patch("kagan.agents.refiner.Agent", return_value=refiner_agent) as agent_cls:
             agent_config = config.get_worker_agent()
             assert agent_config is not None
             refiner = PromptRefiner(Path.cwd(), agent_config)
@@ -92,14 +89,14 @@ class TestPromptRefiner:
             # Agent constructor called only once
             agent_cls.assert_called_once()
             # But send_prompt called twice
-            assert mock_agent.send_prompt.call_count == 2
+            assert refiner_agent.send_prompt.call_count == 2
             await refiner.stop()
 
-    async def test_stop_cleans_up_agent(self, mock_agent: MagicMock, config) -> None:
+    async def test_stop_cleans_up_agent(self, refiner_agent: MagicMock, config) -> None:
         """Verify stop properly terminates agent."""
         from kagan.agents.refiner import PromptRefiner
 
-        with patch("kagan.agents.refiner.Agent", return_value=mock_agent):
+        with patch("kagan.agents.refiner.Agent", return_value=refiner_agent):
             agent_config = config.get_worker_agent()
             assert agent_config is not None
             refiner = PromptRefiner(Path.cwd(), agent_config)
@@ -107,7 +104,7 @@ class TestPromptRefiner:
             await refiner.refine("test")
             await refiner.stop()
 
-            mock_agent.stop.assert_called_once()
+            refiner_agent.stop.assert_called_once()
 
     async def test_stop_without_refine_is_safe(self, config) -> None:
         """Verify stop is safe to call even if refine was never called."""
@@ -120,18 +117,18 @@ class TestPromptRefiner:
         # Should not raise
         await refiner.stop()
 
-    async def test_agent_auto_approve_is_enabled(self, mock_agent: MagicMock, config) -> None:
+    async def test_agent_auto_approve_is_enabled(self, refiner_agent: MagicMock, config) -> None:
         """Verify refiner agent has auto_approve enabled."""
         from kagan.agents.refiner import PromptRefiner
 
-        with patch("kagan.agents.refiner.Agent", return_value=mock_agent):
+        with patch("kagan.agents.refiner.Agent", return_value=refiner_agent):
             agent_config = config.get_worker_agent()
             assert agent_config is not None
             refiner = PromptRefiner(Path.cwd(), agent_config)
 
             await refiner.refine("test prompt")
 
-            mock_agent.set_auto_approve.assert_called_once_with(True)
+            refiner_agent.set_auto_approve.assert_called_once_with(True)
             await refiner.stop()
 
 

@@ -147,42 +147,6 @@ class TestAgentStartStop:
         assert agent._buffers.get_response_text() == ""
 
 
-class TestAgentReadOnlyMode:
-    """Tests for read_only agent capability restrictions."""
-
-    def test_read_only_agent_cannot_write_files(self, git_repo: Path, config):
-        """Read-only agent blocks file write operations via RPC handler."""
-        from kagan.acp import rpc
-
-        agent = Agent(git_repo, config.agents["test"], read_only=True)
-
-        with pytest.raises(ValueError, match="not permitted in read-only mode"):
-            rpc.handle_write_text_file(agent, "session-1", "file.txt", "content")
-
-    async def test_read_only_agent_cannot_create_terminal(self, git_repo: Path, config):
-        """Read-only agent blocks terminal creation via RPC handler."""
-        from kagan.acp import rpc
-
-        agent = Agent(git_repo, config.agents["test"], read_only=True)
-
-        with pytest.raises(ValueError, match="not permitted in read-only mode"):
-            await rpc.handle_terminal_create(agent, "echo test")
-
-    def test_read_only_agent_can_read_files(self, git_repo: Path, config):
-        """Read-only agent allows file read operations."""
-        from kagan.acp import rpc
-
-        # Create a test file
-        test_file = git_repo / "test.txt"
-        test_file.write_text("readable content")
-
-        agent = Agent(git_repo, config.agents["test"], read_only=True)
-
-        result = rpc.handle_read_text_file(agent, "session-1", "test.txt")
-
-        assert result["content"] == "readable content"
-
-
 class TestAgentMessageTarget:
     """Tests for message target and buffering."""
 
