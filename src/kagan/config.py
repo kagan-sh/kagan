@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import tomlkit
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
@@ -55,6 +56,12 @@ class GeneralConfig(BaseModel):
         default=True,
         description="When auto_merge is enabled and fails due to conflict, "
         "rebase and retry automatically",
+    )
+    require_review_approval: bool = Field(
+        default=False, description="Require approved review before merge actions"
+    )
+    serialize_merges: bool = Field(
+        default=False, description="Serialize manual merges to reduce conflicts"
     )
     max_iterations: int = Field(default=10)
     iteration_delay_seconds: float = Field(default=2.0)
@@ -123,6 +130,90 @@ class KaganConfig(BaseModel):
     def get_worker_agent(self) -> AgentConfig | None:
         """Get the configured worker agent."""
         return self.get_agent(self.general.default_worker_agent)
+
+    async def save(self, path: Path) -> None:
+        """Serialize current config to TOML file.
+
+        Args:
+            path: Path to write config file (created if missing)
+        """
+        import aiofiles
+
+        doc = tomlkit.document()
+
+        # General section
+        general_table = tomlkit.table()
+        for key, value in self.general.model_dump().items():
+            if value is not None:
+                general_table[key] = value
+        doc["general"] = general_table
+
+        # Agents section (if any)
+        if self.agents:
+            agents_table = tomlkit.table()
+            for agent_name, agent_cfg in self.agents.items():
+                agent_table = tomlkit.table()
+                for key, value in agent_cfg.model_dump().items():
+                    if value is not None and value != {}:
+                        agent_table[key] = value
+                agents_table[agent_name] = agent_table
+            doc["agents"] = agents_table
+
+        # Refinement section
+        refinement_table = tomlkit.table()
+        for key, value in self.refinement.model_dump().items():
+            if value is not None:
+                refinement_table[key] = value
+        doc["refinement"] = refinement_table
+
+        # UI section
+        ui_table = tomlkit.table()
+        for key, value in self.ui.model_dump().items():
+            if value is not None:
+                ui_table[key] = value
+        doc["ui"] = ui_table
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        async with aiofiles.open(path, "w", encoding="utf-8") as f:
+            await f.write(tomlkit.dumps(doc))
+
+    async def update_ui_preferences(
+        self,
+        path: Path,
+        *,
+        skip_tmux_gateway: bool | None = None,
+    ) -> None:
+        """Update UI preferences in existing TOML file (preserves comments).
+
+        Args:
+            path: Path to config file (created if missing)
+            skip_tmux_gateway: Value for skip_tmux_gateway (None = no change)
+        """
+        import aiofiles
+
+        # Load existing TOML or create minimal structure
+        if path.exists():
+            async with aiofiles.open(path, encoding="utf-8") as f:
+                content = await f.read()
+            doc = tomlkit.parse(content)
+        else:
+            doc = tomlkit.document()
+            doc["general"] = tomlkit.table()
+            doc["general"]["auto_start"] = False  # type: ignore[index]
+
+        # Ensure [ui] section exists
+        if "ui" not in doc:
+            doc["ui"] = tomlkit.table()
+
+        # Update preferences
+        if skip_tmux_gateway is not None:
+            # Type checker workaround: cast to dict-like for assignment
+            doc["ui"]["skip_tmux_gateway"] = skip_tmux_gateway  # type: ignore[index]
+
+        # Write back
+        path.parent.mkdir(parents=True, exist_ok=True)
+        async with aiofiles.open(path, "w", encoding="utf-8") as f:
+            await f.write(tomlkit.dumps(doc))
 
 
 def get_fallback_agent_config() -> AgentConfig:

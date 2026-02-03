@@ -36,11 +36,14 @@ MIN_SCREEN_HEIGHT = 20
 # and by setup/session code to ensure proper .gitignore entries
 #
 # Note: MCP config files (.mcp.json for Claude, opencode.json for OpenCode)
-# are added dynamically based on the agent being used.
+# are added dynamically based on the agent being used. Wildcard patterns
+# catch any variants like kagan.mcp.json, kagan-mcp.json, etc.
 KAGAN_GENERATED_PATTERNS = (
     ".kagan/",
     ".mcp.json",  # Claude Code MCP config (may be merged with existing)
     "opencode.json",  # OpenCode MCP config (may be merged with existing)
+    "kagan*.mcp.json",  # Catch any kagan-prefixed MCP config variants
+    "*kagan.json",  # Catch any kagan-suffixed config files
 )
 
 DEFAULT_DB_PATH = ".kagan/state.db"

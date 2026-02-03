@@ -68,7 +68,10 @@ AUTO mode is like assigning a task to a capable assistant who works on their own
 
    - Check the diff (`Shift+D`)
    - Run tests
+   - Check merge readiness (Ready / At Risk / Blocked)
    - Approve (`a`) to merge, or reject (`r`) to send back
+   - If there are no changes, use **Close as Exploratory** to finish without merging
+   - Merges run in a dedicated merge worktree to keep main clean
 
 ### What Can Happen
 
@@ -152,7 +155,7 @@ PAIR mode opens an interactive terminal session where you and the AI collaborate
 1. **Move ticket manually**
 
    - When ready, move to REVIEW (`g` `l`)
-   - Review and merge as usual
+   - Review and merge as usual (merge readiness shown in REVIEW)
 
 ### Tips for PAIR Mode
 
@@ -179,7 +182,7 @@ PAIR mode opens an interactive terminal session where you and the AI collaborate
 
 ## Configuration
 
-These settings in `.kagan/config.toml` affect AUTO mode:
+These settings in `.kagan/config.toml` affect agent and merge behavior:
 
 ```toml
 [general]
@@ -188,6 +191,12 @@ auto_start = true
 
 # Automatically merge when review passes
 auto_merge = false
+
+# Require approved review before merge actions
+require_review_approval = false
+
+# Serialize manual merges to reduce conflicts
+serialize_merges = false
 
 # Skip permission prompts for AI actions
 auto_approve = false
@@ -230,3 +239,9 @@ Mode-specific shortcuts at a glance:
 
 - Make sure tmux is installed: `brew install tmux` or `apt install tmux`
 - Check if another session is already open for this ticket
+
+### Merge fails in REVIEW
+
+- Kagan shows merge readiness in REVIEW before you merge
+- If a merge fails, the ticket stays in REVIEW with the error
+- Use the primary resolve action in ticket details to open tmux in the merge worktree

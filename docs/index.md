@@ -5,7 +5,7 @@ Keyboard-first Kanban TUI that turns your terminal into an AI-powered developmen
 ## Quick Start
 
 ```bash
-# Install
+# Install (requires Python 3.12+)
 uv tool install kagan
 
 # Launch in any git repo
@@ -72,8 +72,12 @@ Built-in code review with AI assistance:
 
 1. Ticket moves to REVIEW when agent completes work
 1. View diffs (++shift+d++), inspect commits, run tests
+1. Check merge readiness (Ready / At Risk / Blocked) and any preflight warnings
 1. Approve (++a++) to merge or reject (++r++) with feedback
 1. Auto-merge on approval (configurable)
+
+In REVIEW, Kagan surfaces parallel in-progress tickets and their changed files to help prevent conflicts. If a merge fails, the ticket stays in REVIEW with a clear error and a primary resolve action. If there are no changes, the primary action becomes “Close as Exploratory” to finish without a merge.
+Merges run in a dedicated merge worktree to keep your main working tree clean.
 
 ## MCP Integration
 
@@ -84,6 +88,17 @@ Agents access ticket context through MCP (Model Context Protocol):
 - `request_review(ticket_id, summary)` — Submit work for review
 
 Run the MCP server: `kagan mcp`
+
+## Developer Tools
+
+Kagan includes stateless utilities for developers:
+
+```bash
+kagan tools enhance "fix the login bug"                    # Enhance a prompt
+kagan tools enhance "add dark mode" -t opencode            # Target specific AI tool
+kagan tools enhance --file prompt.txt                      # Read from file
+kagan tools enhance -f requirements.md -t claude           # Target with file input
+```
 
 ## Architecture Overview
 
@@ -172,13 +187,15 @@ Coming soon: Gemini, Codex, and more.
 
 Configuration lives in `.kagan/config.toml`. Key settings:
 
-| Setting                 | Purpose                              |
-| ----------------------- | ------------------------------------ |
-| `auto_start`            | Auto-run agents on ticket creation   |
-| `auto_approve`          | Skip permission prompts              |
-| `auto_merge`            | Merge approved tickets automatically |
-| `default_worker_agent`  | Default agent (e.g., "claude")       |
-| `max_concurrent_agents` | Parallel agent limit                 |
+| Setting                   | Purpose                                     |
+| ------------------------- | ------------------------------------------- |
+| `auto_start`              | Auto-run agents on ticket creation          |
+| `auto_approve`            | Skip permission prompts                     |
+| `auto_merge`              | Merge approved tickets automatically        |
+| `require_review_approval` | Require review approval before merge        |
+| `serialize_merges`        | Serialize manual merges to reduce conflicts |
+| `default_worker_agent`    | Default agent (e.g., "claude")              |
+| `max_concurrent_agents`   | Parallel agent limit                        |
 
 See [Configuration](config.md) for the full reference.
 

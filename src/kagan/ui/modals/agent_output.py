@@ -58,6 +58,7 @@ class AgentOutputModal(ModalScreen[None]):
         self._current_mode: str = ""
         self._available_modes: dict[str, messages.Mode] = {}
         self._available_commands: list[protocol.AvailableCommand] = []
+        self._review_loaded: bool = False
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-output-container"):
@@ -74,7 +75,12 @@ class AgentOutputModal(ModalScreen[None]):
                     classes="modal-subtitle",
                 )
                 yield Rule()
-                with TabbedContent(id="output-tabs", initial="review-tab"):
+                initial_tab = (
+                    "review-tab"
+                    if (self._review_agent or self._is_reviewing)
+                    else "implementation-tab"
+                )
+                with TabbedContent(id="output-tabs", initial=initial_tab):
                     with TabPane("Implementation", id="implementation-tab"):
                         yield StreamingOutput(id="implementation-output")
                     with TabPane("Review", id="review-tab"):
@@ -131,26 +137,47 @@ class AgentOutputModal(ModalScreen[None]):
         review_output = self.query_one("#review-output", StreamingOutput)
 
         if self._review_agent:
+            self._review_loaded = True
             # Live review agent - connect for streaming
             self._review_agent.set_message_target(self)
             await review_output.post_note("Connected to review agent stream", classes="info")
+            return
+
+        if self._is_reviewing:
+            self._review_loaded = True
+            await review_output.post_note("Review in progress...", classes="info")
+            return
+
+        self._review_loaded = False
+        await review_output.post_note(
+            "Review output is available on demand. Switch to this tab to load.",
+            classes="info",
+        )
+
+    @on(TabbedContent.TabActivated, "#output-tabs")
+    async def _on_output_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        if event.tab.id == "review-tab":
+            await self._ensure_review_loaded()
+
+    async def _ensure_review_loaded(self) -> None:
+        if self._review_loaded:
+            return
+        review_output = self.query_one("#review-output", StreamingOutput)
+        review_logs = self._historical_logs.get("review", [])
+        if review_logs:
+            for log_entry in review_logs:
+                await self._load_historical_log(
+                    review_output, log_entry, show_iteration_header=False
+                )
         else:
-            # Review complete - load historical logs
-            review_logs = self._historical_logs.get("review", [])
-            if review_logs:
-                for log_entry in review_logs:
-                    await self._load_historical_log(
-                        review_output, log_entry, show_iteration_header=False
-                    )
+            if self.ticket.checks_passed is not None:
+                status = "✓ Passed" if self.ticket.checks_passed else "✗ Failed"
+                summary = self.ticket.review_summary or "No details"
+                await review_output.post_note(f"Review {status}", classes="info")
+                await review_output.post_response(summary)
             else:
-                # Check if review passed/failed
-                if self.ticket.checks_passed is not None:
-                    status = "✓ Passed" if self.ticket.checks_passed else "✗ Failed"
-                    summary = self.ticket.review_summary or "No details"
-                    await review_output.post_note(f"Review {status}", classes="info")
-                    await review_output.post_response(summary)
-                else:
-                    await review_output.post_note("Review not yet completed", classes="warning")
+                await review_output.post_note("Review not yet completed", classes="warning")
+        self._review_loaded = True
 
     async def _setup_single_mode(self) -> None:
         """Set up single output mode for IN_PROGRESS status."""

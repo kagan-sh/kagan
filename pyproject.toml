@@ -35,6 +35,8 @@ dependencies = [
     "httpx>=0.27.0",
     "pyperclip>=1.11.0",
     "packaging>=24.0",
+    "tomlkit>=0.13.0",
+    "aiofiles>=24.1.0",
 ]
 
 [project.scripts]
@@ -82,9 +84,13 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM", "TCH", "RUF"]
 ignore = [
     "RUF012", # Textual class attributes (BINDINGS, etc.) don't need ClassVar
+    "RUF006", # Allow fire-and-forget asyncio.create_task (intentional pattern)
     "SIM102", # Allow nested if statements for readability
     "SIM117", # Allow nested with statements for Textual compose patterns
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/property/*.py" = ["E402"]  # Hypothesis settings must be configured before imports
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -92,6 +98,7 @@ docstring-code-format = true
 [tool.pyrefly]
 project_includes = ["src", "tests"]
 search_path = ["src", "."]
+permissive-ignores = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -103,6 +110,7 @@ markers = [
     "integration: tests with real filesystem/DB, mocked externals",
     "snapshot: visual regression tests",
     "e2e: full application tests",
+    "property: property-based tests with hypothesis",
 ]
 addopts = "-n auto"
 
@@ -128,6 +136,9 @@ typecheck = "pyrefly check src/ tests/"
 check = ["lint", "typecheck", "test"]
 docs-serve = "mkdocs serve"
 docs-build = "mkdocs build"
+# Snapshot tests (run sequentially - parallel can cause issues with snapshots)
+test-snapshot = "pytest tests/snapshots/ -n 0 -v"
+test-snapshot-update = "pytest tests/snapshots/ -n 0 -v --snapshot-update"
 
 [tool.poe.tasks.fix]
 help = "Fix linting issues and format code"

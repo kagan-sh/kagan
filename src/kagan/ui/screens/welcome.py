@@ -250,6 +250,8 @@ active = true''')
             f"auto_start = {str(auto_start).lower()}",
             f"auto_approve = {str(auto_approve).lower()}",
             f"auto_merge = {str(auto_merge).lower()}",
+            "require_review_approval = false",
+            "serialize_merges = false",
             f'default_base_branch = "{base_branch}"',
             f'default_worker_agent = "{worker}"',
         ]

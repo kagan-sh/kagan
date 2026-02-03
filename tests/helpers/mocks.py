@@ -131,6 +131,11 @@ class MergeScenarioBuilder:
         self.manager = WorktreeManager(repo_root=tmp_path)
         self.mock_run_git = AsyncMock()
         self.manager._run_git = self.mock_run_git
+        self.merge_path = tmp_path / ".kagan" / "merge-worktree"
+        self.manager.ensure_merge_worktree = AsyncMock(return_value=self.merge_path)
+        self.manager._reset_merge_worktree = AsyncMock(return_value=self.merge_path)
+        self.manager._fast_forward_base = AsyncMock(return_value=(True, "Fast-forwarded main"))
+        self.manager._merge_in_progress = AsyncMock(return_value=False)
         self.ticket_id = ""
         self.branch_name = ""
         self.commits: list[str] = []
@@ -146,11 +151,13 @@ class MergeScenarioBuilder:
     def with_branch(self, branch_name: str) -> MergeScenarioBuilder:
         """Set branch name response."""
         self.branch_name = branch_name
+        self.manager.get_branch_name = AsyncMock(return_value=branch_name)
         return self
 
     def with_commits(self, commits: list[str]) -> MergeScenarioBuilder:
         """Set commit log response."""
         self.commits = commits
+        self.manager.get_commit_log = AsyncMock(return_value=commits)
         return self
 
     def with_conflict(self, marker: str = "UU") -> MergeScenarioBuilder:
@@ -161,10 +168,6 @@ class MergeScenarioBuilder:
     def build_success_responses(self) -> list:
         """Build mock responses for successful squash merge."""
         return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
             ("", ""),  # merge --squash
             ("M file.py", ""),  # status (conflict check - no conflict)
             ("", ""),  # commit
@@ -173,41 +176,26 @@ class MergeScenarioBuilder:
     def build_regular_merge_responses(self) -> list:
         """Build mock responses for successful regular merge."""
         return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
             ("Merge made by the 'ort' strategy.", ""),  # merge (no squash)
         ]
 
     def build_conflict_responses(self) -> list:
         """Build mock responses for squash conflict scenario."""
         return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
             ("", ""),  # merge --squash
             (f"{self.conflict_marker} file.py", ""),  # status with conflict
-            ("", ""),  # merge --abort
         ]
 
     def build_regular_conflict_responses(self, in_stderr: bool = False) -> list:
         """Build mock responses for regular merge conflict."""
         conflict_msg = "CONFLICT (content): Merge conflict in file.py"
         return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
             ("", conflict_msg) if in_stderr else (conflict_msg, ""),
-            ("", ""),  # merge --abort
         ]
 
     def build_uncommitted_changes_response(self) -> list:
         """Build mock responses for uncommitted changes in main repo."""
         return [
-            (self.branch_name, ""),  # rev-parse (get branch)
             ("M tests/helpers/pages.py", ""),  # status --porcelain shows uncommitted changes
         ]
 
@@ -224,6 +212,8 @@ def create_mock_worktree_manager() -> MagicMock:
     manager.get_commit_log = AsyncMock(return_value=["feat: initial"])
     manager.get_diff_stats = AsyncMock(return_value="1 file changed")
     manager.merge_to_main = AsyncMock(return_value=(True, "Merged"))
+    manager.prepare_merge_conflicts = AsyncMock(return_value=(True, "Merge conflicts prepared"))
+    manager.get_merge_worktree_path = AsyncMock(return_value=Path("/tmp/merge-worktree"))
     return manager
 
 
@@ -245,6 +235,7 @@ def create_mock_session_manager() -> MagicMock:
     manager = MagicMock()
     manager.create_session = AsyncMock(return_value="session-123")
     manager.kill_session = AsyncMock()
+    manager.kill_resolution_session = AsyncMock()
     manager.list_sessions = AsyncMock(return_value=[])
     manager.send_keys = AsyncMock()
     return manager
@@ -281,6 +272,15 @@ def create_test_agent_config(
         short_name=short_name,
         run_command={"*": run_command},
     )
+
+
+def create_mock_scheduler() -> MagicMock:
+    """Create a mock Scheduler."""
+    manager = MagicMock()
+    manager.is_running = MagicMock(return_value=False)
+    manager.stop_ticket = AsyncMock()
+    manager.start_ticket = AsyncMock()
+    return manager
 
 
 def create_test_config(

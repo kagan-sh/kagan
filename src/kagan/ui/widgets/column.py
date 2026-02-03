@@ -163,3 +163,9 @@ class KanbanColumn(Widget):
         for card in self.query(TicketCard):
             if card.ticket and card.ticket.id in iterations:
                 card.iteration_info = iterations[card.ticket.id]
+
+    def update_merge_readiness(self, readiness: dict[str, str]) -> None:
+        """Update merge readiness display on cards."""
+        for card in self.query(TicketCard):
+            if card.ticket and card.ticket.id in readiness:
+                card.merge_readiness = readiness[card.ticket.id]

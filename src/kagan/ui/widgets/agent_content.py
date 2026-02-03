@@ -8,11 +8,11 @@ from textual.containers import Horizontal
 from textual.widgets import Markdown, Static
 
 from kagan.ui.utils.clipboard import copy_with_notification
+from kagan.ui.widgets.streaming_markdown import StreamingMarkdown
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.events import Click
-    from textual.widgets.markdown import MarkdownStream
 
 
 class UserInput(Horizontal):
@@ -34,78 +34,4 @@ class UserInput(Horizontal):
             copy_with_notification(self.app, self._content, "Input")
 
 
-class AgentResponse(Markdown):
-    """Streaming markdown widget for agent responses."""
-
-    DEFAULT_CLASSES = "agent-response"
-
-    def __init__(self, fragment: str = "") -> None:
-        super().__init__(fragment or "")
-        self._stream: MarkdownStream | None = None
-        self._accumulated_content: str = fragment or ""
-
-    @property
-    def stream(self) -> MarkdownStream:
-        if self._stream is None:
-            self._stream = self.get_stream(self)
-        return self._stream
-
-    async def append_fragment(self, fragment: str) -> None:
-        """Append a text fragment to the streaming response."""
-        self.loading = False
-        self._accumulated_content += fragment
-        await self.stream.write(fragment)
-
-    async def on_unmount(self) -> None:
-        """Cleanup markdown stream when widget is unmounted."""
-        if self._stream is not None:
-            try:
-                await self._stream.stop()
-            except Exception:
-                pass  # Ignore errors during cleanup
-            finally:
-                self._stream = None
-
-    async def _on_click(self, event: Click) -> None:
-        """Handle click events - copy on double-click."""
-        if event.chain == 2:
-            copy_with_notification(self.app, self._accumulated_content, "Response")
-
-
-class AgentThought(Markdown):
-    """Streaming markdown widget for agent thinking/reasoning."""
-
-    DEFAULT_CLASSES = "agent-thought"
-
-    def __init__(self, fragment: str = "") -> None:
-        super().__init__(fragment or "")
-        self._stream: MarkdownStream | None = None
-        self._accumulated_content: str = fragment or ""
-
-    @property
-    def stream(self) -> MarkdownStream:
-        if self._stream is None:
-            self._stream = self.get_stream(self)
-        return self._stream
-
-    async def append_fragment(self, fragment: str) -> None:
-        """Append a thought fragment."""
-        self.loading = False
-        self._accumulated_content += fragment
-        await self.stream.write(fragment)
-        self.scroll_end(animate=False)
-
-    async def on_unmount(self) -> None:
-        """Cleanup markdown stream when widget is unmounted."""
-        if self._stream is not None:
-            try:
-                await self._stream.stop()
-            except Exception:
-                pass  # Ignore errors during cleanup
-            finally:
-                self._stream = None
-
-    async def _on_click(self, event: Click) -> None:
-        """Handle click events - copy on double-click."""
-        if event.chain == 2:
-            copy_with_notification(self.app, self._accumulated_content, "Thought")
+__all__ = ["StreamingMarkdown", "UserInput"]

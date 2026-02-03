@@ -8,7 +8,6 @@ import logging
 import subprocess
 from typing import TYPE_CHECKING
 
-from kagan.agents.config_resolver import resolve_agent_config, resolve_model
 from kagan.config import get_os_value
 from kagan.sessions.tmux import TmuxError, run_tmux
 
@@ -57,7 +56,11 @@ class SessionManager:
         await self._state.mark_session_active(ticket.id, True)
 
         # Resolve model from config
-        model = resolve_model(self._config, agent_config.identity)
+        model = None
+        if "claude" in agent_config.identity.lower():
+            model = self._config.general.default_model_claude
+        elif "opencode" in agent_config.identity.lower():
+            model = self._config.general.default_model_opencode
 
         # Auto-launch the agent's interactive CLI with the startup prompt
         startup_prompt = self._build_startup_prompt(ticket)
@@ -67,9 +70,39 @@ class SessionManager:
 
         return session_name
 
+    def _resolve_session_name(self, ticket_id: str) -> str:
+        return f"kagan-resolve-{ticket_id}"
+
+    async def create_resolution_session(self, ticket: Ticket, workdir: Path) -> str:
+        """Create tmux session for manual conflict resolution."""
+        session_name = self._resolve_session_name(ticket.id)
+
+        await run_tmux(
+            "new-session",
+            "-d",
+            "-s",
+            session_name,
+            "-c",
+            str(workdir),
+            "-e",
+            f"KAGAN_TICKET_ID={ticket.id}",
+            "-e",
+            f"KAGAN_TICKET_TITLE={ticket.title}",
+            "-e",
+            f"KAGAN_WORKTREE_PATH={workdir}",
+            "-e",
+            f"KAGAN_PROJECT_ROOT={self._root}",
+        )
+
+        # Seed basic context for conflict resolution.
+        await run_tmux("send-keys", "-t", session_name, "git status", "Enter")
+        await run_tmux("send-keys", "-t", session_name, "git diff", "Enter")
+
+        return session_name
+
     def _get_agent_config(self, ticket: Ticket) -> AgentConfig:
-        """Get agent config for ticket using unified resolver."""
-        return resolve_agent_config(ticket, self._config)
+        """Get agent config for ticket."""
+        return ticket.get_agent_config(self._config)
 
     def _build_launch_command(
         self,
@@ -128,6 +161,21 @@ class SessionManager:
         log.debug("Detached from session: %s", session_name)
         return True
 
+    def attach_resolution_session(self, ticket_id: str) -> bool:
+        """Attach to resolution session (blocks until detach)."""
+        session_name = self._resolve_session_name(ticket_id)
+        log.debug("Attaching to resolution tmux session: %s", session_name)
+        result = subprocess.run(["tmux", "attach-session", "-t", session_name])
+        if result.returncode != 0:
+            log.warning(
+                "Failed to attach to resolution session %s (exit code: %d)",
+                session_name,
+                result.returncode,
+            )
+            return False
+        log.debug("Detached from resolution session: %s", session_name)
+        return True
+
     async def session_exists(self, ticket_id: str) -> bool:
         """Check if session exists."""
         try:
@@ -137,11 +185,24 @@ class SessionManager:
             # No tmux server running = no sessions exist
             return False
 
+    async def resolution_session_exists(self, ticket_id: str) -> bool:
+        """Check if resolution session exists."""
+        try:
+            output = await run_tmux("list-sessions", "-F", "#{session_name}")
+            return self._resolve_session_name(ticket_id) in output.split("\n")
+        except TmuxError:
+            return False
+
     async def kill_session(self, ticket_id: str) -> None:
         """Kill session and mark inactive."""
         with contextlib.suppress(TmuxError):
             await run_tmux("kill-session", "-t", f"kagan-{ticket_id}")
         await self._state.mark_session_active(ticket_id, False)
+
+    async def kill_resolution_session(self, ticket_id: str) -> None:
+        """Kill resolution session if present."""
+        with contextlib.suppress(TmuxError):
+            await run_tmux("kill-session", "-t", self._resolve_session_name(ticket_id))
 
     async def _write_context_files(self, worktree_path: Path, agent_config: AgentConfig) -> None:
         """Create MCP configuration in worktree (merging if file exists).
@@ -150,11 +211,13 @@ class SessionManager:
         - CLAUDE.md/AGENTS.md: Already present in worktree from git clone
         - CONTEXT.md: Redundant with kagan_get_context MCP tool
         """
-        mcp_file = self._write_mcp_config(worktree_path, agent_config)
-        self._ensure_worktree_gitignored(worktree_path, mcp_file)
+        mcp_file = await self._write_mcp_config(worktree_path, agent_config)
+        await self._ensure_worktree_gitignored(worktree_path, mcp_file)
 
-    def _write_mcp_config(self, worktree_path: Path, agent_config: AgentConfig) -> str:
+    async def _write_mcp_config(self, worktree_path: Path, agent_config: AgentConfig) -> str:
         """Write/merge MCP config based on agent type. Returns filename written."""
+        import aiofiles
+
         from kagan.data.builtin_agents import get_builtin_agent
 
         builtin = get_builtin_agent(agent_config.short_name)
@@ -182,7 +245,9 @@ class SessionManager:
         # Merge with existing config if present
         if config_path.exists():
             try:
-                existing = json.loads(config_path.read_text())
+                async with aiofiles.open(config_path, encoding="utf-8") as f:
+                    content = await f.read()
+                existing = json.loads(content)
             except json.JSONDecodeError:
                 existing = {}
             if mcp_key not in existing:
@@ -194,18 +259,22 @@ class SessionManager:
             if filename == "opencode.json":
                 config["$schema"] = "https://opencode.ai/config.json"
 
-        config_path.write_text(json.dumps(config, indent=2))
+        async with aiofiles.open(config_path, "w", encoding="utf-8") as f:
+            await f.write(json.dumps(config, indent=2))
         return filename
 
-    def _ensure_worktree_gitignored(self, worktree_path: Path, mcp_file: str) -> None:
+    async def _ensure_worktree_gitignored(self, worktree_path: Path, mcp_file: str) -> None:
         """Add Kagan MCP config to worktree's .gitignore."""
+        import aiofiles
+
         gitignore = worktree_path / ".gitignore"
         # Only the MCP config file needs to be gitignored now
         kagan_entries = [mcp_file]
 
         existing_content = ""
         if gitignore.exists():
-            existing_content = gitignore.read_text()
+            async with aiofiles.open(gitignore, encoding="utf-8") as f:
+                existing_content = await f.read()
             existing_lines = set(existing_content.split("\n"))
             # Check if all entries already present
             if all(e in existing_lines for e in kagan_entries):
@@ -218,7 +287,8 @@ class SessionManager:
         if existing_content and not existing_content.endswith("\n"):
             addition = "\n" + addition
 
-        gitignore.write_text(existing_content + addition)
+        async with aiofiles.open(gitignore, "w", encoding="utf-8") as f:
+            await f.write(existing_content + addition)
 
     def _build_startup_prompt(self, ticket: Ticket) -> str:
         """Build startup prompt for pair mode.

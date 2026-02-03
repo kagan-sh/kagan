@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import aiosqlite
 
-from kagan.database import queries
 from kagan.database.migrations import auto_migrate
-from kagan.database.models import AgentLogEntry, Ticket, TicketStatus
+from kagan.database.models import AgentLogEntry, Ticket, TicketEvent, TicketStatus
 from kagan.limits import SCRATCHPAD_LIMIT
 
 if TYPE_CHECKING:
@@ -22,6 +22,74 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 class StateManager:
     """Async state manager for SQLite database operations."""
+
+    # SQL Query Constants
+    INSERT_TICKET_SQL = """
+    INSERT INTO tickets
+        (id, title, description, status, priority, ticket_type,
+         assigned_hat, agent_backend, parent_id,
+         acceptance_criteria, review_summary,
+         checks_passed, session_active, total_iterations,
+         merge_failed, merge_error, merge_readiness,
+         last_error, block_reason,
+         created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+
+    SELECT_ALL_TICKETS_SQL = """
+    SELECT * FROM tickets
+    ORDER BY
+        CASE status
+            WHEN 'BACKLOG' THEN 0
+            WHEN 'IN_PROGRESS' THEN 1
+            WHEN 'REVIEW' THEN 2
+            WHEN 'DONE' THEN 3
+        END,
+        priority DESC,
+        created_at ASC
+    """
+
+    SELECT_BY_STATUS_SQL = """
+    SELECT * FROM tickets
+    WHERE status = ?
+    ORDER BY priority DESC, created_at ASC
+    """
+
+    UPSERT_SCRATCHPAD_SQL = """
+    INSERT INTO scratchpads (ticket_id, content, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(ticket_id) DO UPDATE SET
+    content = excluded.content, updated_at = CURRENT_TIMESTAMP
+    """
+
+    INSERT_AGENT_LOG_SQL = """
+    INSERT INTO agent_logs (ticket_id, log_type, iteration, content)
+    VALUES (?, ?, ?, ?)
+    """
+
+    SELECT_AGENT_LOGS_SQL = """
+    SELECT id, ticket_id, log_type, iteration, content, created_at
+    FROM agent_logs
+    WHERE ticket_id = ? AND log_type = ?
+    ORDER BY iteration ASC, created_at ASC
+    """
+
+    DELETE_AGENT_LOGS_SQL = """
+    DELETE FROM agent_logs WHERE ticket_id = ?
+    """
+
+    INSERT_TICKET_EVENT_SQL = """
+    INSERT INTO ticket_events (ticket_id, event_type, message)
+    VALUES (?, ?, ?)
+    """
+
+    SELECT_TICKET_EVENTS_SQL = """
+    SELECT id, ticket_id, event_type, message, created_at
+    FROM ticket_events
+    WHERE ticket_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT ?
+    """
 
     def __init__(
         self,
@@ -97,9 +165,9 @@ class StateManager:
         """
         conn = await self._get_connection()
 
-        params = queries.build_insert_params(ticket, queries.serialize_acceptance_criteria)
+        params = ticket.to_insert_params()
         async with self._lock:
-            await conn.execute(queries.INSERT_TICKET_SQL, params)
+            await conn.execute(self.INSERT_TICKET_SQL, params)
             await conn.commit()
 
         self._notify_change(ticket.id)
@@ -111,21 +179,21 @@ class StateManager:
         async with conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)) as cursor:
             row = await cursor.fetchone()
             if row:
-                return queries.row_to_ticket(row)
+                return Ticket.from_row(row)
         return None
 
     async def get_all_tickets(self) -> list[Ticket]:
         conn = await self._get_connection()
-        async with conn.execute(queries.SELECT_ALL_TICKETS_SQL) as cursor:
+        async with conn.execute(self.SELECT_ALL_TICKETS_SQL) as cursor:
             rows = await cursor.fetchall()
-            return [queries.row_to_ticket(row) for row in rows]
+            return [Ticket.from_row(row) for row in rows]
 
     async def get_tickets_by_status(self, status: TicketStatus) -> list[Ticket]:
         conn = await self._get_connection()
         status_value = status.value if isinstance(status, TicketStatus) else status
-        async with conn.execute(queries.SELECT_BY_STATUS_SQL, (status_value,)) as cursor:
+        async with conn.execute(self.SELECT_BY_STATUS_SQL, (status_value,)) as cursor:
             rows = await cursor.fetchall()
-            return [queries.row_to_ticket(row) for row in rows]
+            return [Ticket.from_row(row) for row in rows]
 
     async def update_ticket(self, ticket_id: str, **kwargs: Any) -> Ticket | None:
         """Update a ticket with the given fields.
@@ -152,19 +220,31 @@ class StateManager:
                 new_status = TicketStatus(new_status)
 
         conn = await self._get_connection()
-        updates, values = queries.build_update_params_from_dict(
-            kwargs, queries.serialize_acceptance_criteria
-        )
 
-        if not updates:
+        # Build UPDATE parameters from kwargs
+        clauses: list[str] = []
+        values: list[object | None] = []
+        for field, value in kwargs.items():
+            # Convert enums and special types to DB format
+            is_enum_field = field in ("status", "ticket_type", "priority", "merge_readiness")
+            if is_enum_field and hasattr(value, "value"):
+                db_value = value.value
+            elif field == "acceptance_criteria" and value is not None:
+                db_value = json.dumps(value)
+            elif field in ("checks_passed", "session_active", "merge_failed") and value is not None:
+                db_value = 1 if value else 0
+            else:
+                db_value = value
+            clauses.append(f"{field} = ?")
+            values.append(db_value)
+
+        if not clauses:
             return await self.get_ticket(ticket_id)
 
         values.append(ticket_id)
         async with self._lock:
-            await conn.execute(f"UPDATE tickets SET {', '.join(updates)} WHERE id = ?", values)
+            await conn.execute(f"UPDATE tickets SET {', '.join(clauses)} WHERE id = ?", values)
             await conn.commit()
-
-        self._notify_change(ticket_id)
 
         # Notify status change if status was updated
         if new_status is not None and old_status != new_status:
@@ -227,9 +307,8 @@ class StateManager:
         conn = await self._get_connection()
         content = content[-SCRATCHPAD_LIMIT:] if len(content) > SCRATCHPAD_LIMIT else content
         async with self._lock:
-            await conn.execute(queries.UPSERT_SCRATCHPAD_SQL, (ticket_id, content))
+            await conn.execute(self.UPSERT_SCRATCHPAD_SQL, (ticket_id, content))
             await conn.commit()
-        self._notify_change(ticket_id)
 
     async def delete_scratchpad(self, ticket_id: str) -> None:
         conn = await self._get_connection()
@@ -261,7 +340,7 @@ class StateManager:
 
         async with conn.execute(sql, params) as cursor:
             rows = await cursor.fetchall()
-            return [queries.row_to_ticket(row) for row in rows]
+            return [Ticket.from_row(row) for row in rows]
 
     async def increment_total_iterations(self, ticket_id: str) -> None:
         """Increment the total_iterations counter for a ticket.
@@ -279,7 +358,6 @@ class StateManager:
                 (ticket_id,),
             )
             await conn.commit()
-        self._notify_change(ticket_id)
 
     async def append_agent_log(
         self, ticket_id: str, log_type: str, iteration: int, content: str
@@ -292,12 +370,10 @@ class StateManager:
             iteration: The iteration number
             content: The full log content
         """
-        from kagan.database.queries import INSERT_AGENT_LOG_SQL
-
         conn = await self._get_connection()
         async with self._lock:
             await conn.execute(
-                INSERT_AGENT_LOG_SQL,
+                self.INSERT_AGENT_LOG_SQL,
                 (ticket_id, log_type, iteration, content),
             )
             await conn.commit()
@@ -312,11 +388,9 @@ class StateManager:
         Returns:
             List of AgentLogEntry objects ordered by iteration
         """
-        from kagan.database.queries import SELECT_AGENT_LOGS_SQL
-
         conn = await self._get_connection()
         cursor = await conn.execute(
-            SELECT_AGENT_LOGS_SQL,
+            self.SELECT_AGENT_LOGS_SQL,
             (ticket_id, log_type),
         )
         rows = await cursor.fetchall()
@@ -340,9 +414,44 @@ class StateManager:
         Args:
             ticket_id: The ticket ID
         """
-        from kagan.database.queries import DELETE_AGENT_LOGS_SQL
-
         conn = await self._get_connection()
         async with self._lock:
-            await conn.execute(DELETE_AGENT_LOGS_SQL, (ticket_id,))
+            await conn.execute(self.DELETE_AGENT_LOGS_SQL, (ticket_id,))
             await conn.commit()
+
+    async def append_ticket_event(self, ticket_id: str, event_type: str, message: str) -> None:
+        """Append an audit event for a ticket.
+
+        Args:
+            ticket_id: The ticket ID
+            event_type: Short event category (e.g., merge, review, policy)
+            message: Human-readable details
+        """
+        conn = await self._get_connection()
+        async with self._lock:
+            await conn.execute(self.INSERT_TICKET_EVENT_SQL, (ticket_id, event_type, message))
+            await conn.commit()
+
+    async def get_ticket_events(self, ticket_id: str, limit: int = 20) -> list[TicketEvent]:
+        """Get recent audit events for a ticket.
+
+        Args:
+            ticket_id: The ticket ID
+            limit: Max number of events to return
+
+        Returns:
+            List of TicketEvent entries (most recent first)
+        """
+        conn = await self._get_connection()
+        cursor = await conn.execute(self.SELECT_TICKET_EVENTS_SQL, (ticket_id, limit))
+        rows = await cursor.fetchall()
+        return [
+            TicketEvent(
+                id=row[0],
+                ticket_id=row[1],
+                event_type=row[2],
+                message=row[3],
+                created_at=datetime.fromisoformat(row[4]) if row[4] else datetime.now(),
+            )
+            for row in rows
+        ]

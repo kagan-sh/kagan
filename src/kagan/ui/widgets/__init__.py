@@ -1,8 +1,7 @@
 """Widget components for Kagan TUI."""
 
 from kagan.ui.widgets.agent_content import (
-    AgentResponse,
-    AgentThought,
+    StreamingMarkdown,
     UserInput,
 )
 from kagan.ui.widgets.base import (
@@ -32,8 +31,6 @@ from kagan.ui.widgets.tool_call import ToolCall
 __all__ = [
     "AcceptanceCriteriaArea",
     "AgentBackendSelect",
-    "AgentResponse",
-    "AgentThought",
     "DescriptionArea",
     "EmptyState",
     "KaganHeader",
@@ -48,6 +45,7 @@ __all__ = [
     "SlashComplete",
     "StatusBar",
     "StatusSelect",
+    "StreamingMarkdown",
     "StreamingOutput",
     "TicketCard",
     "TicketTypeSelect",

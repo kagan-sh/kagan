@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     total_iterations INTEGER DEFAULT 0,  -- Lifetime iteration counter (monotonically increasing)
     merge_failed INTEGER DEFAULT 0 CHECK(merge_failed IN (0, 1)),  -- 0=false, 1=true
     merge_error TEXT,  -- Error message when merge fails
+    merge_readiness TEXT DEFAULT 'risk' CHECK(merge_readiness IN ('ready', 'risk', 'blocked')),
+    last_error TEXT,  -- Last runtime error from agent
+    block_reason TEXT,  -- Reason when agent signals <blocked/>
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -58,3 +61,13 @@ CREATE TABLE IF NOT EXISTS agent_logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_agent_logs_ticket ON agent_logs(ticket_id, log_type, iteration);
+
+-- Ticket event audit trail
+CREATE TABLE IF NOT EXISTS ticket_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_events_ticket ON ticket_events(ticket_id, created_at DESC);

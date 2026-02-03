@@ -16,4 +16,6 @@ WAVE_FRAMES = [
 ]
 
 # Animation timing (milliseconds per frame)
-WAVE_INTERVAL_MS = 150
+# Target: 10-15 FPS for CPU efficiency (66-100ms intervals)
+# Current: 100ms = 10 FPS (previously was 150ms = 6.67 FPS)
+WAVE_INTERVAL_MS = 100

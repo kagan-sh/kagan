@@ -29,6 +29,48 @@ NAME = "kagan"
 TITLE = "Kagan"
 VERSION = "0.1.0"
 
+_SENSITIVE_FILENAMES = {
+    ".npmrc",
+    ".pypirc",
+    ".netrc",
+    "credentials.json",
+    "credentials.yaml",
+    "credentials.yml",
+    "secret.json",
+    "secret.yaml",
+    "secret.yml",
+    "secrets.json",
+    "secrets.yaml",
+    "secrets.yml",
+    "token.json",
+    "tokens.json",
+    "id_rsa",
+    "id_rsa.pub",
+    "id_ed25519",
+    "id_ed25519.pub",
+}
+
+_SENSITIVE_EXTENSIONS = {
+    ".pem",
+    ".key",
+    ".p12",
+    ".pfx",
+    ".crt",
+    ".cer",
+    ".der",
+    ".jks",
+    ".kdbx",
+    ".gpg",
+}
+
+_SENSITIVE_DIRS = {
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".azure",
+    ".kube",
+}
+
 
 class Agent:
     """ACP-based agent communication via JSON-RPC over subprocess."""
@@ -406,7 +448,12 @@ class Agent:
     ) -> dict[str, str]:
         """Read a file in the project."""
         log.info(f"[RPC] fs/read_text_file: path={path}, line={line}, limit={limit}")
-        read_path = self.project_root / path
+        read_path = self._resolve_read_path(path)
+        if read_path is None:
+            raise ValueError("Access denied: path outside project root")
+        if self._is_sensitive_path(read_path):
+            log.warning(f"[RPC] fs/read_text_file: BLOCKED sensitive path {read_path}")
+            raise ValueError("Access denied: sensitive file")
         try:
             text = read_path.read_text(encoding="utf-8", errors="ignore")
             log.debug(f"[RPC] fs/read_text_file: read {len(text)} chars from {read_path}")
@@ -422,6 +469,56 @@ class Agent:
             )
 
         return {"content": text}
+
+    def _resolve_read_path(self, path: str) -> Path | None:
+        """Resolve and validate read path is inside the project root."""
+        project_root = self.project_root.resolve()
+        read_path = (self.project_root / path).resolve()
+        if not read_path.is_relative_to(project_root):
+            log.warning(f"[RPC] fs/read_text_file: BLOCKED path traversal {read_path}")
+            return None
+        return read_path
+
+    def _is_sensitive_path(self, path: Path) -> bool:
+        """Determine whether a path appears to contain secrets or credentials."""
+        name = path.name.lower()
+        if name == ".env" or name.startswith(".env."):
+            return True
+        if name in _SENSITIVE_FILENAMES:
+            return True
+        if path.suffix.lower() in _SENSITIVE_EXTENSIONS:
+            return True
+        return any(part.lower() in _SENSITIVE_DIRS for part in path.parts)
+
+    def _command_mentions_sensitive(self, command: str, args: list[str] | None) -> bool:
+        """Check whether a command references likely sensitive filenames."""
+        tokens = [command] + (args or [])
+        haystack = " ".join(tokens).lower()
+        sensitive_markers = (
+            ".env",
+            "id_rsa",
+            "id_ed25519",
+            "credentials.json",
+            "credentials.yml",
+            "credentials.yaml",
+            "secrets.json",
+            "secrets.yml",
+            "secrets.yaml",
+            "secret.json",
+            "secret.yml",
+            "secret.yaml",
+            ".pem",
+            ".key",
+            ".p12",
+            ".pfx",
+            ".crt",
+            ".cer",
+            ".der",
+            ".jks",
+            ".kdbx",
+            ".gpg",
+        )
+        return any(marker in haystack for marker in sensitive_markers)
 
     def _rpc_write_text_file(self, sessionId: str, path: str, content: str) -> None:
         """Write a file in the project."""
@@ -452,6 +549,9 @@ class Agent:
         if self._read_only:
             log.warning(f"[RPC] terminal/create: BLOCKED in read-only mode (command={command})")
             raise ValueError("Terminal operations not permitted in read-only mode")
+        if self._command_mentions_sensitive(command, args):
+            log.warning(f"[RPC] terminal/create: BLOCKED sensitive command {command}")
+            raise ValueError("Terminal command blocked: references sensitive files")
 
         terminal_id, cmd_display = await self._terminals.create(
             command=command,

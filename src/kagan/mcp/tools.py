@@ -7,7 +7,7 @@ from pathlib import Path
 
 from kagan.constants import KAGAN_GENERATED_PATTERNS
 from kagan.database.manager import StateManager  # noqa: TC001
-from kagan.database.models import TicketStatus
+from kagan.database.models import MergeReadiness, TicketStatus
 
 
 class KaganMCPServer:
@@ -61,7 +61,11 @@ class KaganMCPServer:
             review_summary=summary,
             checks_passed=None,
             status=TicketStatus.REVIEW,
+            merge_failed=False,
+            merge_error=None,
+            merge_readiness=MergeReadiness.RISK,
         )
+        await self._state.append_ticket_event(ticket_id, "review", "Review requested")
         return {"status": "review", "message": "Ready for merge"}
 
     async def _check_uncommitted_changes(self) -> bool:

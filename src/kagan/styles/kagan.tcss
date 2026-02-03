@@ -312,10 +312,22 @@ TicketCard .card-desc.low {
     color: $priority-low-text;
 }
 
+TicketCard .card-error {
+    width: 100%;
+    height: 1;
+    color: $error;
+}
+
+TicketCard .card-blocked {
+    width: 100%;
+    height: 1;
+    color: $warning;
+}
+
 TicketCard .card-meta {
     width: 100%;
     height: 1;
-    color: $text-muted;
+    color: $text-disabled;
 }
 
 TicketCard .card-review {
@@ -343,11 +355,28 @@ TicketCard .card-checks.pending {
     color: $warning;
 }
 
+TicketCard .card-readiness {
+    width: 100%;
+    height: 1;
+    color: $text-muted;
+}
+
+TicketCard .card-readiness.readiness-ready {
+    color: $success;
+}
+
+TicketCard .card-readiness.readiness-risk {
+    color: $warning;
+}
+
+TicketCard .card-readiness.readiness-blocked {
+    color: $error;
+}
+
 TicketCard .card-iteration {
     width: 100%;
     height: 1;
-    color: $warning;
-    text-style: bold;
+    color: $secondary;
 }
 
 /* =============================================================================
@@ -494,12 +523,27 @@ TicketDetailsModal .review-status-row {
     margin-bottom: 1;
 }
 
+TicketDetailsModal .review-label {
+    padding-left: 2;
+    color: $text-muted;
+}
+
 TicketDetailsModal .review-summary-text {
     padding: 1;
     background: $surface;
     color: $text;
     width: 100%;
     height: auto;
+}
+
+TicketDetailsModal .merge-error-text {
+    padding: 1;
+    color: $error;
+}
+
+TicketDetailsModal .merge-help-text {
+    padding: 1;
+    color: $warning;
 }
 
 TicketDetailsModal .badge-checks-passed {
@@ -515,6 +559,43 @@ TicketDetailsModal .badge-checks-failed {
 TicketDetailsModal .badge-checks-pending {
     background: $warning;
     color: $warning-text;
+}
+
+TicketDetailsModal .badge-readiness-ready {
+    background: $success;
+    color: $success-text;
+}
+
+TicketDetailsModal .badge-readiness-risk {
+    background: $warning;
+    color: $warning-text;
+}
+
+TicketDetailsModal .badge-readiness-blocked {
+    background: $error;
+    color: $error-text;
+}
+
+TicketDetailsModal .parallel-work-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TicketDetailsModal #parallel-work-content {
+    color: $text;
+    padding: 1;
+}
+
+TicketDetailsModal .audit-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TicketDetailsModal #audit-content {
+    color: $text-muted;
+    padding: 1;
 }
 
 TicketDetailsModal .meta-row {
@@ -1001,9 +1082,7 @@ PlannerScreen {
 
 #planner-output {
     width: 100%;
-    height: auto;
-    min-height: 10;
-    max-height: 1fr;
+    height: 1fr;
     display: none;
 }
 
@@ -1114,7 +1193,8 @@ StatusBar {
 
 /* StatusBar in planner - positioned above input via planner-bottom container */
 #planner-bottom StatusBar {
-    /* No dock needed - stacks naturally in vertical container */
+    /* Match the input's width: account for input's border (1 cell each side) */
+    margin: 0 1;
 }
 
 .status-left {
@@ -1673,6 +1753,23 @@ SearchBar Input:focus {
     offset-y: 0;
 }
 
+/* Review queue hint */
+#review-queue-hint {
+    dock: bottom;
+    width: 100%;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    text-align: center;
+    layer: overlay;
+    padding: 0 1;
+    offset-y: 100%;
+}
+
+#review-queue-hint.visible {
+    offset-y: 0;
+}
+
 /* =============================================================================
    SETTINGS MODAL
    ============================================================================= */
@@ -1875,8 +1972,10 @@ StreamingOutput {
 .agent-response {
     width: 100%;
     height: auto;
+    min-height: 1;
     margin-bottom: 1;
     padding: 0 1;
+    background: transparent;
 }
 
 .agent-response > * {
@@ -1887,9 +1986,11 @@ StreamingOutput {
 .agent-thought {
     width: 100%;
     height: auto;
+    min-height: 1;
     margin-bottom: 1;
     padding: 0 1;
     color: $text-muted;
+    background: transparent;
 }
 
 .agent-thought > * {
@@ -2387,4 +2488,21 @@ DebugLogModal {
     background: $surface-darken-1;
     border: round $primary-lighten-2;
     padding: 0 1;
+}
+
+/* =============================================================================
+   KEYBINDING HINT WIDGET
+   ============================================================================= */
+
+KeybindingHint {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    text-align: center;
+    padding: 0 1;
+}
+
+KeybindingHint:empty {
+    display: none;
 }

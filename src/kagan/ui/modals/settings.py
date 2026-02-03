@@ -63,6 +63,23 @@ class SettingsModal(ModalScreen[bool]):
 
             yield Rule()
 
+            # Merge Policy Section
+            yield Label("Merge Policy", classes="section-title")
+            with Horizontal(classes="setting-row"):
+                yield Switch(
+                    value=self._config.general.require_review_approval,
+                    id="require-review-approval-switch",
+                )
+                yield Label("Require review approval before merge", classes="setting-label")
+            with Horizontal(classes="setting-row"):
+                yield Switch(
+                    value=self._config.general.serialize_merges,
+                    id="serialize-merges-switch",
+                )
+                yield Label("Serialize manual merges", classes="setting-label")
+
+            yield Rule()
+
             # General Settings Section
             yield Label("General", classes="section-title")
             with Vertical(classes="input-group"):
@@ -158,6 +175,8 @@ class SettingsModal(ModalScreen[bool]):
         auto_retry_on_merge_conflict = self.query_one(
             "#auto-retry-merge-conflict-switch", Switch
         ).value
+        require_review_approval = self.query_one("#require-review-approval-switch", Switch).value
+        serialize_merges = self.query_one("#serialize-merges-switch", Switch).value
         skip_tmux_gateway = self.query_one("#skip-tmux-gateway-switch", Switch).value
         base_branch = self.query_one("#base-branch-input", Input).value
         max_agents_str = self.query_one("#max-agents-input", Input).value
@@ -182,6 +201,8 @@ class SettingsModal(ModalScreen[bool]):
         self._config.general.auto_approve = auto_approve
         self._config.general.auto_merge = auto_merge
         self._config.general.auto_retry_on_merge_conflict = auto_retry_on_merge_conflict
+        self._config.general.require_review_approval = require_review_approval
+        self._config.general.serialize_merges = serialize_merges
         self._config.general.default_base_branch = base_branch
         self._config.general.max_concurrent_agents = max_agents
         self._config.general.max_iterations = max_iterations
@@ -190,12 +211,14 @@ class SettingsModal(ModalScreen[bool]):
         self._config.general.default_model_opencode = default_model_opencode
         self._config.ui.skip_tmux_gateway = skip_tmux_gateway
 
-        # Write to TOML file
-        self._write_config()
+        # Write to TOML file asynchronously
+        self.run_worker(self._write_config(), exclusive=True, exit_on_error=False)
         self.dismiss(True)
 
-    def _write_config(self) -> None:
+    async def _write_config(self) -> None:
         """Write config to TOML file."""
+        import aiofiles
+
         from kagan.data.builtin_agents import BUILTIN_AGENTS
 
         kagan_dir = self._config_path.parent
@@ -236,6 +259,8 @@ active = true'''
             f"auto_approve = {str(general.auto_approve).lower()}",
             f"auto_merge = {str(general.auto_merge).lower()}",
             f"auto_retry_on_merge_conflict = {str(general.auto_retry_on_merge_conflict).lower()}",
+            f"require_review_approval = {str(general.require_review_approval).lower()}",
+            f"serialize_merges = {str(general.serialize_merges).lower()}",
             f'default_base_branch = "{general.default_base_branch}"',
             f'default_worker_agent = "{general.default_worker_agent}"',
             f"max_concurrent_agents = {general.max_concurrent_agents}",
@@ -260,7 +285,8 @@ skip_tmux_gateway = {str(ui.skip_tmux_gateway).lower()}
 {chr(10).join(agent_sections)}
 """
 
-        self._config_path.write_text(config_content)
+        async with aiofiles.open(self._config_path, "w", encoding="utf-8") as f:
+            await f.write(config_content)
 
     def action_cancel(self) -> None:
         """Cancel without saving."""

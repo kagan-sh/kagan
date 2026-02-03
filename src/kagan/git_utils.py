@@ -275,30 +275,45 @@ async def has_commits(repo_root: Path) -> bool:
 
 
 def _ensure_gitignored(repo_root: Path) -> tuple[bool, bool]:
-    """Add .kagan/ to .gitignore if not already present.
+    """Add Kagan-generated files to .gitignore if not already present.
+
+    Adds all patterns from KAGAN_GENERATED_PATTERNS including:
+    - .kagan/ (local state directory)
+    - .mcp.json (Claude Code MCP config)
+    - opencode.json (OpenCode MCP config)
+    - kagan*.mcp.json (catch variants like kagan.mcp.json)
+    - *kagan.json (catch any kagan-suffixed config files)
 
     Returns (created, updated) tuple:
     - created: True if .gitignore was created from scratch
     - updated: True if .gitignore was modified (appended to)
     """
+    from kagan.constants import KAGAN_GENERATED_PATTERNS
+
     gitignore = repo_root / ".gitignore"
-    kagan_entry = ".kagan/"
 
     if gitignore.exists():
         content = gitignore.read_text()
-        lines = content.split("\n")
-        # Check if already ignored (with or without trailing slash)
-        if ".kagan" in lines or ".kagan/" in lines:
+        lines = set(content.split("\n"))
+
+        # Check which patterns are missing
+        missing_patterns = [p for p in KAGAN_GENERATED_PATTERNS if p not in lines]
+
+        if not missing_patterns:
             return False, False
-        # Append to existing file
+
+        # Append missing patterns
         if not content.endswith("\n"):
             content += "\n"
-        content += "\n# Kagan local state\n.kagan/\n"
+        content += "\n# Kagan-generated files (local state + MCP configs)\n"
+        content += "\n".join(missing_patterns) + "\n"
         gitignore.write_text(content)
         return False, True
     else:
-        # Create new .gitignore
-        gitignore.write_text(f"# Kagan local state\n{kagan_entry}\n")
+        # Create new .gitignore with all patterns
+        content = "# Kagan-generated files (local state + MCP configs)\n"
+        content += "\n".join(KAGAN_GENERATED_PATTERNS) + "\n"
+        gitignore.write_text(content)
         return True, False
 
 
@@ -306,10 +321,12 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
     """Initialize a git repo with the requested base branch and initial commit.
 
     Handles four scenarios:
-    1. Empty folder, no git repo: Create .gitignore with .kagan/, init repo, commit
-    2. Existing git repo with commits and .gitignore: Append .kagan/ if needed, commit
+    1. Empty folder, no git repo: Create .gitignore with Kagan patterns, init repo, commit
+    2. Existing git repo with commits and .gitignore: Append Kagan patterns if needed, commit
     3. Existing git repo with commits but no .gitignore: Create .gitignore, commit
     4. Existing git repo with NO commits: Add .gitignore, create initial commit
+
+    Kagan patterns include: .kagan/, .mcp.json, opencode.json, kagan*.mcp.json, *kagan.json
 
     Creates an initial commit so that worktrees can be created from the base branch.
     Without a commit, `git worktree add -b <branch> <path> <base>` fails with
@@ -372,7 +389,7 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
     has_repo = await has_git_repo(repo_root)
     repo_has_commits = has_repo and await has_commits(repo_root)
 
-    # Ensure .gitignore has .kagan/ entry
+    # Ensure .gitignore has Kagan-generated file patterns
     gitignore_created, gitignore_updated = _ensure_gitignored(repo_root)
 
     # If repo exists with commits and .gitignore wasn't modified, nothing to do

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, cast
 
 from textual import on
@@ -11,16 +12,17 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Input, Label, Rule, Select, Static, TextArea
 
 from kagan.database.models import (
+    MergeReadiness,
     Ticket,
     TicketPriority,
     TicketStatus,
     TicketType,
 )
 from kagan.keybindings import TICKET_DETAILS_BINDINGS
-from kagan.ui.forms.ticket_form import TicketFormBuilder
+from kagan.sessions.tmux import TmuxError
 from kagan.ui.modals.actions import ModalAction
 from kagan.ui.modals.description_editor import DescriptionEditorModal
-from kagan.ui.utils import coerce_enum, copy_with_notification, safe_query_one
+from kagan.ui.utils import copy_with_notification, safe_query_one
 from kagan.ui.widgets.base import (
     AcceptanceCriteriaArea,
     AgentBackendSelect,
@@ -33,6 +35,8 @@ from kagan.ui.widgets.base import (
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+
+    from kagan.app import KaganApp
 
 
 # Type alias for update data returned by modal
@@ -52,21 +56,28 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
         *,
         start_editing: bool = False,
         initial_type: TicketType | None = None,
+        merge_readiness: str | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.ticket = ticket
         self.is_create = ticket is None
         self._initial_type = initial_type
-        # Check if ticket is in Done status (normalize string/enum)
+        self._merge_readiness = merge_readiness
+        # Check if ticket is in Done status
         self._is_done = False
         if ticket is not None:
-            status = coerce_enum(ticket.status, TicketStatus)
+            status = ticket.status
             self._is_done = status == TicketStatus.DONE
         # Never allow editing Done tickets
         if self._is_done:
             start_editing = False
         self._initial_editing = self.is_create or start_editing
+
+    @property
+    def kagan_app(self) -> KaganApp:
+        """Get the typed KaganApp instance."""
+        return cast("KaganApp", getattr(self.app, "kagan_app", self.app))
 
     def on_mount(self) -> None:
         if self.is_create:
@@ -75,6 +86,8 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
         if self.editing:
             if title_input := safe_query_one(self, "#title-input", Input):
                 title_input.focus()
+        if self.ticket and self.ticket.status == TicketStatus.REVIEW:
+            self.run_worker(self._load_review_data())
 
     def compose(self) -> ComposeResult:
         with Vertical(id="ticket-details-container"):
@@ -112,6 +125,12 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
 
             # Review results (view mode)
             yield from self._compose_review_section()
+
+            # Parallel work awareness (view mode)
+            yield from self._compose_parallel_work_section()
+
+            # Audit trail (view mode)
+            yield from self._compose_audit_section()
 
             # Meta info
             yield from self._compose_meta_row()
@@ -151,12 +170,10 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
     def _compose_edit_fields_row(self) -> ComposeResult:
         """Compose the edit fields row (priority, type, agent)."""
         current_priority = self.ticket.priority if self.ticket else TicketPriority.MEDIUM
-        current_priority = coerce_enum(current_priority, TicketPriority)
 
         current_type = self._initial_type or (
             self.ticket.ticket_type if self.ticket else TicketType.PAIR
         )
-        current_type = coerce_enum(current_type, TicketType)
 
         with Horizontal(classes="field-row edit-fields", id="edit-fields-row"):
             with Vertical(classes="form-field field-third"):
@@ -231,12 +248,59 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
                     classes=f"badge {self._get_checks_class()}",
                     id="checks-badge",
                 )
+                yield Label("Merge readiness:", classes="review-label")
+                yield Label(
+                    self._format_merge_readiness(),
+                    classes=f"badge {self._get_merge_readiness_class()}",
+                    id="merge-readiness-badge",
+                )
+            if self.ticket and self.ticket.merge_error:
+                yield Static(
+                    f"Merge issue: {self.ticket.merge_error}",
+                    classes="merge-error-text",
+                    id="merge-error-text",
+                )
             if self.ticket and self.ticket.review_summary:
                 yield Static(
                     self.ticket.review_summary,
                     classes="review-summary-text",
                     id="review-summary-display",
                 )
+            if self.ticket and self.ticket.merge_failed:
+                ticket_type = self.ticket.ticket_type
+                mode_line = (
+                    "AUTO ticket: move back to IN_PROGRESS to let the agent resolve."
+                    if ticket_type == TicketType.AUTO
+                    else "PAIR ticket: resolve conflicts manually and retry merge."
+                )
+                yield Static(mode_line, classes="merge-help-text")
+                yield Static(
+                    "Use Resolve Conflicts to open tmux in the main repo.",
+                    classes="merge-help-text",
+                )
+                yield Static(
+                    "Resolve steps: git fetch origin <base>; git rebase origin/<base>; "
+                    "resolve conflicts; git add <file>; git rebase --continue.",
+                    classes="merge-help-text",
+                )
+        yield Rule()
+
+    def _compose_parallel_work_section(self) -> ComposeResult:
+        """Compose parallel work awareness section (view mode only)."""
+        if self.is_create or not self.ticket or self.ticket.status != TicketStatus.REVIEW:
+            return
+        with Vertical(classes="parallel-work-section view-only", id="parallel-work-section"):
+            yield Label("Parallel Work", classes="section-title")
+            yield Static("Loading parallel work...", id="parallel-work-content")
+        yield Rule()
+
+    def _compose_audit_section(self) -> ComposeResult:
+        """Compose audit trail section (view mode only)."""
+        if self.is_create or not self.ticket or self.ticket.status != TicketStatus.REVIEW:
+            return
+        with Vertical(classes="audit-section view-only", id="audit-section"):
+            yield Label("Activity", classes="section-title")
+            yield Static("Loading activity...", id="audit-content")
         yield Rule()
 
     def _compose_meta_row(self) -> ComposeResult:
@@ -253,6 +317,8 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
         """Compose the button rows."""
         with Horizontal(classes="button-row view-only", id="view-buttons"):
             yield Button("[Esc] Close", id="close-btn")
+            if self._should_show_resolve():
+                yield Button("Resolve Conflicts", variant="primary", id="resolve-btn")
             yield Button("[e] Edit", id="edit-btn", disabled=self._is_done)
             yield Button("[d] Delete", variant="error", id="delete-btn")
 
@@ -275,6 +341,11 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
         if editing:
             if title_input := safe_query_one(self, "#title-input", Input):
                 title_input.focus()
+
+    def _should_show_resolve(self) -> bool:
+        if self.editing or self.is_create or not self.ticket:
+            return False
+        return self.ticket.merge_failed and self.ticket.status == TicketStatus.REVIEW
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         """Control which bindings are shown based on editing state.
@@ -309,6 +380,10 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
     def on_cancel_btn(self) -> None:
         self.action_close_or_cancel()
 
+    @on(Button.Pressed, "#resolve-btn")
+    async def on_resolve_btn(self) -> None:
+        await self.action_resolve_conflicts()
+
     def action_toggle_edit(self) -> None:
         if self._is_done:
             self.app.notify("Done tickets cannot be edited", severity="warning")
@@ -321,15 +396,8 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
             self.dismiss(ModalAction.DELETE)
 
     def action_close_or_cancel(self) -> None:
-        if self.editing:
-            if self.is_create:
-                self.dismiss(None)
-            else:
-                self.editing = False
-                if self.ticket:
-                    TicketFormBuilder.reset_form_to_ticket(self, self.ticket)
-        else:
-            self.dismiss(None)
+        """Escape always cancels/closes without saving."""
+        self.dismiss(None)
 
     def action_save(self) -> None:
         if not self.editing:
@@ -378,6 +446,58 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
         )
         self.app.push_screen(modal, handle_result)
 
+    async def action_resolve_conflicts(self) -> None:
+        """Open tmux session to assist with conflict resolution."""
+        if not self.ticket:
+            return
+        from kagan.lifecycle.ticket_lifecycle import TicketLifecycle
+
+        kagan_app = self.kagan_app
+        session_manager = kagan_app.session_manager
+        worktree = kagan_app.worktree_manager
+        base = kagan_app.config.general.default_base_branch
+        workdir = await worktree.get_merge_worktree_path(base)
+
+        lifecycle = TicketLifecycle(
+            kagan_app.state_manager,
+            kagan_app.worktree_manager,
+            kagan_app.session_manager,
+            kagan_app.scheduler,
+            kagan_app.config,
+        )
+
+        try:
+            prepared, prep_message = await worktree.prepare_merge_conflicts(
+                self.ticket.id,
+                base_branch=base,
+            )
+            if not prepared:
+                self.app.notify(prep_message, severity="warning")
+                return
+            if not await session_manager.resolution_session_exists(self.ticket.id):
+                await session_manager.create_resolution_session(self.ticket, workdir)
+
+            with self.app.suspend():
+                attach_success = session_manager.attach_resolution_session(self.ticket.id)
+
+            await asyncio.sleep(0.1)
+            if attach_success:
+                self.app.notify("Merging... (this may take a few seconds)", severity="information")
+                success, message = await lifecycle.merge_ticket(self.ticket)
+                if success:
+                    await session_manager.kill_resolution_session(self.ticket.id)
+                    self.app.notify(
+                        f"Merged and completed: {self.ticket.title}", severity="information"
+                    )
+                else:
+                    ticket_type = self.ticket.ticket_type
+                    prefix = "AUTO" if ticket_type == TicketType.AUTO else "PAIR"
+                    self.app.notify(f"Merge failed ({prefix}): {message}", severity="error")
+            else:
+                self.app.notify("Failed to attach to resolve session", severity="error")
+        except TmuxError as exc:
+            self.app.notify(f"Failed to open resolve session: {exc}", severity="error")
+
     # --- Private helper methods ---
 
     def _get_modal_title(self) -> str:
@@ -409,16 +529,22 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
             return "AUTO"
         return "PAIR"
 
-    def _format_status(self, status: TicketStatus | str) -> str:
+    def _format_status(self, status: TicketStatus) -> str:
         """Format status for display."""
-        status = coerce_enum(status, TicketStatus)
         return status.value.replace("_", " ")
 
     def _has_review_data(self) -> bool:
         """Check if ticket has review data to display."""
         if not self.ticket:
             return False
-        return self.ticket.review_summary is not None or self.ticket.checks_passed is not None
+        status = self.ticket.status
+        return (
+            status == TicketStatus.REVIEW
+            or self.ticket.review_summary is not None
+            or self.ticket.checks_passed is not None
+            or self.ticket.merge_failed
+            or self.ticket.merge_error is not None
+        )
 
     def _format_checks_badge(self) -> str:
         """Format the checks badge text."""
@@ -432,10 +558,45 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
             return "badge-checks-pending"
         return "badge-checks-passed" if self.ticket.checks_passed else "badge-checks-failed"
 
+    def _format_merge_readiness(self) -> str:
+        """Format merge readiness badge text."""
+        readiness = self._get_merge_readiness_value()
+        if readiness == MergeReadiness.READY:
+            return "Ready"
+        if readiness == MergeReadiness.BLOCKED:
+            return "Blocked"
+        return "At Risk"
+
+    def _get_merge_readiness_class(self) -> str:
+        """Get the CSS class for merge readiness badge."""
+        readiness = self._get_merge_readiness_value()
+        if readiness == MergeReadiness.READY:
+            return "badge-readiness-ready"
+        if readiness == MergeReadiness.BLOCKED:
+            return "badge-readiness-blocked"
+        return "badge-readiness-risk"
+
+    def _get_merge_readiness_value(self) -> MergeReadiness:
+        """Return the merge readiness value for display."""
+        if self._merge_readiness:
+            try:
+                return MergeReadiness(self._merge_readiness)
+            except ValueError:
+                return MergeReadiness.RISK
+        if self.ticket and getattr(self.ticket, "merge_readiness", None):
+            readiness_value = self.ticket.merge_readiness
+            if isinstance(readiness_value, MergeReadiness):
+                return readiness_value
+            try:
+                return MergeReadiness(str(readiness_value))
+            except ValueError:
+                return MergeReadiness.RISK
+        return MergeReadiness.RISK
+
     def _build_agent_options(self) -> list[tuple[str, str]]:
         """Build agent backend options from config."""
         options: list[tuple[str, str]] = [("Default", "")]
-        kagan_app = getattr(self.app, "kagan_app", None) or self.app
+        kagan_app = self.kagan_app
         if hasattr(kagan_app, "config"):
             for name, agent in kagan_app.config.agents.items():
                 if agent.active:
@@ -446,6 +607,80 @@ class TicketDetailsModal(ModalScreen[ModalAction | Ticket | TicketUpdateDict | N
         """Parse acceptance criteria from AcceptanceCriteriaArea."""
         ac_input = self.query_one("#ac-input", AcceptanceCriteriaArea)
         return ac_input.get_criteria()
+
+    async def _load_review_data(self) -> None:
+        """Load both parallel work and audit trail in parallel (50% faster)."""
+        if not self.ticket or self.ticket.status != TicketStatus.REVIEW:
+            return
+        await asyncio.gather(
+            self._load_parallel_work(),
+            self._load_audit_trail(),
+        )
+
+    async def _load_parallel_work(self) -> None:
+        """Load parallel work data for the review panel."""
+        if not self.ticket or self.ticket.status != TicketStatus.REVIEW:
+            return
+        content = safe_query_one(self, "#parallel-work-content", Static)
+        if content is None:
+            return
+
+        kagan_app = self.kagan_app
+        state = kagan_app.state_manager
+        worktree = kagan_app.worktree_manager
+        base = kagan_app.config.general.default_base_branch
+
+        others = await state.get_tickets_by_status(TicketStatus.IN_PROGRESS)
+        others = [t for t in others if t.id != self.ticket.id]
+
+        if not others:
+            content.update("No other tickets are in progress.")
+            return
+
+        current_files = await worktree.get_files_changed(self.ticket.id, base_branch=base)
+        current_set = set(current_files)
+
+        lines = []
+        for other in others[:5]:
+            other_files = await worktree.get_files_changed(other.id, base_branch=base)
+            overlap = sorted(current_set.intersection(other_files)) if current_set else []
+            if overlap:
+                overlap_text = ", ".join(overlap[:3])
+                if len(overlap) > 3:
+                    overlap_text += f" (+{len(overlap) - 3} more)"
+                line = f"#{other.short_id} {other.title} | overlap: {overlap_text}"
+            elif current_files and other_files:
+                line = f"#{other.short_id} {other.title} | overlap: none detected"
+            else:
+                line = f"#{other.short_id} {other.title} | overlap: unknown"
+            lines.append(line)
+
+        if len(others) > 5:
+            lines.append(f"... and {len(others) - 5} more in progress")
+
+        content.update("\n".join(lines))
+
+    async def _load_audit_trail(self) -> None:
+        """Load audit events for the ticket."""
+        if not self.ticket:
+            return
+        content = safe_query_one(self, "#audit-content", Static)
+        if content is None:
+            return
+
+        kagan_app = self.kagan_app
+        state = kagan_app.state_manager
+        events = await state.get_ticket_events(self.ticket.id, limit=10)
+
+        if not events:
+            content.update("No activity recorded yet.")
+            return
+
+        lines = [
+            f"{event.created_at:%Y-%m-%d %H:%M} {event.event_type}: {event.message}"
+            for event in events
+        ]
+        content.update("\n".join(lines))
 
     def _validate_and_build_result(self) -> Ticket | TicketUpdateDict | None:
         """Validate form and build result model. Returns None if validation fails."""

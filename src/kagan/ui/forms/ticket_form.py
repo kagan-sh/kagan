@@ -18,7 +18,6 @@ from kagan.database.models import (
     TicketStatus,
     TicketType,
 )
-from kagan.ui.utils import coerce_enum
 from kagan.ui.widgets.base import (
     AcceptanceCriteriaArea,
     AgentBackendSelect,
@@ -70,10 +69,8 @@ class TicketFormBuilder:
             return
 
         current_priority = ticket.priority if ticket else TicketPriority.MEDIUM
-        current_priority = coerce_enum(current_priority, TicketPriority)
 
         current_type = ticket.ticket_type if ticket else TicketType.PAIR
-        current_type = coerce_enum(current_type, TicketType)
 
         current_backend = ticket.agent_backend if ticket else ""
 

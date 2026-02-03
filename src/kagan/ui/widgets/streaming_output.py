@@ -12,7 +12,7 @@ from textual.widgets import Rule, Static
 
 from kagan.limits import MAX_TOOL_CALLS
 from kagan.ui.utils.animation import WAVE_FRAMES, WAVE_INTERVAL_MS
-from kagan.ui.widgets.agent_content import AgentResponse, AgentThought, UserInput
+from kagan.ui.widgets.agent_content import StreamingMarkdown, UserInput
 from kagan.ui.widgets.permission_prompt import PermissionPrompt
 from kagan.ui.widgets.plan_approval import PlanApprovalWidget
 from kagan.ui.widgets.plan_display import PlanDisplay
@@ -65,8 +65,8 @@ class StreamingOutput(VerticalScroll):
 
     def __init__(self, *, id: str | None = None, classes: str | None = None) -> None:
         super().__init__(id=id, classes=classes)
-        self._agent_response: AgentResponse | None = None
-        self._agent_thought: AgentThought | None = None
+        self._agent_response: StreamingMarkdown | None = None
+        self._agent_thought: StreamingMarkdown | None = None
         self._tool_calls: OrderedDict[str, ToolCall] = OrderedDict()
         self._plan_display: PlanDisplay | None = None
         self._thinking_indicator: ThinkingIndicator | None = None
@@ -105,7 +105,7 @@ class StreamingOutput(VerticalScroll):
             await self._thinking_indicator.remove()
             self._thinking_indicator = None
 
-    async def post_response(self, fragment: str = "") -> AgentResponse:
+    async def post_response(self, fragment: str = "") -> StreamingMarkdown:
         """Get or create agent response widget. Resets thought state."""
         await self._remove_thinking_indicator()
         self._agent_thought = None
@@ -116,10 +116,12 @@ class StreamingOutput(VerticalScroll):
             fragment = self._filter_xml_content(fragment)
 
         if self._agent_response is None:
-            self._agent_response = AgentResponse(fragment)
+            self._agent_response = StreamingMarkdown(role="response")
             await self.mount(self._agent_response)
+            if fragment:
+                await self._agent_response.append_content(fragment)
         elif fragment:
-            await self._agent_response.append_fragment(fragment)
+            await self._agent_response.append_content(fragment)
         self._scroll_to_end()
         return self._agent_response
 
@@ -171,14 +173,15 @@ class StreamingOutput(VerticalScroll):
 
         return content
 
-    async def post_thought(self, fragment: str) -> AgentThought:
+    async def post_thought(self, fragment: str) -> StreamingMarkdown:
         """Get or create agent thought widget."""
         await self._remove_thinking_indicator()
         if self._agent_thought is None:
-            self._agent_thought = AgentThought(fragment)
+            self._agent_thought = StreamingMarkdown(role="thought")
             await self.mount(self._agent_thought)
+            await self._agent_thought.append_content(fragment)
         else:
-            await self._agent_thought.append_fragment(fragment)
+            await self._agent_thought.append_content(fragment)
         self._scroll_to_end()
         return self._agent_thought
 
@@ -316,10 +319,9 @@ class StreamingOutput(VerticalScroll):
         parts: list[str] = []
 
         for child in self.children:
-            if isinstance(child, (AgentResponse, AgentThought)):
-                # Markdown widgets - get the markdown source
-                if child._markdown:
-                    parts.append(child._markdown)
+            if isinstance(child, StreamingMarkdown):
+                # StreamingMarkdown widgets - get content property
+                parts.append(child.content)
             elif isinstance(child, UserInput):
                 # User input has stored content
                 parts.append(f"> {child._content}")

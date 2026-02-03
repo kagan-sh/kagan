@@ -168,9 +168,6 @@ references/
 
 snapshot_report.html
 
-# Kagan MCP config (auto-generated)
-.mcp.json
-
 # Private keys and certificates
 *.pem
 *.key
@@ -191,3 +188,9 @@ secrets*
 .azure/
 
 .scratchpad/
+
+# Kagan-generated files (local state + MCP configs)
+.mcp.json
+opencode.json
+kagan*.mcp.json
+*kagan.json

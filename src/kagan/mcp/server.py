@@ -7,6 +7,7 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+from kagan.agents import planner as planner_models
 from kagan.database.manager import StateManager
 from kagan.mcp.tools import KaganMCPServer
 
@@ -50,6 +51,21 @@ def _create_mcp_server(readonly: bool = False) -> FastMCP:
     mcp = FastMCP("kagan")
 
     # Read-only tools (always registered)
+    @mcp.tool()
+    async def propose_plan(
+        tickets: list[planner_models.ProposedTicket],
+        todos: list[planner_models.ProposedTodo] | None = None,
+    ) -> dict:
+        """Submit a structured plan proposal for planner mode."""
+        proposal = planner_models.PlanProposal.model_validate(
+            {"tickets": tickets, "todos": todos or []}
+        )
+        return {
+            "status": "received",
+            "ticket_count": len(proposal.tickets),
+            "todo_count": len(proposal.todos),
+        }
+
     @mcp.tool()
     async def get_parallel_tickets(exclude_ticket_id: str | None = None) -> list[dict]:
         """Get all IN_PROGRESS tickets for coordination.

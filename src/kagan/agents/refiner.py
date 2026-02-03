@@ -6,9 +6,10 @@ before they are sent to the planner agent for ticket creation.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
-from kagan.acp.agent import Agent
+from kagan.agents.agent_factory import AgentFactory, create_agent
 from kagan.agents.refinement_rules import build_refinement_prompt
 from kagan.debug_log import log
 from kagan.limits import AGENT_TIMEOUT
@@ -16,6 +17,7 @@ from kagan.limits import AGENT_TIMEOUT
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from kagan.acp.agent import Agent
     from kagan.config import AgentConfig
 
 
@@ -33,15 +35,22 @@ class PromptRefiner:
         await refiner.stop()
     """
 
-    def __init__(self, project_root: Path, agent_config: AgentConfig) -> None:
+    def __init__(
+        self,
+        project_root: Path,
+        agent_config: AgentConfig,
+        agent_factory: AgentFactory = create_agent,
+    ) -> None:
         """Initialize the prompt refiner.
 
         Args:
             project_root: The project root directory.
             agent_config: Configuration for the ACP agent to use.
+            agent_factory: Factory for creating agent instances.
         """
         self._project_root = project_root
         self._agent_config = agent_config
+        self._agent_factory = agent_factory
         self._agent: Agent | None = None
 
     async def refine(self, user_input: str) -> str:
@@ -62,7 +71,9 @@ class PromptRefiner:
         """
         if not self._agent:
             log.info("[PromptRefiner] Initializing refiner agent...")
-            self._agent = Agent(self._project_root, self._agent_config, read_only=True)
+            self._agent = self._agent_factory(
+                self._project_root, self._agent_config, read_only=True
+            )
             self._agent.set_auto_approve(True)  # No permission dialogs
             self._agent.start(message_target=None)  # No UI messages
             await self._agent.wait_ready(timeout=AGENT_TIMEOUT)
@@ -73,7 +84,7 @@ class PromptRefiner:
 
         await self._agent.send_prompt(prompt)
 
-        response = self._agent.get_response_text().strip()
+        response = _extract_refined_prompt(self._agent.get_response_text())
         log.debug(f"[PromptRefiner] Received response (len={len(response)})")
 
         # Return original if response is empty or very short
@@ -89,3 +100,13 @@ class PromptRefiner:
             log.info("[PromptRefiner] Stopping refiner agent...")
             await self._agent.stop()
             self._agent = None
+
+
+_RESULT_RE = re.compile(r"<result>(.*?)</result>", re.DOTALL | re.IGNORECASE)
+
+
+def _extract_refined_prompt(response: str) -> str:
+    """Extract the refined prompt from a structured response."""
+    if match := _RESULT_RE.search(response):
+        return match.group(1).strip()
+    return response.strip()

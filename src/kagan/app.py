@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from textual.app import App
 from textual.signal import Signal
 
+from kagan.agents.agent_factory import AgentFactory, create_agent
 from kagan.agents.scheduler import Scheduler
 from kagan.agents.worktree import WorktreeManager
 from kagan.config import KaganConfig
@@ -44,6 +45,7 @@ class KaganApp(App):
         db_path: str = DEFAULT_DB_PATH,
         config_path: str = DEFAULT_CONFIG_PATH,
         lock_path: str | None = DEFAULT_LOCK_PATH,
+        agent_factory: AgentFactory = create_agent,
     ):
         super().__init__()
         # Register both themes and select based on terminal capabilities
@@ -70,6 +72,7 @@ class KaganApp(App):
         self._instance_lock: InstanceLock | None = None
         self.config: KaganConfig = KaganConfig()
         self.planner_state: PersistentPlannerState | None = None
+        self._agent_factory = agent_factory
 
     @property
     def state_manager(self) -> StateManager:
@@ -183,6 +186,7 @@ class KaganApp(App):
                 ),
                 on_error=lambda tid, msg: self.notify(f"#{tid}: {msg}", severity="error"),
                 app=self,
+                agent_factory=self._agent_factory,
             )
             # Wire up reactive scheduler: status changes trigger spawns/stops
             self._state_manager.set_status_change_callback(self._on_ticket_status_change)
@@ -197,7 +201,7 @@ class KaganApp(App):
         if len(tickets) == 0:
             from kagan.ui.screens.planner import PlannerScreen
 
-            await self.push_screen(PlannerScreen())
+            await self.push_screen(PlannerScreen(agent_factory=self._agent_factory))
             self.log("PlannerScreen pushed (empty board)")
         else:
             await self.push_screen(KanbanScreen())
