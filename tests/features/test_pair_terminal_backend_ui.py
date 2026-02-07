@@ -191,3 +191,34 @@ async def test_settings_modal_updates_default_pair_terminal_backend(tmp_path: Pa
 
     assert result is True
     assert config.general.default_pair_terminal_backend == "tmux"
+
+
+@pytest.mark.asyncio
+async def test_settings_modal_updates_additional_default_models(tmp_path: Path) -> None:
+    config = KaganConfig()
+    config_path = tmp_path / "config.toml"
+    app = _ModalHarnessApp(config)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        loop = asyncio.get_running_loop()
+        result_future: asyncio.Future[object | None] = loop.create_future()
+        pilot.app.push_screen(
+            SettingsModal(config, config_path),
+            callback=lambda result: result_future.set_result(result),
+        )
+        modal = await wait_for_screen(pilot, SettingsModal, timeout=5.0)
+
+        modal.query_one("#default-model-codex-input", Input).value = "gpt-5.2-codex"
+        modal.query_one("#default-model-gemini-input", Input).value = "flash"
+        modal.query_one("#default-model-kimi-input", Input).value = "kimi-k2-turbo-preview"
+        modal.query_one("#default-model-copilot-input", Input).value = "GPT-5"
+        await pilot.pause()
+        modal.query_one("#save-btn", Button).press()
+
+        result = await result_future
+
+    assert result is True
+    assert config.general.default_model_codex == "gpt-5.2-codex"
+    assert config.general.default_model_gemini == "flash"
+    assert config.general.default_model_kimi == "kimi-k2-turbo-preview"
+    assert config.general.default_model_copilot == "GPT-5"

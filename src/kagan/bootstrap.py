@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 
     from textual.signal import Signal
 
+    from kagan.adapters.db.repositories import TaskRepository
     from kagan.agents.agent_factory import AgentFactory
     from kagan.services.agent_health import AgentHealthService
     from kagan.services.automation import AutomationService
@@ -234,6 +235,8 @@ class AppContext:
     active_project_id: str | None = None
     active_repo_id: str | None = None
 
+    _task_repo: TaskRepository | None = field(default=None, repr=False)
+
     async def close(self) -> None:
         """Clean up all resources."""
         if self.signal_bridge:
@@ -241,6 +244,9 @@ class AppContext:
 
         if hasattr(self, "automation_service"):
             await self.automation_service.stop()
+
+        if self._task_repo is not None:
+            await self._task_repo.close()
 
 
 def create_signal_bridge(event_bus: EventBus) -> SignalBridge:
@@ -372,6 +378,7 @@ async def create_app_context(
 
     repo_repository = RepoRepository(session_factory)
 
+    ctx._task_repo = task_repo
     ctx.task_service = TaskService(task_repo, event_bus)
     ctx.project_service = ProjectServiceImpl(
         session_factory,

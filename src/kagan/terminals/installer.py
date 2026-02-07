@@ -11,6 +11,14 @@ WINDOWS_FALLBACK_ORDER = ("vscode", "cursor")
 UNIX_FALLBACK_ORDER = ("vscode", "cursor")
 
 
+def _which(command: str) -> str | None:
+    """Resolve executable path via stdlib lookup.
+
+    Keeping `shutil.which` reachable preserves test monkeypatch compatibility.
+    """
+    return shutil.which(command)
+
+
 def first_available_pair_backend(*, windows: bool) -> str | None:
     """Return the first available fallback backend in priority order."""
     order = WINDOWS_FALLBACK_ORDER if windows else UNIX_FALLBACK_ORDER
@@ -30,7 +38,7 @@ def check_terminal_installed(backend: str) -> bool:
     executable = executable_map.get(backend)
     if executable is None:
         return False
-    return shutil.which(executable) is not None
+    return _which(executable) is not None
 
 
 def get_manual_install_fallback(backend: str) -> str:
@@ -62,18 +70,18 @@ def _get_tmux_install_command() -> str | None:
     system = platform.system()
 
     if system == "Darwin":
-        if shutil.which("brew") is None:
+        if _which("brew") is None:
             return None
         return "brew install tmux"
 
     if system == "Linux":
-        if shutil.which("apt-get") is not None:
+        if _which("apt-get") is not None:
             return "sudo apt-get update && sudo apt-get install -y tmux"
-        if shutil.which("dnf") is not None:
+        if _which("dnf") is not None:
             return "sudo dnf install -y tmux"
-        if shutil.which("pacman") is not None:
+        if _which("pacman") is not None:
             return "sudo pacman -S --noconfirm tmux"
-        if shutil.which("zypper") is not None:
+        if _which("zypper") is not None:
             return "sudo zypper --non-interactive install tmux"
         return None
 

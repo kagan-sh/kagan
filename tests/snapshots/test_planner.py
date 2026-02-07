@@ -65,7 +65,7 @@ class TestPlannerFlow:
                 assert isinstance(pilot.app.screen, PlannerScreen)
                 snapshots = await execute_test_actions(pilot, ["shot(empty)"])
 
-                await wait_for_planner_ready(pilot)
+                await wait_for_planner_ready(pilot, timeout=20.0)
 
                 await type_text(pilot, "Add user authentication")
                 await pilot.pause()

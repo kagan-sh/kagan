@@ -130,6 +130,34 @@ class SettingsModal(ModalScreen[bool]):
                     id="default-model-opencode-input",
                     placeholder="anthropic/claude-sonnet-4-5",
                 )
+            with Vertical(classes="input-group"):
+                yield Label("Default Codex Model", classes="input-label")
+                yield Input(
+                    value=self._config.general.default_model_codex or "",
+                    id="default-model-codex-input",
+                    placeholder="gpt-5.2-codex",
+                )
+            with Vertical(classes="input-group"):
+                yield Label("Default Gemini Model", classes="input-label")
+                yield Input(
+                    value=self._config.general.default_model_gemini or "",
+                    id="default-model-gemini-input",
+                    placeholder="auto | pro | flash | gemini-2.5-flash",
+                )
+            with Vertical(classes="input-group"):
+                yield Label("Default Kimi Model", classes="input-label")
+                yield Input(
+                    value=self._config.general.default_model_kimi or "",
+                    id="default-model-kimi-input",
+                    placeholder="kimi-k2-turbo-preview",
+                )
+            with Vertical(classes="input-group"):
+                yield Label("Default Copilot Model (Label)", classes="input-label")
+                yield Input(
+                    value=self._config.general.default_model_copilot or "",
+                    id="default-model-copilot-input",
+                    placeholder="e.g. Claude Sonnet 4.5 (switch in CLI via /model)",
+                )
 
             yield Rule()
 
@@ -177,6 +205,14 @@ class SettingsModal(ModalScreen[bool]):
         default_model_claude = default_model_claude.strip() or None
         default_model_opencode = self.query_one("#default-model-opencode-input", Input).value
         default_model_opencode = default_model_opencode.strip() or None
+        default_model_codex = self.query_one("#default-model-codex-input", Input).value
+        default_model_codex = default_model_codex.strip() or None
+        default_model_gemini = self.query_one("#default-model-gemini-input", Input).value
+        default_model_gemini = default_model_gemini.strip() or None
+        default_model_kimi = self.query_one("#default-model-kimi-input", Input).value
+        default_model_kimi = default_model_kimi.strip() or None
+        default_model_copilot = self.query_one("#default-model-copilot-input", Input).value
+        default_model_copilot = default_model_copilot.strip() or None
 
         try:
             max_agents = int(max_agents_str) if max_agents_str else 3
@@ -194,6 +230,10 @@ class SettingsModal(ModalScreen[bool]):
         self._config.general.default_pair_terminal_backend = pair_terminal_backend  # type: ignore[assignment]
         self._config.general.default_model_claude = default_model_claude
         self._config.general.default_model_opencode = default_model_opencode
+        self._config.general.default_model_codex = default_model_codex
+        self._config.general.default_model_gemini = default_model_gemini
+        self._config.general.default_model_kimi = default_model_kimi
+        self._config.general.default_model_copilot = default_model_copilot
         self._config.ui.skip_pair_instructions = skip_pair_instructions
 
         self.run_worker(self._write_config(), exclusive=True, exit_on_error=False)
@@ -234,6 +274,26 @@ active = true'''
             if general.default_model_opencode
             else ""
         )
+        model_codex_line = (
+            f'default_model_codex = "{general.default_model_codex}"'
+            if general.default_model_codex
+            else ""
+        )
+        model_gemini_line = (
+            f'default_model_gemini = "{general.default_model_gemini}"'
+            if general.default_model_gemini
+            else ""
+        )
+        model_kimi_line = (
+            f'default_model_kimi = "{general.default_model_kimi}"'
+            if general.default_model_kimi
+            else ""
+        )
+        model_copilot_line = (
+            f'default_model_copilot = "{general.default_model_copilot}"'
+            if general.default_model_copilot
+            else ""
+        )
 
         general_lines = [
             f"auto_review = {str(general.auto_review).lower()}",
@@ -249,6 +309,14 @@ active = true'''
             general_lines.append(model_claude_line)
         if model_opencode_line:
             general_lines.append(model_opencode_line)
+        if model_codex_line:
+            general_lines.append(model_codex_line)
+        if model_gemini_line:
+            general_lines.append(model_gemini_line)
+        if model_kimi_line:
+            general_lines.append(model_kimi_line)
+        if model_copilot_line:
+            general_lines.append(model_copilot_line)
 
         general_section = "\n".join(general_lines)
 

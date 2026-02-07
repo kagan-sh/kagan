@@ -4,13 +4,13 @@ Kagan offers two distinct ways to work with AI on your tasks: **AUTO** mode for 
 
 ## Quick Comparison
 
-| Aspect             | AUTO Mode           | PAIR Mode                                             |
-| ------------------ | ------------------- | ----------------------------------------------------- |
-| **AI involvement** | Works independently | Works alongside you                                   |
-| **Your role**      | Review results      | Active collaboration                                  |
-| **Best for**       | Well-defined tasks  | Complex problems                                      |
-| **Session**        | Background process  | Interactive tmux session or VS Code/Cursor launch      |
-| **Start with**     | Press `a`           | Press `Enter`                                         |
+| Aspect             | AUTO Mode           | PAIR Mode                                         |
+| ------------------ | ------------------- | ------------------------------------------------- |
+| **AI involvement** | Works independently | Works alongside you                               |
+| **Your role**      | Review results      | Active collaboration                              |
+| **Best for**       | Well-defined tasks  | Complex problems                                  |
+| **Session**        | Background process  | Interactive tmux session or VS Code/Cursor launch |
+| **Start with**     | Press `a`           | Press `Enter`                                     |
 
 ## AUTO Mode: Let AI Work Independently
 

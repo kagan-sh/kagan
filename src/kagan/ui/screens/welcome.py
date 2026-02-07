@@ -21,6 +21,11 @@ if TYPE_CHECKING:
     from kagan.app import KaganApp
 
 
+def _utcnow() -> datetime:
+    """Return the current UTC time. Extracted for test monkeypatching."""
+    return datetime.now(UTC)
+
+
 class ProjectListItem(ListItem):
     """A project item in the recent projects list."""
 
@@ -65,7 +70,7 @@ class ProjectListItem(ListItem):
         """Format last opened time as relative time with arrow indicator (e.g., '2h ↵')."""
         if not self.last_opened:
             return "Never ↵"
-        now = datetime.now(UTC)
+        now = _utcnow()
         last_opened = self.last_opened
         if last_opened.tzinfo is None:
             last_opened = last_opened.replace(tzinfo=UTC)

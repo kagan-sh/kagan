@@ -1019,10 +1019,10 @@ BaseBranchModal #branch-custom-input.hidden {
 }
 
 /* =============================================================================
-   TMUX GATEWAY MODAL
+   PAIR INSTRUCTIONS MODAL (tmux gateway)
    ============================================================================= */
 
-TmuxGatewayModal {
+PairInstructionsModal {
     align: center middle;
 }
 
@@ -1035,7 +1035,7 @@ TmuxGatewayModal {
     padding: 1 2;
 }
 
-TmuxGatewayModal .modal-title {
+PairInstructionsModal .modal-title {
     text-align: center;
     text-style: bold;
     width: 100%;
@@ -1043,7 +1043,7 @@ TmuxGatewayModal .modal-title {
     padding-bottom: 1;
 }
 
-TmuxGatewayModal .section-title {
+PairInstructionsModal .section-title {
     text-style: bold;
     color: $text-muted;
     width: 100%;

@@ -89,6 +89,19 @@ class GeneralConfig(BaseModel):
     default_model_opencode: str | None = Field(
         default=None, description="Default OpenCode model (None = agent default)"
     )
+    default_model_codex: str | None = Field(
+        default=None, description="Default Codex model (None = agent default)"
+    )
+    default_model_gemini: str | None = Field(
+        default=None, description="Default Gemini model (None = agent default)"
+    )
+    default_model_kimi: str | None = Field(
+        default=None, description="Default Kimi model (None = agent default)"
+    )
+    default_model_copilot: str | None = Field(
+        default=None,
+        description="Preferred Copilot model label for display (runtime set via /model)",
+    )
 
     @field_validator("default_pair_terminal_backend", mode="before")
     @classmethod

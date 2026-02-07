@@ -25,7 +25,7 @@ from kagan.app import KaganApp
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
 from tests.helpers.journey_runner import bundle_snapshots, execute_test_actions
 from tests.helpers.mocks import create_fake_tmux
-from tests.helpers.wait import wait_for_screen
+from tests.helpers.wait import _ci_timeout, wait_for_screen
 from tests.snapshots.conftest import _normalize_svg
 
 if TYPE_CHECKING:
@@ -263,7 +263,7 @@ class TestAgentOutputModal:
             from kagan.ui.screens.kanban import KanbanScreen
             from kagan.ui.widgets.streaming_output import StreamingOutput
 
-            auto_mode_project.mock_factory.set_response_delay(3.0)
+            auto_mode_project.mock_factory.set_response_delay(1.0)
             cols, rows = snapshot_terminal_size
             async with app.run_test(headless=True, size=(cols, rows)) as pilot:
                 await pilot.pause()
@@ -279,10 +279,11 @@ class TestAgentOutputModal:
 
                 kagan_app = pilot.app
                 assert isinstance(kagan_app, KaganApp)
-                max_wait = 10.0
+                max_wait = _ci_timeout(10.0)
                 waited = 0.0
                 agent = None
                 while waited < max_wait:
+                    await pilot.pause()
                     agent = kagan_app.ctx.automation_service.get_running_agent(
                         auto_mode_project.task_id
                     )
@@ -290,6 +291,7 @@ class TestAgentOutputModal:
                         break
                     await asyncio.sleep(0.05)
                     waited += 0.05
+                    await pilot.pause()
                 if agent is None:
                     raise TimeoutError("Agent did not start in time")
 
@@ -307,7 +309,7 @@ class TestAgentOutputModal:
                     )
                 )
                 await wait_for_screen(pilot, AgentOutputModal, timeout=5.0)
-                max_wait = 5.0
+                max_wait = _ci_timeout(5.0)
                 waited = 0.0
                 while waited < max_wait:
                     await pilot.pause()

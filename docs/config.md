@@ -29,19 +29,19 @@ mcp_server_name = "kagan"
 # default_model_opencode = "opencode-default"  # Optional
 ```
 
-| Setting                         | Default     | Purpose                                                                    |
-| ------------------------------- | ----------- | -------------------------------------------------------------------------- |
-| `auto_review`                   | `true`      | Run AI review on task completion                                           |
-| `auto_approve`                  | `false`     | Skip permission prompts in the planner agent (workers always auto-approve) |
-| `require_review_approval`       | `false`     | Require approved review before merge actions                               |
-| `serialize_merges`              | `false`     | Serialize manual merges to reduce conflicts                                |
-| `default_base_branch`           | `"main"`    | Base branch for worktrees and merges                                       |
-| `default_worker_agent`          | `"claude"`  | Default agent for new tickets                                              |
-| `default_pair_terminal_backend` | `"tmux"`    | Default terminal backend for PAIR tasks (`tmux`, `vscode`, or `cursor`)    |
-| `max_concurrent_agents`         | `1`         | Maximum parallel AUTO agents                                               |
-| `mcp_server_name`               | `"kagan"`   | MCP server name used in tool registration/config                           |
-| `default_model_claude`          | `None`      | Default Claude model alias or full name (optional)                         |
-| `default_model_opencode`        | `None`      | Default OpenCode model (optional)                                          |
+| Setting                         | Default    | Purpose                                                                    |
+| ------------------------------- | ---------- | -------------------------------------------------------------------------- |
+| `auto_review`                   | `true`     | Run AI review on task completion                                           |
+| `auto_approve`                  | `false`    | Skip permission prompts in the planner agent (workers always auto-approve) |
+| `require_review_approval`       | `false`    | Require approved review before merge actions                               |
+| `serialize_merges`              | `false`    | Serialize manual merges to reduce conflicts                                |
+| `default_base_branch`           | `"main"`   | Base branch for worktrees and merges                                       |
+| `default_worker_agent`          | `"claude"` | Default agent for new tickets                                              |
+| `default_pair_terminal_backend` | `"tmux"`   | Default terminal backend for PAIR tasks (`tmux`, `vscode`, or `cursor`)    |
+| `max_concurrent_agents`         | `1`        | Maximum parallel AUTO agents                                               |
+| `mcp_server_name`               | `"kagan"`  | MCP server name used in tool registration/config                           |
+| `default_model_claude`          | `None`     | Default Claude model alias or full name (optional)                         |
+| `default_model_opencode`        | `None`     | Default OpenCode model (optional)                                          |
 
 !!! note "Permission model"
 **Worker agents** (AUTO tasks) always auto-approve tool calls because they run in
@@ -160,10 +160,10 @@ These variables are set when agents run:
 
 For MCP server integration, agents look for:
 
-| Agent       | Config File     |
-| ----------- | --------------- |
-| Claude Code | `.mcp.json`     |
-| OpenCode    | `opencode.json` |
+| Agent       | Config File        |
+| ----------- | ------------------ |
+| Claude Code | `.mcp.json`        |
+| OpenCode    | `opencode.json`    |
 | VS Code     | `.vscode/mcp.json` |
 | Cursor      | `.cursor/mcp.json` |
 

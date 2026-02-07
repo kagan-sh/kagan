@@ -66,16 +66,29 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: uv run pytest tests/ -m "not snapshot" -n auto
 
+  # TODO: to be refined — currently macOS is the strict source of truth while
+  # Linux/Windows run in --snapshot-update mode to avoid cross-platform rendering diffs.
   snapshot:
     needs: lint
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - name: Install system dependencies
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y tmux git
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tmux
+      - name: Install system dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: choco install git -y
       - name: Configure git for tests
         run: |
           git config --global user.email "test@kagan.local"
@@ -85,8 +98,17 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --dev
-      - name: Snapshot tests (sequential)
+      # macOS is the source of truth — snapshots are committed from macOS,
+      # so strict comparison catches real regressions.
+      - name: Snapshot tests — strict (macOS)
+        if: runner.os == 'macOS'
         run: uv run pytest tests/snapshots/ -n 0 -v
+      # Linux/Windows run with --snapshot-update to tolerate rendering
+      # diffs while still catching runtime errors, crashes, and assertion
+      # failures that aren't snapshot-comparison related.
+      - name: Snapshot tests — update mode (Linux/Windows)
+        if: runner.os != 'macOS'
+        run: uv run pytest tests/snapshots/ -n 0 -v --snapshot-update
 
   test-all-platforms:
     needs: lint

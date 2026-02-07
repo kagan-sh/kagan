@@ -11,6 +11,7 @@ internally calls asyncio.run(), which conflicts with async test functions.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -24,6 +25,12 @@ if TYPE_CHECKING:
     from types import SimpleNamespace
 
     from tests.snapshots.conftest import MockAgentFactory
+
+# Fixed reference times for deterministic snapshot output.
+# _format_time() computes ``_utcnow() - last_opened`` so we keep these
+# exactly 23 h apart so the rendered label is always "23h ↵".
+_FIXED_OPENED = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
+_FIXED_NOW = _FIXED_OPENED + timedelta(hours=23)
 
 
 class TestWelcomeScreen:
@@ -44,6 +51,10 @@ class TestWelcomeScreen:
         monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
         monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
+        # Freeze the clock used by _format_time() so the relative time
+        # label is always "23h ↵" regardless of when the test executes.
+        monkeypatch.setattr("kagan.ui.screens.welcome._utcnow", lambda: _FIXED_NOW)
+
         app = KaganApp(
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
@@ -51,10 +62,33 @@ class TestWelcomeScreen:
             agent_factory=mock_acp_agent_factory,
         )
 
+        async def _pin_last_opened() -> None:
+            """Set last_opened_at to the fixed reference time in the DB."""
+            from sqlmodel import col, select
+
+            from kagan.adapters.db.schema import Project as DbProject
+
+            session_factory = app.ctx.project_service._session_factory  # type: ignore[attr-defined]
+            assert session_factory is not None
+            async with session_factory() as session:
+                result = await session.execute(
+                    select(DbProject).order_by(col(DbProject.created_at).asc())
+                )
+                project = result.scalars().first()
+                if project is not None:
+                    project.last_opened_at = _FIXED_OPENED.replace(tzinfo=None)
+                    session.add(project)
+                    await session.commit()
+
         async def run_flow() -> dict[str, str]:
             cols, rows = snapshot_terminal_size
             async with app.run_test(headless=True, size=(cols, rows)) as pilot:
                 await pilot.pause()
+
+                # Pin last_opened_at *after* the app has initialised
+                # (open_project may have set it to datetime.now()).
+                await _pin_last_opened()
+
                 await pilot.app.push_screen(
                     WelcomeScreen(
                         suggest_cwd=True,

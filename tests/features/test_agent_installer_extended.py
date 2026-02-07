@@ -13,6 +13,13 @@ from kagan.agents.installer import (
     check_agent_installed,
 )
 from kagan.builtin_agents import get_agent_status, list_available_agents
+from kagan.command_utils import clear_which_cache
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache() -> None:
+    """Ensure cached_which cache is empty before every test."""
+    clear_which_cache()
 
 
 class TestCheckAgentInstalled:

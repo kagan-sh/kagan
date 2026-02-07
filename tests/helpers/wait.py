@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from kagan.core.models.enums import TaskStatus
 
 # CI runners are significantly slower; scale timeouts accordingly.
-_CI_MULTIPLIER: float = 3.0 if os.environ.get("CI") else 1.0
+_CI_MULTIPLIER: float = 5.0 if os.environ.get("CI") else 1.0
 
 
 def _ci_timeout(timeout: float) -> float:
@@ -78,6 +78,8 @@ async def wait_for_planner_ready(
     timeout = _ci_timeout(timeout)
     elapsed = 0.0
     while elapsed < timeout:
+        # Pump the Textual message queue so AgentReady messages are processed.
+        await pilot.pause()
         await pilot.pause()
         screen = pilot.app.screen
         if isinstance(screen, PlannerScreen) and screen._state.agent_ready:

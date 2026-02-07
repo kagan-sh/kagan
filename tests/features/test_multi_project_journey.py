@@ -260,7 +260,7 @@ async def _open_project_selector(pilot) -> None:
     await wait_for_screen(pilot, WelcomeScreen, timeout=10.0)
 
 
-async def _wait_for_project_item(pilot, name: str, *, timeout: float = 5.0) -> None:
+async def _wait_for_project_item(pilot, name: str, *, timeout: float = 10.0) -> None:
     from tests.helpers.wait import _ci_timeout
 
     timeout = _ci_timeout(timeout)
