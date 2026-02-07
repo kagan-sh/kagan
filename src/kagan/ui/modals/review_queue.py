@@ -51,6 +51,8 @@ class ReviewQueueMixin:
             panel.add_class("queue-disabled")
 
     async def _refresh_review_queue_state(self: ReviewModal) -> None:
+        if not self.is_mounted:
+            return
         self._sync_review_queue_visibility()
         await self._get_chat_panel().refresh_queued_messages()
         if self._task_model.status != TaskStatus.REVIEW:
@@ -67,6 +69,8 @@ class ReviewQueueMixin:
         self._sync_review_action_state()
 
     async def _refresh_implementation_queue_state(self: ReviewModal) -> None:
+        if not self.is_mounted:
+            return
         self._sync_agent_output_queue_visibility()
         await self._get_agent_output_panel().refresh_queued_messages()
         if self._task_model.status != TaskStatus.IN_PROGRESS:

@@ -244,6 +244,8 @@ class ReviewModal(
 
     async def _hydrate_content(self) -> None:
         """Load commits, diffs and history without blocking initial paint."""
+        if not self.is_mounted:
+            return
         from kagan.debug_log import log
 
         log.info(f"[ReviewModal] Hydrating content for task {self._task_model.id[:8]}")
@@ -416,6 +418,8 @@ class ReviewModal(
         await self._refresh_runtime_state()
 
     async def _refresh_runtime_state(self) -> None:
+        if not self.is_mounted:
+            return
         app = cast("KaganApp", self.app)
         latest = await app.ctx.task_service.get_task(self._task_model.id)
         if latest is not None:

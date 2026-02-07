@@ -169,6 +169,8 @@ class WelcomeScreen(KaganScreen):
 
     async def _load_recent_projects(self) -> None:
         """Load and display recent projects from project service."""
+        if not self.is_mounted:
+            return
         try:
             project_service = self.ctx.project_service
             projects = await project_service.list_recent_projects(limit=10)
