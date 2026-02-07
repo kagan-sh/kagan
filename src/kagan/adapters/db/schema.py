@@ -39,15 +39,10 @@ class Project(SQLModel, table=True):
     id: str = Field(default_factory=_new_id, primary_key=True)
     name: str = Field(index=True)
     description: str = Field(default="")
-    default_repo_id: str | None = Field(default=None, foreign_key="repos.id")
     last_opened_at: datetime | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-    repos: list["Repo"] = Relationship(
-        back_populates="project",
-        sa_relationship_kwargs={"foreign_keys": "Repo.project_id"},
-    )
     tasks: list["Task"] = Relationship(back_populates="project")
     workspaces: list["Workspace"] = Relationship(back_populates="project")
     project_repos: list["ProjectRepo"] = Relationship(back_populates="project")
@@ -59,7 +54,6 @@ class Repo(SQLModel, table=True):
     __tablename__ = "repos"  # type: ignore[bad-override]
 
     id: str = Field(default_factory=_new_id, primary_key=True)
-    project_id: str = Field(foreign_key="projects.id", index=True)
     name: str = Field(index=True)
     path: str = Field(unique=True, index=True)
     display_name: str | None = Field(default=None)
@@ -69,12 +63,6 @@ class Repo(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-    project: Project = Relationship(
-        back_populates="repos",
-        sa_relationship_kwargs={"foreign_keys": "Repo.project_id"},
-    )
-    tasks: list["Task"] = Relationship(back_populates="repo")
-    workspaces: list["Workspace"] = Relationship(back_populates="repo")
     project_repos: list["ProjectRepo"] = Relationship(back_populates="repo")
     workspace_repos: list["WorkspaceRepo"] = Relationship(back_populates="repo")
 
@@ -95,7 +83,6 @@ class Task(SQLModel, table=True):
 
     id: str = Field(default_factory=_new_id, primary_key=True)
     project_id: str = Field(foreign_key="projects.id", index=True)
-    repo_id: str | None = Field(default=None, foreign_key="repos.id", index=True)
     parent_id: str | None = Field(default=None, foreign_key="tasks.id", index=True)
     title: str = Field(index=True)
     description: str = Field(default="")
@@ -118,7 +105,6 @@ class Task(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.now)
 
     project: Project = Relationship(back_populates="tasks")
-    repo: Repo | None = Relationship(back_populates="tasks")
     parent: Optional["Task"] = Relationship(
         back_populates="children",
         sa_relationship_kwargs={"remote_side": "Task.id"},
@@ -167,12 +153,10 @@ class Task(SQLModel, table=True):
         block_reason: str | None = None,
         *,
         project_id: str,
-        repo_id: str | None = None,
     ) -> "Task":
         """Create a new task with generated ID and timestamps."""
         return cls(
             project_id=project_id,
-            repo_id=repo_id,
             title=title,
             description=description,
             priority=priority,
@@ -195,8 +179,8 @@ class Task(SQLModel, table=True):
 
     def get_agent_config(self, config: "KaganConfig") -> Any:
         """Resolve agent config with priority order."""
+        from kagan.builtin_agents import get_builtin_agent
         from kagan.config import get_fallback_agent_config
-        from kagan.data.builtin_agents import get_builtin_agent
 
         if self.agent_backend:
             if builtin := get_builtin_agent(self.agent_backend):
@@ -220,7 +204,6 @@ class Workspace(SQLModel, table=True):
 
     id: str = Field(default_factory=_new_id, primary_key=True)
     project_id: str = Field(foreign_key="projects.id", index=True)
-    repo_id: str = Field(foreign_key="repos.id", index=True)
     task_id: str | None = Field(default=None, foreign_key="tasks.id", index=True)
     branch_name: str
     path: str
@@ -229,7 +212,6 @@ class Workspace(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.now)
 
     project: Project = Relationship(back_populates="workspaces")
-    repo: Repo = Relationship(back_populates="workspaces")
     task: Task | None = Relationship(back_populates="workspaces")
     sessions: list["Session"] = Relationship(back_populates="workspace")
     executions: list["ExecutionProcess"] = Relationship(back_populates="workspace")
@@ -303,6 +285,9 @@ class Merge(SQLModel, table=True):
     task_id: str = Field(foreign_key="tasks.id", index=True)
     workspace_id: str | None = Field(default=None, foreign_key="workspaces.id", index=True)
     repo_id: str | None = Field(default=None, foreign_key="repos.id")
+    strategy: str | None = Field(default=None)
+    target_branch: str | None = Field(default=None)
+    commit_sha: str | None = Field(default=None)
     status: MergeStatus = Field(default=MergeStatus.PENDING, index=True)
     readiness: MergeReadiness = Field(default=MergeReadiness.RISK, index=True)
     pr_url: str | None = Field(default=None)

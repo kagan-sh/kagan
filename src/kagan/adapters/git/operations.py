@@ -13,17 +13,19 @@ class GitOperationsAdapter:
 
     async def has_uncommitted_changes(self, worktree_path: str) -> bool:
         """Check if worktree has uncommitted changes."""
-        stdout = await self._run_git(Path(worktree_path), ["status", "--porcelain"])
+        stdout, _ = await self._run_git(Path(worktree_path), ["status", "--porcelain"])
         return bool(stdout.strip())
 
     async def commit_all(self, worktree_path: str, message: str) -> str:
         """Stage all changes and commit."""
         if not await self.has_uncommitted_changes(worktree_path):
-            return (await self._run_git(Path(worktree_path), ["rev-parse", "HEAD"])).strip()
+            stdout, _ = await self._run_git(Path(worktree_path), ["rev-parse", "HEAD"])
+            return stdout.strip()
 
         await self._run_git(Path(worktree_path), ["add", "-A"])
         await self._run_git(Path(worktree_path), ["commit", "-m", message])
-        return (await self._run_git(Path(worktree_path), ["rev-parse", "HEAD"])).strip()
+        stdout, _ = await self._run_git(Path(worktree_path), ["rev-parse", "HEAD"])
+        return stdout.strip()
 
     async def push(self, worktree_path: str, branch: str, *, force: bool = False) -> None:
         """Push branch to origin."""
@@ -48,11 +50,12 @@ class GitOperationsAdapter:
             raise RuntimeError("Merge conflict detected")
 
         await self._run_git(repo_path_obj, ["push", "origin", target_branch])
-        return (await self._run_git(repo_path_obj, ["rev-parse", "HEAD"])).strip()
+        stdout, _ = await self._run_git(repo_path_obj, ["rev-parse", "HEAD"])
+        return stdout.strip()
 
     async def get_file_diffs(self, worktree_path: str, target_branch: str) -> list[FileDiff]:
         """Get file-level diffs with content for a worktree."""
-        diff_stats = await self._run_git(
+        diff_stats, _ = await self._run_git(
             Path(worktree_path),
             ["diff", "--numstat", f"{target_branch}..HEAD"],
         )
@@ -70,7 +73,7 @@ class GitOperationsAdapter:
             deletions = int(deletions_str) if deletions_str.isdigit() else 0
             status = await self._get_file_status(Path(worktree_path), file_path, target_branch)
 
-            diff_content = await self._run_git(
+            diff_content, _ = await self._run_git(
                 Path(worktree_path),
                 ["diff", f"{target_branch}..HEAD", "--", file_path],
             )
@@ -94,7 +97,7 @@ class GitOperationsAdapter:
         target_branch: str,
     ) -> str:
         """Determine if file was added, modified, deleted, or renamed."""
-        name_status = await self._run_git(
+        name_status, _ = await self._run_git(
             worktree_path,
             ["diff", "--name-status", f"{target_branch}..HEAD", "--", file_path],
         )
@@ -112,7 +115,7 @@ class GitOperationsAdapter:
         }
         return status_map.get(status_char, "modified")
 
-    async def _run_git(self, cwd: Path, args: list[str], check: bool = True) -> str:
+    async def _run_git(self, cwd: Path, args: list[str], check: bool = True) -> tuple[str, str]:
         """Run a git command."""
         proc = await asyncio.create_subprocess_exec(
             "git",
@@ -126,4 +129,4 @@ class GitOperationsAdapter:
         if proc.returncode != 0 and check:
             raise RuntimeError(f"git {' '.join(args)} failed: {stderr.decode()}")
 
-        return stdout.decode()
+        return stdout.decode(), stderr.decode()

@@ -19,7 +19,7 @@ from kagan.constants import (
     CARD_TITLE_LINE_WIDTH,
 )
 from kagan.core.models.enums import TaskStatus, TaskType
-from kagan.ui.formatters.card_formatters import (
+from kagan.ui.card_formatters import (
     format_progress_bar,
     format_review_status,
     get_readiness_badge,

@@ -11,15 +11,16 @@ repo_name: aorumbayev/kagan
 
 theme:
   name: material
+  custom_dir: docs/overrides
 
   # Dark mode only - no toggle
   palette:
-    scheme: kagan
+    scheme: slate
 
   logo: assets/logo.svg
 
   font:
-    text: Space Grotesk
+    text: JetBrains Mono
     code: JetBrains Mono
 
   features:
@@ -45,6 +46,9 @@ theme:
 
 extra_css:
   - stylesheets/extra.css
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
 
 extra:
   social:
@@ -83,7 +87,7 @@ markdown_extensions:
       custom_fences:
         - name: mermaid
           class: mermaid
-          format: !!python/name:mermaid2.fence_mermaid_custom
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -92,11 +96,11 @@ markdown_extensions:
 
 plugins:
   - search
-  - mermaid2
 
 nav:
   - Home: index.md
   - Task Modes: task-modes.md
+  - Multi-Repo Guide: multi-repo-guide.md
   - Keyboard Shortcuts: keybindings.md
   - Configuration: config.md
   - Contributing: contributing.md

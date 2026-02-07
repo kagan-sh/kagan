@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-    from kagan.core.events import EventBus
     from kagan.adapters.db.schema import Repo
+    from kagan.core.events import EventBus
     from kagan.services.workspaces import WorkspaceService
 
 
@@ -196,7 +196,7 @@ class RepoScriptServiceImpl:
                 proc.terminate()
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     proc.kill()
         self._dev_server_processes.pop(workspace_id, None)
 

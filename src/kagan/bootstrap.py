@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 
     from textual.signal import Signal
 
+    from kagan.agents.agent_factory import AgentFactory
     from kagan.services.automation import AutomationService
     from kagan.services.diffs import DiffService
     from kagan.services.executions import ExecutionService
@@ -334,6 +335,7 @@ async def create_app_context(
     *,
     config: KaganConfig | None = None,
     project_root: Path | None = None,
+    agent_factory: AgentFactory | None = None,
 ) -> AppContext:
     """Create a fully initialized AppContext (non-context-manager)."""
     if config is None:
@@ -350,6 +352,7 @@ async def create_app_context(
     from kagan.adapters.db.repositories import RepoRepository, TaskRepository
     from kagan.adapters.git.operations import GitOperationsAdapter
     from kagan.adapters.git.worktrees import GitWorktreeAdapter
+    from kagan.agents.agent_factory import create_agent
     from kagan.services import (
         AutomationServiceImpl,
         DiffServiceImpl,
@@ -396,12 +399,17 @@ async def create_app_context(
     )
     ctx.session_service = SessionServiceImpl(project_root, ctx.task_service, config)
     ctx.execution_service = ExecutionServiceImpl()
+
+    # Use provided agent factory or default
+    factory = agent_factory if agent_factory is not None else create_agent
+
     ctx.automation_service = AutomationServiceImpl(
         ctx.task_service,
         ctx.workspace_service,
         config,
         session_service=ctx.session_service,
         event_bus=event_bus,
+        agent_factory=factory,
     )
     ctx.merge_service = MergeServiceImpl(
         ctx.task_service,
@@ -413,6 +421,7 @@ async def create_app_context(
         event_bus,
         git_ops_adapter,
     )
+    ctx.automation_service.set_merge_service(ctx.merge_service)
     ctx.diff_service = DiffServiceImpl(session_factory, git_ops_adapter, ctx.workspace_service)
     ctx.repo_script_service = RepoScriptServiceImpl(
         session_factory,

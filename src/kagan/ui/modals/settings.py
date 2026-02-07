@@ -219,7 +219,7 @@ class SettingsModal(ModalScreen[bool]):
         """Write config to TOML file."""
         import aiofiles
 
-        from kagan.data.builtin_agents import BUILTIN_AGENTS
+        from kagan.builtin_agents import BUILTIN_AGENTS
 
         kagan_dir = self._config_path.parent
         kagan_dir.mkdir(exist_ok=True)

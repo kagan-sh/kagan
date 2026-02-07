@@ -18,6 +18,7 @@ from kagan.adapters.db.schema import (
     ExecutionProcess,
     MergeReadiness,
     Project,
+    ProjectRepo,
     Repo,
     Scratch,
     Task,
@@ -52,7 +53,6 @@ class TaskRepository:
         self._project_root = project_root or Path.cwd()
         self._default_branch = default_branch
         self._default_project_id: str | None = None
-        self._default_repo_id: str | None = None
 
     async def initialize(self) -> None:
         """Initialize engine and create tables."""
@@ -77,6 +77,8 @@ class TaskRepository:
 
     async def _ensure_defaults(self) -> None:
         """Ensure a default project and repo exist."""
+        from kagan.git_utils import has_git_repo
+
         async with self._get_session() as session:
             result = await session.execute(select(Project).order_by(col(Project.created_at).asc()))
             project = result.scalars().first()
@@ -89,27 +91,42 @@ class TaskRepository:
                 await session.commit()
                 await session.refresh(project)
 
+            if not await has_git_repo(self._project_root):
+                self._default_project_id = project.id
+                return
+
             repo = None
-            if project.id:
-                result = await session.execute(
-                    select(Repo)
-                    .where(Repo.project_id == project.id)
-                    .order_by(col(Repo.created_at).asc())
-                )
-                repo = result.scalars().first()
-            if repo is None and project.id:
+            resolved_root = str(self._project_root.resolve())
+            result = await session.execute(select(Repo).where(Repo.path == resolved_root))
+            repo = result.scalars().first()
+            if repo is None:
                 repo = Repo(
-                    project_id=project.id,
                     name=self._project_root.name or "repo",
-                    path=str(self._project_root),
+                    path=resolved_root,
                     default_branch=self._default_branch,
                 )
                 session.add(repo)
                 await session.commit()
                 await session.refresh(repo)
 
+            if project.id and repo.id:
+                link_result = await session.execute(
+                    select(ProjectRepo).where(
+                        ProjectRepo.project_id == project.id,
+                        ProjectRepo.repo_id == repo.id,
+                    )
+                )
+                if link_result.scalars().first() is None:
+                    link = ProjectRepo(
+                        project_id=project.id,
+                        repo_id=repo.id,
+                        is_primary=True,
+                        display_order=0,
+                    )
+                    session.add(link)
+                    await session.commit()
+
             self._default_project_id = project.id
-            self._default_repo_id = repo.id if repo else None
 
     def set_status_change_callback(
         self,
@@ -133,9 +150,6 @@ class TaskRepository:
 
     async def create(self, task: Task) -> Task:
         """Create a new task."""
-        if task.repo_id is None and self._default_repo_id:
-            task.repo_id = self._default_repo_id
-
         async with self._lock:
             async with self._get_session() as session:
                 session.add(task)
@@ -311,7 +325,7 @@ class TaskRepository:
             execution = ExecutionProcess(
                 id=task_id,
                 task_id=task_id,
-                executor="legacy",
+                executor="automation",
             )
             session.add(execution)
             await session.commit()
@@ -445,11 +459,6 @@ class TaskRepository:
         return self._default_project_id
 
     @property
-    def default_repo_id(self) -> str | None:
-        """Return default repo ID (if initialized)."""
-        return self._default_repo_id
-
-    @property
     def default_branch(self) -> str:
         """Return default branch name."""
         return self._default_branch
@@ -468,7 +477,6 @@ class RepoRepository:
     async def create(
         self,
         path: str | Path,
-        project_id: str,
         name: str | None = None,
         display_name: str | None = None,
         default_branch: str = "main",
@@ -479,7 +487,6 @@ class RepoRepository:
         resolved_path = Path(path).resolve()
         repo = Repo(
             path=str(resolved_path),
-            project_id=project_id,
             name=name or resolved_path.name,
             display_name=display_name or resolved_path.name,
             default_branch=default_branch,
@@ -506,14 +513,13 @@ class RepoRepository:
     async def get_or_create(
         self,
         path: str | Path,
-        project_id: str,
         **kwargs: Any,
     ) -> tuple[Repo, bool]:
         """Get existing repo or create new one. Returns (repo, created)."""
         existing = await self.get_by_path(path)
         if existing:
             return existing, False
-        return await self.create(path, project_id, **kwargs), True
+        return await self.create(path, **kwargs), True
 
     async def list_for_project(self, project_id: str) -> list[Repo]:
         """List all repos for a project via junction table."""

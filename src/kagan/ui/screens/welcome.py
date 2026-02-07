@@ -94,21 +94,26 @@ class WelcomeScreen(KaganScreen):
 
     BINDINGS = WELCOME_BINDINGS
 
-    def __init__(self) -> None:
+    def __init__(self, suggest_cwd: bool = False, cwd_path: str | None = None) -> None:
         super().__init__()
-        self._ctx_available: bool = False
+        self._suggest_cwd = suggest_cwd
+        self._cwd_path = cwd_path
 
     @property
     def kagan_app(self) -> KaganApp:
         """Get the typed KaganApp instance."""
         return cast("KaganApp", self.app)
 
-    def _has_ctx(self) -> bool:
-        """Check if ctx is available (not first-boot)."""
-        app = self.kagan_app
-        return hasattr(app, "_ctx") and app._ctx is not None
-
     def compose(self) -> ComposeResult:
+        # CWD suggestion banner (shown when suggest_cwd=True)
+        if self._suggest_cwd and self._cwd_path:
+            with Container(id="cwd-suggestion-banner"):
+                yield Label("Current directory is a git repository", id="cwd-title")
+                yield Label(self._cwd_path, id="cwd-path")
+                with Horizontal(id="cwd-actions"):
+                    yield Button("Create Project from CWD", id="btn-cwd-create", variant="primary")
+                    yield Button("Dismiss", id="btn-cwd-dismiss")
+
         with Container(id="welcome-container"):
             # Large ASCII art logo
             yield Static(KAGAN_LOGO, id="logo")
@@ -136,21 +141,11 @@ class WelcomeScreen(KaganScreen):
 
     async def on_mount(self) -> None:
         """Load recent projects on mount."""
-        # Check if ctx is available (only for project picker mode)
-        self._ctx_available = self._has_ctx()
-
-        if self._ctx_available:
-            self.run_worker(self._load_recent_projects(), exclusive=True)
-        else:
-            # First-boot mode - show empty state
-            self._show_empty_state("Welcome! Configure settings to get started.")
+        # Context is always available after onboarding
+        self.run_worker(self._load_recent_projects(), exclusive=True)
 
     async def _load_recent_projects(self) -> None:
         """Load and display recent projects from project service."""
-        if not self._ctx_available:
-            self._show_empty_state("Welcome! Configure settings to get started.")
-            return
-
         try:
             project_service = self.ctx.project_service
             projects = await project_service.list_recent_projects(limit=10)
@@ -231,24 +226,22 @@ class WelcomeScreen(KaganScreen):
                 return False
         return True
 
-    async def action_new_project(self) -> None:
+    def action_new_project(self) -> None:
         """Create a new project via NewProjectModal."""
-        if not self._ctx_available:
-            self.app.notify("Cannot create project during first boot", severity="warning")
-            return
+        self.app.run_worker(self._open_new_project_modal(), exclusive=True)
 
+    async def _open_new_project_modal(self) -> None:
         from kagan.ui.modals.new_project import NewProjectModal
 
         result = await self.app.push_screen_wait(NewProjectModal())
         if result and "project_id" in result:
             await self._open_project(result["project_id"])
 
-    async def action_open_folder(self) -> None:
+    def action_open_folder(self) -> None:
         """Open a folder as a new project or find existing project."""
-        if not self._ctx_available:
-            self.app.notify("Cannot open folder during first boot", severity="warning")
-            return
+        self.app.run_worker(self._open_folder_modal(), exclusive=True)
 
+    async def _open_folder_modal(self) -> None:
         from kagan.ui.modals.folder_picker import FolderPickerModal
 
         folder_path = await self.app.push_screen_wait(FolderPickerModal())
@@ -284,17 +277,14 @@ class WelcomeScreen(KaganScreen):
 
     async def action_settings(self) -> None:
         """Open settings modal."""
-        if self._ctx_available:
-            from kagan.ui.modals.settings import SettingsModal
+        from kagan.ui.modals.settings import SettingsModal
 
-            await self.app.push_screen(
-                SettingsModal(
-                    config=self.ctx.config,
-                    config_path=self.ctx.config_path,
-                )
+        await self.app.push_screen(
+            SettingsModal(
+                config=self.ctx.config,
+                config_path=self.ctx.config_path,
             )
-        else:
-            self.app.notify("Settings not available during first boot", severity="warning")
+        )
 
     async def action_quit(self) -> None:
         """Quit the application."""
@@ -302,9 +292,6 @@ class WelcomeScreen(KaganScreen):
 
     async def _open_project(self, project_id: str) -> None:
         """Open a project and switch to Kanban screen."""
-        if not self._ctx_available:
-            return
-
         try:
             project_service = self.ctx.project_service
             await project_service.open_project(project_id)
@@ -324,13 +311,39 @@ class WelcomeScreen(KaganScreen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         if event.button.id == "btn-new":
-            self.run_worker(self.action_new_project())
+            self.action_new_project()
         elif event.button.id == "btn-open":
-            self.run_worker(self.action_open_folder())
+            self.action_open_folder()
         elif event.button.id == "btn-settings":
-            self.run_worker(self.action_settings())
+            self.app.run_worker(self.action_settings())
+        elif event.button.id == "btn-cwd-create":
+            self.app.run_worker(self._create_project_from_cwd())
+        elif event.button.id == "btn-cwd-dismiss":
+            self._dismiss_cwd_banner()
+
+    async def _create_project_from_cwd(self) -> None:
+        """Create a new project from the current working directory."""
+        if not self._cwd_path:
+            return
+
+        project_service = self.ctx.project_service
+        project_name = Path(self._cwd_path).name
+        project_id = await project_service.create_project(
+            name=project_name,
+            repo_paths=[self._cwd_path],
+        )
+        await self._open_project(project_id)
+
+    def _dismiss_cwd_banner(self) -> None:
+        """Dismiss the CWD suggestion banner."""
+        try:
+            banner = self.query_one("#cwd-suggestion-banner", Container)
+            banner.display = False
+        except Exception:
+            pass  # Banner not found
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle project selection from list."""
         if isinstance(event.item, ProjectListItem):
-            self.run_worker(self._open_project(event.item.project_id))
+            # Use app-scoped worker to survive screen replacement
+            self.app.run_worker(self._open_project(event.item.project_id))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual import getters, on
@@ -999,7 +1000,7 @@ class KanbanScreen(KaganScreen):
             )
 
         except Exception as e:
-            from kagan.sessions.tmux import TmuxError
+            from kagan.tmux import TmuxError
 
             if isinstance(e, TmuxError):
                 self.notify(f"Tmux error: {e}", severity="error")
@@ -1103,12 +1104,16 @@ class KanbanScreen(KaganScreen):
             with self.app.suspend():
                 await self.ctx.session_service.attach_session(task.id)
 
-    async def action_start_agent(self) -> None:
+    def action_start_agent(self) -> None:
         card = focus.get_focused_card(self)
         if not card or not card.task_model:
             return
-        task = card.task_model
+        self.run_worker(
+            self._start_agent_flow(card.task_model),
+            group=f"start-agent-{card.task_model.id}",
+        )
 
+    async def _start_agent_flow(self, task: Task) -> None:
         # Only AUTO tasks
         if task.task_type == TaskType.PAIR:
             return
@@ -1122,18 +1127,41 @@ class KanbanScreen(KaganScreen):
         # Ensure workspace exists (repo selection)
         wt_path = await self.ctx.workspace_service.get_path(task.id)
         if wt_path is None:
-            from kagan.ui.modals.start_workspace import StartWorkspaceModal
+            # Check if project has exactly one repo - auto-provision if so
+            repos = await self.ctx.project_service.get_project_repos(task.project_id)
+            if len(repos) == 1:
+                # Single repo: auto-provision workspace without modal
+                from kagan.git_utils import has_git_repo
 
-            workspace_id = await self.app.push_screen_wait(
-                StartWorkspaceModal(
-                    task_id=task.id,
-                    task_title=task.title,
-                    project_id=task.project_id,
-                    suggested_repos=None,
+                repo_path = Path(repos[0].path)
+                if not await has_git_repo(repo_path):
+                    self.notify(
+                        f"Not a git repository: {repo_path}. Run git init first.",
+                        severity="error",
+                    )
+                    return
+
+                self.notify("Creating workspace...", severity="information")
+                base = self.kagan_app.config.general.default_base_branch
+                try:
+                    wt_path = await self.ctx.workspace_service.create(task.id, base_branch=base)
+                except Exception as exc:
+                    self.notify(f"Failed to create workspace: {exc}", severity="error")
+                    return
+            else:
+                # Multiple repos: show selection modal
+                from kagan.ui.modals.start_workspace import StartWorkspaceModal
+
+                workspace_id = await self.app.push_screen_wait(
+                    StartWorkspaceModal(
+                        task_id=task.id,
+                        task_title=task.title,
+                        project_id=task.project_id,
+                        suggested_repos=None,
+                    )
                 )
-            )
-            if not workspace_id:
-                return
+                if not workspace_id:
+                    return
 
         # Move BACKLOG tasks to IN_PROGRESS first
         if task.status == TaskStatus.BACKLOG:

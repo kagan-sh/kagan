@@ -19,7 +19,7 @@ TOOL_CHOICES = ("claude", "opencode")
 
 def _get_default_tool() -> str:
     """Auto-detect the first available AI tool."""
-    from kagan.data.builtin_agents import get_all_agent_availability
+    from kagan.builtin_agents import get_all_agent_availability
 
     for availability in get_all_agent_availability():
         if availability.is_available:
@@ -61,7 +61,7 @@ def enhance(prompt: str | None, tool: str | None, file_path: Path | None) -> Non
         kagan tools enhance -f requirements.md -t claude
     """
     from kagan.agents.refiner import PromptRefiner
-    from kagan.data.builtin_agents import get_builtin_agent
+    from kagan.builtin_agents import get_builtin_agent
 
     # Determine the prompt source
     if file_path is not None:

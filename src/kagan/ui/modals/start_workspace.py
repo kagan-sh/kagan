@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from textual.app import ComposeResult
+from typing import TYPE_CHECKING, cast
+
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Label, Select, Static
 
 from kagan.services.workspaces import RepoWorkspaceInput
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
+
+    from kagan.app import KaganApp
 
 
 class RepoCheckboxItem(Static):
@@ -97,7 +103,8 @@ class StartWorkspaceModal(ModalScreen[str | None]):
         self.run_worker(self._load_repos(), exclusive=True)
 
     async def _load_repos(self) -> None:
-        project_service = self.app.ctx.project_service
+        app = cast("KaganApp", self.app)
+        project_service = app.ctx.project_service
         repos = await project_service.get_project_repo_details(self.project_id)
 
         repo_list = self.query_one("#repo-list", ScrollableContainer)
@@ -156,7 +163,8 @@ class StartWorkspaceModal(ModalScreen[str | None]):
             error_label.update("Please select at least one repository")
             return
 
-        workspace_service = self.app.ctx.workspace_service
+        app = cast("KaganApp", self.app)
+        workspace_service = app.ctx.workspace_service
 
         try:
             workspace_id = await workspace_service.provision(

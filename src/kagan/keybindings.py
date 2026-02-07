@@ -201,6 +201,10 @@ WELCOME_BINDINGS: list[BindingType] = [
     Binding("escape", "quit", "Quit"),
 ]
 
+ONBOARDING_BINDINGS: list[BindingType] = [
+    Binding("escape", "quit", "Quit"),
+]
+
 # =============================================================================
 # Widget Bindings
 # =============================================================================

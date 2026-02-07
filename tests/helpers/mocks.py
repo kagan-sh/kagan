@@ -11,9 +11,6 @@ if TYPE_CHECKING:
 
     from kagan.config import AgentConfig, KaganConfig
 
-from kagan.adapters.git.worktrees import WorktreeManager
-from kagan.paths import get_worktree_base_dir
-
 
 class MessageCapture:
     """Capture Textual messages from widgets for testing.
@@ -124,99 +121,20 @@ class AgentTestHarness:
         return proc
 
 
-class MergeScenarioBuilder:
-    """Builder for WorktreeManager merge test scenarios."""
-
-    def __init__(self, tmp_path: Path):
-        self.tmp_path = tmp_path
-        self.manager = WorktreeManager(repo_root=tmp_path)
-        self.mock_run_git = AsyncMock()
-        self.manager._run_git = self.mock_run_git
-        base_dir = get_worktree_base_dir()
-        self.merge_path = base_dir / "merge-worktree"
-        self.manager.ensure_merge_worktree = AsyncMock(return_value=self.merge_path)
-        self.manager._reset_merge_worktree = AsyncMock(return_value=self.merge_path)
-        self.manager._fast_forward_base = AsyncMock(return_value=(True, "Fast-forwarded main"))
-        self.manager._merge_in_progress = AsyncMock(return_value=False)
-        self.task_id = ""
-        self.branch_name = ""
-        self.commits: list[str] = []
-        self.conflict_marker = ""
-
-    def with_worktree(self, task_id: str) -> MergeScenarioBuilder:
-        """Create worktree directory for task."""
-        base_dir = get_worktree_base_dir()
-        path = base_dir / "worktrees" / task_id
-        path.mkdir(parents=True)
-        self.task_id = task_id
-        return self
-
-    def with_branch(self, branch_name: str) -> MergeScenarioBuilder:
-        """Set branch name response."""
-        self.branch_name = branch_name
-        self.manager.get_branch_name = AsyncMock(return_value=branch_name)
-        return self
-
-    def with_commits(self, commits: list[str]) -> MergeScenarioBuilder:
-        """Set commit log response."""
-        self.commits = commits
-        self.manager.get_commit_log = AsyncMock(return_value=commits)
-        return self
-
-    def with_conflict(self, marker: str = "UU") -> MergeScenarioBuilder:
-        """Configure conflict scenario."""
-        self.conflict_marker = marker
-        return self
-
-    def build_success_responses(self) -> list:
-        """Build mock responses for successful squash merge."""
-        return [
-            ("", ""),  # merge --squash
-            ("M file.py", ""),  # status (conflict check - no conflict)
-            ("", ""),  # commit
-        ]
-
-    def build_regular_merge_responses(self) -> list:
-        """Build mock responses for successful regular merge."""
-        return [
-            ("Merge made by the 'ort' strategy.", ""),  # merge (no squash)
-        ]
-
-    def build_conflict_responses(self) -> list:
-        """Build mock responses for squash conflict scenario."""
-        return [
-            ("", ""),  # merge --squash
-            (f"{self.conflict_marker} file.py", ""),  # status with conflict
-        ]
-
-    def build_regular_conflict_responses(self, in_stderr: bool = False) -> list:
-        """Build mock responses for regular merge conflict."""
-        conflict_msg = "CONFLICT (content): Merge conflict in file.py"
-        return [
-            ("", conflict_msg) if in_stderr else (conflict_msg, ""),
-        ]
-
-    def build_uncommitted_changes_response(self) -> list:
-        """Build mock responses for uncommitted changes in main repo."""
-        return [
-            ("M tests/helpers/pages.py", ""),  # status --porcelain shows uncommitted changes
-        ]
-
-
-def create_mock_worktree_manager() -> MagicMock:
-    """Create a mock WorktreeManager with async methods."""
-    from kagan.adapters.git.worktrees import WorktreeManager
-
-    manager = MagicMock(spec=WorktreeManager)
+def create_mock_workspace_service() -> MagicMock:
+    """Create a mock WorkspaceService with async methods."""
+    manager = MagicMock()
     manager.get_path = AsyncMock(return_value=Path("/tmp/worktree"))
     manager.create = AsyncMock(return_value=Path("/tmp/worktree"))
     manager.delete = AsyncMock()
-    manager.list_all = AsyncMock(return_value=[])
+    manager.list_workspaces = AsyncMock(return_value=[])
+    manager.get_workspace_repos = AsyncMock(return_value=[])
     manager.get_commit_log = AsyncMock(return_value=["feat: initial"])
     manager.get_diff_stats = AsyncMock(return_value="1 file changed")
-    manager.merge_to_main = AsyncMock(return_value=(True, "Merged"))
     manager.prepare_merge_conflicts = AsyncMock(return_value=(True, "Merge conflicts prepared"))
     manager.get_merge_worktree_path = AsyncMock(return_value=Path("/tmp/merge-worktree"))
+    manager.get_files_changed_on_base = AsyncMock(return_value=[])
+    manager.rebase_onto_base = AsyncMock(return_value=(True, "", []))
     return manager
 
 

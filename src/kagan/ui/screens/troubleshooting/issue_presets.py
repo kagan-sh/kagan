@@ -69,7 +69,7 @@ ISSUE_PRESETS: dict[IssueType, IssuePreset] = {
         icon="[!]",
         title="Another Instance Running",
         message=(
-            "Another Kagan instance is already running in this folder.\n"
+            "Another Kagan instance is already running.\n"
             "Please return to that window or close it before starting."
         ),
         hint="Close the other instance and try again",
@@ -568,7 +568,7 @@ def create_no_agents_issues() -> list[DetectedIssue]:
     Returns:
         List of DetectedIssue for each supported agent.
     """
-    from kagan.data.builtin_agents import list_builtin_agents
+    from kagan.builtin_agents import list_builtin_agents
 
     issues = []
     for agent in list_builtin_agents():

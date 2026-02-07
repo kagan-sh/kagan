@@ -2789,7 +2789,7 @@ MergeDialog .target-branch {
 }
 
 MergeDialog .diff-stats {
-    margin-left: auto;
+    dock: right;
 }
 
 #strategy-select {
@@ -2821,4 +2821,64 @@ DiffModal .diff-content {
 DiffModal .diff-header {
     background: $primary-darken-2;
     padding: 0 1;
+}
+
+/* =============================================================================
+   ONBOARDING SCREEN
+   ============================================================================= */
+
+OnboardingScreen {
+    align: center middle;
+}
+
+#onboarding-container {
+    width: 70;
+    height: auto;
+    border: solid $primary;
+    padding: 1 2;
+}
+
+#onboarding-title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.onboarding-field {
+    margin: 1 0;
+}
+
+.onboarding-label {
+    margin-bottom: 1;
+}
+
+#onboarding-submit {
+    margin-top: 2;
+    width: 100%;
+}
+
+/* =============================================================================
+   CWD SUGGESTION BANNER
+   ============================================================================= */
+
+#cwd-suggestion-banner {
+    width: 100%;
+    height: auto;
+    background: $surface;
+    border: solid $accent;
+    padding: 1 2;
+    margin-bottom: 1;
+}
+
+#cwd-path {
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#cwd-actions {
+    height: auto;
+}
+
+#cwd-actions Button {
+    margin-right: 1;
 }

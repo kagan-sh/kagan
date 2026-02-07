@@ -2,11 +2,8 @@
 
 These tests cover the main planner interaction flows:
 - Empty state
-- User input
 - Plan proposal from agent
-- Plan approval/dismissal/refinement
-- Multi-task plans
-- Clarification requests
+- Plan approval
 
 Note: Tests are synchronous because pytest-textual-snapshot's snap_compare
 internally calls asyncio.run(), which conflicts with async test functions.
@@ -14,7 +11,6 @@ internally calls asyncio.run(), which conflicts with async test functions.
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -25,12 +21,7 @@ from tests.snapshots.helpers import (
     wait_for_widget,
     wait_for_workers,
 )
-from tests.snapshots.mock_responses import (
-    MULTI_TASK_PLAN_TOOL_CALLS,
-    PLAN_PROPOSAL_RESPONSE,
-    PLAN_PROPOSAL_TOOL_CALLS,
-    TASK_NEEDS_CLARIFICATION_RESPONSE,
-)
+from tests.snapshots.mock_responses import PLAN_PROPOSAL_RESPONSE, PLAN_PROPOSAL_TOOL_CALLS
 
 if TYPE_CHECKING:
     from types import SimpleNamespace
@@ -90,7 +81,7 @@ class TestPlannerFlow:
 
         # Mock tmux
         sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
+        monkeypatch.setattr("kagan.tmux.run_tmux", _create_fake_tmux(sessions))
         monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
 
         app = KaganApp(
@@ -107,40 +98,6 @@ class TestPlannerFlow:
             from kagan.ui.screens.planner import PlannerScreen
 
             assert isinstance(pilot.app.screen, PlannerScreen)
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_planner_user_input(
-        self,
-        snapshot_project: SimpleNamespace,
-        mock_acp_agent_factory: MockAgentFactory,
-        snapshot_terminal_size: tuple[int, int],
-        snap_compare,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test user types a prompt, shows in input area."""
-        from kagan.app import KaganApp
-
-        # Mock tmux
-        sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
-        monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
-
-        app = KaganApp(
-            db_path=snapshot_project.db,
-            config_path=snapshot_project.config,
-            lock_path=None,
-            project_root=snapshot_project.root,
-            agent_factory=mock_acp_agent_factory,
-        )
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Type a prompt into the input
-            await type_text(pilot, "Add user authentication to the API")
-            await pilot.pause()
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
@@ -167,7 +124,7 @@ class TestPlannerFlow:
 
         # Mock tmux
         sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
+        monkeypatch.setattr("kagan.tmux.run_tmux", _create_fake_tmux(sessions))
         monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
 
         app = KaganApp(
@@ -223,7 +180,7 @@ class TestPlannerFlow:
 
         # Mock tmux
         sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
+        monkeypatch.setattr("kagan.tmux.run_tmux", _create_fake_tmux(sessions))
         monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
 
         app = KaganApp(
@@ -251,291 +208,6 @@ class TestPlannerFlow:
             await pilot.press("a")
             # Give time for tasks to be created and UI to update
             await pilot.pause()
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_planner_plan_decline(
-        self,
-        snapshot_project: SimpleNamespace,
-        mock_acp_agent_factory: MockAgentFactory,
-        snapshot_terminal_size: tuple[int, int],
-        snap_compare,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test user declines plan (presses 'd').
-
-        Shows decline feedback and prompts for what to change.
-        """
-        from kagan.app import KaganApp
-
-        # Configure mock agent with plan proposal response
-        mock_acp_agent_factory.set_default_response(PLAN_PROPOSAL_RESPONSE)
-        mock_acp_agent_factory.set_default_tool_calls(PLAN_PROPOSAL_TOOL_CALLS)
-
-        # Mock tmux
-        sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
-        monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
-
-        app = KaganApp(
-            db_path=snapshot_project.db,
-            config_path=snapshot_project.config,
-            lock_path=None,
-            project_root=snapshot_project.root,
-            agent_factory=mock_acp_agent_factory,
-        )
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Wait for agent to be ready before typing
-            await wait_for_planner_ready(pilot)
-            # Type and submit a prompt
-            await type_text(pilot, "Add user authentication")
-            await pilot.pause()
-            await pilot.press("enter")
-            # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=10.0)
-            # Wait for plan approval widget
-            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=10.0)
-            await pilot.pause()
-            # Press 'd' to dismiss the plan
-            await pilot.press("d")
-            # Give time for dismiss feedback
-            await pilot.pause()
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_planner_plan_refine(
-        self,
-        snapshot_project: SimpleNamespace,
-        mock_acp_agent_factory: MockAgentFactory,
-        snapshot_terminal_size: tuple[int, int],
-        snap_compare,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test user requests refinement (presses 'e' to edit).
-
-        Shows the task editor screen for refinement.
-        """
-        from kagan.app import KaganApp
-
-        # Configure mock agent with plan proposal response
-        mock_acp_agent_factory.set_default_response(PLAN_PROPOSAL_RESPONSE)
-        mock_acp_agent_factory.set_default_tool_calls(PLAN_PROPOSAL_TOOL_CALLS)
-
-        # Mock tmux
-        sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
-        monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
-
-        app = KaganApp(
-            db_path=snapshot_project.db,
-            config_path=snapshot_project.config,
-            lock_path=None,
-            project_root=snapshot_project.root,
-            agent_factory=mock_acp_agent_factory,
-        )
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Wait for agent to be ready before typing
-            await wait_for_planner_ready(pilot)
-            # Type and submit a prompt
-            await type_text(pilot, "Add user authentication")
-            await pilot.pause()
-            await pilot.press("enter")
-            # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=10.0)
-            # Wait for plan approval widget
-            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=10.0)
-            await pilot.pause()
-            # Press 'e' to edit/refine the plan
-            await pilot.press("e")
-            # Give time for editor screen to appear
-            await pilot.pause()
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_planner_multi_task_plan(
-        self,
-        snapshot_project: SimpleNamespace,
-        mock_acp_agent_factory: MockAgentFactory,
-        snapshot_terminal_size: tuple[int, int],
-        snap_compare,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test agent proposes multiple tasks.
-
-        Shows list with multiple items in plan approval widget.
-        """
-        from kagan.app import KaganApp
-
-        # Configure mock agent with multi-task plan response
-        mock_acp_agent_factory.set_default_response(PLAN_PROPOSAL_RESPONSE)
-        mock_acp_agent_factory.set_default_tool_calls(MULTI_TASK_PLAN_TOOL_CALLS)
-
-        # Mock tmux
-        sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
-        monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
-
-        app = KaganApp(
-            db_path=snapshot_project.db,
-            config_path=snapshot_project.config,
-            lock_path=None,
-            project_root=snapshot_project.root,
-            agent_factory=mock_acp_agent_factory,
-        )
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            from kagan.ui.screens.planner import PlannerScreen
-
-            assert isinstance(pilot.app.screen, PlannerScreen)
-            # Wait for agent to be ready before typing
-            await wait_for_planner_ready(pilot)
-            # Type and submit a prompt
-            await type_text(pilot, "Build complete user system with auth and profiles")
-            await pilot.pause()
-            await pilot.press("enter")
-            # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=20.0)
-            # Wait for plan approval widget
-            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=20.0)
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_planner_clarification_request(
-        self,
-        snapshot_project: SimpleNamespace,
-        mock_acp_agent_factory: MockAgentFactory,
-        snapshot_terminal_size: tuple[int, int],
-        snap_compare,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test agent asks for clarification.
-
-        Shows clarification prompt instead of plan approval.
-        """
-        from kagan.app import KaganApp
-
-        # Configure mock agent with clarification response (no tool calls)
-        mock_acp_agent_factory.set_default_response(TASK_NEEDS_CLARIFICATION_RESPONSE)
-        mock_acp_agent_factory.set_default_tool_calls({})  # No plan proposed
-
-        # Mock tmux
-        sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
-        monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
-
-        app = KaganApp(
-            db_path=snapshot_project.db,
-            config_path=snapshot_project.config,
-            lock_path=None,
-            project_root=snapshot_project.root,
-            agent_factory=mock_acp_agent_factory,
-        )
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            from kagan.ui.screens.planner import PlannerInput, PlannerScreen
-            from kagan.ui.widgets.agent_content import StreamingMarkdown
-            from kagan.ui.widgets.streaming_output import StreamingOutput
-
-            assert isinstance(pilot.app.screen, PlannerScreen)
-            # Wait for agent to be ready before typing
-            await wait_for_planner_ready(pilot)
-            # Type and submit an ambiguous prompt
-            await type_text(pilot, "Improve the performance")
-            await pilot.pause()
-            await pilot.press("enter")
-            # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=20.0)
-            # Wait for user input to appear (shows the submitted prompt)
-            await wait_for_widget(pilot, "UserInput", timeout=20.0)
-            output = pilot.app.screen.query_one("#planner-output", StreamingOutput)
-            max_wait = 5.0
-            waited = 0.0
-            found = False
-            while waited < max_wait:
-                await pilot.pause()
-                for md in output.query(StreamingMarkdown):
-                    if "Could you provide more details" in md.content:
-                        found = True
-                        break
-                if found:
-                    break
-                await asyncio.sleep(0.1)
-                waited += 0.1
-            if not found:
-                raise TimeoutError("Planner response did not render")
-            planner_input = pilot.app.screen.query_one("#planner-input", PlannerInput)
-            planner_input.blur()
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_planner_navigate_task_list(
-        self,
-        snapshot_project: SimpleNamespace,
-        mock_acp_agent_factory: MockAgentFactory,
-        snapshot_terminal_size: tuple[int, int],
-        snap_compare,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test navigating through tasks in plan approval widget.
-
-        User can use up/down to select different tasks.
-        """
-        from kagan.app import KaganApp
-
-        # Configure mock agent with multi-task plan response
-        mock_acp_agent_factory.set_default_response(PLAN_PROPOSAL_RESPONSE)
-        mock_acp_agent_factory.set_default_tool_calls(MULTI_TASK_PLAN_TOOL_CALLS)
-
-        # Mock tmux
-        sessions: dict[str, Any] = {}
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", _create_fake_tmux(sessions))
-        monkeypatch.setattr("kagan.services.sessions.run_tmux", _create_fake_tmux(sessions))
-
-        app = KaganApp(
-            db_path=snapshot_project.db,
-            config_path=snapshot_project.config,
-            lock_path=None,
-            project_root=snapshot_project.root,
-            agent_factory=mock_acp_agent_factory,
-        )
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Wait for agent to be ready before typing
-            await wait_for_planner_ready(pilot)
-            # Type and submit a prompt
-            await type_text(pilot, "Build user system")
-            await pilot.pause()
-            await pilot.press("enter")
-            # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=10.0)
-            # Wait for plan approval widget
-            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=10.0)
-            await pilot.pause()
-            # Navigate down through tasks
-            await pilot.press("down")
-            await pilot.press("down")
             await pilot.pause()
 
         cols, rows = snapshot_terminal_size

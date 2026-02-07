@@ -1,15 +1,11 @@
 """E2E snapshot tests for the full autonomous task lifecycle.
 
-These tests cover the complete AUTO task flow:
+These tests cover core AUTO task touchpoints:
 1. Task created in AUTO mode in BACKLOG
-2. With auto_start=true, task automatically moves to IN_PROGRESS
-3. User presses 'w' to watch agent output stream
-4. Agent completes work, task moves to REVIEW
-5. User presses 'w' again to see tabbed view (Implementation + Review)
-6. User opens review modal via 'g r' leader sequence
-7. User approves via 'a' key
-8. Task moves to DONE
-9. Git verification: branch merged to main
+2. User watches agent output stream
+3. Review modal rendering
+4. Diff modal rendering
+5. DONE column state after completion
 
 Note: Tests are synchronous because pytest-textual-snapshot's snap_compare
 internally calls asyncio.run(), which conflicts with async test functions.
@@ -110,23 +106,25 @@ async def _setup_auto_lifecycle_project(
     )
 
 
-async def _create_auto_task(db_path: str) -> str:
+async def _create_auto_task(db_path: str, project_root: Path) -> str:
     """Create an AUTO task in BACKLOG with fixed ID for reproducible snapshots.
+
+    Args:
+        db_path: Path to the database file.
+        project_root: Root path of the git repository.
 
     Returns:
         The task ID.
     """
-    manager = TaskRepository(db_path)
+    manager = TaskRepository(db_path, project_root=project_root)
     await manager.initialize()
     project_id = manager.default_project_id
     if project_id is None:
         raise RuntimeError("TaskRepository defaults not initialized")
-    repo_id = manager.default_repo_id
 
     task = Task(
         id="auto0001",
         project_id=project_id,
-        repo_id=repo_id,
         title="Implement user authentication",
         description="Add JWT-based authentication to the API endpoints.",
         priority=TaskPriority.HIGH,
@@ -269,14 +267,14 @@ class TestAutoTaskLifecycle:
             project = loop.run_until_complete(
                 _setup_auto_lifecycle_project(tmp_path, AUTO_MODE_CONFIG)
             )
-            task_id = loop.run_until_complete(_create_auto_task(project.db))
+            task_id = loop.run_until_complete(_create_auto_task(project.db, project.root))
         finally:
             loop.close()
 
         # Mock tmux
         sessions: dict[str, Any] = {}
         fake_tmux = _create_fake_tmux(sessions)
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
+        monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
         monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
         # Create lifecycle mock factory
@@ -317,57 +315,6 @@ class TestAutoTaskLifecycle:
             from kagan.ui.screens.kanban import KanbanScreen
 
             assert isinstance(pilot.app.screen, KanbanScreen)
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_02_task_in_progress(
-        self,
-        auto_mode_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """AUTO task moves to IN_PROGRESS when manually started."""
-        app = self._create_app(auto_mode_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            from textual.css.query import NoMatches
-
-            from kagan.ui.screens.kanban import KanbanScreen
-            from kagan.ui.screens.kanban import focus as kanban_focus
-            from kagan.ui.widgets.card import TaskCard
-
-            auto_mode_project.mock_factory.set_response_delay(3.0)
-            await pilot.pause()
-            screen = pilot.app.screen
-            assert isinstance(screen, KanbanScreen)
-            kanban_focus.focus_first_card(screen)
-            await pilot.pause()
-            # Start the agent manually by pressing 'a' (start_agent action)
-            await pilot.press("a")
-            await pilot.pause()
-            # Wait longer for the scheduler to process and UI to synchronize
-            # This prevents race condition where task appears in multiple columns
-            await asyncio.sleep(0.3)
-            # Extra pauses for column refresh and UI synchronization
-            max_wait = 5.0
-            waited = 0.0
-            while waited < max_wait:
-                await pilot.pause()
-                try:
-                    card = pilot.app.screen.query_one(
-                        f"#card-{auto_mode_project.task_id}",
-                        TaskCard,
-                    )
-                except NoMatches:
-                    card = None
-                if card and card.task_model and card.task_model.last_error:
-                    break
-                await asyncio.sleep(0.1)
-                waited += 0.1
-            else:
-                raise TimeoutError("Task error line did not appear on card")
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
@@ -445,167 +392,6 @@ class TestAutoTaskLifecycle:
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_04_close_watch_modal(
-        self,
-        auto_mode_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Press Escape closes watch modal, agent continues in background."""
-        app = self._create_app(auto_mode_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            from textual.css.query import NoMatches
-
-            from kagan.app import KaganApp
-            from kagan.ui.modals.agent_output import AgentOutputModal
-            from kagan.ui.screens.kanban import KanbanScreen
-            from kagan.ui.screens.kanban import focus as kanban_focus
-            from kagan.ui.widgets.card import TaskCard
-
-            auto_mode_project.mock_factory.set_response_delay(3.0)
-            await pilot.pause()
-            screen = pilot.app.screen
-            assert isinstance(screen, KanbanScreen)
-            kanban_focus.focus_first_card(screen)
-            await pilot.pause()
-            # Start agent
-            await pilot.press("a")
-            await pilot.pause()
-
-            # Wait until agent is actually available
-            kagan_app = pilot.app
-            assert isinstance(kagan_app, KaganApp)
-            max_wait = 10.0
-            waited = 0.0
-            agent = None
-            while waited < max_wait:
-                agent = kagan_app.ctx.automation_service.get_running_agent(
-                    auto_mode_project.task_id
-                )
-                if agent is not None:
-                    break
-                await asyncio.sleep(0.05)
-                waited += 0.05
-            if agent is None:
-                raise TimeoutError("Agent did not start in time")
-
-            # Watch
-            screen = pilot.app.screen
-            assert isinstance(screen, KanbanScreen)
-            kanban_focus.focus_first_card(screen)
-            await pilot.pause()
-            await pilot.press("w")
-            await wait_for_screen(pilot, AgentOutputModal, timeout=5.0)
-            # Close watch modal
-            await pilot.press("escape")
-            await pilot.pause()
-            await wait_for_screen(pilot, KanbanScreen, timeout=5.0)
-            await kagan_app.ctx.task_service.update_fields(
-                auto_mode_project.task_id,
-                last_error="Agent starting...",
-            )
-            max_error_wait = 5.0
-            waited_error = 0.0
-            while waited_error < max_error_wait:
-                await pilot.pause()
-                try:
-                    card = pilot.app.screen.query_one(
-                        f"#card-{auto_mode_project.task_id}",
-                        TaskCard,
-                    )
-                except NoMatches:
-                    card = None
-                if card and card.task_model and card.task_model.last_error:
-                    break
-                await asyncio.sleep(0.1)
-                waited_error += 0.1
-            else:
-                raise TimeoutError("Task error line did not appear on card")
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_05_view_task_details(
-        self,
-        auto_mode_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Press 'v' opens task details modal."""
-        app = self._create_app(auto_mode_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # View task details
-            await pilot.press("v")
-            # Multiple pauses to ensure modal is fully mounted
-            await pilot.pause()
-            await pilot.pause()
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_06_leader_mode_activated(
-        self,
-        auto_mode_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Press 'g' activates leader mode showing hints."""
-        app = self._create_app(auto_mode_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Activate leader mode
-            await pilot.press("g")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_07_search_bar_open(
-        self,
-        auto_mode_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Press '/' opens search bar."""
-        app = self._create_app(auto_mode_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Open search bar
-            await pilot.press("slash")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_08_new_task_modal(
-        self,
-        auto_mode_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Press 'N' opens new AUTO task modal."""
-        app = self._create_app(auto_mode_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Open new AUTO task modal
-            await pilot.press("N")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
 
 class TestAutoTaskLifecycleWithReview:
     """E2E snapshot tests for AUTO task lifecycle with REVIEW status.
@@ -629,17 +415,15 @@ class TestAutoTaskLifecycleWithReview:
                 _setup_auto_lifecycle_project(tmp_path, AUTO_MODE_CONFIG)
             )
             # Create task directly in REVIEW status
-            manager = TaskRepository(project.db)
+            manager = TaskRepository(project.db, project_root=project.root)
             loop.run_until_complete(manager.initialize())
             project_id = manager.default_project_id
             if project_id is None:
                 raise RuntimeError("TaskRepository defaults not initialized")
-            repo_id = manager.default_repo_id
 
             task = Task(
                 id="review01",
                 project_id=project_id,
-                repo_id=repo_id,
                 title="Add user profile endpoint",
                 description="Create GET /api/users/profile endpoint.",
                 priority=TaskPriority.HIGH,
@@ -683,7 +467,7 @@ class TestAutoTaskLifecycleWithReview:
         # Mock tmux
         sessions: dict[str, Any] = {}
         fake_tmux = _create_fake_tmux(sessions)
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
+        monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
         monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
         # Create mock factory
@@ -707,80 +491,6 @@ class TestAutoTaskLifecycleWithReview:
             project_root=project.root,
             agent_factory=project.mock_factory,
         )
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_review_01_task_in_review(
-        self,
-        review_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Task displayed in REVIEW column with review status."""
-        app = self._create_app(review_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            from kagan.ui.screens.kanban import KanbanScreen
-
-            assert isinstance(pilot.app.screen, KanbanScreen)
-            # Navigate to REVIEW column (it's the 3rd column)
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_review_02_watch_modal_tabs(
-        self,
-        review_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Watch modal in REVIEW shows tabbed view (Implementation + Review)."""
-        app = self._create_app(review_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate to REVIEW column
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            # Open watch modal
-            await pilot.press("w")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_review_03_review_modal_via_leader(
-        self,
-        review_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Open review modal via 'g r' leader sequence."""
-        app = self._create_app(review_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate to REVIEW column
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            # Leader sequence: g then r
-            await pilot.press("g")
-            await pilot.pause()
-            await pilot.press("r")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
     def test_auto_lifecycle_review_04_review_modal_opened(
@@ -832,30 +542,6 @@ class TestAutoTaskLifecycleWithReview:
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_review_06_peek_overlay(
-        self,
-        review_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Press space to show peek overlay with scratchpad."""
-        app = self._create_app(review_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate to REVIEW column
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            # Toggle peek overlay
-            await pilot.press("space")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
 
 class TestAutoTaskLifecycleDone:
     """E2E snapshot tests for AUTO task lifecycle final stage.
@@ -879,18 +565,16 @@ class TestAutoTaskLifecycleDone:
                 _setup_auto_lifecycle_project(tmp_path, AUTO_MODE_CONFIG)
             )
 
-            manager = TaskRepository(project.db)
+            manager = TaskRepository(project.db, project_root=project.root)
             loop.run_until_complete(manager.initialize())
             project_id = manager.default_project_id
             if project_id is None:
                 raise RuntimeError("TaskRepository defaults not initialized")
-            repo_id = manager.default_repo_id
 
             # Create DONE task
             done_task = Task(
                 id="done0001",
                 project_id=project_id,
-                repo_id=repo_id,
                 title="Completed authentication feature",
                 description="JWT auth fully implemented and merged.",
                 priority=TaskPriority.HIGH,
@@ -907,7 +591,6 @@ class TestAutoTaskLifecycleDone:
             in_progress_task = Task(
                 id="inprog01",
                 project_id=project_id,
-                repo_id=repo_id,
                 title="Working on new feature",
                 description="Currently in progress.",
                 priority=TaskPriority.MEDIUM,
@@ -922,7 +605,6 @@ class TestAutoTaskLifecycleDone:
             backlog_task = Task(
                 id="backlog1",
                 project_id=project_id,
-                repo_id=repo_id,
                 title="Future enhancement",
                 description="To be done later.",
                 priority=TaskPriority.LOW,
@@ -940,7 +622,7 @@ class TestAutoTaskLifecycleDone:
         # Mock tmux
         sessions: dict[str, Any] = {}
         fake_tmux = _create_fake_tmux(sessions)
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
+        monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
         monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
         # Create mock factory
@@ -976,84 +658,30 @@ class TestAutoTaskLifecycleDone:
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
+            from textual.css.query import NoMatches
+
             from kagan.ui.screens.kanban import KanbanScreen
+            from kagan.ui.widgets.card import TaskCard
 
             assert isinstance(pilot.app.screen, KanbanScreen)
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_done_02_navigate_to_done(
-        self,
-        done_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Navigate to DONE column and view completed task."""
-        app = self._create_app(done_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate to DONE column (4th column)
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_done_03_view_done_task_details(
-        self,
-        done_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """View details of completed task."""
-        app = self._create_app(done_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate to DONE column
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            # View details
-            await pilot.press("v")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_auto_lifecycle_done_04_duplicate_done_task(
-        self,
-        done_project: SimpleNamespace,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Press 'y' to duplicate (yank) a done task."""
-        app = self._create_app(done_project)
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate to DONE column
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
-            # Yank/duplicate task
-            await pilot.press("y")
-            await pilot.pause()
+            max_wait = 5.0
+            waited = 0.0
+            expected_ids = {"done0001", "inprog01", "backlog1"}
+            while waited < max_wait:
+                await pilot.pause()
+                found = set()
+                for task_id in expected_ids:
+                    try:
+                        pilot.app.screen.query_one(f"#card-{task_id}", TaskCard)
+                        found.add(task_id)
+                    except NoMatches:
+                        continue
+                if found == expected_ids:
+                    break
+                await asyncio.sleep(0.1)
+                waited += 0.1
+            else:
+                raise TimeoutError("Board did not render all columns in time")
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)

@@ -139,12 +139,12 @@ The **Retry** action resets the iteration counter for a fresh attempt.
 
 ### Debug Log Modal
 
-| Key      | Action                          |
-| -------- | ------------------------------- |
-| `c`      | Clear all logs                  |
+| Key      | Action                                |
+| -------- | ------------------------------------- |
+| `c`      | Clear all logs                        |
 | `s`      | Save logs to XDG data dir `debug.log` |
-| `F12`    | Toggle modal (close)            |
-| `Escape` | Close                           |
+| `F12`    | Toggle modal (close)                  |
+| `Escape` | Close                                 |
 
 ### Settings Modal
 

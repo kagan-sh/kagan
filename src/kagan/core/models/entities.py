@@ -43,7 +43,7 @@ class Project(DomainModel):
     id: str
     name: str
     description: str = ""
-    default_repo_id: str | None = None
+    last_opened_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -51,14 +51,15 @@ class Project(DomainModel):
 class Repo(DomainModel):
     """Repository configuration.
 
-    Relationships: project, tasks, workspaces.
+    Relationships: projects, workspaces.
     """
 
     id: str
-    project_id: str
     name: str
     path: str
+    display_name: str | None = None
     default_branch: str = "main"
+    default_working_dir: str | None = None
     scripts: dict[str, str] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
@@ -67,12 +68,11 @@ class Repo(DomainModel):
 class Task(DomainModel):
     """Unit of work (Kanban card).
 
-    Relationships: project, repo, parent task, workspaces, executions, merge.
+    Relationships: project, parent task, workspaces, executions, merge.
     """
 
     id: str
     project_id: str
-    repo_id: str | None = None
     title: str
     description: str = ""
     status: TaskStatus = TaskStatus.BACKLOG
@@ -106,8 +106,8 @@ class Task(DomainModel):
 
     def get_agent_config(self, config: KaganConfig) -> Any:
         """Resolve agent config with priority order."""
+        from kagan.builtin_agents import get_builtin_agent
         from kagan.config import get_fallback_agent_config
-        from kagan.data.builtin_agents import get_builtin_agent
 
         if self.agent_backend:
             if builtin := get_builtin_agent(self.agent_backend):
@@ -129,7 +129,6 @@ class Workspace(DomainModel):
 
     id: str
     project_id: str
-    repo_id: str
     task_id: str | None = None
     branch_name: str
     path: str
@@ -185,6 +184,10 @@ class Merge(DomainModel):
     id: str
     task_id: str
     workspace_id: str | None = None
+    repo_id: str | None = None
+    strategy: str | None = None
+    target_branch: str | None = None
+    commit_sha: str | None = None
     status: MergeStatus = MergeStatus.PENDING
     readiness: MergeReadiness = MergeReadiness.RISK
     pr_url: str | None = None

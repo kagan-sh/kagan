@@ -22,12 +22,13 @@ from kagan.constants import (
     DEFAULT_LOCK_PATH,
 )
 from kagan.debug_log import setup_debug_logging
-from kagan.git_utils import GitInitResult, has_git_repo, init_git_repo
+from kagan.git_utils import has_git_repo
 from kagan.keybindings import APP_BINDINGS
 from kagan.lock import InstanceLock, exit_if_already_running
 from kagan.terminal import supports_truecolor
 from kagan.theme import KAGAN_THEME, KAGAN_THEME_256
 from kagan.ui.screens.kanban import KanbanScreen
+from kagan.ui.screens.onboarding import OnboardingScreen
 
 if TYPE_CHECKING:
     from kagan.ui.screens.planner.state import PersistentPlannerState
@@ -88,13 +89,16 @@ class KaganApp(App):
         # Check for first boot (no config.toml file)
         # The config directory may already exist (created by lock file),
         # so we check for config.toml specifically
-        if not self.config_path.exists():
-            from kagan.ui.screens.welcome import WelcomeScreen
-
-            await self.push_screen(WelcomeScreen())
-            return  # _continue_after_welcome will be called when welcome finishes
+        if not self._config_exists():
+            # First boot - show onboarding screen to collect initial settings
+            await self.push_screen(OnboardingScreen())
+            return  # _continue_after_onboarding will be called when onboarding finishes
 
         await self._initialize_app()
+
+    def _config_exists(self) -> bool:
+        """Check if the config file exists (determines first boot vs normal boot)."""
+        return self.config_path.exists()
 
     async def _initialize_app(self) -> None:
         """Initialize all app components."""
@@ -102,50 +106,13 @@ class KaganApp(App):
         self.log("Config loaded", path=str(self.config_path))
         self.log.debug("Config settings", auto_start=self.config.general.auto_start)
 
-        project_root = self.project_root
-        if not await has_git_repo(project_root):
-            base_branch = self.config.general.default_base_branch
-            result: GitInitResult = await init_git_repo(project_root, base_branch)
-            if result.success:
-                self.log("Initialized git repository", base_branch=base_branch)
-                if result.committed:
-                    self.notify("Git repository initialized with .gitignore")
-            else:
-                # Show error to user
-                error = result.error
-                if error:
-                    self.log.warning(
-                        "Failed to initialize git repository",
-                        path=str(project_root),
-                        error_type=error.error_type,
-                        message=error.message,
-                    )
-                    # Notify user with specific error message
-                    if error.error_type == "version_low":
-                        self.notify(
-                            f"Git error: {error.message}. {error.details or ''}",
-                            severity="error",
-                        )
-                    elif error.error_type == "user_not_configured":
-                        self.notify(
-                            f"Git error: {error.details or error.message}",
-                            severity="error",
-                        )
-                    else:
-                        self.notify(
-                            f"Git initialization failed: {error.message}",
-                            severity="error",
-                        )
-                else:
-                    self.log.warning("Failed to initialize git repository", path=str(project_root))
-                    self.notify("Git initialization failed", severity="error")
-
         if self._ctx is None:
             self._ctx = await create_app_context(
                 self.config_path,
                 self.db_path,
                 config=self.config,
                 project_root=self.project_root,
+                agent_factory=self._agent_factory,
             )
             ctx = self._ctx
             # Wire signal bridge to map domain events to Textual signals
@@ -174,38 +141,31 @@ class KaganApp(App):
         """Run initialization after welcome screen."""
         await self._initialize_app()
 
+    def on_onboarding_screen_completed(self, message: OnboardingScreen.Completed) -> None:
+        """Handle OnboardingScreen.Completed message."""
+        # Store the config from onboarding
+        self.config = message.config
+        self.call_later(self._continue_after_onboarding)
+
+    async def _continue_after_onboarding(self) -> None:
+        """Called after OnboardingScreen completes to continue startup flow.
+
+        Pops the onboarding screen, reinitializes context (now that config exists),
+        and continues to the normal startup screen decision flow.
+        """
+        # Pop the onboarding screen
+        self.pop_screen()
+
+        # Initialize the app now that config exists
+        await self._initialize_app()
+
     async def _startup_screen_decision(self) -> None:
         """Decide which screen to show on startup based on project context.
 
         Flow:
         1. If CWD is in an existing project → open that project
-        2. If CWD is a git repo not in any project → auto-create single-repo project
+        2. If CWD is a git repo not in any project → show WelcomeScreen with CWD suggestion
         3. Otherwise → show welcome screen for project selection
-        """
-        ctx = self.ctx
-
-        # Try to detect project from current working directory
-        project_id = await self._get_startup_project()
-
-        if project_id:
-            # Found a project - open it and go to Kanban/Planner
-            ctx.active_project_id = project_id
-            await ctx.project_service.open_project(project_id)
-            await self._push_main_screen()
-        else:
-            # No project found - show welcome screen for project selection
-            from kagan.ui.screens.welcome import WelcomeScreen
-
-            await self.push_screen(WelcomeScreen())
-            self.log("WelcomeScreen pushed (project picker mode)")
-
-    async def _get_startup_project(self) -> str | None:
-        """Get the project to open on startup.
-
-        Priority:
-        1. Detect from current working directory
-        2. Auto-create if CWD is a git repo
-        3. Most recently opened project
         """
         ctx = self.ctx
         cwd = self.project_root
@@ -213,26 +173,26 @@ class KaganApp(App):
         # Try to find existing project containing this path
         project = await ctx.project_service.find_project_by_repo_path(str(cwd))
         if project:
+            # CWD is in an existing project - open it
             self.log("Detected project from CWD", project_id=project.id)
-            return project.id
+            ctx.active_project_id = project.id
+            await ctx.project_service.open_project(project.id)
+            await self._push_main_screen()
+            return
 
-        # If CWD is a git repo, auto-create a project for it
-        if await has_git_repo(cwd):
-            project_name = cwd.name or "Default Project"
-            project_id = await ctx.project_service.create_project(
-                name=project_name,
-                repo_paths=[str(cwd)],
-            )
-            self.log("Auto-created project for git repo", project_id=project_id)
-            return project_id
+        # Check if CWD is a git repo not in any project
+        suggest_cwd = await has_git_repo(cwd)
+        cwd_path = str(cwd) if suggest_cwd else None
 
-        # Fall back to most recently opened project
-        recent = await ctx.project_service.list_recent_projects(limit=1)
-        if recent:
-            self.log("Using most recent project", project_id=recent[0].id)
-            return recent[0].id
+        # Show welcome screen (with CWD suggestion if applicable)
+        from kagan.ui.screens.welcome import WelcomeScreen
 
-        return None
+        await self.push_screen(WelcomeScreen(suggest_cwd=suggest_cwd, cwd_path=cwd_path))
+        self.log(
+            "WelcomeScreen pushed",
+            suggest_cwd=suggest_cwd,
+            cwd_path=cwd_path,
+        )
 
     async def _push_main_screen(self) -> None:
         """Push the main screen (Planner if empty, Kanban otherwise)."""
@@ -263,7 +223,7 @@ class KaganApp(App):
 
     async def _reconcile_sessions(self) -> None:
         """Kill orphaned tmux sessions from previous runs."""
-        from kagan.sessions.tmux import TmuxError, run_tmux
+        from kagan.tmux import TmuxError, run_tmux
 
         state = self.ctx.task_service
         try:

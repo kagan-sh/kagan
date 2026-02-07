@@ -116,7 +116,7 @@ markers = [
     "e2e: full application tests",
     "property: property-based tests with hypothesis",
 ]
-addopts = "-n auto"
+addopts = ""
 
 [tool.coverage.run]
 source = ["src/kagan"]

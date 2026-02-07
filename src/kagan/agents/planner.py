@@ -335,7 +335,6 @@ class PlanProposal(BaseModel):
                 Task(
                     id=uuid4().hex[:8],
                     project_id="plan",
-                    repo_id=None,
                     title=item.title[:200],
                     description=item.description,
                     status=TaskStatus.BACKLOG,

@@ -206,10 +206,7 @@ class AgentOutputModal(ModalScreen[None]):
     async def _load_historical_log(
         self, output: StreamingOutput, log_entry: AgentTurn, show_iteration_header: bool = True
     ) -> None:
-        """Load a historical log entry into a StreamingOutput widget.
-
-        Handles both JSON format (new) and plain text (legacy) logs.
-        """
+        """Load a historical log entry into a StreamingOutput widget."""
         if show_iteration_header:
             await output.post_note(f"--- Iteration {log_entry.sequence} ---", classes="info")
 
@@ -257,8 +254,10 @@ class AgentOutputModal(ModalScreen[None]):
                     await output.post_response(response_text)
 
         except json.JSONDecodeError:
-            # Fallback for legacy plain-text logs
-            await output.post_response(log_entry.content)
+            await output.post_note(
+                "Unsupported log format (expected JSON).",
+                classes="warning",
+            )
 
     # ACP Message handlers
 

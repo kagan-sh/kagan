@@ -191,7 +191,10 @@ class StreamingOutput(VerticalScroll):
         return self._agent_thought
 
     async def post_tool_call(self, tool_id: str, title: str, kind: str = "") -> ToolCall:
-        """Post a tool call notification."""
+        """Post a tool call notification.
+
+        Idempotent: returns existing widget if tool_id already exists.
+        """
         await self._remove_thinking_indicator()
         self._agent_response = None
         self._agent_thought = None
@@ -199,6 +202,20 @@ class StreamingOutput(VerticalScroll):
         # Generate unique ID if tool_id is unknown/empty
         if not tool_id or tool_id == "unknown":
             tool_id = f"auto-{uuid4().hex[:8]}"
+        elif tool_id in self._tool_calls:
+            # Avoid duplicate widget IDs for repeated tool call messages.
+            # Return existing widget - this makes the method idempotent.
+            return self._tool_calls[tool_id]
+
+        # Double-check DOM for existing widget (defensive against race conditions)
+        widget_id = f"tool-{tool_id}"
+        try:
+            existing = self.query_one(f"#{widget_id}", ToolCall)
+            # Widget exists in DOM but not in our tracking dict - add it back
+            self._tool_calls[tool_id] = existing
+            return existing
+        except Exception:
+            pass  # Widget doesn't exist in DOM, proceed to create
 
         tool_data = AcpToolCall(
             toolCallId=tool_id,
@@ -206,7 +223,7 @@ class StreamingOutput(VerticalScroll):
             kind=cast("Any", kind) if kind else None,
             status="pending",
         )
-        widget = ToolCall(tool_data, id=f"tool-{tool_id}")
+        widget = ToolCall(tool_data, id=widget_id)
         self._tool_calls[tool_id] = widget
 
         # Evict oldest entries if over limit

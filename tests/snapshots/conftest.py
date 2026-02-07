@@ -486,7 +486,7 @@ async def snapshot_app(
     # Mock tmux
     sessions: dict[str, dict[str, Any]] = {}
     fake_tmux = _create_fake_tmux(sessions)
-    monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
+    monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
     monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
     app = KaganApp(

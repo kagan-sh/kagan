@@ -5,12 +5,12 @@ Kagan configuration lives in the XDG config directory, created automatically on 
 
 ## File Locations
 
-| Path                                 | Purpose         |
-| ------------------------------------ | --------------- |
-| XDG config dir `config.toml`         | Configuration   |
-| XDG data dir `kagan.db`              | Task database   |
-| XDG data dir `kagan.lock`            | Single-instance |
-| Temp dir `kagan/worktrees/`          | Git worktrees   |
+| Path                         | Purpose         |
+| ---------------------------- | --------------- |
+| XDG config dir `config.toml` | Configuration   |
+| XDG data dir `kagan.db`      | Task database   |
+| XDG data dir `kagan.lock`    | Single-instance |
+| Temp dir `kagan/worktrees/`  | Git worktrees   |
 
 ## General Settings
 

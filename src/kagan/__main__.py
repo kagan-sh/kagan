@@ -118,7 +118,7 @@ def tui(db: str, config: str, skip_preflight: bool, skip_update_check: bool) -> 
 
     # Run pre-flight checks unless skipped
     if not skip_preflight:
-        from kagan.data.builtin_agents import (
+        from kagan.builtin_agents import (
             any_agent_available,
             get_first_available_agent,
         )

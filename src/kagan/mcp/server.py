@@ -6,36 +6,41 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-from kagan.adapters.db.repositories import TaskRepository
 from kagan.agents import planner as planner_models
-from kagan.bootstrap import InMemoryEventBus
+from kagan.bootstrap import AppContext, create_app_context
 from kagan.git_utils import has_git_repo
 from kagan.mcp.tools import KaganMCPServer
-from kagan.paths import get_database_path
-from kagan.services.tasks import TaskServiceImpl
+from kagan.paths import get_config_path, get_database_path
 
-_state_manager: TaskServiceImpl | None = None
+_app_context: AppContext | None = None
 _server: KaganMCPServer | None = None
 
 
-async def _get_state_manager() -> TaskServiceImpl:
-    """Get or create the global TaskService."""
-    global _state_manager
-    if _state_manager is None:
+async def _get_app_context() -> AppContext:
+    """Get or create the global AppContext."""
+    global _app_context
+    if _app_context is None:
         project_root = Path.cwd()
         if not await has_git_repo(project_root):
             raise RuntimeError("Not in a git repository")
-        repo = TaskRepository(get_database_path(), project_root=project_root)
-        await repo.initialize()
-        _state_manager = TaskServiceImpl(repo, InMemoryEventBus())
-    return _state_manager
+        _app_context = await create_app_context(
+            get_config_path(),
+            get_database_path(),
+            project_root=project_root,
+        )
+    return _app_context
 
 
 async def _get_server() -> KaganMCPServer:
     """Get or create the MCP server wrapper."""
     global _server
     if _server is None:
-        _server = KaganMCPServer(await _get_state_manager())
+        ctx = await _get_app_context()
+        _server = KaganMCPServer(
+            ctx.task_service,
+            workspace_service=ctx.workspace_service,
+            project_service=ctx.project_service,
+        )
     return _server
 
 
@@ -102,8 +107,8 @@ def _create_mcp_server(readonly: bool = False) -> FastMCP:
 
 def main(readonly: bool = False) -> None:
     """Entry point for kagan-mcp command."""
-    global _state_manager, _server
-    _state_manager = None  # Reset for fresh instance
+    global _app_context, _server
+    _app_context = None  # Reset for fresh instance
     _server = None
     mcp = _create_mcp_server(readonly=readonly)
     mcp.run(transport="stdio")

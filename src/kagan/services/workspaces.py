@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from sqlmodel import select
+from sqlmodel import col, select
 
-from kagan.adapters.git.worktrees import GitWorktreeAdapter
-from kagan.core.events import WorkspaceProvisioned, WorkspaceReleased
+from kagan.core.events import WorkspaceProvisioned, WorkspaceReleased, WorkspaceRepoStatus
 from kagan.core.models.entities import Workspace as DomainWorkspace
 from kagan.core.models.enums import WorkspaceStatus
 from kagan.paths import get_worktree_base_dir
@@ -22,7 +20,9 @@ from kagan.paths import get_worktree_base_dir
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+    from kagan.adapters.db.schema import Repo, WorkspaceRepo
     from kagan.adapters.db.schema import Workspace as DbWorkspace
+    from kagan.adapters.git.worktrees import GitWorktreeAdapter
     from kagan.core.models.entities import Workspace
     from kagan.services.projects import ProjectService
     from kagan.services.tasks import TaskService
@@ -85,7 +85,7 @@ class WorkspaceService(Protocol):
     ) -> list[Workspace]:
         """List workspaces filtered by task or repo."""
 
-    async def create(self, task_id: TaskId, title: str, base_branch: str = "main") -> Path:
+    async def create(self, task_id: TaskId, base_branch: str = "main") -> Path:
         """Create a worktree for the task and return its path."""
 
     async def delete(self, task_id: TaskId, *, delete_branch: bool = False) -> None:
@@ -93,9 +93,6 @@ class WorkspaceService(Protocol):
 
     async def get_path(self, task_id: TaskId) -> Path | None:
         """Return the worktree path, if it exists."""
-
-    async def get_branch_name(self, task_id: TaskId) -> str | None:
-        """Return the branch name for a worktree."""
 
     async def get_commit_log(self, task_id: TaskId, base_branch: str = "main") -> list[str]:
         """Return commit messages for the task worktree."""
@@ -120,9 +117,6 @@ class WorkspaceService(Protocol):
     async def cleanup_orphans(self, valid_task_ids: set[TaskId]) -> list[str]:
         """Remove worktrees not associated with any known task."""
 
-    async def preflight_merge(self, task_id: TaskId, base_branch: str = "main") -> tuple[bool, str]:
-        """Check whether merging would conflict."""
-
     async def rebase_onto_base(
         self, task_id: TaskId, base_branch: str = "main"
     ) -> tuple[bool, str, list[str]]:
@@ -132,15 +126,6 @@ class WorkspaceService(Protocol):
         self, task_id: TaskId, base_branch: str = "main"
     ) -> list[str]:
         """Return files changed on the base branch since divergence."""
-
-    async def merge_to_main(
-        self,
-        task_id: TaskId,
-        base_branch: str = "main",
-        squash: bool = True,
-        allow_conflicts: bool = True,
-    ) -> tuple[bool, str]:
-        """Merge the worktree branch via the merge worktree."""
 
 
 class WorkspaceServiceImpl:
@@ -175,8 +160,9 @@ class WorkspaceServiceImpl:
         branch_name: str | None = None,
     ) -> str:
         """Provision a workspace with worktrees for all repos."""
-        from kagan.adapters.db.schema import Workspace, WorkspaceRepo
         import uuid
+
+        from kagan.adapters.db.schema import Workspace, WorkspaceRepo
 
         if not repos:
             raise ValueError("At least one repo is required to provision a workspace")
@@ -194,7 +180,6 @@ class WorkspaceServiceImpl:
         workspace = Workspace(
             id=workspace_id,
             project_id=task.project_id,
-            repo_id=repos[0].repo_id,
             task_id=task_id,
             path=str(base_dir),
             branch_name=branch_name,
@@ -262,7 +247,7 @@ class WorkspaceServiceImpl:
                 select(ProjectRepo, Repo)
                 .join(Repo)
                 .where(ProjectRepo.project_id == project_id)
-                .order_by(ProjectRepo.display_order)
+                .order_by(col(ProjectRepo.display_order))
             )
             project_repos = result.all()
 
@@ -338,43 +323,49 @@ class WorkspaceServiceImpl:
 
         items: list[dict] = []
         for workspace_repo, repo in results:
-            has_changes = await self._has_changes(workspace_repo.worktree_path)
             diff_stats = None
-            if has_changes and workspace_repo.worktree_path:
+            has_changes = False
+            if workspace_repo.worktree_path:
+                has_uncommitted = await self._git.has_uncommitted_changes(
+                    workspace_repo.worktree_path
+                )
                 diff_stats = await self._git.get_diff_stats(
                     workspace_repo.worktree_path,
                     workspace_repo.target_branch,
                 )
-            items.append(
-                {
-                    "repo_id": repo.id,
-                    "repo_name": repo.name,
-                    "repo_path": repo.path,
-                    "worktree_path": workspace_repo.worktree_path,
-                    "target_branch": workspace_repo.target_branch,
-                    "has_changes": has_changes,
-                    "diff_stats": diff_stats,
-                }
+                diff_files = int(diff_stats.get("files", 0)) if diff_stats else 0
+                diff_insertions = int(diff_stats.get("insertions", 0)) if diff_stats else 0
+                diff_deletions = int(diff_stats.get("deletions", 0)) if diff_stats else 0
+                has_changes = bool(
+                    has_uncommitted or diff_files or diff_insertions or diff_deletions
+                )
+            item = {
+                "repo_id": repo.id,
+                "repo_name": repo.name,
+                "repo_path": repo.path,
+                "worktree_path": workspace_repo.worktree_path,
+                "target_branch": workspace_repo.target_branch,
+                "has_changes": has_changes,
+                "diff_stats": diff_stats,
+            }
+            items.append(item)
+            await self._events.publish(
+                WorkspaceRepoStatus(
+                    workspace_id=workspace_id,
+                    repo_id=repo.id,
+                    has_changes=has_changes,
+                    diff_stats=diff_stats,
+                )
             )
 
         return items
 
     async def get_agent_working_dir(self, workspace_id: str) -> Path:
         """Get working directory for agents (primary repo's worktree)."""
-        workspace = await self._get_workspace(workspace_id)
-        if workspace is None:
-            raise ValueError(f"Workspace {workspace_id} not found")
-
-        repos = await self.get_workspace_repos(workspace_id)
-        if not repos:
+        primary_repo = await self._get_primary_workspace_repo(workspace_id)
+        if primary_repo is None or not primary_repo.worktree_path:
             raise ValueError(f"Workspace {workspace_id} has no repos")
-
-        if workspace.repo_id:
-            for repo in repos:
-                if repo["repo_id"] == workspace.repo_id:
-                    return Path(repo["worktree_path"])
-
-        return Path(repos[0]["worktree_path"])
+        return Path(primary_repo.worktree_path)
 
     async def get_workspace(self, workspace_id: str) -> Workspace | None:
         workspace = await self._get_workspace(workspace_id)
@@ -388,20 +379,21 @@ class WorkspaceServiceImpl:
         task_id: str | None = None,
         repo_id: str | None = None,
     ) -> list[Workspace]:
-        from kagan.adapters.db.schema import Workspace
+        from kagan.adapters.db.schema import Workspace, WorkspaceRepo
 
         async with self._get_session() as session:
-            statement = select(Workspace).order_by(Workspace.created_at.desc())
+            statement = select(Workspace).order_by(col(Workspace.created_at).desc())
             if task_id is not None:
                 statement = statement.where(Workspace.task_id == task_id)
             if repo_id is not None:
-                statement = statement.where(Workspace.repo_id == repo_id)
+                statement = (
+                    statement.join(WorkspaceRepo).where(WorkspaceRepo.repo_id == repo_id).distinct()
+                )
             result = await session.execute(statement)
             return [DomainWorkspace.model_validate(item) for item in result.scalars().all()]
 
-    async def create(self, task_id: str, title: str, base_branch: str = "main") -> Path:
+    async def create(self, task_id: str, base_branch: str = "main") -> Path:
         """Create a workspace for the task and return primary worktree path."""
-        del title
         task = await self._tasks.get_task(task_id)
         if task is None:
             raise ValueError(f"Task {task_id} not found")
@@ -434,52 +426,102 @@ class WorkspaceServiceImpl:
             return None
         return await self.get_agent_working_dir(workspace.id)
 
-    async def get_branch_name(self, task_id: str) -> str | None:
-        workspace = await self._get_latest_workspace_for_task(task_id)
-        if workspace is None:
-            return None
-        return workspace.branch_name
-
     async def get_commit_log(self, task_id: str, base_branch: str = "main") -> list[str]:
         workspace = await self._get_latest_workspace_for_task(task_id)
         if workspace is None:
             return []
-        worktree_path = await self.get_agent_working_dir(workspace.id)
-        target_branch = await self._get_primary_target_branch(workspace.id, base_branch)
-        return await self._git.get_commit_log(str(worktree_path), target_branch)
+        repo_rows = await self._get_workspace_repo_rows(workspace.id)
+        commits: list[str] = []
+        for workspace_repo, repo in repo_rows:
+            if not workspace_repo.worktree_path:
+                continue
+            target_branch = workspace_repo.target_branch or base_branch
+            repo_commits = await self._git.get_commit_log(
+                workspace_repo.worktree_path,
+                target_branch,
+            )
+            commits.extend([f"[{repo.name}] {commit}" for commit in repo_commits])
+        return commits
 
     async def get_diff(self, task_id: str, base_branch: str = "main") -> str:
         workspace = await self._get_latest_workspace_for_task(task_id)
         if workspace is None:
             return ""
-        worktree_path = await self.get_agent_working_dir(workspace.id)
-        target_branch = await self._get_primary_target_branch(workspace.id, base_branch)
-        return await self._git.get_diff(str(worktree_path), target_branch)
+        repo_rows = await self._get_workspace_repo_rows(workspace.id)
+        chunks: list[str] = []
+        for workspace_repo, repo in repo_rows:
+            if not workspace_repo.worktree_path:
+                continue
+            target_branch = workspace_repo.target_branch or base_branch
+            diff = await self._git.get_diff(workspace_repo.worktree_path, target_branch)
+            if not diff.strip():
+                continue
+            chunks.append(f"# === {repo.name} ({target_branch}) ===")
+            chunks.append(diff.rstrip())
+            chunks.append("")
+        return "\n".join(chunks).strip()
 
     async def get_diff_stats(self, task_id: str, base_branch: str = "main") -> str:
         workspace = await self._get_latest_workspace_for_task(task_id)
         if workspace is None:
             return ""
-        worktree_path = await self.get_agent_working_dir(workspace.id)
-        target_branch = await self._get_primary_target_branch(workspace.id, base_branch)
-        stdout, _ = await self._run_git(
-            "diff", "--stat", f"{target_branch}..HEAD", cwd=worktree_path, check=False
-        )
-        return stdout.strip()
+        repo_rows = await self._get_workspace_repo_rows(workspace.id)
+        summary_lines: list[str] = []
+        total_files = 0
+        total_insertions = 0
+        total_deletions = 0
+        for workspace_repo, repo in repo_rows:
+            if not workspace_repo.worktree_path:
+                continue
+            target_branch = workspace_repo.target_branch or base_branch
+            stats = await self._git.get_diff_stats(
+                workspace_repo.worktree_path,
+                target_branch,
+            )
+            files = int(stats.get("files", 0))
+            insertions = int(stats.get("insertions", 0))
+            deletions = int(stats.get("deletions", 0))
+            total_files += files
+            total_insertions += insertions
+            total_deletions += deletions
+            if files or insertions or deletions:
+                summary_lines.append(f"{repo.name}: +{insertions} -{deletions} ({files} files)")
+            else:
+                summary_lines.append(f"{repo.name}: no changes")
+
+        if not summary_lines:
+            return ""
+        if len(summary_lines) > 1:
+            summary_lines.append(
+                f"Total: +{total_insertions} -{total_deletions} ({total_files} files)"
+            )
+        return "\n".join(summary_lines)
 
     async def get_files_changed(self, task_id: str, base_branch: str = "main") -> list[str]:
         workspace = await self._get_latest_workspace_for_task(task_id)
         if workspace is None:
             return []
-        worktree_path = await self.get_agent_working_dir(workspace.id)
-        target_branch = await self._get_primary_target_branch(workspace.id, base_branch)
-        return await self._git.get_files_changed(str(worktree_path), target_branch)
+        repo_rows = await self._get_workspace_repo_rows(workspace.id)
+        files: list[str] = []
+        for workspace_repo, repo in repo_rows:
+            if not workspace_repo.worktree_path:
+                continue
+            target_branch = workspace_repo.target_branch or base_branch
+            repo_files = await self._git.get_files_changed(
+                workspace_repo.worktree_path,
+                target_branch,
+            )
+            files.extend([f"{repo.name}:{path}" for path in repo_files])
+        return files
 
     async def get_merge_worktree_path(self, task_id: str, base_branch: str = "main") -> Path:
         workspace = await self._get_latest_workspace_for_task(task_id)
         if workspace is None:
             raise ValueError(f"Workspace not found for task {task_id}")
-        return await self._ensure_merge_worktree(workspace.repo_id, base_branch, workspace)
+        primary_repo = await self._get_primary_workspace_repo(workspace.id)
+        if primary_repo is None:
+            raise ValueError(f"Workspace {workspace.id} has no repos")
+        return await self._ensure_merge_worktree(primary_repo.repo_id, base_branch, workspace)
 
     async def prepare_merge_conflicts(
         self, task_id: str, base_branch: str = "main"
@@ -489,7 +531,10 @@ class WorkspaceServiceImpl:
             return False, f"Workspace not found for task {task_id}"
         branch_name = workspace.branch_name
 
-        merge_path = await self._ensure_merge_worktree(workspace.repo_id, base_branch, workspace)
+        primary_repo = await self._get_primary_workspace_repo(workspace.id)
+        if primary_repo is None:
+            return False, f"Workspace {workspace.id} has no repos"
+        merge_path = await self._ensure_merge_worktree(primary_repo.repo_id, base_branch, workspace)
         if await self._merge_in_progress(merge_path):
             return True, "Merge already in progress"
 
@@ -526,39 +571,6 @@ class WorkspaceServiceImpl:
 
         return cleaned
 
-    async def preflight_merge(self, task_id: str, base_branch: str = "main") -> tuple[bool, str]:
-        workspace = await self._get_latest_workspace_for_task(task_id)
-        if workspace is None:
-            return False, f"Workspace not found for task {task_id}"
-
-        branch_name = workspace.branch_name
-        merge_path = await self._ensure_merge_worktree(workspace.repo_id, base_branch, workspace)
-
-        try:
-            if await self._merge_in_progress(merge_path):
-                return False, "Merge worktree has unresolved conflicts. Resolve before merging."
-
-            await self._reset_merge_worktree(merge_path, base_branch)
-            await self._run_git(
-                "merge",
-                "--no-commit",
-                "--no-ff",
-                branch_name,
-                cwd=merge_path,
-                check=False,
-            )
-
-            status_out, _ = await self._run_git("status", "--porcelain", cwd=merge_path)
-            if any(marker in status_out for marker in ("UU ", "AA ", "DD ")):
-                await self._run_git("merge", "--abort", cwd=merge_path, check=False)
-                return False, "Merge conflict predicted. Please resolve before merging."
-
-            await self._run_git("merge", "--abort", cwd=merge_path, check=False)
-            return True, "Preflight clean"
-        except Exception as exc:
-            await self._run_git("merge", "--abort", cwd=merge_path, check=False)
-            return False, f"Preflight failed: {exc}"
-
     async def rebase_onto_base(
         self, task_id: str, base_branch: str = "main"
     ) -> tuple[bool, str, list[str]]:
@@ -566,35 +578,63 @@ class WorkspaceServiceImpl:
         if workspace is None:
             return False, f"Workspace not found for task {task_id}", []
 
-        wt_path = await self.get_agent_working_dir(workspace.id)
+        repo_rows = await self._get_workspace_repo_rows(workspace.id)
+        if not repo_rows:
+            return False, f"Workspace {workspace.id} has no repos", []
+
         try:
-            await self._run_git("fetch", "origin", base_branch, cwd=wt_path, check=False)
+            for workspace_repo, repo in repo_rows:
+                if not workspace_repo.worktree_path:
+                    continue
+                target_branch = workspace_repo.target_branch or base_branch
+                wt_path = Path(workspace_repo.worktree_path)
+                await self._run_git("fetch", "origin", target_branch, cwd=wt_path, check=False)
 
-            status_out, _ = await self._run_git("status", "--porcelain", cwd=wt_path)
-            if status_out.strip():
-                return False, "Cannot rebase: worktree has uncommitted changes", []
-
-            stdout, stderr = await self._run_git(
-                "rebase", f"origin/{base_branch}", cwd=wt_path, check=False
-            )
-            combined_output = f"{stdout}\n{stderr}".lower()
-            if "conflict" in combined_output or "could not apply" in combined_output:
                 status_out, _ = await self._run_git("status", "--porcelain", cwd=wt_path)
-                conflicting_files = []
-                for line in status_out.split("\n"):
-                    if line.startswith("UU ") or line.startswith("AA ") or line.startswith("DD "):
-                        conflicting_files.append(line[3:].strip())
+                if status_out.strip():
+                    return (
+                        False,
+                        f"Cannot rebase: {repo.name} has uncommitted changes",
+                        [],
+                    )
 
-                await self._run_git("rebase", "--abort", cwd=wt_path, check=False)
-                return (
-                    False,
-                    f"Rebase conflict in {len(conflicting_files)} file(s)",
-                    conflicting_files,
+                stdout, stderr = await self._run_git(
+                    "rebase",
+                    f"origin/{target_branch}",
+                    cwd=wt_path,
+                    check=False,
                 )
+                combined_output = f"{stdout}\n{stderr}".lower()
+                if "conflict" in combined_output or "could not apply" in combined_output:
+                    status_out, _ = await self._run_git("status", "--porcelain", cwd=wt_path)
+                    conflicting_files: list[str] = []
+                    for line in status_out.split("\n"):
+                        if (
+                            line.startswith("UU ")
+                            or line.startswith("AA ")
+                            or line.startswith("DD ")
+                        ):
+                            conflicting_files.append(f"{repo.name}:{line[3:].strip()}")
+
+                    await self._run_git("rebase", "--abort", cwd=wt_path, check=False)
+                    return (
+                        False,
+                        f"Rebase conflict in {repo.name} ({len(conflicting_files)} file(s))",
+                        conflicting_files,
+                    )
 
             return True, f"Successfully rebased onto {base_branch}", []
         except Exception as exc:
-            await self._run_git("rebase", "--abort", cwd=wt_path, check=False)
+            with contextlib.suppress(Exception):
+                for workspace_repo, _repo in repo_rows:
+                    if not workspace_repo.worktree_path:
+                        continue
+                    await self._run_git(
+                        "rebase",
+                        "--abort",
+                        cwd=Path(workspace_repo.worktree_path),
+                        check=False,
+                    )
             return False, f"Rebase failed: {exc}", []
 
     async def get_files_changed_on_base(self, task_id: str, base_branch: str = "main") -> list[str]:
@@ -602,104 +642,54 @@ class WorkspaceServiceImpl:
         if workspace is None:
             return []
 
-        wt_path = await self.get_agent_working_dir(workspace.id)
+        repo_rows = await self._get_workspace_repo_rows(workspace.id)
         try:
-            merge_base_out, _ = await self._run_git(
-                "merge-base", "HEAD", f"origin/{base_branch}", cwd=wt_path, check=False
-            )
-            if not merge_base_out.strip():
-                return []
+            files: list[str] = []
+            for workspace_repo, repo in repo_rows:
+                if not workspace_repo.worktree_path:
+                    continue
+                target_branch = workspace_repo.target_branch or base_branch
+                wt_path = Path(workspace_repo.worktree_path)
+                merge_base_out, _ = await self._run_git(
+                    "merge-base",
+                    "HEAD",
+                    f"origin/{target_branch}",
+                    cwd=wt_path,
+                    check=False,
+                )
+                if not merge_base_out.strip():
+                    continue
 
-            merge_base = merge_base_out.strip()
-            diff_out, _ = await self._run_git(
-                "diff", "--name-only", merge_base, f"origin/{base_branch}", cwd=wt_path
-            )
-            if not diff_out.strip():
-                return []
+                merge_base = merge_base_out.strip()
+                diff_out, _ = await self._run_git(
+                    "diff",
+                    "--name-only",
+                    merge_base,
+                    f"origin/{target_branch}",
+                    cwd=wt_path,
+                )
+                if not diff_out.strip():
+                    continue
 
-            return [line.strip() for line in diff_out.split("\n") if line.strip()]
+                repo_files = [line.strip() for line in diff_out.split("\n") if line.strip()]
+                files.extend([f"{repo.name}:{path}" for path in repo_files])
+
+            return files
         except Exception:
             return []
 
-    async def merge_to_main(
-        self,
-        task_id: str,
-        base_branch: str = "main",
-        squash: bool = True,
-        allow_conflicts: bool = True,
-    ) -> tuple[bool, str]:
-        workspace = await self._get_latest_workspace_for_task(task_id)
-        if workspace is None:
-            return False, f"Workspace not found for task {task_id}"
+    async def _get_workspace_repo_rows(self, workspace_id: str) -> list[tuple[WorkspaceRepo, Repo]]:
+        from kagan.adapters.db.schema import Repo, WorkspaceRepo
 
-        wt_path = await self.get_agent_working_dir(workspace.id)
-        branch_name = workspace.branch_name
-        repo_id = workspace.repo_id
-        merge_path = await self._ensure_merge_worktree(workspace.repo_id, base_branch, workspace)
-
-        try:
-            if await self._merge_in_progress(merge_path):
-                if not allow_conflicts:
-                    return False, "Merge worktree has unresolved conflicts. Resolve before merging."
-
-                status_out, _ = await self._run_git("status", "--porcelain", cwd=merge_path)
-                if any(marker in status_out for marker in ("UU ", "AA ", "DD ")):
-                    return False, "Merge conflicts still unresolved. Finish resolution first."
-
-                commits = await self.get_commit_log(task_id, base_branch)
-                if commits:
-                    title = self._format_title_from_branch(branch_name)
-                    staged, _ = await self._run_git(
-                        "diff", "--cached", "--name-only", cwd=merge_path
-                    )
-                    if staged.strip():
-                        commit_msg = await self._generate_semantic_commit(task_id, title, commits)
-                        await self._run_git("commit", "-m", commit_msg, cwd=merge_path)
-
-                return await self._fast_forward_base(
-                    base_branch, repo_root=wt_path, repo_id=repo_id
-                )
-
-            await self._reset_merge_worktree(merge_path, base_branch)
-
-            commits = await self.get_commit_log(task_id, base_branch)
-            if not commits:
-                return False, f"No commits to merge for task {task_id}"
-
-            title = self._format_title_from_branch(branch_name)
-
-            if squash:
-                await self._run_git("merge", "--squash", branch_name, cwd=merge_path, check=False)
-                status_out, _ = await self._run_git("status", "--porcelain", cwd=merge_path)
-                if any(marker in status_out for marker in ("UU ", "AA ", "DD ")):
-                    if not allow_conflicts:
-                        await self._run_git("merge", "--abort", cwd=merge_path, check=False)
-                    return False, "Merge conflict detected. Resolve in merge worktree."
-
-                commit_msg = await self._generate_semantic_commit(task_id, title, commits)
-                await self._run_git("commit", "-m", commit_msg, cwd=merge_path)
-            else:
-                stdout, stderr = await self._run_git(
-                    "merge",
-                    branch_name,
-                    "-m",
-                    f"Merge branch '{branch_name}'",
-                    cwd=merge_path,
-                    check=False,
-                )
-                if "CONFLICT" in stderr or "CONFLICT" in stdout:
-                    if not allow_conflicts:
-                        await self._run_git("merge", "--abort", cwd=merge_path, check=False)
-                    return False, "Merge conflict detected. Resolve in merge worktree."
-
-            return await self._fast_forward_base(base_branch, repo_root=wt_path, repo_id=repo_id)
-        except Exception as exc:
-            return False, f"Merge failed: {exc}"
-
-    async def _has_changes(self, worktree_path: str | None) -> bool:
-        if not worktree_path or not Path(worktree_path).exists():
-            return False
-        return await self._git.has_uncommitted_changes(worktree_path)
+        async with self._get_session() as session:
+            result = await session.execute(
+                select(WorkspaceRepo, Repo)
+                .join(Repo)
+                .where(WorkspaceRepo.workspace_id == workspace_id)
+                .order_by(col(WorkspaceRepo.created_at).asc())
+            )
+            rows = result.all()
+            return [(row[0], row[1]) for row in rows]
 
     async def _get_workspace(self, workspace_id: str) -> DbWorkspace | None:
         from kagan.adapters.db.schema import Workspace
@@ -714,24 +704,39 @@ class WorkspaceServiceImpl:
             result = await session.execute(
                 select(Workspace)
                 .where(Workspace.task_id == task_id)
-                .order_by(Workspace.created_at.desc())
+                .order_by(col(Workspace.created_at).desc())
             )
             return result.scalars().first()
 
-    async def _get_primary_target_branch(self, workspace_id: str, fallback: str) -> str:
-        from kagan.adapters.db.schema import WorkspaceRepo
+    async def _get_primary_workspace_repo(self, workspace_id: str) -> WorkspaceRepo | None:
+        from kagan.adapters.db.schema import ProjectRepo, Workspace, WorkspaceRepo
 
         async with self._get_session() as session:
+            workspace = await session.get(Workspace, workspace_id)
+            if workspace is None:
+                return None
+
+            result = await session.execute(
+                select(WorkspaceRepo)
+                .join(ProjectRepo, col(ProjectRepo.repo_id) == col(WorkspaceRepo.repo_id))
+                .where(WorkspaceRepo.workspace_id == workspace_id)
+                .where(ProjectRepo.project_id == workspace.project_id)
+                .order_by(
+                    col(ProjectRepo.is_primary).desc(),
+                    col(ProjectRepo.display_order).asc(),
+                    col(WorkspaceRepo.created_at).asc(),
+                )
+            )
+            primary = result.scalars().first()
+            if primary:
+                return primary
+
             result = await session.execute(
                 select(WorkspaceRepo)
                 .where(WorkspaceRepo.workspace_id == workspace_id)
-                .order_by(WorkspaceRepo.created_at.asc())
+                .order_by(col(WorkspaceRepo.created_at).asc())
             )
-            workspace_repo = result.scalars().first()
-
-        if workspace_repo and workspace_repo.target_branch:
-            return workspace_repo.target_branch
-        return fallback
+            return result.scalars().first()
 
     async def _ensure_merge_worktree(
         self, repo_id: str, base_branch: str, workspace: DbWorkspace
@@ -788,37 +793,6 @@ class WorkspaceServiceImpl:
         )
         return bool(stdout.strip())
 
-    async def _fast_forward_base(
-        self, base_branch: str, repo_root: Path, repo_id: str
-    ) -> tuple[bool, str]:
-        resolved_root = self._resolve_repo_root(repo_root)
-        status_out, _ = await self._run_git("status", "--porcelain", cwd=resolved_root, check=False)
-        if status_out.strip():
-            return False, (
-                "Cannot update base branch: repository has uncommitted changes. "
-                "Please commit or stash your changes first."
-            )
-
-        head_branch, _ = await self._run_git("rev-parse", "--abbrev-ref", "HEAD", cwd=resolved_root)
-        if head_branch.strip() != base_branch:
-            return (
-                False,
-                f"Cannot update base branch: checked out on '{head_branch}'. "
-                f"Switch to '{base_branch}' and retry.",
-            )
-
-        try:
-            await self._run_git(
-                "merge",
-                "--no-ff",
-                self._merge_branch_name(repo_id),
-                cwd=resolved_root,
-            )
-        except Exception as exc:
-            return False, f"Fast-forward failed: {exc}"
-
-        return True, f"Fast-forwarded {base_branch} to merge worktree"
-
     def _resolve_repo_root(self, worktree_path: Path) -> Path:
         git_file = worktree_path / ".git"
         if not git_file.exists():
@@ -847,58 +821,6 @@ class WorkspaceServiceImpl:
             raise RuntimeError(stderr_str or f"git {args[0]} failed with code {proc.returncode}")
 
         return stdout_str, stderr_str
-
-    def _format_title_from_branch(self, branch_name: str) -> str:
-        title = branch_name.split("/", 1)[-1]
-        if "-" in title:
-            parts = title.split("-", 1)
-            if len(parts) > 1:
-                title = parts[1].replace("-", " ").title()
-        return title
-
-    async def _generate_semantic_commit(self, task_id: str, title: str, commits: list[str]) -> str:
-        del task_id
-        title_lower = title.lower()
-
-        if any(kw in title_lower for kw in ("fix", "bug", "issue")):
-            commit_type = "fix"
-        elif any(kw in title_lower for kw in ("add", "create", "implement", "new")):
-            commit_type = "feat"
-        elif any(kw in title_lower for kw in ("refactor", "clean", "improve")):
-            commit_type = "refactor"
-        elif any(kw in title_lower for kw in ("doc", "readme")):
-            commit_type = "docs"
-        elif "test" in title_lower:
-            commit_type = "test"
-        else:
-            commit_type = "chore"
-
-        scope = ""
-        scope_match = re.match(r"^\w+\s+(\w+)", title)
-        if scope_match:
-            potential_scope = scope_match.group(1).lower()
-            if len(potential_scope) > 2 and potential_scope not in (
-                "the",
-                "for",
-                "and",
-                "with",
-                "from",
-                "into",
-            ):
-                scope = potential_scope
-
-        header = f"{commit_type}({scope}): {title}" if scope else f"{commit_type}: {title}"
-
-        if commits:
-            body_lines = []
-            for commit in commits:
-                parts = commit.split(" ", 1)
-                msg = parts[1] if len(parts) > 1 else commit
-                body_lines.append(f"- {msg}")
-            body = "\n".join(body_lines)
-            return f"{header}\n\n{body}"
-
-        return header
 
     def _merge_branch_name(self, repo_id: str) -> str:
         return f"kagan/merge-worktree-{repo_id[:8]}"

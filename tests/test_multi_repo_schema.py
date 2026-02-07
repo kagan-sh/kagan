@@ -53,7 +53,6 @@ async def project(db_session: AsyncSession) -> Project:
 async def repo(db_session: AsyncSession, project: Project) -> Repo:
     """Create a test repo."""
     repo = Repo(
-        project_id=project.id,
         path="/code/app",
         name="app",
     )
@@ -70,7 +69,6 @@ class TestRepoModel:
     async def test_repo_creation_with_new_fields(self, db_session: AsyncSession, project: Project):
         """Repo can be created with display_name and default_working_dir."""
         repo = Repo(
-            project_id=project.id,
             path="/code/my-app",
             name="my-app",
             display_name="My Application",
@@ -91,7 +89,6 @@ class TestRepoModel:
         """Repo path should be unique."""
         # Create first repo
         repo1 = Repo(
-            project_id=project.id,
             path="/code/my-app",
             name="my-app",
         )
@@ -100,7 +97,6 @@ class TestRepoModel:
 
         # Try to create repo with same path - should fail with IntegrityError
         repo2 = Repo(
-            project_id=project.id,
             path="/code/my-app",
             name="my-app-duplicate",
         )
@@ -138,7 +134,6 @@ class TestProjectRepoJunction:
         repos = []
         for i, name in enumerate(["frontend", "backend", "shared"]):
             repo = Repo(
-                project_id=project.id,
                 path=f"/code/{name}",
                 name=name,
             )
@@ -199,7 +194,6 @@ class TestWorkspaceRepoJunction:
         """WorkspaceRepo links a workspace to a repo with target branch."""
         workspace = Workspace(
             project_id=project.id,
-            repo_id=repo.id,
             branch_name="kagan/abc123",
             path="/tmp/worktrees/abc123",
             status=WorkspaceStatus.ACTIVE,
@@ -230,7 +224,6 @@ class TestWorkspaceRepoJunction:
         repos = []
         for name in ["frontend", "backend"]:
             repo = Repo(
-                project_id=project.id,
                 path=f"/code/{name}",
                 name=name,
             )
@@ -239,10 +232,9 @@ class TestWorkspaceRepoJunction:
             await db_session.refresh(repo)
             repos.append(repo)
 
-        # Create workspace (using first repo for the required repo_id)
+        # Create workspace (repo linkage is via WorkspaceRepo)
         workspace = Workspace(
             project_id=project.id,
-            repo_id=repos[0].id,
             branch_name="kagan/feature",
             path="/tmp/worktrees/feature",
             status=WorkspaceStatus.ACTIVE,
@@ -276,7 +268,6 @@ class TestWorkspaceRepoJunction:
         """Cannot create duplicate workspace-repo link."""
         workspace = Workspace(
             project_id=project.id,
-            repo_id=repo.id,
             branch_name="kagan/test",
             path="/tmp/worktrees/test",
         )
@@ -404,7 +395,6 @@ class TestQueryPatterns:
         # Create repos and links
         for i, name in enumerate(["frontend", "backend"]):
             repo = Repo(
-                project_id=project.id,
                 path=f"/code/{name}",
                 name=name,
             )
@@ -441,7 +431,6 @@ class TestQueryPatterns:
         repos = []
         for name in ["frontend", "backend"]:
             repo = Repo(
-                project_id=project.id,
                 path=f"/code/{name}",
                 name=name,
             )
@@ -453,7 +442,6 @@ class TestQueryPatterns:
         # Create workspace
         workspace = Workspace(
             project_id=project.id,
-            repo_id=repos[0].id,
             branch_name="kagan/test",
             path="/tmp/test",
         )

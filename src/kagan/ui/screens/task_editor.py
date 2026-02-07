@@ -121,7 +121,6 @@ class TaskEditorScreen(ModalScreen[list[Task] | None]):
                 Task(
                     id=original.id,
                     project_id=original.project_id,
-                    repo_id=original.repo_id,
                     title=title,
                     description=description,
                     status=original.status,

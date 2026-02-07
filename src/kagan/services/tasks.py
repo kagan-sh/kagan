@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from kagan.core.events import EventBus
     from kagan.core.models.entities import Task
     from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
-    from kagan.services.types import ProjectId, RepoId, TaskId
+    from kagan.services.types import ProjectId, TaskId
 
 
 class TaskService(Protocol):
@@ -24,7 +24,6 @@ class TaskService(Protocol):
         description: str,
         *,
         project_id: ProjectId | None = None,
-        repo_id: RepoId | None = None,
         created_by: str | None = None,
     ) -> Task:
         """Create a task and return the new entity."""
@@ -137,7 +136,6 @@ class TaskServiceImpl:
         description: str,
         *,
         project_id: ProjectId | None = None,
-        repo_id: RepoId | None = None,
         created_by: str | None = None,
     ) -> Task:
         from kagan.adapters.db.schema import Task as DbTask
@@ -150,7 +148,6 @@ class TaskServiceImpl:
 
         db_task = DbTask(
             project_id=project_id,
-            repo_id=repo_id or self._repo.default_repo_id,
             title=title,
             description=description,
         )

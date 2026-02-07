@@ -25,11 +25,12 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from kagan.acp.agent import Agent
-    from kagan.adapters.git.worktrees import WorktreeManager
     from kagan.config import AgentConfig, KaganConfig
+    from kagan.services.merges import MergeService
     from kagan.services.sessions import SessionServiceImpl
     from kagan.services.tasks import TaskService
     from kagan.services.types import TaskLike
+    from kagan.services.workspaces import WorkspaceService
 
 
 class AutomationService(Protocol):
@@ -95,9 +96,10 @@ class AutomationServiceImpl:
     def __init__(
         self,
         task_service: TaskService,
-        worktree_manager: WorktreeManager,
+        workspace_service: WorkspaceService,
         config: KaganConfig,
         session_service: SessionServiceImpl | None = None,
+        merge_service: MergeService | None = None,
         on_task_changed: Callable[[], None] | None = None,
         on_iteration_changed: Callable[[str, int], None] | None = None,
         on_error: Callable[[str, str], None] | None = None,
@@ -107,9 +109,10 @@ class AutomationServiceImpl:
         event_bus: EventBus | None = None,
     ) -> None:
         self._tasks = task_service
-        self._worktrees = worktree_manager
+        self._workspaces = workspace_service
         self._config = config
         self._sessions = session_service
+        self._merge_service = merge_service
         self._running: dict[str, RunningTaskState] = {}
         self._on_task_changed = on_task_changed
         self._on_iteration_changed = on_iteration_changed
@@ -134,6 +137,10 @@ class AutomationServiceImpl:
     def merge_lock(self) -> asyncio.Lock:
         """Lock for serializing merge operations."""
         return self._merge_lock
+
+    def set_merge_service(self, merge_service: MergeService) -> None:
+        """Attach merge service after initialization to avoid circular wiring."""
+        self._merge_service = merge_service
 
     async def start(self) -> None:
         """Start the automation event processing loop."""
@@ -455,12 +462,41 @@ class AutomationServiceImpl:
 
         try:
             # Ensure worktree exists
-            wt_path = await self._worktrees.get_path(task.id)
+            wt_path = await self._workspaces.get_path(task.id)
             if wt_path is None:
                 log.info(f"Creating worktree for {task.id}")
-                wt_path = await self._worktrees.create(
-                    task.id, task.title, self._config.general.default_base_branch
-                )
+                try:
+                    wt_path = await self._workspaces.create(
+                        task.id, base_branch=self._config.general.default_base_branch
+                    )
+                except ValueError as exc:
+                    # Common errors: no repos, project not found
+                    error_msg = str(exc)
+                    log.error(f"Workspace creation failed for task {task.id}: {error_msg}")
+                    self._notify_error(task.id, error_msg)
+                    self._notify_user(
+                        f"❌ {error_msg}",
+                        title="Cannot Start Agent",
+                        severity="error",
+                    )
+                    await self._update_task_status(task.id, TaskStatus.BACKLOG)
+                    return
+                except Exception as exc:
+                    # Check for common git-related errors
+                    error_str = str(exc).lower()
+                    if "not a git repository" in error_str or "fatal:" in error_str:
+                        error_msg = f"Repository is not a valid git repo: {exc}"
+                    else:
+                        error_msg = f"Failed to create workspace: {exc}"
+                    log.error(f"Workspace creation failed for task {task.id}: {exc}")
+                    self._notify_error(task.id, error_msg)
+                    self._notify_user(
+                        f"❌ {error_msg}",
+                        title="Cannot Start Agent",
+                        severity="error",
+                    )
+                    await self._update_task_status(task.id, TaskStatus.BACKLOG)
+                    return
             log.info(f"Worktree path: {wt_path}")
 
             # Get git user identity for Co-authored-by attribution
@@ -584,18 +620,25 @@ class AutomationServiceImpl:
         """
         async with self._merge_lock:
             log.info(f"Acquired merge lock for task {task.id}")
+            if self._merge_service is None:
+                log.warning("Auto-merge requested but merge service is not configured")
+                await self._tasks.update_fields(
+                    task.id,
+                    merge_failed=True,
+                    merge_error="Auto-merge unavailable: merge service not configured",
+                    merge_readiness=MergeReadiness.BLOCKED,
+                )
+                await self._tasks.append_event(
+                    task.id,
+                    "merge",
+                    "Auto-merge unavailable: merge service not configured",
+                )
+                self._notify_task_changed()
+                return
             base = self._config.general.default_base_branch
-            success, message = await self._worktrees.merge_to_main(  # type: ignore[misc]
-                task.id,
-                base_branch=base,
-                allow_conflicts=False,
-            )
+            success, message = await self._merge_service.merge_task(task)
 
             if success:
-                await self._worktrees.delete(task.id, delete_branch=True)
-                if self._sessions is not None:
-                    await self._sessions.kill_session(task.id)
-                await self._update_task_status(task.id, TaskStatus.DONE)
                 log.info(f"Auto-merged task {task.id}: {task.title}")
                 await self._tasks.append_event(task.id, "merge", f"Auto-merged to {base}")
             else:
@@ -638,7 +681,7 @@ class AutomationServiceImpl:
         This gives the agent a chance to resolve conflicts after rebasing onto
         the latest base branch.
         """
-        wt_path = await self._worktrees.get_path(task.id)
+        wt_path = await self._workspaces.get_path(task.id)
         if wt_path is None:
             log.error(f"Cannot retry {task.id}: worktree not found")
             await self._tasks.update_fields(
@@ -649,10 +692,10 @@ class AutomationServiceImpl:
             return
 
         # Get info about what changed on base branch (for context)
-        files_on_base = await self._worktrees.get_files_changed_on_base(task.id, base_branch)
+        files_on_base = await self._workspaces.get_files_changed_on_base(task.id, base_branch)
 
         # Attempt to rebase onto latest base branch
-        rebase_success, rebase_msg, conflict_files = await self._worktrees.rebase_onto_base(
+        rebase_success, rebase_msg, conflict_files = await self._workspaces.rebase_onto_base(
             task.id, base_branch
         )
 
@@ -839,7 +882,7 @@ class AutomationServiceImpl:
         )
         self._notify_task_changed()
 
-        wt_path = await self._worktrees.get_path(task.id)
+        wt_path = await self._workspaces.get_path(task.id)
         checks_passed = False
         review_summary = ""
 
@@ -901,8 +944,8 @@ class AutomationServiceImpl:
     async def _build_review_prompt(self, task: TaskLike) -> str:
         """Build review prompt from template with commits and diff."""
         base = self._config.general.default_base_branch
-        commits = await self._worktrees.get_commit_log(task.id, base)
-        diff_summary = await self._worktrees.get_diff_stats(task.id, base)
+        commits = await self._workspaces.get_commit_log(task.id, base)
+        diff_summary = await self._workspaces.get_diff_stats(task.id, base)
 
         return get_review_prompt(
             title=task.title,

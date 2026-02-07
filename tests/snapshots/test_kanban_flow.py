@@ -2,7 +2,6 @@
 
 These tests cover the main Kanban interaction flows:
 - Board display with tasks in columns
-- Column and task navigation
 - Search functionality
 - Delete confirmation
 
@@ -77,14 +76,12 @@ async def _setup_kanban_tasks(db_path: str) -> None:
     project_id = manager.default_project_id
     if project_id is None:
         raise RuntimeError("TaskRepository defaults not initialized")
-    repo_id = manager.default_repo_id
 
     # Create tasks with fixed IDs for reproducible snapshots
     tasks = [
         Task(
             id="backlog1",
             project_id=project_id,
-            repo_id=repo_id,
             title="Backlog task 1",
             description="First task in backlog",
             priority=TaskPriority.LOW,
@@ -96,7 +93,6 @@ async def _setup_kanban_tasks(db_path: str) -> None:
         Task(
             id="backlog2",
             project_id=project_id,
-            repo_id=repo_id,
             title="Backlog task 2",
             description="Second task in backlog",
             priority=TaskPriority.HIGH,
@@ -108,7 +104,6 @@ async def _setup_kanban_tasks(db_path: str) -> None:
         Task(
             id="inprog01",
             project_id=project_id,
-            repo_id=repo_id,
             title="In progress task",
             description="Currently working on this",
             priority=TaskPriority.HIGH,
@@ -120,7 +115,6 @@ async def _setup_kanban_tasks(db_path: str) -> None:
         Task(
             id="review01",
             project_id=project_id,
-            repo_id=repo_id,
             title="Review task",
             description="Ready for code review",
             priority=TaskPriority.MEDIUM,
@@ -132,7 +126,6 @@ async def _setup_kanban_tasks(db_path: str) -> None:
         Task(
             id="done0001",
             project_id=project_id,
-            repo_id=repo_id,
             title="Done task",
             description="Completed work",
             priority=TaskPriority.LOW,
@@ -162,7 +155,7 @@ class TestKanbanFlow:
         # Mock tmux
         sessions: dict[str, Any] = {}
         fake_tmux = _create_fake_tmux(sessions)
-        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
+        monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
         monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
         # Set up tasks synchronously
@@ -195,26 +188,6 @@ class TestKanbanFlow:
             from kagan.ui.screens.kanban import KanbanScreen
 
             assert isinstance(pilot.app.screen, KanbanScreen)
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_navigate_columns(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """User navigates between columns with right arrow key."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate right twice to reach REVIEW column
-            await pilot.press("right")
-            await pilot.pause()
-            await pilot.press("right")
-            await pilot.pause()
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)

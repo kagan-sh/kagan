@@ -6,20 +6,17 @@ import asyncio
 
 
 class TmuxError(RuntimeError):
-    """Raised when tmux commands fail or tmux is not installed."""
+    """Raised when tmux commands fail."""
 
 
 async def run_tmux(*args: str) -> str:
     """Run a tmux command and return stdout."""
-    try:
-        process = await asyncio.create_subprocess_exec(
-            "tmux",
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except FileNotFoundError:
-        raise TmuxError("tmux is not installed") from None
+    process = await asyncio.create_subprocess_exec(
+        "tmux",
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     stdout, stderr = await process.communicate()
     if process.returncode != 0:
         raise TmuxError(stderr.decode().strip() or "tmux command failed")

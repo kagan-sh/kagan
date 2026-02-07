@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from importlib import resources
 from typing import TYPE_CHECKING, cast
 
 from textual.app import App
@@ -72,7 +72,7 @@ class TroubleshootingApp(App):
     """Standalone app shown when pre-flight checks fail or have warnings."""
 
     TITLE = "KAGAN"
-    CSS_PATH = str(Path(__file__).resolve().parents[2] / "styles" / "kagan.tcss")
+    CSS_PATH = str(resources.files("kagan.styles") / "kagan.tcss")
 
     BINDINGS = TROUBLESHOOTING_BINDINGS
 
@@ -114,7 +114,10 @@ class TroubleshootingApp(App):
         if is_no_agents:
             title = "No AI Agents Found"
             subtitle = "Install one of the following to get started:"
-            resolve_hint = "Install an agent and restart Kagan"
+            resolve_hint = (
+                "Install an agent and restart Kagan\n"
+                "or run 'kagan --skip-preflight' to continue in limited mode"
+            )
             exit_hint = "i = Install Agent | q = Quit"
         elif has_only_warnings:
             title = "Startup Warnings"
@@ -160,7 +163,7 @@ class TroubleshootingApp(App):
             return
 
         # Get list of installable agents
-        from kagan.data.builtin_agents import list_builtin_agents
+        from kagan.builtin_agents import list_builtin_agents
 
         agents = [a.config.short_name for a in list_builtin_agents()]
 

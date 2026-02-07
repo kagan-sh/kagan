@@ -34,7 +34,7 @@ class AgentSelectModal(ModalScreen[str | None]):
         self._agents = agents
 
     def compose(self) -> ComposeResult:
-        from kagan.data.builtin_agents import get_builtin_agent
+        from kagan.builtin_agents import get_builtin_agent
 
         with Container(id="agent-select-modal"):
             yield Label("Select Agent to Install", classes="install-modal-title")
@@ -79,7 +79,7 @@ class InstallModal(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         from kagan.agents.installer import get_install_command
-        from kagan.data.builtin_agents import get_builtin_agent
+        from kagan.builtin_agents import get_builtin_agent
 
         agent_info = get_builtin_agent(self._agent)
         agent_name = agent_info.config.name if agent_info else self._agent.title()
@@ -114,7 +114,7 @@ class InstallModal(ModalScreen[bool]):
         if self._is_installing or self._install_complete:
             return
 
-        from kagan.data.builtin_agents import get_builtin_agent
+        from kagan.builtin_agents import get_builtin_agent
 
         self._is_installing = True
         spinner = self.query_one("#install-spinner", LoadingIndicator)

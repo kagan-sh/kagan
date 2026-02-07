@@ -13,7 +13,7 @@ from textual.widgets import Button, Footer, Input, Label, Rule, Select, Static, 
 
 from kagan.core.models.enums import MergeReadiness, TaskPriority, TaskStatus, TaskType
 from kagan.keybindings import TASK_DETAILS_BINDINGS
-from kagan.sessions.tmux import TmuxError
+from kagan.tmux import TmuxError
 from kagan.ui.modals.actions import ModalAction
 from kagan.ui.modals.description_editor import DescriptionEditorModal
 from kagan.ui.utils import copy_with_notification, safe_query_one
@@ -309,7 +309,7 @@ class TaskDetailsModal(ModalScreen[ModalAction | TaskUpdateDict | None]):
                 )
                 yield Static(mode_line, classes="merge-help-text")
                 yield Static(
-                    "Use Resolve Conflicts to open tmux in the main repo.",
+                    "Use Resolve Conflicts to open tmux in the primary repo.",
                     classes="merge-help-text",
                 )
                 yield Static(

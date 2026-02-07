@@ -9,7 +9,7 @@ import logging
 from typing import TYPE_CHECKING, Protocol
 
 from kagan.config import get_os_value
-from kagan.sessions.tmux import TmuxError, run_tmux
+from kagan.tmux import TmuxError, run_tmux
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -228,7 +228,7 @@ class SessionServiceImpl:
         """Write/merge MCP config based on agent type. Returns filename written."""
         import aiofiles
 
-        from kagan.data.builtin_agents import get_builtin_agent
+        from kagan.builtin_agents import get_builtin_agent
 
         builtin = get_builtin_agent(agent_config.short_name)
 

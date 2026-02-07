@@ -154,10 +154,7 @@ class ProjectServiceImpl:
     ) -> str:
         """Add repo to project, return repo_id."""
         # Get or create repo
-        repo, _ = await self._repo_repository.get_or_create(
-            path=repo_path,
-            project_id=project_id,
-        )
+        repo, _ = await self._repo_repository.get_or_create(path=repo_path)
 
         # Get current repo count for display_order
         existing_repos = await self._repo_repository.list_for_project(project_id)
@@ -194,7 +191,7 @@ class ProjectServiceImpl:
                 select(ProjectRepo, Repo)
                 .join(Repo)
                 .where(ProjectRepo.project_id == project_id)
-                .order_by(ProjectRepo.display_order)
+                .order_by(col(ProjectRepo.display_order))
             )
             return [
                 {

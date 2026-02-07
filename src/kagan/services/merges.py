@@ -14,11 +14,12 @@ if TYPE_CHECKING:
 
     from kagan.adapters.git.operations import GitOperationsAdapter
     from kagan.config import KaganConfig
-    from kagan.core.models.entities import Task
     from kagan.core.events import EventBus
+    from kagan.core.models.entities import Task
     from kagan.services.automation import AutomationServiceImpl
     from kagan.services.sessions import SessionService
     from kagan.services.tasks import TaskService
+    from kagan.services.types import TaskLike
     from kagan.services.workspaces import WorkspaceService
 
 log = logging.getLogger(__name__)
@@ -47,20 +48,20 @@ class MergeResult:
 class MergeService(Protocol):
     """Service interface for merge operations."""
 
-    async def delete_task(self, task: Task) -> tuple[bool, str]: ...
+    async def delete_task(self, task: TaskLike) -> tuple[bool, str]: ...
 
-    async def merge_task(self, task: Task) -> tuple[bool, str]: ...
+    async def merge_task(self, task: TaskLike) -> tuple[bool, str]: ...
 
-    async def close_exploratory(self, task: Task) -> tuple[bool, str]: ...
+    async def close_exploratory(self, task: TaskLike) -> tuple[bool, str]: ...
 
     async def apply_rejection_feedback(
         self,
-        task: Task,
+        task: TaskLike,
         feedback: str | None,
         action: str = "shelve",
     ) -> Task: ...
 
-    async def has_no_changes(self, task: Task) -> bool: ...
+    async def has_no_changes(self, task: TaskLike) -> bool: ...
 
     async def merge_repo(
         self,
@@ -89,42 +90,6 @@ class MergeService(Protocol):
         body: str,
         draft: bool = False,
     ) -> str: ...
-
-
-def _parse_conflict_files(git_output: str) -> list[str]:
-    """Extract conflicted file paths from git merge output.
-
-    Looks for pattern: "CONFLICT (content): Merge conflict in <file>"
-
-    Args:
-        git_output: Raw git merge stderr/stdout
-
-    Returns:
-        List of conflicted file paths
-    """
-    import re
-
-    pattern = r"CONFLICT \([^)]+\): Merge conflict in (.+)"
-    matches = re.findall(pattern, git_output)
-    return [match.strip() for match in matches]
-
-
-def _is_merge_conflict(message: str) -> bool:
-    """Check if merge failure message indicates conflicts.
-
-    Args:
-        message: Error message from merge operation
-
-    Returns:
-        True if message contains conflict indicators
-    """
-    conflict_indicators = [
-        "CONFLICT",
-        "Merge conflict",
-        "conflict in",
-        "fix conflicts",
-    ]
-    return any(indicator.lower() in message.lower() for indicator in conflict_indicators)
 
 
 class MergeServiceImpl:
@@ -156,7 +121,11 @@ class MergeServiceImpl:
             raise RuntimeError("Merge service missing session factory for per-repo operations")
         return self._session_factory()
 
-    async def delete_task(self, task: Task) -> tuple[bool, str]:
+    async def _get_latest_workspace_id(self, task_id: str) -> str | None:
+        workspaces = await self.workspace_service.list_workspaces(task_id=task_id)
+        return workspaces[0].id if workspaces else None
+
+    async def delete_task(self, task: TaskLike) -> tuple[bool, str]:
         """Delete task with rollback-aware error handling.
 
         Returns:
@@ -190,7 +159,7 @@ class MergeServiceImpl:
             )
             return False, f"Delete failed: {e}"
 
-    async def merge_task(self, task: Task) -> tuple[bool, str]:
+    async def merge_task(self, task: TaskLike) -> tuple[bool, str]:
         """Merge task changes and clean up. Returns (success, message)."""
         base = self.config.general.default_base_branch
         config = self.config.general
@@ -214,58 +183,55 @@ class MergeServiceImpl:
                 merge_readiness=MergeReadiness.RISK,
             )
 
-            success, message = await self.worktrees.merge_to_main(  # type: ignore[misc]
-                task.id, base_branch=base, allow_conflicts=True
-            )
-            if success:
-                await self.worktrees.delete(task.id, delete_branch=True)
-                await self.sessions.kill_session(task.id)
+            workspace_id = await self._get_latest_workspace_id(task.id)
+            if not workspace_id:
+                message = f"Workspace not found for task {task.id}"
                 await self.tasks.update_fields(
                     task.id,
-                    status=TaskStatus.DONE,
-                    merge_failed=False,
-                    merge_error=None,
-                    merge_readiness=MergeReadiness.READY,
+                    merge_failed=True,
+                    merge_error=message[:500],
+                    merge_readiness=MergeReadiness.BLOCKED,
                 )
-                await self.tasks.append_event(task.id, "merge", f"Merged to {base}")
-            else:
-                # On merge conflict, stay in REVIEW with structured error
-                if _is_merge_conflict(message):
-                    conflict_files = _parse_conflict_files(message)
-                    if conflict_files:
-                        error_msg = f"Merge conflicts in: {', '.join(conflict_files)}"
-                        hint = " Resolve conflicts and retry merge from REVIEW."
-                    else:
-                        error_msg = "Merge conflicts detected"
-                        hint = " Check git status in worktree and retry."
+                await self.tasks.append_event(task.id, "merge", message)
+                return False, message
 
-                    final_message = error_msg + hint
+            results = await self.merge_all(
+                workspace_id,
+                strategy=MergeStrategy.DIRECT,
+                skip_unchanged=True,
+            )
+            failures = [result for result in results if not result.success]
+            if failures:
+                message = "; ".join(f"{result.repo_name}: {result.message}" for result in failures)[
+                    :500
+                ]
+                await self.tasks.update_fields(
+                    task.id,
+                    merge_failed=True,
+                    merge_error=message,
+                    merge_readiness=MergeReadiness.BLOCKED,
+                )
+                await self.tasks.append_event(task.id, "merge", f"Merge failed: {message}")
+                return False, message
 
-                    await self.tasks.update_fields(
-                        task.id,
-                        merge_failed=True,
-                        merge_error=final_message[:500],
-                        merge_readiness=MergeReadiness.BLOCKED,
-                    )
-                    await self.tasks.append_event(task.id, "merge", f"Merge conflict: {error_msg}")
-                else:
-                    # Non-conflict failures: keep in REVIEW with generic error
-                    await self.tasks.update_fields(
-                        task.id,
-                        merge_failed=True,
-                        merge_error=message[:500] if message else "Unknown error",
-                        merge_readiness=MergeReadiness.BLOCKED,
-                    )
-                    await self.tasks.append_event(task.id, "merge", f"Merge failed: {message}")
-
-            return success, message
+            await self.worktrees.delete(task.id, delete_branch=True)
+            await self.sessions.kill_session(task.id)
+            await self.tasks.update_fields(
+                task.id,
+                status=TaskStatus.DONE,
+                merge_failed=False,
+                merge_error=None,
+                merge_readiness=MergeReadiness.READY,
+            )
+            await self.tasks.append_event(task.id, "merge", f"Merged to {base}")
+            return True, "Merged all repos"
 
         if config.serialize_merges:
             async with self.automation.merge_lock:
                 return await _do_merge()
         return await _do_merge()
 
-    async def close_exploratory(self, task: Task) -> tuple[bool, str]:
+    async def close_exploratory(self, task: TaskLike) -> tuple[bool, str]:
         """Close a DONE task by deleting it (used for no-change exploratory tasks)."""
         if await self.worktrees.get_path(task.id):
             await self.worktrees.delete(task.id, delete_branch=True)
@@ -281,7 +247,7 @@ class MergeServiceImpl:
 
     async def apply_rejection_feedback(
         self,
-        task: Task,
+        task: TaskLike,
         feedback: str | None,
         action: str = "shelve",  # "retry" | "stage" | "shelve"
     ) -> Task:
@@ -336,12 +302,13 @@ class MergeServiceImpl:
         assert refreshed_task is not None
         return refreshed_task
 
-    async def has_no_changes(self, task: Task) -> bool:
+    async def has_no_changes(self, task: TaskLike) -> bool:
         """Return True if the task has no commits and no diff stats."""
-        base = self.config.general.default_base_branch
-        commits = await self.worktrees.get_commit_log(task.id, base_branch=base)
-        diff_stats = await self.worktrees.get_diff_stats(task.id, base_branch=base)
-        return not commits and not diff_stats.strip()
+        workspace_id = await self._get_latest_workspace_id(task.id)
+        if not workspace_id:
+            return True
+        repos = await self.workspace_service.get_workspace_repos(workspace_id)
+        return not any(repo.get("has_changes") for repo in repos)
 
     async def merge_repo(
         self,
@@ -358,7 +325,7 @@ class MergeServiceImpl:
 
         from datetime import datetime
 
-        from sqlmodel import select
+        from sqlmodel import col, select
 
         from kagan.adapters.db.schema import Merge, Repo, Workspace, WorkspaceRepo
         from kagan.core.events import MergeCompleted, MergeFailed, PRCreated
@@ -367,8 +334,8 @@ class MergeServiceImpl:
         async with self._get_session() as session:
             result = await session.execute(
                 select(WorkspaceRepo, Repo, Workspace)
-                .join(Repo, WorkspaceRepo.repo_id == Repo.id)
-                .join(Workspace, WorkspaceRepo.workspace_id == Workspace.id)
+                .join(Repo, col(WorkspaceRepo.repo_id) == col(Repo.id))
+                .join(Workspace, col(WorkspaceRepo.workspace_id) == col(Workspace.id))
                 .where(WorkspaceRepo.workspace_id == workspace_id)
                 .where(WorkspaceRepo.repo_id == repo_id)
             )
@@ -457,6 +424,9 @@ class MergeServiceImpl:
                     task_id=workspace.task_id,
                     workspace_id=workspace_id,
                     repo_id=repo_id,
+                    strategy=strategy.value,
+                    target_branch=workspace_repo.target_branch,
+                    commit_sha=merge_result.commit_sha,
                     status=MergeStatus.MERGED if merge_result.success else MergeStatus.FAILED,
                     pr_url=merge_result.pr_url,
                     error=None if merge_result.success else merge_result.message,

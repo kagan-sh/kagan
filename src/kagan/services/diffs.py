@@ -106,9 +106,9 @@ class DiffServiceImpl:
         diffs: list[RepoDiff] = []
 
         for repo in repos:
-            if not repo["has_changes"]:
-                continue
-            diffs.append(await self.get_repo_diff(workspace_id, repo["repo_id"]))
+            diff = await self.get_repo_diff(workspace_id, repo["repo_id"])
+            if diff.files or diff.total_additions or diff.total_deletions:
+                diffs.append(diff)
 
         return diffs
 

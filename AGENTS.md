@@ -70,13 +70,13 @@ if TYPE_CHECKING:
 
 ### Naming Conventions
 
-| Type       | Convention        | Example                    |
-|------------|-------------------|----------------------------|
-| Classes    | PascalCase        | `TaskCard`, `KanbanScreen` |
-| Functions  | snake_case        | `get_all_tasks`            |
-| Private    | underscore prefix | `_refresh_board`           |
-| Constants  | UPPER_SNAKE       | `COLUMN_ORDER`             |
-| Enums      | PascalCase/UPPER  | `TaskStatus.BACKLOG`       |
+| Type      | Convention        | Example                    |
+| --------- | ----------------- | -------------------------- |
+| Classes   | PascalCase        | `TaskCard`, `KanbanScreen` |
+| Functions | snake_case        | `get_all_tasks`            |
+| Private   | underscore prefix | `_refresh_board`           |
+| Constants | UPPER_SNAKE       | `COLUMN_ORDER`             |
+| Enums     | PascalCase/UPPER  | `TaskStatus.BACKLOG`       |
 
 ### Error Handling
 
@@ -92,13 +92,16 @@ if TYPE_CHECKING:
 class Selected(Message):
     task: Task
 
+
 # Event handlers with @on decorator
 @on(Button.Pressed, "#save-btn")
 def on_save(self) -> None:
     self.action_submit()
 
+
 # Reactive attributes
 tasks: reactive[list[Task]] = reactive(list, recompose=True)
+
 
 # Widget IDs in __init__
 def __init__(self, task: Task, **kwargs) -> None:
@@ -136,10 +139,13 @@ Existing embedded CSS in legacy widgets may remain, but **do not add new inline 
 ```python
 class TaskService(Protocol):
     """Service interface."""
+
     async def create_task(self, title: str) -> Task: ...
+
 
 class TaskServiceImpl:
     """Concrete implementation."""
+
     def __init__(self, repo: TaskRepository, event_bus: EventBus) -> None:
         self._repo = repo
         self._events = event_bus
@@ -213,6 +219,7 @@ pytest -m e2e               # Full application tests
 ## Ruff Configuration
 
 Line length: 100 characters. Key rules enabled:
+
 - `E`, `F` - pycodestyle errors, pyflakes
 - `I` - isort import sorting
 - `UP` - pyupgrade
@@ -222,6 +229,7 @@ Line length: 100 characters. Key rules enabled:
 - `RUF` - Ruff-specific rules
 
 Ignored rules (intentional):
+
 - `RUF012` - Textual class attributes don't need ClassVar
 - `RUF006` - Allow fire-and-forget asyncio.create_task
 - `SIM102`, `SIM117` - Allow nested if/with for readability
@@ -229,9 +237,9 @@ Ignored rules (intentional):
 ## Key Rules Summary
 
 1. **CSS: Centralized** - All new styles in `src/kagan/styles/kagan.tcss` (no inline CSS)
-2. **Async database** - All DB operations via TaskRepository
-3. **Constants module** - Use `kagan.constants` for shared values
-4. **Module size** - Keep modules ~150-250 LOC; test files < 200 LOC
-5. **Protocol-based services** - Define interfaces with Protocol, implement with `*Impl`
-6. **Event-driven** - Use domain events for cross-service communication
-7. **Run `uv run poe fix`** - Before committing, always run the fix command
+1. **Async database** - All DB operations via TaskRepository
+1. **Constants module** - Use `kagan.constants` for shared values
+1. **Module size** - Keep modules ~150-250 LOC; test files < 200 LOC
+1. **Protocol-based services** - Define interfaces with Protocol, implement with `*Impl`
+1. **Event-driven** - Use domain events for cross-service communication
+1. **Run `uv run poe fix`** - Before committing, always run the fix command

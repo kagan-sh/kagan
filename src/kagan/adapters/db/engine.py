@@ -10,8 +10,6 @@ from sqlmodel import SQLModel
 
 from kagan.paths import ensure_directories, get_database_path
 
-LEGACY_TABLES = ("task_events", "agent_logs", "scratchpads")
-
 
 async def create_db_engine(db_path: str | Path | None = None) -> AsyncEngine:
     """Create async SQLite engine with WAL mode."""
@@ -43,8 +41,6 @@ async def create_db_engine(db_path: str | Path | None = None) -> AsyncEngine:
 async def create_db_tables(engine: AsyncEngine) -> None:
     """Create all tables from SQLModel metadata."""
     async with engine.begin() as conn:
-        for table in LEGACY_TABLES:
-            await conn.exec_driver_sql(f"DROP TABLE IF EXISTS {table}")
         await conn.run_sync(SQLModel.metadata.create_all)
 
 

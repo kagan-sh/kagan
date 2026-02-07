@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from textual.app import ComposeResult
+from typing import TYPE_CHECKING, cast
+
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, Static
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
+
+    from kagan.app import KaganApp
 
 
 class WorkspaceRepoItem(Static):
@@ -63,7 +69,8 @@ class WorkspaceReposWidget(Static):
 
     async def refresh_repos(self) -> None:
         """Refresh the repo list."""
-        workspace_service = self.app.ctx.workspace_service
+        app = cast("KaganApp", self.app)
+        workspace_service = app.ctx.workspace_service
         self.repos = await workspace_service.get_workspace_repos(self.workspace_id)
 
         repo_list = self.query_one("#repo-list", Vertical)
@@ -92,7 +99,8 @@ class WorkspaceReposWidget(Static):
     async def _open_diff(self, repo_id: str) -> None:
         from kagan.ui.modals import DiffModal
 
-        diff_service = self.app.ctx.diff_service
+        app = cast("KaganApp", self.app)
+        diff_service = app.ctx.diff_service
         repo_diff = await diff_service.get_repo_diff(self.workspace_id, repo_id)
         await self.app.push_screen(DiffModal(diffs=[repo_diff]))
 

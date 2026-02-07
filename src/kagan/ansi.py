@@ -1,9 +1,16 @@
-"""ANSI escape sequence stripper."""
+"""ANSI escape sequence stripper.
+
+Provides efficient regex-based stripping of ANSI escape codes from terminal output.
+"""
 
 from __future__ import annotations
 
 import re
 
+# Combined pattern for all ANSI escape sequences:
+# - CSI sequences: ESC [ ... final_byte (colors, cursor, etc.)
+# - OSC sequences: ESC ] ... BEL (terminal title, etc.)
+# - Simple escapes: ESC followed by single char
 ANSI_ESCAPE = re.compile(r"\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07|[@-Z\\^_-])")
 
 

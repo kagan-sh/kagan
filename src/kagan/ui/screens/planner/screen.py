@@ -396,11 +396,16 @@ class PlannerScreen(KaganScreen):
 
         for task_data in event.tasks:
             try:
+                # Use active project ID, never the placeholder "plan"
+                project_id = self.ctx.active_project_id
+                if project_id is None:
+                    # Fallback to task_data.project_id only if it's not the placeholder
+                    if task_data.project_id and task_data.project_id != "plan":
+                        project_id = task_data.project_id
                 task = await self.ctx.task_service.create_task(
                     task_data.title,
                     task_data.description,
-                    project_id=task_data.project_id,
-                    repo_id=task_data.repo_id,
+                    project_id=project_id,
                     created_by=None,
                 )
                 await self.ctx.task_service.update_fields(

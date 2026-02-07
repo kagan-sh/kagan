@@ -54,6 +54,15 @@ settings.register_profile(
 )
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Ensure snapshot tests run sequentially under xdist."""
+    del config
+    for item in items:
+        if item.get_closest_marker("snapshot"):
+            item.add_marker(pytest.mark.xdist_group("snapshots"))
+
+
 # =============================================================================
 # Core Unit Test Fixtures
 # =============================================================================
@@ -130,7 +139,6 @@ def task_factory(state_manager: TaskRepository):
             session_active=session_active,
             total_iterations=total_iterations,
             project_id=project_id,
-            repo_id=state_manager.default_repo_id,
         )
 
     return _factory
@@ -184,11 +192,11 @@ def mock_agent():
 
 
 @pytest.fixture
-def mock_worktree_manager():
-    """Create a mock WorktreeManager."""
-    from tests.helpers.mocks import create_mock_worktree_manager
+def mock_workspace_service():
+    """Create a mock WorkspaceService."""
+    from tests.helpers.mocks import create_mock_workspace_service
 
-    return create_mock_worktree_manager()
+    return create_mock_workspace_service()
 
 
 @pytest.fixture
@@ -234,7 +242,6 @@ async def _create_e2e_app_with_tasks(e2e_project, tasks: list[dict]) -> KaganApp
     for task_kwargs in tasks:
         task = Task.create(
             project_id=project_id,
-            repo_id=manager.default_repo_id,
             **task_kwargs,
         )
         await manager.create(task)
@@ -334,7 +341,7 @@ def mock_agent_factory():
         async def test_something(state_manager, mock_agent_factory):
             automation = AutomationServiceImpl(
                 task_service=task_service,
-                worktree_manager=worktrees,
+                workspace_service=worktrees,
                 config=config,
                 agent_factory=mock_agent_factory,
             )
@@ -499,7 +506,7 @@ def auto_mock_tmux_for_app_tests(request, monkeypatch):
     ):
         return
     fake = _create_fake_tmux({})
-    monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake)
+    monkeypatch.setattr("kagan.tmux.run_tmux", fake)
     monkeypatch.setattr("kagan.services.sessions.run_tmux", fake)
 
 
