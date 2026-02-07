@@ -54,6 +54,8 @@ class SessionService:
         self._tasks = task_service
         self._workspaces = workspace_service
         self._config = config
+        self._launched_external: set[str] = set()
+        self._external_proc: asyncio.subprocess.Process | None = None
 
     @staticmethod
     def _coerce_terminal_backend(value: object) -> str | None:
@@ -152,7 +154,11 @@ class SessionService:
         except OSError:
             log.warning("Failed to start external launcher %s in %s", backend, worktree_path)
             return False
-        return await proc.wait() == 0
+        # Fire-and-forget: the `code`/`cursor` CLI on Windows blocks until the
+        # window loads — we don't need to wait.  Keep the reference so the GC
+        # doesn't reap the process and trigger ResourceWarning.
+        self._external_proc = proc
+        return True
 
     @staticmethod
     def _build_session_env(task: TaskLike, workdir: Path, project_root: Path) -> dict[str, str]:
@@ -215,6 +221,7 @@ class SessionService:
         else:
             if not await self._launch_external_launcher(backend, worktree_path):
                 raise RuntimeError(f"Failed to launch external PAIR session for task {task.id}")
+            self._launched_external.add(task.id)
 
         workspaces = await self._workspaces.list_workspaces(task_id=task.id)
         if not workspaces:
@@ -363,6 +370,9 @@ class SessionService:
             worktree_path = await self._workspaces.get_path(task_id)
             if worktree_path is None:
                 return False
+            if task_id in self._launched_external:
+                self._launched_external.discard(task_id)
+                return True
             return await self._launch_external_launcher(backend, worktree_path)
         except WeztermError:
             return False
@@ -422,6 +432,7 @@ class SessionService:
             with contextlib.suppress(TmuxError):
                 await run_tmux("kill-session", "-t", session_name)
         await self._tasks.close_session_by_external_id(session_name, status=SessionStatus.CLOSED)
+        self._launched_external.discard(task_id)
 
     async def kill_resolution_session(self, task_id: str) -> None:
         """Kill resolution session if present."""
@@ -602,30 +613,37 @@ class SessionService:
         return True
 
     async def _commit_gitignore_if_needed(self, worktree_path: Path, modified: bool) -> None:
-        """Auto-commit .gitignore so agents start with clean git status."""
+        """Schedule .gitignore commit in background so session creation isn't blocked."""
         if not modified:
             return
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "-C",
-            str(worktree_path),
-            "add",
-            ".gitignore",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.wait()
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "-C",
-            str(worktree_path),
-            "commit",
-            "-m",
-            "chore: gitignore kagan mcp config files",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.wait()
+        asyncio.create_task(self._bg_commit_gitignore(worktree_path))
+
+    async def _bg_commit_gitignore(self, worktree_path: Path) -> None:
+        """Background task to commit .gitignore changes (best-effort)."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                "-C",
+                str(worktree_path),
+                "add",
+                ".gitignore",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.wait()
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                "-C",
+                str(worktree_path),
+                "commit",
+                "-m",
+                "chore: gitignore kagan mcp config files",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.wait()
+        except Exception:
+            pass  # Best-effort background commit
 
     def _build_startup_prompt(self, task: TaskLike) -> str:
         """Build startup prompt for pair mode."""

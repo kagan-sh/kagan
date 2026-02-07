@@ -22,6 +22,14 @@ if TYPE_CHECKING:
 INSTALL_TIMEOUT_SECONDS = 120
 
 
+def _which(command: str) -> str | None:
+    """Resolve command path via stdlib lookup.
+
+    Keeping `shutil.which` reachable preserves test monkeypatch compatibility.
+    """
+    return shutil.which(command)
+
+
 class AgentType(StrEnum):
     """Supported agent types."""
 
@@ -77,7 +85,7 @@ def check_agent_installed(agent: AgentType | str) -> bool:
     if not cmd:
         return False
     executable = cmd.split()[0]
-    return shutil.which(executable) is not None
+    return _which(executable) is not None
 
 
 def _check_prerequisites(agent: AgentType) -> str | None:
@@ -90,10 +98,10 @@ def _check_prerequisites(agent: AgentType) -> str | None:
         Error message if prerequisites are missing, None if all prerequisites are met.
     """
     if agent in _NPM_AGENTS:
-        if shutil.which("npm") is None:
+        if _which("npm") is None:
             return "npm is not installed. Please install Node.js and npm first: https://nodejs.org/"
     elif agent in _UV_AGENTS:
-        if shutil.which("uv") is None:
+        if _which("uv") is None:
             return (
                 "uv is not installed. "
                 "Please install uv first: https://docs.astral.sh/uv/getting-started/installation/"
@@ -145,7 +153,7 @@ async def check_claude_code_installed() -> bool:
         True if claude command is available, False otherwise.
     """
 
-    return shutil.which("claude") is not None
+    return _which("claude") is not None
 
 
 def check_opencode_installed() -> bool:
@@ -154,7 +162,7 @@ def check_opencode_installed() -> bool:
     Returns:
         True if opencode command is available, False otherwise.
     """
-    return shutil.which("opencode") is not None
+    return _which("opencode") is not None
 
 
 async def _run_install(
@@ -272,7 +280,7 @@ async def install_opencode(
         - success: True if installation completed successfully
         - message: Descriptive message about the result or error
     """
-    if shutil.which("npm") is None:
+    if _which("npm") is None:
         return False, (
             "Installation failed: npm is not installed. "
             "Please install Node.js and npm first: https://nodejs.org/"

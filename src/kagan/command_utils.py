@@ -15,6 +15,22 @@ if TYPE_CHECKING:
 
 WIN_DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC"
 
+# Module-level cache for shutil.which() results.
+# PATH doesn't change during a session, so caching avoids repeated filesystem scans.
+_which_cache: dict[str, str | None] = {}
+
+
+def cached_which(name: str) -> str | None:
+    """Return the path for *name* using shutil.which(), with per-session caching."""
+    if name not in _which_cache:
+        _which_cache[name] = shutil.which(name)
+    return _which_cache[name]
+
+
+def clear_which_cache() -> None:
+    """Clear the cached_which cache. Intended for testing."""
+    _which_cache.clear()
+
 
 def is_windows() -> bool:
     """Return True when running on Windows."""
@@ -47,11 +63,11 @@ def resolve_command_path(command: Sequence[str]) -> list[str]:
     if is_windows():
         pathext = os.environ.get("PATHEXT", WIN_DEFAULT_PATHEXT)
         for ext in pathext.split(";"):
-            potential_path = shutil.which(cmd + ext)
+            potential_path = cached_which(cmd + ext)
             if potential_path:
                 return [potential_path, *args]
 
-    if resolved_cmd := shutil.which(cmd):
+    if resolved_cmd := cached_which(cmd):
         return [resolved_cmd, *args]
 
     return [cmd, *args]

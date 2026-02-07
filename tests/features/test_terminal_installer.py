@@ -4,7 +4,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from kagan.command_utils import clear_which_cache
 from kagan.terminals.installer import check_terminal_installed, install_terminal
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache() -> None:
+    """Ensure cached_which cache is empty before every test."""
+    clear_which_cache()
 
 
 class _Proc:

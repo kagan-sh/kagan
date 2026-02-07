@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from kagan.command_utils import clear_which_cache
+
 # Re-export fixtures from parent conftest so they're available in feature tests
 # pytest automatically discovers fixtures from conftest.py files in parent directories
 
@@ -24,6 +26,7 @@ def _mock_agent_gates_for_ci(monkeypatch: pytest.MonkeyPatch) -> None:
     This fixture mocks the two ``shutil.which`` entry-points and the MCP config
     check so that all feature tests run identically on CI and locally.
     """
+    clear_which_cache()
     monkeypatch.setattr(
         "kagan.services.agent_health.shutil.which",
         lambda _cmd, *_a, **_kw: "/usr/bin/mock",

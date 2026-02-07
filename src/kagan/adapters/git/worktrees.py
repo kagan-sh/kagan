@@ -21,11 +21,10 @@ class GitWorktreeAdapter:
         repo_path_obj = Path(repo_path)
         worktree_path_obj = Path(worktree_path)
 
-        has_remote = await self._has_remote(repo_path_obj, "origin")
-        if has_remote:
+        try:
             await self._run_git(repo_path_obj, ["fetch", "origin", base_branch])
             start_point = f"origin/{base_branch}"
-        else:
+        except RuntimeError:
             start_point = base_branch
 
         await self._run_git(

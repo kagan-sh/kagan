@@ -7,12 +7,11 @@ entry point (__main__.py) and the ACP agent (acp/kagan_agent.py).
 from __future__ import annotations
 
 import platform
-import shutil
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from kagan.command_utils import split_command_string
+from kagan.command_utils import cached_which, split_command_string
 
 if TYPE_CHECKING:
     from kagan.config import AgentConfig
@@ -270,7 +269,7 @@ def resolve_acp_command(
                 issue=DetectedIssue(preset=preset, details=agent_name),
             )
 
-        binary_path = shutil.which(binary_name)
+        binary_path = cached_which(binary_name)
         if binary_path is not None:
             try:
                 parts = split_command_string(run_command)
@@ -283,7 +282,7 @@ def resolve_acp_command(
                 used_fallback=True,
             )
 
-        npx_resolved = shutil.which("npx")
+        npx_resolved = cached_which("npx")
         if npx_resolved is not None:
             from kagan.command_utils import ensure_windows_npm_dir
 
@@ -325,7 +324,7 @@ def resolve_acp_command(
     except ValueError:
         executable = run_command
 
-    if shutil.which(executable) is not None:
+    if cached_which(executable) is not None:
         return ACPCommandResolution(
             resolved_command=split_command_string(run_command),
             issue=None,
@@ -354,7 +353,7 @@ def _command_exists(command: str) -> bool:
         if not command_lower.endswith((".exe", ".cmd", ".bat")):
             candidates.extend([f"{command}.exe", f"{command}.cmd", f"{command}.bat"])
 
-    return any(shutil.which(candidate) is not None for candidate in candidates)
+    return any(cached_which(candidate) is not None for candidate in candidates)
 
 
 def _resolve_pair_terminal_backend(
@@ -472,7 +471,7 @@ def _check_agent(
     except ValueError:
         executable = agent_command
 
-    if shutil.which(executable) is None:
+    if cached_which(executable) is None:
         preset = IssuePreset(
             type=IssueType.AGENT_MISSING,
             severity=IssueSeverity.BLOCKING,
