@@ -11,15 +11,16 @@ repo_name: aorumbayev/kagan
 
 theme:
   name: material
+  custom_dir: docs/overrides
 
   # Dark mode only - no toggle
   palette:
-    scheme: kagan
+    scheme: slate
 
   logo: assets/logo.svg
 
   font:
-    text: Space Grotesk
+    text: JetBrains Mono
     code: JetBrains Mono
 
   features:
@@ -46,6 +47,9 @@ theme:
 extra_css:
   - stylesheets/extra.css
 
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+
 extra:
   social:
     - icon: fontawesome/brands/github
@@ -55,7 +59,7 @@ extra:
 
   generator: false
 
-copyright: Copyright 2026 Altynbek Orumbayev (<a href="https://makerx.com.au/" target="_blank">MakerX</a>)
+copyright: Released under the <a href="https://github.com/aorumbayev/kagan/blob/main/LICENSE" target="_blank">MIT License</a>. Copyright 2026 Kagan by <a href="https://makerx.com.au/" target="_blank">MakerX</a>.
 
 markdown_extensions:
   # Python Markdown
@@ -83,7 +87,7 @@ markdown_extensions:
       custom_fences:
         - name: mermaid
           class: mermaid
-          format: !!python/name:mermaid2.fence_mermaid_custom
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist:
@@ -92,11 +96,11 @@ markdown_extensions:
 
 plugins:
   - search
-  - mermaid2
 
 nav:
   - Home: index.md
-  - Ticket Modes: ticket-modes.md
+  - Task Modes: task-modes.md
+  - Multi-Repo Guide: multi-repo-guide.md
   - Keyboard Shortcuts: keybindings.md
   - Configuration: config.md
   - Contributing: contributing.md

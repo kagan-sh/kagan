@@ -27,7 +27,7 @@ def copy_with_notification(app: App, text: str, label: str = "Content") -> bool:
 
     try:
         pyperclip.copy(text)
-        # Truncate preview for notification
+
         preview = text[:50].replace("\n", " ")
         if len(text) > 50:
             preview += "..."

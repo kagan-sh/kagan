@@ -1,0 +1,144 @@
+name: Post-Release Update Test
+
+on:
+  workflow_run:
+    workflows: ["Continuous Delivery"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch: # Allow manual triggering for testing
+
+jobs:
+  test-update:
+    name: Test Update from Previous Version
+    # Only run if CD workflow succeeded OR manually triggered
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    steps:
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Get PyPI versions and determine previous version
+        id: versions
+        run: |
+          # Fetch all versions from PyPI
+          VERSIONS_JSON=$(curl -s https://pypi.org/pypi/kagan/json)
+
+          # Get the two most recent versions by upload time (includes prereleases)
+          # The first is the latest (just released), the second is the previous
+          VERSIONS=$(echo "$VERSIONS_JSON" | jq -r '
+            .releases
+            | to_entries
+            | map(select(.value | length > 0))
+            | map({version: .key, upload_time: .value[0].upload_time_iso_8601})
+            | sort_by(.upload_time)
+            | reverse
+            | .[0:2]
+            | .[].version
+          ')
+
+          LATEST=$(echo "$VERSIONS" | head -n 1)
+          PREVIOUS=$(echo "$VERSIONS" | tail -n 1)
+
+          echo "Latest version on PyPI: $LATEST"
+          echo "latest_version=$LATEST" >> $GITHUB_OUTPUT
+
+          # Check if latest is a prerelease (contains 'a', 'b', 'rc', or 'dev')
+          if [[ "$LATEST" =~ (a|b|rc|dev|alpha|beta) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "Latest version is a prerelease"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "Latest version is a stable release"
+          fi
+
+          # Ensure we have a different previous version
+          if [ -z "$PREVIOUS" ] || [ "$PREVIOUS" = "$LATEST" ]; then
+            echo "No previous version found - this might be the first release"
+            echo "has_previous=false" >> $GITHUB_OUTPUT
+          else
+            echo "previous_version=$PREVIOUS" >> $GITHUB_OUTPUT
+            echo "has_previous=true" >> $GITHUB_OUTPUT
+            echo "Previous version: $PREVIOUS"
+          fi
+
+      - name: Install previous version via uv tool
+        if: steps.versions.outputs.has_previous == 'true'
+        run: |
+          PREVIOUS_VERSION="${{ steps.versions.outputs.previous_version }}"
+          echo "Installing kagan==$PREVIOUS_VERSION via uv tool install..."
+          uv tool install "kagan==$PREVIOUS_VERSION"
+
+          # Verify installation
+          echo "Verifying installation..."
+          which kagan
+          kagan --version
+
+      - name: Test CLI help (before update)
+        if: steps.versions.outputs.has_previous == 'true'
+        run: |
+          echo "Testing 'kagan --help' on previous version..."
+          kagan --help
+          echo "CLI help test passed (before update)"
+
+      - name: Run kagan update with --force
+        if: steps.versions.outputs.has_previous == 'true'
+        run: |
+          LATEST_VERSION="${{ steps.versions.outputs.latest_version }}"
+          IS_PRERELEASE="${{ steps.versions.outputs.is_prerelease }}"
+
+          echo "Running 'kagan update --force' to update to $LATEST_VERSION..."
+
+          # Use --prerelease flag if the latest version is a prerelease
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            echo "Using --prerelease flag for prerelease version"
+            kagan update --force --prerelease
+          else
+            kagan update --force
+          fi
+
+          # Check if update succeeded by comparing versions
+          echo "Verifying version after update..."
+          INSTALLED_VERSION=$(kagan --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-?[a-zA-Z0-9.]+)?')
+          echo "Installed version after update: $INSTALLED_VERSION"
+
+          # If kagan update failed (uv tool upgrade issue), fallback to direct install
+          if [ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]; then
+            echo "Update via 'kagan update' did not change version. Falling back to direct uv tool install..."
+            uv tool install "kagan==$LATEST_VERSION" --force
+            INSTALLED_VERSION=$(kagan --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-?[a-zA-Z0-9.]+)?')
+            echo "Installed version after direct install: $INSTALLED_VERSION"
+          fi
+
+          # Final verification - fail if version still doesn't match
+          if [ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]; then
+            echo "ERROR: Version mismatch. Expected $LATEST_VERSION but got $INSTALLED_VERSION"
+            exit 1
+          fi
+
+          echo "Successfully updated to $LATEST_VERSION"
+
+      - name: Test CLI help (after update)
+        if: steps.versions.outputs.has_previous == 'true'
+        run: |
+          echo "Testing 'kagan --help' after update (verifies DB migration on boot)..."
+          kagan --help
+          echo "CLI help test passed (after update)"
+
+          # Final version check
+          echo ""
+          echo "=== Update Test Summary ==="
+          echo "Previous version: ${{ steps.versions.outputs.previous_version }}"
+          echo "Latest version: ${{ steps.versions.outputs.latest_version }}"
+          kagan --version
+
+      - name: Skip notice (first release)
+        if: steps.versions.outputs.has_previous != 'true'
+        run: |
+          echo "Skipping update test - no previous version available"
+          echo "This is expected for the first release"

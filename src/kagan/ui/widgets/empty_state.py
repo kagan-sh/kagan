@@ -23,14 +23,11 @@ class EmptyState(Widget):
         """Compose the empty state layout."""
         with Center():
             with Vertical(classes="empty-state-card"):
-                # Centered logo - wrapped in Center for proper alignment
                 with Center():
                     yield Static(KAGAN_LOGO, id="empty-state-logo")
 
-                # Getting Started label centered below logo
                 yield Static("Getting Started", classes="empty-card-title")
 
-                # How it works
                 yield Static("How it works:", classes="empty-card-section")
                 yield Static(
                     f"  {BOX_DRAWING['BULLET']} Describe your feature below",
@@ -41,11 +38,10 @@ class EmptyState(Widget):
                     classes="card-item-compact",
                 )
                 yield Static(
-                    f"  {BOX_DRAWING['BULLET']} Generates tickets for review",
+                    f"  {BOX_DRAWING['BULLET']} Generates tasks for review",
                     classes="card-item-compact",
                 )
 
-                # Tips
                 yield Static("Tips:", classes="empty-card-section")
                 yield Static(
                     f"  {BOX_DRAWING['BULLET']} Be specific about requirements",

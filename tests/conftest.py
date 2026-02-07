@@ -3,31 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from hypothesis import Phase, Verbosity, settings
 
-from kagan.app import KaganApp
-from kagan.database.manager import StateManager
-from kagan.database.models import Ticket, TicketPriority, TicketStatus, TicketType
-from tests.helpers.git import init_git_repo_with_commit
-from tests.helpers.mocks import (
-    create_mock_agent,
-    create_mock_process,
-    create_mock_session_manager,
-    create_mock_worktree_manager,
-    create_test_agent_config,
-    create_test_config,
-)
+from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
 
-# =============================================================================
-# Hypothesis Profiles
-# =============================================================================
+_TEST_BASE_DIR = Path(tempfile.mkdtemp(prefix="kagan-tests-"))
+os.environ["KAGAN_DATA_DIR"] = str(_TEST_BASE_DIR / "data")
+os.environ["KAGAN_CONFIG_DIR"] = str(_TEST_BASE_DIR / "config")
+os.environ["KAGAN_CACHE_DIR"] = str(_TEST_BASE_DIR / "cache")
+os.environ["KAGAN_WORKTREE_BASE"] = str(_TEST_BASE_DIR / "worktrees")
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from kagan.adapters.db.repositories import TaskRepository
+    from kagan.adapters.db.schema import Task
+    from kagan.app import KaganApp
+    from kagan.bootstrap import InMemoryEventBus
+    from kagan.services.tasks import TaskService
+
 
 settings.register_profile(
     "ci",
@@ -48,134 +52,173 @@ settings.register_profile(
 )
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 
-# =============================================================================
-# Core Unit Test Fixtures
-# =============================================================================
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Ensure snapshot tests run sequentially under xdist."""
+    del config
+    for item in items:
+        if item.get_closest_marker("snapshot"):
+            item.add_marker(pytest.mark.xdist_group("snapshots"))
+
+
+@pytest.fixture(autouse=True)
+def _mock_platform_system(monkeypatch, request):
+    """Handle @pytest.mark.mock_platform_system("Windows") marker."""
+    marker = request.node.get_closest_marker("mock_platform_system")
+    if marker:
+        target_platform = marker.args[0]
+        monkeypatch.setattr("platform.system", lambda: target_platform)
+        # Also mock command_utils.is_windows which caches platform.system
+        monkeypatch.setattr("kagan.command_utils.is_windows", lambda: target_platform == "Windows")
+
+
+@pytest.fixture(autouse=True)
+def _clean_worktree_base() -> Generator[None, None, None]:
+    """Ensure worktree temp directories don't leak between tests."""
+    yield
+    base_dir = Path(os.environ["KAGAN_WORKTREE_BASE"])
+    shutil.rmtree(base_dir, ignore_errors=True)
 
 
 @pytest.fixture
 async def state_manager():
-    """Create a temporary database for testing.
+    """Create a temporary task repository for testing."""
+    from kagan.adapters.db.repositories import TaskRepository
 
-    Shared by: test_database.py, test_scheduler.py, and other DB tests.
-    """
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"
-        manager = StateManager(db_path)
+        manager = TaskRepository(db_path)
         await manager.initialize()
+
+        await manager.ensure_test_project("Test Project")
         yield manager
         await manager.close()
 
 
 @pytest.fixture
+def event_bus() -> InMemoryEventBus:
+    """Create an in-memory event bus for service tests."""
+    from kagan.bootstrap import InMemoryEventBus
+
+    return InMemoryEventBus()
+
+
+@pytest.fixture
+def task_service(state_manager: TaskRepository, event_bus: InMemoryEventBus) -> TaskService:
+    """Create a TaskService backed by the test repository."""
+    from kagan.services.tasks import TaskService
+
+    return TaskService(state_manager, event_bus)
+
+
+@pytest.fixture
+def task_factory(state_manager: TaskRepository):
+    """Factory for creating DB Task objects with default project/repo IDs."""
+    from kagan.adapters.db.schema import Task
+    from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
+
+    def _factory(
+        *,
+        title: str,
+        description: str = "",
+        priority: TaskPriority = TaskPriority.MEDIUM,
+        status: TaskStatus = TaskStatus.BACKLOG,
+        task_type: TaskType = TaskType.PAIR,
+        acceptance_criteria: list[str] | None = None,
+        assigned_hat: str | None = None,
+        agent_backend: str | None = None,
+    ) -> Task:
+        project_id = state_manager.default_project_id
+        if project_id is None:
+            raise RuntimeError("TaskRepository defaults not initialized")
+        return Task.create(
+            title=title,
+            description=description,
+            priority=priority,
+            task_type=task_type,
+            status=status,
+            assigned_hat=assigned_hat,
+            agent_backend=agent_backend,
+            acceptance_criteria=acceptance_criteria,
+            project_id=project_id,
+        )
+
+    return _factory
+
+
+@pytest.fixture
 def app() -> KaganApp:
     """Create app with in-memory database."""
+    from kagan.app import KaganApp
+
     return KaganApp(db_path=":memory:")
-
-
-# =============================================================================
-# Git Repository Fixtures
-# =============================================================================
 
 
 @pytest.fixture
 async def git_repo(tmp_path: Path) -> Path:
-    """Create an initialized git repository for testing.
+    """Create an initialized git repository for testing."""
+    from tests.helpers.git import init_git_repo_with_commit
 
-    Shared by: test_worktree.py, test_git_utils.py, and other git tests.
-
-    Provides:
-    - Initialized git repo with 'main' branch
-    - Configured user (email, name)
-    - GPG signing disabled
-    - Initial commit with README.md
-    """
     return await init_git_repo_with_commit(tmp_path)
 
 
-# =============================================================================
-# Mock Fixtures
-# =============================================================================
-
-
 @pytest.fixture
-def mock_agent():
-    """Create a mock ACP agent for testing.
+def mock_workspace_service():
+    """Create a mock WorkspaceService."""
+    from tests.helpers.mocks import create_mock_workspace_service
 
-    Shared by: test_scheduler.py and other agent tests.
-    Default response: "Done! <complete/>"
-    """
-    return create_mock_agent()
+    return create_mock_workspace_service()
 
 
-@pytest.fixture
-def mock_worktree_manager():
-    """Create a mock WorktreeManager."""
-    return create_mock_worktree_manager()
+async def _create_e2e_app_with_tasks(e2e_project, tasks: list[dict]) -> KaganApp:
+    """Helper to create a KaganApp with pre-populated tasks."""
+    from kagan.adapters.db.repositories import RepoRepository, TaskRepository
+    from kagan.adapters.db.schema import Task
+    from kagan.app import KaganApp
 
-
-@pytest.fixture
-def mock_session_manager():
-    """Create a mock SessionManager."""
-    return create_mock_session_manager()
-
-
-@pytest.fixture
-def config():
-    """Create a test KaganConfig."""
-    return create_test_config()
-
-
-@pytest.fixture
-def agent_config():
-    """Create a minimal AgentConfig for testing."""
-    return create_test_agent_config()
-
-
-@pytest.fixture
-def mock_process():
-    """Create a mock subprocess for agent process testing."""
-    return create_mock_process()
-
-
-# =============================================================================
-# E2E Test Fixtures
-# =============================================================================
-
-
-async def _create_e2e_app_with_tickets(e2e_project, tickets: list[Ticket]) -> KaganApp:
-    """Helper to create a KaganApp with pre-populated tickets."""
-    manager = StateManager(e2e_project.db)
+    manager = TaskRepository(e2e_project.db, project_root=e2e_project.root)
     await manager.initialize()
-    for ticket in tickets:
-        await manager.create_ticket(ticket)
+
+    project_id = await manager.ensure_test_project("E2E Test Project")
+
+    assert manager._session_factory is not None
+    repo_repo = RepoRepository(manager._session_factory)
+    repo, _ = await repo_repo.get_or_create(e2e_project.root, default_branch="main")
+    if repo.id:
+        await repo_repo.add_to_project(project_id, repo.id, is_primary=True)
+
+    for task_kwargs in tasks:
+        task = Task.create(
+            project_id=project_id,
+            **task_kwargs,
+        )
+        await manager.create(task)
     await manager.close()
-    return KaganApp(db_path=e2e_project.db, config_path=e2e_project.config, lock_path=None)
+    return KaganApp(
+        db_path=e2e_project.db,
+        config_path=e2e_project.config,
+        project_root=e2e_project.root,
+    )
 
 
 @pytest.fixture
 async def e2e_project(tmp_path: Path):
-    """Create a real project with git repo and kagan config for E2E testing.
-
-    This fixture provides:
-    - A real git repository with initial commit
-    - A .kagan/config.toml file
-    - Paths to DB and config for KaganApp initialization
-    """
+    """Create a real project with git repo and kagan config for E2E testing."""
     project = tmp_path / "test_project"
     project.mkdir()
 
-    # Initialize real git repo with commit
+    from tests.helpers.git import init_git_repo_with_commit
+
     await init_git_repo_with_commit(project)
 
-    # Create .kagan directory with config
-    kagan_dir = project / ".kagan"
-    kagan_dir.mkdir()
+    config_dir = tmp_path / "kagan-config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "kagan-data"
+    data_dir.mkdir()
 
     config_content = """# Kagan Test Configuration
 [general]
-auto_start = false
-auto_merge = false
+auto_review = false
 default_base_branch = "main"
 default_worker_agent = "claude"
 
@@ -187,32 +230,26 @@ run_command."*" = "echo mock-claude"
 interactive_command."*" = "echo mock-claude-interactive"
 active = true
 """
-    (kagan_dir / "config.toml").write_text(config_content)
+    config_path = config_dir / "config.toml"
+    config_path.write_text(config_content)
 
     return SimpleNamespace(
         root=project,
-        db=str(kagan_dir / "state.db"),
-        config=str(kagan_dir / "config.toml"),
-        kagan_dir=kagan_dir,
+        db=str(data_dir / "kagan.db"),
+        config=str(config_path),
     )
 
 
 @pytest.fixture
 def mock_agent_spawn(monkeypatch):
-    """Mock ACP agent subprocess spawning.
-
-    This is the ONLY mock we use in E2E tests - everything else is real.
-    The mock prevents actual agent CLI processes from starting.
-    """
+    """Mock ACP agent subprocess spawning."""
     original_exec = asyncio.create_subprocess_exec
 
     async def selective_mock(*args, **kwargs):
-        # Only mock agent-related commands, allow git commands through
         cmd = args[0] if args else ""
         if cmd in ("git", "tmux"):
             return await original_exec(*args, **kwargs)
 
-        # Mock agent processes
         mock_process = MagicMock()
         mock_process.pid = 12345
         mock_process.returncode = None
@@ -230,214 +267,156 @@ def mock_agent_spawn(monkeypatch):
 
 
 @pytest.fixture
+def mock_agent_factory():
+    """Factory that returns a mock Agent for testing."""
+    from kagan.acp.agent import Agent
+    from kagan.acp.buffers import AgentBuffers
+
+    def factory(project_root, agent_config, *, read_only=False):
+        mock_agent = MagicMock(spec=Agent)
+        buffers = AgentBuffers()
+        buffers.append_response("Done. <complete/>")
+
+        mock_agent.set_auto_approve = MagicMock()
+        mock_agent.set_model_override = MagicMock()
+        mock_agent.start = MagicMock()
+        mock_agent.wait_ready = AsyncMock()
+        mock_agent.send_prompt = AsyncMock()
+        mock_agent.get_response_text = MagicMock(side_effect=buffers.get_response_text)
+        mock_agent.get_tool_calls = MagicMock(return_value=[])
+        mock_agent.get_thinking_text = MagicMock(return_value="")
+        mock_agent.clear_tool_calls = MagicMock()
+        mock_agent.stop = AsyncMock()
+        mock_agent._buffers = buffers
+        return mock_agent
+
+    return factory
+
+
+@pytest.fixture
 async def e2e_app(e2e_project):
     """Create a KaganApp configured for E2E testing with real git repo."""
+    from kagan.app import KaganApp
+
     app = KaganApp(
         db_path=e2e_project.db,
         config_path=e2e_project.config,
-        lock_path=None,
+        project_root=e2e_project.root,
     )
     return app
 
 
 @pytest.fixture
-async def e2e_app_with_tickets(e2e_project):
-    """Create a KaganApp with pre-populated tickets (backlog, in-progress, review)."""
-    return await _create_e2e_app_with_tickets(
+async def e2e_app_with_tasks(e2e_project):
+    """Create a KaganApp with pre-populated tasks (backlog, in-progress, review)."""
+    return await _create_e2e_app_with_tasks(
         e2e_project,
         [
-            Ticket.create(
+            dict(
                 title="Backlog task",
                 description="A task in backlog",
-                priority=TicketPriority.LOW,
-                status=TicketStatus.BACKLOG,
+                priority=TaskPriority.LOW,
+                status=TaskStatus.BACKLOG,
             ),
-            Ticket.create(
+            dict(
                 title="In progress task",
                 description="Currently working",
-                priority=TicketPriority.HIGH,
-                status=TicketStatus.IN_PROGRESS,
+                priority=TaskPriority.HIGH,
+                status=TaskStatus.IN_PROGRESS,
             ),
-            Ticket.create(
+            dict(
                 title="Review task",
                 description="Ready for review",
-                priority=TicketPriority.MEDIUM,
-                status=TicketStatus.REVIEW,
+                priority=TaskPriority.MEDIUM,
+                status=TaskStatus.REVIEW,
             ),
         ],
     )
-
-
-@pytest.fixture
-async def e2e_app_with_auto_ticket(e2e_project):
-    """Create a KaganApp with an AUTO ticket in IN_PROGRESS."""
-    return await _create_e2e_app_with_tickets(
-        e2e_project,
-        [
-            Ticket.create(
-                title="Auto task in progress",
-                description="An AUTO task currently being worked on by agent",
-                priority=TicketPriority.HIGH,
-                status=TicketStatus.IN_PROGRESS,
-                ticket_type=TicketType.AUTO,
-            )
-        ],
-    )
-
-
-@pytest.fixture
-async def e2e_app_with_done_ticket(e2e_project):
-    """Create a KaganApp with a ticket in DONE status."""
-    return await _create_e2e_app_with_tickets(
-        e2e_project,
-        [
-            Ticket.create(
-                title="Completed task",
-                description="A task that has been completed",
-                priority=TicketPriority.MEDIUM,
-                status=TicketStatus.DONE,
-            )
-        ],
-    )
-
-
-@pytest.fixture
-async def e2e_app_with_ac_ticket(e2e_project):
-    """Create a KaganApp with a ticket that has acceptance criteria."""
-    return await _create_e2e_app_with_tickets(
-        e2e_project,
-        [
-            Ticket.create(
-                title="Task with acceptance criteria",
-                description="A task with defined acceptance criteria",
-                priority=TicketPriority.HIGH,
-                status=TicketStatus.BACKLOG,
-                acceptance_criteria=["User can login", "Error messages shown"],
-            )
-        ],
-    )
-
-
-# =============================================================================
-# Integration Test Fixtures
-# =============================================================================
-
-
-@pytest.fixture
-def scheduler(state_manager, mock_worktree_manager, config):
-    """Create a scheduler instance with default config (auto_merge=false).
-
-    Shared by: test_scheduler_*.py
-    """
-    from kagan.agents.scheduler import Scheduler
-
-    changed_callback = MagicMock()
-    return Scheduler(
-        state_manager=state_manager,
-        worktree_manager=mock_worktree_manager,
-        config=config,
-        on_ticket_changed=changed_callback,
-    )
-
-
-@pytest.fixture
-def auto_merge_config():
-    """Create a test config with auto_merge enabled.
-
-    Shared by: test_scheduler_automerge.py, test_scheduler_automerge_extended.py
-    """
-    from kagan.config import AgentConfig, GeneralConfig, KaganConfig
-
-    return KaganConfig(
-        general=GeneralConfig(
-            auto_start=True,
-            auto_merge=True,
-            max_concurrent_agents=2,
-            max_iterations=3,
-            iteration_delay_seconds=0.01,
-            default_worker_agent="test",
-            default_base_branch="main",
-        ),
-        agents={
-            "test": AgentConfig(
-                identity="test.agent",
-                name="Test Agent",
-                short_name="test",
-                run_command={"*": "echo test"},
-            )
-        },
-    )
-
-
-@pytest.fixture
-def mock_review_agent():
-    """Create a mock agent for review that returns approve signal.
-
-    Shared by: test_scheduler_automerge.py, test_scheduler_automerge_extended.py
-    """
-    agent = MagicMock()
-    agent.set_auto_approve = MagicMock()
-    agent.start = MagicMock()
-    agent.wait_ready = AsyncMock()
-    agent.send_prompt = AsyncMock()
-    agent.get_response_text = MagicMock(
-        return_value='Looks good! <approve summary="Implementation complete"/>'
-    )
-    agent.stop = AsyncMock()
-    return agent
-
-
-def _create_fake_tmux(sessions: dict):
-    """Create a fake tmux function that tracks session state."""
-
-    async def fake_run_tmux(*args: str) -> str:
-        if not args:
-            return ""
-        command, args_list = args[0], list(args)
-        if command == "new-session" and "-s" in args_list:
-            idx = args_list.index("-s")
-            name = args_list[idx + 1] if idx + 1 < len(args_list) else None
-            if name:
-                cwd = args_list[args_list.index("-c") + 1] if "-c" in args_list else ""
-                # Extract environment variables from -e flags
-                env: dict[str, str] = {}
-                for i, val in enumerate(args_list):
-                    if val == "-e" and i + 1 < len(args_list):
-                        key, _, env_value = args_list[i + 1].partition("=")
-                        env[key] = env_value
-                sessions[name] = {"cwd": cwd, "env": env, "sent_keys": []}
-        elif command == "kill-session" and "-t" in args_list:
-            sessions.pop(args_list[args_list.index("-t") + 1], None)
-        elif command == "send-keys" and "-t" in args_list:
-            idx = args_list.index("-t")
-            name, keys = args_list[idx + 1], args_list[idx + 2] if idx + 2 < len(args_list) else ""
-            if name in sessions:
-                sessions[name]["sent_keys"].append(keys)
-        elif command == "list-sessions":
-            return "\n".join(sorted(sessions.keys()))
-        return ""
-
-    return fake_run_tmux
 
 
 @pytest.fixture(autouse=True)
-def auto_mock_tmux_for_app_tests(request, monkeypatch):
-    """Auto-mock tmux for tests using KaganApp fixtures (external system boundary)."""
-    # Match fixtures that create KaganApp instances
+def auto_mock_terminals_for_app_tests(request, monkeypatch):
+    """Auto-mock terminal backends for app-driven tests (external system boundary)."""
+    from tests.helpers.mocks import create_fake_tmux
+
     app_fixture_patterns = ("e2e_app", "app", "welcome_app", "_fresh_app")
     if not any(
         n.startswith(app_fixture_patterns) or n in app_fixture_patterns
         for n in request.fixturenames
     ):
         return
-    fake = _create_fake_tmux({})
-    monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake)
-    monkeypatch.setattr("kagan.sessions.manager.run_tmux", fake)
+
+    # tmux commands
+    fake = create_fake_tmux({})
+    monkeypatch.setattr("kagan.tmux.run_tmux", fake)
+    monkeypatch.setattr("kagan.services.sessions.run_tmux", fake)
+
+    # wezterm commands
+    wezterm_workspaces: dict[str, set[str]] = {}
+    pane_counter = 0
+
+    async def fake_run_wezterm(*args: str, **_kwargs: object) -> str:
+        nonlocal pane_counter
+        if not args:
+            return ""
+
+        if args[0] == "start":
+            workspace = "default"
+            if "--workspace" in args:
+                idx = args.index("--workspace")
+                if idx + 1 < len(args):
+                    workspace = args[idx + 1]
+            pane_counter += 1
+            wezterm_workspaces.setdefault(workspace, set()).add(str(pane_counter))
+            return ""
+
+        if args[:3] == ("cli", "list", "--format"):
+            payload = [
+                {"workspace": workspace, "pane_id": pane_id}
+                for workspace, pane_ids in wezterm_workspaces.items()
+                for pane_id in sorted(pane_ids)
+            ]
+            return json.dumps(payload)
+
+        if args[:3] == ("cli", "kill-pane", "--pane-id") and len(args) >= 4:
+            pane_id = args[3]
+            for pane_ids in wezterm_workspaces.values():
+                pane_ids.discard(pane_id)
+            empty = [
+                workspace for workspace, pane_ids in wezterm_workspaces.items() if not pane_ids
+            ]
+            for workspace in empty:
+                wezterm_workspaces.pop(workspace, None)
+            return ""
+
+        return ""
+
+    monkeypatch.setattr("kagan.wezterm.run_wezterm", fake_run_wezterm)
+    monkeypatch.setattr("kagan.services.sessions.run_wezterm", fake_run_wezterm)
+
+    # Safety: never spawn real terminal attach/external launcher subprocesses in app tests.
+    monkeypatch.setattr(
+        "kagan.services.sessions.SessionService._attach_tmux_session",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "kagan.services.sessions.SessionService._attach_wezterm_session",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "kagan.services.sessions.SessionService._launch_external_launcher",
+        AsyncMock(return_value=True),
+    )
+
+    # Assume terminals are available in app tests unless a test overrides this explicitly.
+    monkeypatch.setattr("kagan.terminals.installer.check_terminal_installed", lambda _name: True)
 
 
 @pytest.fixture
 def mock_tmux(monkeypatch):
     """Intercept tmux calls and return session state for assertions."""
+    from tests.helpers.mocks import create_fake_tmux
+
     sessions: dict = {}
-    monkeypatch.setattr("kagan.sessions.manager.run_tmux", _create_fake_tmux(sessions))
+    monkeypatch.setattr("kagan.services.sessions.run_tmux", create_fake_tmux(sessions))
     return sessions

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from kagan.acp import messages  # noqa: TC001 - used in method signatures at runtime
-from kagan.agents.planner import parse_todos
+from kagan.ui.utils.agent_exit import is_graceful_agent_termination
 
 if TYPE_CHECKING:
     from kagan.ui.screens.planner.screen import PlannerScreen
@@ -14,18 +14,13 @@ if TYPE_CHECKING:
 
 
 class MessageHandler:
-    """Handles ACP messages for the planner screen.
-
-    This class encapsulates all message handling logic, keeping
-    the main screen class focused on UI concerns.
-    """
+    """Handles ACP messages for the planner screen."""
 
     def __init__(self, screen: PlannerScreen) -> None:
         self._screen = screen
 
     @property
     def state(self) -> PlannerState:
-        """Get current state from screen."""
         return self._screen._state
 
     @state.setter
@@ -47,18 +42,6 @@ class MessageHandler:
         self.state.accumulated_response.append(message.text)
         await self._get_output().post_response(message.text)
 
-        # Parse and update plan display (update in-place if exists)
-        if not self.state.todos_displayed:
-            full_response = "".join(self.state.accumulated_response)
-            todos = parse_todos(full_response)
-            if todos:
-                self.state.todos_displayed = True
-                output = self._get_output()
-                if output._plan_display is not None:
-                    output._plan_display.update_entries(todos)
-                else:
-                    await output.post_plan(todos)
-
     async def handle_thinking(self, message: messages.Thinking) -> None:
         """Handle thinking indicator from agent."""
         self._show_output()
@@ -70,26 +53,31 @@ class MessageHandler:
     async def handle_tool_call(self, message: messages.ToolCall) -> None:
         """Handle tool call from agent."""
         self._show_output()
-        tool_id = str(message.tool_call.get("id", "unknown"))
-        title = str(message.tool_call.get("title", "Tool call"))
-        kind = str(message.tool_call.get("kind", ""))
-        await self._get_output().post_tool_call(tool_id, title, kind)
+        await self._get_output().upsert_tool_call(message.tool_call)
 
-    def handle_tool_call_update(self, message: messages.ToolCallUpdate) -> None:
+    async def handle_tool_call_update(self, message: messages.ToolCallUpdate) -> None:
         """Handle tool call status update."""
-        tool_id = str(message.update.get("id", "unknown"))
-        status = str(message.update.get("status", ""))
-        if status:
-            self._get_output().update_tool_status(tool_id, status)
+        self._show_output()
+        await self._get_output().apply_tool_call_update(message.update, message.tool_call)
 
     async def handle_agent_ready(self, message: messages.AgentReady) -> None:
         """Handle agent ready notification."""
         self.state = self.state.with_agent_ready(True)
         self._screen._enable_input()
-        self._screen._update_status("ready", "Press F1 for help")
+        self._screen._update_status("ready", "Press ? for help")
 
     async def handle_agent_fail(self, message: messages.AgentFail) -> None:
         """Handle agent failure."""
+        if is_graceful_agent_termination(message.message):
+            self._screen._update_status("ready", "Agent stream ended (cancelled)")
+            self._screen._enable_input()
+            self._show_output()
+            await self._get_output().post_note(
+                "Agent stream ended by cancellation (SIGTERM).",
+                classes="dismissed",
+            )
+            return
+
         self._screen._update_status("error", f"Error: {message.message}")
         self._screen._disable_input()
 

@@ -33,17 +33,15 @@ class SignalResult:
     key_files: str = ""
 
 
-# Patterns for parsing signals from agent output
 _PATTERNS = [
     (Signal.COMPLETE, re.compile(r"<complete\s*/?>", re.IGNORECASE)),
     (Signal.BLOCKED, re.compile(r'<blocked\s+reason="([^"]+)"\s*/?>', re.IGNORECASE)),
     (Signal.CONTINUE, re.compile(r"<continue\s*/?>", re.IGNORECASE)),
-    # APPROVE captures summary (required), approach and key_files (optional)
-    (Signal.APPROVE, re.compile(r"<approve\s+[^>]*/?>")),
+    (Signal.APPROVE, re.compile(r"<approve\s*[^>]*/?>", re.IGNORECASE)),
     (Signal.REJECT, re.compile(r'<reject\s+reason="([^"]+)"\s*/?>', re.IGNORECASE)),
 ]
 
-# Patterns for extracting attributes from APPROVE signal
+
 _APPROVE_ATTRS = {
     "summary": re.compile(r'summary="([^"]+)"', re.IGNORECASE),
     "approach": re.compile(r'approach="([^"]+)"', re.IGNORECASE),
@@ -60,7 +58,7 @@ def parse_signal(output: str) -> SignalResult:
     Returns:
         SignalResult with parsed signal. Defaults to CONTINUE if no signal found.
     """
-    # Signals that capture a reason/summary in group(1)
+
     signals_with_reason = {Signal.BLOCKED, Signal.REJECT}
 
     for sig, pat in _PATTERNS:

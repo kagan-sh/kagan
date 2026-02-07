@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING
 
 from textual.containers import Container, Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Input, Label, Rule, Switch
+from textual.widgets import Button, Footer, Input, Label, Rule, Select, Switch
 
+from kagan.builtin_agents import BUILTIN_AGENTS
 from kagan.keybindings import SETTINGS_BINDINGS
 
 if TYPE_CHECKING:
@@ -33,30 +34,45 @@ class SettingsModal(ModalScreen[bool]):
             yield Label("Settings", classes="modal-title")
             yield Rule()
 
-            # Auto Mode Section
-            yield Label("Auto Mode", classes="section-title")
+            yield Label("Auto Review", classes="section-title")
             with Horizontal(classes="setting-row"):
                 yield Switch(
-                    value=self._config.general.auto_start,
-                    id="auto-start-switch",
+                    value=self._config.general.auto_review,
+                    id="auto-review-switch",
                 )
-                yield Label("Auto-start agents", classes="setting-label")
+                yield Label("Enable auto review", classes="setting-label")
+
+            yield Rule()
+
+            yield Label("Planner Permissions", classes="section-title")
             with Horizontal(classes="setting-row"):
                 yield Switch(
                     value=self._config.general.auto_approve,
                     id="auto-approve-switch",
                 )
-                yield Label("Auto-approve permissions", classes="setting-label")
-            with Horizontal(classes="setting-row"):
-                yield Switch(
-                    value=self._config.general.auto_merge,
-                    id="auto-merge-switch",
+                yield Label(
+                    "Auto-approve planner tool calls (workers always auto-approve)",
+                    classes="setting-label",
                 )
-                yield Label("Auto-merge completed tickets", classes="setting-label")
 
             yield Rule()
 
-            # General Settings Section
+            yield Label("Merge Policy", classes="section-title")
+            with Horizontal(classes="setting-row"):
+                yield Switch(
+                    value=self._config.general.require_review_approval,
+                    id="require-review-approval-switch",
+                )
+                yield Label("Require review approval before merge", classes="setting-label")
+            with Horizontal(classes="setting-row"):
+                yield Switch(
+                    value=self._config.general.serialize_merges,
+                    id="serialize-merges-switch",
+                )
+                yield Label("Serialize manual merges", classes="setting-label")
+
+            yield Rule()
+
             yield Label("General", classes="section-title")
             with Vertical(classes="input-group"):
                 yield Label("Default Base Branch", classes="input-label")
@@ -74,40 +90,64 @@ class SettingsModal(ModalScreen[bool]):
                     type="integer",
                 )
             with Vertical(classes="input-group"):
-                yield Label("Max Iterations per Ticket", classes="input-label")
-                yield Input(
-                    value=str(self._config.general.max_iterations),
-                    id="max-iterations-input",
-                    placeholder="10",
-                    type="integer",
+                yield Label("Default Agent", classes="input-label")
+                agent_options: list[tuple[str, str]] = [
+                    (agent.config.name, name) for name, agent in BUILTIN_AGENTS.items()
+                ]
+                yield Select[str](
+                    options=agent_options,
+                    value=self._config.general.default_worker_agent,
+                    id="default-agent-select",
+                    allow_blank=False,
                 )
             with Vertical(classes="input-group"):
-                yield Label("Iteration Delay (seconds)", classes="input-label")
-                yield Input(
-                    value=str(self._config.general.iteration_delay_seconds),
-                    id="iteration-delay-input",
-                    placeholder="2.0",
+                yield Label("Default PAIR Terminal", classes="input-label")
+                yield Select[str](
+                    options=[
+                        ("tmux", "tmux"),
+                        ("VS Code", "vscode"),
+                        ("Cursor", "cursor"),
+                    ],
+                    value=self._config.general.default_pair_terminal_backend,
+                    id="default-pair-terminal-select",
+                    allow_blank=False,
                 )
 
             yield Rule()
 
-            # UI Preferences Section
+            yield Label("Model Defaults", classes="section-title")
+            with Vertical(classes="input-group"):
+                yield Label("Default Claude Model", classes="input-label")
+                yield Input(
+                    value=self._config.general.default_model_claude or "",
+                    id="default-model-claude-input",
+                    placeholder="sonnet",
+                )
+            with Vertical(classes="input-group"):
+                yield Label("Default OpenCode Model", classes="input-label")
+                yield Input(
+                    value=self._config.general.default_model_opencode or "",
+                    id="default-model-opencode-input",
+                    placeholder="anthropic/claude-sonnet-4-5",
+                )
+
+            yield Rule()
+
             yield Label("UI Preferences", classes="section-title")
             with Horizontal(classes="setting-row"):
                 yield Switch(
-                    value=self._config.ui.skip_tmux_gateway,
-                    id="skip-tmux-gateway-switch",
+                    value=self._config.ui.skip_pair_instructions,
+                    id="skip-pair-instructions-switch",
                 )
-                yield Label("Skip tmux info on session start", classes="setting-label")
+                yield Label("Skip PAIR instructions popup", classes="setting-label")
 
             yield Rule()
 
-            # Buttons
             with Horizontal(classes="button-row"):
                 yield Button("Save", variant="primary", id="save-btn")
                 yield Button("Cancel", variant="default", id="cancel-btn")
 
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
@@ -118,47 +158,56 @@ class SettingsModal(ModalScreen[bool]):
 
     def action_save(self) -> None:
         """Save settings to config file."""
-        # Read values from widgets
-        auto_start = self.query_one("#auto-start-switch", Switch).value
+        auto_review = self.query_one("#auto-review-switch", Switch).value
         auto_approve = self.query_one("#auto-approve-switch", Switch).value
-        auto_merge = self.query_one("#auto-merge-switch", Switch).value
-        skip_tmux_gateway = self.query_one("#skip-tmux-gateway-switch", Switch).value
+        require_review_approval = self.query_one("#require-review-approval-switch", Switch).value
+        serialize_merges = self.query_one("#serialize-merges-switch", Switch).value
+        skip_pair_instructions = self.query_one("#skip-pair-instructions-switch", Switch).value
         base_branch = self.query_one("#base-branch-input", Input).value
         max_agents_str = self.query_one("#max-agents-input", Input).value
-        max_iterations_str = self.query_one("#max-iterations-input", Input).value
-        iteration_delay_str = self.query_one("#iteration-delay-input", Input).value
+        default_agent_select = self.query_one("#default-agent-select", Select)
+        default_agent = str(default_agent_select.value) if default_agent_select.value else "claude"
+        pair_terminal_select = self.query_one("#default-pair-terminal-select", Select)
+        pair_terminal_backend = (
+            str(pair_terminal_select.value)
+            if pair_terminal_select.value in {"tmux", "vscode", "cursor"}
+            else "tmux"
+        )
+        default_model_claude = self.query_one("#default-model-claude-input", Input).value
+        default_model_claude = default_model_claude.strip() or None
+        default_model_opencode = self.query_one("#default-model-opencode-input", Input).value
+        default_model_opencode = default_model_opencode.strip() or None
 
-        # Parse numeric values with validation
         try:
             max_agents = int(max_agents_str) if max_agents_str else 3
-            max_iterations = int(max_iterations_str) if max_iterations_str else 10
-            iteration_delay = float(iteration_delay_str) if iteration_delay_str else 2.0
         except ValueError:
             self.app.notify("Invalid numeric value", severity="error")
             return
 
-        # Update config object
-        self._config.general.auto_start = auto_start
+        self._config.general.auto_review = auto_review
         self._config.general.auto_approve = auto_approve
-        self._config.general.auto_merge = auto_merge
+        self._config.general.require_review_approval = require_review_approval
+        self._config.general.serialize_merges = serialize_merges
         self._config.general.default_base_branch = base_branch
         self._config.general.max_concurrent_agents = max_agents
-        self._config.general.max_iterations = max_iterations
-        self._config.general.iteration_delay_seconds = iteration_delay
-        self._config.ui.skip_tmux_gateway = skip_tmux_gateway
+        self._config.general.default_worker_agent = default_agent
+        self._config.general.default_pair_terminal_backend = pair_terminal_backend  # type: ignore[assignment]
+        self._config.general.default_model_claude = default_model_claude
+        self._config.general.default_model_opencode = default_model_opencode
+        self._config.ui.skip_pair_instructions = skip_pair_instructions
 
-        # Write to TOML file
-        self._write_config()
+        self.run_worker(self._write_config(), exclusive=True, exit_on_error=False)
         self.dismiss(True)
 
-    def _write_config(self) -> None:
+    async def _write_config(self) -> None:
         """Write config to TOML file."""
-        from kagan.data.builtin_agents import BUILTIN_AGENTS
+        import aiofiles
+
+        from kagan.builtin_agents import BUILTIN_AGENTS
 
         kagan_dir = self._config_path.parent
         kagan_dir.mkdir(exist_ok=True)
 
-        # Build agent sections
         agent_sections = []
         for key, agent in BUILTIN_AGENTS.items():
             cfg = agent.config
@@ -174,25 +223,48 @@ active = true'''
 
         general = self._config.general
         ui = self._config.ui
+
+        model_claude_line = (
+            f'default_model_claude = "{general.default_model_claude}"'
+            if general.default_model_claude
+            else ""
+        )
+        model_opencode_line = (
+            f'default_model_opencode = "{general.default_model_opencode}"'
+            if general.default_model_opencode
+            else ""
+        )
+
+        general_lines = [
+            f"auto_review = {str(general.auto_review).lower()}",
+            f"auto_approve = {str(general.auto_approve).lower()}",
+            f"require_review_approval = {str(general.require_review_approval).lower()}",
+            f"serialize_merges = {str(general.serialize_merges).lower()}",
+            f'default_base_branch = "{general.default_base_branch}"',
+            f'default_worker_agent = "{general.default_worker_agent}"',
+            f'default_pair_terminal_backend = "{general.default_pair_terminal_backend}"',
+            f"max_concurrent_agents = {general.max_concurrent_agents}",
+        ]
+        if model_claude_line:
+            general_lines.append(model_claude_line)
+        if model_opencode_line:
+            general_lines.append(model_opencode_line)
+
+        general_section = "\n".join(general_lines)
+
         config_content = f"""# Kagan Configuration
 
 [general]
-auto_start = {str(general.auto_start).lower()}
-auto_approve = {str(general.auto_approve).lower()}
-auto_merge = {str(general.auto_merge).lower()}
-default_base_branch = "{general.default_base_branch}"
-default_worker_agent = "{general.default_worker_agent}"
-max_concurrent_agents = {general.max_concurrent_agents}
-max_iterations = {general.max_iterations}
-iteration_delay_seconds = {general.iteration_delay_seconds}
+{general_section}
 
 [ui]
-skip_tmux_gateway = {str(ui.skip_tmux_gateway).lower()}
+skip_pair_instructions = {str(ui.skip_pair_instructions).lower()}
 
 {chr(10).join(agent_sections)}
 """
 
-        self._config_path.write_text(config_content)
+        async with aiofiles.open(self._config_path, "w", encoding="utf-8") as f:
+            await f.write(config_content)
 
     def action_cancel(self) -> None:
         """Cancel without saving."""

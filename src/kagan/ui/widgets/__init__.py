@@ -1,8 +1,7 @@
 """Widget components for Kagan TUI."""
 
 from kagan.ui.widgets.agent_content import (
-    AgentResponse,
-    AgentThought,
+    StreamingMarkdown,
     UserInput,
 )
 from kagan.ui.widgets.base import (
@@ -10,12 +9,12 @@ from kagan.ui.widgets.base import (
     AgentBackendSelect,
     DescriptionArea,
     PrioritySelect,
-    ReadOnlyField,
     StatusSelect,
-    TicketTypeSelect,
+    TaskTypeSelect,
     TitleInput,
 )
-from kagan.ui.widgets.card import TicketCard
+from kagan.ui.widgets.card import TaskCard
+from kagan.ui.widgets.chat_panel import ChatPanel
 from kagan.ui.widgets.column import KanbanColumn
 from kagan.ui.widgets.empty_state import EmptyState
 from kagan.ui.widgets.header import KaganHeader
@@ -28,12 +27,12 @@ from kagan.ui.widgets.slash_complete import SlashComplete
 from kagan.ui.widgets.status_bar import StatusBar
 from kagan.ui.widgets.streaming_output import StreamingOutput
 from kagan.ui.widgets.tool_call import ToolCall
+from kagan.ui.widgets.workspace_repos import WorkspaceReposWidget
 
 __all__ = [
     "AcceptanceCriteriaArea",
     "AgentBackendSelect",
-    "AgentResponse",
-    "AgentThought",
+    "ChatPanel",
     "DescriptionArea",
     "EmptyState",
     "KaganHeader",
@@ -43,15 +42,16 @@ __all__ = [
     "PlanApprovalWidget",
     "PlanDisplay",
     "PrioritySelect",
-    "ReadOnlyField",
     "SearchBar",
     "SlashComplete",
     "StatusBar",
     "StatusSelect",
+    "StreamingMarkdown",
     "StreamingOutput",
-    "TicketCard",
-    "TicketTypeSelect",
+    "TaskCard",
+    "TaskTypeSelect",
     "TitleInput",
     "ToolCall",
     "UserInput",
+    "WorkspaceReposWidget",
 ]

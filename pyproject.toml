@@ -26,7 +26,10 @@ requires-python = ">=3.12"
 dependencies = [
     "textual>=7.0.0",
     "aiosqlite>=0.22.0",
+    "greenlet>=3.1.0",  # Required by SQLAlchemy for async operations
     "pydantic>=2.10.0",
+    "agent-client-protocol>=0.7.0,<1.0.0",
+    "sqlmodel>=0.0.22",
     "rich>=14.0.0",
     "psutil>=7.0.0",
     "typeguard>=4.4.0",
@@ -35,6 +38,11 @@ dependencies = [
     "httpx>=0.27.0",
     "pyperclip>=1.11.0",
     "packaging>=24.0",
+    "tomlkit>=0.13.0",
+    "aiofiles>=24.1.0",
+    "platformdirs>=4.3.0",
+    "filelock>=3.16.0",
+    "mslex>=1.3.0",
 ]
 
 [project.scripts]
@@ -82,9 +90,13 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM", "TCH", "RUF"]
 ignore = [
     "RUF012", # Textual class attributes (BINDINGS, etc.) don't need ClassVar
+    "RUF006", # Allow fire-and-forget asyncio.create_task (intentional pattern)
     "SIM102", # Allow nested if statements for readability
     "SIM117", # Allow nested with statements for Textual compose patterns
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/property/*.py" = ["E402"]  # Hypothesis settings must be configured before imports
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -92,6 +104,7 @@ docstring-code-format = true
 [tool.pyrefly]
 project_includes = ["src", "tests"]
 search_path = ["src", "."]
+permissive-ignores = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -103,8 +116,10 @@ markers = [
     "integration: tests with real filesystem/DB, mocked externals",
     "snapshot: visual regression tests",
     "e2e: full application tests",
+    "property: property-based tests with hypothesis",
+    "mock_platform_system(name): override platform.system() for the test",
 ]
-addopts = "-n auto"
+addopts = "-n auto --dist=loadgroup"
 
 [tool.coverage.run]
 source = ["src/kagan"]
@@ -128,6 +143,9 @@ typecheck = "pyrefly check src/ tests/"
 check = ["lint", "typecheck", "test"]
 docs-serve = "mkdocs serve"
 docs-build = "mkdocs build"
+# Snapshot tests (run sequentially - parallel can cause issues with snapshots)
+test-snapshot = "pytest tests/snapshots/ -n 0 -v"
+test-snapshot-update = "pytest tests/snapshots/ -n 0 -v --snapshot-update"
 
 [tool.poe.tasks.fix]
 help = "Fix linting issues and format code"
@@ -146,6 +164,15 @@ help = "Preview current and next prerelease version"
 [tool.poe.tasks.release-dry-run-beta]
 shell = "uv run semantic-release --noop -vv version --as-prerelease --prerelease-token beta --print-tag"
 help = "Dry-run beta release (no changes made)"
+
+[tool.poe.tasks.workflows-check]
+help = "Validate GitHub Actions workflows using act (requires act installed)"
+sequence = [
+    { shell = "act --list -W .github/workflows/" },
+    { shell = "act push --dryrun -W .github/workflows/ci.yml" },
+    { shell = "act workflow_dispatch --dryrun -W .github/workflows/cd.yaml" },
+    { shell = "act workflow_dispatch --dryrun -W .github/workflows/post-release-update-test.yaml" },
+]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING
 
+from kagan.debug_log import log
 from kagan.limits import MESSAGE_BUFFER, RESPONSE_BUFFER
 
 if TYPE_CHECKING:
@@ -19,6 +20,7 @@ class AgentBuffers:
         self.messages: deque[Message] = deque(maxlen=MESSAGE_BUFFER)
 
     def append_response(self, text: str) -> None:
+        log.debug(f"[AGENT] {text}")
         self.response.append(text)
 
     def buffer_message(self, message: Message) -> None:
@@ -38,7 +40,9 @@ class AgentBuffers:
         self.messages.clear()
 
     def replay_messages_to(self, target) -> None:
-        """Replay buffered messages to a target and clear buffer."""
+        """Replay all buffered messages to a target.
+
+        The buffer is kept intact so future reconnects can rebuild the full view.
+        """
         for msg in self.messages:
             target.post_message(msg)
-        self.messages.clear()

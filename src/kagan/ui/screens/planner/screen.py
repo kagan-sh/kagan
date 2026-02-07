@@ -1,28 +1,30 @@
-"""Planner screen for chat-first ticket creation."""
+"""Planner screen for chat-first task creation."""
 
 from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
-from textual import events, on
+from textual import events, getters, on
 from textual.binding import Binding, BindingType
-from textual.containers import Vertical
+from textual.containers import Center, Vertical
 from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Footer, Static, TextArea
 
 from kagan.acp import messages
-from kagan.acp.agent import Agent
-from kagan.agents.planner import build_planner_prompt, parse_plan, parse_todos
+from kagan.agents.agent_factory import AgentFactory, create_agent
+from kagan.agents.planner import build_planner_prompt, parse_proposed_plan
 from kagan.agents.refiner import PromptRefiner
 from kagan.config import get_fallback_agent_config
-from kagan.constants import PLANNER_TITLE_MAX_LENGTH
+from kagan.constants import BOX_DRAWING, KAGAN_LOGO, PLANNER_TITLE_MAX_LENGTH
+from kagan.core.models.enums import ChatRole
+from kagan.git_utils import list_local_branches
 from kagan.keybindings import PLANNER_BINDINGS
 from kagan.limits import AGENT_TIMEOUT
+from kagan.ui.modals import BaseBranchModal
 from kagan.ui.screens.base import KaganScreen
 from kagan.ui.screens.planner.message_handler import MessageHandler
 from kagan.ui.screens.planner.state import (
@@ -33,20 +35,70 @@ from kagan.ui.screens.planner.state import (
     PlannerState,
     SlashCommand,
 )
-from kagan.ui.screens.ticket_editor import TicketEditorScreen
-from kagan.ui.widgets import EmptyState, StatusBar, StreamingOutput
+from kagan.ui.screens.task_editor import TaskEditorScreen
+from kagan.ui.widgets import StatusBar, StreamingOutput
+from kagan.ui.widgets.chat_panel import QueuedMessageRow, QueuedMessagesContainer
 from kagan.ui.widgets.header import KaganHeader
+from kagan.ui.widgets.offline_banner import OfflineBanner
 from kagan.ui.widgets.plan_approval import PlanApprovalWidget
 from kagan.ui.widgets.slash_complete import SlashComplete
 
 if TYPE_CHECKING:
+    from acp.schema import AvailableCommand
     from textual.app import ComposeResult
 
-    from kagan.acp import protocol
-    from kagan.database.models import Ticket
+    from kagan.app import KaganApp
+    from kagan.core.models.entities import Task
+    from kagan.services.queued_messages import QueuedMessageService
 
 MIN_INPUT_HEIGHT = 1
 MAX_INPUT_HEIGHT = 6
+
+
+PLANNER_EXAMPLES = [
+    '"Add user authentication with OAuth2"',
+    '"Refactor the payment module for better testing"',
+    '"Fix the bug where users can\'t upload images"',
+]
+
+
+class PlannerEmptyState(Vertical):
+    """Empty state widget for planner screen with branded design."""
+
+    DEFAULT_CLASSES = "planner-empty-state"
+
+    def compose(self) -> ComposeResult:
+        """Compose the planner empty state layout."""
+        with Center():
+            with Vertical(classes="planner-empty-content"):
+                with Vertical(classes="planner-empty-card"):
+                    with Center():
+                        yield Static(
+                            KAGAN_LOGO,
+                            id="planner-empty-logo",
+                            classes="planner-empty-logo",
+                        )
+
+                    yield Static(
+                        "🎯 Plan Your Work",
+                        id="planner-empty-heading",
+                        classes="planner-empty-heading",
+                    )
+
+                    yield Static(
+                        "Describe what you want to build or accomplish.\n"
+                        "Kagan will help break it down into actionable tasks.",
+                        id="planner-empty-description",
+                        classes="planner-empty-description",
+                    )
+
+                    with Vertical(id="planner-empty-examples", classes="planner-empty-examples"):
+                        yield Static("Examples:", classes="planner-empty-section-title")
+                        for example in PLANNER_EXAMPLES:
+                            yield Static(
+                                f"  {BOX_DRAWING['BULLET']} {example}",
+                                classes="planner-empty-example",
+                            )
 
 
 class PlannerInput(TextArea):
@@ -71,7 +123,6 @@ class PlannerInput(TextArea):
         self.insert("\n")
 
     async def _on_key(self, event: events.Key) -> None:
-        # Check if slash complete mode is active (input starts with /)
         if self.text.startswith("/"):
             if event.key in ("up", "down"):
                 event.prevent_default()
@@ -98,57 +149,112 @@ class PlannerInput(TextArea):
 
 
 class PlannerScreen(KaganScreen):
-    """Chat-first planner for creating tickets."""
+    """Chat-first planner for creating tasks."""
 
     BINDINGS = PLANNER_BINDINGS
+    header = getters.query_one(KaganHeader)
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, agent_factory: AgentFactory = create_agent, **kwargs) -> None:
         super().__init__(**kwargs)
         self._state = PlannerState()
         self._message_handler = MessageHandler(self)
+        self._agent_factory = agent_factory
 
-        # Agent-related state (not part of PlannerState to avoid circular issues)
         self._current_mode: str = ""
         self._available_modes: dict[str, messages.Mode] = {}
-        self._available_commands: list[protocol.AvailableCommand] = []
+        self._available_commands: list[AvailableCommand] = []
 
-        # UI-only state
+        self._clearing: bool = False
         self._slash_complete: SlashComplete | None = None
         self._builtin_commands: list[SlashCommand] = [
             SlashCommand("clear", "Clear conversation and start fresh"),
             SlashCommand("help", "Show available commands"),
         ]
+        self._planner_queue_pending = False
 
     def compose(self) -> ComposeResult:
         yield KaganHeader()
         with Vertical(id="planner-container"):
             yield Static("Plan Mode", id="planner-header")
-            yield EmptyState()
+            yield PlannerEmptyState()
             yield StreamingOutput(id="planner-output")
             with Vertical(id="planner-bottom"):
                 yield StatusBar()
-                yield PlannerInput("", id="planner-input", show_line_numbers=False)
-        yield Footer()
+                yield QueuedMessagesContainer(
+                    id="planner-queued-messages",
+                    classes="queued-messages-container planner-queued-messages",
+                )
+                yield PlannerInput(
+                    "",
+                    id="planner-input",
+                    show_line_numbers=False,
+                    placeholder="Describe your task... (/ for commands)",
+                )
+        yield Footer(show_command_palette=False)
 
     async def on_mount(self) -> None:
+        await self.sync_header_context(self.header)
+        with suppress(NoMatches):
+            self.query_one("#planner-queued-messages", QueuedMessagesContainer).display = False
+        from kagan.ui.widgets.header import _get_git_branch
+
+        if self.ctx.active_repo_id is None:
+            banner = OfflineBanner(message="Select a repository to start planning")
+            container = self.query_one("#planner-container", Vertical)
+            await container.mount(banner, before=0)
+            self._disable_input()
+            self._update_status("offline", "No repository selected")
+            await self._discard_persistent_state(self.kagan_app.planner_state)
+            return
+
+        branch = await _get_git_branch(self.kagan_app.project_root)
+        self.header.update_branch(branch)
+
+        if not self.ctx.agent_health.is_available():
+            message = self.ctx.agent_health.get_status_message()
+            banner = OfflineBanner(message=message or "Planner requires an active agent")
+            container = self.query_one("#planner-container", Vertical)
+            await container.mount(banner, before=0)
+            self._disable_input()
+            self._update_status("offline", "Agent unavailable")
+            return
+
         self._update_status("initializing", "Initializing agent...")
         self._disable_input()
 
-        # Restore session state if available
         persistent_state = self.kagan_app.planner_state
-        if persistent_state is not None:
+        if persistent_state is not None and self._is_persistent_state_compatible(persistent_state):
             await self._restore_state(persistent_state)
         else:
+            await self._discard_persistent_state(persistent_state)
             await self._start_planner()
 
         self._focus_input()
+        await self._refresh_planner_queue_messages()
+
+    @on(OfflineBanner.Reconnect)
+    async def on_offline_banner_reconnect(self, event: OfflineBanner.Reconnect) -> None:
+        """Handle reconnect from offline banner - refresh agent health check."""
+        self.ctx.agent_health.refresh()
+        if self.ctx.agent_health.is_available():
+            for banner in self.query(OfflineBanner):
+                await banner.remove()
+
+            self._update_status("initializing", "Initializing agent...")
+            await self._start_planner()
+            self._focus_input()
+            self.notify("Agent is now available", severity="information")
+        else:
+            self.notify("Agent still unavailable", severity="warning")
 
     async def _restore_state(self, persistent: PersistentPlannerState) -> None:
         """Restore state from a previous session."""
         output = self._get_output()
-        self._show_output()
 
-        # Restore conversation history
+        has_content = bool(persistent.conversation_history or persistent.pending_plan)
+        if has_content:
+            self._show_output()
+
         self._state.conversation_history = list(persistent.conversation_history)
         for msg in persistent.conversation_history:
             if msg.role == "user":
@@ -160,18 +266,15 @@ class PlannerScreen(KaganScreen):
             for note in msg.notes:
                 await output.post_note(note.text, classes=note.classes)
 
-        # Restore input text
         if persistent.input_text:
             planner_input = self.query_one("#planner-input", PlannerInput)
             planner_input.insert(persistent.input_text)
 
-        # Restore pending plan
         if persistent.pending_plan:
             self._state.pending_plan = persistent.pending_plan
             self._state.has_pending_plan = True
             await output.post_plan_approval(persistent.pending_plan)
 
-        # Restore agent if it exists
         if persistent.agent is not None:
             self._state.agent = persistent.agent
             self._state.agent.set_message_target(self)
@@ -180,7 +283,7 @@ class PlannerScreen(KaganScreen):
 
             if self._state.agent_ready:
                 self._enable_input()
-                self._update_status("ready", "Press F1 for help")
+                self._update_status("ready", "Press ? for help")
         else:
             await self._start_planner()
 
@@ -191,11 +294,25 @@ class PlannerScreen(KaganScreen):
         if agent_config is None:
             agent_config = get_fallback_agent_config()
 
-        agent = Agent(Path.cwd(), agent_config, read_only=True)
+        agent = self._agent_factory(self.kagan_app.project_root, agent_config, read_only=True)
         agent.set_auto_approve(config.general.auto_approve)
         agent.start(self)
 
         self._state.agent = agent
+
+    def _is_persistent_state_compatible(self, state: PersistentPlannerState) -> bool:
+        if state.active_repo_id != self.ctx.active_repo_id:
+            return False
+        return state.project_root == str(self.kagan_app.project_root)
+
+    async def _discard_persistent_state(self, state: PersistentPlannerState | None) -> None:
+        if state is None:
+            return
+        if state.agent:
+            await state.agent.stop()
+        if state.refiner:
+            await state.refiner.stop()
+        self.kagan_app.planner_state = None
 
     def _get_output(self) -> StreamingOutput:
         return self.query_one("#planner-output", StreamingOutput)
@@ -204,7 +321,7 @@ class PlannerScreen(KaganScreen):
         if not self._state.has_output:
             self._state.has_output = True
             with suppress(NoMatches):
-                self.query_one(EmptyState).add_class("hidden")
+                self.query_one(PlannerEmptyState).add_class("hidden")
             with suppress(NoMatches):
                 self._get_output().add_class("visible")
 
@@ -228,12 +345,14 @@ class PlannerScreen(KaganScreen):
         with suppress(NoMatches):
             self.query_one("#planner-input", PlannerInput).focus()
 
-    # -------------------------------------------------------------------------
-    # Submit / Send to Agent
-    # -------------------------------------------------------------------------
-
     @on(PlannerInput.SubmitRequested)
     async def on_submit_requested(self, event: PlannerInput.SubmitRequested) -> None:
+        if self._state.phase == PlannerPhase.PROCESSING:
+            queued_text = event.text.strip()
+            if queued_text:
+                await self._queue_planner_message(queued_text)
+                self.query_one("#planner-input", PlannerInput).clear()
+            return
         if self._state.has_pending_plan:
             self.notify("Please approve or dismiss the pending plan first", severity="warning")
             return
@@ -241,20 +360,23 @@ class PlannerScreen(KaganScreen):
             return
         await self._submit_prompt()
 
-    async def _submit_prompt(self) -> None:
+    async def _submit_prompt(self, prompt_text: str | None = None) -> None:
         planner_input = self.query_one("#planner-input", PlannerInput)
-        text = planner_input.text.strip()
+        text = (prompt_text if prompt_text is not None else planner_input.text).strip()
         if not text:
             return
 
-        # Transition to processing
         self._state = self._state.transition("submit")
         self._state.todos_displayed = False
         self._state.thinking_shown = False
 
-        self._disable_input()
-        planner_input.clear()
         self._update_status("thinking", "Processing...")
+        if prompt_text is None:
+            planner_input.clear()
+        else:
+            await self._get_output().post_note(
+                "Processing queued planner follow-up...", classes="info"
+            )
 
         self._show_output()
         output = self._get_output()
@@ -262,9 +384,8 @@ class PlannerScreen(KaganScreen):
 
         await output.post_user_input(text)
 
-        # Store user message
         self._state.conversation_history.append(
-            ChatMessage(role="user", content=text, timestamp=datetime.now())
+            ChatMessage(role=ChatRole.USER, content=text, timestamp=datetime.now())
         )
 
         if self._state.agent:
@@ -291,20 +412,32 @@ class PlannerScreen(KaganScreen):
             await self._state.agent.wait_ready(timeout=AGENT_TIMEOUT)
             await self._state.agent.send_prompt(prompt)
 
-            # Store assistant response
+            tasks, todos, plan_error = parse_proposed_plan(self._state.agent.tool_calls)
+
             if self._state.accumulated_response:
                 full_response = "".join(self._state.accumulated_response)
-                todos = parse_todos(full_response) if self._state.todos_displayed else None
                 self._state.conversation_history.append(
                     ChatMessage(
-                        role="assistant",
+                        role=ChatRole.ASSISTANT,
                         content=full_response,
                         timestamp=datetime.now(),
+                        plan_tasks=tasks or None,
                         todos=todos,
                     )
                 )
 
-            await self._try_create_tickets()
+            output = self._get_output()
+            if todos and not self._state.todos_displayed:
+                self._state.todos_displayed = True
+                await output.post_plan(todos)
+
+            if plan_error:
+                await output.post_note(plan_error, classes="error")
+
+            if tasks:
+                self._state = self._state.with_pending_plan(tasks)
+                self._state = self._state.transition("plan_received")
+                await output.post_plan_approval(tasks)
         except Exception as e:
             await self._get_output().post_note(f"Error: {e}", classes="error")
             self._state = self._state.transition("error")
@@ -314,23 +447,67 @@ class PlannerScreen(KaganScreen):
                 self._state = self._state.transition("done")
                 self._enable_input()
 
-        self._update_status("ready", "Press F1 for help")
+        self._update_status("ready", "Press ? for help")
+        await self._consume_planner_queue_if_needed()
 
-    async def _try_create_tickets(self) -> None:
-        if not self._state.accumulated_response:
+    def _planner_queue_key(self) -> str:
+        repo_id = self.ctx.active_repo_id or "global"
+        return f"planner:{repo_id}"
+
+    def _get_queue_service(self) -> QueuedMessageService | None:
+        app = cast("KaganApp", self.app)
+        service = getattr(app.ctx, "queued_message_service", None)
+        if service is None:
+            return None
+        return cast("QueuedMessageService", service)
+
+    async def _refresh_planner_queue_messages(self) -> None:
+        with suppress(NoMatches):
+            container = self.query_one("#planner-queued-messages", QueuedMessagesContainer)
+            service = self._get_queue_service()
+            if service is None:
+                container.display = False
+                self._planner_queue_pending = False
+                return
+            messages = await service.get_queued(self._planner_queue_key(), lane="planner")
+            container.update_messages(messages)
+            self._planner_queue_pending = bool(messages)
+
+    async def _queue_planner_message(self, content: str) -> None:
+        service = self._get_queue_service()
+        if service is None:
+            self.notify("Planner queue unavailable", severity="error")
             return
+        await service.queue_message(self._planner_queue_key(), content, lane="planner")
+        await self._refresh_planner_queue_messages()
+        await self._get_output().post_note("Queued message for next planner turn.", classes="info")
+        self._update_status("queued", "Planner follow-up queued")
 
-        full_response = "".join(self._state.accumulated_response)
-        tickets = parse_plan(full_response)
-        if tickets:
-            # Set pending plan, then transition (transition preserves has_pending_plan)
-            self._state = self._state.with_pending_plan(tickets)
-            self._state = self._state.transition("plan_received")
-            await self._get_output().post_plan_approval(tickets)
+    async def _consume_planner_queue_if_needed(self) -> None:
+        if self._state.phase != PlannerPhase.IDLE:
+            return
+        if self._state.has_pending_plan:
+            return
+        service = self._get_queue_service()
+        if service is None:
+            return
+        queued = await service.take_queued(self._planner_queue_key(), lane="planner")
+        await self._refresh_planner_queue_messages()
+        if queued is None:
+            return
+        await self._submit_prompt(prompt_text=_truncate_queue_payload(queued.content))
 
-    # -------------------------------------------------------------------------
-    # ACP Message Handlers (delegated to MessageHandler)
-    # -------------------------------------------------------------------------
+    @on(QueuedMessageRow.RemoveRequested)
+    async def on_queue_remove_requested(self, event: QueuedMessageRow.RemoveRequested) -> None:
+        service = self._get_queue_service()
+        if service is None:
+            return
+        await service.remove_message(
+            self._planner_queue_key(),
+            event.index,
+            lane="planner",
+        )
+        await self._refresh_planner_queue_messages()
 
     @on(messages.AgentUpdate)
     async def on_agent_update(self, message: messages.AgentUpdate) -> None:
@@ -346,14 +523,17 @@ class PlannerScreen(KaganScreen):
 
     @on(messages.ToolCallUpdate)
     async def on_tool_call_update(self, message: messages.ToolCallUpdate) -> None:
-        self._message_handler.handle_tool_call_update(message)
+        await self._message_handler.handle_tool_call_update(message)
 
     @on(messages.AgentReady)
     async def on_agent_ready(self, message: messages.AgentReady) -> None:
+        self._clearing = False
         await self._message_handler.handle_agent_ready(message)
 
     @on(messages.AgentFail)
     async def on_agent_fail(self, message: messages.AgentFail) -> None:
+        if self._clearing:
+            return
         await self._message_handler.handle_agent_fail(message)
 
     @on(messages.Plan)
@@ -376,44 +556,57 @@ class PlannerScreen(KaganScreen):
     async def on_request_permission(self, message: messages.RequestPermission) -> None:
         await self._message_handler.handle_request_permission(message)
 
-    # -------------------------------------------------------------------------
-    # Plan Approval Handlers
-    # -------------------------------------------------------------------------
-
     @on(PlanApprovalWidget.Approved)
     async def on_plan_approved(self, event: PlanApprovalWidget.Approved) -> None:
-        """Handle plan approval - create tickets."""
+        """Handle plan approval - create tasks."""
         self._state = self._state.transition("approved")
         output = self._get_output()
-        created_tickets: list[tuple[str, str, str]] = []
+        created_tasks: list[tuple[str, str, str]] = []
 
-        for ticket_data in event.tickets:
+        for task_data in event.tasks:
             try:
-                ticket = await self.kagan_app.state_manager.create_ticket(ticket_data)
-                self.notify(
-                    f"Created: {ticket.title[:PLANNER_TITLE_MAX_LENGTH]}", severity="information"
+                project_id = self.ctx.active_project_id
+                if project_id is None:
+                    if task_data.project_id and task_data.project_id != "plan":
+                        project_id = task_data.project_id
+                task = await self.ctx.task_service.create_task(
+                    task_data.title,
+                    task_data.description,
+                    project_id=project_id,
+                    created_by=None,
                 )
-                created_tickets.append(
+                await self.ctx.task_service.update_fields(
+                    task.id,
+                    priority=task_data.priority,
+                    task_type=task_data.task_type,
+                    assigned_hat=task_data.assigned_hat,
+                    agent_backend=task_data.agent_backend,
+                    acceptance_criteria=task_data.acceptance_criteria,
+                )
+                self.notify(
+                    f"Created: {task.title[:PLANNER_TITLE_MAX_LENGTH]}", severity="information"
+                )
+                created_tasks.append(
                     (
-                        ticket.title,
-                        ticket.ticket_type.value if ticket.ticket_type else "PAIR",
-                        ticket.priority.label if ticket.priority else "Medium",
+                        task.title,
+                        task.task_type.value if task.task_type else "PAIR",
+                        task.priority.label if task.priority else "Medium",
                     )
                 )
             except Exception as e:
-                self.notify(f"Failed to create ticket: {e}", severity="error")
+                self.notify(f"Failed to create task: {e}", severity="error")
 
         self._state.pending_plan = None
         self._state.has_pending_plan = False
         self._state.accumulated_response.clear()
         self._state = self._state.transition("done")
 
-        if created_tickets:
-            lines = [f"[bold]Created {len(created_tickets)} ticket(s):[/bold]", ""]
-            for title, ticket_type, priority in created_tickets:
+        if created_tasks:
+            lines = [f"[bold]Created {len(created_tasks)} task(s):[/bold]", ""]
+            for title, task_type, priority in created_tasks:
                 display_title = title[:60] + "..." if len(title) > 60 else title
                 lines.append(
-                    f"  - [dim]{ticket_type}[/dim] {display_title} [italic]({priority})[/italic]"
+                    f"  - [dim]{task_type}[/dim] {display_title} [italic]({priority})[/italic]"
                 )
             note_text = "\n".join(lines)
 
@@ -455,24 +648,20 @@ class PlannerScreen(KaganScreen):
 
     @on(PlanApprovalWidget.EditRequested)
     async def on_plan_edit_requested(self, event: PlanApprovalWidget.EditRequested) -> None:
-        """Handle request to edit tickets before approval."""
+        """Handle request to edit tasks before approval."""
         self.app.push_screen(
-            TicketEditorScreen(event.tickets),
-            self._on_ticket_editor_result,
+            TaskEditorScreen(event.tasks),
+            self._on_task_editor_result,
         )
 
-    async def _on_ticket_editor_result(self, result: list[Ticket] | None) -> None:
-        """Handle result from ticket editor."""
+    async def _on_task_editor_result(self, result: list[Task] | None) -> None:
+        """Handle result from task editor."""
         if result is None:
             if self._state.pending_plan:
                 await self._get_output().post_plan_approval(self._state.pending_plan)
         else:
             self._state.pending_plan = result
             await self._get_output().post_plan_approval(result)
-
-    # -------------------------------------------------------------------------
-    # Slash Commands
-    # -------------------------------------------------------------------------
 
     @on(TextArea.Changed, "#planner-input")
     def on_planner_input_changed(self, event: TextArea.Changed) -> None:
@@ -534,8 +723,9 @@ class PlannerScreen(KaganScreen):
             planner_input.clear()
             await self._hide_slash_complete()
 
-    async def _execute_clear(self) -> None:
+    async def _execute_clear(self, *, notify: bool = True) -> None:
         """Reset planner session completely."""
+        self._clearing = True
         self._state.accumulated_response.clear()
         self._state.conversation_history.clear()
         self._state.pending_plan = None
@@ -552,17 +742,21 @@ class PlannerScreen(KaganScreen):
 
         self.kagan_app.planner_state = None
         await self._start_planner()
-        self.notify("Conversation cleared")
+        if notify:
+            self.notify("Conversation cleared")
+
+    async def reset_for_repo_change(self) -> None:
+        """Reset planner state when the active repo changes."""
+        with suppress(NoMatches):
+            self.query_one(OfflineBanner).remove()
+        await self._execute_clear(notify=False)
 
     async def _execute_help(self) -> None:
+        self._show_output()
         help_text = "**Available Commands:**\n"
         for cmd in self._builtin_commands:
             help_text += f"- `/{cmd.command}` - {cmd.help}\n"
         await self._get_output().post_note(help_text)
-
-    # -------------------------------------------------------------------------
-    # Actions
-    # -------------------------------------------------------------------------
 
     async def action_cancel(self) -> None:
         """Cancel the current agent operation and preserve context."""
@@ -571,13 +765,11 @@ class PlannerScreen(KaganScreen):
 
         if self._state.accumulated_response:
             partial_content = "".join(self._state.accumulated_response) + "\n\n*[interrupted]*"
-            todos = parse_todos(partial_content) if self._state.todos_displayed else None
             self._state.conversation_history.append(
                 ChatMessage(
-                    role="assistant",
+                    role=ChatRole.ASSISTANT,
                     content=partial_content,
                     timestamp=datetime.now(),
-                    todos=todos,
                 )
             )
 
@@ -624,7 +816,9 @@ class PlannerScreen(KaganScreen):
                 agent_config = config.get_worker_agent()
                 if agent_config is None:
                     agent_config = get_fallback_agent_config()
-                self._state.refiner = PromptRefiner(Path.cwd(), agent_config)
+                self._state.refiner = PromptRefiner(
+                    self.kagan_app.project_root, agent_config, self._agent_factory
+                )
 
             refined = await self._state.refiner.refine(text)
 
@@ -640,7 +834,7 @@ class PlannerScreen(KaganScreen):
             self._state = self._state.transition("done")
             planner_input.remove_class("-refining")
             self._focus_input()
-            self._update_status("ready", "Press F1 for help")
+            self._update_status("ready", "Press ? for help")
 
     async def action_to_board(self) -> None:
         """Navigate to the Kanban board.
@@ -655,7 +849,6 @@ class PlannerScreen(KaganScreen):
         """
         from kagan.ui.screens.kanban import KanbanScreen
 
-        # Check if there's a KanbanScreen in the stack (underneath PlannerScreen)
         has_kanban_underneath = any(
             isinstance(screen, KanbanScreen) for screen in self.app.screen_stack[:-1]
         )
@@ -663,12 +856,30 @@ class PlannerScreen(KaganScreen):
         if has_kanban_underneath:
             self.app.pop_screen()
         else:
-            # Empty board boot case - no KanbanScreen underneath, switch to it
             self.app.switch_screen(KanbanScreen())
 
-    # -------------------------------------------------------------------------
-    # Lifecycle
-    # -------------------------------------------------------------------------
+    def action_set_task_branch(self) -> None:
+        self.notify("Select a task on the Kanban board to set its branch", severity="warning")
+
+    async def action_set_default_branch(self) -> None:
+        config = self.kagan_app.config
+        current = config.general.default_base_branch
+
+        branches = await list_local_branches(self.kagan_app.project_root)
+
+        result = await self.app.push_screen(
+            BaseBranchModal(
+                branches=branches,
+                current_value=current,
+                title="Set Default Base Branch",
+                description="Branch used for new tasks (e.g. main, develop):",
+            )
+        )
+
+        if result is not None:
+            config.general.default_base_branch = result
+            await config.save(self.kagan_app.config_path)
+            self.notify(f"Default branch set to: {result}")
 
     async def on_unmount(self) -> None:
         input_text = ""
@@ -683,8 +894,18 @@ class PlannerScreen(KaganScreen):
             conversation_history=self._state.conversation_history,
             pending_plan=self._state.pending_plan,
             input_text=input_text,
+            active_repo_id=self.ctx.active_repo_id,
+            project_root=str(self.kagan_app.project_root),
             agent=self._state.agent,
             refiner=self._state.refiner,
             is_running=self._state.agent is not None,
             agent_ready=self._state.agent_ready,
         )
+
+
+def _truncate_queue_payload(content: str, max_chars: int = 6000) -> str:
+    """Bound queued planner context so follow-up prompts stay lightweight."""
+    if len(content) <= max_chars:
+        return content
+    prefix = "[queued planner context truncated]\n"
+    return f"{prefix}{content[-(max_chars - len(prefix)) :]}"

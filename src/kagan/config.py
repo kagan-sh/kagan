@@ -2,21 +2,36 @@
 
 from __future__ import annotations
 
+import asyncio
 import platform
 import tomllib
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, Field
+import tomlkit
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from kagan.atomic import atomic_write
+from kagan.paths import ensure_directories, get_config_path
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
 
-# OS detection for platform-specific commands
+
 type OS = Literal["linux", "macos", "windows", "*"]
+type PairTerminalBackendLiteral = Literal[
+    "tmux",
+    "vscode",
+    "cursor",
+]
 
 _OS_MAP = {"Linux": "linux", "Darwin": "macos", "Windows": "windows"}
 CURRENT_OS: str = _OS_MAP.get(platform.system(), "linux")
+PAIR_TERMINAL_BACKEND_VALUES = frozenset({"tmux", "vscode", "cursor"})
+
+
+def _default_pair_terminal_backend() -> PairTerminalBackendLiteral:
+    return "vscode" if CURRENT_OS == "windows" else "tmux"
 
 
 def get_os_value[T](matrix: Mapping[str, T]) -> T | None:
@@ -35,7 +50,7 @@ class RefinementConfig(BaseModel):
     """Configuration for prompt refinement."""
 
     enabled: bool = Field(default=True, description="Enable prompt refinement feature")
-    hotkey: str = Field(default="ctrl+e", description="Hotkey to trigger refinement")
+    hotkey: str = Field(default="f2", description="Hotkey to trigger refinement")
     skip_length_under: int = Field(default=20, description="Skip refinement for short inputs")
     skip_prefixes: list[str] = Field(
         default_factory=lambda: ["/", "!", "?"],
@@ -46,23 +61,64 @@ class RefinementConfig(BaseModel):
 class GeneralConfig(BaseModel):
     """General configuration settings."""
 
-    max_concurrent_agents: int = Field(default=3)
+    max_concurrent_agents: int = Field(default=1)
+    mcp_server_name: str = Field(
+        default="kagan",
+        description="MCP server name for tool registration and config entries",
+    )
     default_base_branch: str = Field(default="main")
-    auto_start: bool = Field(default=False)
-    auto_approve: bool = Field(default=False)
-    auto_merge: bool = Field(default=False)
-    max_iterations: int = Field(default=10)
-    iteration_delay_seconds: float = Field(default=2.0)
+    auto_review: bool = Field(default=True, description="Run AI review on task completion")
+    auto_approve: bool = Field(
+        default=False,
+        description="Skip permission prompts in the planner agent (workers always auto-approve)",
+    )
+    require_review_approval: bool = Field(
+        default=False, description="Require approved review before merge actions"
+    )
+    serialize_merges: bool = Field(
+        default=False, description="Serialize manual merges to reduce conflicts"
+    )
     default_worker_agent: str = Field(default="claude")
+    default_pair_terminal_backend: PairTerminalBackendLiteral = Field(
+        default_factory=_default_pair_terminal_backend,
+        description="Default terminal backend for PAIR tasks",
+    )
+    default_model_claude: str | None = Field(
+        default=None, description="Default Claude model alias or full name (None = agent default)"
+    )
+    default_model_opencode: str | None = Field(
+        default=None, description="Default OpenCode model (None = agent default)"
+    )
+
+    @field_validator("default_pair_terminal_backend", mode="before")
+    @classmethod
+    def validate_default_pair_terminal_backend(cls, value: object) -> str:
+        """Gracefully coerce invalid values to platform default."""
+        if isinstance(value, str) and value in PAIR_TERMINAL_BACKEND_VALUES:
+            return value
+        return _default_pair_terminal_backend()
 
 
 class UIConfig(BaseModel):
     """UI-related user preferences."""
 
-    skip_tmux_gateway: bool = Field(
+    skip_pair_instructions: bool = Field(
         default=False,
-        description="Skip tmux gateway info modal when opening PAIR sessions",
+        description="Skip pair mode instructions popup when opening PAIR sessions",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_skip_tmux_gateway(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        if "skip_pair_instructions" in data:
+            return data
+        if "skip_tmux_gateway" in data:
+            migrated = dict(data)
+            migrated["skip_pair_instructions"] = migrated["skip_tmux_gateway"]
+            return migrated
+        return data
 
 
 class AgentConfig(BaseModel):
@@ -81,6 +137,7 @@ class AgentConfig(BaseModel):
         description="OS-specific CLI commands for PAIR mode (e.g., 'claude')",
     )
     active: bool = Field(default=True, description="Whether this agent is active")
+    model_env_var: str = Field(default="", description="Environment variable for model selection")
 
 
 class KaganConfig(BaseModel):
@@ -94,8 +151,9 @@ class KaganConfig(BaseModel):
     @classmethod
     def load(cls, config_path: Path | None = None) -> KaganConfig:
         """Load configuration from TOML file or use defaults."""
+        ensure_directories()
         if config_path is None:
-            config_path = Path(".kagan/config.toml")
+            config_path = get_config_path()
 
         if config_path.exists():
             with open(config_path, "rb") as f:
@@ -112,6 +170,76 @@ class KaganConfig(BaseModel):
         """Get the configured worker agent."""
         return self.get_agent(self.general.default_worker_agent)
 
+    async def save(self, path: Path) -> None:
+        """Serialize current config to TOML file.
+
+        Args:
+            path: Path to write config file (created if missing)
+        """
+        doc = tomlkit.document()
+
+        general_table = tomlkit.table()
+        for key, value in self.general.model_dump().items():
+            if value is not None:
+                general_table[key] = value
+        doc["general"] = general_table
+
+        if self.agents:
+            agents_table = tomlkit.table()
+            for agent_name, agent_cfg in self.agents.items():
+                agent_table = tomlkit.table()
+                for key, value in agent_cfg.model_dump().items():
+                    if value is not None and value != {}:
+                        agent_table[key] = value
+                agents_table[agent_name] = agent_table
+            doc["agents"] = agents_table
+
+        refinement_table = tomlkit.table()
+        for key, value in self.refinement.model_dump().items():
+            if value is not None:
+                refinement_table[key] = value
+        doc["refinement"] = refinement_table
+
+        ui_table = tomlkit.table()
+        for key, value in self.ui.model_dump().items():
+            if value is not None:
+                ui_table[key] = value
+        doc["ui"] = ui_table
+
+        content = tomlkit.dumps(doc)
+        await asyncio.to_thread(atomic_write, path, content)
+
+    async def update_ui_preferences(
+        self,
+        path: Path,
+        *,
+        skip_pair_instructions: bool | None = None,
+    ) -> None:
+        """Update UI preferences in existing TOML file (preserves comments).
+
+        Args:
+            path: Path to config file (created if missing)
+            skip_pair_instructions: Value for skip_pair_instructions (None = no change)
+        """
+        import aiofiles
+
+        if path.exists():
+            async with aiofiles.open(path, encoding="utf-8") as f:
+                content = await f.read()
+            doc = tomlkit.parse(content)
+        else:
+            doc = tomlkit.document()
+            doc["general"] = tomlkit.table()
+
+        if "ui" not in doc:
+            doc["ui"] = tomlkit.table()
+
+        if skip_pair_instructions is not None:
+            doc["ui"]["skip_pair_instructions"] = skip_pair_instructions  # type: ignore[index]
+
+        content = tomlkit.dumps(doc)
+        await asyncio.to_thread(atomic_write, path, content)
+
 
 def get_fallback_agent_config() -> AgentConfig:
     """Get fallback agent config when none configured."""
@@ -121,4 +249,5 @@ def get_fallback_agent_config() -> AgentConfig:
         short_name="claude",
         run_command={"*": "npx claude-code-acp"},
         interactive_command={"*": "claude"},
+        model_env_var="ANTHROPIC_MODEL",
     )

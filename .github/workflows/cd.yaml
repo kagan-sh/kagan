@@ -65,10 +65,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
-      - name: Run tests and quality checks
+      - name: Run lint, typecheck, and non-snapshot tests
+        # Snapshot tests run in a separate sequential step for determinism.
         run: |
           set -o pipefail
-          uv run poe check
+          uv run poe lint
+          uv run poe typecheck
+          uv run pytest tests/ -m "not snapshot" -n auto
+
+      - name: Run snapshot tests (sequential)
+        # Snapshot rendering is sensitive to runner/display differences; keep this isolated.
+        run: uv run pytest tests/snapshots/ -n 0 -v
 
       - name: Get branch name
         shell: bash

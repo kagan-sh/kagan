@@ -12,9 +12,9 @@ from textual.widgets import Button, Static
 from kagan.keybindings import PERMISSION_PROMPT_BINDINGS
 
 if TYPE_CHECKING:
+    from acp.schema import PermissionOption, ToolCall, ToolCallUpdate
     from textual.app import ComposeResult
 
-    from kagan.acp import protocol
     from kagan.acp.messages import Answer
 
 
@@ -28,8 +28,8 @@ class PermissionPrompt(VerticalGroup):
 
     def __init__(
         self,
-        options: list[protocol.PermissionOption],
-        tool_call: protocol.ToolCall | protocol.ToolCallUpdatePermissionRequest,
+        options: list[PermissionOption],
+        tool_call: ToolCall | ToolCallUpdate,
         result_future: asyncio.Future[Answer],
         timeout: float = 300.0,
         *,
@@ -45,15 +45,16 @@ class PermissionPrompt(VerticalGroup):
 
     @property
     def title(self) -> str:
-        return self._tool_call.get("title") or "Unknown Tool"
+        title = getattr(self._tool_call, "title", None)
+        return title or "Unknown Tool"
 
     def compose(self) -> ComposeResult:
         yield Static("⚠️ Permission Required", classes="permission-header")
         yield Static(f"Tool: {self.title}", classes="permission-tool")
         with Horizontal(classes="permission-buttons"):
-            yield Button("[y] Allow once", id="btn-allow-once", variant="success")
-            yield Button("[a] Allow always", id="btn-allow-always", variant="warning")
-            yield Button("[n] Deny", id="btn-deny", variant="error")
+            yield Button("[Enter] Allow once", id="btn-allow-once", variant="success")
+            yield Button("[A] Allow always", id="btn-allow-always", variant="warning")
+            yield Button("[Esc] Deny", id="btn-deny", variant="error")
         yield Static(self._format_timer(), id="perm-timer", classes="permission-timer")
 
     def on_mount(self) -> None:
@@ -88,8 +89,8 @@ class PermissionPrompt(VerticalGroup):
 
     def _find_option_id(self, kind: str) -> str | None:
         for opt in self._options:
-            if opt.get("kind") == kind:
-                return opt.get("optionId")
+            if opt.kind == kind:
+                return opt.option_id
         return None
 
     def _resolve(self, option_id: str) -> None:

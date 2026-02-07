@@ -23,8 +23,8 @@ TIMEOUT_SECONDS = 5.0
 class InstallationInfo:
     """Information about how kagan was installed."""
 
-    method: str  # "uv", "pipx", "pip"
-    upgrade_command: list[str]  # Command parts to run
+    method: str
+    upgrade_command: list[str]
 
     def format_command(self) -> str:
         """Return human-readable command string."""
@@ -78,7 +78,6 @@ def fetch_latest_version(prerelease: bool = False, timeout: float = TIMEOUT_SECO
             data = response.json()
 
             if prerelease:
-                # Get latest from all releases (including prereleases)
                 releases = data.get("releases", {})
                 if not releases:
                     return data.get("info", {}).get("version")
@@ -94,7 +93,6 @@ def fetch_latest_version(prerelease: bool = False, timeout: float = TIMEOUT_SECO
                     return str(max(versions))
                 return None
             else:
-                # Get stable version from info
                 return data.get("info", {}).get("version")
     except httpx.TimeoutException:
         return None
@@ -167,27 +165,24 @@ def detect_installation_method(target_version: str) -> InstallationInfo | None:
     installer, dist_path = installer_info
     dist_path_str = str(dist_path).lower()
 
-    # UV tool installation
     if installer == "uv":
         if "tool" in dist_path_str or ".local/share/uv/tools" in dist_path_str:
             return InstallationInfo(
                 method="uv tool",
                 upgrade_command=["uv", "tool", "upgrade", f"kagan=={target_version}"],
             )
-        # UV in venv
+
         return InstallationInfo(
             method="uv",
             upgrade_command=["uv", "pip", "install", f"kagan=={target_version}"],
         )
 
-    # PIPX installation - use install --force to upgrade to specific version
     if installer == "pipx" or "pipx" in dist_path_str:
         return InstallationInfo(
             method="pipx",
             upgrade_command=["pipx", "install", f"kagan=={target_version}", "--force"],
         )
 
-    # Check for venv/pip installation
     pyvenv_cfg = Path(sys.prefix) / "pyvenv.cfg"
     if pyvenv_cfg.exists() or installer == "pip":
         return InstallationInfo(
@@ -251,7 +246,6 @@ def prompt_and_update(
     click.echo(f"  Current version: {click.style(current, fg='red')}")
     click.echo(f"  Latest version:  {click.style(latest, fg='green', bold=True)}")
 
-    # Check if latest is a prerelease
     try:
         latest_ver = parse_version(latest)
         if isinstance(latest_ver, Version) and latest_ver.is_prerelease:
@@ -261,7 +255,6 @@ def prompt_and_update(
 
     click.echo()
 
-    # Detect installation method
     install_info = detect_installation_method(latest)
     if install_info is None:
         click.secho("Could not detect installation method.", fg="red")
@@ -296,16 +289,9 @@ def prompt_and_update(
 @click.option("--check", "check_only", is_flag=True, help="Only check for updates, don't install")
 @click.option("--prerelease", is_flag=True, help="Include pre-release versions")
 def update(force: bool, check_only: bool, prerelease: bool) -> None:
-    """Check for and install kagan updates from PyPI.
-
-    Exit codes for --check mode:
-      0 = Already on latest version
-      1 = Update available
-      2 = Error occurred
-    """
+    """Check for and install kagan updates from PyPI."""
     result = check_for_updates(prerelease=prerelease)
 
-    # Handle dev version
     if result.is_dev:
         click.secho("Running from development version. Cannot auto-update.", fg="yellow")
         click.echo("If you installed from source, use 'git pull' instead.")
@@ -313,14 +299,12 @@ def update(force: bool, check_only: bool, prerelease: bool) -> None:
             sys.exit(2)
         return
 
-    # Handle fetch errors
     if result.error and result.latest_version is None:
         click.secho(f"Error: {result.error}", fg="red")
         if check_only:
             sys.exit(2)
         return
 
-    # Check mode output
     if check_only:
         click.echo(f"Current version: {result.current_version}")
         click.echo(f"Latest version:  {result.latest_version}")
@@ -332,7 +316,6 @@ def update(force: bool, check_only: bool, prerelease: bool) -> None:
             click.secho("Already on the latest version.", fg="green")
             sys.exit(0)
 
-    # Already up to date
     if not result.update_available:
         click.secho(
             f"kagan {result.current_version} is already the latest version.",
@@ -340,5 +323,4 @@ def update(force: bool, check_only: bool, prerelease: bool) -> None:
         )
         return
 
-    # Perform update
     prompt_and_update(result, force=force, prerelease=prerelease)

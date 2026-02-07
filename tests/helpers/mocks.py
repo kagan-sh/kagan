@@ -2,235 +2,45 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
+from acp.schema import ToolCall
+
+from kagan.acp.buffers import AgentBuffers
+from kagan.tmux import TmuxError
+
 if TYPE_CHECKING:
-    from textual.message import Message
+    from collections.abc import Callable
 
     from kagan.config import AgentConfig, KaganConfig
 
-from kagan.agents.worktree import WorktreeManager
 
-
-class MessageCapture:
-    """Capture Textual messages from widgets for testing.
-
-    Usage:
-        capture = MessageCapture()
-        with patch.object(widget, "post_message", capture):
-            widget.action_select()
-
-        assert len(capture.messages) == 1
-        assert isinstance(capture.messages[0], MyWidget.Completed)
-    """
-
-    def __init__(self) -> None:
-        self.messages: list[Any] = []
-
-    def __call__(self, message: Message) -> bool:
-        """Capture a message and return True (as post_message expects)."""
-        self.messages.append(message)
-        return True
-
-    def clear(self) -> None:
-        """Clear captured messages."""
-        self.messages.clear()
-
-    def get_last(self) -> Any:
-        """Get the last captured message."""
-        return self.messages[-1] if self.messages else None
-
-    def get_first(self, message_type: type) -> Any:
-        """Get the first message of the given type."""
-        for msg in self.messages:
-            if isinstance(msg, message_type):
-                return msg
-        return None
-
-    def assert_single(self, message_type: type) -> Any:
-        """Assert exactly one message of given type was captured, return it."""
-        assert len(self.messages) == 1, f"Expected 1 message, got {len(self.messages)}"
-        msg = self.messages[0]
-        assert isinstance(msg, message_type), f"Expected {message_type}, got {type(msg)}"
-        return msg
-
-    def assert_contains(self, message_type: type) -> Any:
-        """Assert at least one message of given type was captured, return it."""
-        msg = self.get_first(message_type)
-        actual_types = [type(m).__name__ for m in self.messages]
-        assert msg is not None, (
-            f"Expected message of type {message_type.__name__}, got: {actual_types}"
-        )
-        return msg
-
-
-class AgentTestHarness:
-    """Test harness for Agent error testing.
-
-    Provides:
-    - Pre-configured Agent with mocked message target
-    - Message capture via posted_messages list
-    - Assertion helpers for common checks
-    """
-
-    def __init__(self, tmp_path: Path, agent_config: AgentConfig, *, read_only: bool = False):
-        from kagan.acp.agent import Agent
-
-        self.agent = Agent(tmp_path, agent_config, read_only=read_only)
-        self.agent._message_target = MagicMock()
-        self.agent._message_target.post_message = MagicMock(return_value=True)
-        self.posted_messages: list[Any] = []
-        self.agent.post_message = MagicMock(
-            side_effect=lambda m, **kw: self.posted_messages.append(m) or True
-        )
-
-    def assert_posted_fail(self, contains: str | None = None) -> None:
-        """Assert that AgentFail was posted, optionally checking message content."""
-        from kagan.acp import messages
-
-        assert len(self.posted_messages) == 1
-        msg = self.posted_messages[0]
-        assert isinstance(msg, messages.AgentFail)
-        if contains:
-            assert contains in msg.message or contains in (msg.details or "")
-
-    def assert_posted_ready(self) -> None:
-        """Assert that AgentReady was posted."""
-        from kagan.acp import messages
-
-        assert any(isinstance(m, messages.AgentReady) for m in self.posted_messages)
-
-    def mock_process(self, readline_responses: list[bytes]) -> MagicMock:
-        """Create a mock process with specified readline responses."""
-        proc = MagicMock()
-        proc.pid = 12345
-        proc.stdin = MagicMock()
-        proc.stdout = MagicMock()
-        proc.stderr = MagicMock()
-        call_count = 0
-
-        async def mock_readline():
-            nonlocal call_count
-            if call_count < len(readline_responses):
-                result = readline_responses[call_count]
-                call_count += 1
-                return result
-            return b""
-
-        proc.stdout.readline = mock_readline
-        return proc
-
-
-class MergeScenarioBuilder:
-    """Builder for WorktreeManager merge test scenarios."""
-
-    def __init__(self, tmp_path: Path):
-        self.tmp_path = tmp_path
-        self.manager = WorktreeManager(repo_root=tmp_path)
-        self.mock_run_git = AsyncMock()
-        self.manager._run_git = self.mock_run_git
-        self.ticket_id = ""
-        self.branch_name = ""
-        self.commits: list[str] = []
-        self.conflict_marker = ""
-
-    def with_worktree(self, ticket_id: str) -> MergeScenarioBuilder:
-        """Create worktree directory for ticket."""
-        path = self.tmp_path / ".kagan" / "worktrees" / ticket_id
-        path.mkdir(parents=True)
-        self.ticket_id = ticket_id
-        return self
-
-    def with_branch(self, branch_name: str) -> MergeScenarioBuilder:
-        """Set branch name response."""
-        self.branch_name = branch_name
-        return self
-
-    def with_commits(self, commits: list[str]) -> MergeScenarioBuilder:
-        """Set commit log response."""
-        self.commits = commits
-        return self
-
-    def with_conflict(self, marker: str = "UU") -> MergeScenarioBuilder:
-        """Configure conflict scenario."""
-        self.conflict_marker = marker
-        return self
-
-    def build_success_responses(self) -> list:
-        """Build mock responses for successful squash merge."""
-        return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
-            ("", ""),  # merge --squash
-            ("M file.py", ""),  # status (conflict check - no conflict)
-            ("", ""),  # commit
-        ]
-
-    def build_regular_merge_responses(self) -> list:
-        """Build mock responses for successful regular merge."""
-        return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
-            ("Merge made by the 'ort' strategy.", ""),  # merge (no squash)
-        ]
-
-    def build_conflict_responses(self) -> list:
-        """Build mock responses for squash conflict scenario."""
-        return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
-            ("", ""),  # merge --squash
-            (f"{self.conflict_marker} file.py", ""),  # status with conflict
-            ("", ""),  # merge --abort
-        ]
-
-    def build_regular_conflict_responses(self, in_stderr: bool = False) -> list:
-        """Build mock responses for regular merge conflict."""
-        conflict_msg = "CONFLICT (content): Merge conflict in file.py"
-        return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("", ""),  # status --porcelain (uncommitted check - clean)
-            ("\n".join(self.commits), ""),  # log (get commits)
-            ("", ""),  # checkout
-            ("", conflict_msg) if in_stderr else (conflict_msg, ""),
-            ("", ""),  # merge --abort
-        ]
-
-    def build_uncommitted_changes_response(self) -> list:
-        """Build mock responses for uncommitted changes in main repo."""
-        return [
-            (self.branch_name, ""),  # rev-parse (get branch)
-            ("M tests/helpers/pages.py", ""),  # status --porcelain shows uncommitted changes
-        ]
-
-
-def create_mock_worktree_manager() -> MagicMock:
-    """Create a mock WorktreeManager with async methods."""
-    from kagan.agents.worktree import WorktreeManager
-
-    manager = MagicMock(spec=WorktreeManager)
+def create_mock_workspace_service() -> MagicMock:
+    """Create a mock WorkspaceService with async methods."""
+    manager = MagicMock()
+    workspace_stub = SimpleNamespace(id="workspace-test")
     manager.get_path = AsyncMock(return_value=Path("/tmp/worktree"))
     manager.create = AsyncMock(return_value=Path("/tmp/worktree"))
     manager.delete = AsyncMock()
-    manager.list_all = AsyncMock(return_value=[])
+    manager.list_workspaces = AsyncMock(return_value=[workspace_stub])
+    manager.get_workspace_repos = AsyncMock(return_value=[])
     manager.get_commit_log = AsyncMock(return_value=["feat: initial"])
     manager.get_diff_stats = AsyncMock(return_value="1 file changed")
-    manager.merge_to_main = AsyncMock(return_value=(True, "Merged"))
+    manager.prepare_merge_conflicts = AsyncMock(return_value=(True, "Merge conflicts prepared"))
+    manager.get_merge_worktree_path = AsyncMock(return_value=Path("/tmp/merge-worktree"))
+    manager.get_files_changed_on_base = AsyncMock(return_value=[])
+    manager.rebase_onto_base = AsyncMock(return_value=(True, "", []))
     return manager
 
 
 def create_mock_agent(response: str = "Done! <complete/>") -> MagicMock:
     """Create a mock ACP agent with configurable response."""
     agent = MagicMock()
-    agent._read_only = False  # Default to normal (non-read-only) mode
+    agent._read_only = False
     agent.set_auto_approve = MagicMock()
     agent.start = MagicMock()
     agent.wait_ready = AsyncMock()
@@ -238,16 +48,6 @@ def create_mock_agent(response: str = "Done! <complete/>") -> MagicMock:
     agent.get_response_text = MagicMock(return_value=response)
     agent.stop = AsyncMock()
     return agent
-
-
-def create_mock_session_manager() -> MagicMock:
-    """Create a mock SessionManager."""
-    manager = MagicMock()
-    manager.create_session = AsyncMock(return_value="session-123")
-    manager.kill_session = AsyncMock()
-    manager.list_sessions = AsyncMock(return_value=[])
-    manager.send_keys = AsyncMock()
-    return manager
 
 
 def create_mock_process(pid: int = 12345, returncode: int | None = None) -> MagicMock:
@@ -284,23 +84,19 @@ def create_test_agent_config(
 
 
 def create_test_config(
-    auto_start: bool = True,
-    auto_merge: bool = False,
+    auto_review: bool = True,
     max_concurrent: int = 2,
-    max_iterations: int = 3,
 ) -> KaganConfig:
     """Create a KaganConfig for testing."""
     from kagan.config import AgentConfig, GeneralConfig, KaganConfig
 
     return KaganConfig(
         general=GeneralConfig(
-            auto_start=auto_start,
-            auto_merge=auto_merge,
+            auto_review=auto_review,
             max_concurrent_agents=max_concurrent,
-            max_iterations=max_iterations,
-            iteration_delay_seconds=0.01,
             default_worker_agent="test",
             default_base_branch="main",
+            default_pair_terminal_backend="tmux",
         ),
         agents={
             "test": AgentConfig(
@@ -313,64 +109,302 @@ def create_test_config(
     )
 
 
-class SubprocessMockBuilder:
-    """Builder for complex subprocess mocking scenarios.
+def _coerce_tool_call(tool_call: Any) -> ToolCall:
+    if isinstance(tool_call, ToolCall):
+        return tool_call
+    if not isinstance(tool_call, dict):
+        return ToolCall(toolCallId="unknown", title="Tool call")
+    data = dict(tool_call)
+    if "toolCallId" not in data:
+        if "id" in data:
+            data["toolCallId"] = data["id"]
+        elif "tool_call_id" in data:
+            data["toolCallId"] = data["tool_call_id"]
+    if not data.get("title"):
+        data["title"] = data.get("name") or "Tool call"
+    if "rawInput" not in data:
+        for key in ("arguments", "input", "params", "args"):
+            if key in data:
+                data["rawInput"] = data[key]
+                break
+    return ToolCall.model_validate(data)
 
-    Example:
-        builder = SubprocessMockBuilder()
-        mock_subprocess = (
-            builder
-            .on_call(1, stdout=b"output1")
-            .on_call(2, stdout=b"output2")
-            .error_on_call(3, message="failure")
-            .build()
-        )
-        mocker.patch("asyncio.create_subprocess_exec", side_effect=mock_subprocess)
+
+class MockAgent:
+    """Mock ACP agent with controllable responses for snapshot / E2E testing.
+
+    Simulates the Agent interface without spawning real processes.
+    Responses are controlled via ``set_response`` / ``set_tool_calls``.
     """
 
-    def __init__(self):
-        self._call_responses: dict[int, tuple[bytes, bytes, int]] = {}
-        self._default_response: tuple[bytes, bytes, int] = (b"", b"", 0)
+    def __init__(
+        self,
+        project_root: Path,
+        agent_config: AgentConfig,
+        *,
+        read_only: bool = False,
+    ) -> None:
+        self.project_root = project_root
+        self._agent_config = agent_config
+        self._read_only = read_only
+        self._buffers = AgentBuffers()
+        self._tool_calls: dict[str, ToolCall] = {}
+        self._thinking_text: str = ""
+        self._ready = False
+        self._stopped = False
+        self._auto_approve = False
+        self._model_override: str | None = None
+        self._message_target: Any = None
 
-    def on_call(
-        self, call_num: int, stdout: bytes, stderr: bytes = b"", returncode: int = 0
-    ) -> SubprocessMockBuilder:
-        """Configure response for a specific call number (1-indexed)."""
-        self._call_responses[call_num] = (stdout, stderr, returncode)
-        return self
+        self._buffers.append_response("Done. <complete/>")
 
-    def error_on_call(self, call_num: int, message: str = "error") -> SubprocessMockBuilder:
-        """Configure an error response for a specific call number."""
-        self._call_responses[call_num] = (b"", message.encode(), 1)
-        return self
+    def _stream_text(self) -> str:
+        text = self._buffers.get_response_text()
+        if not text:
+            return ""
+        text = re.sub(r"<complete\\s*/?>", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"<continue\\s*/?>", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"<blocked\\s+reason=\"[^\"]+\"\\s*/?>", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"<approve\\s*[^>]*?/?>", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"<reject\\s+reason=\"[^\"]+\"\\s*/?>", "", text, flags=re.IGNORECASE)
+        return text.strip()
 
-    def with_default(
-        self, stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0
-    ) -> SubprocessMockBuilder:
-        """Set the default response for unconfigured calls."""
-        self._default_response = (stdout, stderr, returncode)
-        return self
+    def set_response(self, text: str) -> None:
+        self._buffers.clear_response()
+        self._buffers.append_response(text)
 
-    def build(self):
-        """Build the mock subprocess factory function."""
-        call_count = [0]
-        responses = self._call_responses
-        default = self._default_response
+    def set_tool_calls(self, tool_calls: dict[str, Any]) -> None:
+        self._tool_calls = {
+            tool_call_id: _coerce_tool_call(tool_call)
+            for tool_call_id, tool_call in tool_calls.items()
+        }
 
-        async def mock_subprocess(*args, **kwargs):
-            call_count[0] += 1
-            stdout, stderr, code = responses.get(call_count[0], default)
-            proc = MagicMock()
-            proc.communicate = AsyncMock(return_value=(stdout, stderr))
-            proc.returncode = code
-            proc.pid = 12345 + call_count[0]
-            proc.stdout = MagicMock()
-            proc.stdout.readline = AsyncMock(return_value=b"")
-            proc.stderr = MagicMock()
-            proc.stderr.readline = AsyncMock(return_value=b"")
-            proc.wait = AsyncMock(return_value=code)
-            proc.terminate = MagicMock()
-            proc.kill = MagicMock()
-            return proc
+    def set_thinking_text(self, text: str) -> None:
+        self._thinking_text = text
 
-        return mock_subprocess
+    def set_message_target(self, target: Any) -> None:
+        self._message_target = target
+
+    def set_auto_approve(self, enabled: bool) -> None:
+        self._auto_approve = enabled
+
+    def set_model_override(self, model_id: str | None) -> None:
+        self._model_override = model_id
+
+    def start(self, message_target: Any = None) -> None:
+        self._message_target = message_target
+        self._ready = True
+        if self._message_target:
+            from kagan.acp import messages
+
+            self._message_target.post_message(messages.AgentReady())
+
+    async def wait_ready(self, timeout: float = 30.0) -> None:
+        self._ready = True
+        if self._message_target:
+            from kagan.acp import messages
+
+            self._message_target.post_message(messages.AgentReady())
+
+    async def send_prompt(self, prompt: str) -> str | None:
+        import asyncio
+
+        if self._message_target:
+            from kagan.acp import messages
+
+            if self._thinking_text:
+                self._message_target.post_message(messages.Thinking("text", self._thinking_text))
+                await asyncio.sleep(0.05)
+
+            stream_text = self._stream_text()
+            if stream_text:
+                self._message_target.post_message(messages.AgentUpdate("text", stream_text))
+                await asyncio.sleep(0.1)
+
+            for tool_call in self._tool_calls.values():
+                self._message_target.post_message(messages.ToolCall(tool_call))
+                await asyncio.sleep(0.05)
+
+            await asyncio.sleep(0.05)
+            self._message_target.post_message(messages.AgentComplete())
+            await asyncio.sleep(0.05)
+
+        return "end_turn"
+
+    def get_response_text(self) -> str:
+        return self._buffers.get_response_text()
+
+    def get_tool_calls(self) -> dict[str, ToolCall]:
+        return self._tool_calls
+
+    @property
+    def tool_calls(self) -> dict[str, ToolCall]:
+        return self._tool_calls
+
+    def get_thinking_text(self) -> str:
+        return self._thinking_text
+
+    def clear_tool_calls(self) -> None:
+        self._tool_calls.clear()
+
+    async def stop(self) -> None:
+        self._stopped = True
+        self._buffers.clear_all()
+
+    async def cancel(self) -> bool:
+        return True
+
+
+class SmartMockAgent(MockAgent):
+    """Route-based mock agent that adapts responses based on prompt keywords.
+
+    Replaces the ad-hoc PairFlowAgent, FullFlowAgent, JourneyAgent classes.
+
+    Usage::
+
+        routes = {
+            "propose_plan": (PLAN_RESPONSE, plan_tool_calls),
+            "Code Review Specialist": (REVIEW_RESPONSE, {}),
+        }
+        agent = SmartMockAgent(root, config, routes=routes)
+
+    If no route matches, the *default* response/tool_calls pair is used.
+    An optional *on_default* async callback is called when the default
+    route fires (e.g. to commit files in the worktree).
+    """
+
+    def __init__(
+        self,
+        project_root: Path,
+        agent_config: AgentConfig,
+        *,
+        routes: dict[str, tuple[str, dict[str, Any]]] | None = None,
+        default: tuple[str, dict[str, Any]] | None = None,
+        on_default: Callable[..., Any] | None = None,
+        read_only: bool = False,
+    ) -> None:
+        super().__init__(project_root, agent_config, read_only=read_only)
+        self._routes = routes or {}
+        self._default = default or ("Done. <complete/>", {})
+        self._on_default = on_default
+
+    async def send_prompt(self, prompt: str) -> str | None:
+        for keyword, (response, tool_calls) in self._routes.items():
+            if keyword in prompt:
+                self.set_response(response)
+                self.set_tool_calls(tool_calls)
+                return await super().send_prompt(prompt)
+
+        response, tool_calls = self._default
+        if self._on_default is not None:
+            import inspect
+
+            result = self._on_default(self)
+            if inspect.isawaitable(result):
+                await result
+        self.set_response(response)
+        self.set_tool_calls(tool_calls)
+        return await super().send_prompt(prompt)
+
+
+class MockAgentFactory:
+    """Factory for creating MockAgent instances with controllable behavior.
+
+    Works as a generic factory — pass ``agent_cls`` to use SmartMockAgent
+    or any other MockAgent subclass.
+    """
+
+    def __init__(
+        self,
+        *,
+        agent_cls: type[MockAgent] | None = None,
+        agent_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        self._agent_cls = agent_cls or MockAgent
+        self._agent_kwargs = agent_kwargs or {}
+        self._default_response = "Done. <complete/>"
+        self._default_tool_calls: dict[str, Any] = {}
+        self._default_thinking = ""
+        self._agents: list[MockAgent] = []
+
+    def set_default_response(self, text: str) -> None:
+        self._default_response = text
+
+    def set_default_tool_calls(self, tool_calls: dict[str, Any]) -> None:
+        self._default_tool_calls = tool_calls
+
+    def set_default_thinking(self, text: str) -> None:
+        self._default_thinking = text
+
+    def get_last_agent(self) -> MockAgent | None:
+        return self._agents[-1] if self._agents else None
+
+    def get_all_agents(self) -> list[MockAgent]:
+        return list(self._agents)
+
+    def __call__(
+        self,
+        project_root: Path,
+        agent_config: AgentConfig,
+        *,
+        read_only: bool = False,
+    ) -> Any:
+        agent = self._agent_cls(
+            project_root,
+            agent_config,
+            read_only=read_only,
+            **self._agent_kwargs,
+        )
+        agent.set_response(self._default_response)
+        agent.set_tool_calls(dict(self._default_tool_calls))
+        agent.set_thinking_text(self._default_thinking)
+        self._agents.append(agent)
+        return agent
+
+
+def create_fake_tmux(
+    sessions: dict[str, dict[str, Any]], *, strict: bool = False
+) -> Callable[..., Any]:
+    """Create a fake tmux run function for testing.
+
+    Args:
+        sessions: Dictionary to track created sessions
+        strict: If True, raise TmuxError for invalid operations like
+            kill-session or send-keys on non-existent sessions
+    """
+
+    async def fake_run_tmux(*args: str) -> str:
+        if not args:
+            return ""
+        command, args_list = args[0], list(args)
+        if command == "new-session" and "-s" in args_list:
+            idx = args_list.index("-s")
+            name = args_list[idx + 1] if idx + 1 < len(args_list) else None
+            if name:
+                cwd = args_list[args_list.index("-c") + 1] if "-c" in args_list else ""
+                env: dict[str, str] = {}
+                for i, val in enumerate(args_list):
+                    if val == "-e" and i + 1 < len(args_list):
+                        key, _, env_value = args_list[i + 1].partition("=")
+                        env[key] = env_value
+                sessions[name] = {"cwd": cwd, "env": env, "sent_keys": []}
+        elif command == "kill-session" and "-t" in args_list:
+            idx = args_list.index("-t")
+            name = args_list[idx + 1] if idx + 1 < len(args_list) else None
+            if strict and name and name not in sessions:
+                raise TmuxError(f"session not found: {name}")
+            if name:
+                sessions.pop(name, None)
+        elif command == "send-keys" and "-t" in args_list:
+            idx = args_list.index("-t")
+            name = args_list[idx + 1]
+            if strict and name not in sessions:
+                raise TmuxError(f"session not found: {name}")
+            keys = args_list[idx + 2] if idx + 2 < len(args_list) else ""
+            if name in sessions:
+                sessions[name]["sent_keys"].append(keys)
+        elif command == "list-sessions":
+            return "\n".join(sorted(sessions.keys()))
+        return ""
+
+    return fake_run_tmux

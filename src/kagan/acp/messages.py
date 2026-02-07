@@ -2,19 +2,36 @@
 
 from __future__ import annotations
 
+import asyncio  # noqa: TC003 (used in type hint for dataclass field)
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 from textual.message import Message
 
 if TYPE_CHECKING:
-    import asyncio
-
-    from kagan.acp import protocol
+    from acp.schema import (
+        AvailableCommand,
+        PermissionOption,
+        PlanEntry,
+    )
+    from acp.schema import (
+        ToolCall as AcpToolCall,
+    )
+    from acp.schema import (
+        ToolCallUpdate as AcpToolCallUpdate,
+    )
 
 
 class Mode(NamedTuple):
     """An agent mode."""
+
+    id: str
+    name: str
+    description: str | None
+
+
+class Model(NamedTuple):
+    """An available LLM model."""
 
     id: str
     name: str
@@ -33,14 +50,14 @@ class AgentMessage(Message):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentReady(AgentMessage):
     """Agent is initialized and ready for prompts."""
 
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentFail(AgentMessage):
     """Agent failed to start or encountered an error."""
 
@@ -48,14 +65,14 @@ class AgentFail(AgentMessage):
     details: str = ""
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentComplete(AgentMessage):
     """Agent completed its response."""
 
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentUpdate(AgentMessage):
     """Agent sent text content."""
 
@@ -63,7 +80,7 @@ class AgentUpdate(AgentMessage):
     text: str
 
 
-@dataclass
+@dataclass(slots=True)
 class Thinking(AgentMessage):
     """Agent thinking/reasoning content."""
 
@@ -71,38 +88,38 @@ class Thinking(AgentMessage):
     text: str
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolCall(AgentMessage):
     """Agent is making a tool call."""
 
-    tool_call: protocol.ToolCall
+    tool_call: AcpToolCall
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolCallUpdate(AgentMessage):
     """Tool call status update."""
 
-    tool_call: protocol.ToolCall
-    update: protocol.ToolCallUpdate
+    tool_call: AcpToolCall
+    update: AcpToolCallUpdate
 
 
-@dataclass
+@dataclass(slots=True)
 class Plan(AgentMessage):
     """Agent's plan entries."""
 
-    entries: list[protocol.PlanEntry]
+    entries: list[PlanEntry]
 
 
-@dataclass
+@dataclass(slots=True)
 class RequestPermission(AgentMessage):
     """Agent needs permission for an operation."""
 
-    options: list[protocol.PermissionOption]
-    tool_call: protocol.ToolCall | protocol.ToolCallUpdatePermissionRequest
+    options: list[PermissionOption]
+    tool_call: AcpToolCall | AcpToolCallUpdate
     result_future: asyncio.Future[Answer]
 
 
-@dataclass
+@dataclass(slots=True)
 class SetModes(AgentMessage):
     """Agent reported available modes."""
 
@@ -110,15 +127,30 @@ class SetModes(AgentMessage):
     modes: dict[str, Mode]
 
 
-@dataclass
+@dataclass(slots=True)
 class ModeUpdate(AgentMessage):
     """Agent informed us about a mode change."""
 
     current_mode: str
 
 
-@dataclass
+@dataclass(slots=True)
+class SetModels(AgentMessage):
+    """Agent reported available models."""
+
+    current_model: str
+    models: dict[str, Model]
+
+
+@dataclass(slots=True)
+class ModelUpdate(AgentMessage):
+    """Agent informed us about a model change."""
+
+    current_model: str
+
+
+@dataclass(slots=True)
 class AvailableCommandsUpdate(AgentMessage):
     """Agent is reporting its slash commands."""
 
-    commands: list[protocol.AvailableCommand]
+    commands: list[AvailableCommand]

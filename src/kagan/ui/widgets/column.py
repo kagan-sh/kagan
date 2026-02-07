@@ -11,11 +11,22 @@ from textual.widget import Widget
 from textual.widgets import Label
 
 from kagan.constants import STATUS_LABELS
-from kagan.database.models import Ticket, TicketStatus
-from kagan.ui.widgets.card import TicketCard
+from kagan.core.models.enums import CardIndicator, TaskStatus
+from kagan.ui.widgets.card import TaskCard
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+
+    from kagan.core.models.entities import Task
+
+
+# Column icons for each status
+STATUS_ICONS: dict[TaskStatus, str] = {
+    TaskStatus.BACKLOG: "☐",
+    TaskStatus.IN_PROGRESS: "▶",
+    TaskStatus.REVIEW: "◎",
+    TaskStatus.DONE: "✓",
+}
 
 
 class _NSLabel(Label):
@@ -42,32 +53,34 @@ class KanbanColumn(Widget):
     ALLOW_SELECT = False
     can_focus = False
 
-    status: reactive[TicketStatus] = reactive(TicketStatus.BACKLOG)
+    status: reactive[TaskStatus] = reactive(TaskStatus.BACKLOG)
 
-    def __init__(self, status: TicketStatus, tickets: list[Ticket] | None = None, **kwargs) -> None:
+    def __init__(self, status: TaskStatus, tasks: list[Task] | None = None, **kwargs) -> None:
         super().__init__(id=f"column-{status.value.lower()}", **kwargs)
         self.status = status
-        self._tickets: list[Ticket] = tickets or []
+        self._tasks: list[Task] = tasks or []
+        self._has_active_agents: bool = False
 
     def compose(self) -> ComposeResult:
+        icon = STATUS_ICONS.get(self.status, "○")
         with _NSVertical():
             with _NSVertical(classes="column-header"):
                 yield _NSLabel(
-                    f"{STATUS_LABELS[self.status]} ({len(self._tickets)})",
+                    f"{icon} {STATUS_LABELS[self.status]} ({len(self._tasks)})",
                     id=f"header-{self.status.value.lower()}",
                     classes="column-header-text",
                 )
             with _NSScrollable(classes="column-content", id=f"content-{self.status.value.lower()}"):
-                if self._tickets:
-                    for ticket in self._tickets:
-                        yield TicketCard(ticket)
+                if self._tasks:
+                    for task in self._tasks:
+                        yield TaskCard(task)
                 else:
                     empty_id = f"empty-{self.status.value.lower()}"
                     with _NSContainer(classes="column-empty", id=empty_id):
-                        yield _NSLabel("No tickets", classes="empty-message")
+                        yield _NSLabel("No tasks", classes="empty-message")
 
-    def get_cards(self) -> list[TicketCard]:
-        return list(self.query(TicketCard))
+    def get_cards(self) -> list[TaskCard]:
+        return list(self.query(TaskCard))
 
     def get_focused_card_index(self) -> int | None:
         for i, card in enumerate(self.get_cards()):
@@ -85,77 +98,84 @@ class KanbanColumn(Widget):
     def focus_first_card(self) -> bool:
         return self.focus_card(0)
 
-    def update_tickets(self, tickets: list[Ticket]) -> None:
-        """Update tickets with minimal DOM changes - no full recompose.
+    def update_tasks(self, tasks: list[Task]) -> None:
+        """Update tasks with minimal DOM changes - no full recompose."""
+        new_tasks = [t for t in tasks if t.status == self.status]
+        self._tasks = new_tasks
 
-        - Updates existing cards when ticket metadata changes
-        - Adds new cards for tickets that weren't here before
-        - Removes cards for tickets that moved out
-        """
-        new_tickets = [t for t in tickets if t.status == self.status]
-        self._tickets = new_tickets
-
-        # Update header count
         try:
             header = self.query_one(f"#header-{self.status.value.lower()}", _NSLabel)
-            header.update(f"{STATUS_LABELS[self.status]} ({len(new_tickets)})")
+            icon = STATUS_ICONS.get(self.status, "○")
+            header.update(f"{icon} {STATUS_LABELS[self.status]} ({len(new_tasks)})")
         except NoMatches:
             pass
 
-        # Get current cards and build lookup
-        current_cards = {card.ticket.id: card for card in self.get_cards() if card.ticket}
-        new_tickets_by_id = {t.id: t for t in new_tickets}
-        new_ticket_ids = set(new_tickets_by_id.keys())
+        current_cards = {card.task_model.id: card for card in self.get_cards() if card.task_model}
+        new_tasks_by_id = {t.id: t for t in new_tasks}
+        new_task_ids = set(new_tasks_by_id.keys())
         current_ids = set(current_cards.keys())
 
         try:
             content = self.query_one(f"#content-{self.status.value.lower()}", _NSScrollable)
         except NoMatches:
             return
+        if not content.is_attached:
+            return
 
-        # Remove cards for tickets no longer in this column
-        for ticket_id in current_ids - new_ticket_ids:
-            card = current_cards[ticket_id]
+        for task_id in current_ids - new_task_ids:
+            card = current_cards[task_id]
             card.remove()
 
-        # Update existing cards with new ticket data (handles metadata changes like type)
-        for ticket_id in current_ids & new_ticket_ids:
-            card = current_cards[ticket_id]
-            new_ticket = new_tickets_by_id[ticket_id]
-            # Update the ticket reactive - this triggers recompose if needed
-            card.ticket = new_ticket
+        for task_id in current_ids & new_task_ids:
+            card = current_cards[task_id]
+            new_task = new_tasks_by_id[task_id]
 
-        # Add new cards only (tickets that weren't here before)
-        for ticket in new_tickets:
-            if ticket.id not in current_ids:
-                content.mount(TicketCard(ticket))
+            card.task_model = new_task
 
-        # Handle empty state container
+        for task in new_tasks:
+            if task.id not in current_ids:
+                content.mount(TaskCard(task))
+
         empty_id = f"empty-{self.status.value.lower()}"
         has_empty = False
         try:
             empty_container = self.query_one(f"#{empty_id}", _NSContainer)
             has_empty = True
-            if new_tickets:
-                # Have tickets now, remove empty state
+            if new_tasks:
                 empty_container.remove()
         except NoMatches:
             pass
 
-        # If no tickets and no empty container, add empty state
-        if not new_tickets and not has_empty:
-            empty = _NSContainer(classes="column-empty", id=empty_id)
+        if not new_tasks and not has_empty:
+            empty = _NSContainer(
+                _NSLabel("No tasks", classes="empty-message"),
+                classes="column-empty",
+                id=empty_id,
+            )
             content.mount(empty)
-            empty.mount(_NSLabel("No tickets", classes="empty-message"))
 
-    def update_active_states(self, active_ids: set[str]) -> None:
-        """Update active agent state for all cards in this column."""
-        for card in self.query(TicketCard):
-            if card.ticket is not None:
-                card.is_agent_active = card.ticket.id in active_ids
+    def update_active_states(
+        self,
+        active_ids: set[str],
+        indicator_map: dict[str, CardIndicator] | None = None,
+    ) -> None:
+        """Update active agent state and card indicators for all cards."""
+        had_active = self._has_active_agents
+        self._has_active_agents = any(
+            card.task_model is not None and card.task_model.id in active_ids
+            for card in self.query(TaskCard)
+        )
 
-    def update_iterations(self, iterations: dict[str, str]) -> None:
-        """Update iteration display on cards."""
-        for card in self.query(TicketCard):
-            if card.ticket:
-                card.iteration_info = iterations.get(card.ticket.id, "")
+        if had_active != self._has_active_agents:
+            try:
+                header = self.query_one(f"#header-{self.status.value.lower()}", _NSLabel)
+                icon = STATUS_ICONS.get(self.status, "○")
+                header.update(f"{icon} {STATUS_LABELS[self.status]} ({len(self._tasks)})")
+            except NoMatches:
+                pass
+
+        for card in self.query(TaskCard):
+            if card.task_model is not None:
+                card.is_agent_active = card.task_model.id in active_ids
+                if indicator_map is not None:
+                    card.indicator = indicator_map.get(card.task_model.id, CardIndicator.NONE)

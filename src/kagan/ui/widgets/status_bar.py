@@ -23,11 +23,11 @@ class StatusBar(Widget):
 
     STATUS_INDICATORS = {
         "ready": "●",
-        "thinking": WAVE_FRAMES[0],  # Will be animated
-        "refining": WAVE_FRAMES[0],  # Will be animated
+        "thinking": WAVE_FRAMES[0],
+        "refining": WAVE_FRAMES[0],
         "error": "✗",
         "waiting": "○",
-        "initializing": WAVE_FRAMES[0],  # Will be animated
+        "initializing": WAVE_FRAMES[0],
     }
 
     def __init__(self, **kwargs) -> None:

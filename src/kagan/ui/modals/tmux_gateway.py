@@ -1,4 +1,4 @@
-"""Tmux gateway modal - info display before entering tmux session."""
+"""PAIR instructions modal shown before opening a PAIR session."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from kagan.keybindings import TMUX_GATEWAY_BINDINGS
 from kagan.ui.utils.clipboard import copy_with_notification
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from textual.app import ComposeResult
     from textual.events import Click
 
@@ -28,51 +30,78 @@ class CopyableLink(Static):
         self._url = url
 
     async def _on_click(self, event: Click) -> None:
-        """Copy URL on click."""
         event.stop()
         copy_with_notification(self.app, self._url, "URL")
 
 
-class TmuxGatewayModal(ModalScreen[str | None]):
-    """Gateway modal showing tmux info before entering session.
-
-    Returns:
-        "proceed" - User wants to continue
-        "skip_future" - User wants to continue AND skip in future
-        None - User cancelled
-    """
+class PairInstructionsModal(ModalScreen[str | None]):
+    """Instructions popup shown before launching PAIR tool."""
 
     BINDINGS = TMUX_GATEWAY_BINDINGS
 
-    def __init__(self, ticket_id: str, ticket_title: str, **kwargs) -> None:
+    def __init__(
+        self,
+        task_id: str,
+        task_title: str,
+        backend: str,
+        prompt_path: Path,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
-        self._ticket_id = ticket_id
-        self._ticket_title = ticket_title
+        self._task_id = task_id
+        self._task_title = task_title
+        self._backend = backend
+        self._prompt_path = prompt_path
 
     def compose(self) -> ComposeResult:
-        with Container(id="tmux-gateway-container"):
-            yield Label("Entering tmux Session", classes="modal-title")
+        with Container(id="pair-instructions-container"):
+            yield Label("PAIR Session Instructions", classes="modal-title")
             yield Rule()
 
-            yield Static(
-                "You are about to enter a [bold]tmux[/bold] terminal session.\n"
-                "Kagan keybindings will be unavailable until you return.",
-                classes="tmux-intro",
-            )
-
-            yield Rule(line_style="heavy")
-            yield Label("Essential Commands", classes="section-title")
-
-            with Vertical(classes="hotkey-list"):
-                yield self._hotkey_row("Ctrl+b d", "Detach (return to Kagan)")
-                yield self._hotkey_row("Ctrl+b c", "Create new window")
-                yield self._hotkey_row("Ctrl+b n/p", "Next / previous window")
-                yield self._hotkey_row("Ctrl+b %", "Split pane vertically")
-                yield self._hotkey_row('Ctrl+b "', "Split pane horizontally")
-                yield self._hotkey_row("Ctrl+b ?", "Show all tmux bindings")
-
-            yield Rule()
-            yield CopyableLink(TMUX_DOCS_URL)
+            if self._backend == "tmux":
+                yield Static(
+                    "You are about to enter a [bold]tmux[/bold] session.\n"
+                    "Kagan keybindings are paused until you detach.",
+                    classes="tmux-intro",
+                )
+                yield Rule(line_style="heavy")
+                yield Label("Essential Commands", classes="section-title")
+                with Vertical(classes="hotkey-list"):
+                    yield self._hotkey_row("Ctrl+b d", "Detach (return to Kagan)")
+                    yield self._hotkey_row("Ctrl+b c", "Create new window")
+                    yield self._hotkey_row("Ctrl+b n/p", "Next / previous window")
+                    yield self._hotkey_row("Ctrl+b %", "Split pane vertically")
+                    yield self._hotkey_row('Ctrl+b "', "Split pane horizontally")
+                    yield self._hotkey_row("Ctrl+b ?", "Show all tmux bindings")
+                yield Rule()
+                yield CopyableLink(TMUX_DOCS_URL)
+            else:
+                tool_name = "VS Code" if self._backend == "vscode" else "Cursor"
+                chat_name = "Copilot Chat" if self._backend == "vscode" else "Cursor Chat"
+                yield Static(
+                    f"Kagan will open [bold]{tool_name}[/bold] for this task.\n"
+                    "Preferred workflow: paste Kagan startup prompt into chat first.",
+                    classes="tmux-intro",
+                )
+                yield Rule(line_style="heavy")
+                yield Label("What To Do Next", classes="section-title")
+                with Vertical(classes="hotkey-list"):
+                    yield Static(
+                        "1. Open chat interface in the IDE (Copilot Chat/Cursor Chat).",
+                        classes="tmux-desc",
+                    )
+                    yield Static(
+                        f"2. Open startup prompt file:\n{self._prompt_path}",
+                        classes="tmux-desc",
+                    )
+                    yield Static(
+                        f"3. Copy prompt contents and paste into {chat_name}.",
+                        classes="tmux-desc",
+                    )
+                    yield Static(
+                        "4. Agent uses Kagan MCP and should move the task to REVIEW when done.",
+                        classes="tmux-desc",
+                    )
 
             yield Static(
                 "Press [bold]Enter[/bold] to continue  "
@@ -80,10 +109,9 @@ class TmuxGatewayModal(ModalScreen[str | None]):
                 "[bold]Esc[/bold] cancel",
                 classes="tmux-hint",
             )
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def _hotkey_row(self, key: str, description: str) -> Horizontal:
-        """Create a hotkey-description row."""
         return Horizontal(
             Static(key, classes="tmux-key"),
             Static(description, classes="tmux-desc"),
@@ -91,22 +119,21 @@ class TmuxGatewayModal(ModalScreen[str | None]):
         )
 
     def on_click(self, event: Click) -> None:
-        """Dismiss when clicking outside the modal container."""
         try:
-            container = self.query_one("#tmux-gateway-container")
+            container = self.query_one("#pair-instructions-container")
             if not container.region.contains(event.screen_x, event.screen_y):
                 self.dismiss(None)
         except Exception:
             pass
 
     def action_proceed(self) -> None:
-        """Continue to tmux session."""
         self.dismiss("proceed")
 
     def action_cancel(self) -> None:
-        """Cancel and return to board."""
         self.dismiss(None)
 
     def action_skip_future(self) -> None:
-        """Continue and skip this modal in future."""
         self.dismiss("skip_future")
+
+
+TmuxGatewayModal = PairInstructionsModal

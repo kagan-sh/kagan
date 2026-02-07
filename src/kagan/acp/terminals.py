@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual import log
+from acp import RequestError
 
-from kagan.acp.jsonrpc import RPCError
 from kagan.acp.terminal import TerminalRunner
 from kagan.ansi import clean_terminal_output
+from kagan.debug_log import log
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from kagan.acp import protocol
+    from acp.schema import EnvVariable, TerminalOutputResponse
 
 
 class TerminalManager:
@@ -32,7 +32,7 @@ class TerminalManager:
         command: str,
         args: list[str] | None = None,
         cwd: str | None = None,
-        env: list[protocol.EnvVariable] | None = None,
+        env: list[EnvVariable] | None = None,
         output_byte_limit: int | None = None,
     ) -> tuple[str, str]:
         """Create a new terminal. Returns (terminal_id, display_command)."""
@@ -42,7 +42,7 @@ class TerminalManager:
         log.info(f"[RPC] terminal/create: id={terminal_id}, cmd={cmd_display}")
         log.debug(f"[RPC] terminal/create: cwd={cwd}, env={env}")
 
-        env_dict = {v["name"]: v["value"] for v in (env or [])}
+        env_dict = {v.name: v.value for v in (env or [])}
         terminal = TerminalRunner(
             terminal_id=terminal_id,
             command=command,
@@ -59,30 +59,33 @@ class TerminalManager:
             if not success:
                 log.error(f"[RPC] terminal/create: failed to start terminal {terminal_id}")
                 del self._terminals[terminal_id]
-                raise RPCError("Failed to start terminal")
+                raise RequestError.internal_error({"details": "Failed to start terminal"})
             log.info(f"[RPC] terminal/create: terminal {terminal_id} started successfully")
-        except RPCError:
-            raise
         except Exception as e:
             log.error(f"[RPC] terminal/create: exception starting terminal: {e}")
             self._terminals.pop(terminal_id, None)
-            raise RPCError(f"Failed to create terminal: {e}") from e
+            raise RequestError.internal_error({"details": f"Failed to create terminal: {e}"}) from e
 
         return terminal_id, cmd_display
 
-    def get_output(self, terminal_id: str) -> protocol.TerminalOutputResponse:
+    def get_output(self, terminal_id: str) -> TerminalOutputResponse:
         terminal = self._terminals.get(terminal_id)
         if terminal is None:
-            raise RPCError(f"No terminal with id {terminal_id!r}")
+            raise RequestError.invalid_params({"details": f"No terminal with id {terminal_id!r}"})
 
         state = terminal.state
-        result: protocol.TerminalOutputResponse = {
-            "output": state.output,
-            "truncated": state.truncated,
-        }
+        exit_status = None
         if state.return_code is not None:
-            result["exitStatus"] = {"exitCode": state.return_code}
-        return result
+            from acp.schema import TerminalExitStatus
+
+            exit_status = TerminalExitStatus(exit_code=state.return_code)
+        from acp.schema import TerminalOutputResponse
+
+        return TerminalOutputResponse(
+            output=state.output,
+            truncated=state.truncated,
+            exit_status=exit_status,
+        )
 
     def kill(self, terminal_id: str) -> None:
         if terminal := self._terminals.get(terminal_id):
@@ -92,11 +95,12 @@ class TerminalManager:
         if terminal := self._terminals.get(terminal_id):
             terminal.kill()
             terminal.release()
+            del self._terminals[terminal_id]
 
     async def wait_for_exit(self, terminal_id: str) -> tuple[int, str | None]:
         terminal = self._terminals.get(terminal_id)
         if terminal is None:
-            raise RPCError(f"No terminal with id {terminal_id!r}")
+            raise RequestError.invalid_params({"details": f"No terminal with id {terminal_id!r}"})
         return await terminal.wait_for_exit()
 
     def get_final_output(self, terminal_id: str, limit: int = 500) -> str:

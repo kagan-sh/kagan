@@ -4,21 +4,23 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Footer, Label, RichLog
+from textual.widgets import Button, Footer, Label, RichLog, Rule, Static, TabbedContent, TabPane
 
 from kagan.keybindings import DIFF_BINDINGS
 from kagan.ui.utils.clipboard import copy_with_notification
+from kagan.ui.utils.diff import colorize_diff
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
-    from kagan.database.models import Ticket
+    from kagan.core.models.entities import Task
+    from kagan.services.diffs import RepoDiff
 
 
 class DiffModal(ModalScreen[str | None]):
-    """Modal for showing a ticket diff.
+    """Modal for showing task diffs.
 
     Returns:
         str | None:
@@ -29,22 +31,64 @@ class DiffModal(ModalScreen[str | None]):
 
     BINDINGS = DIFF_BINDINGS
 
-    def __init__(self, title: str, diff_text: str, ticket: Ticket | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        *,
+        title: str | None = None,
+        diff_text: str | None = None,
+        diffs: list[RepoDiff] | None = None,
+        task: Task | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
-        self._title = title
-        self._diff_text = diff_text
-        self._ticket = ticket
+        self._title = title or "WORKSPACE DIFF"
+        self._diff_text = diff_text or ""
+        self._diffs = diffs or []
+        self._task_model = task
 
     def compose(self) -> ComposeResult:
         with Vertical(id="diff-container"):
             yield Label(self._title, classes="modal-title")
-            yield RichLog(id="diff-log", wrap=True, highlight=True)
-        yield Footer()
+            if self._diffs:
+                with TabbedContent():
+                    for diff in self._diffs:
+                        tab_label = (
+                            f"{diff.repo_name} (+{diff.total_additions}/-{diff.total_deletions})"
+                        )
+                        with TabPane(tab_label, id=f"tab-{diff.repo_id}"):
+                            yield from self._render_repo_diff(diff)
+            else:
+                yield RichLog(id="diff-log", wrap=True, highlight=True)
+            yield Rule()
+            with Horizontal(classes="button-row"):
+                yield Button("Close", variant="primary", id="close-btn")
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
-        log = self.query_one("#diff-log", RichLog)
-        for line in self._diff_text.splitlines() or ["(No diff available)"]:
-            log.write(line)
+        button_row = self.query_one(".button-row", Horizontal)
+        button_row.styles.width = "100%"
+        button_row.styles.height = "auto"
+        button_row.styles.align = ("center", "middle")
+        button_row.styles.padding = (1, 0, 0, 0)
+
+        if not self._diffs:
+            log = self.query_one("#diff-log", RichLog)
+
+            log.styles.border = ("none", "transparent")
+            for line in self._diff_text.splitlines() or ["(No diff available)"]:
+                log.write(line)
+
+    def _render_repo_diff(self, diff: RepoDiff) -> ComposeResult:
+        with VerticalScroll(classes="diff-scroll"):
+            for file in diff.files:
+                yield Label(
+                    f"{file.status.upper()}: {file.path} (+{file.additions}/-{file.deletions})",
+                    classes="diff-header",
+                )
+                yield Static(
+                    colorize_diff(file.diff_content),
+                    classes="diff-content",
+                )
 
     def action_close(self) -> None:
         """Close the modal without any action."""
@@ -60,4 +104,23 @@ class DiffModal(ModalScreen[str | None]):
 
     def action_copy(self) -> None:
         """Copy diff content to clipboard."""
-        copy_with_notification(self.app, self._diff_text, "Diff")
+        content = self._diff_text or self._build_unified_diff()
+        copy_with_notification(self.app, content, "Diff")
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close-btn":
+            self.dismiss(None)
+
+    def _build_unified_diff(self) -> str:
+        if not self._diffs:
+            return self._diff_text
+
+        lines: list[str] = []
+        for diff in self._diffs:
+            lines.append(f"# === {diff.repo_name} ({diff.target_branch}) ===")
+            lines.append(f"# +{diff.total_additions} -{diff.total_deletions}")
+            lines.append("")
+            for file in diff.files:
+                lines.append(file.diff_content)
+                lines.append("")
+        return "\n".join(lines)

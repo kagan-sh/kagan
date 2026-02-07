@@ -10,8 +10,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path  # noqa: TC003 - Used at runtime in _ensure_gitignored
 
-# Minimum git version required for worktree support
-# git worktree was introduced in Git 2.5 (July 2015)
 MIN_GIT_VERSION = (2, 5, 0)
 
 
@@ -38,7 +36,7 @@ class GitVersion:
 class GitError:
     """Describes a git operation failure."""
 
-    error_type: str  # "version_low", "user_not_configured", "init_failed", "commit_failed"
+    error_type: str
     message: str
     details: str | None = None
 
@@ -86,6 +84,54 @@ async def get_git_version() -> GitVersion | None:
         return None
 
 
+async def get_git_user_identity() -> tuple[str, str]:
+    """Get the configured git user name and email.
+
+    Checks environment variables first (GIT_AUTHOR_NAME, GIT_COMMITTER_NAME,
+    GIT_AUTHOR_EMAIL, GIT_COMMITTER_EMAIL), then falls back to git config.
+
+    Returns (name, email) tuple. Returns fallback values if not configured.
+    """
+    import os
+
+    env_name = os.environ.get("GIT_AUTHOR_NAME") or os.environ.get("GIT_COMMITTER_NAME")
+    env_email = os.environ.get("GIT_AUTHOR_EMAIL") or os.environ.get("GIT_COMMITTER_EMAIL")
+
+    name = env_name or ""
+    email = env_email or ""
+
+    try:
+        if not name:
+            proc_name = await asyncio.create_subprocess_exec(
+                "git",
+                "config",
+                "--get",
+                "user.name",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout_name, _ = await proc_name.communicate()
+            if proc_name.returncode == 0:
+                name = stdout_name.decode().strip()
+
+        if not email:
+            proc_email = await asyncio.create_subprocess_exec(
+                "git",
+                "config",
+                "--get",
+                "user.email",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout_email, _ = await proc_email.communicate()
+            if proc_email.returncode == 0:
+                email = stdout_email.decode().strip()
+    except FileNotFoundError:
+        pass
+
+    return name or "Developer", email or "developer@localhost"
+
+
 async def check_git_user_configured() -> tuple[bool, str | None]:
     """Check if git user.name and user.email are configured.
 
@@ -96,12 +142,10 @@ async def check_git_user_configured() -> tuple[bool, str | None]:
     """
     import os
 
-    # First check environment variables (takes precedence for git operations)
     env_name = os.environ.get("GIT_AUTHOR_NAME") or os.environ.get("GIT_COMMITTER_NAME")
     env_email = os.environ.get("GIT_AUTHOR_EMAIL") or os.environ.get("GIT_COMMITTER_EMAIL")
 
     try:
-        # Check user.name from git config
         proc_name = await asyncio.create_subprocess_exec(
             "git",
             "config",
@@ -112,7 +156,6 @@ async def check_git_user_configured() -> tuple[bool, str | None]:
         )
         stdout_name, _ = await proc_name.communicate()
 
-        # Check user.email from git config
         proc_email = await asyncio.create_subprocess_exec(
             "git",
             "config",
@@ -123,9 +166,8 @@ async def check_git_user_configured() -> tuple[bool, str | None]:
         )
         stdout_email, _ = await proc_email.communicate()
 
-        # Name is set if either env var or git config has it
         name_set = bool(env_name) or (proc_name.returncode == 0 and stdout_name.decode().strip())
-        # Email is set if either env var or git config has it
+
         email_set = bool(env_email) or (
             proc_email.returncode == 0 and stdout_email.decode().strip()
         )
@@ -223,30 +265,41 @@ async def has_commits(repo_root: Path) -> bool:
 
 
 def _ensure_gitignored(repo_root: Path) -> tuple[bool, bool]:
-    """Add .kagan/ to .gitignore if not already present.
+    """Add Kagan-generated files to .gitignore if not already present.
+
+    Adds all patterns from KAGAN_GENERATED_PATTERNS including:
+    - .mcp.json (Claude Code MCP config)
+    - opencode.json (OpenCode MCP config)
+    - kagan*.mcp.json (catch variants like kagan.mcp.json)
+    - *kagan.json (catch any kagan-suffixed config files)
 
     Returns (created, updated) tuple:
     - created: True if .gitignore was created from scratch
     - updated: True if .gitignore was modified (appended to)
     """
+    from kagan.constants import KAGAN_GENERATED_PATTERNS
+
     gitignore = repo_root / ".gitignore"
-    kagan_entry = ".kagan/"
 
     if gitignore.exists():
         content = gitignore.read_text()
-        lines = content.split("\n")
-        # Check if already ignored (with or without trailing slash)
-        if ".kagan" in lines or ".kagan/" in lines:
+        lines = set(content.split("\n"))
+
+        missing_patterns = [p for p in KAGAN_GENERATED_PATTERNS if p not in lines]
+
+        if not missing_patterns:
             return False, False
-        # Append to existing file
+
         if not content.endswith("\n"):
             content += "\n"
-        content += "\n# Kagan local state\n.kagan/\n"
+        content += "\n# Kagan-generated files (local state + MCP configs)\n"
+        content += "\n".join(missing_patterns) + "\n"
         gitignore.write_text(content)
         return False, True
     else:
-        # Create new .gitignore
-        gitignore.write_text(f"# Kagan local state\n{kagan_entry}\n")
+        content = "# Kagan-generated files (local state + MCP configs)\n"
+        content += "\n".join(KAGAN_GENERATED_PATTERNS) + "\n"
+        gitignore.write_text(content)
         return True, False
 
 
@@ -254,10 +307,12 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
     """Initialize a git repo with the requested base branch and initial commit.
 
     Handles four scenarios:
-    1. Empty folder, no git repo: Create .gitignore with .kagan/, init repo, commit
-    2. Existing git repo with commits and .gitignore: Append .kagan/ if needed, commit
+    1. Empty folder, no git repo: Create .gitignore with Kagan patterns, init repo, commit
+    2. Existing git repo with commits and .gitignore: Append Kagan patterns if needed, commit
     3. Existing git repo with commits but no .gitignore: Create .gitignore, commit
     4. Existing git repo with NO commits: Add .gitignore, create initial commit
+
+    Kagan patterns include: .mcp.json, opencode.json, kagan*.mcp.json, *kagan.json
 
     Creates an initial commit so that worktrees can be created from the base branch.
     Without a commit, `git worktree add -b <branch> <path> <base>` fails with
@@ -281,7 +336,6 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
         except FileNotFoundError:
             return 1, "", "Git is not installed"
 
-    # Check git version first
     version = await get_git_version()
     if version is None:
         return GitInitResult(
@@ -304,7 +358,6 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
             ),
         )
 
-    # Check if git user is configured (needed for commits)
     user_configured, user_error = await check_git_user_configured()
     if not user_configured:
         return GitInitResult(
@@ -316,14 +369,11 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
             ),
         )
 
-    # Determine if we have an existing repo and if it has commits
     has_repo = await has_git_repo(repo_root)
     repo_has_commits = has_repo and await has_commits(repo_root)
 
-    # Ensure .gitignore has .kagan/ entry
     gitignore_created, gitignore_updated = _ensure_gitignored(repo_root)
 
-    # If repo exists with commits and .gitignore wasn't modified, nothing to do
     if repo_has_commits and not gitignore_created and not gitignore_updated:
         return GitInitResult(
             success=True,
@@ -333,11 +383,8 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
         )
 
     if not has_repo:
-        # Scenario 1 or 3: No git repo exists, initialize one
-        # Try init with -b flag first
         code, _, stderr = await run_git("init", "-b", base_branch)
         if code != 0:
-            # Fallback for older git versions without -b support
             code, _, stderr = await run_git("init")
             if code != 0:
                 return GitInitResult(
@@ -363,8 +410,9 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
                     gitignore_updated=gitignore_updated,
                 )
 
-    # Stage .gitignore (it always exists at this point)
-    code, _, stderr = await run_git("add", ".gitignore")
+    # Use -f so a user/global excludes rule (e.g. ".gitignore" in core.excludesfile)
+    # cannot block repository bootstrap.
+    code, _, stderr = await run_git("add", "-f", ".gitignore")
     if code != 0:
         return GitInitResult(
             success=False,
@@ -377,8 +425,6 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
             gitignore_updated=gitignore_updated,
         )
 
-    # Commit the changes
-    # Scenario 4: repo exists but has no commits - treat as initial commit
     if not has_repo or not repo_has_commits:
         commit_msg = "Initial commit (kagan)"
     elif gitignore_created:
@@ -388,7 +434,6 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
 
     code, _, stderr = await run_git("commit", "-m", commit_msg)
     if code != 0:
-        # Check if it's just "nothing to commit" (gitignore already committed)
         if "nothing to commit" in stderr or "nothing added to commit" in stderr:
             return GitInitResult(
                 success=True,

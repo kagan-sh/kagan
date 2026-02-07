@@ -1,171 +1,266 @@
 # Keyboard Shortcuts
 
-Complete reference for all Kagan keyboard shortcuts.
-
-## Navigation
-
-| Key                 | Action           |
-| ------------------- | ---------------- |
-| `h` / `←`           | Move focus left  |
-| `l` / `→`           | Move focus right |
-| `j` / `↓`           | Move focus down  |
-| `k` / `↑`           | Move focus up    |
-| `Tab` / `Shift+Tab` | Cycle columns    |
-
-## Tickets
-
-| Key       | Action                                          |
-| --------- | ----------------------------------------------- |
-| `n`       | New ticket (opens type selection modal)         |
-| `Shift+N` | New AUTO ticket directly (skips type selection) |
-| `v`       | View ticket details                             |
-| `e`       | Edit ticket                                     |
-| `x`       | Delete ticket                                   |
-| `Enter`   | Open session (PAIR) / watch agent (AUTO)        |
-| `/`       | Search tickets                                  |
-| `y`       | Duplicate (yank) ticket                         |
-| `c`       | Copy ticket ID to clipboard                     |
-| `Space`   | Toggle peek overlay (agent status/scratchpad)   |
-| `f`       | Expand description                              |
-| `F5`      | Open full description editor                    |
-
-## Agent Control
-
-| Key | Action                     |
-| --- | -------------------------- |
-| `a` | Start agent (AUTO tickets) |
-| `s` | Stop agent                 |
-| `w` | Watch agent output         |
-
-## Leader Keys
-
-Press `g`, then:
-
-| Key | Action                                |
-| --- | ------------------------------------- |
-| `h` | Move ticket left (to previous column) |
-| `l` | Move ticket right (to next column)    |
-| `d` | View diff                             |
-| `r` | Open review modal                     |
-| `w` | Watch agent                           |
-
-## Review
-
-| Key       | Action            |
-| --------- | ----------------- |
-| `Shift+D` | View diff         |
-| `r`       | Open review modal |
-| `m`       | Merge ticket      |
+This page mirrors the in-app help (press ++question++).
 
 ## Global
 
-| Key        | Action                 |
-| ---------- | ---------------------- |
-| `p`        | Open planner mode      |
-| `,`        | Open settings          |
-| `F1` / `?` | Show help              |
-| `Ctrl+P`   | Command palette        |
-| `Escape`   | Deselect / close modal |
-| `q`        | Quit                   |
+| Key                     | Action           |
+| ----------------------- | ---------------- |
+| ++question++ / ++f1++   | Help             |
+| ++period++ / ++ctrl+p++ | Actions palette  |
+| ++ctrl+o++              | Project selector |
+| ++ctrl+r++              | Repo selector    |
+| ++f12++                 | Debug log        |
+| ++q++                   | Quit             |
 
-## Modal-Specific Shortcuts
+## Board (Kanban)
 
-### Review Modal
+### Navigation
 
-| Key      | Action                    |
-| -------- | ------------------------- |
-| `a`      | Approve (merge changes)   |
-| `r`      | Reject (provide feedback) |
-| `g`      | Generate AI review        |
-| `y`      | Copy content              |
-| `Escape` | Close / Cancel            |
+| Key               | Action                                   |
+| ----------------- | ---------------------------------------- |
+| ++h++ / ++left++  | Focus left column                        |
+| ++l++ / ++right++ | Focus right column                       |
+| ++j++ / ++down++  | Focus next card                          |
+| ++k++ / ++up++    | Focus previous card                      |
+| ++tab++           | Next column                              |
+| ++shift+tab++     | Previous column                          |
+| ++esc++           | Clear focus, close search, or close peek |
 
-### Diff Modal
+### Tasks
 
-| Key      | Action                    |
-| -------- | ------------------------- |
-| `a`      | Approve (merge changes)   |
-| `r`      | Reject (provide feedback) |
-| `y`      | Copy content              |
-| `Escape` | Close                     |
+| Key         | Action                                 |
+| ----------- | -------------------------------------- |
+| ++n++       | New task                               |
+| ++shift+n++ | New AUTO task                          |
+| ++enter++   | Open session (PAIR) or review (REVIEW) |
+| ++slash++   | Search tasks                           |
+| ++v++       | View details                           |
+| ++e++       | Edit task                              |
+| ++x++       | Delete task                            |
+| ++y++       | Duplicate task                         |
+| ++c++       | Copy task ID                           |
+| ++space++   | Peek overlay                           |
+| ++f++       | Expand description                     |
+| ++f5++      | Full editor                            |
 
-### Ticket Details Modal
+### Workflow And Agents
 
-| Key      | Action                 |
-| -------- | ---------------------- |
-| `e`      | Toggle edit mode       |
-| `d`      | Delete ticket          |
-| `f`      | Expand description     |
-| `F5`     | Open full editor       |
-| `y`      | Copy content           |
-| `Ctrl+S` | Save changes           |
-| `Escape` | Close / Cancel editing |
+| Key         | Action                |
+| ----------- | --------------------- |
+| ++shift+h++ | Move task left        |
+| ++shift+l++ | Move task right       |
+| ++a++       | Start agent (AUTO)    |
+| ++s++       | Stop agent (AUTO)     |
+| ++shift+d++ | View diff (REVIEW)    |
+| ++r++       | Review modal (REVIEW) |
+| ++m++       | Merge (REVIEW)        |
+| ++p++       | Plan mode             |
+| ++b++       | Set task branch       |
+| ++shift+b++ | Set default branch    |
+| ++comma++   | Settings              |
+| ++ctrl+c++  | Quit                  |
 
-### Rejection Input Modal
+## Planner
 
-When rejecting work, you have three options for what happens next:
+### Screen
 
-| Key      | Action     | Result                                                      |
-| -------- | ---------- | ----------------------------------------------------------- |
-| `Enter`  | **Retry**  | Ticket stays IN_PROGRESS, agent auto-restarts with feedback |
-| `Ctrl+S` | **Stage**  | Ticket stays IN_PROGRESS but paused (restart with `a`)      |
-| `Escape` | **Shelve** | Ticket moves to BACKLOG for later                           |
+| Key         | Action             |
+| ----------- | ------------------ |
+| ++esc++     | Back to board      |
+| ++ctrl+c++  | Stop current run   |
+| ++f2++      | Enhance prompt     |
+| ++b++       | Set task branch    |
+| ++shift+b++ | Set default branch |
 
-The **Retry** action resets the iteration counter for a fresh attempt.
+### Input
 
-### Confirmation Dialogs
+| Key                          | Action             |
+| ---------------------------- | ------------------ |
+| ++enter++                    | Send message       |
+| ++shift+enter++ / ++ctrl+j++ | New line           |
+| `/help`                      | Show commands      |
+| `/clear`                     | Clear conversation |
 
-| Key      | Action        |
-| -------- | ------------- |
-| `y`      | Confirm (Yes) |
-| `n`      | Cancel (No)   |
-| `Escape` | Cancel        |
+### Slash Complete
+
+| Key               | Action         |
+| ----------------- | -------------- |
+| ++up++ / ++down++ | Navigate list  |
+| ++enter++         | Select command |
+| ++esc++           | Dismiss list   |
+
+### Plan Approval
+
+| Key                            | Action         |
+| ------------------------------ | -------------- |
+| ++up++/++down++ or ++j++/++k++ | Move selection |
+| ++enter++                      | Preview task   |
+| ++a++                          | Approve        |
+| ++e++                          | Edit           |
+| ++d++ / ++esc++                | Dismiss        |
+
+## Welcome And Onboarding
+
+### Welcome Screen
+
+| Key            | Action                 |
+| -------------- | ---------------------- |
+| ++enter++      | Open selected project  |
+| ++n++          | New project            |
+| ++o++          | Open folder            |
+| ++s++          | Settings               |
+| ++1++ to ++9++ | Open project by number |
+| ++esc++        | Quit                   |
+
+### Onboarding
+
+| Key     | Action |
+| ------- | ------ |
+| ++esc++ | Quit   |
+
+## Repo Picker
+
+| Key                            | Action         |
+| ------------------------------ | -------------- |
+| ++up++/++down++ or ++j++/++k++ | Navigate repos |
+| ++enter++                      | Select repo    |
+| ++n++                          | Add repo       |
+| ++esc++                        | Cancel         |
+
+## Modals
+
+### Help
+
+| Key             | Action |
+| --------------- | ------ |
+| ++esc++ / ++q++ | Close  |
+
+### Confirm
+
+| Key       | Action  |
+| --------- | ------- |
+| ++enter++ | Confirm |
+| ++y++     | Yes     |
+| ++n++     | No      |
+| ++esc++   | Cancel  |
+
+### Task Details
+
+| Key                | Action             |
+| ------------------ | ------------------ |
+| ++e++              | Toggle edit        |
+| ++d++              | Delete             |
+| ++f++              | Expand description |
+| ++f5++             | Full editor        |
+| ++f2++ / ++alt+s++ | Save (edit mode)   |
+| ++y++              | Copy               |
+| ++esc++            | Close/Cancel       |
+
+### Task Editor
+
+| Key                | Action         |
+| ------------------ | -------------- |
+| ++f2++ / ++alt+s++ | Finish editing |
+| ++esc++            | Cancel         |
 
 ### Description Editor
 
-| Key      | Action         |
-| -------- | -------------- |
-| `Escape` | Done editing   |
-| `Ctrl+S` | Save and close |
+| Key                | Action |
+| ------------------ | ------ |
+| ++f2++ / ++alt+s++ | Save   |
+| ++esc++            | Cancel |
 
-### Agent Output Modal
+### Settings
 
-| Key      | Action       |
-| -------- | ------------ |
-| `y`      | Copy output  |
-| `c`      | Cancel agent |
-| `Escape` | Close        |
+| Key                | Action |
+| ------------------ | ------ |
+| ++f2++ / ++alt+s++ | Save   |
+| ++esc++            | Cancel |
 
-### Settings Modal
+### Duplicate Task
 
-| Key      | Action |
-| -------- | ------ |
-| `Ctrl+S` | Save   |
-| `Escape` | Cancel |
+| Key       | Action |
+| --------- | ------ |
+| ++enter++ | Create |
+| ++esc++   | Cancel |
 
-### Tmux Gateway Modal
+### Diff
 
-| Key      | Action           |
-| -------- | ---------------- |
-| `Enter`  | Continue to tmux |
-| `s`      | Don't show again |
-| `Escape` | Cancel           |
+| Key       | Action  |
+| --------- | ------- |
+| ++enter++ | Approve |
+| ++r++     | Reject  |
+| ++y++     | Copy    |
+| ++esc++   | Close   |
 
-## Planner Screen
+### Review
 
-| Key      | Action          |
-| -------- | --------------- |
-| `Escape` | Return to board |
-| `Ctrl+C` | Cancel/Stop     |
-| `Ctrl+E` | Enhance prompt  |
+| Key       | Action       |
+| --------- | ------------ |
+| ++enter++ | Approve      |
+| ++r++     | Reject       |
+| ++g++     | AI review    |
+| ++y++     | Copy         |
+| ++esc++   | Close/Cancel |
 
-## Permission Prompts
+### Rejection Input
 
-When an agent requests permission:
+| Key       | Action              |
+| --------- | ------------------- |
+| ++enter++ | Back to In Progress |
+| ++esc++   | Backlog             |
 
-| Key      | Action                          |
-| -------- | ------------------------------- |
-| `y`      | Allow once                      |
-| `a`      | Allow always (for this session) |
-| `n`      | Deny                            |
-| `Escape` | Deny                            |
+### Agent Output
+
+| Key     | Action       |
+| ------- | ------------ |
+| ++y++   | Copy         |
+| ++c++   | Cancel agent |
+| ++esc++ | Close        |
+
+### Agent And Review Chat Input
+
+| Key                          | Action       |
+| ---------------------------- | ------------ |
+| ++enter++                    | Send message |
+| ++shift+enter++ / ++ctrl+j++ | New line     |
+
+### Debug Log
+
+| Key     | Action     |
+| ------- | ---------- |
+| ++c++   | Clear logs |
+| ++s++   | Save logs  |
+| ++esc++ | Close      |
+
+### Tmux Gateway
+
+| Key       | Action           |
+| --------- | ---------------- |
+| ++enter++ | Continue         |
+| ++esc++   | Cancel           |
+| ++s++     | Don't show again |
+
+### Base Branch
+
+| Key       | Action |
+| --------- | ------ |
+| ++enter++ | Submit |
+| ++esc++   | Cancel |
+
+### Permission Prompt
+
+| Key             | Action       |
+| --------------- | ------------ |
+| ++enter++       | Allow once   |
+| ++a++           | Allow always |
+| ++esc++ / ++n++ | Deny         |
+
+### No Dedicated Hotkeys
+
+| Modal         | Notes                        |
+| ------------- | ---------------------------- |
+| Merge Dialog  | Use buttons and checkboxes   |
+| New Project   | Use inputs and buttons       |
+| Folder Picker | Use input, tree, and buttons |

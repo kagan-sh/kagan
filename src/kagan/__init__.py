@@ -2,7 +2,6 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-# Re-export OS detection utilities
 from kagan.config import CURRENT_OS, get_os_value
 
 try:

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import os
 
-# Terminals that are KNOWN to NOT support truecolor
-# Check these FIRST, before trusting COLORTERM (which may be incorrectly set)
 _NO_TRUECOLOR_TERMINALS = {
-    "apple_terminal",  # macOS Terminal.app - only supports 256 colors
+    "apple_terminal",
 }
 
-# Terminals that are KNOWN to support truecolor
+
 _TRUECOLOR_TERMINALS = {
     "iterm.app",
     "vscode",
@@ -43,21 +41,17 @@ def supports_truecolor() -> bool:
     Returns:
         True if truecolor is likely supported, False otherwise.
     """
-    # Check for explicit user override via Textual's environment variable
-    # This takes highest priority - user knows best
+
     textual_color = os.environ.get("TEXTUAL_COLOR_SYSTEM", "").lower()
     if textual_color == "truecolor":
         return True
 
-    # Check TERM_PROGRAM for known terminals (both supported and unsupported)
-    # We check this BEFORE COLORTERM because COLORTERM may be incorrectly set
     term_program = os.environ.get("TERM_PROGRAM", "").lower()
 
     # First, check if it's a terminal we KNOW doesn't support truecolor
     if term_program in _NO_TRUECOLOR_TERMINALS:
         return False
 
-    # Then check if it's a terminal we KNOW supports truecolor
     if term_program in _TRUECOLOR_TERMINALS:
         return True
 
@@ -66,7 +60,6 @@ def supports_truecolor() -> bool:
     if colorterm in ("truecolor", "24bit"):
         return True
 
-    # Check WT_SESSION for Windows Terminal
     return bool(os.environ.get("WT_SESSION"))
 
 
@@ -76,10 +69,9 @@ def get_terminal_name() -> str:
     Returns:
         Terminal name or 'Unknown terminal'.
     """
-    # Check TERM_PROGRAM first (most informative)
+
     term_program = os.environ.get("TERM_PROGRAM", "")
     if term_program:
-        # Format nicely for common terminals
         nice_names = {
             "Apple_Terminal": "macOS Terminal.app",
             "iTerm.app": "iTerm2",
@@ -87,11 +79,9 @@ def get_terminal_name() -> str:
         }
         return nice_names.get(term_program, term_program)
 
-    # Check for Windows Terminal
     if os.environ.get("WT_SESSION"):
         return "Windows Terminal"
 
-    # Fall back to TERM
     term = os.environ.get("TERM", "")
     if term:
         return term

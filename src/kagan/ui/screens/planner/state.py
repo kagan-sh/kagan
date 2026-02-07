@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
+
+from kagan.core.models.enums import ChatRole  # noqa: TC001 (used at runtime in dataclass)
+from kagan.limits import MAX_ACCUMULATED_CHUNKS, MAX_CONVERSATION_HISTORY
 
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from acp.schema import PlanEntry
+
     from kagan.acp.agent import Agent
     from kagan.agents.refiner import PromptRefiner
-    from kagan.database.models import Ticket
+    from kagan.core.models.entities import Task
 
 
 class PlannerPhase(Enum):
@@ -21,7 +26,7 @@ class PlannerPhase(Enum):
     PROCESSING = auto()
     REFINING = auto()
     AWAITING_APPROVAL = auto()
-    CREATING_TICKETS = auto()
+    CREATING_TASKS = auto()
 
 
 @dataclass
@@ -36,13 +41,13 @@ class NoteInfo:
 class ChatMessage:
     """A message in the planner conversation history."""
 
-    role: Literal["user", "assistant"]
+    role: ChatRole
     content: str
     timestamp: datetime
-    plan_tickets: list[Ticket] | None = None
+    plan_tasks: list[Task] | None = None
     # Parsed todo entries for PlanDisplay restoration
-    todos: list[dict] | None = None
-    # Notes to display after this message (e.g., "Created N tickets", errors)
+    todos: list[PlanEntry] | list[dict[str, object]] | None = None
+    # Notes to display after this message (e.g., "Created N tasks", errors)
     notes: list[NoteInfo] = field(default_factory=list)
 
 
@@ -69,19 +74,14 @@ class PlannerState:
     todos_displayed: bool = False
     has_output: bool = False
 
-    # Accumulated response text from agent
     accumulated_response: list[str] = field(default_factory=list)
 
-    # Conversation history for context injection
     conversation_history: list[ChatMessage] = field(default_factory=list)
 
-    # Pending plan tickets awaiting approval
-    pending_plan: list[Ticket] | None = None
+    pending_plan: list[Task] | None = None
 
-    # Input text to preserve across screen switches
     input_text: str = ""
 
-    # Agent and refiner kept alive across screen switches
     agent: Agent | None = None
     refiner: PromptRefiner | None = None
 
@@ -107,32 +107,33 @@ class PlannerState:
             (PlannerPhase.PROCESSING, "error"): PlannerPhase.IDLE,
             (PlannerPhase.REFINING, "done"): PlannerPhase.IDLE,
             (PlannerPhase.REFINING, "error"): PlannerPhase.IDLE,
-            (PlannerPhase.AWAITING_APPROVAL, "approved"): PlannerPhase.CREATING_TICKETS,
+            (PlannerPhase.AWAITING_APPROVAL, "approved"): PlannerPhase.CREATING_TASKS,
             (PlannerPhase.AWAITING_APPROVAL, "rejected"): PlannerPhase.IDLE,
             (PlannerPhase.AWAITING_APPROVAL, "edit"): PlannerPhase.AWAITING_APPROVAL,
-            (PlannerPhase.CREATING_TICKETS, "done"): PlannerPhase.IDLE,
-            (PlannerPhase.CREATING_TICKETS, "error"): PlannerPhase.IDLE,
+            (PlannerPhase.CREATING_TASKS, "done"): PlannerPhase.IDLE,
+            (PlannerPhase.CREATING_TASKS, "error"): PlannerPhase.IDLE,
         }
 
         new_phase = transitions.get((self.phase, event), self.phase)
 
-        # Build updated state based on transition
-        new_state = PlannerState(
+        accumulated = self.accumulated_response
+        if len(accumulated) > MAX_ACCUMULATED_CHUNKS:
+            accumulated = accumulated[-MAX_ACCUMULATED_CHUNKS:]
+
+        history = self.conversation_history
+        if len(history) > MAX_CONVERSATION_HISTORY:
+            history = history[-MAX_CONVERSATION_HISTORY:]
+
+        new_state = replace(
+            self,
             phase=new_phase,
-            agent_ready=self.agent_ready,
             has_pending_plan=self.has_pending_plan if new_phase != PlannerPhase.IDLE else False,
             thinking_shown=self.thinking_shown if new_phase == self.phase else False,
             todos_displayed=self.todos_displayed if new_phase == self.phase else False,
-            has_output=self.has_output,
-            accumulated_response=self.accumulated_response,
-            conversation_history=self.conversation_history,
-            pending_plan=self.pending_plan,
-            input_text=self.input_text,
-            agent=self.agent,
-            refiner=self.refiner,
+            accumulated_response=accumulated,
+            conversation_history=history,
         )
 
-        # Reset accumulated response on transition to IDLE
         if new_phase == PlannerPhase.IDLE and self.phase != PlannerPhase.IDLE:
             new_state.accumulated_response = []
 
@@ -140,37 +141,11 @@ class PlannerState:
 
     def with_agent_ready(self, ready: bool) -> PlannerState:
         """Return new state with agent_ready updated."""
-        return PlannerState(
-            phase=self.phase,
-            agent_ready=ready,
-            has_pending_plan=self.has_pending_plan,
-            thinking_shown=self.thinking_shown,
-            todos_displayed=self.todos_displayed,
-            has_output=self.has_output,
-            accumulated_response=self.accumulated_response,
-            conversation_history=self.conversation_history,
-            pending_plan=self.pending_plan,
-            input_text=self.input_text,
-            agent=self.agent,
-            refiner=self.refiner,
-        )
+        return replace(self, agent_ready=ready)
 
-    def with_pending_plan(self, plan: list[Ticket] | None) -> PlannerState:
+    def with_pending_plan(self, plan: list[Task] | None) -> PlannerState:
         """Return new state with pending_plan updated."""
-        return PlannerState(
-            phase=self.phase,
-            agent_ready=self.agent_ready,
-            has_pending_plan=plan is not None,
-            thinking_shown=self.thinking_shown,
-            todos_displayed=self.todos_displayed,
-            has_output=self.has_output,
-            accumulated_response=self.accumulated_response,
-            conversation_history=self.conversation_history,
-            pending_plan=plan,
-            input_text=self.input_text,
-            agent=self.agent,
-            refiner=self.refiner,
-        )
+        return replace(self, has_pending_plan=plan is not None, pending_plan=plan)
 
 
 @dataclass
@@ -182,8 +157,10 @@ class PersistentPlannerState:
     """
 
     conversation_history: list[ChatMessage]
-    pending_plan: list[Ticket] | None
+    pending_plan: list[Task] | None
     input_text: str
+    active_repo_id: str | None
+    project_root: str
     agent: Agent | None = None
     refiner: PromptRefiner | None = None
     is_running: bool = False
