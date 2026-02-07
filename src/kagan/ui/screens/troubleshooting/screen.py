@@ -72,7 +72,7 @@ class TroubleshootingApp(App):
     """Standalone app shown when pre-flight checks fail or have warnings."""
 
     TITLE = "KAGAN"
-    CSS_PATH = str(Path(__file__).resolve().parents[2] / "styles" / "kagan.tcss")
+    CSS_PATH = str(Path(__file__).resolve().parents[3] / "styles" / "kagan.tcss")
 
     BINDINGS = TROUBLESHOOTING_BINDINGS
 

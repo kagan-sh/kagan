@@ -123,17 +123,15 @@ class ReviewModal(ModalScreen[str | None]):
         self.query_one("#ai-review-section").remove_class("hidden")
         self.query_one(".button-row").remove_class("hidden")
 
-        log = self.query_one("#commits-log", RichLog)
+        commits_log = self.query_one("#commits-log", RichLog)
         for commit in commits or ["[dim]No commits found[/dim]"]:
-            log.write(f"  {commit}")
+            commits_log.write(f"  {commit}")
 
         self.query_one("#diff-stats", Static).update(diff_stats or "[dim](No changes)[/dim]")
         self._diff_stats = diff_stats or ""
         self._no_changes = not commits and not self._diff_stats
 
-        from kagan.debug_log import log as debug_log
-
-        debug_log.info(
+        log.info(
             f"[ReviewModal] Loaded {len(commits or [])} commits, "
             f"diff_length={len(self._diff_stats)}"
         )

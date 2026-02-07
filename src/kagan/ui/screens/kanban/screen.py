@@ -920,7 +920,18 @@ class KanbanScreen(KaganScreen):
         # Create session if doesn't exist
         if not await self.kagan_app.session_manager.session_exists(ticket.id):
             self.notify("Creating session...", severity="information")
-            await self.kagan_app.session_manager.create_session(ticket, wt_path)
+            try:
+                await self.kagan_app.session_manager.create_session(ticket, wt_path)
+            except Exception as e:
+                from kagan.sessions.tmux import TmuxError
+
+                if isinstance(e, TmuxError):
+                    self.notify(
+                        "PAIR mode requires tmux. Switch ticket type to AUTO or install tmux.",
+                        severity="error",
+                    )
+                    return
+                raise
 
         # Show TmuxGatewayModal if not skipped
         if not self.kagan_app.config.ui.skip_tmux_gateway:

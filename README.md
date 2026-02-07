@@ -45,6 +45,12 @@ uv tool install kagan
 curl -fsSL https://uvget.me/install.sh | bash -s -- kagan
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+iwr -useb uvget.me/install.ps1 -OutFile install.ps1; .\install.ps1 kagan
+```
+
 ### Requirements
 
 - Python 3.12 or higher

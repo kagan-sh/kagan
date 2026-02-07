@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import shlex
 import shutil
 from dataclasses import dataclass
 
 from kagan.config import AgentConfig, get_os_value
+from kagan.utils.command_lex import split_command
 
 
 @dataclass
@@ -129,7 +129,7 @@ def _check_command_available(command: str | None) -> bool:
         return False
 
     try:
-        parts = shlex.split(command)
+        parts = split_command(command)
         executable = parts[0] if parts else command
     except ValueError:
         # If parsing fails, treat the whole command as executable

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import platform
-import shlex
 import shutil
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
+
+from kagan.utils.command_lex import split_command
 
 if TYPE_CHECKING:
     from kagan.config import AgentConfig
@@ -53,14 +54,14 @@ class IssuePreset:
 ISSUE_PRESETS: dict[IssueType, IssuePreset] = {
     IssueType.WINDOWS_OS: IssuePreset(
         type=IssueType.WINDOWS_OS,
-        severity=IssueSeverity.BLOCKING,
-        icon="[!]",
-        title="Windows Not Supported",
+        severity=IssueSeverity.WARNING,
+        icon="[~]",
+        title="Windows Compatibility Notes",
         message=(
-            "Kagan does not currently support Windows.\n"
-            "We recommend using WSL2 (Windows Subsystem for Linux)."
+            "Kagan runs on Windows, but PAIR mode relies on tmux.\n"
+            "Use AUTO mode for a no-tmux workflow, or run via WSL2 for full PAIR support."
         ),
-        hint="Install WSL2 and run Kagan from there",
+        hint="Recommended: start with AUTO tickets on Windows. Use WSL2 for tmux PAIR sessions.",
         url="https://github.com/aorumbayev/kagan",
     ),
     IssueType.INSTANCE_LOCKED: IssuePreset(
@@ -217,7 +218,7 @@ class ACPCommandResolution:
 def _is_npx_command(command: str) -> bool:
     """Check if a command uses npx."""
     try:
-        parts = shlex.split(command)
+        parts = split_command(command)
         return len(parts) > 0 and parts[0] == "npx"
     except ValueError:
         return command.startswith("npx ")
@@ -230,7 +231,7 @@ def _get_npx_package_binary(command: str) -> str | None:
     For "npx @anthropic-ai/claude-code-acp", returns "claude-code-acp".
     """
     try:
-        parts = shlex.split(command)
+        parts = split_command(command)
         if len(parts) < 2:
             return None
         package = parts[1]
@@ -284,7 +285,7 @@ def resolve_acp_command(
             # Great! Use the global binary directly
             # Preserve any additional args from the original command
             try:
-                parts = shlex.split(run_command)
+                parts = split_command(run_command)
                 # Replace "npx <package>" with just "<binary>"
                 resolved = " ".join([binary_name, *parts[2:]])
             except ValueError:
@@ -327,7 +328,7 @@ def resolve_acp_command(
 
     # Non-npx command: just check if the executable exists
     try:
-        parts = shlex.split(run_command)
+        parts = split_command(run_command)
         executable = parts[0] if parts else run_command
     except ValueError:
         executable = run_command
@@ -376,7 +377,7 @@ def _check_agent(
     """Check if the configured agent is available."""
     # Parse command to get the executable
     try:
-        parts = shlex.split(agent_command)
+        parts = split_command(agent_command)
         executable = parts[0] if parts else agent_command
     except ValueError:
         executable = agent_command
@@ -503,10 +504,10 @@ async def detect_issues(
     """
     issues: list[DetectedIssue] = []
 
-    # 1. Windows check (exit early - nothing else matters)
+    # 1. Windows check (warning only)
     windows_issue = _check_windows()
     if windows_issue:
-        return PreflightResult(issues=[windows_issue])
+        issues.append(windows_issue)
 
     # 2. Instance lock check
     if check_lock and not lock_acquired:

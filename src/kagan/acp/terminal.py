@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shlex
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from kagan.utils.command_lex import join_args
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -101,7 +102,7 @@ class TerminalRunner:
     async def _run(self) -> None:
         """Run the command and capture output."""
         # Build the full command
-        full_command = f"{self.command} {shlex.join(self.args)}" if self.args else self.command
+        full_command = f"{self.command} {join_args(self.args)}" if self.args else self.command
 
         # Determine working directory
         if self.cwd:

@@ -5,6 +5,7 @@ Provides consistent styling and configuration for common form components.
 
 from __future__ import annotations
 
+import platform
 from typing import TYPE_CHECKING
 
 from textual.widgets import Input, Select, Static, TextArea
@@ -117,12 +118,14 @@ class TicketTypeSelect(Select[str]):
 
     def __init__(
         self,
-        value: TicketType = TicketType.PAIR,
+        value: TicketType | None = None,
         *,
         disabled: bool = False,
         widget_id: str = "type-select",
         **kwargs,
     ) -> None:
+        if value is None:
+            value = TicketType.AUTO if platform.system() == "Windows" else TicketType.PAIR
         # Ensure value is str for Select
         initial_value = value.value if isinstance(value, TicketType) else value
         super().__init__(

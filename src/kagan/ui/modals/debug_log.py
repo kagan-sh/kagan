@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -92,12 +93,9 @@ class DebugLogModal(ModalScreen[None]):
 
         if buffer_len > self._line_count:
             rich_log = self.query_one("#debug-log", RichLog)
-            # Convert deque to list once and slice only new entries (O(k) where k = new entries)
-            # This avoids iterating through all old entries
-            new_entries = list(log_buffer)[self._line_count :]
-            for entry in new_entries:
-                formatted = self._format_entry(entry)
-                rich_log.write(formatted)
+            # Iterate only new entries via islice to avoid copying the entire deque
+            for entry in islice(log_buffer, self._line_count, None):
+                rich_log.write(self._format_entry(entry))
             self._line_count = buffer_len
 
     def _format_entry(self, entry: LogEntry) -> str:

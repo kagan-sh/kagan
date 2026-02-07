@@ -5,6 +5,7 @@ Separates form generation logic from modal behavior.
 
 from __future__ import annotations
 
+import platform
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
@@ -69,7 +70,10 @@ class TicketFormBuilder:
 
         current_priority = ticket.priority if ticket else TicketPriority.MEDIUM
 
-        current_type = ticket.ticket_type if ticket else TicketType.PAIR
+        if ticket:
+            current_type = ticket.ticket_type
+        else:
+            current_type = TicketType.AUTO if platform.system() == "Windows" else TicketType.PAIR
 
         current_backend = ticket.agent_backend if ticket else ""
 

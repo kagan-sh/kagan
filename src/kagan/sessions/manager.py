@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from kagan.config import get_os_value
 from kagan.sessions.tmux import TmuxError, run_tmux
+from kagan.utils.command_lex import quote_arg
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -120,13 +121,11 @@ class SessionManager:
         Returns:
             The command string to execute, or None if no interactive command
         """
-        import shlex
-
         base_cmd = get_os_value(agent_config.interactive_command)
         if not base_cmd:
             return None
 
-        escaped_prompt = shlex.quote(prompt)
+        escaped_prompt = quote_arg(prompt)
 
         # Agent-specific command formats with optional model flag
         if agent_config.short_name == "claude":
@@ -150,7 +149,11 @@ class SessionManager:
         """
         session_name = f"kagan-{ticket_id}"
         log.debug("Attaching to tmux session: %s", session_name)
-        result = subprocess.run(["tmux", "attach-session", "-t", session_name])
+        try:
+            result = subprocess.run(["tmux", "attach-session", "-t", session_name])
+        except FileNotFoundError:
+            log.warning("tmux is not installed, cannot attach to session %s", session_name)
+            return False
         if result.returncode != 0:
             log.warning(
                 "Failed to attach to session %s (exit code: %d)",
@@ -165,7 +168,11 @@ class SessionManager:
         """Attach to resolution session (blocks until detach)."""
         session_name = self._resolve_session_name(ticket_id)
         log.debug("Attaching to resolution tmux session: %s", session_name)
-        result = subprocess.run(["tmux", "attach-session", "-t", session_name])
+        try:
+            result = subprocess.run(["tmux", "attach-session", "-t", session_name])
+        except FileNotFoundError:
+            log.warning("tmux is not installed, cannot attach to session %s", session_name)
+            return False
         if result.returncode != 0:
             log.warning(
                 "Failed to attach to resolution session %s (exit code: %d)",
