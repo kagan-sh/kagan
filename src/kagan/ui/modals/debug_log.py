@@ -51,7 +51,7 @@ class DebugLogModal(ModalScreen[None]):
                 auto_scroll=True,
                 wrap=True,
             )
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     async def on_mount(self) -> None:
         """Load existing logs and start watching for new ones."""

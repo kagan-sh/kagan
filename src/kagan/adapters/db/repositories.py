@@ -76,57 +76,42 @@ class TaskRepository:
         return self._session_factory()
 
     async def _ensure_defaults(self) -> None:
-        """Ensure a default project and repo exist."""
-        from kagan.git_utils import has_git_repo
+        """Initialize database - no auto-creation of projects or repos.
 
+        Projects and repos are only created through explicit user action via
+        WelcomeScreen. Auto-creating projects caused a bug where first-time
+        users bypassed WelcomeScreen entirely.
+
+        For testing, use TaskRepository.ensure_test_project() to create a
+        test project explicitly.
+        """
+        # No auto-creation - users must explicitly create projects via WelcomeScreen
+        pass
+
+    async def ensure_test_project(self, name: str = "Test Project") -> str:
+        """Create a test project and return its ID. For testing only.
+
+        This method provides an explicit way for tests to create a project
+        without relying on production auto-creation behavior.
+
+        Args:
+            name: Name for the test project
+
+        Returns:
+            The project ID
+        """
         async with self._get_session() as session:
+            # Check if project already exists
             result = await session.execute(select(Project).order_by(col(Project.created_at).asc()))
             project = result.scalars().first()
             if project is None:
-                project = Project(
-                    name="Default Project",
-                    description="",
-                )
+                project = Project(name=name, description="")
                 session.add(project)
                 await session.commit()
                 await session.refresh(project)
 
-            if not await has_git_repo(self._project_root):
-                self._default_project_id = project.id
-                return
-
-            repo = None
-            resolved_root = str(self._project_root.resolve())
-            result = await session.execute(select(Repo).where(Repo.path == resolved_root))
-            repo = result.scalars().first()
-            if repo is None:
-                repo = Repo(
-                    name=self._project_root.name or "repo",
-                    path=resolved_root,
-                    default_branch=self._default_branch,
-                )
-                session.add(repo)
-                await session.commit()
-                await session.refresh(repo)
-
-            if project.id and repo.id:
-                link_result = await session.execute(
-                    select(ProjectRepo).where(
-                        ProjectRepo.project_id == project.id,
-                        ProjectRepo.repo_id == repo.id,
-                    )
-                )
-                if link_result.scalars().first() is None:
-                    link = ProjectRepo(
-                        project_id=project.id,
-                        repo_id=repo.id,
-                        is_primary=True,
-                        display_order=0,
-                    )
-                    session.add(link)
-                    await session.commit()
-
             self._default_project_id = project.id
+            return project.id
 
     def set_status_change_callback(
         self,
@@ -166,11 +151,14 @@ class TaskRepository:
         async with self._get_session() as session:
             return await session.get(Task, task_id)
 
-    async def get_all(self) -> Sequence[Task]:
+    async def get_all(self, *, project_id: str | None = None) -> Sequence[Task]:
         """Get all tasks ordered by status, priority, created_at."""
         async with self._get_session() as session:
+            query = select(Task)
+            if project_id is not None:
+                query = query.where(Task.project_id == project_id)
             result = await session.execute(
-                select(Task).order_by(
+                query.order_by(
                     case(
                         (col(Task.status) == TaskStatus.BACKLOG, 0),
                         (col(Task.status) == TaskStatus.IN_PROGRESS, 1),
@@ -184,13 +172,16 @@ class TaskRepository:
             )
             return result.scalars().all()
 
-    async def get_by_status(self, status: TaskStatus) -> Sequence[Task]:
+    async def get_by_status(
+        self, status: TaskStatus, *, project_id: str | None = None
+    ) -> Sequence[Task]:
         """Get all tasks with a specific status."""
         async with self._get_session() as session:
+            query = select(Task).where(Task.status == status)
+            if project_id is not None:
+                query = query.where(Task.project_id == project_id)
             result = await session.execute(
-                select(Task)
-                .where(Task.status == status)
-                .order_by(col(Task.priority).desc(), col(Task.created_at).asc())
+                query.order_by(col(Task.priority).desc(), col(Task.created_at).asc())
             )
             return result.scalars().all()
 
@@ -458,6 +449,10 @@ class TaskRepository:
         """Return default project ID (if initialized)."""
         return self._default_project_id
 
+    def set_default_project_id(self, project_id: str | None) -> None:
+        """Set default project ID for task creation."""
+        self._default_project_id = project_id
+
     @property
     def default_branch(self) -> str:
         """Return default branch name."""
@@ -523,7 +518,6 @@ class RepoRepository:
 
     async def list_for_project(self, project_id: str) -> list[Repo]:
         """List all repos for a project via junction table."""
-        from kagan.adapters.db.schema import ProjectRepo
 
         async with self._get_session() as session:
             result = await session.execute(
@@ -557,7 +551,6 @@ class RepoRepository:
         display_order: int = 0,
     ) -> Any:
         """Add a repo to a project via junction table."""
-        from kagan.adapters.db.schema import ProjectRepo
 
         async with self._get_session() as session:
             link = ProjectRepo(
@@ -595,7 +588,6 @@ class RepoRepository:
 
     async def remove_from_project(self, project_id: str, repo_id: str) -> bool:
         """Remove a repo from a project. Returns True if removed."""
-        from kagan.adapters.db.schema import ProjectRepo
 
         async with self._get_session() as session:
             result = await session.execute(

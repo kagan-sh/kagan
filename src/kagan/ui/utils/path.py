@@ -22,7 +22,7 @@ def truncate_path(path: str, max_width: int = 40) -> str:
         /Users/dev/workspace/projects/my-project -> ~/workspace/.../my-project
         /Users/dev/short -> ~/short
     """
-
+    # Replace home directory with ~
     home = str(Path.home())
     if path.startswith(home):
         path = "~" + path[len(home) :]
@@ -30,6 +30,7 @@ def truncate_path(path: str, max_width: int = 40) -> str:
     if len(path) <= max_width:
         return path
 
+    # Get path parts
     parts = Path(path).parts
     if not parts:
         return path
@@ -37,13 +38,16 @@ def truncate_path(path: str, max_width: int = 40) -> str:
     final = parts[-1]
     prefix = parts[0] if parts else ""
 
+    # Build truncated path: {prefix}/.../{final}
     truncated = f"{prefix}/.../{final}"
 
+    # If still too long, just show .../{final}
     if len(truncated) > max_width:
         truncated = f".../{final}"
 
+    # If final component itself is too long, truncate it
     if len(truncated) > max_width:
-        available = max_width - 4
+        available = max_width - 4  # Account for ".../..."
         truncated = f".../{final[:available]}..."
 
     return truncated

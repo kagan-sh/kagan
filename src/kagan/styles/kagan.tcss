@@ -2,6 +2,51 @@
 /* Uses Textual design tokens for theme compatibility */
 
 /* =============================================================================
+   DESIGN TOKENS - Premium Kagan Night Theme
+   ============================================================================= */
+
+/* Spacing Scale (consistent rhythm) */
+$space-xs: 0;
+$space-sm: 1;
+$space-md: 2;
+$space-lg: 3;
+$space-xl: 4;
+
+/* Semantic Status Colors */
+$status-running: $secondary;      /* Gold - active/in-progress */
+$status-success: $success;        /* Green - passed/complete */
+$status-warning: $warning;        /* Yellow - needs attention */
+$status-error: $error;            /* Red - failed/blocked */
+$status-idle: $text-muted;        /* Gray - inactive */
+
+/* State Opacities */
+$opacity-disabled: 40%;
+$opacity-hover: 10%;
+$opacity-focus: 20%;
+
+/* =============================================================================
+   BADGE SYSTEM
+   ============================================================================= */
+
+/* Badge Base */
+.badge { padding: 0 1; height: 1; min-width: 3; }
+.badge-sm { padding: 0; min-width: 1; }
+.badge-primary { background: $primary; color: $background; }
+.badge-success { background: $success; color: $background; }
+.badge-warning { background: $warning; color: $background; }
+.badge-error { background: $error; color: $text; }
+.badge-muted { background: $surface; color: $text-muted; }
+
+/* =============================================================================
+   BUTTON VARIANTS
+   ============================================================================= */
+
+.btn-icon { min-width: 3; padding: 0 1; }
+.btn-compact { min-width: auto; padding: 0 1; }
+.btn-wide { min-width: 20; }
+Button:disabled { text-opacity: 40%; background: $surface; }
+
+/* =============================================================================
    CSS VARIABLES
    ============================================================================= */
 
@@ -62,6 +107,11 @@ KaganHeader .header-title {
     width: auto;
     color: $primary;
     text-style: bold;
+}
+
+KaganHeader .header-repo {
+    width: auto;
+    color: $text-muted;
 }
 
 KaganHeader .header-version {
@@ -1132,6 +1182,85 @@ PlannerScreen {
     border: solid $secondary;
 }
 
+/* Planner empty state */
+.planner-empty-state {
+    width: 100%;
+    height: 1fr;
+    align: center middle;
+    content-align: center middle;
+    padding: 1;
+}
+
+.planner-empty-content {
+    width: auto;
+    min-width: 70;
+    max-width: 90;
+    height: auto;
+    align: center middle;
+    content-align: center middle;
+}
+
+.planner-empty-card {
+    width: 100%;
+    height: auto;
+    border: none;
+    background: transparent;
+    padding: 1 2;
+    align: center middle;
+}
+
+#planner-empty-logo {
+    width: auto;
+    content-align: center middle;
+    text-align: center;
+    color: $primary;
+    padding-bottom: 1;
+}
+
+#planner-empty-heading {
+    width: 100%;
+    text-style: bold underline;
+    color: $secondary;
+    text-align: center;
+    content-align: center middle;
+    padding-bottom: 1;
+}
+
+#planner-empty-description {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+#planner-empty-examples {
+    width: 100%;
+    align: center middle;
+}
+
+.planner-empty-section-title {
+    color: $text-muted;
+    text-style: bold;
+    text-align: center;
+    width: 100%;
+    padding-top: 1;
+}
+
+.planner-empty-example {
+    color: $text;
+    text-align: center;
+    width: 100%;
+}
+
+#planner-empty-commands {
+    width: 100%;
+    padding: 0 1;
+    color: $text-muted;
+    text-style: italic;
+    margin-top: 1;
+    text-align: left;
+}
+
 /* EmptyState widget */
 .empty-state {
     width: 100%;
@@ -1482,15 +1611,22 @@ WelcomeScreen Footer {
 
 /* === Welcome Screen Project Picker === */
 #recent-header {
-    padding: 1 0;
+    padding: 0 0 1 0;
     text-style: bold;
     color: $text-muted;
 }
 
 #project-list {
-    height: auto;
-    max-height: 60%;
+    height: 6;
+    max-height: 6;
+    min-height: 0;
     margin-bottom: 1;
+    padding: 0;
+}
+
+#project-list > ListItem {
+    padding: 0;
+    height: auto;
 }
 
 #empty-state {
@@ -1500,34 +1636,37 @@ WelcomeScreen Footer {
 }
 
 .project-item {
-    padding: 1;
-    height: auto;
-}
-
-.project-info {
-    width: 1fr;
+    padding: 0 1;
+    height: 1;
 }
 
 .project-name {
     text-style: bold;
     color: $text;
+    height: 1;
+    width: 22;
 }
 
 .project-repos {
     color: $text-muted;
+    height: 1;
+    width: 1fr;
 }
 
 .project-tasks {
     color: $text-muted;
+    height: 1;
+    width: 20;
 }
 
 .project-time {
-    width: auto;
+    width: 8;
     color: $text-muted;
+    text-align: right;
 }
 
 #actions {
-    padding: 1 0;
+    padding: 0 0 1 0;
     height: auto;
     align: center middle;
 }
@@ -1784,29 +1923,6 @@ SearchBar Input {
 
 SearchBar Input:focus {
     border: round $secondary;
-}
-
-/* =============================================================================
-   LEADER KEY HINT
-   ============================================================================= */
-
-/* Leader mode hint overlay - layer ensures it appears above footer */
-/* Uses offset-y instead of display toggle to avoid layout recalculation */
-.leader-hint {
-    dock: bottom;
-    width: 100%;
-    height: 1;
-    background: $warning;
-    color: $background;
-    text-align: center;
-    text-style: bold;
-    layer: overlay;
-    padding: 0 1;
-    offset-y: 100%;
-}
-
-.leader-hint.visible {
-    offset-y: 0;
 }
 
 /* Review queue hint */
@@ -2633,7 +2749,7 @@ FolderPickerModal .dialog-title {
 }
 
 FolderPickerModal .field {
-    margin: 1 0;
+    margin: 0 0 1 0;
 }
 
 FolderPickerModal .field-label {
@@ -2647,8 +2763,16 @@ FolderPickerModal .hint {
 }
 
 FolderPickerModal #dialog-actions {
-    margin-top: 2;
+    margin-top: 1;
     align: right middle;
+}
+
+FolderPickerModal #folder-tree {
+    height: 12;
+    max-height: 14;
+    border: solid $surface-lighten-2;
+    background: $background;
+    padding: 0 1;
 }
 
 FolderPickerModal #dialog-actions Button {
@@ -2829,56 +2953,301 @@ DiffModal .diff-header {
 
 OnboardingScreen {
     align: center middle;
+    background: $background;
 }
 
 #onboarding-container {
     width: 70;
     height: auto;
+    max-height: 90%;
+    background: $surface;
     border: solid $primary;
     padding: 1 2;
+    overflow-y: auto;
 }
 
-#onboarding-title {
+#onboarding-logo {
+    width: 100%;
     text-align: center;
-    text-style: bold;
+    color: $secondary;
+    padding: 0 0 1 0;
+}
+
+#onboarding-subtitle {
+    text-align: center;
+    color: $text-muted;
     margin-bottom: 1;
-}
-
-.onboarding-field {
-    margin: 1 0;
-}
-
-.onboarding-label {
-    margin-bottom: 1;
-}
-
-#onboarding-submit {
-    margin-top: 2;
     width: 100%;
 }
 
+#onboarding-form {
+    width: 100%;
+    height: auto;
+    padding: 0;
+}
+
+#onboarding-form .form-label {
+    color: $text;
+    text-style: bold;
+    margin-top: 0;
+}
+
+#onboarding-form .form-hint {
+    color: $text-muted;
+}
+
+#onboarding-form Select {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+#auto-mode-row {
+    width: 100%;
+    height: auto;
+    margin-top: 0;
+    padding: 0 1;
+    background: $surface;
+    border: solid $surface-lighten-2;
+    align: left middle;
+}
+
+#auto-mode-info {
+    width: 1fr;
+}
+
+#auto-mode-row .form-label {
+    margin-top: 0;
+}
+
+#onboarding-actions {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    padding-top: 0;
+    margin-top: 0;
+}
+
+#onboarding-actions Button {
+    margin: 0 1;
+}
+
 /* =============================================================================
-   CWD SUGGESTION BANNER
+   CWD SUGGESTION BANNER (Inside Welcome Container)
    ============================================================================= */
 
 #cwd-suggestion-banner {
     width: 100%;
     height: auto;
-    background: $surface;
-    border: solid $accent;
+    background: $primary 10%;
+    border: solid $primary;
     padding: 1 2;
-    margin-bottom: 1;
+    margin: 1 0;
+}
+
+#cwd-title {
+    text-style: bold;
+    color: $primary;
 }
 
 #cwd-path {
     color: $text-muted;
+    margin-left: 2;
     margin-bottom: 1;
 }
 
 #cwd-actions {
     height: auto;
+    margin-left: 2;
 }
 
 #cwd-actions Button {
     margin-right: 1;
+}
+
+/* =============================================================================
+   OFFLINE BANNER
+   ============================================================================= */
+
+OfflineBanner {
+    dock: top;
+    width: 100%;
+    height: auto;
+    background: $warning 20%;
+    border-bottom: solid $warning;
+    padding: 1 2;
+}
+
+#offline-title {
+    text-style: bold;
+    color: $warning;
+}
+
+#offline-message {
+    color: $text-muted;
+    margin-left: 2;
+}
+
+#offline-actions {
+    margin-top: 1;
+    height: auto;
+}
+
+#offline-actions Button {
+    margin-right: 1;
+}
+
+/* =============================================================================
+   CONTINUE HIGHLIGHT (Welcome Screen)
+   ============================================================================= */
+
+#continue-highlight {
+    display: none;
+    width: 100%;
+    height: auto;
+    background: $primary 10%;
+    border: solid $primary;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#continue-title {
+    text-style: bold;
+    color: $primary;
+}
+
+#continue-project-name {
+    text-style: bold;
+    color: $text;
+    margin-left: 1;
+}
+
+#continue-project-info {
+    color: $text-muted;
+    margin-left: 1;
+}
+
+#continue-hint {
+    color: $text-muted;
+    margin-top: 0;
+}
+
+/* Project shortcut number indicator */
+.project-shortcut {
+    width: 4;
+    color: $primary;
+    text-style: bold;
+}
+
+/* =============================================================================
+   REPO PICKER SCREEN
+   ============================================================================= */
+
+RepoPickerScreen {
+    align: center middle;
+    background: $background;
+}
+
+#repo-picker-container {
+    width: 70;
+    height: auto;
+    max-height: 70%;
+    background: $surface;
+    border: solid $primary;
+    padding: 1 2;
+}
+
+#repo-picker-logo {
+    width: 100%;
+    text-align: center;
+    color: $secondary;
+    text-style: bold;
+}
+
+#repo-picker-subtitle {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#repo-picker-project-name {
+    width: 100%;
+    text-align: center;
+    color: $text;
+    margin-bottom: 1;
+}
+
+#repo-picker-empty {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    margin: 1 0;
+}
+
+#repo-list {
+    height: 8;
+    max-height: 8;
+    background: $surface;
+    border: solid $surface-lighten-2;
+    padding: 0;
+}
+
+#repo-picker-actions {
+    width: 100%;
+    padding-top: 0;
+    align: center middle;
+    margin-top: 0;
+}
+
+#repo-picker-actions Button {
+    margin-right: 2;
+}
+
+.repo-item {
+    padding: 0 1;
+    height: 1;
+}
+
+#repo-list > ListItem {
+    background: $surface;
+    padding: 0;
+    height: 1;
+}
+
+#repo-list > ListItem.-hovered,
+#repo-list > ListItem.-highlight {
+    background: $surface-lighten-2;
+}
+
+#repo-list:focus > ListItem.-highlight {
+    background: $primary 15%;
+}
+
+.repo-indicator {
+    width: 3;
+    color: $primary;
+    text-style: bold;
+}
+
+.repo-info {
+    width: 1fr;
+    height: 1;
+}
+
+.repo-name {
+    color: $primary;
+    text-style: bold;
+    height: 1;
+}
+
+.repo-path {
+    color: $text-muted;
+    height: 1;
+    width: 1fr;
+}
+
+.repo-tasks {
+    width: auto;
+    color: $text-muted;
+    text-align: right;
 }

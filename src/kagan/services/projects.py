@@ -23,13 +23,16 @@ class ProjectService(Protocol):
     async def create_project(
         self,
         name: str,
-        repo_paths: list[str | Path],
+        repo_paths: list[str | Path] | None = None,
         description: str | None = None,
     ) -> str:
         """Create a project with repos, return project_id."""
 
     async def open_project(self, project_id: ProjectId) -> Project:
         """Open project (update last_opened_at, publish ProjectOpened event)."""
+
+    async def get_project(self, project_id: ProjectId) -> Project | None:
+        """Return a project by ID."""
 
     async def list_recent_projects(self, limit: int = 10) -> list[Project]:
         """Get recently opened projects sorted by last_opened_at desc."""
@@ -79,12 +82,14 @@ class ProjectServiceImpl:
     async def create_project(
         self,
         name: str,
-        repo_paths: list[str | Path],
+        repo_paths: list[str | Path] | None = None,
         description: str | None = None,
     ) -> str:
         """Create a project with repos, return project_id."""
         from kagan.adapters.db.schema import Project as DbProject
         from kagan.core.events import ProjectCreated
+
+        repo_paths = repo_paths or []
 
         async with self._get_session() as session:
             project = DbProject(
@@ -132,6 +137,13 @@ class ProjectServiceImpl:
             await self._events.publish(ProjectOpened(project_id=project_id))
 
             return project
+
+    async def get_project(self, project_id: ProjectId) -> Project | None:
+        """Return a project by ID."""
+        from kagan.adapters.db.schema import Project as DbProject
+
+        async with self._get_session() as session:
+            return await session.get(DbProject, project_id)
 
     async def list_recent_projects(self, limit: int = 10) -> list[Project]:
         """Get recently opened projects sorted by last_opened_at desc."""

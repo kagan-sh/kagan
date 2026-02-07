@@ -162,22 +162,6 @@ class RepoPickerScreen(ModalScreen[str | None]):
             self.notify("Repository already added to this project", severity="warning")
             return
 
-        resolved_path = Path(resolved)
-        if not (resolved_path / ".git").exists():
-            from kagan.git_utils import init_git_repo
-
-            self.notify("Initializing git repository...", severity="information")
-            result = await init_git_repo(resolved_path, base_branch="main")
-            if not result.success:
-                msg = result.error.message if result.error else "Unknown error"
-                details = result.error.details if result.error else ""
-                self.notify(
-                    f"Failed to initialize git repository: {msg}\n{details}",
-                    severity="error",
-                )
-                return
-            self.notify("Git repository initialized", severity="information")
-
         repo_id = await self.ctx.project_service.add_repo_to_project(
             project_id=self._project.id,
             repo_path=resolved,
@@ -202,7 +186,8 @@ class RepoPickerScreen(ModalScreen[str | None]):
         try:
             task_service = self.ctx.task_service
             tasks = await task_service.list_tasks(project_id=self._project.id)
-
+            # For now, return total project tasks since tasks aren't repo-scoped
+            # In a multi-repo setup, tasks might be filtered by workspace/repo
             return len(tasks)
         except (AttributeError, RuntimeError):
             return 0

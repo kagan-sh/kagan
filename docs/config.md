@@ -29,19 +29,18 @@ max_iterations = 10
 iteration_delay_seconds = 2.0
 ```
 
-| Setting                        | Default    | Purpose                                          |
-| ------------------------------ | ---------- | ------------------------------------------------ |
-| `auto_start`                   | `false`    | Auto-run agents for IN_PROGRESS tasks on startup |
-| `auto_approve`                 | `false`    | Skip permission prompts for AI actions           |
-| `auto_merge`                   | `false`    | Auto-merge tasks after review passes             |
-| `auto_retry_on_merge_conflict` | `true`     | Retry auto-merge after rebase on conflicts       |
-| `require_review_approval`      | `false`    | Require review approval before merge actions     |
-| `serialize_merges`             | `false`    | Serialize manual merges to reduce conflicts      |
-| `default_base_branch`          | `"main"`   | Base branch for worktrees and merges             |
-| `default_worker_agent`         | `"claude"` | Default agent for new tasks                      |
-| `max_concurrent_agents`        | `1`        | Maximum parallel AUTO agents                     |
-| `max_iterations`               | `10`       | Max agent iterations before BACKLOG              |
-| `iteration_delay_seconds`      | `2.0`      | Delay between agent iterations                   |
+| Setting                   | Default    | Purpose                                            |
+| ------------------------- | ---------- | -------------------------------------------------- |
+| `auto_start`              | `false`    | Auto-run agents for IN_PROGRESS tickets on startup |
+| `auto_approve`            | `false`    | Skip permission prompts for AI actions             |
+| `auto_merge`              | `false`    | Auto-merge tickets after review passes             |
+| `default_base_branch`     | `"main"`   | Base branch for worktrees and merges               |
+| `default_worker_agent`    | `"claude"` | Default agent for new tickets                      |
+| `max_concurrent_agents`   | `3`        | Maximum parallel AUTO agents                       |
+| `max_iterations`          | `10`       | Max agent iterations before BACKLOG                |
+| `iteration_delay_seconds` | `2.0`      | Delay between agent iterations                     |
+| `default_model_claude`    | `None`     | Default Claude model alias or full name            |
+| `default_model_opencode`  | `None`     | Default OpenCode model                             |
 
 ## Agent Configuration
 
@@ -60,15 +59,16 @@ active = true
 "*" = "claude"
 ```
 
-| Field                 | Purpose                                 |
-| --------------------- | --------------------------------------- |
-| `identity`            | Unique agent identifier                 |
-| `name`                | Display name in UI                      |
-| `short_name`          | Compact label for badges                |
-| `protocol`            | Protocol type (currently only `acp`)    |
-| `active`              | Whether this agent is available         |
-| `run_command`         | OS-specific command for AUTO mode (ACP) |
-| `interactive_command` | OS-specific command for PAIR mode (CLI) |
+| Field                 | Purpose                                      |
+| --------------------- | -------------------------------------------- |
+| `identity`            | Unique agent identifier                      |
+| `name`                | Display name in UI                           |
+| `short_name`          | Compact label for badges                     |
+| `protocol`            | Protocol type (currently only `acp`)         |
+| `active`              | Whether this agent is available              |
+| `run_command`         | OS-specific command for AUTO mode (ACP)      |
+| `interactive_command` | OS-specific command for PAIR mode (CLI)      |
+| `model_env_var`       | Environment variable for model selection     |
 
 ### OS-Specific Commands
 
@@ -113,7 +113,7 @@ skip_tmux_gateway = false
 ```toml
 [refinement]
 enabled = true
-hotkey = "ctrl+e"
+hotkey = "f2"
 skip_length_under = 20
 skip_prefixes = ["/", "!", "?"]
 ```
@@ -121,7 +121,7 @@ skip_prefixes = ["/", "!", "?"]
 | Setting             | Default           | Purpose                                      |
 | ------------------- | ----------------- | -------------------------------------------- |
 | `enabled`           | `true`            | Enable prompt refinement feature             |
-| `hotkey`            | `"ctrl+e"`        | Hotkey to trigger refinement in planner      |
+| `hotkey`            | `"f2"`            | Hotkey to trigger refinement in planner      |
 | `skip_length_under` | `20`              | Skip refinement for inputs shorter than this |
 | `skip_prefixes`     | `["/", "!", "?"]` | Prefixes that skip refinement                |
 

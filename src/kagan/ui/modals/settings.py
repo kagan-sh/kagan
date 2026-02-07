@@ -150,7 +150,7 @@ class SettingsModal(ModalScreen[bool]):
                 yield Button("Save", variant="primary", id="save-btn")
                 yield Button("Cancel", variant="default", id="cancel-btn")
 
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""

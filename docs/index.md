@@ -21,13 +21,12 @@ Python 3.12+, terminal (min 80x20), git repo (for worktrees), tmux (for PAIR mod
 
 | Key         | Action                             |
 | ----------- | ---------------------------------- |
+| `.`         | Actions palette                    |
 | `n`         | New task                           |
-| `Shift+N`   | New AUTO task (quick create)       |
-| `a`         | Start agent                        |
 | `Enter`     | Open session (PAIR) / watch (AUTO) |
-| `g` `h`/`l` | Move task left/right               |
+| `Shift+H/L` | Move task left/right               |
 | `Space`     | Peek (toggle status overlay)       |
-| `?` / `F1`  | Show help                          |
+| `?`         | Show help                          |
 
 See the [full keyboard reference](keybindings.md) for all shortcuts.
 
@@ -60,11 +59,11 @@ Read the [Task Modes Guide](task-modes.md) for detailed state machines and workf
 
 Classic workflow: **BACKLOG** → **IN_PROGRESS** → **REVIEW** → **DONE**
 
-Move tasks between columns with ++g++ ++h++ / ++g++ ++l++. Track multiple workstreams with visual priority badges and agent assignments.
+Move tasks between columns with ++shift+h++ / ++shift+l++. Track multiple workstreams with visual priority badges and agent assignments.
 
 ## AI Planner
 
-Press ++p++ to describe your goal in natural language. The planner breaks it down into actionable tasks with acceptance criteria. Review, refine, and approve—then watch your board populate automatically.
+Press ++p++ (or open the Actions palette with ++.++ and choose Plan Mode) to describe your goal in natural language. The planner breaks it down into actionable tasks with acceptance criteria. Review, refine, and approve—then watch your board populate automatically.
 
 ## Review Flow
 
@@ -73,7 +72,7 @@ Built-in code review with AI assistance:
 1. Task moves to REVIEW when agent completes work
 1. View diffs (++shift+d++), inspect commits, run tests
 1. Check merge readiness (Ready / At Risk / Blocked) and any preflight warnings
-1. Approve (++a++) to merge or reject (++r++) with feedback
+1. Approve (++enter++) to merge or reject (++r++) with feedback
 1. Auto-merge on approval (configurable)
 
 In REVIEW, Kagan surfaces parallel in-progress tasks and their changed files to help prevent conflicts. If a merge fails, the task stays in REVIEW with a clear error and a primary resolve action. If there are no changes, the primary action becomes “Close as Exploratory” to finish without a merge.
@@ -83,7 +82,15 @@ Merges run in a dedicated merge worktree to keep your main working tree clean.
 
 Agents access task context through MCP (Model Context Protocol):
 
-- `get_context(task_id)` — Full task details and acceptance criteria
+### Read-Only Tools (Available in All Modes)
+
+- `propose_plan(tasks, todos)` — Submit a structured plan proposal for planner mode
+- `get_parallel_tasks(exclude_task_id)` — Get all IN_PROGRESS tasks for coordination
+- `get_agent_logs(task_id, log_type, limit)` — Get agent execution logs from any task
+
+### Full Tools (PAIR Mode Only)
+
+- `get_context(task_id)` — Full ticket details and acceptance criteria
 - `update_scratchpad(task_id, content)` — Append progress notes
 - `request_review(task_id, summary)` — Submit work for review
 

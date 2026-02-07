@@ -27,12 +27,9 @@ class NewProjectModal(ModalScreen[dict | None]):
                 yield Input(placeholder="My Awesome Project", id="name-input")
 
             with Vertical(classes="field"):
-                yield Label("Repository Path", classes="field-label")
+                yield Label("Repository Path (optional)", classes="field-label")
                 yield Input(placeholder="/path/to/repo", id="path-input")
-                yield Label(
-                    "You can add more repos later",
-                    classes="hint",
-                )
+                yield Label("Leave blank to add repos later", classes="hint")
 
             with Horizontal(id="dialog-actions"):
                 yield Button("Cancel", id="btn-cancel")
@@ -52,25 +49,23 @@ class NewProjectModal(ModalScreen[dict | None]):
             self.notify("Project name is required", severity="error")
             return
 
-        if not path:
-            self.notify("Repository path is required", severity="error")
-            return
+        resolved_path: Path | None = None
+        if path:
+            resolved_path = Path(path).expanduser().resolve()
+            if not resolved_path.exists():
+                self.notify(f"Path does not exist: {resolved_path}", severity="error")
+                return
 
-        resolved_path = Path(path).expanduser().resolve()
-        if not resolved_path.exists():
-            self.notify(f"Path does not exist: {resolved_path}", severity="error")
-            return
-
-        if not (resolved_path / ".git").exists():
-            self.notify(f"Not a git repository: {resolved_path}", severity="warning")
-            # Allow creation anyway - they might want to init later
+            if not (resolved_path / ".git").exists():
+                self.notify(f"Not a git repository: {resolved_path}", severity="warning")
+                # Allow creation anyway - they might want to init later
 
         # Create the project via service
         app = cast("KaganApp", self.app)
         project_service = app.ctx.project_service
-        project_id = await project_service.create_project(
-            name=name,
-            repo_paths=[str(resolved_path)],
-        )
+        repo_paths: list[str | Path] = []
+        if resolved_path is not None:
+            repo_paths.append(str(resolved_path))
+        project_id = await project_service.create_project(name=name, repo_paths=repo_paths)
 
         self.dismiss({"project_id": project_id})

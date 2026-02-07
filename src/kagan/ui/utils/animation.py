@@ -1,4 +1,4 @@
-"""Shared animation constants for consistent visual design."""
+"""Shared animation constants and display helpers for consistent visual design."""
 
 from __future__ import annotations
 

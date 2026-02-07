@@ -73,6 +73,12 @@ class ReviewModal(ModalScreen[str | None]):
                 f"Review: {self._task_model.title[:MODAL_TITLE_MAX_LENGTH]}",
                 classes="modal-title",
             )
+            # Branch info placeholder - will be updated in on_mount with actual branch name
+            yield Label(
+                f"Branch: task-{self._task_model.short_id} → {self._base_branch}",
+                id="branch-info",
+                classes="branch-info",
+            )
             yield Rule()
 
             yield LoadingIndicator(id="review-loading", classes="review-loading")
@@ -106,11 +112,23 @@ class ReviewModal(ModalScreen[str | None]):
                 yield Button("Approve (a)", variant="success", id="approve-btn")
                 yield Button("Reject (r)", variant="error", id="reject-btn")
 
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     async def on_mount(self) -> None:
         """Load commits and diff immediately."""
         from kagan.debug_log import log
+
+        # Style branch info label
+        branch_info = self.query_one("#branch-info", Label)
+        branch_info.styles.width = "100%"
+        branch_info.styles.text_align = "center"
+        branch_info.styles.color = "gray"
+
+        # Update branch info with actual branch name from workspace
+        workspaces = await self._worktree.list_workspaces(task_id=self._task_model.id)
+        if workspaces:
+            actual_branch = workspaces[0].branch_name
+            branch_info.update(f"Branch: {actual_branch} → {self._base_branch}")
 
         log.info(f"[ReviewModal] Opening for task {self._task_model.id[:8]}")
         commits = await self._worktree.get_commit_log(self._task_model.id, self._base_branch)

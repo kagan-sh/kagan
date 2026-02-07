@@ -45,8 +45,9 @@ XML_PARTIAL_START = re.compile(r"<(todos|plan)", re.IGNORECASE)
 class ThinkingIndicator(Static):
     """Animated thinking indicator with wave animation."""
 
-    def __init__(self, **kwargs) -> None:
-        super().__init__(WAVE_FRAMES[0], **kwargs)
+    def __init__(self, label: str = "Thinking...", **kwargs) -> None:
+        self._label = label
+        super().__init__(f"{WAVE_FRAMES[0]} {label}", **kwargs)
         self._frame_index = 0
         self._timer = None
 
@@ -62,7 +63,7 @@ class ThinkingIndicator(Static):
     def _next_frame(self) -> None:
         """Advance to the next animation frame."""
         self._frame_index = (self._frame_index + 1) % len(WAVE_FRAMES)
-        self.update(WAVE_FRAMES[self._frame_index])
+        self.update(f"{WAVE_FRAMES[self._frame_index]} {self._label}")
 
 
 class StreamingOutput(VerticalScroll):

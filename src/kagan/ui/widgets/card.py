@@ -11,16 +11,15 @@ from textual.widget import Widget
 from textual.widgets import Label
 
 from kagan.constants import (
+    BOX_DRAWING,
     CARD_BACKEND_MAX_LENGTH,
     CARD_DESC_MAX_LENGTH,
-    CARD_HAT_MAX_LENGTH,
     CARD_ID_MAX_LENGTH,
     CARD_REVIEW_MAX_LENGTH,
     CARD_TITLE_LINE_WIDTH,
 )
-from kagan.core.models.enums import TaskStatus, TaskType
+from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
 from kagan.ui.card_formatters import (
-    format_progress_bar,
     format_review_status,
     get_readiness_badge,
     get_review_badge,
@@ -33,6 +32,27 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
     from kagan.core.models.entities import Task
+
+
+# Progress bar width for agent iteration display
+PROGRESS_BAR_WIDTH = 16
+
+
+def _format_priority_badge(priority: TaskPriority) -> str:
+    """Format priority as a badge like [HIGH], [MED], [LOW]."""
+    labels = {
+        TaskPriority.HIGH: "[HIGH]",
+        TaskPriority.MEDIUM: "[MED]",
+        TaskPriority.LOW: "[LOW]",
+    }
+    return labels.get(priority, "[MED]")
+
+
+def _format_progress_bar(current: int, total: int, width: int = PROGRESS_BAR_WIDTH) -> str:
+    """Format progress bar: ━━━━━━━━░░░░░░ 3/5."""
+    filled = int((current / total) * width) if total > 0 else 0
+    empty = width - filled
+    return f"{'━' * filled}{'░' * empty} {current}/{total}"
 
 
 class TaskCard(Widget):
@@ -56,11 +76,25 @@ class TaskCard(Widget):
         self.task_model = task
 
     def compose(self) -> ComposeResult:
-        """Compose the card layout."""
+        """Compose the card layout with improved visual hierarchy.
+
+        Layout structure:
+        ┌─────────────────────────────────────┐
+        │ ⚡ IMPLEMENT USER AUTH        [MED] │  ← Type badge + Title + Priority badge
+        │ ────────────────────────────────── │  ← Subtle divider
+        │ Add JWT token validation to API    │  ← Description (truncated)
+        │                                    │
+        │ ▸ claude                    #abc1  │  ← Agent/backend + Short ID
+        │ ━━━━━━━━━░░░░░░░ 3/5              │  ← Progress bar (if running)
+        └─────────────────────────────────────┘
+        """
         if self.task_model is None:
             return
 
+        # === Row 1: Type badge + Title + Priority badge ===
         type_badge = self._get_type_badge()
+        priority_badge = _format_priority_badge(self.task_model.priority)
+
         # Title in uppercase for better hierarchy
         title_lines = wrap_title(self.task_model.title.upper(), CARD_TITLE_LINE_WIDTH)
         title_text = title_lines[0] if title_lines else "UNTITLED"
@@ -72,18 +106,21 @@ class TaskCard(Widget):
             )
             first_line = f"{type_badge} {title_text} {review_badge} {readiness_badge}"
         else:
-            first_line = f"{type_badge} {title_text}"
+            first_line = f"{type_badge} {title_text} {priority_badge}"
         yield Label(first_line, classes="card-title")
 
         # Second line for long titles (indented to align with first line)
         if len(title_lines) > 1:
             yield Label(f"  {title_lines[1]}", classes="card-title-continued")
 
-        # Description line: Priority icon + description
-        priority_class = self._get_priority_class()
-        priority_icon = {"LOW": "▽", "MED": "◇", "HIGH": "△"}[self.task_model.priority_label]
+        # === Row 2: Subtle divider ===
+        divider_char = BOX_DRAWING["THIN_H"]
+        yield Label(divider_char * 30, classes="card-divider")
+
+        # === Row 3: Description (truncated with ellipsis) ===
         desc = self.task_model.description or "No description"
-        desc_text = f"{priority_icon} {truncate_text(desc, CARD_DESC_MAX_LENGTH)}"
+        desc_text = truncate_text(desc, CARD_DESC_MAX_LENGTH + 10)  # Slightly wider for desc
+        priority_class = self._get_priority_class()
         yield Label(desc_text, classes=f"card-desc {priority_class}")
 
         # Error indicator (if last_error exists)
@@ -97,11 +134,6 @@ class TaskCard(Widget):
             block_text = f"🛑 Blocked: {truncated}"
             yield Label(block_text, classes="card-blocked")
 
-        # Iteration info with progress bar (if agent is running)
-        if self.iteration_info:
-            progress_text = format_progress_bar(self.iteration_info)
-            yield Label(progress_text, classes="card-iteration")
-
         # Review info for REVIEW tasks
         if self.task_model.status == TaskStatus.REVIEW:
             summary = self.task_model.review_summary or "No summary"
@@ -114,31 +146,31 @@ class TaskCard(Widget):
             readiness_class = f"card-checks readiness-{self.merge_readiness or 'risk'}"
             yield Label(status_text, classes=readiness_class)
 
-        # Metadata footer: grouped in single line with pipe separators
+        # === Row 4: Agent/backend indicator + Short ID ===
         session_indicator = self._get_session_indicator()
-        hat = self.task_model.assigned_hat or ""
-        hat_display = hat[:CARD_HAT_MAX_LENGTH] if hat else ""
         task_id = f"#{self.task_model.short_id[:CARD_ID_MAX_LENGTH]}"
-        date_str = self.task_model.created_at.strftime("%m.%d")
         backend = getattr(self.task_model, "agent_backend", None) or ""
 
-        meta_parts = []
+        # Format: ▸ claude                    #abc1
+        agent_display = ""
         if session_indicator:
-            meta_parts.append(session_indicator)
+            agent_display = f"{session_indicator} "
         if backend:
-            meta_parts.append(backend[:CARD_BACKEND_MAX_LENGTH])
-        elif hat_display:
-            meta_parts.append(hat_display)
-        ac_count = (
-            len(self.task_model.acceptance_criteria) if self.task_model.acceptance_criteria else 0
-        )
-        if ac_count:
-            meta_parts.append(f"AC:{ac_count}")
-        meta_parts.append(task_id)
-        meta_parts.append(date_str)
+            agent_display += f"▸ {backend[:CARD_BACKEND_MAX_LENGTH]}"
+        elif self.task_model.assigned_hat:
+            agent_display += f"▸ {self.task_model.assigned_hat[:CARD_BACKEND_MAX_LENGTH]}"
 
-        meta_text = " | ".join(meta_parts)
+        # Right-align the task ID
+        if agent_display:
+            meta_text = f"{agent_display.ljust(20)}{task_id}"
+        else:
+            meta_text = f"{''.ljust(20)}{task_id}"
         yield Label(meta_text, classes="card-meta")
+
+        # === Row 5: Progress bar (only when agent is running) ===
+        if self.iteration_info:
+            progress_text = self._format_iteration_progress(self.iteration_info)
+            yield Label(progress_text, classes="card-iteration")
 
     def _get_priority_class(self) -> str:
         """Get CSS class for priority."""
@@ -174,6 +206,25 @@ class TaskCard(Widget):
             return "◉"  # Circle with dot (steady state)
 
         return ""
+
+    def _format_iteration_progress(self, iteration_info: str) -> str:
+        """Format iteration info as progress bar: ━━━━━━━━░░░░░░ 3/5."""
+        if not iteration_info:
+            return ""
+
+        # Parse "Iter X/Y" format
+        try:
+            parts = iteration_info.split()
+            if len(parts) >= 2 and "/" in parts[1]:
+                current_str, total_str = parts[1].split("/")
+                current = int(current_str)
+                total = int(total_str)
+                return _format_progress_bar(current, total)
+        except (ValueError, IndexError):
+            pass
+
+        # Fallback: return original info if parsing fails
+        return iteration_info
 
     def _update_review_state(self) -> None:
         if self.task_model is None or self.task_model.status != TaskStatus.REVIEW:

@@ -29,8 +29,8 @@ class ConfirmModal(ModalScreen[bool]):
             yield Label(self._title, classes="confirm-title")
             if self._message:
                 yield Label(self._message, classes="confirm-message")
-            yield Label("Press Y to confirm, N to cancel", classes="confirm-hint")
-        yield Footer()
+            yield Label("Press Enter to confirm, Esc to cancel", classes="confirm-hint")
+        yield Footer(show_command_palette=False)
 
     def action_confirm(self) -> None:
         self.dismiss(True)

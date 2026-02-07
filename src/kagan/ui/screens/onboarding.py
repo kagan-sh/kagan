@@ -12,6 +12,7 @@ from textual.widgets import Button, Label, Select, Static, Switch
 
 from kagan.builtin_agents import BUILTIN_AGENTS, list_builtin_agents
 from kagan.config import GeneralConfig, KaganConfig
+from kagan.constants import KAGAN_LOGO
 from kagan.keybindings import ONBOARDING_BINDINGS
 
 if TYPE_CHECKING:
@@ -66,11 +67,9 @@ class OnboardingScreen(Screen):
         ]
 
         with Container(id="onboarding-container"):
-            yield Static("Welcome to Kagan", id="onboarding-title")
-            yield Label(
-                "Let's configure your development cockpit.",
-                id="onboarding-subtitle",
-            )
+            # Logo and subtitle (matches WelcomeScreen style)
+            yield Static(KAGAN_LOGO, id="onboarding-logo")
+            yield Label("First-Time Setup", id="onboarding-subtitle")
 
             with Vertical(id="onboarding-form"):
                 # AI Assistant Selection

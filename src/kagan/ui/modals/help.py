@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Label, Rule, Static, TabbedContent, TabPane
 
-from kagan.keybindings import (
-    HELP_BINDINGS,
-    KANBAN_LEADER_BINDINGS,
-)
+from kagan.keybindings import HELP_BINDINGS
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -37,7 +33,7 @@ class HelpModal(ModalScreen[None]):
                     yield VerticalScroll(self._compose_concepts())
                 with TabPane("Workflows", id="tab-workflows"):
                     yield VerticalScroll(self._compose_workflows())
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def _compose_keybindings(self) -> Vertical:
         """Compose the keybindings reference section."""
@@ -53,41 +49,35 @@ class HelpModal(ModalScreen[None]):
         children.append(self._key_row("Shift+Tab", "Cycle to previous column"))
         children.append(Rule())
 
-        # Primary Actions
-        children.append(Static("Primary Actions", classes="help-section-title"))
+        # Core Actions
+        children.append(Static("Core Actions", classes="help-section-title"))
+        children.append(self._key_row(".", "Open Actions palette"))
         children.append(self._key_row("n", "Create new task"))
-        children.append(self._key_row("e", "Edit selected task"))
-        children.append(self._key_row("v", "View task details"))
-        children.append(self._key_row("Enter", "Open session (PAIR: tmux, AUTO: agent)"))
-        children.append(self._key_row("x", "Delete task"))
-        children.append(self._key_row("/", "Toggle search bar"))
-        children.append(self._key_row("p", "Switch to Plan mode"))
-        children.append(self._key_row(",", "Open settings"))
-        children.append(Rule())
-
-        # Leader Key Actions
-        children.append(Static("Leader Key (press g, then...)", classes="help-section-title"))
-        for b in KANBAN_LEADER_BINDINGS:
-            if isinstance(b, Binding):
-                key = b.key_display or b.key
-                children.append(self._key_row(f"g {key}", b.description))
-        children.append(self._key_row("Escape", "Cancel leader mode"))
+        children.append(self._key_row("Enter", "Open session / start"))
+        children.append(self._key_row("/", "Search tasks"))
+        children.append(self._key_row("space", "Quick peek"))
         children.append(Rule())
 
         # Context-Specific
         children.append(Static("Context-Specific", classes="help-section-title"))
+        children.append(self._key_row("e", "Edit selected task"))
+        children.append(self._key_row("v", "View task details"))
+        children.append(self._key_row("x", "Delete task"))
+        children.append(self._key_row("Shift+H / Shift+L", "Move task left / right"))
         children.append(self._key_row("a", "Start agent (AUTO tasks)"))
         children.append(self._key_row("s", "Stop agent (AUTO tasks)"))
         children.append(self._key_row("w", "Watch agent output (AUTO tasks)"))
-        children.append(self._key_row("m", "Merge and complete (REVIEW tasks)"))
-        children.append(self._key_row("D", "View diff (REVIEW tasks)"))
-        children.append(self._key_row("r", "Open review modal (REVIEW tasks)"))
+        children.append(self._key_row("r", "Open review (REVIEW tasks)"))
+        children.append(self._key_row("Shift+D", "View diff (REVIEW tasks)"))
+        children.append(self._key_row("m", "Merge (REVIEW tasks)"))
         children.append(Rule())
 
         # Global
         children.append(Static("Global", classes="help-section-title"))
-        children.append(self._key_row("F1 / ?", "Open this help screen"))
-        children.append(self._key_row("Ctrl+P", "Open command palette"))
+        children.append(self._key_row("?", "Open this help screen"))
+        children.append(self._key_row("Ctrl+O", "Open project selector"))
+        children.append(self._key_row("Ctrl+R", "Open repo selector"))
+        children.append(self._key_row("Ctrl+P", "Open Actions palette"))
         children.append(self._key_row("q", "Quit application"))
         children.append(self._key_row("Escape", "Close modal / cancel action"))
         children.append(Rule())
@@ -95,20 +85,13 @@ class HelpModal(ModalScreen[None]):
         # Modal Patterns
         children.append(Static("Modal Patterns", classes="help-section-title"))
         children.append(self._key_row("Escape", "Close or cancel (never saves)"))
-        children.append(self._key_row("Ctrl+S", "Save (in edit contexts)"))
-        children.append(self._key_row("y / n", "Yes / No (confirm dialogs)"))
+        children.append(self._key_row("F2", "Save / finish (edit contexts)"))
+        children.append(self._key_row("Enter", "Primary confirm / approve"))
 
         return Vertical(*children, id="keybindings-content")
 
     def _compose_navigation(self) -> Vertical:
         """Compose the navigation guide section."""
-        # Build leader key list dynamically
-        leader_lines = []
-        for b in KANBAN_LEADER_BINDINGS:
-            if isinstance(b, Binding):
-                key = b.key_display or b.key
-                leader_lines.append(f"  g + {key}  - {b.description}")
-
         return Vertical(
             Static("Vim-Style Navigation", classes="help-section-title"),
             Static(
@@ -124,15 +107,16 @@ class HelpModal(ModalScreen[None]):
             Static("  l / Right  - Move right between columns", classes="help-code"),
             Static(""),
             Rule(),
-            Static("Leader Key System", classes="help-section-title"),
+            Static("Actions Palette", classes="help-section-title"),
             Static(
-                "Press 'g' to enter leader mode. A hint bar appears showing available "
-                "actions. You have 2 seconds to press the next key, or press Escape to cancel.",
+                "Press '.' to open the Actions palette. It lists available commands for the "
+                "current screen and task context.",
                 classes="help-paragraph",
             ),
             Static(""),
-            Static("Leader mode enables compound commands:", classes="help-subsection"),
-            *[Static(line, classes="help-code") for line in leader_lines],
+            Static("Palette Tips:", classes="help-subsection"),
+            Static("  Type to filter commands", classes="help-code"),
+            Static("  Enter to run selected action", classes="help-code"),
             Static(""),
             Rule(),
             Static("Focus & Selection", classes="help-section-title"),
@@ -211,14 +195,14 @@ class HelpModal(ModalScreen[None]):
             Static("Quick Create (n):", classes="help-subsection"),
             Static(
                 "  Press 'n' to open the task form. Fill in title, description, "
-                "priority, and type. Press Ctrl+S to save.",
+                "priority, and type. Press F2 to save.",
                 classes="help-paragraph-indented",
             ),
             Static(""),
             Static("Plan Mode (p):", classes="help-subsection"),
             Static(
-                "  Press 'p' to enter Plan mode. Describe what you want to build "
-                "in natural language. The AI will break it down into tasks.",
+                "  Press 'p' (or use the Actions palette) to enter Plan mode. Describe what "
+                "you want to build in natural language. The AI will break it down into tasks.",
                 classes="help-paragraph-indented",
             ),
             Static(""),
@@ -230,7 +214,7 @@ class HelpModal(ModalScreen[None]):
                 "  1. Select task in BACKLOG, press Enter\n"
                 "  2. Kagan creates a git worktree and tmux session\n"
                 "  3. Work with your AI agent in the session\n"
-                "  4. When done, move to REVIEW with g+l",
+                "  4. When done, move to REVIEW with Shift+L",
                 classes="help-paragraph-indented",
             ),
             Static(""),
@@ -238,7 +222,7 @@ class HelpModal(ModalScreen[None]):
             Static(
                 "  1. Select task in BACKLOG, press Enter\n"
                 "  2. Agent starts working autonomously\n"
-                "  3. Press 'w' or g+w to watch progress\n"
+                "  3. Press 'w' to watch progress\n"
                 "  4. Agent moves task to REVIEW when done",
                 classes="help-paragraph-indented",
             ),

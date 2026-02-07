@@ -414,8 +414,11 @@ async def snapshot_project(tmp_path: Path) -> SimpleNamespace:
     - A real git repository with initial commit
     - A config.toml file stored outside the repo
     - Paths to DB and config for KaganApp initialization
+    - Default project linked to the repo (so KanbanScreen/PlannerScreen work)
     - Standardized for snapshot reproducibility
     """
+    from kagan.adapters.db.repositories import RepoRepository, TaskRepository
+
     project = tmp_path / "snapshot_project"
     project.mkdir()
 
@@ -445,9 +448,28 @@ active = true
     config_path = config_dir / "config.toml"
     config_path.write_text(config_content)
 
+    db_path = str(data_dir / "kagan.db")
+
+    # Initialize DB and explicitly create test project + link repo
+    # This allows tests to start on KanbanScreen/PlannerScreen instead of WelcomeScreen
+    task_repo = TaskRepository(db_path, project_root=project)
+    await task_repo.initialize()
+
+    # Explicitly create test project
+    project_id = await task_repo.ensure_test_project("Snapshot Test Project")
+
+    # Link repo to project so _startup_screen_decision finds it
+    assert task_repo._session_factory is not None
+    repo_repo = RepoRepository(task_repo._session_factory)
+    repo, _ = await repo_repo.get_or_create(project, default_branch="main")
+    if repo.id:
+        await repo_repo.add_to_project(project_id, repo.id, is_primary=True)
+
+    await task_repo.close()
+
     return SimpleNamespace(
         root=project,
-        db=str(data_dir / "kagan.db"),
+        db=db_path,
         config=str(config_path),
     )
 
@@ -492,7 +514,6 @@ async def snapshot_app(
     app = KaganApp(
         db_path=snapshot_project.db,
         config_path=snapshot_project.config,
-        lock_path=None,
         project_root=snapshot_project.root,
         agent_factory=mock_acp_agent_factory,
     )

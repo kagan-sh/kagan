@@ -19,11 +19,7 @@ from kagan.constants import (
     NOTIFICATION_TITLE_MAX_LENGTH,
 )
 from kagan.core.models.enums import MergeReadiness, TaskStatus, TaskType
-from kagan.keybindings import (
-    KANBAN_BINDINGS,
-    KANBAN_LEADER_BINDINGS,
-    generate_leader_hint,
-)
+from kagan.keybindings import KANBAN_BINDINGS
 from kagan.ui.modals import (
     AgentOutputModal,
     ConfirmModal,
@@ -43,6 +39,7 @@ from kagan.ui.widgets.card import TaskCard  # noqa: TC001 - needed at runtime fo
 from kagan.ui.widgets.column import KanbanColumn
 from kagan.ui.widgets.header import KaganHeader
 from kagan.ui.widgets.keybinding_hint import KeybindingHint
+from kagan.ui.widgets.offline_banner import OfflineBanner
 from kagan.ui.widgets.peek_overlay import PeekOverlay
 from kagan.ui.widgets.search_bar import SearchBar
 
@@ -55,9 +52,6 @@ if TYPE_CHECKING:
 
     from kagan.adapters.db.schema import AgentTurn
     from kagan.core.models.entities import Task
-
-# Leader key timeout in seconds
-LEADER_TIMEOUT = 2.0
 
 SIZE_WARNING_MESSAGE = (
     f"Terminal too small\n\n"
@@ -84,11 +78,10 @@ class KanbanScreen(KaganScreen):
         self._pending_auto_move_task: Task | None = None
         self._pending_auto_move_status: TaskStatus | None = None
         self._editing_task_id: str | None = None
-        self._leader_active: bool = False
-        self._leader_timer: Timer | None = None
         self._merge_readiness: dict[str, str] = {}
         self._refresh_timer: Timer | None = None
         self._task_hashes: dict[str, int] = {}  # task_id -> hash for change detection
+        self._agent_offline: bool = False  # Track offline mode
         # Lifecycle handled via services in AppContext
 
     # Actions requiring a task to be selected
@@ -112,8 +105,20 @@ class KanbanScreen(KaganScreen):
         }
     )
 
+    # Actions requiring agent to be available
+    _AGENT_REQUIRED_ACTIONS = frozenset(
+        {
+            "start_agent",
+            "open_planner",
+        }
+    )
+
     def _validate_action(self, action: str) -> tuple[bool, str | None]:
         """Validate if an action can be performed (inlined from ActionValidator)."""
+        # Check agent availability for agent-required actions
+        if self._agent_offline and action in self._AGENT_REQUIRED_ACTIONS:
+            return (False, "Agent unavailable (offline mode)")
+
         card = focus.get_focused_card(self)
         task = card.task_model if card else None
         scheduler = self.ctx.automation_service
@@ -184,13 +189,14 @@ class KanbanScreen(KaganScreen):
         with Container(classes="size-warning"):
             yield Static(SIZE_WARNING_MESSAGE, classes="size-warning-text")
         yield Static("", id="review-queue-hint", classes="review-queue-hint")
-        yield Static(generate_leader_hint(KANBAN_LEADER_BINDINGS), classes="leader-hint")
         yield PeekOverlay(id="peek-overlay")
         yield KeybindingHint(id="keybinding-hint", classes="keybinding-hint")
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     async def on_mount(self) -> None:
         self._check_screen_size()
+        self._check_agent_health()
+        await self.sync_header_context(self.header)
         await self._refresh_board()
         focus.focus_first_card(self)
         self.kagan_app.task_changed_signal.subscribe(self, self._on_task_changed)
@@ -199,8 +205,21 @@ class KanbanScreen(KaganScreen):
         self._sync_agent_states()
         from kagan.ui.widgets.header import _get_git_branch
 
+        if self.ctx.active_repo_id is None:
+            self.header.update_branch("")
+            return
         branch = await _get_git_branch(self.kagan_app.project_root)
         self.header.update_branch(branch)
+
+    def _check_agent_health(self) -> None:
+        """Check if agent is available and show banner if not."""
+        if not self.ctx.agent_health.is_available():
+            self._agent_offline = True
+            message = self.ctx.agent_health.get_status_message()
+            banner = OfflineBanner(message=message)
+            self.mount(banner, before=self.query_one(".board-container"))
+        else:
+            self._agent_offline = False
 
     def on_unmount(self) -> None:
         """Clean up pending state on unmount."""
@@ -276,6 +295,19 @@ class KanbanScreen(KaganScreen):
         self._sync_iterations()
         self._sync_agent_states()
 
+    @on(OfflineBanner.Retry)
+    def on_offline_banner_retry(self, event: OfflineBanner.Retry) -> None:
+        """Handle retry from offline banner - refresh agent health check."""
+        self.ctx.agent_health.refresh()
+        if self.ctx.agent_health.is_available():
+            self._agent_offline = False
+            # Remove the banner
+            for banner in self.query(OfflineBanner):
+                banner.remove()
+            self.notify("Agent is now available", severity="information")
+        else:
+            self.notify("Agent still unavailable", severity="warning")
+
     def _check_screen_size(self) -> None:
         size = self.app.size
         if size.width < MIN_SCREEN_WIDTH or size.height < MIN_SCREEN_HEIGHT:
@@ -285,7 +317,7 @@ class KanbanScreen(KaganScreen):
 
     async def _refresh_board(self) -> None:
         """Refresh board with differential updates (only changed tasks)."""
-        new_tasks = await self.ctx.task_service.list_tasks()
+        new_tasks = await self.ctx.task_service.list_tasks(project_id=self.ctx.active_project_id)
         display_tasks = self._filtered_tasks if self._filtered_tasks is not None else new_tasks
 
         old_status_by_id = {task.id: task.status for task in self._tasks}
@@ -418,9 +450,6 @@ class KanbanScreen(KaganScreen):
         focus.focus_vertical(self, 1)
 
     def action_deselect(self) -> None:
-        if self._leader_active:
-            self._deactivate_leader()
-            return
         try:
             overlay = self.query_one("#peek-overlay", PeekOverlay)
             if overlay.has_class("visible"):
@@ -482,65 +511,7 @@ class KanbanScreen(KaganScreen):
         y_pos = max(1, card.region.y)
         overlay.show_at(x_pos, y_pos)
 
-    # =========================================================================
-    # Leader Key
-    # =========================================================================
-
-    def action_activate_leader(self) -> None:
-        if self._leader_active:
-            return
-        self._leader_active = True
-        try:
-            hint = self.query_one(".leader-hint", Static)
-            hint.add_class("visible")
-        except NoMatches:
-            pass
-        self._leader_timer = self.set_timer(LEADER_TIMEOUT, self._leader_timeout)
-
-    def _leader_timeout(self) -> None:
-        self._deactivate_leader()
-
-    def _deactivate_leader(self) -> None:
-        self._leader_active = False
-        if self._leader_timer:
-            self._leader_timer.stop()
-            self._leader_timer = None
-        try:
-            hint = self.query_one(".leader-hint", Static)
-            hint.remove_class("visible")
-        except NoMatches:
-            pass
-
-    def _execute_leader_action(self, action_name: str) -> None:
-        self._deactivate_leader()
-        is_valid, reason = self._validate_action(action_name)
-        if not is_valid:
-            if reason:
-                self.notify(reason, severity="warning")
-            return
-        action_method = getattr(self, f"action_{action_name}", None)
-        if action_method:
-            result = action_method()
-            if asyncio.iscoroutine(result):
-                self.run_worker(result)
-
     def on_key(self, event: events.Key) -> None:
-        if self._leader_active:
-            leader_actions = {
-                b.key: b.action for b in KANBAN_LEADER_BINDINGS if isinstance(b, Binding)
-            }
-            if event.key in leader_actions:
-                event.prevent_default()
-                event.stop()
-                self._execute_leader_action(leader_actions[event.key])
-            elif event.key == "escape":
-                event.prevent_default()
-                event.stop()
-                self._deactivate_leader()
-            else:
-                self._deactivate_leader()
-            return
-
         feedback_actions = {
             "delete_task_direct",
             "merge_direct",
@@ -905,13 +876,18 @@ class KanbanScreen(KaganScreen):
     # Session Operations (inlined from SessionController)
     # =========================================================================
 
-    async def action_open_session(self) -> None:
+    def action_open_session(self) -> None:
         card = focus.get_focused_card(self)
         if not card or not card.task_model:
             return
-        task = card.task_model
+        self.run_worker(
+            self._open_session_flow(card.task_model),
+            group=f"open-session-{card.task_model.id}",
+        )
+
+    async def _open_session_flow(self, task: Task) -> None:
         if task.status == TaskStatus.REVIEW:
-            await self.action_open_review()
+            await self._open_review_for_task(task)
             return
 
         # Only PAIR tasks need manual session opening
@@ -1310,7 +1286,9 @@ class KanbanScreen(KaganScreen):
         task = self._get_review_task(focus.get_focused_card(self))
         if not task:
             return
+        await self._open_review_for_task(task)
 
+    async def _open_review_for_task(self, task: Task) -> None:
         agent_config = task.get_agent_config(self.kagan_app.config)
         await self.app.push_screen(
             ReviewModal(

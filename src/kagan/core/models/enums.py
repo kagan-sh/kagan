@@ -116,3 +116,10 @@ class MergeStatus(StrEnum):
     MERGED = "MERGED"
     FAILED = "FAILED"
     BLOCKED = "BLOCKED"
+
+
+class AgentStatus(StrEnum):
+    """Agent availability status."""
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"

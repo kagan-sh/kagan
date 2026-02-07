@@ -17,7 +17,6 @@ class IssueType(Enum):
     """Types of pre-flight issues."""
 
     WINDOWS_OS = "windows_os"
-    INSTANCE_LOCKED = "instance_locked"
     TMUX_MISSING = "tmux_missing"
     AGENT_MISSING = "agent_missing"
     NPX_MISSING = "npx_missing"
@@ -62,17 +61,6 @@ ISSUE_PRESETS: dict[IssueType, IssuePreset] = {
         ),
         hint="Install WSL2 and run Kagan from there",
         url="https://github.com/aorumbayev/kagan",
-    ),
-    IssueType.INSTANCE_LOCKED: IssuePreset(
-        type=IssueType.INSTANCE_LOCKED,
-        severity=IssueSeverity.BLOCKING,
-        icon="[!]",
-        title="Another Instance Running",
-        message=(
-            "Another Kagan instance is already running.\n"
-            "Please return to that window or close it before starting."
-        ),
-        hint="Close the other instance and try again",
     ),
     IssueType.TMUX_MISSING: IssuePreset(
         type=IssueType.TMUX_MISSING,
@@ -479,8 +467,6 @@ def _check_terminal_truecolor() -> DetectedIssue | None:
 
 async def detect_issues(
     *,
-    check_lock: bool = False,
-    lock_acquired: bool = True,
     agent_config: AgentConfig | None = None,
     agent_name: str = "Claude Code",
     agent_install_command: str | None = None,
@@ -490,8 +476,6 @@ async def detect_issues(
     """Run all pre-flight checks and return detected issues.
 
     Args:
-        check_lock: Whether to check instance lock status.
-        lock_acquired: If check_lock is True, whether the lock was acquired.
         agent_config: Optional agent configuration to check.
         agent_name: Display name of the agent to check.
         agent_install_command: Installation command for the agent.
@@ -508,11 +492,7 @@ async def detect_issues(
     if windows_issue:
         return PreflightResult(issues=[windows_issue])
 
-    # 2. Instance lock check
-    if check_lock and not lock_acquired:
-        issues.append(DetectedIssue(preset=ISSUE_PRESETS[IssueType.INSTANCE_LOCKED]))
-
-    # 3. Git checks (version and user configuration)
+    # 2. Git checks (version and user configuration)
     if check_git:
         git_version_issue = await _check_git_version()
         if git_version_issue:
@@ -523,18 +503,18 @@ async def detect_issues(
             if git_user_issue:
                 issues.append(git_user_issue)
 
-    # 4. tmux check
+    # 3. tmux check
     tmux_issue = _check_tmux()
     if tmux_issue:
         issues.append(tmux_issue)
 
-    # 5. Terminal truecolor check (warning only)
+    # 4. Terminal truecolor check (warning only)
     if check_terminal:
         terminal_issue = _check_terminal_truecolor()
         if terminal_issue:
             issues.append(terminal_issue)
 
-    # 6. Agent check (interactive command for PAIR mode)
+    # 5. Agent check (interactive command for PAIR mode)
     if agent_config:
         from kagan.config import get_os_value
 
@@ -548,7 +528,7 @@ async def detect_issues(
             if agent_issue:
                 issues.append(agent_issue)
 
-        # 7. ACP command check (run_command for AUTO mode)
+        # 6. ACP command check (run_command for AUTO mode)
         # This uses smart detection for npx-based commands
         acp_cmd = get_os_value(agent_config.run_command)
         if acp_cmd:

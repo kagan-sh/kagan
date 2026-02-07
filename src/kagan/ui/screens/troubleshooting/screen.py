@@ -145,7 +145,7 @@ class TroubleshootingApp(App):
                                     yield IssueCard(issue)
                         yield Static(resolve_hint, id="troubleshoot-resolve-hint")
                         yield Static(exit_hint, id="troubleshoot-exit-hint")
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def action_continue_app(self) -> None:
         """Continue to the main app (only for warning-only cases)."""

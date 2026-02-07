@@ -8,7 +8,7 @@ from kagan.limits import (
     SHUTDOWN_TIMEOUT,
     SUBPROCESS_LIMIT,
 )
-from kagan.paths import get_config_path, get_database_path, get_lock_path
+from kagan.paths import get_config_path, get_database_path
 
 # UI Display Constants
 # Card widget truncation lengths
@@ -48,7 +48,6 @@ KAGAN_GENERATED_PATTERNS = (
 
 DEFAULT_DB_PATH = str(get_database_path())
 DEFAULT_CONFIG_PATH = str(get_config_path())
-DEFAULT_LOCK_PATH = str(get_lock_path())
 
 COLUMN_ORDER = [
     TaskStatus.BACKLOG,
@@ -123,7 +122,6 @@ __all__ = [
     "COLUMN_ORDER",
     "DEFAULT_CONFIG_PATH",
     "DEFAULT_DB_PATH",
-    "DEFAULT_LOCK_PATH",
     "DIFF_MAX_LENGTH",
     "KAGAN_GENERATED_PATTERNS",
     "KAGAN_LOGO",

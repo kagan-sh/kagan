@@ -2,6 +2,80 @@
 
 <!-- version list -->
 
+## v0.3.0-beta.1 (2026-02-02)
+
+### Chores
+
+- **deps**: Add hypothesis testing library and update test config
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+### Continuous Integration
+
+- Fix cd failing due to lack of git profile
+  ([`1ea33fc`](https://github.com/aorumbayev/kagan/commit/1ea33fcb2384d76ad1d0e8f723632042e4dc4e36))
+
+### Documentation
+
+- Update documentation and add architecture guide
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+### Features
+
+- Ux improvements; minor new features; internal refactor
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **cli**: Add tools command for agent management
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+### Refactoring
+
+- Update core modules and styling ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **acp**: Consolidate JSON-RPC and remove legacy RPC layer
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **agents**: Improve planner, scheduler, and add installer
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **database**: Enhance models and add migrations support
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **keybindings**: Consolidate into single module
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **tests**: Remove duplicate permission_prompt test
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **tests**: Update e2e tests for refactored UI ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **tests**: Update integration tests for refactored modules
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **tests**: Update test infrastructure and helpers
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **tests**: Update unit tests for refactored modules
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+- **ui**: Restructure screens, modals, and widgets
+  ([#11](https://github.com/aorumbayev/kagan/pull/11),
+  [`d7c686a`](https://github.com/aorumbayev/kagan/commit/d7c686a6678a1ed7861f6ab2aff77126881344af))
+
+
 ## v0.2.1 (2026-01-31)
 
 ### Bug Fixes

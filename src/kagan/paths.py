@@ -68,11 +68,6 @@ def get_profiles_path() -> Path:
     return get_config_dir() / "profiles.toml"
 
 
-def get_lock_path() -> Path:
-    """Get the path to the instance lock file."""
-    return get_data_dir() / "kagan.lock"
-
-
 def get_debug_log_path() -> Path:
     """Get the path to the debug log export file."""
     return get_data_dir() / "debug.log"

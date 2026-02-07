@@ -31,6 +31,27 @@ class KeybindingHint(Static):
         if not hint_list:
             self.hints = ""
             return
+        self._render_hints(hint_list)
 
-        formatted = " | ".join(f"[bold]{key}[/] {desc}" for key, desc in hint_list)
-        self.hints = f"💡 {formatted}"
+    def _render_hints(self, hint_list: list[tuple[str, str]]) -> None:
+        """Render hint list to formatted string.
+
+        Args:
+            hint_list: List of (key, description) tuples.
+        """
+        parts = []
+        for key, desc in hint_list:
+            if not key:
+                continue
+            if desc:
+                parts.append(f"[bold]{key}[/] {desc}")
+            else:
+                # Key-only hint (like "?" for help)
+                parts.append(f"[bold]{key}[/]")
+
+        formatted = " · ".join(parts)
+        self.hints = formatted
+
+    def clear(self) -> None:
+        """Clear all hints."""
+        self.hints = ""

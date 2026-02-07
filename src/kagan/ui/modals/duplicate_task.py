@@ -50,10 +50,10 @@ class DuplicateTaskModal(ModalScreen[dict[str, object] | None]):
 
             yield Rule()
             with Horizontal(classes="button-row"):
-                yield Button("[Ctrl+S] Create", variant="primary", id="create-btn")
+                yield Button("[Enter] Create", variant="primary", id="create-btn")
                 yield Button("[Esc] Cancel", id="cancel-btn")
 
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         """Focus the title input when modal opens."""

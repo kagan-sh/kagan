@@ -80,7 +80,7 @@ class TmuxGatewayModal(ModalScreen[str | None]):
                 "[bold]Esc[/bold] cancel",
                 classes="tmux-hint",
             )
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def _hotkey_row(self, key: str, description: str) -> Horizontal:
         """Create a hotkey-description row."""

@@ -12,7 +12,6 @@ from kagan.paths import (
     get_data_dir,
     get_database_path,
     get_debug_log_path,
-    get_lock_path,
     get_profiles_path,
     get_worktree_base_dir,
 )
@@ -46,7 +45,6 @@ def test_derived_paths_from_data_and_config(monkeypatch, tmp_path: Path) -> None
     monkeypatch.setenv("KAGAN_CONFIG_DIR", str(config_dir))
 
     assert get_database_path() == data_dir / "kagan.db"
-    assert get_lock_path() == data_dir / "kagan.lock"
     assert get_debug_log_path() == data_dir / "debug.log"
     assert get_config_path() == config_dir / "config.toml"
     assert get_profiles_path() == config_dir / "profiles.toml"

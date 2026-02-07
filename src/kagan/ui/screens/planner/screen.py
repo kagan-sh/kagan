@@ -5,12 +5,11 @@ from __future__ import annotations
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from textual import events, on
+from textual import events, getters, on
 from textual.binding import Binding, BindingType
-from textual.containers import Vertical
+from textual.containers import Center, Vertical
 from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Footer, Static, TextArea
@@ -20,7 +19,7 @@ from kagan.agents.agent_factory import AgentFactory, create_agent
 from kagan.agents.planner import build_planner_prompt, parse_proposed_plan
 from kagan.agents.refiner import PromptRefiner
 from kagan.config import get_fallback_agent_config
-from kagan.constants import PLANNER_TITLE_MAX_LENGTH
+from kagan.constants import BOX_DRAWING, KAGAN_LOGO, PLANNER_TITLE_MAX_LENGTH
 from kagan.keybindings import PLANNER_BINDINGS
 from kagan.limits import AGENT_TIMEOUT
 from kagan.ui.screens.base import KaganScreen
@@ -34,8 +33,9 @@ from kagan.ui.screens.planner.state import (
     SlashCommand,
 )
 from kagan.ui.screens.task_editor import TaskEditorScreen
-from kagan.ui.widgets import EmptyState, StatusBar, StreamingOutput
+from kagan.ui.widgets import StatusBar, StreamingOutput
 from kagan.ui.widgets.header import KaganHeader
+from kagan.ui.widgets.offline_banner import OfflineBanner
 from kagan.ui.widgets.plan_approval import PlanApprovalWidget
 from kagan.ui.widgets.slash_complete import SlashComplete
 
@@ -47,6 +47,63 @@ if TYPE_CHECKING:
 
 MIN_INPUT_HEIGHT = 1
 MAX_INPUT_HEIGHT = 6
+
+# Example prompts for the empty state
+PLANNER_EXAMPLES = [
+    '"Add user authentication with OAuth2"',
+    '"Refactor the payment module for better testing"',
+    '"Fix the bug where users can\'t upload images"',
+]
+
+
+class PlannerEmptyState(Vertical):
+    """Empty state widget for planner screen with branded design."""
+
+    DEFAULT_CLASSES = "planner-empty-state"
+
+    def compose(self) -> ComposeResult:
+        """Compose the planner empty state layout."""
+        with Center():
+            with Vertical(classes="planner-empty-content"):
+                with Vertical(classes="planner-empty-card"):
+                    # Logo section
+                    with Center():
+                        yield Static(
+                            KAGAN_LOGO,
+                            id="planner-empty-logo",
+                            classes="planner-empty-logo",
+                        )
+
+                    # Heading with emoji
+                    yield Static(
+                        "🎯 Plan Your Work",
+                        id="planner-empty-heading",
+                        classes="planner-empty-heading",
+                    )
+
+                    # Description text
+                    yield Static(
+                        "Describe what you want to build or accomplish.\n"
+                        "Kagan will help break it down into actionable tasks.",
+                        id="planner-empty-description",
+                        classes="planner-empty-description",
+                    )
+
+                    # Examples section
+                    with Vertical(id="planner-empty-examples", classes="planner-empty-examples"):
+                        yield Static("Examples:", classes="planner-empty-section-title")
+                        for example in PLANNER_EXAMPLES:
+                            yield Static(
+                                f"  {BOX_DRAWING['BULLET']} {example}",
+                                classes="planner-empty-example",
+                            )
+
+                # Slash commands hint
+                yield Static(
+                    "Press / to access slash commands",
+                    id="planner-empty-commands",
+                    classes="planner-empty-commands",
+                )
 
 
 class PlannerInput(TextArea):
@@ -101,6 +158,7 @@ class PlannerScreen(KaganScreen):
     """Chat-first planner for creating tasks."""
 
     BINDINGS = PLANNER_BINDINGS
+    header = getters.query_one(KaganHeader)
 
     def __init__(self, agent_factory: AgentFactory = create_agent, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -124,25 +182,66 @@ class PlannerScreen(KaganScreen):
         yield KaganHeader()
         with Vertical(id="planner-container"):
             yield Static("Plan Mode", id="planner-header")
-            yield EmptyState()
+            yield PlannerEmptyState()
             yield StreamingOutput(id="planner-output")
             with Vertical(id="planner-bottom"):
                 yield StatusBar()
                 yield PlannerInput("", id="planner-input", show_line_numbers=False)
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     async def on_mount(self) -> None:
+        await self.sync_header_context(self.header)
+        from kagan.ui.widgets.header import _get_git_branch
+
+        if self.ctx.active_repo_id is None:
+            banner = OfflineBanner(message="Select a repository to start planning")
+            container = self.query_one("#planner-container", Vertical)
+            await container.mount(banner, before=0)
+            self._disable_input()
+            self._update_status("offline", "No repository selected")
+            await self._discard_persistent_state(self.kagan_app.planner_state)
+            return
+
+        branch = await _get_git_branch(self.kagan_app.project_root)
+        self.header.update_branch(branch)
+        # Check agent health first - planner requires an active agent
+        if not self.ctx.agent_health.is_available():
+            message = self.ctx.agent_health.get_status_message()
+            banner = OfflineBanner(message=message or "Planner requires an active agent")
+            container = self.query_one("#planner-container", Vertical)
+            await container.mount(banner, before=0)
+            self._disable_input()
+            self._update_status("offline", "Agent unavailable")
+            return
+
         self._update_status("initializing", "Initializing agent...")
         self._disable_input()
 
-        # Restore session state if available
+        # Restore session state if available (only if it matches current repo context)
         persistent_state = self.kagan_app.planner_state
-        if persistent_state is not None:
+        if persistent_state is not None and self._is_persistent_state_compatible(persistent_state):
             await self._restore_state(persistent_state)
         else:
+            await self._discard_persistent_state(persistent_state)
             await self._start_planner()
 
         self._focus_input()
+
+    @on(OfflineBanner.Retry)
+    async def on_offline_banner_retry(self, event: OfflineBanner.Retry) -> None:
+        """Handle retry from offline banner - refresh agent health check."""
+        self.ctx.agent_health.refresh()
+        if self.ctx.agent_health.is_available():
+            # Remove the banner
+            for banner in self.query(OfflineBanner):
+                await banner.remove()
+            # Start the planner
+            self._update_status("initializing", "Initializing agent...")
+            await self._start_planner()
+            self._focus_input()
+            self.notify("Agent is now available", severity="information")
+        else:
+            self.notify("Agent still unavailable", severity="warning")
 
     async def _restore_state(self, persistent: PersistentPlannerState) -> None:
         """Restore state from a previous session."""
@@ -196,11 +295,25 @@ class PlannerScreen(KaganScreen):
         if agent_config is None:
             agent_config = get_fallback_agent_config()
 
-        agent = self._agent_factory(Path.cwd(), agent_config, read_only=True)
+        agent = self._agent_factory(self.kagan_app.project_root, agent_config, read_only=True)
         agent.set_auto_approve(config.general.auto_approve)
         agent.start(self)
 
         self._state.agent = agent
+
+    def _is_persistent_state_compatible(self, state: PersistentPlannerState) -> bool:
+        if state.active_repo_id != self.ctx.active_repo_id:
+            return False
+        return state.project_root == str(self.kagan_app.project_root)
+
+    async def _discard_persistent_state(self, state: PersistentPlannerState | None) -> None:
+        if state is None:
+            return
+        if state.agent:
+            await state.agent.stop()
+        if state.refiner:
+            await state.refiner.stop()
+        self.kagan_app.planner_state = None
 
     def _get_output(self) -> StreamingOutput:
         return self.query_one("#planner-output", StreamingOutput)
@@ -209,7 +322,7 @@ class PlannerScreen(KaganScreen):
         if not self._state.has_output:
             self._state.has_output = True
             with suppress(NoMatches):
-                self.query_one(EmptyState).add_class("hidden")
+                self.query_one(PlannerEmptyState).add_class("hidden")
             with suppress(NoMatches):
                 self._get_output().add_class("visible")
 
@@ -560,7 +673,7 @@ class PlannerScreen(KaganScreen):
             planner_input.clear()
             await self._hide_slash_complete()
 
-    async def _execute_clear(self) -> None:
+    async def _execute_clear(self, *, notify: bool = True) -> None:
         """Reset planner session completely."""
         self._state.accumulated_response.clear()
         self._state.conversation_history.clear()
@@ -578,7 +691,14 @@ class PlannerScreen(KaganScreen):
 
         self.kagan_app.planner_state = None
         await self._start_planner()
-        self.notify("Conversation cleared")
+        if notify:
+            self.notify("Conversation cleared")
+
+    async def reset_for_repo_change(self) -> None:
+        """Reset planner state when the active repo changes."""
+        with suppress(NoMatches):
+            self.query_one(OfflineBanner).remove()
+        await self._execute_clear(notify=False)
 
     async def _execute_help(self) -> None:
         help_text = "**Available Commands:**\n"
@@ -648,7 +768,9 @@ class PlannerScreen(KaganScreen):
                 agent_config = config.get_worker_agent()
                 if agent_config is None:
                     agent_config = get_fallback_agent_config()
-                self._state.refiner = PromptRefiner(Path.cwd(), agent_config, self._agent_factory)
+                self._state.refiner = PromptRefiner(
+                    self.kagan_app.project_root, agent_config, self._agent_factory
+                )
 
             refined = await self._state.refiner.refine(text)
 
@@ -707,6 +829,8 @@ class PlannerScreen(KaganScreen):
             conversation_history=self._state.conversation_history,
             pending_plan=self._state.pending_plan,
             input_text=input_text,
+            active_repo_id=self.ctx.active_repo_id,
+            project_root=str(self.kagan_app.project_root),
             agent=self._state.agent,
             refiner=self._state.refiner,
             is_running=self._state.agent is not None,

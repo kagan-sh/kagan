@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
     from textual.app import ComposeResult
 
+# Visual separator for header sections
+HEADER_SEPARATOR = "│"
+
 
 def _get_version() -> str:
     """Get package version, fallback to dev."""
@@ -48,36 +51,116 @@ async def _get_git_branch(repo_root: Path) -> str:
 
 
 class KaganHeader(Widget):
-    """Header widget displaying app logo, title, version, and stats."""
+    """Header widget displaying logo, project, repo, git branch, and stats.
+
+    Layout (with separators):
+    ┃ ᘚᘛ  my-project / api │ ⎇ main │ ● 2 active │ 📋 12 tasks │ ? help ┃
+    """
 
     task_count: reactive[int] = reactive(0)
     active_sessions: reactive[int] = reactive(0)
     git_branch: reactive[str] = reactive("")
+    project_name: reactive[str] = reactive("")
+    repo_name: reactive[str] = reactive("")
 
     def __init__(self, task_count: int = 0, **kwargs) -> None:
         super().__init__(**kwargs)
         self.task_count = task_count
 
     def compose(self) -> ComposeResult:
+        # Left section: Logo and project name
         yield Label(KAGAN_LOGO_SMALL, classes="header-logo")
-        yield Label("KAGAN", classes="header-title")
-        yield Label(f"v{_get_version()}", classes="header-version")
+        yield Label("", id="header-project", classes="header-title")
+        yield Label("", id="header-repo", classes="header-repo")
+
+        # Spacer pushes stats to the right
         yield Label("", classes="header-spacer")
+
+        # Stats section with separators: branch | active | tasks | help
         yield Label("", id="header-branch", classes="header-branch")
+        yield Label(HEADER_SEPARATOR, id="sep-branch", classes="header-branch")
         yield Label("", id="header-sessions", classes="header-sessions")
-        yield Label(f"Tasks: {self.task_count}", id="header-stats", classes="header-stats")
+        yield Label(HEADER_SEPARATOR, id="sep-sessions", classes="header-branch")
+        yield Label("", id="header-stats", classes="header-stats")
+        yield Label(HEADER_SEPARATOR, id="sep-stats", classes="header-branch")
+        yield Label("? help", id="header-help", classes="header-branch")
+
+    def on_mount(self) -> None:
+        """Initialize display state on mount."""
+        self._update_project_display()
+        self._update_repo_display()
+        self._update_branch_display()
+        self._update_sessions_display()
+        self._update_stats_display()
+
+    def _update_project_display(self) -> None:
+        """Update project name label."""
+        if project_label := safe_query_one(self, "#header-project", Label):
+            display_name = self.project_name if self.project_name else "KAGAN"
+            project_label.update(display_name)
+
+    def _update_branch_display(self) -> None:
+        """Update git branch label and separator visibility."""
+        branch_label = safe_query_one(self, "#header-branch", Label)
+        sep_branch = safe_query_one(self, "#sep-branch", Label)
+        if branch_label:
+            if self.git_branch:
+                branch_label.update(f"⎇ {self.git_branch}")
+                branch_label.display = True
+                if sep_branch:
+                    sep_branch.display = True
+            else:
+                branch_label.update("")
+                branch_label.display = False
+                if sep_branch:
+                    sep_branch.display = False
+
+    def _update_repo_display(self) -> None:
+        """Update repo name label visibility."""
+        repo_label = safe_query_one(self, "#header-repo", Label)
+        if repo_label:
+            if self.repo_name:
+                repo_label.update(f" / {self.repo_name}")
+                repo_label.display = True
+            else:
+                repo_label.update("")
+                repo_label.display = False
+
+    def _update_sessions_display(self) -> None:
+        """Update active sessions label and separator visibility."""
+        sessions_label = safe_query_one(self, "#header-sessions", Label)
+        sep_sessions = safe_query_one(self, "#sep-sessions", Label)
+        if sessions_label:
+            if self.active_sessions > 0:
+                sessions_label.update(f"● {self.active_sessions} active")
+                sessions_label.display = True
+                if sep_sessions:
+                    sep_sessions.display = True
+            else:
+                sessions_label.update("")
+                sessions_label.display = False
+                if sep_sessions:
+                    sep_sessions.display = False
+
+    def _update_stats_display(self) -> None:
+        """Update task count label."""
+        if stats_label := safe_query_one(self, "#header-stats", Label):
+            stats_label.update(f"📋 {self.task_count} tasks")
 
     def watch_task_count(self, count: int) -> None:
-        if stats_label := safe_query_one(self, "#header-stats", Label):
-            stats_label.update(f"Tasks: {count}")
+        self._update_stats_display()
 
     def watch_active_sessions(self, count: int) -> None:
-        if sessions_label := safe_query_one(self, "#header-sessions", Label):
-            sessions_label.update(f"Sessions: {count}")
+        self._update_sessions_display()
 
     def watch_git_branch(self, branch: str) -> None:
-        if branch_label := safe_query_one(self, "#header-branch", Label):
-            branch_label.update(f"⎇ {branch}" if branch else "")
+        self._update_branch_display()
+
+    def watch_project_name(self, name: str) -> None:
+        self._update_project_display()
+
+    def watch_repo_name(self, name: str) -> None:
+        self._update_repo_display()
 
     def update_count(self, count: int) -> None:
         self.task_count = count
@@ -87,3 +170,11 @@ class KaganHeader(Widget):
 
     def update_branch(self, branch: str) -> None:
         self.git_branch = branch
+
+    def update_project(self, name: str) -> None:
+        """Update the displayed project name."""
+        self.project_name = name
+
+    def update_repo(self, name: str) -> None:
+        """Update the displayed repo name."""
+        self.repo_name = name

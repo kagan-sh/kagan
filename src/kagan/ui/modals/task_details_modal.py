@@ -141,7 +141,7 @@ class TaskDetailsModal(ModalScreen[ModalAction | TaskUpdateDict | None]):
             # Buttons
             yield from self._compose_buttons()
 
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def _compose_badge_row(self) -> ComposeResult:
         """Compose the badge row for view mode."""
@@ -357,7 +357,7 @@ class TaskDetailsModal(ModalScreen[ModalAction | TaskUpdateDict | None]):
             yield Button("[d] Delete", variant="error", id="delete-btn")
 
         with Horizontal(classes="button-row edit-fields", id="edit-buttons"):
-            yield Button("[Ctrl+S] Save", variant="primary", id="save-btn")
+            yield Button("[F2] Save", variant="primary", id="save-btn")
             yield Button("[Esc] Cancel", id="cancel-btn")
 
     def watch_editing(self, editing: bool) -> None:
@@ -391,6 +391,8 @@ class TaskDetailsModal(ModalScreen[ModalAction | TaskUpdateDict | None]):
             return not self.editing
         if action == "full_editor":
             # Show 'F5 Full Editor' only in edit mode
+            return self.editing
+        if action == "save":
             return self.editing
         return True
 

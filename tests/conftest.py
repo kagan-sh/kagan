@@ -85,6 +85,8 @@ async def state_manager():
         db_path = Path(tmpdir) / "test.db"
         manager = TaskRepository(db_path)
         await manager.initialize()
+        # Explicitly create test project for tests that need it
+        await manager.ensure_test_project("Test Project")
         yield manager
         await manager.close()
 
@@ -230,15 +232,23 @@ def mock_process():
 
 async def _create_e2e_app_with_tasks(e2e_project, tasks: list[dict]) -> KaganApp:
     """Helper to create a KaganApp with pre-populated tasks."""
-    from kagan.adapters.db.repositories import TaskRepository
+    from kagan.adapters.db.repositories import RepoRepository, TaskRepository
     from kagan.adapters.db.schema import Task
     from kagan.app import KaganApp
 
-    manager = TaskRepository(e2e_project.db)
+    manager = TaskRepository(e2e_project.db, project_root=e2e_project.root)
     await manager.initialize()
-    project_id = manager.default_project_id
-    if project_id is None:
-        raise RuntimeError("TaskRepository defaults not initialized")
+
+    # Explicitly create test project and link repo
+    project_id = await manager.ensure_test_project("E2E Test Project")
+
+    # Link repo to project so _startup_screen_decision finds it
+    assert manager._session_factory is not None
+    repo_repo = RepoRepository(manager._session_factory)
+    repo, _ = await repo_repo.get_or_create(e2e_project.root, default_branch="main")
+    if repo.id:
+        await repo_repo.add_to_project(project_id, repo.id, is_primary=True)
+
     for task_kwargs in tasks:
         task = Task.create(
             project_id=project_id,
@@ -249,7 +259,6 @@ async def _create_e2e_app_with_tasks(e2e_project, tasks: list[dict]) -> KaganApp
     return KaganApp(
         db_path=e2e_project.db,
         config_path=e2e_project.config,
-        lock_path=None,
         project_root=e2e_project.root,
     )
 
@@ -378,7 +387,6 @@ async def e2e_app(e2e_project):
     app = KaganApp(
         db_path=e2e_project.db,
         config_path=e2e_project.config,
-        lock_path=None,
         project_root=e2e_project.root,
     )
     return app

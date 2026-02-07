@@ -918,6 +918,11 @@ class AutomationServiceImpl:
         review_event = "Review passed" if checks_passed else f"Review failed: {review_summary}"
         await self._tasks.append_event(task.id, "review", review_event[:200])
 
+        # Auto-merge if enabled and review passed
+        if checks_passed and self._config.general.auto_merge:
+            log.info(f"Auto-merge enabled, merging task {task.id}")
+            await self._auto_merge(task)
+
     async def _handle_blocked(self, task: TaskLike, reason: str) -> None:
         """Handle blocked task - move back to BACKLOG with reason."""
         scratchpad = await self._tasks.get_scratchpad(task.id)

@@ -49,7 +49,7 @@ class RejectionInputModal(ModalScreen[tuple[str, str] | None]):
                 yield Button("Stage", variant="default", id="stage-btn")
                 yield Button("Shelve", variant="error", id="shelve-btn")
 
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         """Focus the text area on mount."""

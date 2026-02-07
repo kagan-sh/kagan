@@ -6,18 +6,17 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from tests.helpers.git import init_git_repo_with_commit
-from tests.helpers.mocks import MockAgent
-from tests.helpers.wait import (
+from tests.snapshots.conftest import MockAgent
+from tests.snapshots.helpers import (
     type_text,
     wait_for_planner_ready,
     wait_for_screen,
+    wait_for_workers,
 )
 
-from kagan.acp import messages
 from kagan.app import KaganApp
 from kagan.ui.screens.planner import PlannerInput, PlannerScreen
 from kagan.ui.screens.repo_picker import RepoPickerScreen
-from kagan.ui.widgets import StatusBar, StreamingOutput
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -67,7 +66,8 @@ async def test_planner_uses_active_repo_context(
     config_path.write_text(
         """# Test config
 [general]
-auto_review = false
+auto_start = false
+auto_merge = false
 default_base_branch = "main"
 default_worker_agent = "claude"
 
@@ -110,11 +110,11 @@ active = true
         await wait_for_screen(pilot, PlannerScreen, timeout=10.0)
         await wait_for_planner_ready(pilot, timeout=10.0)
 
-        screen = cast("PlannerScreen", pilot.app.screen)
+        screen = cast(PlannerScreen, pilot.app.screen)
         screen.query_one(PlannerInput).focus()
         await type_text(pilot, "where")
         await pilot.press("enter")
-        await pilot.pause()
+        await wait_for_workers(pilot, timeout=10.0)
         await pilot.pause()
         assert str(repo_a) in _read_planner_output(screen)
 
@@ -125,76 +125,10 @@ active = true
         await wait_for_screen(pilot, PlannerScreen)
         await wait_for_planner_ready(pilot, timeout=10.0)
 
-        screen = cast("PlannerScreen", pilot.app.screen)
+        screen = cast(PlannerScreen, pilot.app.screen)
         screen.query_one(PlannerInput).focus()
         await type_text(pilot, "where")
         await pilot.press("enter")
-        await pilot.pause()
+        await wait_for_workers(pilot, timeout=10.0)
         await pilot.pause()
         assert str(repo_b) in _read_planner_output(screen)
-
-
-@pytest.mark.asyncio
-async def test_planner_sigterm_stream_end_is_not_rendered_as_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    await init_git_repo_with_commit(repo)
-
-    config_path = tmp_path / "config.toml"
-    config_path.write_text(
-        """# Test config
-[general]
-auto_review = false
-default_base_branch = "main"
-default_worker_agent = "claude"
-
-[agents.claude]
-identity = "claude.ai"
-name = "Claude"
-short_name = "claude"
-run_command."*" = "echo mock-claude"
-interactive_command."*" = "echo mock-claude-interactive"
-active = true
-"""
-    )
-
-    db_path = tmp_path / "kagan.db"
-    from kagan.adapters.db.repositories import RepoRepository, TaskRepository
-
-    task_repo = TaskRepository(db_path, project_root=repo)
-    await task_repo.initialize()
-    project_id = await task_repo.ensure_test_project("Planner SIGTERM")
-    assert task_repo._session_factory is not None
-    repo_repo = RepoRepository(task_repo._session_factory)
-    repo_row, _ = await repo_repo.get_or_create(repo, default_branch="main")
-    if repo_row.id:
-        await repo_repo.add_to_project(project_id, repo_row.id, is_primary=True)
-    await task_repo.close()
-
-    _mock_tmux(monkeypatch)
-
-    app = KaganApp(
-        db_path=str(db_path),
-        config_path=str(config_path),
-        project_root=repo,
-        agent_factory=RepoEchoAgentFactory(),
-    )
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        await wait_for_screen(pilot, PlannerScreen, timeout=10.0)
-        await wait_for_planner_ready(pilot, timeout=10.0)
-
-        screen = cast("PlannerScreen", pilot.app.screen)
-        screen.post_message(messages.AgentFail("Agent exited with code -15"))
-        await pilot.pause()
-        await pilot.pause()
-
-        rendered = screen.query_one("#planner-output", StreamingOutput).get_text_content()
-        status = screen.query_one("#planner-status-bar", StatusBar)
-        planner_input = screen.query_one(PlannerInput)
-        assert "Agent stream ended by cancellation (SIGTERM)." in rendered
-        assert "Error: Agent exited with code -15" not in rendered
-        assert status.status == "ready"
-        assert planner_input.disabled is False

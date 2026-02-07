@@ -52,7 +52,7 @@ class AgentSelectModal(ModalScreen[str | None]):
                 "Press Enter to select, Escape to cancel",
                 classes="install-modal-hint",
             )
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def action_select(self) -> None:
         """Select the chosen agent."""
@@ -103,7 +103,7 @@ class InstallModal(ModalScreen[bool]):
                 id="install-hint",
                 classes="install-modal-hint",
             )
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         """Hide spinner initially."""

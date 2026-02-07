@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Static
+from textual.widgets import Button, DirectoryTree, Input, Label, Static
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -31,6 +31,10 @@ class FolderPickerModal(ModalScreen[str | None]):
                     classes="hint",
                 )
 
+            with Vertical(classes="field"):
+                yield Label("Browse", classes="field-label")
+                yield DirectoryTree(Path.home(), id="folder-tree")
+
             with Horizontal(id="dialog-actions"):
                 yield Button("Cancel", id="btn-cancel")
                 yield Button("Open", id="btn-open", variant="primary")
@@ -38,6 +42,10 @@ class FolderPickerModal(ModalScreen[str | None]):
     async def on_mount(self) -> None:
         """Focus the input on mount."""
         self.query_one("#path-input", Input).focus()
+
+    def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
+        """Update the input when a directory is selected in the tree."""
+        self.query_one("#path-input", Input).value = str(event.path)
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""

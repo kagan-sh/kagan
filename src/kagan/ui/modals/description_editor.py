@@ -37,7 +37,7 @@ class DescriptionEditorModal(ModalScreen[str | None]):
             with Horizontal(id="description-editor-header"):
                 yield Label(self.modal_title, id="editor-title")
                 yield Static("", id="header-spacer")
-                yield Static("[Esc] Cancel | [Ctrl+S] Save", id="editor-hint")
+                yield Static("[Esc] Cancel | [F2] Save", id="editor-hint")
 
             yield TextArea(
                 self.description,
@@ -51,7 +51,7 @@ class DescriptionEditorModal(ModalScreen[str | None]):
                 yield Static("", id="status-spacer")
                 yield Static("", id="line-count")
 
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
         """Focus the textarea on mount and update status."""

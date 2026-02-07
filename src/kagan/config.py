@@ -40,7 +40,7 @@ class RefinementConfig(BaseModel):
     """Configuration for prompt refinement."""
 
     enabled: bool = Field(default=True, description="Enable prompt refinement feature")
-    hotkey: str = Field(default="ctrl+e", description="Hotkey to trigger refinement")
+    hotkey: str = Field(default="f2", description="Hotkey to trigger refinement")
     skip_length_under: int = Field(default=20, description="Skip refinement for short inputs")
     skip_prefixes: list[str] = Field(
         default_factory=lambda: ["/", "!", "?"],

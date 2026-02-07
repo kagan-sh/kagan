@@ -89,15 +89,15 @@ When you reject work from REVIEW, you have three options:
 ```
 REVIEW task rejected:
 ├── Enter (Retry) → IN_PROGRESS + agent auto-restarts + iterations reset
-├── Ctrl+S (Stage) → IN_PROGRESS + agent paused + iterations reset
+├── F2 (Stage) → IN_PROGRESS + agent paused + iterations reset
 └── Esc (Shelve) → BACKLOG + iterations preserved
 ```
 
-| Key      | Action     | Result                                                         |
-| -------- | ---------- | -------------------------------------------------------------- |
-| `Enter`  | **Retry**  | Task stays IN_PROGRESS, agent auto-restarts with your feedback |
-| `Ctrl+S` | **Stage**  | Task stays IN_PROGRESS but paused - restart manually with `a`  |
-| `Esc`    | **Shelve** | Task goes to BACKLOG for later                                 |
+| Key     | Action     | Result                                                         |
+| ------- | ---------- | -------------------------------------------------------------- |
+| `Enter` | **Retry**  | Task stays IN_PROGRESS, agent auto-restarts with your feedback |
+| `F2`    | **Stage**  | Task stays IN_PROGRESS but paused - restart manually with `a`  |
+| `Esc`   | **Shelve** | Task goes to BACKLOG for later                                 |
 
 The **Retry** action is the most common - it immediately restarts the agent with your rejection feedback, resetting the iteration counter for a fresh attempt.
 
@@ -212,10 +212,11 @@ max_concurrent_agents = 2
 
 Mode-specific shortcuts at a glance:
 
-| Key     | AUTO Mode   | PAIR Mode     |
-| ------- | ----------- | ------------- |
-| `a`     | Start agent | -             |
-| `Enter` | Watch agent | Open terminal |
+| Key     | AUTO Mode    | PAIR Mode     |
+| ------- | ------------ | ------------- |
+| `a`     | Start agent  | -             |
+| `Enter` | Watch agent  | Open terminal |
+| `w`     | Watch output | -             |
 
 > **[Full Keyboard Reference →](keybindings.md)** — Complete list of all shortcuts including the rejection modal options (Retry/Stage/Shelve).
 

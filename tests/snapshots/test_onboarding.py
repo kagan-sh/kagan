@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 
 class TestOnboardingFlow:
+    """Snapshot tests for first-boot onboarding flow."""
+
     @pytest.mark.snapshot
     def test_onboarding_initial_screen(
         self,
@@ -32,6 +34,7 @@ class TestOnboardingFlow:
         class OnboardingTestApp(App):
             """Test app that pushes OnboardingScreen on mount."""
 
+            # Use the global kagan stylesheet
             CSS_PATH = str(importlib.resources.files("kagan").joinpath("styles/kagan.tcss"))
 
             async def on_mount(self) -> None:
@@ -42,7 +45,7 @@ class TestOnboardingFlow:
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-
+            # Verify OnboardingScreen is mounted
             assert isinstance(pilot.app.screen, OnboardingScreen)
             await pilot.pause()
 

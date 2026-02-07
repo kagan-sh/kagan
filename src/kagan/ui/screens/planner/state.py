@@ -197,6 +197,8 @@ class PersistentPlannerState:
     conversation_history: list[ChatMessage]
     pending_plan: list[Task] | None
     input_text: str
+    active_repo_id: str | None
+    project_root: str
     agent: Agent | None = None
     refiner: PromptRefiner | None = None
     is_running: bool = False

@@ -29,6 +29,7 @@ from kagan.core.events import (
     MergeCompleted,
     MergeFailed,
     PRCreated,
+    ProjectOpened,
     ScriptCompleted,
     TaskCreated,
     TaskStatusChanged,
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
     from textual.signal import Signal
 
     from kagan.agents.agent_factory import AgentFactory
+    from kagan.services.agent_health import AgentHealthService
     from kagan.services.automation import AutomationService
     from kagan.services.diffs import DiffService
     from kagan.services.executions import ExecutionService
@@ -237,9 +239,11 @@ class AppContext:
     repo_script_service: RepoScriptService = field(init=False)
     automation_service: AutomationService = field(init=False)
     project_service: ProjectService = field(init=False)
+    agent_health: AgentHealthService = field(init=False)
 
     # Active project tracking
     active_project_id: str | None = None
+    active_repo_id: str | None = None
 
     async def close(self) -> None:
         """Clean up all resources."""
@@ -374,6 +378,12 @@ async def create_app_context(
     )
     await task_repo.initialize()
 
+    def _set_default_project(event: DomainEvent) -> None:
+        if isinstance(event, ProjectOpened):
+            task_repo.set_default_project_id(event.project_id)
+
+    event_bus.add_handler(_set_default_project, ProjectOpened)
+
     # Get session factory from task_repo for project service
     # After initialize(), session_factory is guaranteed to be set
     session_factory = task_repo._session_factory
@@ -428,6 +438,11 @@ async def create_app_context(
         ctx.workspace_service,
         event_bus,
     )
+
+    # Initialize agent health service
+    from kagan.services.agent_health import AgentHealthServiceImpl
+
+    ctx.agent_health = AgentHealthServiceImpl(config)
 
     return ctx
 

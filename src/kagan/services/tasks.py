@@ -230,9 +230,9 @@ class TaskServiceImpl:
         from kagan.core.models.entities import Task as DomainTask
 
         if status:
-            tasks = await self._repo.get_by_status(status)
+            tasks = await self._repo.get_by_status(status, project_id=project_id)
         else:
-            tasks = await self._repo.get_all()
+            tasks = await self._repo.get_all(project_id=project_id)
         return [DomainTask.model_validate(task) for task in tasks]
 
     async def delete_task(self, task_id: TaskId) -> bool:

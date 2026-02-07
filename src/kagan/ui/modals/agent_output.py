@@ -97,23 +97,23 @@ class AgentOutputModal(ModalScreen[None]):
 
             yield Rule()
 
-            # Different hint based on mode
+            # Different hint based on mode - use abbreviated forms to prevent truncation
             if self._is_reviewing:
                 yield Label(
-                    "[Esc] Close (review continues in background)",
+                    "Esc close (review continues)",
                     classes="modal-hint",
                 )
                 with Horizontal(classes="button-row"):
                     yield Button("Close", id="close-btn")
             else:
                 yield Label(
-                    "[c] Cancel (stops + moves to Backlog)  [Esc] Close (agent continues)",
+                    "c cancel │ Esc close (agent continues) │ y copy",
                     classes="modal-hint",
                 )
                 with Horizontal(classes="button-row"):
                     yield Button("Cancel Agent", variant="error", id="cancel-btn")
                     yield Button("Close", id="close-btn")
-        yield Footer()
+        yield Footer(show_command_palette=False)
 
     async def on_mount(self) -> None:
         """Set up agent connections and load historical logs."""

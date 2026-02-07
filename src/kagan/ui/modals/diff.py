@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Label, RichLog, Static, TabbedContent, TabPane
+from textual.widgets import Button, Footer, Label, RichLog, Rule, Static, TabbedContent, TabPane
 
 from kagan.keybindings import DIFF_BINDINGS
 from kagan.ui.utils.clipboard import copy_with_notification
@@ -58,12 +58,23 @@ class DiffModal(ModalScreen[str | None]):
                             yield from self._render_repo_diff(diff)
             else:
                 yield RichLog(id="diff-log", wrap=True, highlight=True)
-            yield Button("Close", variant="primary", id="close-btn")
-        yield Footer()
+            yield Rule()
+            with Horizontal(classes="button-row"):
+                yield Button("Close", variant="primary", id="close-btn")
+        yield Footer(show_command_palette=False)
 
     def on_mount(self) -> None:
+        # Style button row for center alignment (match other modals)
+        button_row = self.query_one(".button-row", Horizontal)
+        button_row.styles.width = "100%"
+        button_row.styles.height = "auto"
+        button_row.styles.align = ("center", "middle")
+        button_row.styles.padding = (1, 0, 0, 0)
+
         if not self._diffs:
             log = self.query_one("#diff-log", RichLog)
+            # Remove border to avoid double-border effect (container already has border)
+            log.styles.border = ("none", "transparent")
             for line in self._diff_text.splitlines() or ["(No diff available)"]:
                 log.write(line)
 

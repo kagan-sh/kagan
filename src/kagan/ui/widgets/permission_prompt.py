@@ -52,9 +52,9 @@ class PermissionPrompt(VerticalGroup):
         yield Static("⚠️ Permission Required", classes="permission-header")
         yield Static(f"Tool: {self.title}", classes="permission-tool")
         with Horizontal(classes="permission-buttons"):
-            yield Button("[y] Allow once", id="btn-allow-once", variant="success")
-            yield Button("[a] Allow always", id="btn-allow-always", variant="warning")
-            yield Button("[n] Deny", id="btn-deny", variant="error")
+            yield Button("[Enter] Allow once", id="btn-allow-once", variant="success")
+            yield Button("[A] Allow always", id="btn-allow-always", variant="warning")
+            yield Button("[Esc] Deny", id="btn-deny", variant="error")
         yield Static(self._format_timer(), id="perm-timer", classes="permission-timer")
 
     def on_mount(self) -> None:

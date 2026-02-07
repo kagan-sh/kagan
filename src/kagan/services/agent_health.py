@@ -15,11 +15,8 @@ class AgentHealthService(Protocol):
     """Protocol for agent health checking."""
 
     def check_status(self) -> AgentStatus: ...
-
     def get_status_message(self) -> str | None: ...
-
     def is_available(self) -> bool: ...
-
     def refresh(self) -> None: ...
 
 
@@ -35,7 +32,7 @@ class AgentHealthServiceImpl:
     def _check_agent(self) -> None:
         """Check if agent CLI exists."""
         agent_name = self._config.general.default_worker_agent
-
+        # Check common agent CLIs
         cli_names: dict[str, list[str]] = {
             "claude": ["claude"],
             "opencode": ["opencode"],

@@ -20,6 +20,23 @@ if TYPE_CHECKING:
     from kagan.core.models.entities import Task
 
 
+def _get_status_dot(count: int, has_active: bool) -> str:
+    """Get status indicator dot based on task count and activity.
+
+    - ● = Column is full (>= 8 items) or has active work (running agents)
+    - ◐ = Column is filling up (5-7 items)
+    - ○ = Column has capacity (< 5 items)
+    """
+    if has_active:
+        return "●"  # Active agents running
+    elif count >= 8:
+        return "●"  # Full
+    elif count >= 5:
+        return "◐"  # Filling up
+    else:
+        return "○"  # Has capacity
+
+
 class _NSLabel(Label):
     ALLOW_SELECT = False
     can_focus = False
@@ -50,12 +67,14 @@ class KanbanColumn(Widget):
         super().__init__(id=f"column-{status.value.lower()}", **kwargs)
         self.status = status
         self._tasks: list[Task] = tasks or []
+        self._has_active_agents: bool = False
 
     def compose(self) -> ComposeResult:
+        status_dot = _get_status_dot(len(self._tasks), self._has_active_agents)
         with _NSVertical():
             with _NSVertical(classes="column-header"):
                 yield _NSLabel(
-                    f"{STATUS_LABELS[self.status]} ({len(self._tasks)})",
+                    f"{status_dot} {STATUS_LABELS[self.status]} ({len(self._tasks)})",
                     id=f"header-{self.status.value.lower()}",
                     classes="column-header-text",
                 )
@@ -100,7 +119,8 @@ class KanbanColumn(Widget):
         # Update header count
         try:
             header = self.query_one(f"#header-{self.status.value.lower()}", _NSLabel)
-            header.update(f"{STATUS_LABELS[self.status]} ({len(new_tasks)})")
+            status_dot = _get_status_dot(len(new_tasks), self._has_active_agents)
+            header.update(f"{status_dot} {STATUS_LABELS[self.status]} ({len(new_tasks)})")
         except NoMatches:
             pass
 
@@ -152,6 +172,23 @@ class KanbanColumn(Widget):
 
     def update_active_states(self, active_ids: set[str]) -> None:
         """Update active agent state for all cards in this column."""
+        # Track whether this column has any active agents
+        had_active = self._has_active_agents
+        self._has_active_agents = any(
+            card.task_model is not None and card.task_model.id in active_ids
+            for card in self.query(TaskCard)
+        )
+
+        # Update header if active state changed (affects status dot)
+        if had_active != self._has_active_agents:
+            try:
+                header = self.query_one(f"#header-{self.status.value.lower()}", _NSLabel)
+                status_dot = _get_status_dot(len(self._tasks), self._has_active_agents)
+                header.update(f"{status_dot} {STATUS_LABELS[self.status]} ({len(self._tasks)})")
+            except NoMatches:
+                pass
+
+        # Update individual card states
         for card in self.query(TaskCard):
             if card.task_model is not None:
                 card.is_agent_active = card.task_model.id in active_ids

@@ -6,16 +6,16 @@ for all or a subset of repos, with per-repo diffs and merges.
 ## Create A Project
 
 1. Launch Kagan.
-2. From the welcome screen, choose **New Project**.
-3. Enter a project name and add repository paths.
-4. Mark a primary repo (first repo is primary by default).
+1. From the welcome screen, choose **New Project**.
+1. Enter a project name and add repository paths.
+1. Mark a primary repo (first repo is primary by default).
 
 ## Start A Workspace
 
 1. Open a task card.
-2. Choose **Start Workspace**.
-3. Select the repos to include for this task.
-4. Kagan creates worktrees for the selected repos under the workspace directory.
+1. Choose **Start Workspace**.
+1. Select the repos to include for this task.
+1. Kagan creates worktrees for the selected repos under the workspace directory.
 
 ## View Diffs And Merge
 
