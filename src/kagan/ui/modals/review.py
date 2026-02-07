@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Literal
 from textual import on
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Footer, Label, RichLog, Rule, Static
+from textual.widgets import Button, Footer, Label, LoadingIndicator, RichLog, Rule, Static
 
 from kagan.acp import messages
-from kagan.acp.agent import Agent
+from kagan.agents.agent_factory import AgentFactory, create_agent
 from kagan.constants import DIFF_MAX_LENGTH, MODAL_TITLE_MAX_LENGTH
 from kagan.keybindings import REVIEW_BINDINGS
 from kagan.limits import AGENT_TIMEOUT
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.timer import Timer
 
+    from kagan.acp.agent import Agent
     from kagan.agents.worktree import WorktreeManager
     from kagan.config import AgentConfig
     from kagan.database.models import Ticket
@@ -48,6 +49,7 @@ class ReviewModal(ModalScreen[str | None]):
         worktree_manager: WorktreeManager,
         agent_config: AgentConfig,
         base_branch: str = "main",
+        agent_factory: AgentFactory = create_agent,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -55,9 +57,12 @@ class ReviewModal(ModalScreen[str | None]):
         self._worktree = worktree_manager
         self._agent_config = agent_config
         self._base_branch = base_branch
+        self._agent_factory = agent_factory
         self._agent: Agent | None = None
         self._phase: ReviewPhase = "idle"
         self._diff_stats: str = ""
+        self._no_changes: bool = False
+        self._approve_after_complete: bool = False
         self._anim_timer: Timer | None = None
         self._anim_frame: int = 0
         self._prompt_task: asyncio.Task[None] | None = None
@@ -69,23 +74,25 @@ class ReviewModal(ModalScreen[str | None]):
             )
             yield Rule()
 
-            with Vertical(id="commits-section"):
+            yield LoadingIndicator(id="review-loading", classes="review-loading")
+
+            with Vertical(id="commits-section", classes="hidden"):
                 yield Label("Commits", classes="section-title")
                 yield RichLog(id="commits-log", wrap=True, markup=True)
 
-            with Vertical(id="diff-section"):
+            with Vertical(id="diff-section", classes="hidden"):
                 yield Label("Changes", classes="section-title")
                 yield Static(id="diff-stats")
 
             yield Rule()
 
-            with Vertical(id="ai-review-section"):
+            with Vertical(id="ai-review-section", classes="hidden"):
                 with Horizontal(id="ai-review-header"):
                     yield Label("AI Review", classes="section-title")
                     yield Static("", classes="spacer")
                     yield Static("○ Ready", id="phase-badge", classes="phase-badge phase-idle")
                 with Horizontal(id="ai-review-controls"):
-                    yield Button("Generate Review", id="generate-btn", variant="primary")
+                    yield Button("Generate Review (g)", id="generate-btn", variant="primary")
                     yield Button("Cancel", id="cancel-btn", variant="warning", classes="hidden")
                     yield Button(
                         "↻ Regenerate", id="regenerate-btn", variant="default", classes="hidden"
@@ -94,16 +101,27 @@ class ReviewModal(ModalScreen[str | None]):
 
             yield Rule()
 
-            with Horizontal(classes="button-row"):
-                yield Button("Approve", variant="success", id="approve-btn")
-                yield Button("Reject", variant="error", id="reject-btn")
+            with Horizontal(classes="button-row hidden"):
+                yield Button("Approve (a)", variant="success", id="approve-btn")
+                yield Button("Reject (r)", variant="error", id="reject-btn")
 
         yield Footer()
 
     async def on_mount(self) -> None:
         """Load commits and diff immediately."""
+        from kagan.debug_log import log
+
+        log.info(f"[ReviewModal] Opening for ticket {self.ticket.id[:8]}")
         commits = await self._worktree.get_commit_log(self.ticket.id, self._base_branch)
+
         diff_stats = await self._worktree.get_diff_stats(self.ticket.id, self._base_branch)
+
+        # Hide loading, show content
+        self.query_one("#review-loading", LoadingIndicator).display = False
+        self.query_one("#commits-section").remove_class("hidden")
+        self.query_one("#diff-section").remove_class("hidden")
+        self.query_one("#ai-review-section").remove_class("hidden")
+        self.query_one(".button-row").remove_class("hidden")
 
         log = self.query_one("#commits-log", RichLog)
         for commit in commits or ["[dim]No commits found[/dim]"]:
@@ -111,6 +129,18 @@ class ReviewModal(ModalScreen[str | None]):
 
         self.query_one("#diff-stats", Static).update(diff_stats or "[dim](No changes)[/dim]")
         self._diff_stats = diff_stats or ""
+        self._no_changes = not commits and not self._diff_stats
+
+        from kagan.debug_log import log as debug_log
+
+        debug_log.info(
+            f"[ReviewModal] Loaded {len(commits or [])} commits, "
+            f"diff_length={len(self._diff_stats)}"
+        )
+
+        if self._no_changes:
+            approve_btn = self.query_one("#approve-btn", Button)
+            approve_btn.label = "Close as Exploratory"
 
     def _set_phase(self, phase: ReviewPhase) -> None:
         """Update phase and UI state."""
@@ -182,6 +212,10 @@ class ReviewModal(ModalScreen[str | None]):
 
     async def action_generate_review(self) -> None:
         """Generate or regenerate AI review."""
+        from kagan.debug_log import log
+
+        log.info(f"[ReviewModal] Starting AI review (phase={self._phase})")
+
         if self._phase == "complete":
             await self.action_regenerate_review()
             return
@@ -212,6 +246,7 @@ class ReviewModal(ModalScreen[str | None]):
         if self._phase not in ("thinking", "streaming"):
             return
 
+        self._approve_after_complete = False
         if self._prompt_task and not self._prompt_task.done():
             self._prompt_task.cancel()
         if self._agent:
@@ -224,6 +259,8 @@ class ReviewModal(ModalScreen[str | None]):
 
     async def _generate_ai_review(self, output: StreamingOutput) -> None:
         """Spawn agent to generate code review."""
+        from kagan.debug_log import log
+
         wt_path = await self._worktree.get_path(self.ticket.id)
         if not wt_path:
             await output.post_note("Error: Worktree not found", classes="error")
@@ -236,10 +273,11 @@ class ReviewModal(ModalScreen[str | None]):
             self._set_phase("idle")
             return
 
-        self._agent = Agent(wt_path, self._agent_config, read_only=True)
+        self._agent = self._agent_factory(wt_path, self._agent_config, read_only=True)
         self._agent.start(self)
 
         await output.post_note("Analyzing changes...", classes="info")
+        log.info("[ReviewModal] Agent started, waiting for response")
 
         try:
             await self._agent.wait_ready(timeout=AGENT_TIMEOUT)
@@ -249,6 +287,20 @@ class ReviewModal(ModalScreen[str | None]):
             return
 
         review_prompt = f"""You are a Code Review Specialist providing feedback on changes.
+
+## Core Principles
+
+- Iterative refinement: inspect, re-check, then summarize.
+- Clarity & specificity: concise, unambiguous, actionable.
+- Learning by example: follow the example format below.
+- Structured reasoning: let's think step by step for complex changes.
+- Separate reasoning from the final summary.
+
+## Safety & Secrets
+
+Never access or request secrets/credentials/keys (e.g., `.env`, `.env.*`, `id_rsa`,
+`*.pem`, `*.key`, `credentials.json`). If a recommendation requires secrets, ask
+for redacted values or suggest safe mocks.
 
 ## Context
 
@@ -260,19 +312,42 @@ class ReviewModal(ModalScreen[str | None]):
 {diff[:DIFF_MAX_LENGTH]}
 ```
 
-## Review Focus
+## Output Format
 
-Evaluate the changes for:
-1. Code quality and adherence to best practices
-2. Potential bugs or logic errors
-3. Test coverage considerations
-4. Actionable suggestions for improvement
+Reasoning:
+- 2-5 brief steps that justify your assessment
 
-## Workflow
+Findings:
+- Specific issues or improvements (if any)
 
-First, identify what the changes accomplish.
-Then, note any issues or improvements.
-Finally, provide a concise summary with specific recommendations.
+Summary:
+- Concise recommendation(s)
+
+## Examples
+
+Example 1: Minor improvement needed
+Reasoning:
+- Validation was added, but the error message is vague.
+Findings:
+- Suggest clearer error copy for invalid input.
+Summary:
+- Solid change; improve error messaging clarity.
+
+Example 2: Potential bug
+Reasoning:
+- New logic uses `or` where `and` is required for all conditions.
+Findings:
+- This could bypass required validation in edge cases.
+Summary:
+- Fix boolean condition before shipping.
+
+Example 3: Missing tests
+Reasoning:
+- Feature adds a new branch with no coverage.
+Findings:
+- Add unit tests for the new branch behavior.
+Summary:
+- Add tests to cover new logic.
 
 Keep your review brief and actionable."""
 
@@ -308,7 +383,15 @@ Keep your review brief and actionable."""
     @on(messages.AgentComplete)
     async def on_agent_complete(self, _: messages.AgentComplete) -> None:
         """Handle agent completion."""
+        from kagan.debug_log import log
+
         self._set_phase("complete")
+
+        # If triggered by 'a' key, auto-approve
+        if self._approve_after_complete:
+            self._approve_after_complete = False
+            log.info("[ReviewModal] Auto-approving after AI review completion")
+            self.dismiss("approve")
 
     @on(messages.AgentFail)
     async def on_agent_fail(self, message: messages.AgentFail) -> None:
@@ -318,8 +401,16 @@ Keep your review brief and actionable."""
         self._set_phase("idle")
 
     def action_approve(self) -> None:
-        """Approve the review."""
-        self.dismiss("approve")
+        """Approve review - generates if not done yet."""
+        if self._phase == "idle" and not self._no_changes:
+            # No review generated yet, start agent first
+            self.notify("Starting AI review first...", severity="information")
+            self._approve_after_complete = True
+            self.run_worker(self.action_generate_review())
+        elif self._no_changes:
+            self.dismiss("exploratory")
+        else:
+            self.dismiss("approve")
 
     def action_reject(self) -> None:
         """Reject the review."""

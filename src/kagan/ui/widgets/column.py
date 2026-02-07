@@ -155,7 +155,17 @@ class KanbanColumn(Widget):
                 card.is_agent_active = card.ticket.id in active_ids
 
     def update_iterations(self, iterations: dict[str, str]) -> None:
-        """Update iteration display on cards."""
+        """Update iteration display on cards.
+
+        Only updates cards that are in the iterations dict.
+        To clear a card's iteration, pass an empty string for that ticket_id.
+        """
         for card in self.query(TicketCard):
-            if card.ticket:
-                card.iteration_info = iterations.get(card.ticket.id, "")
+            if card.ticket and card.ticket.id in iterations:
+                card.iteration_info = iterations[card.ticket.id]
+
+    def update_merge_readiness(self, readiness: dict[str, str]) -> None:
+        """Update merge readiness display on cards."""
+        for card in self.query(TicketCard):
+            if card.ticket and card.ticket.id in readiness:
+                card.merge_readiness = readiness[card.ticket.id]

@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from kagan.acp import messages  # noqa: TC001 - used in method signatures at runtime
-from kagan.agents.planner import parse_todos
 
 if TYPE_CHECKING:
     from kagan.ui.screens.planner.screen import PlannerScreen
@@ -46,18 +45,6 @@ class MessageHandler:
         self._show_output()
         self.state.accumulated_response.append(message.text)
         await self._get_output().post_response(message.text)
-
-        # Parse and update plan display (update in-place if exists)
-        if not self.state.todos_displayed:
-            full_response = "".join(self.state.accumulated_response)
-            todos = parse_todos(full_response)
-            if todos:
-                self.state.todos_displayed = True
-                output = self._get_output()
-                if output._plan_display is not None:
-                    output._plan_display.update_entries(todos)
-                else:
-                    await output.post_plan(todos)
 
     async def handle_thinking(self, message: messages.Thinking) -> None:
         """Handle thinking indicator from agent."""

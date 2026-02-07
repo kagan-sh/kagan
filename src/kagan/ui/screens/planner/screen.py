@@ -16,8 +16,8 @@ from textual.message import Message
 from textual.widgets import Footer, Static, TextArea
 
 from kagan.acp import messages
-from kagan.acp.agent import Agent
-from kagan.agents.planner import build_planner_prompt, parse_plan, parse_todos
+from kagan.agents.agent_factory import AgentFactory, create_agent
+from kagan.agents.planner import build_planner_prompt, parse_proposed_plan
 from kagan.agents.refiner import PromptRefiner
 from kagan.config import get_fallback_agent_config
 from kagan.constants import PLANNER_TITLE_MAX_LENGTH
@@ -102,10 +102,11 @@ class PlannerScreen(KaganScreen):
 
     BINDINGS = PLANNER_BINDINGS
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, agent_factory: AgentFactory = create_agent, **kwargs) -> None:
         super().__init__(**kwargs)
         self._state = PlannerState()
         self._message_handler = MessageHandler(self)
+        self._agent_factory = agent_factory
 
         # Agent-related state (not part of PlannerState to avoid circular issues)
         self._current_mode: str = ""
@@ -146,7 +147,11 @@ class PlannerScreen(KaganScreen):
     async def _restore_state(self, persistent: PersistentPlannerState) -> None:
         """Restore state from a previous session."""
         output = self._get_output()
-        self._show_output()
+
+        # Only show output if there's content to restore
+        has_content = bool(persistent.conversation_history or persistent.pending_plan)
+        if has_content:
+            self._show_output()
 
         # Restore conversation history
         self._state.conversation_history = list(persistent.conversation_history)
@@ -191,7 +196,7 @@ class PlannerScreen(KaganScreen):
         if agent_config is None:
             agent_config = get_fallback_agent_config()
 
-        agent = Agent(Path.cwd(), agent_config, read_only=True)
+        agent = self._agent_factory(Path.cwd(), agent_config, read_only=True)
         agent.set_auto_approve(config.general.auto_approve)
         agent.start(self)
 
@@ -291,20 +296,34 @@ class PlannerScreen(KaganScreen):
             await self._state.agent.wait_ready(timeout=AGENT_TIMEOUT)
             await self._state.agent.send_prompt(prompt)
 
+            tickets, todos, plan_error = parse_proposed_plan(self._state.agent.tool_calls)
+
             # Store assistant response
             if self._state.accumulated_response:
                 full_response = "".join(self._state.accumulated_response)
-                todos = parse_todos(full_response) if self._state.todos_displayed else None
                 self._state.conversation_history.append(
                     ChatMessage(
                         role="assistant",
                         content=full_response,
                         timestamp=datetime.now(),
+                        plan_tickets=tickets or None,
                         todos=todos,
                     )
                 )
 
-            await self._try_create_tickets()
+            output = self._get_output()
+            if todos and not self._state.todos_displayed:
+                self._state.todos_displayed = True
+                await output.post_plan(todos)
+
+            if plan_error:
+                await output.post_note(plan_error, classes="error")
+
+            if tickets:
+                # Set pending plan, then transition (transition preserves has_pending_plan)
+                self._state = self._state.with_pending_plan(tickets)
+                self._state = self._state.transition("plan_received")
+                await output.post_plan_approval(tickets)
         except Exception as e:
             await self._get_output().post_note(f"Error: {e}", classes="error")
             self._state = self._state.transition("error")
@@ -315,18 +334,6 @@ class PlannerScreen(KaganScreen):
                 self._enable_input()
 
         self._update_status("ready", "Press F1 for help")
-
-    async def _try_create_tickets(self) -> None:
-        if not self._state.accumulated_response:
-            return
-
-        full_response = "".join(self._state.accumulated_response)
-        tickets = parse_plan(full_response)
-        if tickets:
-            # Set pending plan, then transition (transition preserves has_pending_plan)
-            self._state = self._state.with_pending_plan(tickets)
-            self._state = self._state.transition("plan_received")
-            await self._get_output().post_plan_approval(tickets)
 
     # -------------------------------------------------------------------------
     # ACP Message Handlers (delegated to MessageHandler)
@@ -571,13 +578,11 @@ class PlannerScreen(KaganScreen):
 
         if self._state.accumulated_response:
             partial_content = "".join(self._state.accumulated_response) + "\n\n*[interrupted]*"
-            todos = parse_todos(partial_content) if self._state.todos_displayed else None
             self._state.conversation_history.append(
                 ChatMessage(
                     role="assistant",
                     content=partial_content,
                     timestamp=datetime.now(),
-                    todos=todos,
                 )
             )
 
@@ -624,7 +629,7 @@ class PlannerScreen(KaganScreen):
                 agent_config = config.get_worker_agent()
                 if agent_config is None:
                     agent_config = get_fallback_agent_config()
-                self._state.refiner = PromptRefiner(Path.cwd(), agent_config)
+                self._state.refiner = PromptRefiner(Path.cwd(), agent_config, self._agent_factory)
 
             refined = await self._state.refiner.refine(text)
 

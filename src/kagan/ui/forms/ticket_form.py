@@ -18,7 +18,6 @@ from kagan.database.models import (
     TicketStatus,
     TicketType,
 )
-from kagan.ui.utils import coerce_enum
 from kagan.ui.widgets.base import (
     AcceptanceCriteriaArea,
     AgentBackendSelect,
@@ -70,10 +69,8 @@ class TicketFormBuilder:
             return
 
         current_priority = ticket.priority if ticket else TicketPriority.MEDIUM
-        current_priority = coerce_enum(current_priority, TicketPriority)
 
         current_type = ticket.ticket_type if ticket else TicketType.PAIR
-        current_type = coerce_enum(current_type, TicketType)
 
         current_backend = ticket.agent_backend if ticket else ""
 
@@ -132,7 +129,7 @@ class TicketFormBuilder:
 
         # View mode: show static display
         yield Label("Title", classes="section-title view-only", id="title-section-label")
-        yield Static(title, classes="ticket-title view-only", id="title-display")
+        yield Static(title, classes="ticket-title view-only", id="title-display", markup=False)
 
         # Edit mode: show input
         with Vertical(classes="form-field edit-fields", id="title-field"):
@@ -163,7 +160,12 @@ class TicketFormBuilder:
             yield Static(expand_text, classes="expand-hint", id="expand-btn")
 
         # View mode display
-        yield Static(description, classes="ticket-description view-only", id="description-content")
+        yield Static(
+            description,
+            classes="ticket-description view-only",
+            id="description-content",
+            markup=False,
+        )
 
         # Edit mode input
         edit_text = ticket.description if ticket else ""

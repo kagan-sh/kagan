@@ -235,6 +235,46 @@ TicketCard.session-active.agent-active {
 }
 
 /* ============================================
+   REVIEW STATE INDICATORS
+   ============================================ */
+
+/* Review passed - green border */
+TicketCard.-review-passed {
+    border: solid $success;
+}
+
+TicketCard.-review-passed:focus {
+    border: solid $success;
+}
+
+/* Review failed - red border */
+TicketCard.-review-failed {
+    border: solid $error;
+}
+
+TicketCard.-review-failed:focus {
+    border: solid $error;
+}
+
+/* Review pending - yellow/warning border */
+TicketCard.-review-pending {
+    border: solid $warning;
+}
+
+TicketCard.-review-pending:focus {
+    border: solid $warning;
+}
+
+/* Merge failed - orange border (review passed but merge failed) */
+TicketCard.-review-merge-failed {
+    border: solid $warning;
+}
+
+TicketCard.-review-merge-failed:focus {
+    border: solid $warning;
+}
+
+/* ============================================
    CARD CONTENT STYLES
    ============================================ */
 
@@ -272,10 +312,22 @@ TicketCard .card-desc.low {
     color: $priority-low-text;
 }
 
+TicketCard .card-error {
+    width: 100%;
+    height: 1;
+    color: $error;
+}
+
+TicketCard .card-blocked {
+    width: 100%;
+    height: 1;
+    color: $warning;
+}
+
 TicketCard .card-meta {
     width: 100%;
     height: 1;
-    color: $text-muted;
+    color: $text-disabled;
 }
 
 TicketCard .card-review {
@@ -290,11 +342,41 @@ TicketCard .card-checks {
     color: $success;
 }
 
+/* Review state colors for checks line */
+TicketCard .card-checks.passed {
+    color: $success;
+}
+
+TicketCard .card-checks.failed {
+    color: $error;
+}
+
+TicketCard .card-checks.pending {
+    color: $warning;
+}
+
+TicketCard .card-readiness {
+    width: 100%;
+    height: 1;
+    color: $text-muted;
+}
+
+TicketCard .card-readiness.readiness-ready {
+    color: $success;
+}
+
+TicketCard .card-readiness.readiness-risk {
+    color: $warning;
+}
+
+TicketCard .card-readiness.readiness-blocked {
+    color: $error;
+}
+
 TicketCard .card-iteration {
     width: 100%;
     height: 1;
-    color: $warning;
-    text-style: bold;
+    color: $secondary;
 }
 
 /* =============================================================================
@@ -369,6 +451,11 @@ TicketDetailsModal .badge-type {
     color: $background;
 }
 
+.badge-model {
+    background: $accent;
+    color: $background;
+}
+
 TicketDetailsModal .section-title {
     text-style: bold;
     color: $text-muted;
@@ -436,12 +523,27 @@ TicketDetailsModal .review-status-row {
     margin-bottom: 1;
 }
 
+TicketDetailsModal .review-label {
+    padding-left: 2;
+    color: $text-muted;
+}
+
 TicketDetailsModal .review-summary-text {
     padding: 1;
     background: $surface;
     color: $text;
     width: 100%;
     height: auto;
+}
+
+TicketDetailsModal .merge-error-text {
+    padding: 1;
+    color: $error;
+}
+
+TicketDetailsModal .merge-help-text {
+    padding: 1;
+    color: $warning;
 }
 
 TicketDetailsModal .badge-checks-passed {
@@ -457,6 +559,43 @@ TicketDetailsModal .badge-checks-failed {
 TicketDetailsModal .badge-checks-pending {
     background: $warning;
     color: $warning-text;
+}
+
+TicketDetailsModal .badge-readiness-ready {
+    background: $success;
+    color: $success-text;
+}
+
+TicketDetailsModal .badge-readiness-risk {
+    background: $warning;
+    color: $warning-text;
+}
+
+TicketDetailsModal .badge-readiness-blocked {
+    background: $error;
+    color: $error-text;
+}
+
+TicketDetailsModal .parallel-work-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TicketDetailsModal #parallel-work-content {
+    color: $text;
+    padding: 1;
+}
+
+TicketDetailsModal .audit-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TicketDetailsModal #audit-content {
+    color: $text-muted;
+    padding: 1;
 }
 
 TicketDetailsModal .meta-row {
@@ -841,6 +980,7 @@ AgentOutputModal {
     background: $surface;
     border: thick $secondary;
     padding: 1 2;
+    overflow: hidden;
 }
 
 AgentOutputModal .modal-title {
@@ -863,6 +1003,8 @@ AgentOutputModal .modal-hint {
     text-align: center;
     color: $text-muted;
     padding-top: 1;
+    height: auto;
+    min-height: 1;
 }
 
 #agent-output {
@@ -881,6 +1023,39 @@ AgentOutputModal .button-row {
 
 AgentOutputModal .button-row Button {
     margin: 0 1;
+}
+
+/* Tabbed content takes remaining space, not unlimited */
+AgentOutputModal TabbedContent {
+    height: 1fr;
+    max-height: 100%;
+}
+
+AgentOutputModal TabbedContent > ContentSwitcher {
+    height: 1fr;
+}
+
+AgentOutputModal TabPane {
+    height: 1fr;
+}
+
+/* StreamingOutput inside tabs must be constrained */
+AgentOutputModal TabPane StreamingOutput {
+    height: 1fr;
+    max-height: 100%;
+}
+
+/* Specific output containers for implementation and review tabs */
+#implementation-output,
+#review-output {
+    height: 1fr;
+    max-height: 100%;
+    background: $background;
+    border: round $border;
+}
+
+AgentOutputModal > Vertical > Rule:last-of-type {
+    height: auto;
 }
 
 /* PlannerScreen styles */
@@ -907,9 +1082,7 @@ PlannerScreen {
 
 #planner-output {
     width: 100%;
-    height: auto;
-    min-height: 10;
-    max-height: 1fr;
+    height: 1fr;
     display: none;
 }
 
@@ -1020,7 +1193,8 @@ StatusBar {
 
 /* StatusBar in planner - positioned above input via planner-bottom container */
 #planner-bottom StatusBar {
-    /* No dock needed - stacks naturally in vertical container */
+    /* Match the input's width: account for input's border (1 cell each side) */
+    margin: 0 1;
 }
 
 .status-left {
@@ -1362,7 +1536,7 @@ ReviewModal .section-title {
     background: $background;
     border: round $border;
     height: auto;
-    max-height: 4;
+    min-height: 4;
 }
 
 /* AI Review section - expandable, takes remaining space */
@@ -1579,6 +1753,23 @@ SearchBar Input:focus {
     offset-y: 0;
 }
 
+/* Review queue hint */
+#review-queue-hint {
+    dock: bottom;
+    width: 100%;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    text-align: center;
+    layer: overlay;
+    padding: 0 1;
+    offset-y: 100%;
+}
+
+#review-queue-hint.visible {
+    offset-y: 0;
+}
+
 /* =============================================================================
    SETTINGS MODAL
    ============================================================================= */
@@ -1781,8 +1972,10 @@ StreamingOutput {
 .agent-response {
     width: 100%;
     height: auto;
+    min-height: 1;
     margin-bottom: 1;
     padding: 0 1;
+    background: transparent;
 }
 
 .agent-response > * {
@@ -1793,9 +1986,11 @@ StreamingOutput {
 .agent-thought {
     width: 100%;
     height: auto;
+    min-height: 1;
     margin-bottom: 1;
     padding: 0 1;
     color: $text-muted;
+    background: transparent;
 }
 
 .agent-thought > * {
@@ -2270,4 +2465,44 @@ DuplicateTicketModal Button {
     text-align: center;
     color: $text-muted;
     padding-top: 1;
+}
+
+/* =============================================================================
+   DEBUG LOG MODAL
+   ============================================================================= */
+
+DebugLogModal {
+    align: center middle;
+}
+
+#debug-log-container {
+    width: 90%;
+    height: 90%;
+    background: $surface;
+    border: thick $primary;
+    padding: 1;
+}
+
+#debug-log {
+    height: 1fr;
+    background: $surface-darken-1;
+    border: round $primary-lighten-2;
+    padding: 0 1;
+}
+
+/* =============================================================================
+   KEYBINDING HINT WIDGET
+   ============================================================================= */
+
+KeybindingHint {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    text-align: center;
+    padding: 0 1;
+}
+
+KeybindingHint:empty {
+    display: none;
 }

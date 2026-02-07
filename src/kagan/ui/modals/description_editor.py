@@ -37,7 +37,7 @@ class DescriptionEditorModal(ModalScreen[str | None]):
             with Horizontal(id="description-editor-header"):
                 yield Label(self.modal_title, id="editor-title")
                 yield Static("", id="header-spacer")
-                yield Static("[Esc] Done", id="editor-hint")
+                yield Static("[Esc] Cancel | [Ctrl+S] Save", id="editor-hint")
 
             yield TextArea(
                 self.description,
@@ -75,10 +75,18 @@ class DescriptionEditorModal(ModalScreen[str | None]):
         lines = textarea.text.count("\n") + 1 if textarea.text else 0
         line_count.update(f"{lines}L")
 
-    def action_done(self) -> None:
+    def action_cancel(self) -> None:
+        """Cancel without saving."""
+        self.dismiss(None)
+
+    def action_save(self) -> None:
         """Save and close the editor."""
         if self.readonly:
             self.dismiss(None)
         else:
             textarea = self.query_one("#description-textarea", TextArea)
             self.dismiss(textarea.text)
+
+    def action_done(self) -> None:
+        """Legacy: redirect to save."""
+        self.action_save()

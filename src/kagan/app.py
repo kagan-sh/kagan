@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from textual.app import App
 from textual.signal import Signal
 
+from kagan.agents.agent_factory import AgentFactory, create_agent
 from kagan.agents.scheduler import Scheduler
 from kagan.agents.worktree import WorktreeManager
 from kagan.config import KaganConfig
@@ -17,6 +18,7 @@ from kagan.constants import (
     DEFAULT_LOCK_PATH,
 )
 from kagan.database import StateManager
+from kagan.debug_log import setup_debug_logging
 from kagan.git_utils import GitInitResult, has_git_repo, init_git_repo
 from kagan.keybindings import APP_BINDINGS
 from kagan.lock import InstanceLock, exit_if_already_running
@@ -43,6 +45,7 @@ class KaganApp(App):
         db_path: str = DEFAULT_DB_PATH,
         config_path: str = DEFAULT_CONFIG_PATH,
         lock_path: str | None = DEFAULT_LOCK_PATH,
+        agent_factory: AgentFactory = create_agent,
     ):
         super().__init__()
         # Register both themes and select based on terminal capabilities
@@ -69,6 +72,7 @@ class KaganApp(App):
         self._instance_lock: InstanceLock | None = None
         self.config: KaganConfig = KaganConfig()
         self.planner_state: PersistentPlannerState | None = None
+        self._agent_factory = agent_factory
 
     @property
     def state_manager(self) -> StateManager:
@@ -92,6 +96,9 @@ class KaganApp(App):
 
     async def on_mount(self) -> None:
         """Initialize app on mount."""
+        # Set up debug logging capture for F12 viewer
+        setup_debug_logging()
+
         # Check for first boot (no config.toml file)
         # Note: .kagan folder may already exist (created by lock file),
         # so we check for config.toml specifically
@@ -159,6 +166,7 @@ class KaganApp(App):
         # Project root is the parent of .kagan directory (where config lives)
         if self._worktree_manager is None:
             self._worktree_manager = WorktreeManager(repo_root=project_root)
+            await self._reconcile_worktrees()
         if self._session_manager is None:
             self._session_manager = SessionManager(
                 project_root=project_root, state=self._state_manager, config=self.config
@@ -177,6 +185,8 @@ class KaganApp(App):
                     (tid, it)
                 ),
                 on_error=lambda tid, msg: self.notify(f"#{tid}: {msg}", severity="error"),
+                app=self,
+                agent_factory=self._agent_factory,
             )
             # Wire up reactive scheduler: status changes trigger spawns/stops
             self._state_manager.set_status_change_callback(self._on_ticket_status_change)
@@ -191,7 +201,7 @@ class KaganApp(App):
         if len(tickets) == 0:
             from kagan.ui.screens.planner import PlannerScreen
 
-            await self.push_screen(PlannerScreen())
+            await self.push_screen(PlannerScreen(agent_factory=self._agent_factory))
             self.log("PlannerScreen pushed (empty board)")
         else:
             await self.push_screen(KanbanScreen())
@@ -221,6 +231,14 @@ class KaganApp(App):
             self.call_later(
                 lambda: self._scheduler.handle_status_change(ticket_id, old_status, new_status)
             )
+
+    async def _reconcile_worktrees(self) -> None:
+        """Remove orphaned worktrees from previous runs."""
+        tickets = await self.state_manager.get_all_tickets()
+        valid_ids = {t.id for t in tickets}
+        cleaned = await self.worktree_manager.cleanup_orphans(valid_ids)
+        if cleaned:
+            self.log(f"Cleaned up {len(cleaned)} orphan worktree(s)")
 
     async def _reconcile_sessions(self) -> None:
         """Kill orphaned tmux sessions from previous runs."""
@@ -266,6 +284,12 @@ class KaganApp(App):
         from kagan.ui.modals import HelpModal
 
         self.push_screen(HelpModal())
+
+    def action_toggle_debug_log(self) -> None:
+        """Toggle the debug log viewer (F12)."""
+        from kagan.ui.modals.debug_log import DebugLogModal
+
+        self.push_screen(DebugLogModal())
 
 
 def run() -> None:
