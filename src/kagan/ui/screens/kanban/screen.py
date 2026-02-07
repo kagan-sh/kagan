@@ -358,8 +358,9 @@ class KanbanScreen(KaganScreen):
                 break
 
             for status in affected_statuses:
-                column = self.query_one(f"#column-{status.value.lower()}", KanbanColumn)
-                column.update_tasks([t for t in display_tasks if t.status == status])
+                with suppress(NoMatches):
+                    column = self.query_one(f"#column-{status.value.lower()}", KanbanColumn)
+                    column.update_tasks([t for t in display_tasks if t.status == status])
 
             with suppress(NoMatches):
                 self.header.update_count(len(self._tasks))

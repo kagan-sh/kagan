@@ -76,3 +76,27 @@ def test_build_launch_command_claude_uses_positional_prompt_and_model() -> None:
     cmd = service._build_launch_command(_agent("claude"), "hello world", model="sonnet")
 
     assert cmd == f"agent-cli --model sonnet {_q('hello world')}"
+
+
+@pytest.mark.parametrize(
+    ("short_name", "expected"),
+    [
+        ("codex", "agent-cli --model gpt-5.2-codex {q}"),
+        ("gemini", "agent-cli --model gemini-2.5-flash {q}"),
+        ("kimi", "agent-cli --model kimi-k2-turbo --prompt {q}"),
+    ],
+)
+def test_build_launch_command_additional_agents_accept_model_flag(
+    short_name: str,
+    expected: str,
+) -> None:
+    service = _build_service()
+    model = {
+        "codex": "gpt-5.2-codex",
+        "gemini": "gemini-2.5-flash",
+        "kimi": "kimi-k2-turbo",
+    }[short_name]
+
+    cmd = service._build_launch_command(_agent(short_name), "hello world", model=model)
+
+    assert cmd == expected.format(q=_q("hello world"))

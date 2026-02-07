@@ -30,6 +30,14 @@ _EXTERNAL_PAIR_BACKENDS = {"vscode", "cursor"}
 _SESSION_BUNDLE_DIR = ".kagan"
 _SESSION_BUNDLE_JSON = "session.json"
 _SESSION_BUNDLE_PROMPT = "start_prompt.md"
+_AGENT_MODEL_CONFIG_KEY: dict[str, str] = {
+    "claude": "default_model_claude",
+    "opencode": "default_model_opencode",
+    "codex": "default_model_codex",
+    "gemini": "default_model_gemini",
+    "kimi": "default_model_kimi",
+    "copilot": "default_model_copilot",
+}
 
 
 class SessionService:
@@ -156,11 +164,11 @@ class SessionService:
         }
 
     def _model_for_agent(self, agent_config: AgentConfig) -> str | None:
-        if "claude" in agent_config.identity.lower():
-            return self._config.general.default_model_claude
-        if "opencode" in agent_config.identity.lower():
-            return self._config.general.default_model_opencode
-        return None
+        key = _AGENT_MODEL_CONFIG_KEY.get(agent_config.short_name.strip().lower())
+        if not key:
+            return None
+        value = getattr(self._config.general, key, None)
+        return value if isinstance(value, str) and value.strip() else None
 
     async def create_session(self, task: TaskLike, worktree_path: Path) -> str:
         """Create session with full context injection."""
@@ -309,12 +317,14 @@ class SessionService:
                 model_flag = f"--model {model} " if model else ""
                 return f"{base_cmd} {model_flag}--prompt {escaped_prompt}"
             case "kimi":
-                return f"{base_cmd} --prompt {escaped_prompt}"
+                model_flag = f"--model {model} " if model else ""
+                return f"{base_cmd} {model_flag}--prompt {escaped_prompt}"
             case "copilot":
                 # `copilot --prompt` runs one-shot (non-interactive), so keep PAIR mode interactive.
                 return base_cmd
             case "codex" | "gemini":
-                return f"{base_cmd} {escaped_prompt}"
+                model_flag = f"--model {model} " if model else ""
+                return f"{base_cmd} {model_flag}{escaped_prompt}"
             case _:
                 return base_cmd
 

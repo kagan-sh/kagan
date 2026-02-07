@@ -21,6 +21,15 @@ if TYPE_CHECKING:
 
     from kagan.config import KaganConfig
 
+_AGENT_MODEL_CONFIG_KEY: dict[str, str] = {
+    "claude": "default_model_claude",
+    "opencode": "default_model_opencode",
+    "codex": "default_model_codex",
+    "gemini": "default_model_gemini",
+    "kimi": "default_model_kimi",
+    "copilot": "default_model_copilot",
+}
+
 
 HEADER_SEPARATOR = "│"
 
@@ -216,11 +225,10 @@ class KaganHeader(Widget):
         builtin = get_builtin_agent(short_name)
         name = builtin.config.name.removesuffix(" Code") if builtin else short_name.capitalize()
 
-        model = ""
-        if short_name == "claude":
-            model = config.general.default_model_claude or ""
-        elif short_name == "opencode":
-            model = config.general.default_model_opencode or ""
+        key = _AGENT_MODEL_CONFIG_KEY.get(short_name)
+        model = getattr(config.general, key, "") if key else ""
+        if not isinstance(model, str):
+            model = ""
 
         model_suffix = f" ({model})" if model else ""
         self.update_agent(f"AI: {name}{model_suffix}")
