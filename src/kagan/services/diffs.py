@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncSession
 
+    from kagan.adapters.db.repositories import ClosingAwareSessionFactory
     from kagan.adapters.git.operations import GitOperationsAdapter
     from kagan.services.workspaces import WorkspaceService
 
@@ -56,7 +57,7 @@ class DiffServiceImpl:
 
     def __init__(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
+        session_factory: ClosingAwareSessionFactory,
         git_adapter: GitOperationsAdapter,
         workspace_service: WorkspaceService,
     ) -> None:

@@ -10,8 +10,9 @@ from typing import TYPE_CHECKING
 from kagan.core.models.enums import MergeStatus, MergeType, RejectionAction, TaskStatus
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncSession
 
+    from kagan.adapters.db.repositories import ClosingAwareSessionFactory
     from kagan.adapters.git.operations import GitOperationsAdapter
     from kagan.config import KaganConfig
     from kagan.core.events import EventBus
@@ -57,7 +58,7 @@ class MergeService:
         sessions: SessionService,
         automation: AutomationService,
         config: KaganConfig,
-        session_factory: async_sessionmaker[AsyncSession] | None = None,
+        session_factory: ClosingAwareSessionFactory | None = None,
         event_bus: EventBus | None = None,
         git_adapter: GitOperationsAdapter | None = None,
     ) -> None:

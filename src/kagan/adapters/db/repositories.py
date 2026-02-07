@@ -41,6 +41,42 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
 
+class RepositoryClosing(Exception):
+    """Raised when a DB operation is attempted on a repository that is shutting down.
+
+    This replaces ad-hoc ``OperationalError`` catches at individual call sites.
+    Workers that race against shutdown will receive this predictable exception
+    before any SQLAlchemy I/O occurs.
+    """
+
+
+class ClosingAwareSessionFactory:
+    """Wrapper around ``async_sessionmaker`` that respects a shared closing flag.
+
+    Every service that needs DB sessions receives this proxy instead of the raw
+    ``async_sessionmaker``.  When ``mark_closing()`` is called, *all* subsequent
+    ``__call__()`` invocations raise ``RepositoryClosing`` — regardless of
+    whether the caller is ``TaskRepository._get_session()``, a service helper,
+    or ``RepoRepository._get_session()``.
+    """
+
+    def __init__(self, inner: async_sessionmaker[AsyncSession]) -> None:
+        self._inner = inner
+        self._closing = False
+
+    def mark_closing(self) -> None:
+        self._closing = True
+
+    @property
+    def closing(self) -> bool:
+        return self._closing
+
+    def __call__(self) -> AsyncSession:
+        if self._closing:
+            raise RepositoryClosing("Repository is shutting down")
+        return self._inner()
+
+
 class TaskRepository:
     """Async repository for task operations."""
 
@@ -54,7 +90,7 @@ class TaskRepository:
     ) -> None:
         self.db_path = Path(db_path) if db_path else get_database_path()
         self._engine: AsyncEngine | None = None
-        self._session_factory: async_sessionmaker[AsyncSession] | None = None
+        self._session_factory: ClosingAwareSessionFactory | None = None
         self._lock = asyncio.Lock()
         self._on_change = on_change
         self._on_status_change: (
@@ -67,19 +103,31 @@ class TaskRepository:
     async def initialize(self) -> None:
         """Initialize engine and create tables."""
         self._engine = await create_db_engine(self.db_path)
-        self._session_factory = async_sessionmaker(
-            self._engine, class_=AsyncSession, expire_on_commit=False
-        )
+        raw_factory = async_sessionmaker(self._engine, class_=AsyncSession, expire_on_commit=False)
+        self._session_factory = ClosingAwareSessionFactory(raw_factory)
         await create_db_tables(self._engine)
         await self._ensure_schema_compatibility()
         await self._ensure_defaults()
 
     async def close(self) -> None:
         """Close engine and release resources."""
+        if self._session_factory is not None:
+            self._session_factory.mark_closing()
         if self._engine:
             await self._engine.dispose()
             self._engine = None
             self._session_factory = None
+
+    def mark_closing(self) -> None:
+        """Signal that shutdown has started.
+
+        After this call, ``_get_session()`` — and every service that shares
+        the same ``ClosingAwareSessionFactory`` — will raise
+        ``RepositoryClosing`` instead of handing out sessions that may hit
+        a disposed engine.
+        """
+        if self._session_factory is not None:
+            self._session_factory.mark_closing()
 
     def _get_session(self) -> AsyncSession:
         """Get a new async session."""
@@ -714,7 +762,7 @@ class TaskRepository:
 class RepoRepository:
     """CRUD operations for Repo entities."""
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(self, session_factory: ClosingAwareSessionFactory) -> None:
         self._session_factory = session_factory
 
     def _get_session(self) -> AsyncSession:

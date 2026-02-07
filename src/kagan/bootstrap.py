@@ -238,7 +238,18 @@ class AppContext:
     _task_repo: TaskRepository | None = field(default=None, repr=False)
 
     async def close(self) -> None:
-        """Clean up all resources."""
+        """Clean up all resources.
+
+        Shutdown order matters:
+        1. Mark the repository as closing so new ``_get_session()`` calls
+           raise ``RepositoryClosing`` instead of hitting a disposed engine.
+        2. Unbind signals to stop scheduling new UI workers.
+        3. Stop the automation service (its own asyncio tasks).
+        4. Dispose the engine (safe now — no new sessions can be created).
+        """
+        if self._task_repo is not None:
+            self._task_repo.mark_closing()
+
         if self.signal_bridge:
             self.signal_bridge.unbind_all()
 

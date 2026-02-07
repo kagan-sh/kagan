@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 from typing import TYPE_CHECKING, cast
 
-from sqlalchemy.exc import OperationalError
 from textual import on
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
@@ -271,7 +270,7 @@ class ReviewModal(
         await self._populate_diff_pane(workspaces)
 
         if self._no_changes:
-            self.query_one("#approve-btn", Button).label = "Close exploratory"
+            self.query_one("#approve-btn", Button).label = "Close task"
 
         await asyncio.gather(
             self._load_agent_output_history(),
@@ -297,7 +296,7 @@ class ReviewModal(
             self._set_active_tab("review-ai")
 
     async def _on_task_changed(self, task_id: str) -> None:
-        if task_id != self._task_model.id:
+        if not self.is_mounted or task_id != self._task_model.id:
             return
         self.run_worker(self._refresh_runtime_state, exclusive=True, exit_on_error=False)
 
@@ -418,12 +417,7 @@ class ReviewModal(
 
     async def _refresh_runtime_state(self) -> None:
         app = cast("KaganApp", self.app)
-        try:
-            latest = await app.ctx.task_service.get_task(self._task_model.id)
-        except OperationalError:
-            # Modal teardown can race with background workers when test/app DB
-            # connections are being closed; ignore stale refresh attempts.
-            return
+        latest = await app.ctx.task_service.get_task(self._task_model.id)
         if latest is not None:
             previous_status = self._task_model.status
             self._task_model = latest

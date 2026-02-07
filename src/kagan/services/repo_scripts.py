@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncSession
 
+    from kagan.adapters.db.repositories import ClosingAwareSessionFactory
     from kagan.adapters.db.schema import Repo
     from kagan.core.events import EventBus
     from kagan.services.workspaces import WorkspaceService
@@ -71,7 +72,7 @@ class RepoScriptServiceImpl:
 
     def __init__(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
+        session_factory: ClosingAwareSessionFactory,
         workspace_service: WorkspaceService,
         event_bus: EventBus,
     ) -> None:

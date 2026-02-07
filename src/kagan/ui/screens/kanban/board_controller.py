@@ -228,6 +228,8 @@ class KanbanBoardController:
 
     def run_refresh(self) -> None:
         self.screen._refresh_timer = None
+        if not self.screen.is_mounted:
+            return
         self.screen.run_worker(self.refresh_and_sync())
 
     def update_review_queue_hint(self) -> None:

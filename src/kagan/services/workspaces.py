@@ -17,8 +17,9 @@ from kagan.core.models.enums import WorkspaceStatus
 from kagan.paths import get_worktree_base_dir
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncSession
 
+    from kagan.adapters.db.repositories import ClosingAwareSessionFactory
     from kagan.adapters.db.schema import Repo, WorkspaceRepo
     from kagan.adapters.db.schema import Workspace as DbWorkspace
     from kagan.adapters.git.worktrees import GitWorktreeAdapter
@@ -41,7 +42,7 @@ class WorkspaceService:
 
     def __init__(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
+        session_factory: ClosingAwareSessionFactory,
         event_bus,
         git_adapter: GitWorktreeAdapter,
         task_service: TaskService,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -359,11 +360,37 @@ class KaganApp(App):
             pass
 
     async def cleanup(self) -> None:
-        """Terminate all agents and close resources."""
+        """Terminate all agents and close resources.
+
+        Shutdown order:
+        1. Stop planner agents.
+        2. Mark the DB repository as closing (prevents new sessions).
+        3. Unbind signals (prevents new workers being scheduled).
+        4. Cancel all in-flight Textual workers and wait for them to finish.
+        5. Close the AppContext (stops automation, disposes DB engine).
+        6. Release the instance lock.
+        """
         if self.planner_state and self.planner_state.agent:
             await self.planner_state.agent.stop()
         if self.planner_state and self.planner_state.refiner:
             await self.planner_state.refiner.stop()
+
+        if self._ctx:
+            # Mark repo closing early so any still-running worker gets a clean
+            # RepositoryClosing error instead of an opaque OperationalError.
+            if self._ctx._task_repo is not None:
+                self._ctx._task_repo.mark_closing()
+            # Unbind signals so no new workers are scheduled.
+            if self._ctx.signal_bridge:
+                self._ctx.signal_bridge.unbind_all()
+
+        # Cancel in-flight workers and wait for them to settle before
+        # disposing the DB engine.  During shutdown, workers that were
+        # already mid-flight may fail with RepositoryClosing, ValueError
+        # ("Connection closed"), or get cancelled outright — all expected.
+        self.workers.cancel_all()
+        with contextlib.suppress(Exception, asyncio.CancelledError):
+            await self.workers.wait_for_complete()
 
         if self._ctx:
             await self._ctx.close()

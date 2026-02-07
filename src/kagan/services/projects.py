@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Protocol
 from sqlmodel import col, select
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy.ext.asyncio import AsyncSession
 
-    from kagan.adapters.db.repositories import RepoRepository
+    from kagan.adapters.db.repositories import ClosingAwareSessionFactory, RepoRepository
     from kagan.adapters.db.schema import Project, Repo
     from kagan.core.events import EventBus
     from kagan.services.types import ProjectId, RepoId
@@ -76,7 +76,7 @@ class ProjectServiceImpl:
 
     def __init__(
         self,
-        session_factory: async_sessionmaker[AsyncSession],
+        session_factory: ClosingAwareSessionFactory,
         event_bus: EventBus,
         repo_repository: RepoRepository,
     ) -> None:

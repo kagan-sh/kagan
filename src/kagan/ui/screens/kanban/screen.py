@@ -198,6 +198,8 @@ class KanbanScreen(KaganScreen):
         self._board.cleanup_on_unmount()
 
     async def _on_task_changed(self, _task_id: str) -> None:
+        if not self.is_mounted:
+            return
         self._schedule_refresh()
 
     def _sync_agent_states(self) -> None:
