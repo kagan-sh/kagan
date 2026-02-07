@@ -25,11 +25,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from kagan.acp.agent import Agent
-    from kagan.config import AgentConfig, KaganConfig
-    from kagan.core.models.entities import Task
-    from kagan.services.tasks import TaskService
-    from kagan.services.sessions import SessionServiceImpl
     from kagan.adapters.git.worktrees import WorktreeManager
+    from kagan.config import AgentConfig, KaganConfig
+    from kagan.services.sessions import SessionServiceImpl
+    from kagan.services.tasks import TaskService
+    from kagan.services.types import TaskLike
 
 
 class AutomationService(Protocol):
@@ -63,8 +63,14 @@ class AutomationService(Protocol):
     def is_reviewing(self, task_id: str) -> bool:
         """Return True if the task is currently in review phase."""
 
+    def get_review_agent(self, task_id: str) -> Agent | None:
+        """Return the running review agent for a task, if any."""
+
     async def stop_task(self, task_id: str) -> bool:
         """Stop automation for a task and return success."""
+
+    async def spawn_for_task(self, task: TaskLike) -> bool:
+        """Spawn automation for a task."""
 
 
 @dataclass(slots=True)
@@ -142,9 +148,7 @@ class AutomationServiceImpl:
     async def handle_event(self, event: DomainEvent) -> None:
         """Process a domain event and trigger actions."""
         if isinstance(event, TaskStatusChanged):
-            await self._event_queue.put(
-                (event.task_id, event.from_status, event.to_status)
-            )
+            await self._event_queue.put((event.task_id, event.from_status, event.to_status))
 
     async def _event_loop(self) -> None:
         """Subscribe to domain events and enqueue relevant automation work."""
@@ -224,7 +228,7 @@ class AutomationServiceImpl:
             # Don't stop for REVIEW transitions as that's part of normal completion flow
             await self._stop_if_running(task_id)
 
-    async def _ensure_running(self, task: Task) -> None:
+    async def _ensure_running(self, task: TaskLike) -> None:
         """Ensure an agent is running for this task."""
         if task.id in self._running:
             log.debug(f"Task {task.id} already running")
@@ -239,7 +243,7 @@ class AutomationServiceImpl:
 
         await self._spawn(task)
 
-    async def _spawn(self, task: Task) -> None:
+    async def _spawn(self, task: TaskLike) -> None:
         """Spawn an agent for a task. Called only from worker loop."""
         title = task.title[:MODAL_TITLE_MAX_LENGTH]
         log.info(f"Spawning agent for AUTO task {task.id}: {title}")
@@ -389,7 +393,7 @@ class AutomationServiceImpl:
         await self._event_queue.put((task_id, TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG))
         return True
 
-    async def spawn_for_task(self, task: Task) -> bool:
+    async def spawn_for_task(self, task: TaskLike) -> bool:
         """Manually request to spawn an agent for a task.
 
         Used by UI for manual agent starts. Returns True if spawn was queued.
@@ -444,7 +448,7 @@ class AutomationServiceImpl:
         # Persist error to database
         _ = asyncio.create_task(self._tasks.update_fields(task_id, last_error=message[:500]))
 
-    async def _run_task_loop(self, task: Task) -> None:
+    async def _run_task_loop(self, task: TaskLike) -> None:
         """Run the iterative loop for a task until completion."""
         log.info(f"Starting task loop for {task.id}")
         self._notify_error(task.id, "Agent starting...")
@@ -532,7 +536,7 @@ class AutomationServiceImpl:
         finally:
             log.info(f"Task loop ended for {task.id}")
 
-    def _get_agent_config(self, task: Task) -> AgentConfig:
+    def _get_agent_config(self, task: TaskLike) -> AgentConfig:
         """Get agent config for a task."""
         return task.get_agent_config(self._config)
 
@@ -568,7 +572,7 @@ class AutomationServiceImpl:
             agent.set_model_override(model)
             log.info(f"Applied model override for {context}: {model}")
 
-    async def _auto_merge(self, task: Task) -> None:
+    async def _auto_merge(self, task: TaskLike) -> None:
         """Auto-merge task to main and move to DONE.
 
         Only called when auto_merge config is enabled.
@@ -627,7 +631,7 @@ class AutomationServiceImpl:
             log.info(f"Released merge lock for task {task.id}")
 
     async def _handle_merge_conflict_retry(
-        self, task: Task, base_branch: str, original_error: str
+        self, task: TaskLike, base_branch: str, original_error: str
     ) -> None:
         """Handle merge conflict by rebasing and sending task back to IN_PROGRESS.
 
@@ -701,7 +705,7 @@ class AutomationServiceImpl:
 
     # --- Methods merged from TaskRunner ---
 
-    async def run_review(self, task: Task, wt_path: Path) -> tuple[bool, str]:
+    async def run_review(self, task: TaskLike, wt_path: Path) -> tuple[bool, str]:
         """Run agent-based review and return (passed, summary).
 
         Args:
@@ -749,7 +753,7 @@ class AutomationServiceImpl:
 
     async def _run_iteration(
         self,
-        task: Task,
+        task: TaskLike,
         wt_path: Path,
         agent_config: AgentConfig,
         iteration: int,
@@ -790,7 +794,7 @@ class AutomationServiceImpl:
         # Build prompt with scratchpad context
         scratchpad = await self._tasks.get_scratchpad(task.id)
         prompt = build_prompt(
-            ticket=task,
+            task=task,
             iteration=iteration,
             max_iterations=max_iterations,
             scratchpad=scratchpad,
@@ -815,9 +819,7 @@ class AutomationServiceImpl:
 
         # Persist FULL agent output as JSON
         serialized_output = serialize_agent_output(agent)
-        await self._tasks.append_agent_log(
-            task.id, "implementation", iteration, serialized_output
-        )
+        await self._tasks.append_agent_log(task.id, "implementation", iteration, serialized_output)
 
         # Update scratchpad with progress
         progress_note = f"\n\n--- Iteration {iteration} ---\n{response[-2000:]}"
@@ -825,7 +827,7 @@ class AutomationServiceImpl:
 
         return (signal_result, agent)
 
-    async def _handle_complete(self, task: Task) -> None:
+    async def _handle_complete(self, task: TaskLike) -> None:
         """Handle task completion - move to REVIEW immediately, then run review."""
         # Move to REVIEW status IMMEDIATELY
         await self._tasks.update_fields(
@@ -873,7 +875,7 @@ class AutomationServiceImpl:
         review_event = "Review passed" if checks_passed else f"Review failed: {review_summary}"
         await self._tasks.append_event(task.id, "review", review_event[:200])
 
-    async def _handle_blocked(self, task: Task, reason: str) -> None:
+    async def _handle_blocked(self, task: TaskLike, reason: str) -> None:
         """Handle blocked task - move back to BACKLOG with reason."""
         scratchpad = await self._tasks.get_scratchpad(task.id)
         block_note = f"\n\n--- BLOCKED ---\nReason: {reason}\n"
@@ -884,7 +886,7 @@ class AutomationServiceImpl:
         )
         self._notify_task_changed()
 
-    async def _handle_max_iterations(self, task: Task) -> None:
+    async def _handle_max_iterations(self, task: TaskLike) -> None:
         """Handle task that reached max iterations."""
         scratchpad = await self._tasks.get_scratchpad(task.id)
         max_iter_note = (
@@ -896,7 +898,7 @@ class AutomationServiceImpl:
         await self._update_task_status(task.id, TaskStatus.BACKLOG)
         self._notify_task_changed()
 
-    async def _build_review_prompt(self, task: Task) -> str:
+    async def _build_review_prompt(self, task: TaskLike) -> str:
         """Build review prompt from template with commits and diff."""
         base = self._config.general.default_base_branch
         commits = await self._worktrees.get_commit_log(task.id, base)
@@ -904,7 +906,7 @@ class AutomationServiceImpl:
 
         return get_review_prompt(
             title=task.title,
-            ticket_id=task.id,
+            task_id=task.id,
             description=task.description or "",
             commits="\n".join(f"- {c}" for c in commits) if commits else "No commits",
             diff_summary=diff_summary or "No changes",

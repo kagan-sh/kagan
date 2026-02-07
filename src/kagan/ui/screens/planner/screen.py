@@ -1,4 +1,4 @@
-"""Planner screen for chat-first ticket creation."""
+"""Planner screen for chat-first task creation."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from kagan.ui.screens.planner.state import (
     PlannerState,
     SlashCommand,
 )
-from kagan.ui.screens.ticket_editor import TicketEditorScreen
+from kagan.ui.screens.task_editor import TaskEditorScreen
 from kagan.ui.widgets import EmptyState, StatusBar, StreamingOutput
 from kagan.ui.widgets.header import KaganHeader
 from kagan.ui.widgets.plan_approval import PlanApprovalWidget
@@ -98,7 +98,7 @@ class PlannerInput(TextArea):
 
 
 class PlannerScreen(KaganScreen):
-    """Chat-first planner for creating tickets."""
+    """Chat-first planner for creating tasks."""
 
     BINDINGS = PLANNER_BINDINGS
 
@@ -296,7 +296,7 @@ class PlannerScreen(KaganScreen):
             await self._state.agent.wait_ready(timeout=AGENT_TIMEOUT)
             await self._state.agent.send_prompt(prompt)
 
-            tickets, todos, plan_error = parse_proposed_plan(self._state.agent.tool_calls)
+            tasks, todos, plan_error = parse_proposed_plan(self._state.agent.tool_calls)
 
             # Store assistant response
             if self._state.accumulated_response:
@@ -306,7 +306,7 @@ class PlannerScreen(KaganScreen):
                         role="assistant",
                         content=full_response,
                         timestamp=datetime.now(),
-                        plan_tickets=tickets or None,
+                        plan_tasks=tasks or None,
                         todos=todos,
                     )
                 )
@@ -319,11 +319,11 @@ class PlannerScreen(KaganScreen):
             if plan_error:
                 await output.post_note(plan_error, classes="error")
 
-            if tickets:
+            if tasks:
                 # Set pending plan, then transition (transition preserves has_pending_plan)
-                self._state = self._state.with_pending_plan(tickets)
+                self._state = self._state.with_pending_plan(tasks)
                 self._state = self._state.transition("plan_received")
-                await output.post_plan_approval(tickets)
+                await output.post_plan_approval(tasks)
         except Exception as e:
             await self._get_output().post_note(f"Error: {e}", classes="error")
             self._state = self._state.transition("error")
@@ -389,32 +389,32 @@ class PlannerScreen(KaganScreen):
 
     @on(PlanApprovalWidget.Approved)
     async def on_plan_approved(self, event: PlanApprovalWidget.Approved) -> None:
-        """Handle plan approval - create tickets."""
+        """Handle plan approval - create tasks."""
         self._state = self._state.transition("approved")
         output = self._get_output()
-        created_tickets: list[tuple[str, str, str]] = []
+        created_tasks: list[tuple[str, str, str]] = []
 
-        for ticket_data in event.tickets:
+        for task_data in event.tasks:
             try:
                 task = await self.ctx.task_service.create_task(
-                    ticket_data.title,
-                    ticket_data.description,
-                    project_id=ticket_data.project_id,
-                    repo_id=ticket_data.repo_id,
+                    task_data.title,
+                    task_data.description,
+                    project_id=task_data.project_id,
+                    repo_id=task_data.repo_id,
                     created_by=None,
                 )
                 await self.ctx.task_service.update_fields(
                     task.id,
-                    priority=ticket_data.priority,
-                    task_type=ticket_data.task_type,
-                    assigned_hat=ticket_data.assigned_hat,
-                    agent_backend=ticket_data.agent_backend,
-                    acceptance_criteria=ticket_data.acceptance_criteria,
+                    priority=task_data.priority,
+                    task_type=task_data.task_type,
+                    assigned_hat=task_data.assigned_hat,
+                    agent_backend=task_data.agent_backend,
+                    acceptance_criteria=task_data.acceptance_criteria,
                 )
                 self.notify(
                     f"Created: {task.title[:PLANNER_TITLE_MAX_LENGTH]}", severity="information"
                 )
-                created_tickets.append(
+                created_tasks.append(
                     (
                         task.title,
                         task.task_type.value if task.task_type else "PAIR",
@@ -422,19 +422,19 @@ class PlannerScreen(KaganScreen):
                     )
                 )
             except Exception as e:
-                self.notify(f"Failed to create ticket: {e}", severity="error")
+                self.notify(f"Failed to create task: {e}", severity="error")
 
         self._state.pending_plan = None
         self._state.has_pending_plan = False
         self._state.accumulated_response.clear()
         self._state = self._state.transition("done")
 
-        if created_tickets:
-            lines = [f"[bold]Created {len(created_tickets)} ticket(s):[/bold]", ""]
-            for title, ticket_type, priority in created_tickets:
+        if created_tasks:
+            lines = [f"[bold]Created {len(created_tasks)} task(s):[/bold]", ""]
+            for title, task_type, priority in created_tasks:
                 display_title = title[:60] + "..." if len(title) > 60 else title
                 lines.append(
-                    f"  - [dim]{ticket_type}[/dim] {display_title} [italic]({priority})[/italic]"
+                    f"  - [dim]{task_type}[/dim] {display_title} [italic]({priority})[/italic]"
                 )
             note_text = "\n".join(lines)
 
@@ -476,14 +476,14 @@ class PlannerScreen(KaganScreen):
 
     @on(PlanApprovalWidget.EditRequested)
     async def on_plan_edit_requested(self, event: PlanApprovalWidget.EditRequested) -> None:
-        """Handle request to edit tickets before approval."""
+        """Handle request to edit tasks before approval."""
         self.app.push_screen(
-            TicketEditorScreen(event.tickets),
-            self._on_ticket_editor_result,
+            TaskEditorScreen(event.tasks),
+            self._on_task_editor_result,
         )
 
-    async def _on_ticket_editor_result(self, result: list[Task] | None) -> None:
-        """Handle result from ticket editor."""
+    async def _on_task_editor_result(self, result: list[Task] | None) -> None:
+        """Handle result from task editor."""
         if result is None:
             if self._state.pending_plan:
                 await self._get_output().post_plan_approval(self._state.pending_plan)

@@ -17,7 +17,6 @@ from kagan.constants import (
     MIN_SCREEN_WIDTH,
     NOTIFICATION_TITLE_MAX_LENGTH,
 )
-from kagan.core.models.entities import Task
 from kagan.core.models.enums import MergeReadiness, TaskStatus, TaskType
 from kagan.keybindings import (
     KANBAN_BINDINGS,
@@ -31,7 +30,7 @@ from kagan.ui.modals import (
     ModalAction,
     RejectionInputModal,
     ReviewModal,
-    TicketDetailsModal,
+    TaskDetailsModal,
 )
 from kagan.ui.modals.description_editor import DescriptionEditorModal
 from kagan.ui.screens.base import KaganScreen
@@ -39,7 +38,7 @@ from kagan.ui.screens.kanban import focus
 from kagan.ui.screens.kanban.hints import build_keybinding_hints
 from kagan.ui.screens.planner import PlannerScreen
 from kagan.ui.utils import copy_with_notification
-from kagan.ui.widgets.card import TicketCard  # noqa: TC001 - needed at runtime for message handler
+from kagan.ui.widgets.card import TaskCard  # noqa: TC001 - needed at runtime for message handler
 from kagan.ui.widgets.column import KanbanColumn
 from kagan.ui.widgets.header import KaganHeader
 from kagan.ui.widgets.keybinding_hint import KeybindingHint
@@ -47,9 +46,14 @@ from kagan.ui.widgets.peek_overlay import PeekOverlay
 from kagan.ui.widgets.search_bar import SearchBar
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from textual import events
     from textual.app import ComposeResult
     from textual.timer import Timer
+
+    from kagan.adapters.db.schema import AgentTurn
+    from kagan.core.models.entities import Task
 
 # Leader key timeout in seconds
 LEADER_TIMEOUT = 2.0
@@ -70,33 +74,33 @@ class KanbanScreen(KaganScreen):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._tickets: list[Task] = []
-        self._filtered_tickets: list[Task] | None = None
-        self._pending_delete_ticket: Task | None = None
+        self._tasks: list[Task] = []
+        self._filtered_tasks: Sequence[Task] | None = None
+        self._pending_delete_task: Task | None = None
         self._pending_merge_task: Task | None = None
-        self._pending_close_ticket: Task | None = None
-        self._pending_advance_ticket: Task | None = None
-        self._pending_auto_move_ticket: Task | None = None
+        self._pending_close_task: Task | None = None
+        self._pending_advance_task: Task | None = None
+        self._pending_auto_move_task: Task | None = None
         self._pending_auto_move_status: TaskStatus | None = None
-        self._editing_ticket_id: str | None = None
+        self._editing_task_id: str | None = None
         self._leader_active: bool = False
         self._leader_timer: Timer | None = None
         self._merge_readiness: dict[str, str] = {}
         self._refresh_timer: Timer | None = None
-        self._ticket_hashes: dict[str, int] = {}  # ticket_id -> hash for change detection
+        self._task_hashes: dict[str, int] = {}  # task_id -> hash for change detection
         # Lifecycle handled via services in AppContext
 
-    # Actions requiring a ticket to be selected
-    _TICKET_REQUIRED_ACTIONS = frozenset(
+    # Actions requiring a task to be selected
+    _TASK_REQUIRED_ACTIONS = frozenset(
         {
-            "edit_ticket",
-            "delete_ticket",
-            "delete_ticket_direct",
+            "edit_task",
+            "delete_task",
+            "delete_task_direct",
             "view_details",
             "open_session",
             "move_forward",
             "move_backward",
-            "duplicate_ticket",
+            "duplicate_task",
             "merge",
             "merge_direct",
             "view_diff",
@@ -110,57 +114,57 @@ class KanbanScreen(KaganScreen):
     def _validate_action(self, action: str) -> tuple[bool, str | None]:
         """Validate if an action can be performed (inlined from ActionValidator)."""
         card = focus.get_focused_card(self)
-        ticket = card.ticket if card else None
+        task = card.task_model if card else None
         scheduler = self.ctx.automation_service
 
-        # No ticket - check ticket-requiring actions
-        if not ticket:
-            if action in self._TICKET_REQUIRED_ACTIONS:
-                return (False, "No ticket selected")
+        # No task - check task-requiring actions
+        if not task:
+            if action in self._TASK_REQUIRED_ACTIONS:
+                return (False, "No task selected")
             return (True, None)
 
-        status = ticket.status
-        ticket_type = ticket.task_type
+        status = task.status
+        task_type = task.task_type
 
         # Edit validation
-        if action == "edit_ticket":
+        if action == "edit_task":
             if status == TaskStatus.DONE:
-                return (False, "Done tickets cannot be edited. Use [y] to duplicate.")
+                return (False, "Done tasks cannot be edited. Use [y] to duplicate.")
             return (True, None)
 
         # Move validation
         if action in ("move_forward", "move_backward"):
             if status == TaskStatus.DONE:
-                return (False, "Done tickets cannot be moved. Use [y] to duplicate.")
+                return (False, "Done tasks cannot be moved. Use [y] to duplicate.")
             return (True, None)
 
         # Review validation
         if action in ("merge", "merge_direct", "view_diff", "open_review"):
             if status != TaskStatus.REVIEW:
-                return (False, f"Only available for REVIEW tickets (current: {status.value})")
+                return (False, f"Only available for REVIEW tasks (current: {status.value})")
             return (True, None)
 
         # Watch agent validation
         if action == "watch_agent":
-            if ticket_type != TaskType.AUTO:
-                return (False, "Only available for AUTO tickets")
-            is_running = scheduler.is_running(ticket.id)
+            if task_type != TaskType.AUTO:
+                return (False, "Only available for AUTO tasks")
+            is_running = scheduler.is_running(task.id)
             if is_running or status == TaskStatus.IN_PROGRESS:
                 return (True, None)
-            return (False, "No agent running for this ticket")
+            return (False, "No agent running for this task")
 
         # Start agent validation
         if action == "start_agent":
-            if ticket_type != TaskType.AUTO:
-                return (False, "Only available for AUTO tickets")
+            if task_type != TaskType.AUTO:
+                return (False, "Only available for AUTO tasks")
             return (True, None)
 
         # Stop agent validation
         if action == "stop_agent":
-            if ticket_type != TaskType.AUTO:
-                return (False, "Only available for AUTO tickets")
-            if not scheduler.is_running(ticket.id):
-                return (False, "No agent running for this ticket")
+            if task_type != TaskType.AUTO:
+                return (False, "Only available for AUTO tasks")
+            if not scheduler.is_running(task.id):
+                return (False, "No agent running for this task")
             return (True, None)
 
         return (True, None)
@@ -170,12 +174,12 @@ class KanbanScreen(KaganScreen):
         return True if is_valid else None
 
     def compose(self) -> ComposeResult:
-        yield KaganHeader(ticket_count=0)
+        yield KaganHeader(task_count=0)
         yield SearchBar(id="search-bar")
         with Container(classes="board-container"):
             with Horizontal(classes="board"):
                 for status in COLUMN_ORDER:
-                    yield KanbanColumn(status=status, tickets=[])
+                    yield KanbanColumn(status=status, tasks=[])
         with Container(classes="size-warning"):
             yield Static(SIZE_WARNING_MESSAGE, classes="size-warning-text")
         yield Static("", id="review-queue-hint", classes="review-queue-hint")
@@ -188,47 +192,47 @@ class KanbanScreen(KaganScreen):
         self._check_screen_size()
         await self._refresh_board()
         focus.focus_first_card(self)
-        self.kagan_app.ticket_changed_signal.subscribe(self, self._on_ticket_changed)
+        self.kagan_app.task_changed_signal.subscribe(self, self._on_task_changed)
         self.kagan_app.iteration_changed_signal.subscribe(self, self._on_iteration_changed)
         self._sync_iterations()
         self._sync_agent_states()
         from kagan.ui.widgets.header import _get_git_branch
 
-        branch = await _get_git_branch(self.kagan_app.config_path.parent.parent)
+        branch = await _get_git_branch(self.kagan_app.project_root)
         self.header.update_branch(branch)
 
     def on_unmount(self) -> None:
         """Clean up pending state on unmount."""
-        self._pending_delete_ticket = None
+        self._pending_delete_task = None
         self._pending_merge_task = None
-        self._pending_advance_ticket = None
-        self._pending_auto_move_ticket = None
+        self._pending_advance_task = None
+        self._pending_auto_move_task = None
         self._pending_auto_move_status = None
-        self._editing_ticket_id = None
-        self._filtered_tickets = None
+        self._editing_task_id = None
+        self._filtered_tasks = None
         if self._refresh_timer:
             self._refresh_timer.stop()
             self._refresh_timer = None
 
-    async def _on_ticket_changed(self, _ticket_id: str) -> None:
+    async def _on_task_changed(self, _task_id: str) -> None:
         self._schedule_refresh()
 
     def _on_iteration_changed(self, data: tuple[str, int]) -> None:
-        ticket_id, iteration = data
+        task_id, iteration = data
         try:
             column = self.query_one("#column-in_progress", KanbanColumn)
         except NoMatches:
             return
         max_iter = self.kagan_app.config.general.max_iterations
         if iteration > 0:
-            column.update_iterations({ticket_id: f"Iter {iteration}/{max_iter}"})
+            column.update_iterations({task_id: f"Iter {iteration}/{max_iter}"})
             for card in column.get_cards():
-                if card.ticket and card.ticket.id == ticket_id:
+                if card.task_model and card.task_model.id == task_id:
                     card.is_agent_active = True
         else:
-            column.update_iterations({ticket_id: ""})
+            column.update_iterations({task_id: ""})
             for card in column.get_cards():
-                if card.ticket and card.ticket.id == ticket_id:
+                if card.task_model and card.task_model.id == task_id:
                     card.is_agent_active = False
 
     def _sync_iterations(self) -> None:
@@ -240,10 +244,10 @@ class KanbanScreen(KaganScreen):
         max_iter = self.kagan_app.config.general.max_iterations
         iterations = {}
         for card in column.get_cards():
-            if card.ticket:
-                count = scheduler.get_iteration_count(card.ticket.id)
+            if card.task_model:
+                count = scheduler.get_iteration_count(card.task_model.id)
                 if count > 0:
-                    iterations[card.ticket.id] = f"Iter {count}/{max_iter}"
+                    iterations[card.task_model.id] = f"Iter {count}/{max_iter}"
         if iterations:
             column.update_iterations(iterations)
 
@@ -254,9 +258,9 @@ class KanbanScreen(KaganScreen):
         This ensures cards show correct running state even during status transitions.
         """
         scheduler = self.ctx.automation_service
-        running_tickets = scheduler.running_tasks
+        running_tasks = scheduler.running_tasks
         for column in self.query(KanbanColumn):
-            column.update_active_states(running_tickets)
+            column.update_active_states(running_tasks)
 
     def on_descendant_focus(self, event: events.DescendantFocus) -> None:
         """Update UI immediately on focus change (hints first for instant feedback)."""
@@ -279,35 +283,41 @@ class KanbanScreen(KaganScreen):
             self.remove_class("too-small")
 
     async def _refresh_board(self) -> None:
-        """Refresh board with differential updates (only changed tickets)."""
-        new_tickets = await self.ctx.task_service.list_tasks()
-        display_tickets = (
-            self._filtered_tickets if self._filtered_tickets is not None else new_tickets
-        )
+        """Refresh board with differential updates (only changed tasks)."""
+        new_tasks = await self.ctx.task_service.list_tasks()
+        display_tasks = self._filtered_tasks if self._filtered_tasks is not None else new_tasks
 
-        old_status_by_id = {ticket.id: ticket.status for ticket in self._tickets}
+        old_status_by_id = {task.id: task.status for task in self._tasks}
 
-        # Compute changed tickets
+        # Compute changed tasks
         new_hashes = {
-            t.id: hash((t.status.value, t.title, t.session_active, t.total_iterations))
-            for t in new_tickets
+            t.id: hash(
+                (
+                    t.status.value,
+                    t.title,
+                    t.session_active,
+                    t.total_iterations,
+                    t.last_error,
+                )
+            )
+            for t in new_tasks
         }
-        changed_ids = {tid for tid, h in new_hashes.items() if self._ticket_hashes.get(tid) != h}
-        deleted_ids = set(self._ticket_hashes.keys()) - set(new_hashes.keys())
+        changed_ids = {tid for tid, h in new_hashes.items() if self._task_hashes.get(tid) != h}
+        deleted_ids = set(self._task_hashes.keys()) - set(new_hashes.keys())
 
         # Only update if changes detected
-        if changed_ids or deleted_ids or self._ticket_hashes == {}:
-            self._tickets = new_tickets
-            self._ticket_hashes = new_hashes
-            self._update_merge_readiness_cache(new_tickets)
+        if changed_ids or deleted_ids or self._task_hashes == {}:
+            self._tasks = new_tasks
+            self._task_hashes = new_hashes
+            self._update_merge_readiness_cache(new_tasks)
 
             # Determine which columns need updates
             affected_statuses = set()
-            for ticket in new_tickets:
-                if ticket.id in changed_ids:
-                    affected_statuses.add(ticket.status)
-                    old_status = old_status_by_id.get(ticket.id)
-                    if old_status is not None and old_status != ticket.status:
+            for task in new_tasks:
+                if task.id in changed_ids:
+                    affected_statuses.add(task.status)
+                    old_status = old_status_by_id.get(task.id)
+                    if old_status is not None and old_status != task.status:
                         affected_statuses.add(old_status)
             for _tid in deleted_ids:
                 # Need full refresh on deletion to be safe
@@ -317,11 +327,11 @@ class KanbanScreen(KaganScreen):
             # Update only affected columns
             for status in affected_statuses:
                 column = self.query_one(f"#column-{status.value.lower()}", KanbanColumn)
-                column.update_tickets([t for t in display_tickets if t.status == status])
+                column.update_tasks([t for t in display_tasks if t.status == status])
 
             self._sync_merge_readiness()
-            self.header.update_count(len(self._tickets))
-            active_sessions = sum(1 for ticket in self._tickets if ticket.session_active)
+            self.header.update_count(len(self._tasks))
+            active_sessions = sum(1 for task in self._tasks if task.session_active)
             self.header.update_sessions(active_sessions)
             self._update_review_queue_hint()
             self._update_keybinding_hints()
@@ -341,18 +351,18 @@ class KanbanScreen(KaganScreen):
         self._refresh_timer = None
         self.run_worker(self._refresh_and_sync())
 
-    def _update_merge_readiness_cache(self, tickets: list[Task]) -> None:
-        for ticket in tickets:
-            if ticket.status != TaskStatus.REVIEW:
-                self._merge_readiness.pop(ticket.id, None)
+    def _update_merge_readiness_cache(self, tasks: list[Task]) -> None:
+        for task in tasks:
+            if task.status != TaskStatus.REVIEW:
+                self._merge_readiness.pop(task.id, None)
                 continue
-            readiness_value = getattr(ticket, "merge_readiness", "risk")
+            readiness_value = getattr(task, "merge_readiness", "risk")
             readiness = (
                 readiness_value.value if hasattr(readiness_value, "value") else str(readiness_value)
             )
-            if ticket.merge_failed:
+            if task.merge_failed:
                 readiness = "blocked"
-            self._merge_readiness[ticket.id] = readiness or "risk"
+            self._merge_readiness[task.id] = readiness or "risk"
 
     def _sync_merge_readiness(self) -> None:
         for status in COLUMN_ORDER:
@@ -367,9 +377,9 @@ class KanbanScreen(KaganScreen):
             hint = self.query_one("#review-queue-hint", Static)
         except NoMatches:
             return
-        review_count = sum(1 for ticket in self._tickets if ticket.status == TaskStatus.REVIEW)
+        review_count = sum(1 for task in self._tasks if task.status == TaskStatus.REVIEW)
         if review_count > 1:
-            hint.update("Hint: multiple tickets are in REVIEW. Merging in order reduces conflicts.")
+            hint.update("Hint: multiple tasks are in REVIEW. Merging in order reduces conflicts.")
             hint.add_class("visible")
         else:
             hint.update("")
@@ -383,10 +393,10 @@ class KanbanScreen(KaganScreen):
             return
 
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
+        if not card or not card.task_model:
             hints = build_keybinding_hints(None, None)
         else:
-            hints = build_keybinding_hints(card.ticket.status, card.ticket.task_type)
+            hints = build_keybinding_hints(card.task_model.status, card.task_model.task_type)
 
         hint_widget.show_hints(hints)
 
@@ -421,7 +431,7 @@ class KanbanScreen(KaganScreen):
             search_bar = self.query_one("#search-bar", SearchBar)
             if search_bar.is_visible:
                 search_bar.hide()
-                self._filtered_tickets = None
+                self._filtered_tasks = None
                 self.run_worker(self._refresh_board())
                 return
         except NoMatches:
@@ -440,7 +450,7 @@ class KanbanScreen(KaganScreen):
 
     async def action_toggle_peek(self) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
+        if not card or not card.task_model:
             return
         try:
             overlay = self.query_one("#peek-overlay", PeekOverlay)
@@ -449,24 +459,24 @@ class KanbanScreen(KaganScreen):
         if not overlay.toggle():
             return
 
-        ticket = card.ticket
+        task = card.task_model
         scheduler = self.ctx.automation_service
-        ticket_type = ticket.task_type
+        task_type = task.task_type
 
-        if ticket_type == TaskType.AUTO:
-            if scheduler.is_running(ticket.id):
-                iteration = scheduler.get_iteration_count(ticket.id)
+        if task_type == TaskType.AUTO:
+            if scheduler.is_running(task.id):
+                iteration = scheduler.get_iteration_count(task.id)
                 max_iter = self.kagan_app.config.general.max_iterations
                 status = f"🟢 Running (Iter {iteration}/{max_iter})"
             else:
                 status = "⚪ Idle"
         else:
-            status = "🟢 Session Active" if ticket.session_active else "⚪ No Active Session"
+            status = "🟢 Session Active" if task.session_active else "⚪ No Active Session"
 
-        scratchpad = await self.ctx.task_service.get_scratchpad(ticket.id)
+        scratchpad = await self.ctx.task_service.get_scratchpad(task.id)
         content = scratchpad if scratchpad else "(No scratchpad)"
 
-        overlay.update_content(ticket.short_id, ticket.title, status, content)
+        overlay.update_content(task.short_id, task.title, status, content)
         x_pos = min(card.region.x + card.region.width + 2, self.size.width - 55)
         y_pos = max(1, card.region.y)
         overlay.show_at(x_pos, y_pos)
@@ -531,9 +541,9 @@ class KanbanScreen(KaganScreen):
             return
 
         feedback_actions = {
-            "delete_ticket_direct",
+            "delete_task_direct",
             "merge_direct",
-            "edit_ticket",
+            "edit_task",
             "view_details",
             "open_session",
             "start_agent",
@@ -561,7 +571,7 @@ class KanbanScreen(KaganScreen):
             search_bar = self.query_one("#search-bar", SearchBar)
             if search_bar.is_visible:
                 search_bar.hide()
-                self._filtered_tickets = None
+                self._filtered_tasks = None
                 self.run_worker(self._refresh_board())
             else:
                 search_bar.show()
@@ -572,26 +582,26 @@ class KanbanScreen(KaganScreen):
     async def on_search_query_changed(self, event: SearchBar.QueryChanged) -> None:
         query = event.query.strip()
         if not query:
-            self._filtered_tickets = None
+            self._filtered_tasks = None
         else:
-            self._filtered_tickets = await self.ctx.task_service.search(query)
+            self._filtered_tasks = await self.ctx.task_service.search(query)
         await self._refresh_board()
 
     # =========================================================================
-    # Ticket Operations
+    # Task Operations
     # =========================================================================
 
-    def action_new_ticket(self) -> None:
-        self.app.push_screen(TicketDetailsModal(), callback=self._on_ticket_modal_result)
+    def action_new_task(self) -> None:
+        self.app.push_screen(TaskDetailsModal(), callback=self._on_task_modal_result)
 
-    def action_new_auto_ticket(self) -> None:
+    def action_new_auto_task(self) -> None:
         self.app.push_screen(
-            TicketDetailsModal(initial_type=TaskType.AUTO),
-            callback=self._on_ticket_modal_result,
+            TaskDetailsModal(initial_type=TaskType.AUTO),
+            callback=self._on_task_modal_result,
         )
 
-    async def _on_ticket_modal_result(self, result: ModalAction | dict | None) -> None:
-        if isinstance(result, dict) and self._editing_ticket_id is None:
+    async def _on_task_modal_result(self, result: ModalAction | dict | None) -> None:
+        if isinstance(result, dict) and self._editing_task_id is None:
             task = await self.ctx.task_service.create_task(
                 result.get("title", ""),
                 result.get("description", ""),
@@ -599,99 +609,97 @@ class KanbanScreen(KaganScreen):
             )
             await self.ctx.task_service.update_fields(task.id, **result)
             await self._refresh_board()
-            self.notify(f"Created ticket: {task.title}")
-        elif isinstance(result, dict) and self._editing_ticket_id is not None:
-            await self.ctx.task_service.update_fields(self._editing_ticket_id, **result)
+            self.notify(f"Created task: {task.title}")
+        elif isinstance(result, dict) and self._editing_task_id is not None:
+            await self.ctx.task_service.update_fields(self._editing_task_id, **result)
             await self._refresh_board()
-            self.notify("Ticket updated")
-            self._editing_ticket_id = None
+            self.notify("Task updated")
+            self._editing_task_id = None
         elif result == ModalAction.DELETE:
-            self.action_delete_ticket()
+            self.action_delete_task()
 
-    def action_edit_ticket(self) -> None:
+    def action_edit_task(self) -> None:
         card = focus.get_focused_card(self)
-        if card and card.ticket:
-            self._editing_ticket_id = card.ticket.id
+        if card and card.task_model:
+            self._editing_task_id = card.task_model.id
             self.app.push_screen(
-                TicketDetailsModal(
-                    ticket=card.ticket,
+                TaskDetailsModal(
+                    task=card.task_model,
                     start_editing=True,
-                    merge_readiness=self._merge_readiness.get(card.ticket.id),
+                    merge_readiness=self._merge_readiness.get(card.task_model.id),
                 ),
-                callback=self._on_ticket_modal_result,
+                callback=self._on_task_modal_result,
             )
 
-    def action_delete_ticket(self) -> None:
+    def action_delete_task(self) -> None:
         card = focus.get_focused_card(self)
-        if card and card.ticket:
-            self._pending_delete_ticket = card.ticket
+        if card and card.task_model:
+            self._pending_delete_task = card.task_model
             self.app.push_screen(
-                ConfirmModal(title="Delete Ticket?", message=f'"{card.ticket.title}"'),
+                ConfirmModal(title="Delete Task?", message=f'"{card.task_model.title}"'),
                 callback=self._on_delete_confirmed,
             )
 
     async def _on_delete_confirmed(self, confirmed: bool | None) -> None:
-        if confirmed and self._pending_delete_ticket:
-            ticket = self._pending_delete_ticket
+        if confirmed and self._pending_delete_task:
+            task = self._pending_delete_task
             if self.ctx.merge_service:
-                await self.ctx.merge_service.delete_task(ticket)
+                await self.ctx.merge_service.delete_task(task)
             await self._refresh_board()
-            self.notify(f"Deleted ticket: {ticket.title}")
+            self.notify(f"Deleted task: {task.title}")
             focus.focus_first_card(self)
-        self._pending_delete_ticket = None
+        self._pending_delete_task = None
 
-    async def action_delete_ticket_direct(self) -> None:
+    async def action_delete_task_direct(self) -> None:
         card = focus.get_focused_card(self)
-        if card and card.ticket:
-            ticket = card.ticket
+        if card and card.task_model:
+            task = card.task_model
             if self.ctx.merge_service:
-                await self.ctx.merge_service.delete_task(ticket)
+                await self.ctx.merge_service.delete_task(task)
             await self._refresh_board()
-            self.notify(f"Deleted: {ticket.title}")
+            self.notify(f"Deleted: {task.title}")
             focus.focus_first_card(self)
 
     async def action_merge_direct(self) -> None:
-        ticket = self._get_review_ticket(focus.get_focused_card(self))
-        if not ticket:
+        task = self._get_review_task(focus.get_focused_card(self))
+        if not task:
             return
-        if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(ticket):
-            success, message = await self.ctx.merge_service.close_exploratory(ticket)
+        if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(task):
+            success, message = await self.ctx.merge_service.close_exploratory(task)
             if success:
                 await self._refresh_board()
-                self.notify(f"Closed as exploratory: {ticket.title}")
+                self.notify(f"Closed as exploratory: {task.title}")
             else:
                 self.notify(message, severity="error")
             return
         self.notify("Merging... (this may take a few seconds)", severity="information")
         success, message = (
-            await self.ctx.merge_service.merge_task(ticket) if self.ctx.merge_service else (False, "")
+            await self.ctx.merge_service.merge_task(task) if self.ctx.merge_service else (False, "")
         )
         if success:
             await self._refresh_board()
-            self.notify(f"Merged: {ticket.title}", severity="information")
+            self.notify(f"Merged: {task.title}", severity="information")
         else:
-            self.notify(KanbanScreen._format_merge_failure(ticket, message), severity="error")
+            self.notify(KanbanScreen._format_merge_failure(task, message), severity="error")
 
-    async def _move_ticket(self, forward: bool) -> None:
+    async def _move_task(self, forward: bool) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
+        if not card or not card.task_model:
             return
-        ticket = card.ticket
-        status = ticket.status
-        ticket_type = ticket.task_type
+        task = card.task_model
+        status = task.status
+        task_type = task.task_type
 
-        new_status = (
-            TaskStatus.next_status(status) if forward else TaskStatus.prev_status(status)
-        )
+        new_status = TaskStatus.next_status(status) if forward else TaskStatus.prev_status(status)
         if new_status:
-            if status == TaskStatus.IN_PROGRESS and ticket_type == TaskType.AUTO:
-                self._pending_auto_move_ticket = ticket
+            if status == TaskStatus.IN_PROGRESS and task_type == TaskType.AUTO:
+                self._pending_auto_move_task = task
                 self._pending_auto_move_status = new_status
-                title = ticket.title[:NOTIFICATION_TITLE_MAX_LENGTH]
+                title = task.title[:NOTIFICATION_TITLE_MAX_LENGTH]
                 destination = new_status.value.upper()
                 self.app.push_screen(
                     ConfirmModal(
-                        title="Stop Agent and Move Ticket?",
+                        title="Stop Agent and Move Task?",
                         message=(
                             f"Stop agent, keep worktree/logs, and move '{title}' to {destination}?"
                         ),
@@ -701,9 +709,9 @@ class KanbanScreen(KaganScreen):
                 return
 
             if status == TaskStatus.REVIEW and new_status == TaskStatus.DONE:
-                if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(ticket):
-                    self._pending_close_ticket = ticket
-                    title = ticket.title[:NOTIFICATION_TITLE_MAX_LENGTH]
+                if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(task):
+                    self._pending_close_task = task
+                    title = task.title[:NOTIFICATION_TITLE_MAX_LENGTH]
                     self.app.push_screen(
                         ConfirmModal(
                             title="Close as Exploratory?",
@@ -712,11 +720,11 @@ class KanbanScreen(KaganScreen):
                         callback=self._on_close_confirmed,
                     )
                     return
-                self._pending_merge_task = ticket
-                title = ticket.title[:NOTIFICATION_TITLE_MAX_LENGTH]
+                self._pending_merge_task = task
+                title = task.title[:NOTIFICATION_TITLE_MAX_LENGTH]
                 self.app.push_screen(
                     ConfirmModal(
-                        title="Complete Ticket?",
+                        title="Complete Task?",
                         message=f"Merge '{title}' and move to DONE?",
                     ),
                     callback=self._on_merge_confirmed,
@@ -725,123 +733,127 @@ class KanbanScreen(KaganScreen):
 
             if (
                 status == TaskStatus.IN_PROGRESS
-                and ticket_type == TaskType.PAIR
+                and task_type == TaskType.PAIR
                 and new_status == TaskStatus.REVIEW
             ):
-                self._pending_advance_ticket = ticket
-                title = ticket.title[:NOTIFICATION_TITLE_MAX_LENGTH]
+                self._pending_advance_task = task
+                title = task.title[:NOTIFICATION_TITLE_MAX_LENGTH]
                 self.app.push_screen(
                     ConfirmModal(title="Advance to Review?", message=f"Move '{title}' to REVIEW?"),
                     callback=self._on_advance_confirmed,
                 )
                 return
 
-            # If moving AUTO ticket out of IN_PROGRESS, clear agent state immediately
+            # If moving AUTO task out of IN_PROGRESS, clear agent state immediately
             if (
-                ticket_type == TaskType.AUTO
+                task_type == TaskType.AUTO
                 and status == TaskStatus.IN_PROGRESS
                 and new_status != TaskStatus.REVIEW
             ):
                 # Clear agent state on UI before moving
                 column = self.query_one("#column-in_progress", KanbanColumn)
-                column.update_iterations({ticket.id: ""})
+                column.update_iterations({task.id: ""})
                 for c in column.get_cards():
-                    if c.ticket and c.ticket.id == ticket.id:
+                    if c.task_model and c.task_model.id == task.id:
                         c.is_agent_active = False
 
-            await self.ctx.task_service.move(ticket.id, new_status)
+            await self.ctx.task_service.move(task.id, new_status)
             await self._refresh_board()
-            self.notify(f"Moved #{ticket.id} to {new_status.value}")
+            self.notify(f"Moved #{task.id} to {new_status.value}")
             focus.focus_column(self, new_status)
         else:
             self.notify(f"Already in {'final' if forward else 'first'} status", severity="warning")
 
     async def _on_merge_confirmed(self, confirmed: bool | None) -> None:
         if confirmed and self._pending_merge_task:
-            ticket = self._pending_merge_task
+            task = self._pending_merge_task
             self.notify("Merging... (this may take a few seconds)", severity="information")
             success, message = (
-                await self.ctx.merge_service.merge_task(ticket) if self.ctx.merge_service else (False, "")
+                await self.ctx.merge_service.merge_task(task)
+                if self.ctx.merge_service
+                else (False, "")
             )
             if success:
                 await self._refresh_board()
-                self.notify(f"Merged and completed: {ticket.title}", severity="information")
+                self.notify(f"Merged and completed: {task.title}", severity="information")
             else:
-                self.notify(KanbanScreen._format_merge_failure(ticket, message), severity="error")
+                self.notify(KanbanScreen._format_merge_failure(task, message), severity="error")
         self._pending_merge_task = None
 
     async def _on_close_confirmed(self, confirmed: bool | None) -> None:
-        if confirmed and self._pending_close_ticket:
-            ticket = self._pending_close_ticket
+        if confirmed and self._pending_close_task:
+            task = self._pending_close_task
             success, message = (
-                await self.ctx.merge_service.close_exploratory(ticket) if self.ctx.merge_service else (False, "")
+                await self.ctx.merge_service.close_exploratory(task)
+                if self.ctx.merge_service
+                else (False, "")
             )
             if success:
                 await self._refresh_board()
-                self.notify(f"Closed as exploratory: {ticket.title}")
+                self.notify(f"Closed as exploratory: {task.title}")
             else:
                 self.notify(message, severity="error")
-        self._pending_close_ticket = None
+        self._pending_close_task = None
 
     async def _on_advance_confirmed(self, confirmed: bool | None) -> None:
-        if confirmed and self._pending_advance_ticket:
-            ticket = self._pending_advance_ticket
+        if confirmed and self._pending_advance_task:
+            task = self._pending_advance_task
             await self.ctx.task_service.update_fields(
-                ticket.id,
+                task.id,
                 status=TaskStatus.REVIEW,
                 merge_failed=False,
                 merge_error=None,
                 merge_readiness=MergeReadiness.RISK,
             )
-            await self.ctx.task_service.append_event(ticket.id, "review", "Moved to REVIEW")
+            await self.ctx.task_service.append_event(task.id, "review", "Moved to REVIEW")
             await self._refresh_board()
-            self.notify(f"Moved #{ticket.id} to REVIEW")
+            self.notify(f"Moved #{task.id} to REVIEW")
             focus.focus_column(self, TaskStatus.REVIEW)
-        self._pending_advance_ticket = None
+        self._pending_advance_task = None
 
     async def _on_auto_move_confirmed(self, confirmed: bool | None) -> None:
-        ticket = self._pending_auto_move_ticket
+        task = self._pending_auto_move_task
         new_status = self._pending_auto_move_status
-        self._pending_auto_move_ticket = None
+        self._pending_auto_move_task = None
         self._pending_auto_move_status = None
 
-        if not confirmed or ticket is None or new_status is None:
+        if not confirmed or task is None or new_status is None:
             return
 
         scheduler = self.ctx.automation_service
-        if scheduler.is_running(ticket.id):
-            await scheduler.stop_task(ticket.id)
+        if scheduler.is_running(task.id):
+            await scheduler.stop_task(task.id)
 
         # Clear agent state immediately on UI to prevent stale indicators
         try:
             column = self.query_one("#column-in_progress", KanbanColumn)
-            column.update_iterations({ticket.id: ""})
+            column.update_iterations({task.id: ""})
             for card in column.get_cards():
-                if card.ticket and card.ticket.id == ticket.id:
+                if card.task_model and card.task_model.id == task.id:
                     card.is_agent_active = False
         except Exception:
             pass  # Column might not exist yet
 
-        await self.ctx.task_service.move(ticket.id, new_status)
+        await self.ctx.task_service.move(task.id, new_status)
         await self._refresh_board()
-        self.notify(f"Moved #{ticket.id} to {new_status.value} (agent stopped)")
+        self.notify(f"Moved #{task.id} to {new_status.value} (agent stopped)")
         focus.focus_column(self, new_status)
 
     async def action_move_forward(self) -> None:
-        await self._move_ticket(forward=True)
+        await self._move_task(forward=True)
 
     async def action_move_backward(self) -> None:
-        await self._move_ticket(forward=False)
+        await self._move_task(forward=False)
 
-    async def action_duplicate_ticket(self) -> None:
+    async def action_duplicate_task(self) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
-            self.notify("No ticket selected", severity="warning")
+        if not card or not card.task_model:
+            self.notify("No task selected", severity="warning")
             return
-        from kagan.ui.modals.duplicate_ticket import DuplicateTicketModal
+        from kagan.ui.modals.duplicate_task import DuplicateTaskModal
 
         self.app.push_screen(
-            DuplicateTicketModal(source_ticket=card.ticket),
+            DuplicateTaskModal(source_task=card.task_model),
             callback=self._on_duplicate_result,
         )
 
@@ -857,32 +869,32 @@ class KanbanScreen(KaganScreen):
             self.notify(f"Created duplicate: #{task.short_id}")
             focus.focus_column(self, TaskStatus.BACKLOG)
 
-    def action_copy_ticket_id(self) -> None:
+    def action_copy_task_id(self) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
-            self.notify("No ticket selected", severity="warning")
+        if not card or not card.task_model:
+            self.notify("No task selected", severity="warning")
             return
-        copy_with_notification(self.app, f"#{card.ticket.short_id}", "Ticket ID")
+        copy_with_notification(self.app, f"#{card.task_model.short_id}", "Task ID")
 
     def action_view_details(self) -> None:
         card = focus.get_focused_card(self)
-        if card and card.ticket:
-            self._editing_ticket_id = card.ticket.id
+        if card and card.task_model:
+            self._editing_task_id = card.task_model.id
             self.app.push_screen(
-                TicketDetailsModal(
-                    ticket=card.ticket,
-                    merge_readiness=self._merge_readiness.get(card.ticket.id),
+                TaskDetailsModal(
+                    task=card.task_model,
+                    merge_readiness=self._merge_readiness.get(card.task_model.id),
                 ),
-                callback=self._on_ticket_modal_result,
+                callback=self._on_task_modal_result,
             )
 
     def action_expand_description(self) -> None:
         """Expand description in full-screen editor (read-only from Kanban)."""
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
-            self.notify("No ticket selected", severity="warning")
+        if not card or not card.task_model:
+            self.notify("No task selected", severity="warning")
             return
-        description = card.ticket.description or ""
+        description = card.task_model.description or ""
         modal = DescriptionEditorModal(
             description=description, readonly=True, title="View Description"
         )
@@ -894,29 +906,29 @@ class KanbanScreen(KaganScreen):
 
     async def action_open_session(self) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
+        if not card or not card.task_model:
             return
-        ticket = card.ticket
-        if ticket.status == TaskStatus.REVIEW:
+        task = card.task_model
+        if task.status == TaskStatus.REVIEW:
             await self.action_open_review()
             return
 
-        # Only PAIR tickets need manual session opening
-        if ticket.task_type != TaskType.PAIR:
+        # Only PAIR tasks need manual session opening
+        if task.task_type != TaskType.PAIR:
             return
 
         # Ensure worktree exists
-        wt_path = await self.ctx.workspace_service.get_path(ticket.id)
+        wt_path = await self.ctx.workspace_service.get_path(task.id)
         if wt_path is None:
             self.notify("Creating worktree...", severity="information")
             base = self.kagan_app.config.general.default_base_branch
-            wt_path = await self.ctx.workspace_service.create(ticket.id, ticket.title, base)
+            wt_path = await self.ctx.workspace_service.create(task.id, task.title, base)
             self.notify("Worktree created", severity="information")
 
         # Create session if doesn't exist
-        if not await self.ctx.session_service.session_exists(ticket.id):
+        if not await self.ctx.session_service.session_exists(task.id):
             self.notify("Creating session...", severity="information")
-            await self.ctx.session_service.create_session(ticket, wt_path)
+            await self.ctx.session_service.create_session(task, wt_path)
 
         # Show TmuxGatewayModal if not skipped
         if not self.kagan_app.config.ui.skip_tmux_gateway:
@@ -931,30 +943,28 @@ class KanbanScreen(KaganScreen):
                     if asyncio.iscoroutine(cb_result):
                         asyncio.create_task(cb_result)
                 # Proceed to open tmux session
-                self.app.call_later(self._do_open_pair_session, ticket)
+                self.app.call_later(self._do_open_pair_session, task)
 
-            self.app.push_screen(TmuxGatewayModal(ticket.id, ticket.title), on_gateway_result)
+            self.app.push_screen(TmuxGatewayModal(task.id, task.title), on_gateway_result)
             return
 
         # Skip modal - open directly
-        await self._do_open_pair_session(ticket)
+        await self._do_open_pair_session(task)
 
-    async def _do_open_pair_session(self, ticket: Task) -> None:
+    async def _do_open_pair_session(self, task: Task) -> None:
         """Open the tmux session after modal confirmation."""
         try:
             # Move BACKLOG to IN_PROGRESS if needed
-            if ticket.status == TaskStatus.BACKLOG:
-                await self.ctx.task_service.update_fields(
-                    ticket.id, status=TaskStatus.IN_PROGRESS
-                )
+            if task.status == TaskStatus.BACKLOG:
+                await self.ctx.task_service.update_fields(task.id, status=TaskStatus.IN_PROGRESS)
                 await self._refresh_board()
 
             # Suspend app and attach to session
             with self.app.suspend():
-                await self.ctx.session_service.attach_session(ticket.id)
+                await self.ctx.session_service.attach_session(task.id)
 
             # Check if session still exists after returning from attach
-            session_still_exists = await self.ctx.session_service.session_exists(ticket.id)
+            session_still_exists = await self.ctx.session_service.session_exists(task.id)
             if session_still_exists:
                 # User detached, session is still active
                 return
@@ -966,15 +976,13 @@ class KanbanScreen(KaganScreen):
                 if result:
 
                     async def move_to_review() -> None:
-                        await self.ctx.task_service.update_fields(
-                            ticket.id, status=TaskStatus.REVIEW
-                        )
+                        await self.ctx.task_service.update_fields(task.id, status=TaskStatus.REVIEW)
                         await self._refresh_board()
 
                     self.app.call_later(move_to_review)
 
             self.app.push_screen(
-                ConfirmModal("Session Complete", "Move ticket to REVIEW?"),
+                ConfirmModal("Session Complete", "Move task to REVIEW?"),
                 on_confirm,
             )
 
@@ -990,41 +998,41 @@ class KanbanScreen(KaganScreen):
 
     async def action_watch_agent(self) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
+        if not card or not card.task_model:
             return
-        ticket = card.ticket
+        task = card.task_model
 
-        # AUTO tickets: Show agent output modal
-        if ticket.task_type == TaskType.AUTO:
-            # Show modal if agent is running OR ticket is IN_PROGRESS/REVIEW
+        # AUTO tasks: Show agent output modal
+        if task.task_type == TaskType.AUTO:
+            # Show modal if agent is running OR task is IN_PROGRESS/REVIEW
             # (IN_PROGRESS: agent may be starting, REVIEW: can view historical logs)
-            is_running = self.ctx.automation_service.is_running(ticket.id)
-            if not is_running and ticket.status not in (
+            is_running = self.ctx.automation_service.is_running(task.id)
+            if not is_running and task.status not in (
                 TaskStatus.IN_PROGRESS,
                 TaskStatus.REVIEW,
             ):
-                self.notify("No agent running for this ticket", severity="warning")
+                self.notify("No agent running for this task", severity="warning")
                 return
 
-            agent = self.ctx.automation_service.get_running_agent(ticket.id)
-            iteration = self.ctx.automation_service.get_iteration_count(ticket.id)
+            agent = self.ctx.automation_service.get_running_agent(task.id)
+            iteration = self.ctx.automation_service.get_iteration_count(task.id)
 
-            # For REVIEW tickets, also check for review agent and historical logs
+            # For REVIEW tasks, also check for review agent and historical logs
             review_agent = None
             is_reviewing_now = False
-            historical_logs: dict[str, list] = {}
+            historical_logs: dict[str, list[AgentTurn]] = {}
 
-            if ticket.status == TaskStatus.REVIEW:
+            if task.status == TaskStatus.REVIEW:
                 # Get review agent if running
-                review_agent = self.ctx.automation_service.get_review_agent(ticket.id)
-                is_reviewing_now = self.ctx.automation_service.is_reviewing(ticket.id)
+                review_agent = self.ctx.automation_service.get_review_agent(task.id)
+                is_reviewing_now = self.ctx.automation_service.is_reviewing(task.id)
 
                 # Load historical logs for both phases
-                impl_logs = await self.ctx.task_service.get_agent_logs(
-                    ticket.id, log_type="implementation"
+                impl_logs = list(
+                    await self.ctx.task_service.get_agent_logs(task.id, log_type="implementation")
                 )
-                review_logs = await self.ctx.task_service.get_agent_logs(
-                    ticket.id, log_type="review"
+                review_logs = list(
+                    await self.ctx.task_service.get_agent_logs(task.id, log_type="review")
                 )
 
                 if impl_logs:
@@ -1035,7 +1043,7 @@ class KanbanScreen(KaganScreen):
                 # Open modal with review mode
                 await self.app.push_screen(
                     AgentOutputModal(
-                        ticket=ticket,
+                        task=task,
                         agent=agent,
                         iteration=iteration,
                         review_agent=review_agent,
@@ -1045,15 +1053,15 @@ class KanbanScreen(KaganScreen):
                 )
                 return
 
-            # For IN_PROGRESS tickets without running agent, check for historical logs
+            # For IN_PROGRESS tasks without running agent, check for historical logs
             if agent is None:
-                logs = await self.ctx.task_service.get_agent_logs(
-                    ticket.id, log_type="implementation"
+                logs = list(
+                    await self.ctx.task_service.get_agent_logs(task.id, log_type="implementation")
                 )
                 if logs:
                     await self.app.push_screen(
                         AgentOutputModal(
-                            ticket=ticket,
+                            task=task,
                             agent=None,
                             iteration=iteration,
                             historical_logs={"implementation": logs},
@@ -1065,54 +1073,54 @@ class KanbanScreen(KaganScreen):
                     )
                 return
 
-            # Normal case: agent is running for IN_PROGRESS ticket
+            # Normal case: agent is running for IN_PROGRESS task
             await self.app.push_screen(
                 AgentOutputModal(
-                    ticket=ticket,
+                    task=task,
                     agent=agent,
                     iteration=iteration,
                 )
             )
-        # PAIR tickets: Attach to tmux session
+        # PAIR tasks: Attach to tmux session
         else:
-            if not await self.ctx.session_service.session_exists(ticket.id):
-                self.notify("No active session for this ticket", severity="warning")
+            if not await self.ctx.session_service.session_exists(task.id):
+                self.notify("No active session for this task", severity="warning")
                 return
 
             # Attach to existing session
             with self.app.suspend():
-                await self.ctx.session_service.attach_session(ticket.id)
+                await self.ctx.session_service.attach_session(task.id)
 
     async def action_start_agent(self) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
+        if not card or not card.task_model:
             return
-        ticket = card.ticket
+        task = card.task_model
 
-        # Only AUTO tickets
-        if ticket.task_type == TaskType.PAIR:
+        # Only AUTO tasks
+        if task.task_type == TaskType.PAIR:
             return
 
-        if self.ctx.automation_service.is_running(ticket.id):
+        if self.ctx.automation_service.is_running(task.id):
             self.notify(
-                "Agent already running for this ticket (press w to watch)", severity="warning"
+                "Agent already running for this task (press w to watch)", severity="warning"
             )
             return
 
-        # Move BACKLOG tickets to IN_PROGRESS first
-        if ticket.status == TaskStatus.BACKLOG:
-            await self.ctx.task_service.move(ticket.id, TaskStatus.IN_PROGRESS)
-            # Refresh ticket to get updated status
-            refreshed = await self.ctx.task_service.get_task(ticket.id)
+        # Move BACKLOG tasks to IN_PROGRESS first
+        if task.status == TaskStatus.BACKLOG:
+            await self.ctx.task_service.move(task.id, TaskStatus.IN_PROGRESS)
+            # Refresh task to get updated status
+            refreshed = await self.ctx.task_service.get_task(task.id)
             if refreshed:
-                ticket = refreshed
+                task = refreshed
             await self._refresh_board()
 
         # Show immediate feedback
         self.notify("Starting agent...", severity="information")
 
         # Delegate to automation service
-        result = self.ctx.automation_service.spawn_for_task(ticket)
+        result = self.ctx.automation_service.spawn_for_task(task)
         # Handle both async and sync returns for test compatibility
         if hasattr(result, "__await__"):
             spawned = await result
@@ -1120,29 +1128,29 @@ class KanbanScreen(KaganScreen):
             spawned = result
 
         if spawned:
-            self.notify(f"Agent started: {ticket.id[:8]}", severity="information")
+            self.notify(f"Agent started: {task.id[:8]}", severity="information")
         else:
             self.notify("Failed to start agent (at capacity?)", severity="warning")
 
     async def action_stop_agent(self) -> None:
         card = focus.get_focused_card(self)
-        if not card or not card.ticket:
+        if not card or not card.task_model:
             return
-        ticket = card.ticket
+        task = card.task_model
 
-        if not self.ctx.automation_service.is_running(ticket.id):
-            self.notify("No agent running for this ticket", severity="warning")
+        if not self.ctx.automation_service.is_running(task.id):
+            self.notify("No agent running for this task", severity="warning")
             return
 
         # Show immediate feedback
         self.notify("Stopping agent...", severity="information")
 
-        result = self.ctx.automation_service.stop_task(ticket.id)
+        result = self.ctx.automation_service.stop_task(task.id)
         # Handle both async and sync returns for test compatibility
         if hasattr(result, "__await__"):
             await result
 
-        self.notify(f"Agent stopped: {ticket.id[:8]}", severity="information")
+        self.notify(f"Agent stopped: {task.id[:8]}", severity="information")
 
     # =========================================================================
     # Screen Navigation
@@ -1165,82 +1173,84 @@ class KanbanScreen(KaganScreen):
     # Review Operations
     # =========================================================================
 
-    def _get_review_ticket(self, card: TicketCard | None) -> Task | None:
-        """Get ticket from card if it's in REVIEW status."""
-        if not card or not card.ticket:
+    def _get_review_task(self, card: TaskCard | None) -> Task | None:
+        """Get task from card if it's in REVIEW status."""
+        if not card or not card.task_model:
             return None
-        if card.ticket.status != TaskStatus.REVIEW:
-            self.notify("Ticket is not in REVIEW", severity="warning")
+        if card.task_model.status != TaskStatus.REVIEW:
+            self.notify("Task is not in REVIEW", severity="warning")
             return None
-        return card.ticket
+        return card.task_model
 
     async def action_merge(self) -> None:
-        ticket = self._get_review_ticket(focus.get_focused_card(self))
-        if not ticket:
+        task = self._get_review_task(focus.get_focused_card(self))
+        if not task:
             return
-        if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(ticket):
-            success, message = await self.ctx.merge_service.close_exploratory(ticket)
+        if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(task):
+            success, message = await self.ctx.merge_service.close_exploratory(task)
             if success:
                 await self._refresh_board()
-                self.notify(f"Closed as exploratory: {ticket.title}")
+                self.notify(f"Closed as exploratory: {task.title}")
             else:
                 self.notify(message, severity="error")
             return
         self.notify("Merging... (this may take a few seconds)", severity="information")
         success, message = (
-            await self.ctx.merge_service.merge_task(ticket) if self.ctx.merge_service else (False, "")
+            await self.ctx.merge_service.merge_task(task) if self.ctx.merge_service else (False, "")
         )
         if success:
             await self._refresh_board()
-            self.notify(f"Merged and completed: {ticket.title}", severity="information")
+            self.notify(f"Merged and completed: {task.title}", severity="information")
         else:
-            self.notify(KanbanScreen._format_merge_failure(ticket, message), severity="error")
+            self.notify(KanbanScreen._format_merge_failure(task, message), severity="error")
 
     async def action_view_diff(self) -> None:
-        ticket = self._get_review_ticket(focus.get_focused_card(self))
-        if not ticket:
+        task = self._get_review_task(focus.get_focused_card(self))
+        if not task:
             return
         worktree = self.ctx.workspace_service
         base = self.kagan_app.config.general.default_base_branch
-        diff_text = await worktree.get_diff(ticket.id, base_branch=base)  # type: ignore[misc]
-        title = f"Diff: {ticket.short_id} {ticket.title[:NOTIFICATION_TITLE_MAX_LENGTH]}"
+        diff_text = await worktree.get_diff(task.id, base_branch=base)  # type: ignore[misc]
+        title = f"Diff: {task.short_id} {task.title[:NOTIFICATION_TITLE_MAX_LENGTH]}"
 
         await self.app.push_screen(
-            DiffModal(title=title, diff_text=diff_text, ticket=ticket),
-            callback=lambda result: self._on_diff_result(ticket, result),
+            DiffModal(title=title, diff_text=diff_text, task=task),
+            callback=lambda result: self._on_diff_result(task, result),
         )
 
-    async def _on_diff_result(self, ticket: Task, result: str | None) -> None:
+    async def _on_diff_result(self, task: Task, result: str | None) -> None:
         if result == "approve":
-            if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(ticket):
-                success, message = await self.ctx.merge_service.close_exploratory(ticket)
+            if self.ctx.merge_service and await self.ctx.merge_service.has_no_changes(task):
+                success, message = await self.ctx.merge_service.close_exploratory(task)
                 if success:
                     await self._refresh_board()
-                    self.notify(f"Closed as exploratory: {ticket.title}")
+                    self.notify(f"Closed as exploratory: {task.title}")
                 else:
                     self.notify(message, severity="error")
                 return
             self.notify("Merging... (this may take a few seconds)", severity="information")
             success, message = (
-                await self.ctx.merge_service.merge_task(ticket) if self.ctx.merge_service else (False, "")
+                await self.ctx.merge_service.merge_task(task)
+                if self.ctx.merge_service
+                else (False, "")
             )
             if success:
                 await self._refresh_board()
-                self.notify(f"Merged: {ticket.title}", severity="information")
+                self.notify(f"Merged: {task.title}", severity="information")
             else:
-                self.notify(KanbanScreen._format_merge_failure(ticket, message), severity="error")
+                self.notify(KanbanScreen._format_merge_failure(task, message), severity="error")
         elif result == "reject":
-            await self._handle_reject_with_feedback(ticket)
+            await self._handle_reject_with_feedback(task)
 
     async def action_open_review(self) -> None:
-        ticket = self._get_review_ticket(focus.get_focused_card(self))
-        if not ticket:
+        task = self._get_review_task(focus.get_focused_card(self))
+        if not task:
             return
 
-        agent_config = ticket.get_agent_config(self.kagan_app.config)
+        agent_config = task.get_agent_config(self.kagan_app.config)
         await self.app.push_screen(
             ReviewModal(
-                ticket=ticket,
+                task=task,
                 worktree_manager=self.ctx.workspace_service,
                 agent_config=agent_config,
                 base_branch=self.kagan_app.config.general.default_base_branch,
@@ -1250,65 +1260,69 @@ class KanbanScreen(KaganScreen):
         )
 
     async def _on_review_result(self, result: str | None) -> None:
-        ticket = self._get_review_ticket(focus.get_focused_card(self))
-        if not ticket:
+        task = self._get_review_task(focus.get_focused_card(self))
+        if not task:
             return
         if result == "approve":
             self.notify("Merging... (this may take a few seconds)", severity="information")
             success, message = (
-                await self.ctx.merge_service.merge_task(ticket) if self.ctx.merge_service else (False, "")
+                await self.ctx.merge_service.merge_task(task)
+                if self.ctx.merge_service
+                else (False, "")
             )
             if success:
                 await self._refresh_board()
-                self.notify(f"Merged and completed: {ticket.title}", severity="information")
+                self.notify(f"Merged and completed: {task.title}", severity="information")
             else:
-                self.notify(KanbanScreen._format_merge_failure(ticket, message), severity="error")
+                self.notify(KanbanScreen._format_merge_failure(task, message), severity="error")
         elif result == "exploratory":
             success, message = (
-                await self.ctx.merge_service.close_exploratory(ticket) if self.ctx.merge_service else (False, "")
+                await self.ctx.merge_service.close_exploratory(task)
+                if self.ctx.merge_service
+                else (False, "")
             )
             if success:
                 await self._refresh_board()
-                self.notify(f"Closed as exploratory: {ticket.title}")
+                self.notify(f"Closed as exploratory: {task.title}")
             else:
                 self.notify(message, severity="error")
         elif result == "reject":
-            await self._handle_reject_with_feedback(ticket)
+            await self._handle_reject_with_feedback(task)
 
     @staticmethod
-    def _format_merge_failure(ticket: Task, message: str) -> str:
-        ticket_type = ticket.task_type
-        if ticket_type == TaskType.AUTO:
+    def _format_merge_failure(task: Task, message: str) -> str:
+        task_type = task.task_type
+        if task_type == TaskType.AUTO:
             return f"Merge failed (AUTO): {message}"
         return f"Merge failed (PAIR): {message}"
 
-    async def _handle_reject_with_feedback(self, ticket: Task) -> None:
-        ticket_type = ticket.task_type
-        if ticket_type == TaskType.AUTO:
+    async def _handle_reject_with_feedback(self, task: Task) -> None:
+        task_type = task.task_type
+        if task_type == TaskType.AUTO:
             await self.app.push_screen(
-                RejectionInputModal(ticket.title),
-                callback=lambda result: self._apply_rejection_result(ticket, result),
+                RejectionInputModal(task.title),
+                callback=lambda result: self._apply_rejection_result(task, result),
             )
         else:
-            await self.ctx.task_service.move(ticket.id, TaskStatus.IN_PROGRESS)
+            await self.ctx.task_service.move(task.id, TaskStatus.IN_PROGRESS)
             await self._refresh_board()
-            self.notify(f"Moved back to IN_PROGRESS: {ticket.title}")
+            self.notify(f"Moved back to IN_PROGRESS: {task.title}")
 
-    async def _apply_rejection_result(self, ticket: Task, result: tuple[str, str] | None) -> None:
+    async def _apply_rejection_result(self, task: Task, result: tuple[str, str] | None) -> None:
         if self.ctx.merge_service is None:
             return
         if result is None:
-            await self.ctx.merge_service.apply_rejection_feedback(ticket, None, "shelve")
+            await self.ctx.merge_service.apply_rejection_feedback(task, None, "shelve")
         else:
             feedback, action = result
-            await self.ctx.merge_service.apply_rejection_feedback(ticket, feedback, action)
+            await self.ctx.merge_service.apply_rejection_feedback(task, feedback, action)
         await self._refresh_board()
         if result is None:
-            self.notify(f"Shelved: {ticket.title}")
+            self.notify(f"Shelved: {task.title}")
         elif result[1] == "retry":
-            self.notify(f"Retrying: {ticket.title}")
+            self.notify(f"Retrying: {task.title}")
         else:
-            self.notify(f"Staged for manual restart: {ticket.title}")
+            self.notify(f"Staged for manual restart: {task.title}")
 
     # =========================================================================
     # Config Persistence
@@ -1328,5 +1342,5 @@ class KanbanScreen(KaganScreen):
     # Message Handlers
     # =========================================================================
 
-    def on_ticket_card_selected(self, message: TicketCard.Selected) -> None:
+    def on_task_card_selected(self, message: TaskCard.Selected) -> None:
         self.action_view_details()

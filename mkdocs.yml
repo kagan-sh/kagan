@@ -96,7 +96,7 @@ plugins:
 
 nav:
   - Home: index.md
-  - Ticket Modes: ticket-modes.md
+  - Task Modes: task-modes.md
   - Keyboard Shortcuts: keybindings.md
   - Configuration: config.md
   - Contributing: contributing.md

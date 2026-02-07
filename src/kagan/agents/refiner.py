@@ -1,7 +1,7 @@
 """Prompt refinement service using a dedicated ACP agent.
 
 This module provides the PromptRefiner class which enhances user prompts
-before they are sent to the planner agent for ticket creation.
+before they are sent to the planner agent for task creation.
 """
 
 from __future__ import annotations

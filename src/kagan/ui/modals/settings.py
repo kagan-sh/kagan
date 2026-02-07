@@ -52,7 +52,7 @@ class SettingsModal(ModalScreen[bool]):
                     value=self._config.general.auto_merge,
                     id="auto-merge-switch",
                 )
-                yield Label("Auto-merge completed tickets", classes="setting-label")
+                yield Label("Auto-merge completed tasks", classes="setting-label")
             with Horizontal(classes="setting-row"):
                 yield Switch(
                     value=self._config.general.auto_retry_on_merge_conflict,
@@ -98,7 +98,7 @@ class SettingsModal(ModalScreen[bool]):
                     type="integer",
                 )
             with Vertical(classes="input-group"):
-                yield Label("Max Iterations per Ticket", classes="input-label")
+                yield Label("Max Iterations per Task", classes="input-label")
                 yield Input(
                     value=str(self._config.general.max_iterations),
                     id="max-iterations-input",

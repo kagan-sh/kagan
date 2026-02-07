@@ -1,14 +1,14 @@
-"""E2E snapshot tests for the full autonomous ticket lifecycle.
+"""E2E snapshot tests for the full autonomous task lifecycle.
 
-These tests cover the complete AUTO ticket flow:
-1. Ticket created in AUTO mode in BACKLOG
-2. With auto_start=true, ticket automatically moves to IN_PROGRESS
+These tests cover the complete AUTO task flow:
+1. Task created in AUTO mode in BACKLOG
+2. With auto_start=true, task automatically moves to IN_PROGRESS
 3. User presses 'w' to watch agent output stream
-4. Agent completes work, ticket moves to REVIEW
+4. Agent completes work, task moves to REVIEW
 5. User presses 'w' again to see tabbed view (Implementation + Review)
 6. User opens review modal via 'g r' leader sequence
 7. User approves via 'a' key
-8. Ticket moves to DONE
+8. Task moves to DONE
 9. Git verification: branch merged to main
 
 Note: Tests are synchronous because pytest-textual-snapshot's snap_compare
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -27,6 +28,7 @@ from kagan.adapters.db.repositories import TaskRepository
 from kagan.adapters.db.schema import Task
 from kagan.app import KaganApp
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
+from tests.snapshots.helpers import wait_for_screen
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,6 +40,8 @@ if TYPE_CHECKING:
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+SNAPSHOT_TIME = datetime(2024, 1, 1, 12, 0, 0)
 
 
 def _create_fake_tmux(sessions: dict[str, Any]) -> object:
@@ -92,24 +96,25 @@ async def _setup_auto_lifecycle_project(
     # Initialize real git repo with commit
     await init_git_repo_with_commit(project)
 
-    # Create .kagan directory with config
-    kagan_dir = project / ".kagan"
-    kagan_dir.mkdir()
-    (kagan_dir / "config.toml").write_text(config_content)
+    config_dir = tmp_path / "kagan-config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "kagan-data"
+    data_dir.mkdir()
+    config_path = config_dir / "config.toml"
+    config_path.write_text(config_content)
 
     return SimpleNamespace(
         root=project,
-        db=str(kagan_dir / "state.db"),
-        config=str(kagan_dir / "config.toml"),
-        kagan_dir=kagan_dir,
+        db=str(data_dir / "kagan.db"),
+        config=str(config_path),
     )
 
 
-async def _create_auto_ticket(db_path: str) -> str:
-    """Create an AUTO ticket in BACKLOG with fixed ID for reproducible snapshots.
+async def _create_auto_task(db_path: str) -> str:
+    """Create an AUTO task in BACKLOG with fixed ID for reproducible snapshots.
 
     Returns:
-        The ticket ID.
+        The task ID.
     """
     manager = TaskRepository(db_path)
     await manager.initialize()
@@ -118,7 +123,7 @@ async def _create_auto_ticket(db_path: str) -> str:
         raise RuntimeError("TaskRepository defaults not initialized")
     repo_id = manager.default_repo_id
 
-    ticket = Task(
+    task = Task(
         id="auto0001",
         project_id=project_id,
         repo_id=repo_id,
@@ -127,11 +132,13 @@ async def _create_auto_ticket(db_path: str) -> str:
         priority=TaskPriority.HIGH,
         status=TaskStatus.BACKLOG,
         task_type=TaskType.AUTO,
+        created_at=SNAPSHOT_TIME,
+        updated_at=SNAPSHOT_TIME,
     )
-    await manager.create(ticket)
+    await manager.create(task)
     await manager.close()
 
-    return ticket.id
+    return task.id
 
 
 class LifecycleMockAgentFactory:
@@ -144,6 +151,7 @@ class LifecycleMockAgentFactory:
     def __init__(self, project_root: Path) -> None:
         self._project_root = project_root
         self._agents: list[Any] = []
+        self._response_delay = 0.0
         self._implementation_response = """\
 I've completed the implementation as specified.
 
@@ -163,13 +171,17 @@ I've reviewed the changes and they look good.
 
 ## Review Summary
 
-The implementation correctly addresses the ticket requirements:
+The implementation correctly addresses the task requirements:
 - Code follows project conventions
 - Tests cover the main functionality
 - No obvious security issues
 
 <approve summary="Implementation is correct and well-tested"/>
 """
+
+    def set_response_delay(self, delay: float) -> None:
+        """Set artificial delay before agent responses."""
+        self._response_delay = max(delay, 0.0)
 
     def __call__(
         self,
@@ -182,6 +194,14 @@ The implementation correctly addresses the ticket requirements:
         from tests.snapshots.conftest import MockAgent
 
         agent = MockAgent(project_root, agent_config, read_only=read_only)
+        if self._response_delay > 0:
+            original_send = agent.send_prompt
+
+            async def _delayed_send(prompt: str) -> str | None:
+                await asyncio.sleep(self._response_delay)
+                return await original_send(prompt)
+
+            agent.send_prompt = _delayed_send
 
         # Determine response based on read_only flag (review agents are read_only)
         if read_only:
@@ -228,8 +248,8 @@ active = true
 # =============================================================================
 
 
-class TestAutoTicketLifecycle:
-    """E2E snapshot tests for full autonomous ticket lifecycle."""
+class TestAutoTaskLifecycle:
+    """E2E snapshot tests for full autonomous task lifecycle."""
 
     @pytest.fixture
     def auto_mode_project(
@@ -249,7 +269,7 @@ class TestAutoTicketLifecycle:
             project = loop.run_until_complete(
                 _setup_auto_lifecycle_project(tmp_path, AUTO_MODE_CONFIG)
             )
-            ticket_id = loop.run_until_complete(_create_auto_ticket(project.db))
+            task_id = loop.run_until_complete(_create_auto_task(project.db))
         finally:
             loop.close()
 
@@ -266,8 +286,7 @@ class TestAutoTicketLifecycle:
             root=project.root,
             db=project.db,
             config=project.config,
-            kagan_dir=project.kagan_dir,
-            ticket_id=ticket_id,
+            task_id=task_id,
             mock_factory=mock_factory,
             sessions=sessions,
         )
@@ -278,22 +297,23 @@ class TestAutoTicketLifecycle:
             db_path=project.db,
             config_path=project.config,
             lock_path=None,
+            project_root=project.root,
             agent_factory=project.mock_factory,
         )
 
     @pytest.mark.snapshot
-    def test_auto_lifecycle_01_ticket_created(
+    def test_auto_lifecycle_01_task_created(
         self,
         auto_mode_project: SimpleNamespace,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """AUTO ticket is displayed in BACKLOG column initially."""
+        """AUTO task is displayed in BACKLOG column initially."""
         app = self._create_app(auto_mode_project)
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # Verify we're on KanbanScreen with the AUTO ticket visible
+            # Verify we're on KanbanScreen with the AUTO task visible
             from kagan.ui.screens.kanban import KanbanScreen
 
             assert isinstance(pilot.app.screen, KanbanScreen)
@@ -302,26 +322,52 @@ class TestAutoTicketLifecycle:
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_auto_lifecycle_02_ticket_in_progress(
+    def test_auto_lifecycle_02_task_in_progress(
         self,
         auto_mode_project: SimpleNamespace,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """AUTO ticket moves to IN_PROGRESS when manually started."""
+        """AUTO task moves to IN_PROGRESS when manually started."""
         app = self._create_app(auto_mode_project)
 
         async def run_before(pilot: Pilot) -> None:
+            from textual.css.query import NoMatches
+
+            from kagan.ui.screens.kanban import KanbanScreen
+            from kagan.ui.screens.kanban import focus as kanban_focus
+            from kagan.ui.widgets.card import TaskCard
+
+            auto_mode_project.mock_factory.set_response_delay(3.0)
+            await pilot.pause()
+            screen = pilot.app.screen
+            assert isinstance(screen, KanbanScreen)
+            kanban_focus.focus_first_card(screen)
             await pilot.pause()
             # Start the agent manually by pressing 'a' (start_agent action)
             await pilot.press("a")
             await pilot.pause()
             # Wait longer for the scheduler to process and UI to synchronize
-            # This prevents race condition where ticket appears in multiple columns
+            # This prevents race condition where task appears in multiple columns
             await asyncio.sleep(0.3)
             # Extra pauses for column refresh and UI synchronization
-            await pilot.pause()
-            await pilot.pause()
+            max_wait = 5.0
+            waited = 0.0
+            while waited < max_wait:
+                await pilot.pause()
+                try:
+                    card = pilot.app.screen.query_one(
+                        f"#card-{auto_mode_project.task_id}",
+                        TaskCard,
+                    )
+                except NoMatches:
+                    card = None
+                if card and card.task_model and card.task_model.last_error:
+                    break
+                await asyncio.sleep(0.1)
+                waited += 0.1
+            else:
+                raise TimeoutError("Task error line did not appear on card")
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
@@ -338,7 +384,17 @@ class TestAutoTicketLifecycle:
 
         async def run_before(pilot: Pilot) -> None:
             from kagan.app import KaganApp
+            from kagan.ui.modals.agent_output import AgentOutputModal
+            from kagan.ui.screens.kanban import KanbanScreen
+            from kagan.ui.widgets.streaming_output import StreamingOutput
 
+            auto_mode_project.mock_factory.set_response_delay(3.0)
+            await pilot.pause()
+            from kagan.ui.screens.kanban import focus as kanban_focus
+
+            screen = pilot.app.screen
+            assert isinstance(screen, KanbanScreen)
+            kanban_focus.focus_first_card(screen)
             await pilot.pause()
             # Start agent first
             await pilot.press("a")
@@ -348,20 +404,43 @@ class TestAutoTicketLifecycle:
             # This prevents "No agent running" message in watch modal
             kagan_app = pilot.app
             assert isinstance(kagan_app, KaganApp)
-            max_wait = 2.0
+            max_wait = 10.0
             waited = 0.0
+            agent = None
             while waited < max_wait:
                 agent = kagan_app.ctx.automation_service.get_running_agent(
-                    auto_mode_project.ticket_id
+                    auto_mode_project.task_id
                 )
                 if agent is not None:
                     break
                 await asyncio.sleep(0.05)
                 waited += 0.05
+            if agent is None:
+                raise TimeoutError("Agent did not start in time")
 
-            # Now press 'w' to watch
-            await pilot.press("w")
-            await pilot.pause()
+            task = await kagan_app.ctx.task_service.get_task(auto_mode_project.task_id)
+            if task is None:
+                raise RuntimeError("Task not found for watch modal")
+            iteration = kagan_app.ctx.automation_service.get_iteration_count(task.id)
+            await pilot.app.push_screen(
+                AgentOutputModal(
+                    task=task,
+                    agent=agent,
+                    iteration=iteration,
+                )
+            )
+            await wait_for_screen(pilot, AgentOutputModal, timeout=5.0)
+            max_wait = 5.0
+            waited = 0.0
+            while waited < max_wait:
+                await pilot.pause()
+                output = pilot.app.screen.query_one("#agent-output", StreamingOutput)
+                if list(output.children):
+                    break
+                await asyncio.sleep(0.1)
+                waited += 0.1
+            else:
+                raise TimeoutError("Agent output did not mount")
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
@@ -377,8 +456,19 @@ class TestAutoTicketLifecycle:
         app = self._create_app(auto_mode_project)
 
         async def run_before(pilot: Pilot) -> None:
-            from kagan.app import KaganApp
+            from textual.css.query import NoMatches
 
+            from kagan.app import KaganApp
+            from kagan.ui.modals.agent_output import AgentOutputModal
+            from kagan.ui.screens.kanban import KanbanScreen
+            from kagan.ui.screens.kanban import focus as kanban_focus
+            from kagan.ui.widgets.card import TaskCard
+
+            auto_mode_project.mock_factory.set_response_delay(3.0)
+            await pilot.pause()
+            screen = pilot.app.screen
+            assert isinstance(screen, KanbanScreen)
+            kanban_focus.focus_first_card(screen)
             await pilot.pause()
             # Start agent
             await pilot.press("a")
@@ -387,40 +477,69 @@ class TestAutoTicketLifecycle:
             # Wait until agent is actually available
             kagan_app = pilot.app
             assert isinstance(kagan_app, KaganApp)
-            max_wait = 2.0
+            max_wait = 10.0
             waited = 0.0
+            agent = None
             while waited < max_wait:
                 agent = kagan_app.ctx.automation_service.get_running_agent(
-                    auto_mode_project.ticket_id
+                    auto_mode_project.task_id
                 )
                 if agent is not None:
                     break
                 await asyncio.sleep(0.05)
                 waited += 0.05
+            if agent is None:
+                raise TimeoutError("Agent did not start in time")
 
             # Watch
-            await pilot.press("w")
+            screen = pilot.app.screen
+            assert isinstance(screen, KanbanScreen)
+            kanban_focus.focus_first_card(screen)
             await pilot.pause()
+            await pilot.press("w")
+            await wait_for_screen(pilot, AgentOutputModal, timeout=5.0)
             # Close watch modal
             await pilot.press("escape")
             await pilot.pause()
+            await wait_for_screen(pilot, KanbanScreen, timeout=5.0)
+            await kagan_app.ctx.task_service.update_fields(
+                auto_mode_project.task_id,
+                last_error="Agent starting...",
+            )
+            max_error_wait = 5.0
+            waited_error = 0.0
+            while waited_error < max_error_wait:
+                await pilot.pause()
+                try:
+                    card = pilot.app.screen.query_one(
+                        f"#card-{auto_mode_project.task_id}",
+                        TaskCard,
+                    )
+                except NoMatches:
+                    card = None
+                if card and card.task_model and card.task_model.last_error:
+                    break
+                await asyncio.sleep(0.1)
+                waited_error += 0.1
+            else:
+                raise TimeoutError("Task error line did not appear on card")
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_auto_lifecycle_05_view_ticket_details(
+    def test_auto_lifecycle_05_view_task_details(
         self,
         auto_mode_project: SimpleNamespace,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Press 'v' opens ticket details modal."""
+        """Press 'v' opens task details modal."""
         app = self._create_app(auto_mode_project)
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # View ticket details
+            # View task details
             await pilot.press("v")
             # Multiple pauses to ensure modal is fully mounted
             await pilot.pause()
@@ -469,18 +588,18 @@ class TestAutoTicketLifecycle:
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_auto_lifecycle_08_new_ticket_modal(
+    def test_auto_lifecycle_08_new_task_modal(
         self,
         auto_mode_project: SimpleNamespace,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Press 'N' opens new AUTO ticket modal."""
+        """Press 'N' opens new AUTO task modal."""
         app = self._create_app(auto_mode_project)
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # Open new AUTO ticket modal
+            # Open new AUTO task modal
             await pilot.press("N")
             await pilot.pause()
 
@@ -488,8 +607,8 @@ class TestAutoTicketLifecycle:
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
 
-class TestAutoTicketLifecycleWithReview:
-    """E2E snapshot tests for AUTO ticket lifecycle with REVIEW status.
+class TestAutoTaskLifecycleWithReview:
+    """E2E snapshot tests for AUTO task lifecycle with REVIEW status.
 
     These tests focus on the REVIEW phase of the lifecycle.
     """
@@ -500,7 +619,7 @@ class TestAutoTicketLifecycleWithReview:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> SimpleNamespace:
-        """Create project with a ticket already in REVIEW status."""
+        """Create project with a task already in REVIEW status."""
         from types import SimpleNamespace as NS
 
         # Run async setup synchronously
@@ -509,7 +628,7 @@ class TestAutoTicketLifecycleWithReview:
             project = loop.run_until_complete(
                 _setup_auto_lifecycle_project(tmp_path, AUTO_MODE_CONFIG)
             )
-            # Create ticket directly in REVIEW status
+            # Create task directly in REVIEW status
             manager = TaskRepository(project.db)
             loop.run_until_complete(manager.initialize())
             project_id = manager.default_project_id
@@ -517,7 +636,7 @@ class TestAutoTicketLifecycleWithReview:
                 raise RuntimeError("TaskRepository defaults not initialized")
             repo_id = manager.default_repo_id
 
-            ticket = Task(
+            task = Task(
                 id="review01",
                 project_id=project_id,
                 repo_id=repo_id,
@@ -528,8 +647,10 @@ class TestAutoTicketLifecycleWithReview:
                 task_type=TaskType.AUTO,
                 checks_passed=True,
                 review_summary="Implementation is correct and well-tested",
+                created_at=SNAPSHOT_TIME,
+                updated_at=SNAPSHOT_TIME,
             )
-            loop.run_until_complete(manager.create(ticket))
+            loop.run_until_complete(manager.create(task))
 
             # Add historical agent logs for watch modal
             impl_log = json.dumps(
@@ -542,7 +663,7 @@ class TestAutoTicketLifecycleWithReview:
                 }
             )
             loop.run_until_complete(
-                manager.append_agent_log(ticket.id, "implementation", 1, impl_log)
+                manager.append_agent_log(task.id, "implementation", 1, impl_log)
             )
 
             review_log = json.dumps(
@@ -553,7 +674,7 @@ class TestAutoTicketLifecycleWithReview:
                     ],
                 }
             )
-            loop.run_until_complete(manager.append_agent_log(ticket.id, "review", 1, review_log))
+            loop.run_until_complete(manager.append_agent_log(task.id, "review", 1, review_log))
 
             loop.run_until_complete(manager.close())
         finally:
@@ -572,8 +693,7 @@ class TestAutoTicketLifecycleWithReview:
             root=project.root,
             db=project.db,
             config=project.config,
-            kagan_dir=project.kagan_dir,
-            ticket_id="review01",
+            task_id="review01",
             mock_factory=mock_factory,
             sessions=sessions,
         )
@@ -584,17 +704,18 @@ class TestAutoTicketLifecycleWithReview:
             db_path=project.db,
             config_path=project.config,
             lock_path=None,
+            project_root=project.root,
             agent_factory=project.mock_factory,
         )
 
     @pytest.mark.snapshot
-    def test_auto_lifecycle_review_01_ticket_in_review(
+    def test_auto_lifecycle_review_01_task_in_review(
         self,
         review_project: SimpleNamespace,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Ticket displayed in REVIEW column with review status."""
+        """Task displayed in REVIEW column with review status."""
         app = self._create_app(review_project)
 
         async def run_before(pilot: Pilot) -> None:
@@ -668,7 +789,7 @@ class TestAutoTicketLifecycleWithReview:
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Review modal opened via 'r' key directly on REVIEW ticket."""
+        """Review modal opened via 'r' key directly on REVIEW task."""
         app = self._create_app(review_project)
 
         async def run_before(pilot: Pilot) -> None:
@@ -736,8 +857,8 @@ class TestAutoTicketLifecycleWithReview:
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
 
-class TestAutoTicketLifecycleDone:
-    """E2E snapshot tests for AUTO ticket lifecycle final stage.
+class TestAutoTaskLifecycleDone:
+    """E2E snapshot tests for AUTO task lifecycle final stage.
 
     These tests focus on the DONE state after approval.
     """
@@ -748,7 +869,7 @@ class TestAutoTicketLifecycleDone:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> SimpleNamespace:
-        """Create project with tickets in various states including DONE."""
+        """Create project with tasks in various states including DONE."""
         from types import SimpleNamespace as NS
 
         # Run async setup synchronously
@@ -765,8 +886,8 @@ class TestAutoTicketLifecycleDone:
                 raise RuntimeError("TaskRepository defaults not initialized")
             repo_id = manager.default_repo_id
 
-            # Create DONE ticket
-            done_ticket = Task(
+            # Create DONE task
+            done_task = Task(
                 id="done0001",
                 project_id=project_id,
                 repo_id=repo_id,
@@ -777,11 +898,13 @@ class TestAutoTicketLifecycleDone:
                 task_type=TaskType.AUTO,
                 checks_passed=True,
                 review_summary="All tests pass, implementation complete",
+                created_at=SNAPSHOT_TIME,
+                updated_at=SNAPSHOT_TIME,
             )
-            loop.run_until_complete(manager.create(done_ticket))
+            loop.run_until_complete(manager.create(done_task))
 
-            # Create IN_PROGRESS ticket for comparison
-            in_progress_ticket = Task(
+            # Create IN_PROGRESS task for comparison
+            in_progress_task = Task(
                 id="inprog01",
                 project_id=project_id,
                 repo_id=repo_id,
@@ -790,11 +913,13 @@ class TestAutoTicketLifecycleDone:
                 priority=TaskPriority.MEDIUM,
                 status=TaskStatus.IN_PROGRESS,
                 task_type=TaskType.AUTO,
+                created_at=SNAPSHOT_TIME,
+                updated_at=SNAPSHOT_TIME,
             )
-            loop.run_until_complete(manager.create(in_progress_ticket))
+            loop.run_until_complete(manager.create(in_progress_task))
 
-            # Create BACKLOG ticket
-            backlog_ticket = Task(
+            # Create BACKLOG task
+            backlog_task = Task(
                 id="backlog1",
                 project_id=project_id,
                 repo_id=repo_id,
@@ -803,8 +928,10 @@ class TestAutoTicketLifecycleDone:
                 priority=TaskPriority.LOW,
                 status=TaskStatus.BACKLOG,
                 task_type=TaskType.AUTO,
+                created_at=SNAPSHOT_TIME,
+                updated_at=SNAPSHOT_TIME,
             )
-            loop.run_until_complete(manager.create(backlog_ticket))
+            loop.run_until_complete(manager.create(backlog_task))
 
             loop.run_until_complete(manager.close())
         finally:
@@ -823,7 +950,6 @@ class TestAutoTicketLifecycleDone:
             root=project.root,
             db=project.db,
             config=project.config,
-            kagan_dir=project.kagan_dir,
             mock_factory=mock_factory,
             sessions=sessions,
         )
@@ -834,6 +960,7 @@ class TestAutoTicketLifecycleDone:
             db_path=project.db,
             config_path=project.config,
             lock_path=None,
+            project_root=project.root,
             agent_factory=project.mock_factory,
         )
 
@@ -844,7 +971,7 @@ class TestAutoTicketLifecycleDone:
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Board displays tickets across all columns including DONE."""
+        """Board displays tasks across all columns including DONE."""
         app = self._create_app(done_project)
 
         async def run_before(pilot: Pilot) -> None:
@@ -863,7 +990,7 @@ class TestAutoTicketLifecycleDone:
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Navigate to DONE column and view completed ticket."""
+        """Navigate to DONE column and view completed task."""
         app = self._create_app(done_project)
 
         async def run_before(pilot: Pilot) -> None:
@@ -880,13 +1007,13 @@ class TestAutoTicketLifecycleDone:
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_auto_lifecycle_done_03_view_done_ticket_details(
+    def test_auto_lifecycle_done_03_view_done_task_details(
         self,
         done_project: SimpleNamespace,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """View details of completed ticket."""
+        """View details of completed task."""
         app = self._create_app(done_project)
 
         async def run_before(pilot: Pilot) -> None:
@@ -906,13 +1033,13 @@ class TestAutoTicketLifecycleDone:
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_auto_lifecycle_done_04_duplicate_done_ticket(
+    def test_auto_lifecycle_done_04_duplicate_done_task(
         self,
         done_project: SimpleNamespace,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Press 'y' to duplicate (yank) a done ticket."""
+        """Press 'y' to duplicate (yank) a done task."""
         app = self._create_app(done_project)
 
         async def run_before(pilot: Pilot) -> None:
@@ -924,7 +1051,7 @@ class TestAutoTicketLifecycleDone:
             await pilot.pause()
             await pilot.press("right")
             await pilot.pause()
-            # Yank/duplicate ticket
+            # Yank/duplicate task
             await pilot.press("y")
             await pilot.pause()
 

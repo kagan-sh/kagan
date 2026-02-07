@@ -1,213 +1,237 @@
-# Agent Development Guide for Kagan
+# AGENTS.md - Coding Agent Instructions for Kagan
 
-Comprehensive instructions for AI coding agents working in the Kagan repository.
+This document provides essential guidelines for AI coding agents working in this repository.
 
 ## Project Overview
 
-Kagan is an AI-powered Kanban TUI for autonomous development workflows built with Python 3.12+, Textual, and async/await patterns.
+Kagan is an AI-powered Kanban TUI for autonomous development workflows. Built with Python 3.12+, Textual framework, and SQLModel for persistence.
 
-## Commands
-
-### Setup & Running
+## Build, Lint, and Test Commands
 
 ```bash
-uv sync --dev                    # Install dependencies
-uv run pre-commit install        # Install pre-commit hooks
-uv run poe dev                   # Run with live reload
-uv run kagan                     # Run normally
-uv run kagan mcp                 # Run as MCP server
+# Install dependencies
+uv sync
+
+# Run the application
+uv run kagan                    # Launch TUI
+uv run poe dev                  # Development mode with hot reload
+
+# Linting & Formatting (use these before committing)
+uv run poe lint                 # Ruff linter (check only)
+uv run poe format               # Ruff formatter
+uv run poe fix                  # Auto-fix lint issues + format (RECOMMENDED)
+uv run poe typecheck            # Pyrefly type checker
+uv run poe check                # Full suite: lint + typecheck + test
+
+# Testing
+uv run pytest tests/ -v                                              # All tests
+uv run pytest tests/features/test_agent_automation.py -v             # Single file
+uv run pytest tests/features/test_agent_automation.py::TestClass -v  # Single class
+uv run pytest tests/features/test_agent_automation.py::TestClass::test_method -v  # Single test
+uv run pytest -k "test_name_pattern" -v                              # Pattern match
+
+# Snapshot tests (MUST run sequentially - no parallel)
+uv run poe test-snapshot                         # Run snapshot tests
+uv run poe test-snapshot-update                  # Update snapshots
+UPDATE_SNAPSHOTS=1 uv run pytest tests/snapshots/ -n 0 --snapshot-update
 ```
 
-### Testing
+## Code Style Guidelines
 
-```bash
-# Run all tests (parallel by default)
-uv run pytest tests/
+### Imports
 
-# Run single test file
-uv run pytest tests/e2e/test_critical_flows.py
-
-# Run single test function
-uv run pytest tests/e2e/test_critical_flows.py::TestAutoTicketLifecycle::test_auto_full_lifecycle
-
-# Run by marker
-uv run pytest -m unit            # Pure logic
-uv run pytest -m integration     # Real filesystem/DB
-uv run pytest -m e2e            # Full app
-uv run pytest -m "not slow"     # Exclude slow tests
-
-# Sequential (debugging)
-uv run pytest tests/ -n 0
-```
-
-### Linting & Type Checking
-
-```bash
-uv run poe lint                  # Lint with ruff
-uv run poe format                # Format with ruff
-uv run poe typecheck             # Type check with pyrefly
-uv run poe fix                   # Fix lint + format
-uv run poe check                 # Lint + typecheck + test
-uv run pre-commit run --all-files
-```
-
-## Code Style
-
-### Import Order (Ruff/isort-compatible)
+Always use this order with blank lines between groups:
 
 ```python
-from __future__ import annotations  # Always first
+from __future__ import annotations  # ALWAYS first line
 
-import asyncio  # Standard library
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+# Standard library
+from datetime import datetime
+from typing import TYPE_CHECKING, cast
 
-from pydantic import BaseModel  # Third-party
-from textual.app import App
+# Third-party
+from pydantic import BaseModel
+from textual.app import ComposeResult
 
-from kagan.config import KaganConfig  # Local
+# Local imports
+from kagan.constants import COLUMN_ORDER
+from kagan.core.models.entities import Task
 
-if TYPE_CHECKING:  # At end
-    from collections.abc import Callable
+if TYPE_CHECKING:
+    from kagan.app import KaganApp  # Type-only imports go here
 ```
 
-### Type Annotations (MANDATORY)
+### Type Annotations
 
-- Use Python 3.12+ syntax: `list[str]`, `dict[str, Any]`, `str | None`
-- Use `type` aliases: `type OS = Literal["linux", "macos", "windows", "*"]`
-- Use `TYPE_CHECKING` blocks to avoid circular imports
-- All functions must have type annotations
+- Always annotate function signatures and class attributes
+- Use `X | None` union syntax, NOT `Optional[X]`
+- Use `TYPE_CHECKING` block for imports only needed for type hints
+- Use `cast()` for type narrowing: `return cast("KaganApp", self.app)`
 
-### Formatting (Ruff enforced)
+### Naming Conventions
 
-- **Line length**: 100 chars
-- **Quotes**: Double quotes
-- **Indentation**: 4 spaces
-- **Docstrings**: Google-style with triple double-quotes
-
-### Naming
-
-- Functions/variables: `snake_case`
-- Classes: `PascalCase`
-- Constants: `UPPER_SNAKE_CASE`
-- Private: `_private_method`
+| Type       | Convention        | Example                    |
+|------------|-------------------|----------------------------|
+| Classes    | PascalCase        | `TaskCard`, `KanbanScreen` |
+| Functions  | snake_case        | `get_all_tasks`            |
+| Private    | underscore prefix | `_refresh_board`           |
+| Constants  | UPPER_SNAKE       | `COLUMN_ORDER`             |
+| Enums      | PascalCase/UPPER  | `TaskStatus.BACKLOG`       |
 
 ### Error Handling
 
-- Define custom exceptions: `class WorktreeError(Exception): ...`
-- Use dataclasses for error details (see `GitError` in `git_utils.py`)
-- Always include context in exception messages
-- Use `try/finally` with `await manager.close()`
+- Use specific exception types, not bare `except:`
+- Log errors with context before re-raising
+- For async operations, use `try/except` with proper cleanup in `finally`
 
-### Async/Await (CRITICAL)
+### Textual-Specific Patterns
 
-- **All I/O must be async** (database, subprocess, file I/O)
-- Use `asyncio.create_subprocess_exec`, never `subprocess.run`
-- Use `aiosqlite`, never blocking `sqlite3`
-- Use `asyncio.Lock` for concurrent access
-- Use `async with` for resource management
+```python
+# Messages as dataclasses
+@dataclass
+class Selected(Message):
+    task: Task
 
-### Pydantic (v2 API)
+# Event handlers with @on decorator
+@on(Button.Pressed, "#save-btn")
+def on_save(self) -> None:
+    self.action_submit()
 
-- Use `BaseModel`, `Field`, `ConfigDict`
-- Use `@field_validator` decorator
-- Use `model_validate`, `model_dump` methods
+# Reactive attributes
+tasks: reactive[list[Task]] = reactive(list, recompose=True)
 
-### Textual UI
-
-- Use `BINDINGS` class attribute (no ClassVar needed)
-- Use `compose()` for widget hierarchy
-- CSS in `src/kagan/styles/*.tcss`
-- Use `reactive()` for state
-- Use `Signal[T]` for pub/sub
-
-### Database
-
-- Use `TaskRepository` for all DB access (see `adapters/db/repositories.py`)
-- Use SQLModel for tables (see `adapters/db/schema.py`)
-- Always close: `await repo.close()` or `async with`
-- Register callbacks: `repo.set_status_change_callback()`
-
-### Git
-
-- Use async functions from `git_utils.py`
-- Check for `GitError` in results
-- Never use blocking git commands
-- Use worktrees for parallel execution
-
-## Testing
-
-### Markers
-
-- `@pytest.mark.unit` - Pure logic
-- `@pytest.mark.integration` - Real filesystem/DB
-- `@pytest.mark.e2e` - Full app
-- `@pytest.mark.snapshot` - Visual regression
-- `@pytest.mark.property` - Hypothesis property-based
-- `@pytest.mark.slow` - Tests >5 seconds
-
-### Patterns
-
-- Use descriptive class/function names: `TestAutoTicketLifecycle::test_auto_full_lifecycle`
-- Use fixtures from `conftest.py` and helpers from `tests/helpers/`
-- Mark async tests: `async def test_...`
-- Use `await pilot.pause()` in Textual tests
-- Configure Hypothesis: `settings.register_profile("aggressive", max_examples=100, deadline=None)`
-- Reduce `max_examples=10` for DB operations
-
-## Git Commits (Conventional Commits)
-
-**Format**: `<type>(<scope>): <description>`
-
-**Types** (semantic-release):
-
-- `feat` - New feature (minor bump)
-- `fix` - Bug fix (patch bump)
-- `perf` - Performance (patch bump)
-- `docs` - Documentation (patch bump)
-- `refactor`, `test`, `chore`, `ci`, `build`, `style` - No version bump
-
-**Examples**:
-
+# Widget IDs in __init__
+def __init__(self, task: Task, **kwargs) -> None:
+    super().__init__(id=f"card-{task.id}", **kwargs)
 ```
-feat: add auto-merge capability for REVIEW tickets
-fix: resolve UI freezes from blocking git operations
-perf(ci): optimize test parallelization
-refactor(tests): reduce httpx_mock usage
-ci: fix cd failing due to lack of git profile
+
+### CSS Organization (Centralized)
+
+Kagan follows a **centralized CSS strategy** (JiraTUI-style):
+
+- **All new styles** go in `src/kagan/styles/kagan.tcss`
+- Avoid `DEFAULT_CSS`, `CSS`, and screen-level `CSS_PATH` for new work
+- `KaganApp.CSS_PATH` points to the single global stylesheet
+- If a screen/widget needs styles, add a clearly labeled section in `kagan.tcss`
+- Use CSS variables for theming: `$primary`, `$error`, `$text-muted`
+- Use semantic color aliases: `$priority-high: $error`
+
+```tcss
+/* === Welcome Screen === */
+WelcomeScreen {
+    align: center middle;
+}
+
+#welcome-container {
+    width: 80;
+    border: solid $primary;
+    padding: 1 2;
+}
+```
+
+Existing embedded CSS in legacy widgets may remain, but **do not add new inline CSS** without explicit approval.
+
+### Service Pattern
+
+```python
+class TaskService(Protocol):
+    """Service interface."""
+    async def create_task(self, title: str) -> Task: ...
+
+class TaskServiceImpl:
+    """Concrete implementation."""
+    def __init__(self, repo: TaskRepository, event_bus: EventBus) -> None:
+        self._repo = repo
+        self._events = event_bus
 ```
 
 ## Project Structure
 
 ```
 src/kagan/
-├── adapters/           # DB/git/executor adapters
-├── agents/             # Agent prompts, planners, factories
-├── core/               # Domain models, events, policies
-├── services/           # Task/workspace/session/merge automation services
-├── ui/                 # Textual components: screens/, modals/, forms/, widgets/
-├── acp/                # Autonomous Coding Protocol (MCP server)
-├── cli/                # Click CLI commands
-├── sessions/           # tmux helpers (run_tmux, errors)
-├── styles/             # Textual CSS
-├── app.py              # Main Textual App
-├── config.py           # TOML configuration
-├── git_utils.py        # Async git operations
-└── __main__.py         # CLI entry point
+├── app.py              # Main KaganApp class
+├── bootstrap.py        # Dependency injection / AppContext
+├── constants.py        # Shared constants (use this for magic values)
+├── adapters/           # External interfaces (DB, git, executors)
+├── core/models/        # Domain entities and enums
+├── services/           # Business logic layer
+├── ui/                 # Screens, widgets, modals
+└── styles/kagan.tcss   # ALL CSS (single source of truth)
 
 tests/
-├── e2e/                # End-to-end tests
-├── integration/        # Real filesystem/DB tests
-├── property/           # Hypothesis tests
-├── snapshot/           # Visual regression
-├── helpers/            # Test helpers & page objects
-└── conftest.py         # Pytest fixtures
+├── conftest.py         # Shared fixtures
+├── helpers/            # Test utilities
+├── features/           # Feature tests
+└── snapshots/          # Visual regression tests
 ```
 
-## Notes
+## Testing Guidelines
 
-- Python 3.12+ required
-- Use `uv` for all package management
-- Pre-commit hooks must pass
-- CI: Ubuntu + macOS (full matrix on main)
-- System deps: `tmux`, `git`
+### Test Organization
+
+Tests are organized by user-facing features, not implementation layers:
+
+```python
+class TestSignalParsing:
+    """Agent signals are correctly parsed from output."""
+
+    def test_parse_complete_signal(self):
+        """<complete/> signal is recognized."""
+        output = "Task finished. <complete/>"
+        result = parse_signal(output)
+        assert result.signal == Signal.COMPLETE
+```
+
+### Key Fixtures (from `tests/conftest.py`)
+
+- `state_manager` - Temporary TaskRepository
+- `event_bus` - InMemoryEventBus for testing
+- `task_service` - TaskServiceImpl instance
+- `task_factory` - Factory for creating Task objects
+- `git_repo` - Initialized git repository
+- `mock_agent`, `mock_agent_factory` - Mock ACP agents
+
+### Test Markers
+
+```bash
+pytest -m "not slow"        # Skip slow tests
+pytest -m unit              # Pure logic tests only
+pytest -m integration       # Tests with real filesystem/DB
+pytest -m snapshot          # Visual regression tests
+pytest -m e2e               # Full application tests
+```
+
+## Git Commit Rules
+
+- **CRITICAL**: Disable GPG signing in agent workflows:
+  ```bash
+  git config commit.gpgsign false
+  ```
+- Use conventional commit format: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+- Keep commits atomic and focused
+
+## Ruff Configuration
+
+Line length: 100 characters. Key rules enabled:
+- `E`, `F` - pycodestyle errors, pyflakes
+- `I` - isort import sorting
+- `UP` - pyupgrade
+- `B` - bugbear
+- `SIM` - simplify
+- `TCH` - type-checking imports
+- `RUF` - Ruff-specific rules
+
+Ignored rules (intentional):
+- `RUF012` - Textual class attributes don't need ClassVar
+- `RUF006` - Allow fire-and-forget asyncio.create_task
+- `SIM102`, `SIM117` - Allow nested if/with for readability
+
+## Key Rules Summary
+
+1. **CSS: Centralized** - All new styles in `src/kagan/styles/kagan.tcss` (no inline CSS)
+2. **Async database** - All DB operations via TaskRepository
+3. **Constants module** - Use `kagan.constants` for shared values
+4. **Module size** - Keep modules ~150-250 LOC; test files < 200 LOC
+5. **Protocol-based services** - Define interfaces with Protocol, implement with `*Impl`
+6. **Event-driven** - Use domain events for cross-service communication
+7. **Run `uv run poe fix`** - Before committing, always run the fix command

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from kagan.debug_log import log
+from kagan.paths import get_worktree_base_dir
 
 if TYPE_CHECKING:
     from kagan.adapters.git.types import WorktreeInfo
@@ -83,8 +84,9 @@ class WorktreeManager:
             repo_root: Root of the git repository. Defaults to cwd.
         """
         self.repo_root = repo_root or Path.cwd()
-        self.worktrees_dir = self.repo_root / ".kagan" / "worktrees"
-        self._merge_worktree_dir = self.repo_root / ".kagan" / "merge-worktree"
+        base_dir = get_worktree_base_dir()
+        self.worktrees_dir = base_dir / "worktrees"
+        self._merge_worktree_dir = base_dir / "merge-worktree"
         self._merge_worktree_branch = "kagan/merge-worktree"
         self._cache_ttl_seconds = 5.0
         self._cache: dict[tuple[str, str, str], tuple[float, object]] = {}
@@ -667,9 +669,7 @@ class WorktreeManager:
             await self._run_git("rebase", "--abort", cwd=wt_path, check=False)
             return False, f"Unexpected error during rebase: {e}", []
 
-    async def get_files_changed_on_base(
-        self, task_id: str, base_branch: str = "main"
-    ) -> list[str]:
+    async def get_files_changed_on_base(self, task_id: str, base_branch: str = "main") -> list[str]:
         """Get list of files changed on the base branch since our branch diverged.
 
         Useful for understanding what might cause merge conflicts.

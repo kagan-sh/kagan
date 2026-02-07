@@ -1,4 +1,4 @@
-"""SearchBar widget for filtering tickets."""
+"""SearchBar widget for filtering tasks."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class SearchBar(Widget):
-    """A search bar widget for filtering tickets on the Kanban board."""
+    """A search bar widget for filtering tasks on the Kanban board."""
 
     # Start hidden and non-focusable
     can_focus = False
@@ -33,7 +33,7 @@ class SearchBar(Widget):
 
     def compose(self) -> ComposeResult:
         """Compose the search bar layout."""
-        yield Input(placeholder="Search tickets...", id="search-input")
+        yield Input(placeholder="Search tasks...", id="search-input")
 
     def on_mount(self) -> None:
         """Disable focus on the input when mounted (hidden by default)."""

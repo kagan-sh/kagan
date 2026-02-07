@@ -7,21 +7,21 @@ from kagan.core.models.enums import TaskStatus, TaskType
 
 def build_keybinding_hints(
     status: TaskStatus | None,
-    ticket_type: TaskType | None,
+    task_type: TaskType | None,
 ) -> list[tuple[str, str]]:
-    """Build context-sensitive keybinding hints based on ticket state.
+    """Build context-sensitive keybinding hints based on task state.
 
     Args:
-        status: Current ticket status, or None if no ticket selected.
-        ticket_type: Ticket type (AUTO/PAIR), or None if no ticket selected.
+        status: Current task status, or None if no task selected.
+        task_type: Task type (AUTO/PAIR), or None if no task selected.
 
     Returns:
         List of (key, description) tuples for display.
     """
-    # No ticket selected - show general actions
+    # No task selected - show general actions
     if status is None:
         return [
-            ("n", "new ticket"),
+            ("n", "new task"),
             ("N", "new AUTO"),
             ("ctrl+p", "planner"),
             ("/", "search"),
@@ -38,7 +38,7 @@ def build_keybinding_hints(
         ]
 
     if status == TaskStatus.IN_PROGRESS:
-        if ticket_type == TaskType.AUTO:
+        if task_type == TaskType.AUTO:
             return [
                 ("w", "watch agent"),
                 ("s", "stop agent"),

@@ -12,13 +12,9 @@ from textual.widgets import Button, Input, Label, Select, TabbedContent, TabPane
 from kagan.core.models.entities import Task
 from kagan.core.models.enums import TaskPriority, TaskType
 from kagan.keybindings import TASK_EDITOR_BINDINGS
-from kagan.ui.widgets.base import BaseBranchInput, PairTerminalBackendSelect
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
-
-
-VALID_PAIR_LAUNCHERS = {"tmux", "vscode", "cursor"}
 
 
 class TaskEditorScreen(ModalScreen[list[Task] | None]):
@@ -33,7 +29,7 @@ class TaskEditorScreen(ModalScreen[list[Task] | None]):
 
     def __init__(self, tasks: list[Task]) -> None:
         super().__init__()
-        self._tasks = list(tasks)
+        self._tasks = list(tasks)  # Mutable copy
 
     def compose(self) -> ComposeResult:
         with Vertical(id="task-editor-container"):
@@ -71,24 +67,6 @@ class TaskEditorScreen(ModalScreen[list[Task] | None]):
                                 id=f"type-{i}",
                                 classes="task-select",
                             )
-                            yield Label("PAIR Terminal Backend:", classes="task-label")
-                            pair_terminal_backend = getattr(task, "terminal_backend", None)
-                            terminal_backend = (
-                                pair_terminal_backend
-                                if pair_terminal_backend in VALID_PAIR_LAUNCHERS
-                                else "tmux"
-                            )
-                            yield PairTerminalBackendSelect(
-                                value=terminal_backend,
-                                disabled=task.task_type != TaskType.PAIR,
-                                widget_id=f"terminal-backend-{i}",
-                                classes="task-select",
-                            )
-                            yield Label("Base Branch:", classes="task-label")
-                            yield BaseBranchInput(
-                                value=task.base_branch or "",
-                                widget_id=f"base-branch-{i}",
-                            )
                             yield Label("Acceptance Criteria (one per line):", classes="task-label")
                             ac_text = (
                                 "\n".join(task.acceptance_criteria)
@@ -117,13 +95,13 @@ class TaskEditorScreen(ModalScreen[list[Task] | None]):
             description_input = self.query_one(f"#description-{i}", TextArea)
             priority_select: Select[int] = self.query_one(f"#priority-{i}", Select)
             type_select: Select[str] = self.query_one(f"#type-{i}", Select)
-            terminal_backend_select: Select[str] = self.query_one(f"#terminal-backend-{i}", Select)
-            base_branch_input = self.query_one(f"#base-branch-{i}", BaseBranchInput)
             ac_input = self.query_one(f"#ac-{i}", TextArea)
 
+            # Parse acceptance criteria from TextArea
             ac_lines = ac_input.text.strip().split("\n") if ac_input.text.strip() else []
             acceptance_criteria = [line.strip() for line in ac_lines if line.strip()]
 
+            # Get values with fallbacks
             title = title_input.value.strip() or original.title
             description = description_input.text or original.description
 
@@ -139,70 +117,35 @@ class TaskEditorScreen(ModalScreen[list[Task] | None]):
             else:
                 task_type = TaskType(cast("str", type_value))
 
-            terminal_backend_value = terminal_backend_select.value
-            if terminal_backend_value is Select.BLANK:
-                terminal_backend = "tmux"
-            else:
-                selected_backend = str(terminal_backend_value)
-                terminal_backend = (
-                    selected_backend if selected_backend in VALID_PAIR_LAUNCHERS else "tmux"
+            edited_tasks.append(
+                Task(
+                    id=original.id,
+                    project_id=original.project_id,
+                    repo_id=original.repo_id,
+                    title=title,
+                    description=description,
+                    status=original.status,
+                    priority=priority,
+                    task_type=task_type,
+                    assigned_hat=original.assigned_hat,
+                    agent_backend=original.agent_backend,
+                    parent_id=original.parent_id,
+                    acceptance_criteria=acceptance_criteria,
+                    review_summary=original.review_summary,
+                    checks_passed=original.checks_passed,
+                    session_active=original.session_active,
+                    total_iterations=original.total_iterations,
+                    merge_failed=original.merge_failed,
+                    merge_error=original.merge_error,
+                    merge_readiness=original.merge_readiness,
+                    last_error=original.last_error,
+                    block_reason=original.block_reason,
+                    created_at=original.created_at,
+                    updated_at=original.updated_at,
                 )
-            if task_type == TaskType.AUTO:
-                terminal_backend = None
-
-            base_branch = base_branch_input.value.strip() or None
-
-            if "terminal_backend" in Task.model_fields:
-                edited_tasks.append(
-                    Task(
-                        id=original.id,
-                        project_id=original.project_id,
-                        title=title,
-                        description=description,
-                        status=original.status,
-                        priority=priority,
-                        task_type=task_type,
-                        terminal_backend=terminal_backend,
-                        assigned_hat=original.assigned_hat,
-                        agent_backend=original.agent_backend,
-                        parent_id=original.parent_id,
-                        acceptance_criteria=acceptance_criteria,
-                        base_branch=base_branch,
-                        created_at=original.created_at,
-                        updated_at=original.updated_at,
-                    )
-                )
-            else:
-                edited_tasks.append(
-                    Task(
-                        id=original.id,
-                        project_id=original.project_id,
-                        title=title,
-                        description=description,
-                        status=original.status,
-                        priority=priority,
-                        task_type=task_type,
-                        assigned_hat=original.assigned_hat,
-                        agent_backend=original.agent_backend,
-                        parent_id=original.parent_id,
-                        acceptance_criteria=acceptance_criteria,
-                        base_branch=base_branch,
-                        created_at=original.created_at,
-                        updated_at=original.updated_at,
-                    )
-                )
+            )
 
         return edited_tasks
-
-    @on(Select.Changed)
-    def on_type_changed(self, event: Select.Changed) -> None:
-        if event.select.id is None or not event.select.id.startswith("type-"):
-            return
-        suffix = event.select.id.removeprefix("type-")
-        terminal_select = self.query_one(f"#terminal-backend-{suffix}", Select)
-        value = event.select.value
-        is_pair = value is not Select.BLANK and str(value) == TaskType.PAIR.value
-        terminal_select.disabled = not is_pair
 
     def action_finish(self) -> None:
         """Finish editing and return the edited tasks."""

@@ -1,0 +1,329 @@
+"""Snapshot tests for task movement between columns.
+
+These tests specifically verify that tasks don't appear in multiple columns
+when moved using leader keys (gl/gh) or other navigation.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+import pytest
+
+from kagan.adapters.db.repositories import TaskRepository
+from kagan.adapters.db.schema import Task
+from kagan.app import KaganApp
+from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
+
+if TYPE_CHECKING:
+    from types import SimpleNamespace
+
+    from textual.pilot import Pilot
+
+    from tests.snapshots.conftest import MockAgentFactory
+
+
+def _create_fake_tmux(sessions: dict[str, Any]) -> object:
+    """Create a fake tmux function that tracks session state."""
+
+    async def fake_run_tmux(*args: str) -> str:
+        if not args:
+            return ""
+        command, args_list = args[0], list(args)
+        if command == "new-session" and "-s" in args_list:
+            idx = args_list.index("-s")
+            name = args_list[idx + 1] if idx + 1 < len(args_list) else None
+            if name:
+                cwd = args_list[args_list.index("-c") + 1] if "-c" in args_list else ""
+                env: dict[str, str] = {}
+                for i, val in enumerate(args_list):
+                    if val == "-e" and i + 1 < len(args_list):
+                        key, _, env_value = args_list[i + 1].partition("=")
+                        env[key] = env_value
+                sessions[name] = {"cwd": cwd, "env": env, "sent_keys": []}
+        elif command == "kill-session" and "-t" in args_list:
+            sessions.pop(args_list[args_list.index("-t") + 1], None)
+        elif command == "send-keys" and "-t" in args_list:
+            idx = args_list.index("-t")
+            name = args_list[idx + 1]
+            keys = args_list[idx + 2] if idx + 2 < len(args_list) else ""
+            if name in sessions:
+                sessions[name]["sent_keys"].append(keys)
+        elif command == "list-sessions":
+            return "\n".join(sorted(sessions.keys()))
+        return ""
+
+    return fake_run_tmux
+
+
+SNAPSHOT_TIME = datetime(2024, 1, 1, 12, 0, 0)
+
+
+async def _setup_movement_tasks(db_path: str) -> None:
+    """Create tasks for movement testing."""
+    manager = TaskRepository(db_path)
+    await manager.initialize()
+    project_id = manager.default_project_id
+    if project_id is None:
+        raise RuntimeError("TaskRepository defaults not initialized")
+    repo_id = manager.default_repo_id
+
+    # Create PAIR tasks in different columns
+    tasks = [
+        Task(
+            id="pair0001",
+            project_id=project_id,
+            repo_id=repo_id,
+            title="PAIR in Backlog",
+            description="PAIR task ready to move",
+            priority=TaskPriority.MEDIUM,
+            status=TaskStatus.BACKLOG,
+            task_type=TaskType.PAIR,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
+        ),
+        Task(
+            id="pair0002",
+            project_id=project_id,
+            repo_id=repo_id,
+            title="PAIR in Progress",
+            description="PAIR task in progress",
+            priority=TaskPriority.HIGH,
+            status=TaskStatus.IN_PROGRESS,
+            task_type=TaskType.PAIR,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
+        ),
+    ]
+
+    for task in tasks:
+        await manager.create(task)
+    await manager.close()
+
+
+async def _setup_auto_movement_task(db_path: str) -> None:
+    """Create an AUTO task in progress for movement confirmation testing."""
+    manager = TaskRepository(db_path)
+    await manager.initialize()
+    project_id = manager.default_project_id
+    if project_id is None:
+        raise RuntimeError("TaskRepository defaults not initialized")
+    repo_id = manager.default_repo_id
+
+    task = Task(
+        id="auto0001",
+        project_id=project_id,
+        repo_id=repo_id,
+        title="AUTO in Progress",
+        description="AUTO task in progress",
+        priority=TaskPriority.HIGH,
+        status=TaskStatus.IN_PROGRESS,
+        task_type=TaskType.AUTO,
+        created_at=SNAPSHOT_TIME,
+        updated_at=SNAPSHOT_TIME,
+    )
+
+    await manager.create(task)
+    await manager.close()
+
+
+class TestTaskMovement:
+    """Snapshot tests for task movement to detect multi-column bugs."""
+
+    @pytest.fixture
+    def movement_app(
+        self,
+        snapshot_project: SimpleNamespace,
+        mock_acp_agent_factory: MockAgentFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> KaganApp:
+        """Create app with PAIR tasks for movement testing."""
+        # Mock tmux
+        sessions: dict[str, Any] = {}
+        fake_tmux = _create_fake_tmux(sessions)
+        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
+        monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
+
+        # Set up tasks synchronously
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_setup_movement_tasks(snapshot_project.db))
+        finally:
+            loop.close()
+
+        return KaganApp(
+            db_path=snapshot_project.db,
+            config_path=snapshot_project.config,
+            lock_path=None,
+            project_root=snapshot_project.root,
+            agent_factory=mock_acp_agent_factory,
+        )
+
+    @pytest.fixture
+    def auto_movement_app(
+        self,
+        snapshot_project: SimpleNamespace,
+        mock_acp_agent_factory: MockAgentFactory,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> KaganApp:
+        """Create app with AUTO task for confirmation modal testing."""
+        sessions: dict[str, Any] = {}
+        fake_tmux = _create_fake_tmux(sessions)
+        monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
+        monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_setup_auto_movement_task(snapshot_project.db))
+        finally:
+            loop.close()
+
+        return KaganApp(
+            db_path=snapshot_project.db,
+            config_path=snapshot_project.config,
+            lock_path=None,
+            project_root=snapshot_project.root,
+            agent_factory=mock_acp_agent_factory,
+        )
+
+    @pytest.mark.snapshot
+    def test_pair_task_move_forward_backlog_to_progress(
+        self,
+        movement_app: KaganApp,
+        snap_compare: Any,
+        snapshot_terminal_size: tuple[int, int],
+    ) -> None:
+        """Move PAIR task forward from BACKLOG to IN_PROGRESS using gl."""
+
+        async def run_before(pilot: Pilot) -> None:
+            await pilot.pause()
+            # Focus on first task in BACKLOG
+            from kagan.ui.screens.kanban import KanbanScreen
+
+            assert isinstance(pilot.app.screen, KanbanScreen)
+
+            # Press g then l to move forward
+            await pilot.press("g")
+            await pilot.pause()
+            await pilot.press("l")
+            await pilot.pause()
+
+            # Wait for board to refresh and UI to synchronize
+            await asyncio.sleep(0.3)
+            await pilot.pause()
+            await pilot.pause()
+
+        cols, rows = snapshot_terminal_size
+        assert snap_compare(movement_app, terminal_size=(cols, rows), run_before=run_before)
+
+    @pytest.mark.snapshot
+    def test_pair_task_move_forward_progress_to_review(
+        self,
+        movement_app: KaganApp,
+        snap_compare: Any,
+        snapshot_terminal_size: tuple[int, int],
+    ) -> None:
+        """Move PAIR task forward from IN_PROGRESS to REVIEW using gl with confirmation."""
+
+        async def run_before(pilot: Pilot) -> None:
+            await pilot.pause()
+            # Navigate to IN_PROGRESS column
+            await pilot.press("right")
+            await pilot.pause()
+
+            # Press g then l to move forward (will show confirmation modal)
+            await pilot.press("g")
+            await pilot.pause()
+            await pilot.press("l")
+            await pilot.pause()
+
+            # Modal should appear - press 'y' to confirm
+            await pilot.press("y")
+            await pilot.pause()
+
+            # Wait for board to refresh and UI to synchronize
+            await asyncio.sleep(0.3)
+            await pilot.pause()
+            await pilot.pause()
+
+        cols, rows = snapshot_terminal_size
+        assert snap_compare(movement_app, terminal_size=(cols, rows), run_before=run_before)
+
+    @pytest.mark.snapshot
+    def test_pair_task_move_backward_progress_to_backlog(
+        self,
+        movement_app: KaganApp,
+        snap_compare: Any,
+        snapshot_terminal_size: tuple[int, int],
+    ) -> None:
+        """Move PAIR task backward from IN_PROGRESS to BACKLOG using gh."""
+
+        async def run_before(pilot: Pilot) -> None:
+            await pilot.pause()
+            # Navigate to IN_PROGRESS column (has pair0002)
+            await pilot.press("right")
+            await pilot.pause()
+
+            # Press g then h to move backward
+            await pilot.press("g")
+            await pilot.pause()
+            await pilot.press("h")
+            await pilot.pause()
+
+            # Wait for board to refresh and UI to synchronize
+            await asyncio.sleep(0.3)
+            await pilot.pause()
+            await pilot.pause()
+
+        cols, rows = snapshot_terminal_size
+        assert snap_compare(movement_app, terminal_size=(cols, rows), run_before=run_before)
+
+    @pytest.mark.snapshot
+    def test_board_state_after_movement(
+        self,
+        movement_app: KaganApp,
+        snap_compare: Any,
+        snapshot_terminal_size: tuple[int, int],
+    ) -> None:
+        """Verify board shows correct column counts after task movement."""
+
+        async def run_before(pilot: Pilot) -> None:
+            await pilot.pause()
+
+            # Initial state: BACKLOG(1) IN_PROGRESS(1)
+            # Move first task forward: BACKLOG(0) IN_PROGRESS(2)
+            await pilot.press("g")
+            await pilot.pause()
+            await pilot.press("l")
+            await pilot.pause()
+
+            # Wait for full synchronization
+            await asyncio.sleep(0.5)
+            await pilot.pause()
+            await pilot.pause()
+            await pilot.pause()
+
+        cols, rows = snapshot_terminal_size
+        assert snap_compare(movement_app, terminal_size=(cols, rows), run_before=run_before)
+
+    @pytest.mark.snapshot
+    def test_auto_task_move_shows_confirm_modal(
+        self,
+        auto_movement_app: KaganApp,
+        snap_compare: Any,
+        snapshot_terminal_size: tuple[int, int],
+    ) -> None:
+        """AUTO task move shows confirmation modal to stop agent and move."""
+
+        async def run_before(pilot: Pilot) -> None:
+            await pilot.pause()
+            # Attempt to move AUTO task forward (g + l)
+            await pilot.press("g")
+            await pilot.pause()
+            await pilot.press("l")
+            await pilot.pause()
+
+        cols, rows = snapshot_terminal_size
+        assert snap_compare(auto_movement_app, terminal_size=(cols, rows), run_before=run_before)

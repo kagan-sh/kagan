@@ -44,10 +44,10 @@ class TmuxGatewayModal(ModalScreen[str | None]):
 
     BINDINGS = TMUX_GATEWAY_BINDINGS
 
-    def __init__(self, ticket_id: str, ticket_title: str, **kwargs) -> None:
+    def __init__(self, task_id: str, task_title: str, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._ticket_id = ticket_id
-        self._ticket_title = ticket_title
+        self._task_id = task_id
+        self._task_title = task_title
 
     def compose(self) -> ComposeResult:
         with Container(id="tmux-gateway-container"):

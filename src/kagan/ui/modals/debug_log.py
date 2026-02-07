@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual.containers import Vertical
@@ -136,24 +135,15 @@ class DebugLogModal(ModalScreen[None]):
         rich_log.write("[dim]Logs cleared[/dim]")
 
     def action_save_logs(self) -> None:
-        """Export logs to .kagan/debug.log file."""
+        """Export logs to the centralized debug log file."""
         try:
-            # Find .kagan directory
-            kagan_dir = Path.cwd()
-            while kagan_dir != kagan_dir.parent:
-                if (kagan_dir / ".kagan").is_dir():
-                    log_path = kagan_dir / ".kagan" / "debug.log"
-                    count = export_logs_to_file(str(log_path))
-                    rich_log = self.query_one("#debug-log", RichLog)
-                    rich_log.write(f"[green]✓ Exported {count} log entries to {log_path}[/green]")
-                    return
-                kagan_dir = kagan_dir.parent
+            from kagan.paths import ensure_directories, get_debug_log_path
 
-            # Fallback to current directory if .kagan not found
-            log_path = Path.cwd() / "kagan_debug.log"
+            ensure_directories()
+            log_path = get_debug_log_path()
             count = export_logs_to_file(str(log_path))
             rich_log = self.query_one("#debug-log", RichLog)
-            rich_log.write(f"[yellow]⚠ .kagan not found, saved to {log_path}[/yellow]")
+            rich_log.write(f"[green]✓ Exported {count} log entries to {log_path}[/green]")
         except Exception as e:
             rich_log = self.query_one("#debug-log", RichLog)
             rich_log.write(f"[red]✗ Failed to export logs: {e}[/red]")

@@ -8,6 +8,7 @@ from kagan.limits import (
     SHUTDOWN_TIMEOUT,
     SUBPROCESS_LIMIT,
 )
+from kagan.paths import get_config_path, get_database_path, get_lock_path
 
 # UI Display Constants
 # Card widget truncation lengths
@@ -39,16 +40,15 @@ MIN_SCREEN_HEIGHT = 20
 # are added dynamically based on the agent being used. Wildcard patterns
 # catch any variants like kagan.mcp.json, kagan-mcp.json, etc.
 KAGAN_GENERATED_PATTERNS = (
-    ".kagan/",
     ".mcp.json",  # Claude Code MCP config (may be merged with existing)
     "opencode.json",  # OpenCode MCP config (may be merged with existing)
     "kagan*.mcp.json",  # Catch any kagan-prefixed MCP config variants
     "*kagan.json",  # Catch any kagan-suffixed config files
 )
 
-DEFAULT_DB_PATH = ".kagan/state.db"
-DEFAULT_CONFIG_PATH = ".kagan/config.toml"
-DEFAULT_LOCK_PATH = ".kagan/kagan.lock"
+DEFAULT_DB_PATH = str(get_database_path())
+DEFAULT_CONFIG_PATH = str(get_config_path())
+DEFAULT_LOCK_PATH = str(get_lock_path())
 
 COLUMN_ORDER = [
     TaskStatus.BACKLOG,

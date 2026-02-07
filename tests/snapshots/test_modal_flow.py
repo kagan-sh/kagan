@@ -3,7 +3,7 @@
 These tests cover modal interactions:
 - Help modal (F1) with tabbed content
 - Settings modal (,) with configuration options
-- Ticket details modal (n, e, v) for create/edit/view
+- Task details modal (n, e, v) for create/edit/view
 - Confirm modal (x) for delete confirmation
 - Diff modal for review approve/reject
 
@@ -14,6 +14,7 @@ internally calls asyncio.run(), which conflicts with async test functions.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -64,8 +65,11 @@ def _create_fake_tmux(sessions: dict[str, Any]) -> object:
     return fake_run_tmux
 
 
-async def _setup_modal_test_tickets(db_path: str) -> None:
-    """Pre-populate database with tickets for modal testing.
+SNAPSHOT_TIME = datetime(2024, 1, 1, 12, 0, 0)
+
+
+async def _setup_modal_test_tasks(db_path: str) -> None:
+    """Pre-populate database with tasks for modal testing.
 
     Uses fixed IDs for snapshot reproducibility.
     """
@@ -76,42 +80,48 @@ async def _setup_modal_test_tickets(db_path: str) -> None:
         raise RuntimeError("TaskRepository defaults not initialized")
     repo_id = manager.default_repo_id
 
-    tickets = [
+    tasks = [
         Task(
             id="modal001",
             project_id=project_id,
             repo_id=repo_id,
-            title="Test ticket for modals",
-            description="A ticket to test modal interactions with detailed content.",
+            title="Test task for modals",
+            description="A task to test modal interactions with detailed content.",
             priority=TaskPriority.MEDIUM,
             status=TaskStatus.BACKLOG,
             task_type=TaskType.PAIR,
             acceptance_criteria=["First criterion", "Second criterion"],
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
         Task(
             id="modal002",
             project_id=project_id,
             repo_id=repo_id,
-            title="Review ticket for diff modal",
-            description="This ticket is ready for review and diff viewing.",
+            title="Review task for diff modal",
+            description="This task is ready for review and diff viewing.",
             priority=TaskPriority.HIGH,
             status=TaskStatus.REVIEW,
             task_type=TaskType.AUTO,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
         Task(
             id="modal003",
             project_id=project_id,
             repo_id=repo_id,
-            title="Another backlog ticket",
-            description="Secondary test ticket",
+            title="Another backlog task",
+            description="Secondary test task",
             priority=TaskPriority.LOW,
             status=TaskStatus.BACKLOG,
             task_type=TaskType.AUTO,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
     ]
 
-    for ticket in tickets:
-        await manager.create(ticket)
+    for task in tasks:
+        await manager.create(task)
     await manager.close()
 
 
@@ -125,17 +135,17 @@ class TestModalFlow:
         mock_acp_agent_factory: MockAgentFactory,
         monkeypatch: pytest.MonkeyPatch,
     ) -> KaganApp:
-        """Create app with pre-populated tickets for modal testing."""
+        """Create app with pre-populated tasks for modal testing."""
         # Mock tmux
         sessions: dict[str, Any] = {}
         fake_tmux = _create_fake_tmux(sessions)
         monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
         monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
-        # Set up tickets synchronously
+        # Set up tasks synchronously
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(_setup_modal_test_tickets(snapshot_project.db))
+            loop.run_until_complete(_setup_modal_test_tasks(snapshot_project.db))
         finally:
             loop.close()
 
@@ -143,6 +153,7 @@ class TestModalFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -277,11 +288,11 @@ class TestModalFlow:
         assert snap_compare(modal_app, terminal_size=(cols, rows), run_before=run_before)
 
     # =========================================================================
-    # Ticket Details Modal Tests (n, e, v)
+    # Task Details Modal Tests (n, e, v)
     # =========================================================================
 
     @pytest.mark.snapshot
-    def test_ticket_create_modal_empty(
+    def test_task_create_modal_empty(
         self,
         modal_app: KaganApp,
         snap_compare: Any,
@@ -291,7 +302,7 @@ class TestModalFlow:
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # Open create ticket modal
+            # Open create task modal
             await pilot.press("n")
             await pilot.pause()
 
@@ -299,7 +310,7 @@ class TestModalFlow:
         assert snap_compare(modal_app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_ticket_create_modal_filled(
+    def test_task_create_modal_filled(
         self,
         modal_app: KaganApp,
         snap_compare: Any,
@@ -309,11 +320,11 @@ class TestModalFlow:
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # Open create ticket modal
+            # Open create task modal
             await pilot.press("n")
             await pilot.pause()
             # Type a title
-            for char in "New test ticket":
+            for char in "New test task":
                 await pilot.press(char)
             await pilot.pause()
             # Tab to description
@@ -324,17 +335,17 @@ class TestModalFlow:
         assert snap_compare(modal_app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_ticket_edit_modal(
+    def test_task_edit_modal(
         self,
         modal_app: KaganApp,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Pressing 'e' opens edit modal for existing ticket."""
+        """Pressing 'e' opens edit modal for existing task."""
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # Edit currently focused ticket
+            # Edit currently focused task
             await pilot.press("e")
             await pilot.pause()
 
@@ -342,7 +353,7 @@ class TestModalFlow:
         assert snap_compare(modal_app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_ticket_view_modal(
+    def test_task_view_modal(
         self,
         modal_app: KaganApp,
         snap_compare: Any,
@@ -352,7 +363,7 @@ class TestModalFlow:
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # View ticket details
+            # View task details
             await pilot.press("v")
             # Multiple pauses to ensure modal is fully mounted
             await pilot.pause()
@@ -363,17 +374,17 @@ class TestModalFlow:
         assert snap_compare(modal_app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_ticket_view_modal_with_acceptance_criteria(
+    def test_task_view_modal_with_acceptance_criteria(
         self,
         modal_app: KaganApp,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """View modal displays acceptance criteria for ticket."""
+        """View modal displays acceptance criteria for task."""
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # First ticket (modal001) has acceptance criteria
+            # First task (modal001) has acceptance criteria
             await pilot.press("v")
             # Multiple pauses to ensure modal is fully mounted
             await pilot.pause()
@@ -437,7 +448,7 @@ class TestModalFlow:
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Pressing 'D' on review ticket shows diff modal."""
+        """Pressing 'D' on review task shows diff modal."""
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
@@ -460,7 +471,7 @@ class TestModalFlow:
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Leader key 'g d' also opens diff modal for review ticket."""
+        """Leader key 'g d' also opens diff modal for review task."""
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
@@ -479,11 +490,11 @@ class TestModalFlow:
         assert snap_compare(modal_app, terminal_size=(cols, rows), run_before=run_before)
 
     # =========================================================================
-    # Auto Ticket Modal Tests (N)
+    # Auto Task Modal Tests (N)
     # =========================================================================
 
     @pytest.mark.snapshot
-    def test_auto_ticket_create_modal(
+    def test_auto_task_create_modal(
         self,
         modal_app: KaganApp,
         snap_compare: Any,
@@ -493,7 +504,7 @@ class TestModalFlow:
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # Open create AUTO ticket modal
+            # Open create AUTO task modal
             await pilot.press("N")
             await pilot.pause()
 
@@ -505,13 +516,13 @@ class TestModalFlow:
     # =========================================================================
 
     @pytest.mark.snapshot
-    def test_ticket_modal_escape_closes(
+    def test_task_modal_escape_closes(
         self,
         modal_app: KaganApp,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Escape closes ticket modal without saving."""
+        """Escape closes task modal without saving."""
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()

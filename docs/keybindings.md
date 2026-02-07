@@ -12,42 +12,42 @@ Complete reference for all Kagan keyboard shortcuts.
 | `k` / `↑`           | Move focus up    |
 | `Tab` / `Shift+Tab` | Cycle columns    |
 
-## Tickets
+## Tasks
 
-| Key       | Action                                          |
-| --------- | ----------------------------------------------- |
-| `n`       | New ticket (opens type selection modal)         |
-| `Shift+N` | New AUTO ticket directly (skips type selection) |
-| `v`       | View ticket details                             |
-| `e`       | Edit ticket                                     |
-| `x`       | Delete ticket                                   |
-| `Enter`   | Open session (PAIR) / watch agent (AUTO)        |
-| `/`       | Search tickets                                  |
-| `y`       | Duplicate (yank) ticket                         |
-| `c`       | Copy ticket ID to clipboard                     |
-| `Space`   | Toggle peek overlay (agent status/scratchpad)   |
-| `f`       | Expand description                              |
-| `F5`      | Open full description editor                    |
+| Key       | Action                                        |
+| --------- | --------------------------------------------- |
+| `n`       | New task (opens type selection modal)         |
+| `Shift+N` | New AUTO task directly (skips type selection) |
+| `v`       | View task details                             |
+| `e`       | Edit task                                     |
+| `x`       | Delete task                                   |
+| `Enter`   | Open session (PAIR) / watch agent (AUTO)      |
+| `/`       | Search tasks                                  |
+| `y`       | Duplicate (yank) task                         |
+| `c`       | Copy task ID to clipboard                     |
+| `Space`   | Toggle peek overlay (agent status/scratchpad) |
+| `f`       | Expand description                            |
+| `F5`      | Open full description editor                  |
 
 ## Agent Control
 
-| Key | Action                     |
-| --- | -------------------------- |
-| `a` | Start agent (AUTO tickets) |
-| `s` | Stop agent                 |
-| `w` | Watch agent output         |
+| Key | Action                   |
+| --- | ------------------------ |
+| `a` | Start agent (AUTO tasks) |
+| `s` | Stop agent               |
+| `w` | Watch agent output       |
 
 ## Leader Keys
 
 Press `g`, then:
 
-| Key | Action                                |
-| --- | ------------------------------------- |
-| `h` | Move ticket left (to previous column) |
-| `l` | Move ticket right (to next column)    |
-| `d` | View diff                             |
-| `r` | Open review modal                     |
-| `w` | Watch agent                           |
+| Key | Action                              |
+| --- | ----------------------------------- |
+| `h` | Move task left (to previous column) |
+| `l` | Move task right (to next column)    |
+| `d` | View diff                           |
+| `r` | Open review modal                   |
+| `w` | Watch agent                         |
 
 ## Review
 
@@ -55,7 +55,7 @@ Press `g`, then:
 | --------- | ----------------- |
 | `Shift+D` | View diff         |
 | `r`       | Open review modal |
-| `m`       | Merge ticket      |
+| `m`       | Merge task        |
 
 ## Global
 
@@ -90,12 +90,12 @@ Press `g`, then:
 | `y`      | Copy content              |
 | `Escape` | Close                     |
 
-### Ticket Details Modal
+### Task Details Modal
 
 | Key      | Action                 |
 | -------- | ---------------------- |
 | `e`      | Toggle edit mode       |
-| `d`      | Delete ticket          |
+| `d`      | Delete task            |
 | `f`      | Expand description     |
 | `F5`     | Open full editor       |
 | `y`      | Copy content           |
@@ -106,11 +106,11 @@ Press `g`, then:
 
 When rejecting work, you have three options for what happens next:
 
-| Key      | Action     | Result                                                      |
-| -------- | ---------- | ----------------------------------------------------------- |
-| `Enter`  | **Retry**  | Ticket stays IN_PROGRESS, agent auto-restarts with feedback |
-| `Ctrl+S` | **Stage**  | Ticket stays IN_PROGRESS but paused (restart with `a`)      |
-| `Escape` | **Shelve** | Ticket moves to BACKLOG for later                           |
+| Key      | Action     | Result                                                    |
+| -------- | ---------- | --------------------------------------------------------- |
+| `Enter`  | **Retry**  | Task stays IN_PROGRESS, agent auto-restarts with feedback |
+| `Ctrl+S` | **Stage**  | Task stays IN_PROGRESS but paused (restart with `a`)      |
+| `Escape` | **Shelve** | Task moves to BACKLOG for later                           |
 
 The **Retry** action resets the iteration counter for a fresh attempt.
 
@@ -142,7 +142,7 @@ The **Retry** action resets the iteration counter for a fresh attempt.
 | Key      | Action                          |
 | -------- | ------------------------------- |
 | `c`      | Clear all logs                  |
-| `s`      | Save logs to `.kagan/debug.log` |
+| `s`      | Save logs to XDG data dir `debug.log` |
 | `F12`    | Toggle modal (close)            |
 | `Escape` | Close                           |
 

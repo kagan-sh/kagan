@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import platform
 import tomllib
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import tomlkit
 from pydantic import BaseModel, Field
 
+from kagan.atomic import atomic_write
+from kagan.paths import ensure_directories, get_config_path
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
 
 # OS detection for platform-specific commands
 type OS = Literal["linux", "macos", "windows", "*"]
@@ -113,8 +117,9 @@ class KaganConfig(BaseModel):
     @classmethod
     def load(cls, config_path: Path | None = None) -> KaganConfig:
         """Load configuration from TOML file or use defaults."""
+        ensure_directories()
         if config_path is None:
-            config_path = Path(".kagan/config.toml")
+            config_path = get_config_path()
 
         if config_path.exists():
             with open(config_path, "rb") as f:
@@ -137,8 +142,6 @@ class KaganConfig(BaseModel):
         Args:
             path: Path to write config file (created if missing)
         """
-        import aiofiles
-
         doc = tomlkit.document()
 
         # General section
@@ -173,9 +176,8 @@ class KaganConfig(BaseModel):
                 ui_table[key] = value
         doc["ui"] = ui_table
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(path, "w", encoding="utf-8") as f:
-            await f.write(tomlkit.dumps(doc))
+        content = tomlkit.dumps(doc)
+        await asyncio.to_thread(atomic_write, path, content)
 
     async def update_ui_preferences(
         self,
@@ -211,9 +213,8 @@ class KaganConfig(BaseModel):
             doc["ui"]["skip_tmux_gateway"] = skip_tmux_gateway  # type: ignore[index]
 
         # Write back
-        path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(path, "w", encoding="utf-8") as f:
-            await f.write(tomlkit.dumps(doc))
+        content = tomlkit.dumps(doc)
+        await asyncio.to_thread(atomic_write, path, content)
 
 
 def get_fallback_agent_config() -> AgentConfig:

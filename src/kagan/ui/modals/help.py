@@ -55,11 +55,11 @@ class HelpModal(ModalScreen[None]):
 
         # Primary Actions
         children.append(Static("Primary Actions", classes="help-section-title"))
-        children.append(self._key_row("n", "Create new ticket"))
-        children.append(self._key_row("e", "Edit selected ticket"))
-        children.append(self._key_row("v", "View ticket details"))
+        children.append(self._key_row("n", "Create new task"))
+        children.append(self._key_row("e", "Edit selected task"))
+        children.append(self._key_row("v", "View task details"))
         children.append(self._key_row("Enter", "Open session (PAIR: tmux, AUTO: agent)"))
-        children.append(self._key_row("x", "Delete ticket"))
+        children.append(self._key_row("x", "Delete task"))
         children.append(self._key_row("/", "Toggle search bar"))
         children.append(self._key_row("p", "Switch to Plan mode"))
         children.append(self._key_row(",", "Open settings"))
@@ -76,12 +76,12 @@ class HelpModal(ModalScreen[None]):
 
         # Context-Specific
         children.append(Static("Context-Specific", classes="help-section-title"))
-        children.append(self._key_row("a", "Start agent (AUTO tickets)"))
-        children.append(self._key_row("s", "Stop agent (AUTO tickets)"))
-        children.append(self._key_row("w", "Watch agent output (AUTO tickets)"))
-        children.append(self._key_row("m", "Merge and complete (REVIEW tickets)"))
-        children.append(self._key_row("D", "View diff (REVIEW tickets)"))
-        children.append(self._key_row("r", "Open review modal (REVIEW tickets)"))
+        children.append(self._key_row("a", "Start agent (AUTO tasks)"))
+        children.append(self._key_row("s", "Stop agent (AUTO tasks)"))
+        children.append(self._key_row("w", "Watch agent output (AUTO tasks)"))
+        children.append(self._key_row("m", "Merge and complete (REVIEW tasks)"))
+        children.append(self._key_row("D", "View diff (REVIEW tasks)"))
+        children.append(self._key_row("r", "Open review modal (REVIEW tasks)"))
         children.append(Rule())
 
         # Global
@@ -137,7 +137,7 @@ class HelpModal(ModalScreen[None]):
             Rule(),
             Static("Focus & Selection", classes="help-section-title"),
             Static(
-                "Only ticket cards can receive focus. The focused card is highlighted "
+                "Only task cards can receive focus. The focused card is highlighted "
                 "with a colored border. Double-click a card to view details.",
                 classes="help-paragraph",
             ),
@@ -147,7 +147,7 @@ class HelpModal(ModalScreen[None]):
     def _compose_concepts(self) -> Vertical:
         """Compose the concepts guide section."""
         return Vertical(
-            Static("Ticket Types", classes="help-section-title"),
+            Static("Task Types", classes="help-section-title"),
             Static(""),
             Static("PAIR (Human-in-the-loop):", classes="help-subsection"),
             Static(
@@ -169,11 +169,11 @@ class HelpModal(ModalScreen[None]):
             Static("Workflow Columns", classes="help-section-title"),
             Static(""),
             Static("BACKLOG", classes="help-subsection"),
-            Static("  Tickets waiting to be started.", classes="help-paragraph-indented"),
+            Static("  Tasks waiting to be started.", classes="help-paragraph-indented"),
             Static(""),
             Static("IN PROGRESS", classes="help-subsection"),
             Static(
-                "  Active work. PAIR tickets have tmux sessions; AUTO tickets have agents running.",
+                "  Active work. PAIR tasks have tmux sessions; AUTO tasks have agents running.",
                 classes="help-paragraph-indented",
             ),
             Static(""),
@@ -198,19 +198,19 @@ class HelpModal(ModalScreen[None]):
             Static("  Pulsing border - Agent actively working", classes="help-code"),
             Static(""),
             Static("Type Badges:", classes="help-subsection"),
-            Static("  Human icon   - PAIR ticket", classes="help-code"),
-            Static("  Lightning    - AUTO ticket", classes="help-code"),
+            Static("  Human icon   - PAIR task", classes="help-code"),
+            Static("  Lightning    - AUTO task", classes="help-code"),
             id="concepts-content",
         )
 
     def _compose_workflows(self) -> Vertical:
         """Compose the workflows guide section."""
         return Vertical(
-            Static("Creating Tickets", classes="help-section-title"),
+            Static("Creating Tasks", classes="help-section-title"),
             Static(""),
             Static("Quick Create (n):", classes="help-subsection"),
             Static(
-                "  Press 'n' to open the ticket form. Fill in title, description, "
+                "  Press 'n' to open the task form. Fill in title, description, "
                 "priority, and type. Press Ctrl+S to save.",
                 classes="help-paragraph-indented",
             ),
@@ -218,16 +218,16 @@ class HelpModal(ModalScreen[None]):
             Static("Plan Mode (p):", classes="help-subsection"),
             Static(
                 "  Press 'p' to enter Plan mode. Describe what you want to build "
-                "in natural language. The AI will break it down into tickets.",
+                "in natural language. The AI will break it down into tasks.",
                 classes="help-paragraph-indented",
             ),
             Static(""),
             Rule(),
-            Static("Working on Tickets", classes="help-section-title"),
+            Static("Working on Tasks", classes="help-section-title"),
             Static(""),
             Static("PAIR Workflow:", classes="help-subsection"),
             Static(
-                "  1. Select ticket in BACKLOG, press Enter\n"
+                "  1. Select task in BACKLOG, press Enter\n"
                 "  2. Kagan creates a git worktree and tmux session\n"
                 "  3. Work with your AI agent in the session\n"
                 "  4. When done, move to REVIEW with g+l",
@@ -236,10 +236,10 @@ class HelpModal(ModalScreen[None]):
             Static(""),
             Static("AUTO Workflow:", classes="help-subsection"),
             Static(
-                "  1. Select ticket in BACKLOG, press Enter\n"
+                "  1. Select task in BACKLOG, press Enter\n"
                 "  2. Agent starts working autonomously\n"
                 "  3. Press 'w' or g+w to watch progress\n"
-                "  4. Agent moves ticket to REVIEW when done",
+                "  4. Agent moves task to REVIEW when done",
                 classes="help-paragraph-indented",
             ),
             Static(""),
@@ -248,7 +248,7 @@ class HelpModal(ModalScreen[None]):
             Static(""),
             Static("Review Process:", classes="help-subsection"),
             Static(
-                "  1. Select ticket in REVIEW\n"
+                "  1. Select task in REVIEW\n"
                 "  2. Press g+d to view the diff\n"
                 "  3. Press g+r to open review modal\n"
                 "  4. Press 'g' to generate AI review\n"
@@ -258,7 +258,7 @@ class HelpModal(ModalScreen[None]):
             Static(""),
             Static("Completing:", classes="help-subsection"),
             Static(
-                "  Approved tickets are merged to main, worktrees cleaned up, and moved to DONE.",
+                "  Approved tasks are merged to main, worktrees cleaned up, and moved to DONE.",
                 classes="help-paragraph-indented",
             ),
             id="workflows-content",

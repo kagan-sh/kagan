@@ -1,15 +1,16 @@
 # Configuration
 
-Kagan configuration lives in `.kagan/config.toml`, created automatically on first run.
+Kagan configuration lives in the XDG config directory, created automatically on first run
+(for example `~/.config/kagan/config.toml` on Linux).
 
 ## File Locations
 
-| Path                 | Purpose         |
-| -------------------- | --------------- |
-| `.kagan/config.toml` | Configuration   |
-| `.kagan/state.db`    | Ticket database |
-| `.kagan/kagan.lock`  | Single-instance |
-| `.kagan/worktrees/`  | Git worktrees   |
+| Path                                 | Purpose         |
+| ------------------------------------ | --------------- |
+| XDG config dir `config.toml`         | Configuration   |
+| XDG data dir `kagan.db`              | Task database   |
+| XDG data dir `kagan.lock`            | Single-instance |
+| Temp dir `kagan/worktrees/`          | Git worktrees   |
 
 ## General Settings
 
@@ -28,19 +29,19 @@ max_iterations = 10
 iteration_delay_seconds = 2.0
 ```
 
-| Setting                        | Default    | Purpose                                            |
-| ------------------------------ | ---------- | -------------------------------------------------- |
-| `auto_start`                   | `false`    | Auto-run agents for IN_PROGRESS tickets on startup |
-| `auto_approve`                 | `false`    | Skip permission prompts for AI actions             |
-| `auto_merge`                   | `false`    | Auto-merge tickets after review passes             |
-| `auto_retry_on_merge_conflict` | `true`     | Retry auto-merge after rebase on conflicts         |
-| `require_review_approval`      | `false`    | Require review approval before merge actions       |
-| `serialize_merges`             | `false`    | Serialize manual merges to reduce conflicts        |
-| `default_base_branch`          | `"main"`   | Base branch for worktrees and merges               |
-| `default_worker_agent`         | `"claude"` | Default agent for new tickets                      |
-| `max_concurrent_agents`        | `1`        | Maximum parallel AUTO agents                       |
-| `max_iterations`               | `10`       | Max agent iterations before BACKLOG                |
-| `iteration_delay_seconds`      | `2.0`      | Delay between agent iterations                     |
+| Setting                        | Default    | Purpose                                          |
+| ------------------------------ | ---------- | ------------------------------------------------ |
+| `auto_start`                   | `false`    | Auto-run agents for IN_PROGRESS tasks on startup |
+| `auto_approve`                 | `false`    | Skip permission prompts for AI actions           |
+| `auto_merge`                   | `false`    | Auto-merge tasks after review passes             |
+| `auto_retry_on_merge_conflict` | `true`     | Retry auto-merge after rebase on conflicts       |
+| `require_review_approval`      | `false`    | Require review approval before merge actions     |
+| `serialize_merges`             | `false`    | Serialize manual merges to reduce conflicts      |
+| `default_base_branch`          | `"main"`   | Base branch for worktrees and merges             |
+| `default_worker_agent`         | `"claude"` | Default agent for new tasks                      |
+| `max_concurrent_agents`        | `1`        | Maximum parallel AUTO agents                     |
+| `max_iterations`               | `10`       | Max agent iterations before BACKLOG              |
+| `iteration_delay_seconds`      | `2.0`      | Delay between agent iterations                   |
 
 ## Agent Configuration
 
@@ -128,24 +129,24 @@ skip_prefixes = ["/", "!", "?"]
 
 Agents communicate state transitions via XML signals:
 
-| Signal                     | Effect                 |
-| -------------------------- | ---------------------- |
-| `<complete/>`              | Move ticket to REVIEW  |
-| `<blocked reason="..."/>`  | Move ticket to BACKLOG |
-| `<continue/>`              | Continue iteration     |
-| `<approve summary="..."/>` | Approve in review      |
-| `<reject reason="..."/>`   | Reject in review       |
+| Signal                     | Effect               |
+| -------------------------- | -------------------- |
+| `<complete/>`              | Move task to REVIEW  |
+| `<blocked reason="..."/>`  | Move task to BACKLOG |
+| `<continue/>`              | Continue iteration   |
+| `<approve summary="..."/>` | Approve in review    |
+| `<reject reason="..."/>`   | Reject in review     |
 
 ## Environment Variables
 
 These variables are set when agents run:
 
-| Variable              | Description             |
-| --------------------- | ----------------------- |
-| `KAGAN_TICKET_ID`     | Current ticket ID       |
-| `KAGAN_TICKET_TITLE`  | Current ticket title    |
-| `KAGAN_WORKTREE_PATH` | Path to ticket worktree |
-| `KAGAN_PROJECT_ROOT`  | Root of the repository  |
+| Variable              | Description            |
+| --------------------- | ---------------------- |
+| `KAGAN_TASK_ID`       | Current task ID        |
+| `KAGAN_TASK_TITLE`    | Current task title     |
+| `KAGAN_WORKTREE_PATH` | Path to task worktree  |
+| `KAGAN_PROJECT_ROOT`  | Root of the repository |
 
 ## MCP Configuration Files
 

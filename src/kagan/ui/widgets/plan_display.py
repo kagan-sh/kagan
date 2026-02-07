@@ -22,6 +22,7 @@ STATUS_ICONS: dict[str, str] = {
 }
 
 PlanStatus = Literal["pending", "in_progress", "completed", "failed"]
+AcpPlanStatus = Literal["pending", "in_progress", "completed"]
 
 
 class PlanEntry(Static):
@@ -87,7 +88,9 @@ class PlanDisplay(VerticalGroup):
 
     def update_entry_status(self, index: int, status: PlanStatus) -> None:
         if 0 <= index < len(self._entries):
-            self._entries[index].status = status
+            entry = self._entries[index]
+            entry_status = "pending" if status == "failed" else status
+            entry.status = cast("AcpPlanStatus", entry_status)
             children = list(self.query(PlanEntry))
             if 0 <= index < len(children):
                 children[index].update_status(status)

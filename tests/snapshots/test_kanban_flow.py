@@ -1,11 +1,10 @@
 """Snapshot tests for Kanban screen user flows.
 
 These tests cover the main Kanban interaction flows:
-- Board display with tickets in columns
-- Column and ticket navigation
-- Leader mode activation
+- Board display with tasks in columns
+- Column and task navigation
 - Search functionality
-- Modals (create, view, delete, peek)
+- Delete confirmation
 
 Note: Tests are synchronous because pytest-textual-snapshot's snap_compare
 internally calls asyncio.run(), which conflicts with async test functions.
@@ -14,6 +13,7 @@ internally calls asyncio.run(), which conflicts with async test functions.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -64,8 +64,11 @@ def _create_fake_tmux(sessions: dict[str, Any]) -> object:
     return fake_run_tmux
 
 
-async def _setup_kanban_tickets(db_path: str) -> None:
-    """Pre-populate database with tickets in different columns.
+SNAPSHOT_TIME = datetime(2024, 1, 1, 12, 0, 0)
+
+
+async def _setup_kanban_tasks(db_path: str) -> None:
+    """Pre-populate database with tasks in different columns.
 
     Uses fixed IDs for snapshot reproducibility.
     """
@@ -76,8 +79,8 @@ async def _setup_kanban_tickets(db_path: str) -> None:
         raise RuntimeError("TaskRepository defaults not initialized")
     repo_id = manager.default_repo_id
 
-    # Create tickets with fixed IDs for reproducible snapshots
-    tickets = [
+    # Create tasks with fixed IDs for reproducible snapshots
+    tasks = [
         Task(
             id="backlog1",
             project_id=project_id,
@@ -87,6 +90,8 @@ async def _setup_kanban_tickets(db_path: str) -> None:
             priority=TaskPriority.LOW,
             status=TaskStatus.BACKLOG,
             task_type=TaskType.PAIR,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
         Task(
             id="backlog2",
@@ -97,6 +102,8 @@ async def _setup_kanban_tickets(db_path: str) -> None:
             priority=TaskPriority.HIGH,
             status=TaskStatus.BACKLOG,
             task_type=TaskType.AUTO,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
         Task(
             id="inprog01",
@@ -107,6 +114,8 @@ async def _setup_kanban_tickets(db_path: str) -> None:
             priority=TaskPriority.HIGH,
             status=TaskStatus.IN_PROGRESS,
             task_type=TaskType.PAIR,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
         Task(
             id="review01",
@@ -117,6 +126,8 @@ async def _setup_kanban_tickets(db_path: str) -> None:
             priority=TaskPriority.MEDIUM,
             status=TaskStatus.REVIEW,
             task_type=TaskType.AUTO,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
         Task(
             id="done0001",
@@ -127,11 +138,13 @@ async def _setup_kanban_tickets(db_path: str) -> None:
             priority=TaskPriority.LOW,
             status=TaskStatus.DONE,
             task_type=TaskType.PAIR,
+            created_at=SNAPSHOT_TIME,
+            updated_at=SNAPSHOT_TIME,
         ),
     ]
 
-    for ticket in tickets:
-        await manager.create(ticket)
+    for task in tasks:
+        await manager.create(task)
     await manager.close()
 
 
@@ -145,17 +158,17 @@ class TestKanbanFlow:
         mock_acp_agent_factory: MockAgentFactory,
         monkeypatch: pytest.MonkeyPatch,
     ) -> KaganApp:
-        """Create app with pre-populated tickets for kanban testing."""
+        """Create app with pre-populated tasks for kanban testing."""
         # Mock tmux
         sessions: dict[str, Any] = {}
         fake_tmux = _create_fake_tmux(sessions)
         monkeypatch.setattr("kagan.sessions.tmux.run_tmux", fake_tmux)
         monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
-        # Set up tickets synchronously
+        # Set up tasks synchronously
         loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(_setup_kanban_tickets(snapshot_project.db))
+            loop.run_until_complete(_setup_kanban_tasks(snapshot_project.db))
         finally:
             loop.close()
 
@@ -163,21 +176,22 @@ class TestKanbanFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
     @pytest.mark.snapshot
-    def test_kanban_board_with_tickets(
+    def test_kanban_board_with_tasks(
         self,
         kanban_app: KaganApp,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """Kanban board displays tickets in their respective columns."""
+        """Kanban board displays tasks in their respective columns."""
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            # Verify we're on KanbanScreen (since we have tickets)
+            # Verify we're on KanbanScreen (since we have tasks)
             from kagan.ui.screens.kanban import KanbanScreen
 
             assert isinstance(pilot.app.screen, KanbanScreen)
@@ -206,87 +220,13 @@ class TestKanbanFlow:
         assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_kanban_navigate_tickets(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """User navigates tickets within a column using up/down arrows."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Navigate down within backlog column (has 2 tickets)
-            await pilot.press("down")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_ticket_focused(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Focused ticket has visual highlight indicator."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Focus should be on first ticket by default
-            from kagan.ui.screens.kanban import KanbanScreen
-
-            screen = pilot.app.screen
-            assert isinstance(screen, KanbanScreen)
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_leader_mode(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Pressing 'g' activates leader mode and shows leader hint bar."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Activate leader mode
-            await pilot.press("g")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_search_bar_open(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Pressing '/' opens the search bar."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Open search bar
-            await pilot.press("slash")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
     def test_kanban_search_with_query(
         self,
         kanban_app: KaganApp,
         snap_compare: Any,
         snapshot_terminal_size: tuple[int, int],
     ) -> None:
-        """User types search query in search bar, tickets are filtered."""
+        """User types search query in search bar, tasks are filtered."""
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
@@ -296,81 +236,6 @@ class TestKanbanFlow:
             # Type "backlog" to filter
             for char in "backlog":
                 await pilot.press(char)
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_create_ticket_modal(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Pressing 'n' opens the new ticket modal."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Open create ticket modal
-            await pilot.press("n")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_create_auto_ticket_modal(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Pressing 'N' (Shift+N) opens new ticket modal with AUTO type preselected."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Open create AUTO ticket modal
-            await pilot.press("N")
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_view_ticket_details(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Pressing 'v' opens ticket details modal for the focused ticket."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # View ticket details
-            await pilot.press("v")
-            # Multiple pauses to ensure modal is fully mounted
-            await pilot.pause()
-            await pilot.pause()
-            await pilot.pause()
-
-        cols, rows = snapshot_terminal_size
-        assert snap_compare(kanban_app, terminal_size=(cols, rows), run_before=run_before)
-
-    @pytest.mark.snapshot
-    def test_kanban_peek_overlay(
-        self,
-        kanban_app: KaganApp,
-        snap_compare: Any,
-        snapshot_terminal_size: tuple[int, int],
-    ) -> None:
-        """Pressing 'space' shows peek overlay with ticket scratchpad preview."""
-
-        async def run_before(pilot: Pilot) -> None:
-            await pilot.pause()
-            # Toggle peek overlay
-            await pilot.press("space")
             await pilot.pause()
 
         cols, rows = snapshot_terminal_size

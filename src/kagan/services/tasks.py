@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from kagan.adapters.db.repositories import TaskRepository
-    from kagan.adapters.db.schema import AgentTurn, Task as DbTask
+    from kagan.adapters.db.schema import AgentTurn
     from kagan.core.events import EventBus
     from kagan.core.models.entities import Task
     from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
@@ -66,9 +65,6 @@ class TaskService(Protocol):
 
     async def delete_task(self, task_id: TaskId) -> bool:
         """Delete a task. Returns True if deleted."""
-
-    async def get_task(self, task_id: TaskId) -> Task | None:
-        """Return a task by ID."""
 
     async def update_fields(self, task_id: TaskId, **kwargs: object) -> Task | None:
         """Update a task with keyword arguments."""
@@ -325,7 +321,9 @@ class TaskServiceImpl:
     async def set_review_summary(
         self, task_id: TaskId, summary: str, checks_passed: bool | None
     ) -> Task | None:
-        return await self.update_fields(task_id, review_summary=summary, checks_passed=checks_passed)
+        return await self.update_fields(
+            task_id, review_summary=summary, checks_passed=checks_passed
+        )
 
     async def sync_status_from_agent_complete(self, task_id: TaskId, success: bool) -> Task | None:
         from kagan.core.models.entities import Task as DomainTask

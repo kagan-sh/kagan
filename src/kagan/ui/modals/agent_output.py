@@ -1,4 +1,4 @@
-"""Modal for watching AUTO ticket agent progress."""
+"""Modal for watching AUTO task agent progress."""
 
 from __future__ import annotations
 
@@ -23,13 +23,13 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
     from kagan.acp.agent import Agent
-    from kagan.app import KaganApp
     from kagan.adapters.db.schema import AgentTurn
+    from kagan.app import KaganApp
     from kagan.core.models.entities import Task
 
 
 class AgentOutputModal(ModalScreen[None]):
-    """Modal for watching an AUTO ticket's agent progress in real-time.
+    """Modal for watching an AUTO task's agent progress in real-time.
 
     Supports two modes:
     - IN_PROGRESS: Single streaming output showing live agent work
@@ -40,7 +40,7 @@ class AgentOutputModal(ModalScreen[None]):
 
     def __init__(
         self,
-        ticket: Task,
+        task: Task,
         agent: Agent | None,
         iteration: int = 0,
         review_agent: Agent | None = None,
@@ -49,13 +49,13 @@ class AgentOutputModal(ModalScreen[None]):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.ticket = ticket
+        self._task_model = task
         self._agent = agent
         self._iteration = iteration
         self._review_agent = review_agent
         self._is_reviewing = is_reviewing
         self._historical_logs = historical_logs or {}
-        self._show_tabs = ticket.status == TaskStatus.REVIEW
+        self._show_tabs = task.status == TaskStatus.REVIEW
         self._current_mode: str = ""
         self._available_modes: dict[str, messages.Mode] = {}
         self._available_commands: list[AvailableCommand] = []
@@ -64,7 +64,7 @@ class AgentOutputModal(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-output-container"):
             yield Label(
-                f"AUTO: {self.ticket.title[:MODAL_TITLE_MAX_LENGTH]}",
+                f"AUTO: {self._task_model.title[:MODAL_TITLE_MAX_LENGTH]}",
                 classes="modal-title",
             )
 
@@ -72,7 +72,7 @@ class AgentOutputModal(ModalScreen[None]):
                 # REVIEW status: Tabbed interface
                 status_text = "Reviewing..." if self._is_reviewing else "Review Complete"
                 yield Label(
-                    f"Ticket #{self.ticket.short_id} | {status_text}",
+                    f"Task #{self._task_model.short_id} | {status_text}",
                     classes="modal-subtitle",
                 )
                 yield Rule()
@@ -89,7 +89,7 @@ class AgentOutputModal(ModalScreen[None]):
             else:
                 # IN_PROGRESS status: Single output
                 yield Label(
-                    f"Ticket #{self.ticket.short_id} | Iteration {self._iteration}",
+                    f"Task #{self._task_model.short_id} | Iteration {self._iteration}",
                     classes="modal-subtitle",
                 )
                 yield Rule()
@@ -171,9 +171,9 @@ class AgentOutputModal(ModalScreen[None]):
                     review_output, log_entry, show_iteration_header=False
                 )
         else:
-            if self.ticket.checks_passed is not None:
-                status = "✓ Passed" if self.ticket.checks_passed else "✗ Failed"
-                summary = self.ticket.review_summary or "No details"
+            if self._task_model.checks_passed is not None:
+                status = "✓ Passed" if self._task_model.checks_passed else "✗ Failed"
+                summary = self._task_model.review_summary or "No details"
                 await review_output.post_note(f"Review {status}", classes="info")
                 await review_output.post_response(summary)
             else:
@@ -353,7 +353,7 @@ class AgentOutputModal(ModalScreen[None]):
     # Actions
 
     async def action_cancel_agent(self) -> None:
-        """Stop agent completely and move ticket to BACKLOG."""
+        """Stop agent completely and move task to BACKLOG."""
         # Prevent cancel during review
         if self._is_reviewing:
             self.notify("Cannot cancel during review", severity="warning")
@@ -365,19 +365,19 @@ class AgentOutputModal(ModalScreen[None]):
             self.notify("Automation service unavailable", severity="error")
             return
 
-        if automation.is_running(self.ticket.id):
-            # Stop both the agent process and the ticket loop task
-            await automation.stop_task(self.ticket.id)
+        if automation.is_running(self._task_model.id):
+            # Stop both the agent process and the task loop task
+            await automation.stop_task(self._task_model.id)
             await self._get_output().post_note("Agent stopped", classes="warning")
 
-            # Move ticket to BACKLOG to prevent auto-restart
-            await app.ctx.task_service.move(self.ticket.id, TaskStatus.BACKLOG)
+            # Move task to BACKLOG to prevent auto-restart
+            await app.ctx.task_service.move(self._task_model.id, TaskStatus.BACKLOG)
             await self._get_output().post_note(
-                "Ticket moved to BACKLOG (agent won't auto-restart)", classes="info"
+                "Task moved to BACKLOG (agent won't auto-restart)", classes="info"
             )
-            self.notify("Agent stopped, ticket moved to BACKLOG")
+            self.notify("Agent stopped, task moved to BACKLOG")
         else:
-            self.notify("No agent running for this ticket", severity="warning")
+            self.notify("No agent running for this task", severity="warning")
 
     def action_close(self) -> None:
         """Close the modal (agent continues running in background)."""

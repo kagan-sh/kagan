@@ -26,7 +26,7 @@ class KeybindingHint(Static):
     def show_hints(self, hint_list: list[tuple[str, str]]) -> None:
         """Show list of (key, description) hints.
 
-        Example: [("n", "new ticket"), ("e", "edit"), ("Enter", "start")]
+        Example: [("n", "new task"), ("e", "edit"), ("Enter", "start")]
         """
         if not hint_list:
             self.hints = ""

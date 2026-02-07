@@ -1,9 +1,9 @@
-"""Planner agent support for ticket generation from natural language."""
+"""Planner agent support for task generation from natural language."""
 
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from acp.schema import PlanEntry, ToolCall
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -11,12 +11,15 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from kagan.core.models.entities import Task
 from kagan.core.models.enums import MergeReadiness, TaskPriority, TaskStatus, TaskType
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 # =============================================================================
 # PLANNER PROMPT (hardcoded - no customization)
 # =============================================================================
 
 PLANNER_PROMPT = """\
-You are a Planning Specialist that designs well-scoped units of work as development tickets.
+You are a Planning Specialist that designs well-scoped units of work as development tasks.
 
 ## Core Principles
 
@@ -33,14 +36,14 @@ redacted values or suggest safe mock inputs.
 
 ## Your Role
 
-You analyze requests and propose tickets for workers to execute later.
+You analyze requests and propose tasks for workers to execute later.
 
 Your outputs are limited to:
 - Clarifying questions (when requests are ambiguous)
-- A single tool call to `propose_plan` with the tickets and todos
+- A single tool call to `propose_plan` with the tasks and todos
 - A short confirmation sentence after the tool call
 
-When a user requests "create a script" or "write code", design a ticket
+When a user requests "create a script" or "write code", design a task
 describing what a worker should build.
 
 ## Output Contract (Tool Call)
@@ -49,7 +52,7 @@ Always call the MCP tool `propose_plan` exactly once with structured arguments.
 After the tool call, reply with one short confirmation sentence.
 
 Tool arguments:
-- tickets: list of ticket objects
+- tasks: list of task objects
   - title: string (verb + clear objective)
   - type: "AUTO" or "PAIR"
   - description: string (what to build and why)
@@ -59,14 +62,14 @@ Tool arguments:
   - content: short summary of the planning steps
   - status: "pending" | "in_progress" | "completed" | "failed"
 
-## Ticket Design Guidelines
+## Task Design Guidelines
 
 1. **Title**: Start with a verb (Create, Implement, Fix, Add, Update, Refactor)
 2. **Description**: Provide enough context for a developer to understand the task
 3. **Acceptance Criteria**: Include 2-5 testable conditions that define completion
-4. **Scope**: Each ticket represents one focused unit of work
+4. **Scope**: Each task represents one focused unit of work
 
-## Ticket Types
+## Task Types
 
 **AUTO** - Worker agent completes autonomously:
 - Bug fixes with clear reproduction steps
@@ -94,9 +97,9 @@ Let's think step by step for complex requests.
 
 1. Analyze the request for clarity
 2. Ask 1-2 clarifying questions if the scope is ambiguous
-3. Break complex requests into 2-5 focused tickets
+3. Break complex requests into 2-5 focused tasks
 4. Provide concise todos for the planning steps
-5. Call `propose_plan` with the tickets and todos
+5. Call `propose_plan` with the tasks and todos
 
 ## Examples
 
@@ -106,7 +109,7 @@ User: "Login button doesn't work on mobile"
 
 Tool call arguments:
 {
-  "tickets": [
+  "tasks": [
     {
       "title": "Fix mobile login button tap handling",
       "type": "AUTO",
@@ -133,7 +136,7 @@ User: "Add a dark mode toggle"
 
 Tool call arguments:
 {
-  "tickets": [
+  "tasks": [
     {
       "title": "Add dark mode theme variables",
       "type": "AUTO",
@@ -171,7 +174,7 @@ User: "Refactor the API client to reduce duplication"
 
 Tool call arguments:
 {
-  "tickets": [
+  "tasks": [
     {
       "title": "Refactor API client request helpers",
       "type": "AUTO",
@@ -198,7 +201,7 @@ Tool call arguments:
 {user_request}
 </input>
 
-Call `propose_plan` with the tickets and todos now.
+Call `propose_plan` with the tasks and todos now.
 """
 
 PROPOSE_PLAN_TOOL_NAME = "propose_plan"
@@ -230,8 +233,8 @@ class ProposedTodo(BaseModel):
         return "pending"
 
 
-class ProposedTicket(BaseModel):
-    """Planner ticket proposal parsed from tool call arguments."""
+class ProposedTask(BaseModel):
+    """Planner task proposal parsed from tool call arguments."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -300,7 +303,7 @@ class PlanProposal(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    tickets: list[ProposedTicket] = Field(..., min_length=1)
+    tasks: list[ProposedTask] = Field(..., min_length=1)
     todos: list[ProposedTodo] = Field(default_factory=list)
 
     @field_validator("todos", mode="before")
@@ -314,21 +317,21 @@ class PlanProposal(BaseModel):
         # LLM sent invalid type (string, object, etc.) - gracefully handle
         return []
 
-    def to_tickets(self) -> list[Task]:
-        """Convert proposed tickets into Task models."""
+    def to_tasks(self) -> list[Task]:
+        """Convert proposed tasks into Task models."""
         from datetime import datetime
         from uuid import uuid4
 
-        tickets: list[Task] = []
-        for item in self.tickets:
-            ticket_type = TaskType.AUTO if item.type == "AUTO" else TaskType.PAIR
+        tasks: list[Task] = []
+        for item in self.tasks:
+            task_type = TaskType.AUTO if item.type == "AUTO" else TaskType.PAIR
             priority_map = {
                 "low": TaskPriority.LOW,
                 "medium": TaskPriority.MEDIUM,
                 "high": TaskPriority.HIGH,
             }
             now = datetime.now()
-            tickets.append(
+            tasks.append(
                 Task(
                     id=uuid4().hex[:8],
                     project_id="plan",
@@ -337,7 +340,7 @@ class PlanProposal(BaseModel):
                     description=item.description,
                     status=TaskStatus.BACKLOG,
                     priority=priority_map.get(item.priority, TaskPriority.MEDIUM),
-                    task_type=ticket_type,
+                    task_type=task_type,
                     assigned_hat=None,
                     agent_backend=None,
                     parent_id=None,
@@ -355,7 +358,7 @@ class PlanProposal(BaseModel):
                     updated_at=now,
                 )
             )
-        return tickets
+        return tasks
 
     def to_plan_entries(self) -> list[PlanEntry]:
         """Convert todos to plan display entries."""
@@ -406,9 +409,9 @@ def build_planner_prompt(
 
 
 def parse_proposed_plan(
-    tool_calls: dict[str, ToolCall | dict[str, Any]],
+    tool_calls: Mapping[str, ToolCall | dict[str, Any]],
 ) -> tuple[list[Task], list[PlanEntry] | None, str | None]:
-    """Parse proposed tickets from tool calls.
+    """Parse proposed tasks from tool calls.
 
     Returns (tasks, todos, error). If no proposal is found, returns empty tasks and None.
     """
@@ -428,9 +431,9 @@ def parse_proposed_plan(
     except ValidationError as exc:
         return [], None, _format_plan_error(exc)
 
-    tickets = proposal.to_tickets()
+    tasks = proposal.to_tasks()
     todos = proposal.to_plan_entries()
-    return tickets, todos or None, None
+    return tasks, todos or None, None
 
 
 def _select_propose_plan_call(
@@ -440,7 +443,7 @@ def _select_propose_plan_call(
     if not matches:
         for call in reversed(calls):
             payload = _extract_plan_payload(call)
-            if payload and "tickets" in payload:
+            if payload and "tasks" in payload:
                 return call
         return None
 

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class TitleInput(Input):
     """Reusable title input with consistent styling and validation."""
 
-    DEFAULT_PLACEHOLDER = "Enter ticket title..."
+    DEFAULT_PLACEHOLDER = "Enter task title..."
     DEFAULT_MAX_LENGTH = 200
 
     def __init__(
@@ -86,7 +86,7 @@ class AcceptanceCriteriaArea(TextArea):
 
 
 class PrioritySelect(Select[int]):
-    """Ticket priority dropdown with consistent options."""
+    """Task priority dropdown with consistent options."""
 
     def __init__(
         self,
@@ -108,8 +108,8 @@ class PrioritySelect(Select[int]):
         )
 
 
-class TicketTypeSelect(Select[str]):
-    """Ticket type dropdown (Pair/Auto)."""
+class TaskTypeSelect(Select[str]):
+    """Task type dropdown (Pair/Auto)."""
 
     OPTIONS: Sequence[tuple[str, str]] = [
         ("Pair (tmux)", TaskType.PAIR.value),
@@ -136,7 +136,7 @@ class TicketTypeSelect(Select[str]):
 
 
 class StatusSelect(Select[str]):
-    """Ticket status dropdown."""
+    """Task status dropdown."""
 
     OPTIONS: Sequence[tuple[str, str]] = [
         ("Backlog", TaskStatus.BACKLOG.value),

@@ -1,4 +1,4 @@
-"""Pure formatting functions for ticket cards."""
+"""Pure formatting functions for task cards."""
 
 from __future__ import annotations
 
@@ -94,94 +94,94 @@ def format_progress_bar(iteration_info: str) -> str:
     return iteration_info
 
 
-def get_review_badge(ticket: Task | None) -> str:
+def get_review_badge(task: Task | None) -> str:
     """Get review badge icon.
 
     Args:
-        ticket: Ticket to get badge for
+        task: Task to get badge for
 
     Returns:
         Badge emoji: ⏳ pending, ✓ passed, ✗ failed, ⚠ blocked
     """
-    if ticket is None:
+    if task is None:
         return "⏳"
-    if ticket.merge_failed:
+    if task.merge_failed:
         return "⚠"
-    if ticket.checks_passed is True:
+    if task.checks_passed is True:
         return "✓"
-    if ticket.checks_passed is False:
+    if task.checks_passed is False:
         return "✗"
     return "⏳"
 
 
-def format_checks_status(ticket: Task | None) -> str:
+def format_checks_status(task: Task | None) -> str:
     """Format checks status with icon and text.
 
     Args:
-        ticket: Ticket to format status for
+        task: Task to format status for
 
     Returns:
         Status string like "✓ Review approved"
     """
-    if ticket is None:
+    if task is None:
         return "⏳ Review pending"
-    if ticket.merge_failed:
-        error = ticket.merge_error or "unknown error"
+    if task.merge_failed:
+        error = task.merge_error or "unknown error"
         return f"⚠ Merge failed: {error[:40]}"
-    if ticket.checks_passed is True:
+    if task.checks_passed is True:
         return "✓ Review approved"
-    if ticket.checks_passed is False:
+    if task.checks_passed is False:
         return "✗ Review rejected"
     return "⏳ Review pending"
 
 
-def format_review_status(ticket: Task | None, merge_readiness: str) -> str:
+def format_review_status(task: Task | None, merge_readiness: str) -> str:
     """Format consolidated review status with merge readiness.
 
     Args:
-        ticket: Ticket to format status for
+        task: Task to format status for
         merge_readiness: Merge readiness state (ready/blocked/risk)
 
     Returns:
         Status string like "✓ Review approved · Ready to merge"
     """
-    if ticket is None:
+    if task is None:
         return "⏳ Review pending"
 
     # Merge blocked - show error inline
-    if ticket.merge_failed:
-        error = ticket.merge_error or "unknown error"
+    if task.merge_failed:
+        error = task.merge_error or "unknown error"
         return f"⚠ Merge blocked: {error[:35]}"
 
     # Review passed/failed with readiness indicator
     readiness = merge_readiness or "risk"
-    if ticket.checks_passed is True:
+    if task.checks_passed is True:
         if readiness == "ready":
             return "✓ Review approved · Ready to merge"
         elif readiness == "blocked":
             return "✓ Review approved · Blocked"
         else:
             return "✓ Review approved · At risk"
-    elif ticket.checks_passed is False:
+    elif task.checks_passed is False:
         return "✗ Review rejected"
     else:
         return "⏳ Review pending"
 
 
-def get_readiness_badge(ticket: Task | None, merge_readiness: str, status: TaskStatus) -> str:
-    """Get merge readiness badge for REVIEW tickets.
+def get_readiness_badge(task: Task | None, merge_readiness: str, status: TaskStatus) -> str:
+    """Get merge readiness badge for REVIEW tasks.
 
     Args:
-        ticket: Ticket to get badge for
+        task: Task to get badge for
         merge_readiness: Merge readiness state
-        status: Ticket status
+        status: Task status
 
     Returns:
         Badge like "🟢 SAFE" or empty string for non-REVIEW
     """
     from kagan.core.models.enums import TaskStatus
 
-    if ticket is None or status != TaskStatus.REVIEW:
+    if task is None or status != TaskStatus.REVIEW:
         return ""
     readiness = merge_readiness or "risk"
     if readiness == "ready":

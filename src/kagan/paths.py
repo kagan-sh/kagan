@@ -35,7 +35,12 @@ def get_cache_dir() -> Path:
 
 
 def get_worktree_base_dir() -> Path:
-    """Get the base directory for git worktrees."""
+    """Get the base directory for git worktrees.
+
+    - Linux: /var/tmp/kagan/
+    - macOS: /var/folders/.../kagan/ (via tempfile)
+    - Windows: %TEMP%/kagan/
+    """
     override = os.environ.get("KAGAN_WORKTREE_BASE")
     if override:
         return Path(override)
@@ -61,6 +66,11 @@ def get_config_path() -> Path:
 def get_profiles_path() -> Path:
     """Get the path to the agent profiles file."""
     return get_config_dir() / "profiles.toml"
+
+
+def get_lock_path() -> Path:
+    """Get the path to the instance lock file."""
+    return get_data_dir() / "kagan.lock"
 
 
 def get_debug_log_path() -> Path:

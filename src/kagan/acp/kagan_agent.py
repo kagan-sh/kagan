@@ -208,14 +208,19 @@ class KaganAgent:
         log.info(f"[_run_agent] KAGAN_CWD={env['KAGAN_CWD']}")
 
         try:
-            async with spawn_agent_process(
-                self,
-                parts[0],
-                *parts[1:],
-                env=env,
-                cwd=str(self.project_root.absolute()),
-                transport_kwargs={"limit": SUBPROCESS_LIMIT, "shutdown_timeout": SHUTDOWN_TIMEOUT},
-            ) as (conn, process):
+            async with (
+                spawn_agent_process(
+                    self,  # type: ignore[arg-type]
+                    parts[0],
+                    *parts[1:],
+                    env=env,
+                    cwd=str(self.project_root.absolute()),
+                    transport_kwargs={
+                        "limit": SUBPROCESS_LIMIT,
+                        "shutdown_timeout": SHUTDOWN_TIMEOUT,
+                    },
+                ) as (conn, process)
+            ):
                 self._connection = conn
                 self._process = process
                 await self._initialize(conn)
@@ -341,7 +346,9 @@ class KaganAgent:
             if option_id is None and options:
                 option_id = options[0].option_id
             if option_id:
-                return RequestPermissionResponse(outcome=AllowedOutcome(option_id=option_id))
+                return RequestPermissionResponse(
+                    outcome=AllowedOutcome(outcome="selected", optionId=option_id)
+                )
             return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
 
         log.info("[ACP] session/request_permission: waiting for UI response")
@@ -358,13 +365,17 @@ class KaganAgent:
             if option_id is None and options:
                 option_id = options[0].option_id
             if option_id:
-                return RequestPermissionResponse(outcome=AllowedOutcome(option_id=option_id))
+                return RequestPermissionResponse(
+                    outcome=AllowedOutcome(outcome="selected", optionId=option_id)
+                )
             return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
 
         log.info(f"[ACP] session/request_permission: UI responded with {answer.id}")
         if not answer.id:
             return RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
-        return RequestPermissionResponse(outcome=AllowedOutcome(option_id=answer.id))
+        return RequestPermissionResponse(
+            outcome=AllowedOutcome(outcome="selected", optionId=answer.id)
+        )
 
     async def read_text_file(
         self,
@@ -460,7 +471,7 @@ class KaganAgent:
             output_byte_limit=output_byte_limit,
         )
         self.post_message(messages.AgentUpdate("terminal", f"$ {cmd_display}"))
-        return CreateTerminalResponse(terminal_id=terminal_id)
+        return CreateTerminalResponse(terminalId=terminal_id)
 
     async def terminal_output(
         self,
@@ -513,7 +524,7 @@ class KaganAgent:
         existing = self.tool_calls.get(tool_call_id)
         if existing is None:
             title = update.title or "Tool call"
-            existing = ToolCall(tool_call_id=tool_call_id, title=title)
+            existing = ToolCall(toolCallId=tool_call_id, title=title)
             self.tool_calls[tool_call_id] = existing
 
         if update.title is not None:

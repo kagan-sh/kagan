@@ -11,10 +11,10 @@ from kagan.ui.widgets.base import (
     PrioritySelect,
     ReadOnlyField,
     StatusSelect,
-    TicketTypeSelect,
+    TaskTypeSelect,
     TitleInput,
 )
-from kagan.ui.widgets.card import TicketCard
+from kagan.ui.widgets.card import TaskCard
 from kagan.ui.widgets.column import KanbanColumn
 from kagan.ui.widgets.empty_state import EmptyState
 from kagan.ui.widgets.header import KaganHeader
@@ -47,8 +47,8 @@ __all__ = [
     "StatusSelect",
     "StreamingMarkdown",
     "StreamingOutput",
-    "TicketCard",
-    "TicketTypeSelect",
+    "TaskCard",
+    "TaskTypeSelect",
     "TitleInput",
     "ToolCall",
     "UserInput",

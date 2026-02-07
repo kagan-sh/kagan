@@ -23,8 +23,11 @@ def _now() -> datetime:
 class DomainEvent(Protocol):
     """Base protocol for all domain events."""
 
-    event_id: str
-    occurred_at: datetime
+    @property
+    def event_id(self) -> str: ...
+
+    @property
+    def occurred_at(self) -> datetime: ...
 
 
 EventHandler = Callable[[DomainEvent], None]
@@ -45,6 +48,9 @@ class EventBus(Protocol):
         event_type: type[DomainEvent] | None = None,
     ) -> None:
         """Register a sync handler for events (UI bridges use this)."""
+
+    def remove_handler(self, handler: EventHandler) -> None:
+        """Remove a previously registered handler."""
 
 
 @dataclass(frozen=True)

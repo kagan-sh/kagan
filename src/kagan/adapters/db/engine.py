@@ -8,12 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel
 
-LEGACY_TABLES = ("ticket_events", "agent_logs", "scratchpads", "tickets")
+from kagan.paths import ensure_directories, get_database_path
+
+LEGACY_TABLES = ("task_events", "agent_logs", "scratchpads")
 
 
-async def create_db_engine(db_path: str | Path) -> AsyncEngine:
+async def create_db_engine(db_path: str | Path | None = None) -> AsyncEngine:
     """Create async SQLite engine with WAL mode."""
-    db_path_str = str(db_path)
+    ensure_directories()
+    resolved = Path(db_path) if db_path else get_database_path()
+    db_path_str = str(resolved)
     if db_path_str == ":memory:":
         engine = create_async_engine(
             "sqlite+aiosqlite:///:memory:",

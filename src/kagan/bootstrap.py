@@ -16,7 +16,8 @@ import asyncio
 import contextlib
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from kagan.config import KaganConfig
 from kagan.core.events import (
@@ -35,8 +36,7 @@ from kagan.core.events import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
-    from pathlib import Path
+    from collections.abc import AsyncIterator, Callable
 
     from textual.signal import Signal
 
@@ -119,7 +119,10 @@ class SignalBinding:
 
     event_type: type[DomainEvent]
     signal: Signal
-    extractor: callable | None = None  # Optional: extract payload from event
+    extractor: Callable[[DomainEvent], object] | None = None  # Optional payload extractor
+
+
+TDomainEvent = TypeVar("TDomainEvent", bound=DomainEvent)
 
 
 class SignalBridge:
@@ -131,9 +134,9 @@ class SignalBridge:
 
     Usage:
         bridge = SignalBridge(event_bus)
-        bridge.bind(TaskStatusChanged, app.ticket_changed_signal,
+        bridge.bind(TaskStatusChanged, app.task_changed_signal,
                     extractor=lambda e: e.task_id)
-        bridge.bind(TaskCreated, app.ticket_changed_signal,
+        bridge.bind(TaskCreated, app.task_changed_signal,
                     extractor=lambda e: e.task_id)
     """
 
@@ -144,10 +147,10 @@ class SignalBridge:
 
     def bind(
         self,
-        event_type: type[DomainEvent],
+        event_type: type[TDomainEvent],
         signal: Signal,
         *,
-        extractor: callable | None = None,
+        extractor: Callable[[TDomainEvent], object] | None = None,
     ) -> None:
         """Bind an event type to a Textual Signal.
 
@@ -157,7 +160,8 @@ class SignalBridge:
             extractor: Optional function to extract the signal payload from
                        the event. If None, the full event is published.
         """
-        self._bindings.append(SignalBinding(event_type, signal, extractor))
+        binding_extractor = cast("Callable[[DomainEvent], object] | None", extractor)
+        self._bindings.append(SignalBinding(event_type, signal, binding_extractor))
         if not self._handler_registered:
             self._event_bus.add_handler(self._on_event)
             self._handler_registered = True
@@ -218,19 +222,19 @@ class AppContext:
     signal_bridge: SignalBridge | None = None
 
     # Services (will be populated during bootstrap)
-    task_service: TaskService | None = None
-    workspace_service: WorkspaceService | None = None
-    session_service: SessionService | None = None
-    execution_service: ExecutionService | None = None
-    merge_service: MergeService | None = None
-    automation_service: AutomationService | None = None
+    task_service: TaskService = field(init=False)
+    workspace_service: WorkspaceService = field(init=False)
+    session_service: SessionService = field(init=False)
+    execution_service: ExecutionService = field(init=False)
+    merge_service: MergeService = field(init=False)
+    automation_service: AutomationService = field(init=False)
 
     async def close(self) -> None:
         """Clean up all resources."""
         if self.signal_bridge:
             self.signal_bridge.unbind_all()
 
-        if self.automation_service:
+        if hasattr(self, "automation_service"):
             await self.automation_service.stop()
 
 
@@ -254,21 +258,21 @@ def wire_default_signals(bridge: SignalBridge, app: object) -> None:
         bridge: The SignalBridge to configure.
         app: The KaganApp instance with signal attributes.
     """
-    # Task events -> ticket_changed_signal (backward compat naming)
-    if hasattr(app, "ticket_changed_signal"):
+    # Task events -> task_changed_signal (backward compat naming)
+    if hasattr(app, "task_changed_signal"):
         bridge.bind(
             TaskCreated,
-            app.ticket_changed_signal,
+            app.task_changed_signal,
             extractor=lambda e: e.task_id,
         )
         bridge.bind(
             TaskUpdated,
-            app.ticket_changed_signal,
+            app.task_changed_signal,
             extractor=lambda e: e.task_id,
         )
         bridge.bind(
             TaskStatusChanged,
-            app.ticket_changed_signal,
+            app.task_changed_signal,
             extractor=lambda e: e.task_id,
         )
 
@@ -283,6 +287,7 @@ async def bootstrap_app(
     db_path: Path,
     *,
     config: KaganConfig | None = None,
+    project_root: Path | None = None,
 ) -> AsyncIterator[AppContext]:
     """Bootstrap the application context with all services wired.
 
@@ -293,6 +298,7 @@ async def bootstrap_app(
         config_path: Path to the config.toml file.
         db_path: Path to the SQLite database.
         config: Optional pre-loaded config (for testing).
+        project_root: Optional project root override (defaults to cwd).
 
     Yields:
         Fully initialized AppContext.
@@ -303,7 +309,9 @@ async def bootstrap_app(
             # ... run application ...
     """
     try:
-        ctx = await create_app_context(config_path, db_path, config=config)
+        ctx = await create_app_context(
+            config_path, db_path, config=config, project_root=project_root
+        )
         yield ctx
     finally:
         await ctx.close()
@@ -314,6 +322,7 @@ async def create_app_context(
     db_path: Path,
     *,
     config: KaganConfig | None = None,
+    project_root: Path | None = None,
 ) -> AppContext:
     """Create a fully initialized AppContext (non-context-manager)."""
     if config is None:
@@ -337,7 +346,7 @@ async def create_app_context(
         WorkspaceServiceImpl,
     )
 
-    project_root = config_path.parent.parent
+    project_root = project_root or Path.cwd()
 
     task_repo = TaskRepository(
         db_path,

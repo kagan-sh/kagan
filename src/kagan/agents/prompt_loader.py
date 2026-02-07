@@ -22,7 +22,7 @@ from __future__ import annotations
 # =============================================================================
 
 ITERATION_PROMPT = """\
-You are a Senior Software Engineer executing ticket {ticket_id}.
+You are a Senior Software Engineer executing task {task_id}.
 Iteration {iteration} of {max_iterations}.
 
 ## Core Principles
@@ -32,7 +32,7 @@ Iteration {iteration} of {max_iterations}.
 - Learning by example: follow the patterns in the examples below.
 - Structured reasoning: let's think step by step for complex tasks.
 - Separate reasoning from the final response: provide Reasoning, then Work Summary.
-- Variables: treat placeholders (ticket id, iteration, etc.) as data inputs.
+- Variables: treat placeholders (task id, iteration, etc.) as data inputs.
 
 ## Safety & Secrets
 
@@ -83,7 +83,7 @@ Next, implement the next logical step toward completion.
 Finally, verify your changes work, COMMIT them, then signal.
 
 Detailed steps:
-1. **Coordinate first**: Call `kagan_get_parallel_tickets` and `kagan_get_agent_logs`
+1. **Coordinate first**: Call `kagan_get_parallel_tasks` and `kagan_get_agent_logs`
 2. Review scratchpad to understand completed and remaining work
 3. Implement incrementally - one coherent change at a time
 4. Run tests or builds to verify changes function correctly
@@ -152,14 +152,14 @@ Keep reasoning concise and separate from the final signal.
 Before starting implementation, you MUST check for parallel work:
 
 **Step 1: Discover Concurrent Work**
-Call `kagan_get_parallel_tickets` with exclude_ticket_id="{ticket_id}".
-Review each concurrent ticket's title, description, and scratchpad to identify:
+Call `kagan_get_parallel_tasks` with exclude_task_id="{task_id}".
+Review each concurrent task's title, description, and scratchpad to identify:
 - Overlapping file modifications (coordinate to avoid merge conflicts)
 - Shared dependencies being modified (align on approach)
 - Related features that should stay consistent
 
 **Step 2: Learn from History**
-Call `kagan_get_agent_logs` on completed or in-progress tickets that relate to your task.
+Call `kagan_get_agent_logs` on completed or in-progress tasks that relate to your task.
 Use insights to:
 - Avoid repeating failed approaches documented in prior iterations
 - Reuse successful patterns and solutions
@@ -167,8 +167,8 @@ Use insights to:
 
 **Step 3: Document Coordination Decisions**
 If you find overlap with parallel work, note in your response:
-- Which tickets overlap and how
-- What coordination strategy you're using (e.g., "avoiding file X until ticket Y completes")
+- Which tasks overlap and how
+- What coordination strategy you're using (e.g., "avoiding file X until task Y completes")
 - Any assumptions about merge order
 
 This coordination step prevents wasted effort and merge conflicts across parallel agents.
@@ -187,7 +187,7 @@ Reasoning:
 3. Verify functionality and commit before signaling.
 
 Work Summary:
-- Called `kagan_get_parallel_tickets`: Ticket ABC-102 is modifying `src/components/Profile.tsx`.
+- Called `kagan_get_parallel_tasks`: Task ABC-102 is modifying `src/components/Profile.tsx`.
 - Called `kagan_get_agent_logs` on ABC-098: multer + UUID filenames, middleware in
   `src/middleware/`.
 - Implemented `POST /api/users/avatar` with image validation, 5MB limit, and avatar storage.
@@ -312,7 +312,7 @@ Signal `<complete/>` only when all acceptance criteria are met AND changes are c
 # =============================================================================
 
 REVIEW_PROMPT = """\
-You are a Code Review Specialist evaluating changes for a completed ticket.
+You are a Code Review Specialist evaluating changes for a completed task.
 
 ## Core Principles
 
@@ -330,8 +330,8 @@ assumption and recommend a safe, redacted verification path.
 
 ## Context
 
-**Ticket:** {title}
-**ID:** {ticket_id}
+**Task:** {title}
+**ID:** {task_id}
 **Description:** {description}
 
 ## Changes to Review
@@ -353,7 +353,7 @@ assumption and recommend a safe, redacted verification path.
 
 ### Quality Checks (evaluate only if commits exist)
 
-3. Does the implementation fulfill the ticket description?
+3. Does the implementation fulfill the task description?
 4. Is the code free of obvious bugs or logic errors?
 5. Is the code reasonably clean and maintainable?
 
@@ -389,7 +389,7 @@ End with exactly ONE signal:
 
 ### Example 1: Approve - Complete Implementation
 
-**Ticket:** Add input validation for registration form
+**Task:** Add input validation for registration form
 **Commits:** feat: Add email and password validation, test: Add validation tests
 **Diff:** src/validation.ts (45+), tests/validation.test.ts (30+)
 
@@ -408,7 +408,7 @@ Decision:
 
 ### Example 2: Reject - Missing Requirements
 
-**Ticket:** Implement dark mode toggle with theme persistence
+**Task:** Implement dark mode toggle with theme persistence
 **Commits:** feat: Add theme context provider
 **Diff:** src/context/theme.tsx (35+)
 
@@ -416,7 +416,7 @@ Decision:
 Reasoning:
 - Only a theme context provider is added.
 - Dark palette tokens, component updates, and persistence are missing.
-- Ticket requirements are not fully met.
+- Task requirements are not fully met.
 
 Decision:
 
@@ -424,7 +424,7 @@ Decision:
 
 ### Example 3: Approve with Observations
 
-**Ticket:** Add request logging for API debugging
+**Task:** Add request logging for API debugging
 **Commits:** feat: Add request/response logging middleware
 **Diff:** src/middleware/logging.ts (40+)
 
@@ -443,7 +443,7 @@ Decision:
 
 ### Example 4: Reject - No Commits (Agent Failed to Commit)
 
-**Ticket:** Create config.json with default settings
+**Task:** Create config.json with default settings
 **Commits:** No commits
 **Diff:** No changes
 
@@ -458,7 +458,7 @@ Decision:
 
 ### Example 5: Reject - Empty Diff Despite Commits Listed
 
-**Ticket:** Update README with installation instructions
+**Task:** Update README with installation instructions
 **Commits:** docs: Update README
 **Diff:** No changes
 
@@ -476,7 +476,7 @@ Decision:
 
 def get_review_prompt(
     title: str,
-    ticket_id: str,
+    task_id: str,
     description: str,
     commits: str,
     diff_summary: str,
@@ -484,9 +484,9 @@ def get_review_prompt(
     """Get formatted review prompt.
 
     Args:
-        title: Ticket title.
-        ticket_id: Ticket ID.
-        description: Ticket description.
+        title: Task title.
+        task_id: Task ID.
+        description: Task description.
         commits: Formatted commit messages.
         diff_summary: Diff statistics summary.
 
@@ -495,7 +495,7 @@ def get_review_prompt(
     """
     return REVIEW_PROMPT.format(
         title=title,
-        ticket_id=ticket_id,
+        task_id=task_id,
         description=description,
         commits=commits,
         diff_summary=diff_summary,

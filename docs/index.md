@@ -11,7 +11,7 @@ uv tool install kagan
 # Launch in any git repo
 cd your-project && kagan
 
-# Create your first ticket: press 'n', enter details, press 'Enter' to start
+# Create your first task: press 'n', enter details, press 'Enter' to start
 ```
 
 !!! info "Requirements"
@@ -21,11 +21,11 @@ Python 3.12+, terminal (min 80x20), git repo (for worktrees), tmux (for PAIR mod
 
 | Key         | Action                             |
 | ----------- | ---------------------------------- |
-| `n`         | New ticket                         |
-| `Shift+N`   | New AUTO ticket (quick create)     |
+| `n`         | New task                           |
+| `Shift+N`   | New AUTO task (quick create)       |
 | `a`         | Start agent                        |
 | `Enter`     | Open session (PAIR) / watch (AUTO) |
-| `g` `h`/`l` | Move ticket left/right             |
+| `g` `h`/`l` | Move task left/right               |
 | `Space`     | Peek (toggle status overlay)       |
 | `?` / `F1`  | Show help                          |
 
@@ -33,11 +33,11 @@ See the [full keyboard reference](keybindings.md) for all shortcuts.
 
 ## Two Collaboration Modes
 
-Kagan offers two ways to work with AI on your tickets:
+Kagan offers two ways to work with AI on your tasks:
 
 ### AUTO Mode
 
-Autonomous agents that work independently on tickets.
+Autonomous agents that work independently on tasks.
 
 - Press ++a++ to start an agent, ++w++ to watch progress
 - Agent works in background, moves to REVIEW when done
@@ -47,45 +47,45 @@ Autonomous agents that work independently on tickets.
 
 Interactive tmux session where you work alongside your AI agent in real-time.
 
-- Press ++enter++ on any ticket to open a shared terminal
-- Agent has access to ticket context via MCP tools
+- Press ++enter++ on any task to open a shared terminal
+- Agent has access to task context via MCP tools
 - Perfect for complex problems requiring back-and-forth
 
 !!! tip "Choosing the right mode"
 Use **AUTO** for well-defined tasks with clear acceptance criteria. Use **PAIR** when you need to explore, debug, or learn alongside the AI.
 
-Read the [Ticket Modes Guide](ticket-modes.md) for detailed state machines and workflow tips.
+Read the [Task Modes Guide](task-modes.md) for detailed state machines and workflow tips.
 
 ## Kanban Board
 
 Classic workflow: **BACKLOG** → **IN_PROGRESS** → **REVIEW** → **DONE**
 
-Move tickets between columns with ++g++ ++h++ / ++g++ ++l++. Track multiple workstreams with visual priority badges and agent assignments.
+Move tasks between columns with ++g++ ++h++ / ++g++ ++l++. Track multiple workstreams with visual priority badges and agent assignments.
 
 ## AI Planner
 
-Press ++p++ to describe your goal in natural language. The planner breaks it down into actionable tickets with acceptance criteria. Review, refine, and approve—then watch your board populate automatically.
+Press ++p++ to describe your goal in natural language. The planner breaks it down into actionable tasks with acceptance criteria. Review, refine, and approve—then watch your board populate automatically.
 
 ## Review Flow
 
 Built-in code review with AI assistance:
 
-1. Ticket moves to REVIEW when agent completes work
+1. Task moves to REVIEW when agent completes work
 1. View diffs (++shift+d++), inspect commits, run tests
 1. Check merge readiness (Ready / At Risk / Blocked) and any preflight warnings
 1. Approve (++a++) to merge or reject (++r++) with feedback
 1. Auto-merge on approval (configurable)
 
-In REVIEW, Kagan surfaces parallel in-progress tickets and their changed files to help prevent conflicts. If a merge fails, the ticket stays in REVIEW with a clear error and a primary resolve action. If there are no changes, the primary action becomes “Close as Exploratory” to finish without a merge.
+In REVIEW, Kagan surfaces parallel in-progress tasks and their changed files to help prevent conflicts. If a merge fails, the task stays in REVIEW with a clear error and a primary resolve action. If there are no changes, the primary action becomes “Close as Exploratory” to finish without a merge.
 Merges run in a dedicated merge worktree to keep your main working tree clean.
 
 ## MCP Integration
 
-Agents access ticket context through MCP (Model Context Protocol):
+Agents access task context through MCP (Model Context Protocol):
 
-- `get_context(ticket_id)` — Full ticket details and acceptance criteria
-- `update_scratchpad(ticket_id, content)` — Append progress notes
-- `request_review(ticket_id, summary)` — Submit work for review
+- `get_context(task_id)` — Full task details and acceptance criteria
+- `update_scratchpad(task_id, content)` — Append progress notes
+- `request_review(task_id, summary)` — Submit work for review
 
 Run the MCP server: `kagan mcp`
 
@@ -130,18 +130,18 @@ flowchart TB
 
     subgraph Code["Your Codebase"]
         Main["Main Branch"]
-        Worktree["Isolated Git Branch<br/>(per ticket)"]
+        Worktree["Isolated Git Branch<br/>(per task)"]
         Main <--> Worktree
     end
 ```
 
-Each ticket gets its own isolated git branch, keeping your main branch safe until changes are reviewed and approved.
+Each task gets its own isolated git branch, keeping your main branch safe until changes are reviewed and approved.
 
-## Ticket Lifecycle
+## Task Lifecycle
 
 ```mermaid
 stateDiagram-v2
-    [*] --> BACKLOG: Create ticket
+    [*] --> BACKLOG: Create task
 
     BACKLOG --> IN_PROGRESS: Start work
 
@@ -174,7 +174,7 @@ stateDiagram-v2
 | **DONE**        | Merged (auto or manual)              | Merged manually         |
 
 !!! note "Key difference"
-AUTO tickets have automatic state transitions driven by the agent. PAIR tickets are fully manual—you control when they move between columns.
+AUTO tasks have automatic state transitions driven by the agent. PAIR tasks are fully manual—you control when they move between columns.
 
 ## Supported AI CLIs
 
@@ -185,13 +185,13 @@ Coming soon: Gemini, Codex, and more.
 
 ## Configuration
 
-Configuration lives in `.kagan/config.toml`. Key settings:
+Configuration lives in the XDG config `config.toml`. Key settings:
 
 | Setting                   | Purpose                                     |
 | ------------------------- | ------------------------------------------- |
-| `auto_start`              | Auto-run agents on ticket creation          |
+| `auto_start`              | Auto-run agents on task creation            |
 | `auto_approve`            | Skip permission prompts                     |
-| `auto_merge`              | Merge approved tickets automatically        |
+| `auto_merge`              | Merge approved tasks automatically          |
 | `require_review_approval` | Require review approval before merge        |
 | `serialize_merges`        | Serialize manual merges to reduce conflicts |
 | `default_worker_agent`    | Default agent (e.g., "claude")              |

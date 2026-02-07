@@ -4,7 +4,7 @@
 # type hints at runtime for relationships.
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import uuid4
 
 from sqlalchemy import JSON, Column
@@ -23,6 +23,10 @@ from kagan.core.models.enums import (
     WorkspaceStatus,
 )
 
+if TYPE_CHECKING:
+    from kagan.config import KaganConfig
+
+
 def _new_id() -> str:
     return uuid4().hex[:8]
 
@@ -30,16 +34,19 @@ def _new_id() -> str:
 class Project(SQLModel, table=True):
     """Project container."""
 
-    __tablename__ = "projects"
+    __tablename__ = "projects"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     name: str = Field(index=True)
     description: str = Field(default="")
     default_repo_id: str | None = Field(default=None, foreign_key="repos.id")
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-    repos: list["Repo"] = Relationship(back_populates="project")
+    repos: list["Repo"] = Relationship(
+        back_populates="project",
+        sa_relationship_kwargs={"foreign_keys": "Repo.project_id"},
+    )
     tasks: list["Task"] = Relationship(back_populates="project")
     workspaces: list["Workspace"] = Relationship(back_populates="project")
 
@@ -47,9 +54,9 @@ class Project(SQLModel, table=True):
 class Repo(SQLModel, table=True):
     """Repository configuration."""
 
-    __tablename__ = "repos"
+    __tablename__ = "repos"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     project_id: str = Field(foreign_key="projects.id", index=True)
     name: str = Field(index=True)
     path: str
@@ -58,7 +65,10 @@ class Repo(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-    project: Project = Relationship(back_populates="repos")
+    project: Project = Relationship(
+        back_populates="repos",
+        sa_relationship_kwargs={"foreign_keys": "Repo.project_id"},
+    )
     tasks: list["Task"] = Relationship(back_populates="repo")
     workspaces: list["Workspace"] = Relationship(back_populates="repo")
 
@@ -66,7 +76,7 @@ class Repo(SQLModel, table=True):
 class TaskTag(SQLModel, table=True):
     """Association table for tasks and tags."""
 
-    __tablename__ = "task_tags"
+    __tablename__ = "task_tags"  # type: ignore[bad-override]
 
     task_id: str = Field(foreign_key="tasks.id", primary_key=True)
     tag_id: str = Field(foreign_key="tags.id", primary_key=True)
@@ -75,9 +85,9 @@ class TaskTag(SQLModel, table=True):
 class Task(SQLModel, table=True):
     """Unit of work (Kanban card)."""
 
-    __tablename__ = "tasks"
+    __tablename__ = "tasks"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     project_id: str = Field(foreign_key="projects.id", index=True)
     repo_id: str | None = Field(default=None, foreign_key="repos.id", index=True)
     parent_id: str | None = Field(default=None, foreign_key="tasks.id", index=True)
@@ -200,9 +210,9 @@ class Task(SQLModel, table=True):
 class Workspace(SQLModel, table=True):
     """Worktree + branch pairing for a task."""
 
-    __tablename__ = "workspaces"
+    __tablename__ = "workspaces"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     project_id: str = Field(foreign_key="projects.id", index=True)
     repo_id: str = Field(foreign_key="repos.id", index=True)
     task_id: str | None = Field(default=None, foreign_key="tasks.id", index=True)
@@ -223,9 +233,9 @@ class Workspace(SQLModel, table=True):
 class Session(SQLModel, table=True):
     """Session for an execution backend (tmux/ACP/etc.)."""
 
-    __tablename__ = "sessions"
+    __tablename__ = "sessions"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     workspace_id: str = Field(foreign_key="workspaces.id", index=True)
     session_type: SessionType = Field(index=True)
     status: SessionStatus = Field(default=SessionStatus.ACTIVE, index=True)
@@ -240,9 +250,9 @@ class Session(SQLModel, table=True):
 class ExecutionProcess(SQLModel, table=True):
     """Single execution run for a task."""
 
-    __tablename__ = "execution_processes"
+    __tablename__ = "execution_processes"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     task_id: str = Field(foreign_key="tasks.id", index=True)
     workspace_id: str | None = Field(default=None, foreign_key="workspaces.id", index=True)
     session_id: str | None = Field(default=None, foreign_key="sessions.id", index=True)
@@ -252,7 +262,7 @@ class ExecutionProcess(SQLModel, table=True):
     finished_at: datetime | None = Field(default=None)
     exit_code: int | None = Field(default=None)
     error: str | None = Field(default=None)
-    metadata: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    metadata_: dict[str, Any] = Field(default_factory=dict, sa_column=Column("metadata", JSON))
 
     task: Task = Relationship(back_populates="executions")
     workspace: Workspace | None = Relationship(back_populates="executions")
@@ -263,9 +273,9 @@ class ExecutionProcess(SQLModel, table=True):
 class AgentTurn(SQLModel, table=True):
     """Prompt/response/log/event data for an execution."""
 
-    __tablename__ = "agent_turns"
+    __tablename__ = "agent_turns"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     execution_id: str = Field(foreign_key="execution_processes.id", index=True)
     kind: AgentTurnKind = Field(index=True)
     sequence: int = Field(default=0)
@@ -280,9 +290,9 @@ class AgentTurn(SQLModel, table=True):
 class Merge(SQLModel, table=True):
     """Merge action and result."""
 
-    __tablename__ = "merges"
+    __tablename__ = "merges"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     task_id: str = Field(foreign_key="tasks.id", index=True)
     workspace_id: str | None = Field(default=None, foreign_key="workspaces.id", index=True)
     status: MergeStatus = Field(default=MergeStatus.PENDING, index=True)
@@ -301,9 +311,9 @@ class Merge(SQLModel, table=True):
 class Tag(SQLModel, table=True):
     """Label for grouping tasks."""
 
-    __tablename__ = "tags"
+    __tablename__ = "tags"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     name: str = Field(index=True, unique=True)
     color: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.now)
@@ -314,7 +324,7 @@ class Tag(SQLModel, table=True):
 class Scratch(SQLModel, table=True):
     """Scratchpad content tied to a task."""
 
-    __tablename__ = "scratches"
+    __tablename__ = "scratches"  # type: ignore[bad-override]
 
     task_id: str = Field(primary_key=True, foreign_key="tasks.id")
     content: str = Field(default="")
@@ -326,9 +336,9 @@ class Scratch(SQLModel, table=True):
 class Image(SQLModel, table=True):
     """Image attachment for a task."""
 
-    __tablename__ = "images"
+    __tablename__ = "images"  # type: ignore[bad-override]
 
-    id: str | None = Field(default_factory=_new_id, primary_key=True)
+    id: str = Field(default_factory=_new_id, primary_key=True)
     task_id: str = Field(foreign_key="tasks.id", index=True)
     uri: str
     caption: str | None = Field(default=None)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import uuid4
 
 from acp.schema import PlanEntry
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from kagan.acp.messages import Answer
     from kagan.core.models.entities import Task
+    from kagan.ui.widgets.tool_call import ToolCallStatus
 
 # Phase state machine
 StreamPhase = Literal["idle", "thinking", "streaming", "complete"]
@@ -200,9 +201,9 @@ class StreamingOutput(VerticalScroll):
             tool_id = f"auto-{uuid4().hex[:8]}"
 
         tool_data = AcpToolCall(
-            tool_call_id=tool_id,
+            toolCallId=tool_id,
             title=title,
-            kind=kind or None,
+            kind=cast("Any", kind) if kind else None,
             status="pending",
         )
         widget = ToolCall(tool_data, id=f"tool-{tool_id}")
@@ -220,7 +221,7 @@ class StreamingOutput(VerticalScroll):
     def update_tool_status(self, tool_id: str, status: str) -> None:
         """Update a tool call's status."""
         if tool_id in self._tool_calls:
-            self._tool_calls[tool_id].update_status(status)
+            self._tool_calls[tool_id].update_status(cast("ToolCallStatus", status))
 
     async def post_note(self, text: str, classes: str = "") -> Widget:
         """Post a simple text note."""
@@ -270,17 +271,17 @@ class StreamingOutput(VerticalScroll):
         widget.focus()
         return widget
 
-    async def post_plan_approval(self, tickets: list[Task]) -> PlanApprovalWidget:
+    async def post_plan_approval(self, tasks: list[Task]) -> PlanApprovalWidget:
         """Display inline plan approval widget.
 
         Args:
-            tickets: The generated tickets to approve or dismiss.
+            tasks: The generated tasks to approve or dismiss.
 
         Returns:
             The mounted PlanApprovalWidget.
         """
         await self._remove_thinking_indicator()
-        widget = PlanApprovalWidget(tickets)
+        widget = PlanApprovalWidget(tasks)
         await self.mount(widget)
         self._scroll_to_end()
         widget.focus()

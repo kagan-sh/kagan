@@ -19,7 +19,7 @@ from __future__ import annotations
 
 # =============================================================================
 # REFINEMENT PROMPT
-# Tailored for Kagan's planner context - creates development tickets from
+# Tailored for Kagan's planner context - creates development tasks from
 # natural language requests. Follows prompt engineering best practices.
 #
 # CRITICAL: This prompt must clearly establish that the agent's job is to
@@ -56,9 +56,9 @@ keep them as placeholders and request redacted inputs.
 
 <context>
 The rewritten prompt will be processed by a planning agent that:
-- Creates development tickets with title, description, and acceptance criteria
-- Assigns tickets as AUTO (AI-executed) or PAIR (human collaboration)
-- Breaks complex requests into 2-5 focused, sequenced tickets
+- Creates development tasks with title, description, and acceptance criteria
+- Assigns tasks as AUTO (AI-executed) or PAIR (human collaboration)
+- Breaks complex requests into 2-5 focused, sequenced tasks
 </context>
 
 <rewriting-principles>

@@ -15,21 +15,21 @@ from typing import Any
 
 def make_propose_plan_tool_call(
     tool_call_id: str = "tc-plan-001",
-    tickets: list[dict[str, Any]] | None = None,
+    tasks: list[dict[str, Any]] | None = None,
     todos: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Create a propose_plan tool call structure.
 
     Args:
         tool_call_id: Unique identifier for the tool call
-        tickets: List of ticket definitions
+        tasks: List of task definitions
         todos: List of todo items for the plan
 
     Returns:
         Tool call dict that can be set via MockAgent.set_tool_calls()
     """
-    if tickets is None:
-        tickets = [
+    if tasks is None:
+        tasks = [
             {
                 "title": "Implement user authentication",
                 "type": "AUTO",
@@ -46,7 +46,7 @@ def make_propose_plan_tool_call(
     if todos is None:
         todos = [
             {"content": "Analyze authentication requirements", "status": "completed"},
-            {"content": "Design ticket structure", "status": "completed"},
+            {"content": "Design task structure", "status": "completed"},
             {"content": "Create implementation plan", "status": "in_progress"},
         ]
 
@@ -57,7 +57,7 @@ def make_propose_plan_tool_call(
             "name": "propose_plan",
             "title": "propose_plan",
             "status": "completed",
-            "arguments": {"tickets": tickets, "todos": todos},
+            "arguments": {"tasks": tasks, "todos": todos},
         }
     }
 
@@ -71,7 +71,7 @@ Let me propose a structured approach to implement this feature.
 
 PLAN_PROPOSAL_TOOL_CALLS = make_propose_plan_tool_call(
     tool_call_id="tc-plan-001",
-    tickets=[
+    tasks=[
         {
             "title": "Implement user authentication",
             "type": "AUTO",
@@ -105,16 +105,16 @@ PLAN_PROPOSAL_TOOL_CALLS = make_propose_plan_tool_call(
     todos=[
         {"content": "Analyze authentication requirements", "status": "completed"},
         {"content": "Design JWT token structure", "status": "completed"},
-        {"content": "Create ticket breakdown", "status": "completed"},
+        {"content": "Create task breakdown", "status": "completed"},
         {"content": "Validate against security best practices", "status": "in_progress"},
     ],
 )
 
 
-# Multi-ticket plan proposal for complex features
-MULTI_TICKET_PLAN_TOOL_CALLS = make_propose_plan_tool_call(
+# Multi-task plan proposal for complex features
+MULTI_TASK_PLAN_TOOL_CALLS = make_propose_plan_tool_call(
     tool_call_id="tc-multi-001",
-    tickets=[
+    tasks=[
         {
             "title": "Create database schema for users",
             "type": "AUTO",
@@ -151,7 +151,7 @@ MULTI_TICKET_PLAN_TOOL_CALLS = make_propose_plan_tool_call(
     todos=[
         {"content": "Review existing codebase structure", "status": "completed"},
         {"content": "Identify dependencies and blockers", "status": "completed"},
-        {"content": "Create prioritized ticket list", "status": "completed"},
+        {"content": "Create prioritized task list", "status": "completed"},
     ],
 )
 
@@ -161,10 +161,10 @@ MULTI_TICKET_PLAN_TOOL_CALLS = make_propose_plan_tool_call(
 # =============================================================================
 
 PLAN_ACCEPTED_RESPONSE = """\
-The plan has been accepted and tickets have been created.
+The plan has been accepted and tasks have been created.
 
-The tickets are now in your backlog and ready to be started. I recommend \
-beginning with the high-priority authentication ticket, as other features \
+The tasks are now in your backlog and ready to be started. I recommend \
+beginning with the high-priority authentication task, as other features \
 depend on it.
 
 <complete/>
@@ -292,7 +292,7 @@ I've reviewed the changes and they look good.
 
 ## Review Summary
 
-The implementation correctly addresses the ticket requirements:
+The implementation correctly addresses the task requirements:
 - Code follows project conventions
 - Tests cover the main functionality
 - No obvious security issues

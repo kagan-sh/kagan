@@ -1,4 +1,4 @@
-"""Modal for reviewing ticket changes."""
+"""Modal for reviewing task changes."""
 
 from __future__ import annotations
 
@@ -24,9 +24,9 @@ if TYPE_CHECKING:
     from textual.timer import Timer
 
     from kagan.acp.agent import Agent
-    from kagan.adapters.git.worktrees import WorktreeManager
     from kagan.config import AgentConfig
     from kagan.core.models.entities import Task
+    from kagan.services.workspaces import WorkspaceService
 
 ReviewPhase = Literal["idle", "thinking", "streaming", "complete"]
 
@@ -39,21 +39,21 @@ PHASE_LABELS: dict[ReviewPhase, tuple[str, str]] = {
 
 
 class ReviewModal(ModalScreen[str | None]):
-    """Modal for reviewing ticket changes."""
+    """Modal for reviewing task changes."""
 
     BINDINGS = REVIEW_BINDINGS
 
     def __init__(
         self,
-        ticket: Task,
-        worktree_manager: WorktreeManager,
+        task: Task,
+        worktree_manager: WorkspaceService,
         agent_config: AgentConfig,
         base_branch: str = "main",
         agent_factory: AgentFactory = create_agent,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self.ticket = ticket
+        self._task_model = task
         self._worktree = worktree_manager
         self._agent_config = agent_config
         self._base_branch = base_branch
@@ -70,7 +70,8 @@ class ReviewModal(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="review-modal-container"):
             yield Label(
-                f"Review: {self.ticket.title[:MODAL_TITLE_MAX_LENGTH]}", classes="modal-title"
+                f"Review: {self._task_model.title[:MODAL_TITLE_MAX_LENGTH]}",
+                classes="modal-title",
             )
             yield Rule()
 
@@ -111,10 +112,10 @@ class ReviewModal(ModalScreen[str | None]):
         """Load commits and diff immediately."""
         from kagan.debug_log import log
 
-        log.info(f"[ReviewModal] Opening for ticket {self.ticket.id[:8]}")
-        commits = await self._worktree.get_commit_log(self.ticket.id, self._base_branch)
+        log.info(f"[ReviewModal] Opening for task {self._task_model.id[:8]}")
+        commits = await self._worktree.get_commit_log(self._task_model.id, self._base_branch)
 
-        diff_stats = await self._worktree.get_diff_stats(self.ticket.id, self._base_branch)
+        diff_stats = await self._worktree.get_diff_stats(self._task_model.id, self._base_branch)
 
         # Hide loading, show content
         self.query_one("#review-loading", LoadingIndicator).display = False
@@ -261,13 +262,13 @@ class ReviewModal(ModalScreen[str | None]):
         """Spawn agent to generate code review."""
         from kagan.debug_log import log
 
-        wt_path = await self._worktree.get_path(self.ticket.id)
+        wt_path = await self._worktree.get_path(self._task_model.id)
         if not wt_path:
             await output.post_note("Error: Worktree not found", classes="error")
             self._set_phase("idle")
             return
 
-        diff = await self._worktree.get_diff(self.ticket.id, self._base_branch)
+        diff = await self._worktree.get_diff(self._task_model.id, self._base_branch)
         if not diff:
             await output.post_note("No diff to review", classes="info")
             self._set_phase("idle")
@@ -304,7 +305,7 @@ for redacted values or suggest safe mocks.
 
 ## Context
 
-**Ticket:** {self.ticket.title}
+**Task:** {self._task_model.title}
 
 ## Changes to Review
 
@@ -428,7 +429,7 @@ Keep your review brief and actionable."""
         output = self.query_one("#ai-review-output", StreamingOutput)
         review_text = output._agent_response._markdown if output._agent_response else ""
 
-        content_parts = [f"# Review: {self.ticket.title}"]
+        content_parts = [f"# Review: {self._task_model.title}"]
         if self._diff_stats:
             content_parts.append(f"\n## Changes\n{self._diff_stats}")
         if review_text:

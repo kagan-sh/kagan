@@ -41,7 +41,7 @@ class EmptyState(Widget):
                     classes="card-item-compact",
                 )
                 yield Static(
-                    f"  {BOX_DRAWING['BULLET']} Generates tickets for review",
+                    f"  {BOX_DRAWING['BULLET']} Generates tasks for review",
                     classes="card-item-compact",
                 )
 

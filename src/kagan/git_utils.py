@@ -278,7 +278,6 @@ def _ensure_gitignored(repo_root: Path) -> tuple[bool, bool]:
     """Add Kagan-generated files to .gitignore if not already present.
 
     Adds all patterns from KAGAN_GENERATED_PATTERNS including:
-    - .kagan/ (local state directory)
     - .mcp.json (Claude Code MCP config)
     - opencode.json (OpenCode MCP config)
     - kagan*.mcp.json (catch variants like kagan.mcp.json)
@@ -326,7 +325,7 @@ async def init_git_repo(repo_root: Path, base_branch: str) -> GitInitResult:
     3. Existing git repo with commits but no .gitignore: Create .gitignore, commit
     4. Existing git repo with NO commits: Add .gitignore, create initial commit
 
-    Kagan patterns include: .kagan/, .mcp.json, opencode.json, kagan*.mcp.json, *kagan.json
+    Kagan patterns include: .mcp.json, opencode.json, kagan*.mcp.json, *kagan.json
 
     Creates an initial commit so that worktrees can be created from the base branch.
     Without a commit, `git worktree add -b <branch> <path> <base>` fails with

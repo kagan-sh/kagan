@@ -9,7 +9,12 @@ from textual.app import App
 from textual.signal import Signal
 
 from kagan.agents.agent_factory import AgentFactory, create_agent
-from kagan.bootstrap import AppContext, create_app_context, create_signal_bridge, wire_default_signals
+from kagan.bootstrap import (
+    AppContext,
+    create_app_context,
+    create_signal_bridge,
+    wire_default_signals,
+)
 from kagan.config import KaganConfig
 from kagan.constants import (
     DEFAULT_CONFIG_PATH,
@@ -25,7 +30,6 @@ from kagan.theme import KAGAN_THEME, KAGAN_THEME_256
 from kagan.ui.screens.kanban import KanbanScreen
 
 if TYPE_CHECKING:
-    from kagan.core.models.enums import TaskStatus
     from kagan.ui.screens.planner.state import PersistentPlannerState
 
 
@@ -42,6 +46,7 @@ class KaganApp(App):
         db_path: str = DEFAULT_DB_PATH,
         config_path: str = DEFAULT_CONFIG_PATH,
         lock_path: str | None = DEFAULT_LOCK_PATH,
+        project_root: str | Path | None = None,
         agent_factory: AgentFactory = create_agent,
     ):
         super().__init__()
@@ -55,13 +60,14 @@ class KaganApp(App):
         else:
             self.theme = "kagan-256"
 
-        # Pub/sub signal for ticket changes - screens subscribe to this
-        self.ticket_changed_signal: Signal[str] = Signal(self, "ticket_changed")
+        # Pub/sub signal for task changes - screens subscribe to this
+        self.task_changed_signal: Signal[str] = Signal(self, "task_changed")
         self.iteration_changed_signal: Signal[tuple[str, int]] = Signal(self, "iteration_changed")
 
         self.db_path = Path(db_path)
         self.config_path = Path(config_path)
         self.lock_path = Path(lock_path) if lock_path else None
+        self.project_root = Path(project_root) if project_root else Path.cwd()
         self._instance_lock: InstanceLock | None = None
         self._ctx: AppContext | None = None
         self.config: KaganConfig = KaganConfig()
@@ -80,7 +86,7 @@ class KaganApp(App):
         setup_debug_logging()
 
         # Check for first boot (no config.toml file)
-        # Note: .kagan folder may already exist (created by lock file),
+        # The config directory may already exist (created by lock file),
         # so we check for config.toml specifically
         if not self.config_path.exists():
             from kagan.ui.screens.welcome import WelcomeScreen
@@ -96,7 +102,7 @@ class KaganApp(App):
         self.log("Config loaded", path=str(self.config_path))
         self.log.debug("Config settings", auto_start=self.config.general.auto_start)
 
-        project_root = self.config_path.parent.parent
+        project_root = self.project_root
         if not await has_git_repo(project_root):
             base_branch = self.config.general.default_base_branch
             result: GitInitResult = await init_git_repo(project_root, base_branch)
@@ -136,12 +142,16 @@ class KaganApp(App):
 
         if self._ctx is None:
             self._ctx = await create_app_context(
-                self.config_path, self.db_path, config=self.config
+                self.config_path,
+                self.db_path,
+                config=self.config,
+                project_root=self.project_root,
             )
+            ctx = self._ctx
             # Wire signal bridge to map domain events to Textual signals
-            bridge = create_signal_bridge(self._ctx.event_bus)
+            bridge = create_signal_bridge(ctx.event_bus)
             wire_default_signals(bridge, self)
-            self._ctx.signal_bridge = bridge
+            ctx.signal_bridge = bridge
             self.log("AppContext initialized with SignalBridge")
 
             # Reconcile orphaned worktrees/sessions before starting automation
@@ -149,14 +159,14 @@ class KaganApp(App):
             await self._reconcile_sessions()
 
             # Start automation service
-            if self._ctx.automation_service:
-                await self._ctx.automation_service.start()
-                await self._ctx.automation_service.initialize_existing_tasks()
-                self.log("Automation service initialized (reactive mode)")
+            await ctx.automation_service.start()
+            await ctx.automation_service.initialize_existing_tasks()
+            self.log("Automation service initialized (reactive mode)")
 
         # Chat-first boot: show PlannerScreen if board is empty, else KanbanScreen
-        tickets = await self._ctx.task_service.list_tasks()
-        if len(tickets) == 0:
+        ctx = self.ctx
+        tasks = await ctx.task_service.list_tasks()
+        if len(tasks) == 0:
             from kagan.ui.screens.planner import PlannerScreen
 
             await self.push_screen(PlannerScreen(agent_factory=self._agent_factory))
@@ -179,9 +189,10 @@ class KaganApp(App):
 
     async def _reconcile_worktrees(self) -> None:
         """Remove orphaned worktrees from previous runs."""
-        tasks = await self._ctx.task_service.list_tasks()
+        ctx = self.ctx
+        tasks = await ctx.task_service.list_tasks()
         valid_ids = {t.id for t in tasks}
-        cleaned = await self._ctx.workspace_service.cleanup_orphans(valid_ids)
+        cleaned = await ctx.workspace_service.cleanup_orphans(valid_ids)
         if cleaned:
             self.log(f"Cleaned up {len(cleaned)} orphan worktree(s)")
 
@@ -189,7 +200,7 @@ class KaganApp(App):
         """Kill orphaned tmux sessions from previous runs."""
         from kagan.sessions.tmux import TmuxError, run_tmux
 
-        state = self._ctx.task_service
+        state = self.ctx.task_service
         try:
             output = await run_tmux("list-sessions", "-F", "#{session_name}")
             kagan_sessions = [s for s in output.split("\n") if s.startswith("kagan-")]
@@ -200,7 +211,7 @@ class KaganApp(App):
             for session_name in kagan_sessions:
                 task_id = session_name.replace("kagan-", "")
                 if task_id not in valid_task_ids:
-                    # Orphaned session - ticket no longer exists
+                    # Orphaned session - task no longer exists
                     await run_tmux("kill-session", "-t", session_name)
                     self.log(f"Killed orphaned session: {session_name}")
                 else:

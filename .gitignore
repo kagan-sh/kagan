@@ -194,3 +194,5 @@ secrets*
 opencode.json
 kagan*.mcp.json
 *kagan.json
+
+coverage.json

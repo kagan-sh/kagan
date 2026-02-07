@@ -4,28 +4,32 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from hypothesis import Phase, Verbosity, settings
 
-from kagan.adapters.db.repositories import TaskRepository
-from kagan.adapters.db.schema import Task
-from kagan.app import KaganApp
-from kagan.bootstrap import InMemoryEventBus
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
-from kagan.services.tasks import TaskServiceImpl
-from tests.helpers.git import init_git_repo_with_commit
-from tests.helpers.mocks import (
-    create_mock_agent,
-    create_mock_process,
-    create_mock_worktree_manager,
-    create_test_agent_config,
-    create_test_config,
-)
+
+_TEST_BASE_DIR = Path(tempfile.mkdtemp(prefix="kagan-tests-"))
+os.environ["KAGAN_DATA_DIR"] = str(_TEST_BASE_DIR / "data")
+os.environ["KAGAN_CONFIG_DIR"] = str(_TEST_BASE_DIR / "config")
+os.environ["KAGAN_CACHE_DIR"] = str(_TEST_BASE_DIR / "cache")
+os.environ["KAGAN_WORKTREE_BASE"] = str(_TEST_BASE_DIR / "worktrees")
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from kagan.adapters.db.repositories import TaskRepository
+    from kagan.adapters.db.schema import Task
+    from kagan.app import KaganApp
+    from kagan.bootstrap import InMemoryEventBus
+    from kagan.services.tasks import TaskServiceImpl
 
 # =============================================================================
 # Hypothesis Profiles
@@ -55,9 +59,19 @@ settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "dev"))
 # =============================================================================
 
 
+@pytest.fixture(autouse=True)
+def _clean_worktree_base() -> Generator[None, None, None]:
+    """Ensure worktree temp directories don't leak between tests."""
+    yield
+    base_dir = Path(os.environ["KAGAN_WORKTREE_BASE"])
+    shutil.rmtree(base_dir, ignore_errors=True)
+
+
 @pytest.fixture
 async def state_manager():
     """Create a temporary task repository for testing."""
+    from kagan.adapters.db.repositories import TaskRepository
+
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = Path(tmpdir) / "test.db"
         manager = TaskRepository(db_path)
@@ -69,18 +83,24 @@ async def state_manager():
 @pytest.fixture
 def event_bus() -> InMemoryEventBus:
     """Create an in-memory event bus for service tests."""
+    from kagan.bootstrap import InMemoryEventBus
+
     return InMemoryEventBus()
 
 
 @pytest.fixture
 def task_service(state_manager: TaskRepository, event_bus: InMemoryEventBus) -> TaskServiceImpl:
     """Create a TaskService backed by the test repository."""
+    from kagan.services.tasks import TaskServiceImpl
+
     return TaskServiceImpl(state_manager, event_bus)
 
 
 @pytest.fixture
 def task_factory(state_manager: TaskRepository):
     """Factory for creating DB Task objects with default project/repo IDs."""
+    from kagan.adapters.db.schema import Task
+    from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
 
     def _factory(
         *,
@@ -119,6 +139,8 @@ def task_factory(state_manager: TaskRepository):
 @pytest.fixture
 def app() -> KaganApp:
     """Create app with in-memory database."""
+    from kagan.app import KaganApp
+
     return KaganApp(db_path=":memory:")
 
 
@@ -139,6 +161,8 @@ async def git_repo(tmp_path: Path) -> Path:
     - GPG signing disabled
     - Initial commit with README.md
     """
+    from tests.helpers.git import init_git_repo_with_commit
+
     return await init_git_repo_with_commit(tmp_path)
 
 
@@ -154,30 +178,40 @@ def mock_agent():
     Shared by: test_scheduler.py and other agent tests.
     Default response: "Done! <complete/>"
     """
+    from tests.helpers.mocks import create_mock_agent
+
     return create_mock_agent()
 
 
 @pytest.fixture
 def mock_worktree_manager():
     """Create a mock WorktreeManager."""
+    from tests.helpers.mocks import create_mock_worktree_manager
+
     return create_mock_worktree_manager()
 
 
 @pytest.fixture
 def config():
     """Create a test KaganConfig."""
+    from tests.helpers.mocks import create_test_config
+
     return create_test_config()
 
 
 @pytest.fixture
 def agent_config():
     """Create a minimal AgentConfig for testing."""
+    from tests.helpers.mocks import create_test_agent_config
+
     return create_test_agent_config()
 
 
 @pytest.fixture
 def mock_process():
     """Create a mock subprocess for agent process testing."""
+    from tests.helpers.mocks import create_mock_process
+
     return create_mock_process()
 
 
@@ -188,6 +222,10 @@ def mock_process():
 
 async def _create_e2e_app_with_tasks(e2e_project, tasks: list[dict]) -> KaganApp:
     """Helper to create a KaganApp with pre-populated tasks."""
+    from kagan.adapters.db.repositories import TaskRepository
+    from kagan.adapters.db.schema import Task
+    from kagan.app import KaganApp
+
     manager = TaskRepository(e2e_project.db)
     await manager.initialize()
     project_id = manager.default_project_id
@@ -201,7 +239,12 @@ async def _create_e2e_app_with_tasks(e2e_project, tasks: list[dict]) -> KaganApp
         )
         await manager.create(task)
     await manager.close()
-    return KaganApp(db_path=e2e_project.db, config_path=e2e_project.config, lock_path=None)
+    return KaganApp(
+        db_path=e2e_project.db,
+        config_path=e2e_project.config,
+        lock_path=None,
+        project_root=e2e_project.root,
+    )
 
 
 @pytest.fixture
@@ -210,18 +253,21 @@ async def e2e_project(tmp_path: Path):
 
     This fixture provides:
     - A real git repository with initial commit
-    - A .kagan/config.toml file
+    - A config.toml file stored outside the repo
     - Paths to DB and config for KaganApp initialization
     """
     project = tmp_path / "test_project"
     project.mkdir()
 
     # Initialize real git repo with commit
+    from tests.helpers.git import init_git_repo_with_commit
+
     await init_git_repo_with_commit(project)
 
-    # Create .kagan directory with config
-    kagan_dir = project / ".kagan"
-    kagan_dir.mkdir()
+    config_dir = tmp_path / "kagan-config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "kagan-data"
+    data_dir.mkdir()
 
     config_content = """# Kagan Test Configuration
 [general]
@@ -238,13 +284,13 @@ run_command."*" = "echo mock-claude"
 interactive_command."*" = "echo mock-claude-interactive"
 active = true
 """
-    (kagan_dir / "config.toml").write_text(config_content)
+    config_path = config_dir / "config.toml"
+    config_path.write_text(config_content)
 
     return SimpleNamespace(
         root=project,
-        db=str(kagan_dir / "state.db"),
-        config=str(kagan_dir / "config.toml"),
-        kagan_dir=kagan_dir,
+        db=str(data_dir / "kagan.db"),
+        config=str(config_path),
     )
 
 
@@ -320,17 +366,20 @@ def mock_agent_factory():
 @pytest.fixture
 async def e2e_app(e2e_project):
     """Create a KaganApp configured for E2E testing with real git repo."""
+    from kagan.app import KaganApp
+
     app = KaganApp(
         db_path=e2e_project.db,
         config_path=e2e_project.config,
         lock_path=None,
+        project_root=e2e_project.root,
     )
     return app
 
 
 @pytest.fixture
-async def e2e_app_with_tickets(e2e_project):
-    """Create a KaganApp with pre-populated tickets (backlog, in-progress, review)."""
+async def e2e_app_with_tasks(e2e_project):
+    """Create a KaganApp with pre-populated tasks (backlog, in-progress, review)."""
     return await _create_e2e_app_with_tasks(
         e2e_project,
         [
@@ -357,8 +406,8 @@ async def e2e_app_with_tickets(e2e_project):
 
 
 @pytest.fixture
-async def e2e_app_with_auto_ticket(e2e_project):
-    """Create a KaganApp with an AUTO ticket in IN_PROGRESS."""
+async def e2e_app_with_auto_task(e2e_project):
+    """Create a KaganApp with an AUTO task in IN_PROGRESS."""
     return await _create_e2e_app_with_tasks(
         e2e_project,
         [
@@ -374,8 +423,8 @@ async def e2e_app_with_auto_ticket(e2e_project):
 
 
 @pytest.fixture
-async def e2e_app_with_done_ticket(e2e_project):
-    """Create a KaganApp with a ticket in DONE status."""
+async def e2e_app_with_done_task(e2e_project):
+    """Create a KaganApp with a task in DONE status."""
     return await _create_e2e_app_with_tasks(
         e2e_project,
         [
@@ -390,8 +439,8 @@ async def e2e_app_with_done_ticket(e2e_project):
 
 
 @pytest.fixture
-async def e2e_app_with_ac_ticket(e2e_project):
-    """Create a KaganApp with a ticket that has acceptance criteria."""
+async def e2e_app_with_ac_task(e2e_project):
+    """Create a KaganApp with a task that has acceptance criteria."""
     return await _create_e2e_app_with_tasks(
         e2e_project,
         [
@@ -404,7 +453,6 @@ async def e2e_app_with_ac_ticket(e2e_project):
             )
         ],
     )
-
 
 
 def _create_fake_tmux(sessions: dict):

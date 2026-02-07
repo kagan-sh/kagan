@@ -4,13 +4,13 @@ Kagan offers two distinct ways to work with AI on your tasks: **AUTO** mode for 
 
 ## Quick Comparison
 
-| Aspect             | AUTO Mode           | PAIR Mode                                             |
-| ------------------ | ------------------- | ----------------------------------------------------- |
-| **AI involvement** | Works independently | Works alongside you                                   |
-| **Your role**      | Review results      | Active collaboration                                  |
-| **Best for**       | Well-defined tasks  | Complex problems                                      |
-| **Session**        | Background process  | Interactive tmux session or VS Code/Cursor launch      |
-| **Start with**     | Press `a`           | Press `Enter`                                         |
+| Aspect             | AUTO Mode           | PAIR Mode            |
+| ------------------ | ------------------- | -------------------- |
+| **AI involvement** | Works independently | Works alongside you  |
+| **Your role**      | Review results      | Active collaboration |
+| **Best for**       | Well-defined tasks  | Complex problems     |
+| **Session**        | Background process  | Interactive tmux     |
+| **Start with**     | Press `a`           | Press `Enter`        |
 
 ## AUTO Mode: Let AI Work Independently
 
@@ -32,8 +32,8 @@ AUTO mode is like assigning a task to a capable assistant who works on their own
    └─────────┘        └──────────┘         └─────────┘         └─────────┘
                            │                                         ▲
                            │ If blocked or                           │
-                           │ needs help                  Approve & merge│
-                           ▼                               (manual) │
+                           │ needs help                    Auto-merge│
+                           ▼                              (optional) │
                       ┌─────────┐                                    │
                       │ BACKLOG │────────────────────────────────────┘
                       └─────────┘    (fix issue, restart)
@@ -46,11 +46,11 @@ AUTO mode is like assigning a task to a capable assistant who works on their own
    - Give it a clear title and description
    - Make sure task type is `AUTO` (default)
 
-1. **Start the agent** (press `Enter` or `a`)
+1. **Start the agent** (press `a` or move to IN_PROGRESS)
 
    - Kagan spawns an AI agent in the background
    - Agent works in an isolated git branch (your main branch stays safe)
-   - Open output with `Enter`
+   - Watch progress with `w`
 
 1. **Agent works autonomously**
 
@@ -69,40 +69,43 @@ AUTO mode is like assigning a task to a capable assistant who works on their own
    - Check the diff (`Shift+D`)
    - Run tests
    - Check merge readiness (Ready / At Risk / Blocked)
-   - Approve (`Enter`) to merge, or reject (`r`) to send back
+   - Approve (`a`) to merge, or reject (`r`) to send back
    - If there are no changes, use **Close as Exploratory** to finish without merging
    - Merges run in a dedicated merge worktree to keep main clean
 
 ### What Can Happen
 
-| Agent Says | What Happens     | Your Action                   |
-| ---------- | ---------------- | ----------------------------- |
-| "Done!"    | Moves to REVIEW  | Review the work               |
-| "Blocked"  | Moves to BACKLOG | Read the reason, help unblock |
-| (error)    | Moves to BACKLOG | Check logs, fix issue         |
+| Agent Says       | What Happens     | Your Action                   |
+| ---------------- | ---------------- | ----------------------------- |
+| "Done!"          | Moves to REVIEW  | Review the work               |
+| "Blocked"        | Moves to BACKLOG | Read the reason, help unblock |
+| (max iterations) | Moves to BACKLOG | Add clarification, restart    |
+| (error)          | Moves to BACKLOG | Check logs, fix issue         |
 
-### Rejection Flow
+### Rejection Flow (Active Iteration Model)
 
-When you reject work from REVIEW, you have two options:
+When you reject work from REVIEW, you have three options:
 
 ```
 REVIEW task rejected:
-├── Enter (Send Back) → IN_PROGRESS (manual restart)
-└── Esc (Backlog) → BACKLOG
+├── Enter (Retry) → IN_PROGRESS + agent auto-restarts + iterations reset
+├── Ctrl+S (Stage) → IN_PROGRESS + agent paused + iterations reset
+└── Esc (Shelve) → BACKLOG + iterations preserved
 ```
 
-| Key     | Action        | Result                                       |
-| ------- | ------------- | -------------------------------------------- |
-| `Enter` | **Send Back** | Task moves to IN_PROGRESS (restart manually) |
-| `Esc`   | **Backlog**   | Task moves to BACKLOG for later              |
+| Key      | Action     | Result                                                         |
+| -------- | ---------- | -------------------------------------------------------------- |
+| `Enter`  | **Retry**  | Task stays IN_PROGRESS, agent auto-restarts with your feedback |
+| `Ctrl+S` | **Stage**  | Task stays IN_PROGRESS but paused - restart manually with `a`  |
+| `Esc`    | **Shelve** | Task goes to BACKLOG for later                                 |
 
-Send-back moves the task to IN_PROGRESS with your feedback appended. Start a new run manually when you're ready.
+The **Retry** action is the most common - it immediately restarts the agent with your rejection feedback, resetting the iteration counter for a fresh attempt.
 
 ### Tips for AUTO Mode
 
 - **Be specific** - Clear acceptance criteria help the agent succeed
 - **Start small** - Break big tasks into focused tasks
-- **Watch sometimes** - Press `Enter` to see current output
+- **Watch sometimes** - Press `w` to see what the agent is doing
 - **Check scratchpad** - Agent's notes show its thinking process
 
 ## PAIR Mode: Work Together with AI
@@ -138,7 +141,7 @@ PAIR mode opens an interactive terminal session where you and the AI collaborate
 
 1. **Open the session** (press `Enter`)
 
-   - A session opens in your configured backend (`tmux`, `vscode`, or `cursor`)
+   - A tmux terminal opens
    - AI agent is ready to chat
    - You're both looking at the same workspace
 
@@ -151,7 +154,7 @@ PAIR mode opens an interactive terminal session where you and the AI collaborate
 
 1. **Move task manually**
 
-   - When ready, move to REVIEW (`Shift+L`)
+   - When ready, move to REVIEW (`g` `l`)
    - Review and merge as usual (merge readiness shown in REVIEW)
 
 ### Tips for PAIR Mode
@@ -183,12 +186,11 @@ These settings in the XDG config `config.toml` affect agent and merge behavior:
 
 ```toml
 [general]
-# Run AI review on task completion
-auto_review = true
+# Automatically start agents for IN_PROGRESS tasks on launch
+auto_start = true
 
-# Skip permission prompts in the planner agent
-# (workers always auto-approve — they run in isolated worktrees)
-auto_approve = false
+# Automatically merge when review passes
+auto_merge = false
 
 # Require approved review before merge actions
 require_review_approval = false
@@ -196,55 +198,50 @@ require_review_approval = false
 # Serialize manual merges to reduce conflicts
 serialize_merges = false
 
-# Default agent (e.g., "claude")
-default_worker_agent = "claude"
+# Skip permission prompts for AI actions
+auto_approve = false
+
+# Stop agent after this many iterations without completing
+max_iterations = 10
 
 # How many agents can run simultaneously
-max_concurrent_agents = 1
-
-# Default base branch for new repos
-default_base_branch = "main"
-
-# Default terminal backend for PAIR tasks (options: "tmux", "vscode", "cursor")
-default_pair_terminal_backend = "tmux"
+max_concurrent_agents = 2
 ```
 
 ## Keyboard Reference
 
 Mode-specific shortcuts at a glance:
 
-| Key       | AUTO Mode              | PAIR Mode           |
-| --------- | ---------------------- | ------------------- |
-| `a`       | Start agent            | -                   |
-| `s`       | Stop agent             | -                   |
-| `Enter`   | Open task workspace    | Open/attach session |
-| `Shift+L` | Move right (to REVIEW) | Move right          |
+| Key     | AUTO Mode   | PAIR Mode     |
+| ------- | ----------- | ------------- |
+| `a`     | Start agent | -             |
+| `Enter` | Watch agent | Open terminal |
 
-> **[Full Keyboard Reference ->](keybindings.md)** - Complete list of all shortcuts including the rejection modal options.
+> **[Full Keyboard Reference →](keybindings.md)** — Complete list of all shortcuts including the rejection modal options (Retry/Stage/Shelve).
 
 ## Troubleshooting
 
 ### AUTO task keeps going back to BACKLOG
 
-- Check the task details (`v`) or peek overlay (`space`) for the reason
+- Check the scratchpad (`v` to view details) for the reason
 - Agent may be blocked on something it can't figure out
 - Try adding more context to the description
 - Consider switching to PAIR mode for complex issues
 
 ### Agent seems stuck
 
-- Press `Enter` on the task to open output
-- Stop (`s`) and start a new run (`a`) if needed
+- Press `w` to watch what it's doing
+- Check iteration count in the card badge
+- Stop (`s`) and restart (`a`) if needed
 - Reduce complexity of the task
 
 ### PAIR session won't open
 
-- If using tmux backend, install tmux: `brew install tmux` or `apt install tmux`
-- If using IDE backend, install VS Code or Cursor and ensure `code`/`cursor` is in PATH
+- Make sure tmux is installed: `brew install tmux` or `apt install tmux`
 - Check if another session is already open for this task
 
 ### Merge fails in REVIEW
 
 - Kagan shows merge readiness in REVIEW before you merge
 - If a merge fails, the task stays in REVIEW with the error
-- Use the primary resolve action in task details to open a terminal session in the merge worktree
+- Use the primary resolve action in task details to open tmux in the merge worktree

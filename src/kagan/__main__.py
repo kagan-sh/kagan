@@ -39,7 +39,6 @@ sys.unraisablehook = _suppress_event_loop_closed
 # Standard imports after hook is installed
 import asyncio  # noqa: E402
 import os  # noqa: E402
-from pathlib import Path  # noqa: E402
 
 import click  # noqa: E402
 
@@ -111,12 +110,7 @@ cli.add_command(tools)
 )
 def tui(db: str, config: str, skip_preflight: bool, skip_update_check: bool) -> None:
     """Run the Kanban TUI (default command)."""
-    config_path = Path(config)
     db_path = db
-
-    # Derive db path from config path if only config is specified
-    if db == DEFAULT_DB_PATH and config != DEFAULT_CONFIG_PATH:
-        db_path = str(config_path.parent / "state.db")
 
     # Check for updates before starting TUI (unless skipped)
     if not skip_update_check and not os.environ.get("KAGAN_SKIP_UPDATE_CHECK"):
@@ -232,11 +226,11 @@ def mcp(readonly: bool) -> None:
     This command is typically invoked by AI agents (Claude Code, OpenCode, etc.)
     to communicate with Kagan via the Model Context Protocol.
 
-    The MCP server finds the nearest .kagan/ directory by traversing up
-    from the current working directory.
+    The MCP server uses centralized storage and assumes the current working
+    directory is a Kagan-managed project.
 
     Use --readonly for ACP agents to expose only coordination tools
-    (get_parallel_tickets, get_agent_logs).
+    (get_parallel_tasks, get_agent_logs).
     """
     from kagan.mcp.server import main as mcp_main
 

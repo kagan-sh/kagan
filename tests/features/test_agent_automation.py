@@ -4,13 +4,13 @@ Tests organized by user-facing features, not implementation layers.
 Each test validates a complete user journey or critical behavior.
 
 Covers:
-- Agent spawning for AUTO tickets
+- Agent spawning for AUTO tasks
 - Agent stopping
 - Iteration loop (max iterations)
 - Signal parsing (complete/blocked/continue/approve/reject)
 - Auto-review generation
 - AutomationServiceImpl queue management
-- Session management (PAIR tickets)
+- Session management (PAIR tasks)
 - Worktree operations (create, delete, get)
 - Git operations (merge, conflict handling)
 """
@@ -25,11 +25,12 @@ import pytest
 from tests.helpers.mocks import create_mock_worktree_manager, create_test_config
 
 from kagan.adapters.git.worktrees import WorktreeError, WorktreeManager
+from kagan.agents.signals import Signal, parse_signal
 from kagan.bootstrap import InMemoryEventBus
 from kagan.core.models.enums import TaskStatus, TaskType
+from kagan.paths import get_worktree_base_dir
 from kagan.services.automation import AutomationServiceImpl, RunningTaskState
 from kagan.services.tasks import TaskServiceImpl
-from kagan.agents.signals import Signal, parse_signal
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -165,12 +166,12 @@ class TestSignalParsing:
 
 
 class TestAgentSpawning:
-    """Agents can be spawned for AUTO tickets."""
+    """Agents can be spawned for AUTO tasks."""
 
-    async def test_auto_ticket_to_in_progress_spawns_agent(
+    async def test_auto_task_to_in_progress_spawns_agent(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
     ):
-        """Moving AUTO ticket to IN_PROGRESS triggers agent spawn."""
+        """Moving AUTO task to IN_PROGRESS triggers agent spawn."""
         task = task_factory(
             title="Auto task",
             status=TaskStatus.BACKLOG,
@@ -204,9 +205,7 @@ class TestAgentSpawning:
 
         # Move to IN_PROGRESS should trigger spawn
         await state_manager.move(task.id, TaskStatus.IN_PROGRESS)
-        await scheduler.handle_status_change(
-            task.id, TaskStatus.BACKLOG, TaskStatus.IN_PROGRESS
-        )
+        await scheduler.handle_status_change(task.id, TaskStatus.BACKLOG, TaskStatus.IN_PROGRESS)
 
         # Allow async processing
         await asyncio.sleep(0.1)
@@ -214,10 +213,10 @@ class TestAgentSpawning:
         assert scheduler.is_running(task.id) or mock_factory.called
         await scheduler.stop()
 
-    async def test_pair_ticket_not_auto_spawned(
+    async def test_pair_task_not_auto_spawned(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
     ):
-        """PAIR tickets don't auto-spawn agents when moved to IN_PROGRESS."""
+        """PAIR tasks don't auto-spawn agents when moved to IN_PROGRESS."""
         task = task_factory(
             title="Pair task",
             status=TaskStatus.BACKLOG,
@@ -236,16 +235,14 @@ class TestAgentSpawning:
         )
         await scheduler.start()
 
-        await scheduler.handle_status_change(
-            task.id, TaskStatus.BACKLOG, TaskStatus.IN_PROGRESS
-        )
+        await scheduler.handle_status_change(task.id, TaskStatus.BACKLOG, TaskStatus.IN_PROGRESS)
         await asyncio.sleep(0.1)
 
-        # PAIR tickets should not trigger agent factory
+        # PAIR tasks should not trigger agent factory
         mock_factory.assert_not_called()
         await scheduler.stop()
 
-    async def test_manual_spawn_for_auto_ticket(
+    async def test_manual_spawn_for_auto_task(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
     ):
         """Agent can be manually spawned via spawn_for_task."""
@@ -275,8 +272,8 @@ class TestAgentSpawning:
 
         scheduler = build_automation(state_manager, worktrees, config)
 
-        # Manually add a running ticket to simulate at capacity
-        scheduler._running["existing-ticket"] = RunningTaskState()
+        # Manually add a running task to simulate at capacity
+        scheduler._running["existing-task"] = RunningTaskState()
 
         task = task_factory(
             title="Should wait",
@@ -289,7 +286,7 @@ class TestAgentSpawning:
         await scheduler.start()
         await scheduler._process_event(task.id, None, TaskStatus.IN_PROGRESS)
 
-        # New ticket should not be running (at capacity)
+        # New task should not be running (at capacity)
         assert task.id not in scheduler._running
 
 
@@ -309,19 +306,19 @@ class TestAgentStopping:
         scheduler = build_automation(state_manager, worktrees, config)
         await scheduler.start()
 
-        # Simulate running ticket
+        # Simulate running task
         mock_agent = MagicMock()
         mock_agent.stop = AsyncMock()
         state = RunningTaskState(agent=mock_agent)
-        scheduler._running["test-ticket"] = state
+        scheduler._running["test-task"] = state
 
-        result = await scheduler.stop_task("test-ticket")
+        result = await scheduler.stop_task("test-task")
 
         assert result is True
         await scheduler.stop()
 
     async def test_stop_nonexistent_returns_false(self, state_manager: TaskRepository):
-        """Stopping non-running ticket returns False."""
+        """Stopping non-running task returns False."""
         config = create_test_config()
         worktrees = create_mock_worktree_manager()
 
@@ -339,20 +336,18 @@ class TestAgentStopping:
         scheduler = build_automation(state_manager, worktrees, config)
         await scheduler.start()
 
-        # Add running ticket
+        # Add running task
         mock_agent = MagicMock()
         mock_agent.stop = AsyncMock()
         mock_task = MagicMock()
         mock_task.done = MagicMock(return_value=True)
         state = RunningTaskState(agent=mock_agent, task=mock_task)
-        scheduler._running["test-ticket"] = state
+        scheduler._running["test-task"] = state
 
         # Move to BACKLOG should stop
-        await scheduler._process_event(
-            "test-ticket", TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG
-        )
+        await scheduler._process_event("test-task", TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG)
 
-        assert "test-ticket" not in scheduler._running
+        assert "test-task" not in scheduler._running
         await scheduler.stop()
 
 
@@ -367,7 +362,7 @@ class TestIterationLoop:
     async def test_complete_signal_moves_to_review(
         self, state_manager: TaskRepository, task_factory, git_repo: Path, mock_agent_factory
     ):
-        """COMPLETE signal moves ticket to REVIEW."""
+        """COMPLETE signal moves task to REVIEW."""
         task = await state_manager.create(
             task_factory(
                 title="Will complete",
@@ -387,7 +382,7 @@ class TestIterationLoop:
             agent_factory=mock_agent_factory,
         )
 
-        # Run the ticket loop directly
+        # Run the task loop directly
         await scheduler._run_task_loop(task)
 
         fetched = await state_manager.get(task.id)
@@ -397,7 +392,7 @@ class TestIterationLoop:
     async def test_blocked_signal_moves_to_backlog(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
     ):
-        """BLOCKED signal moves ticket to BACKLOG with reason."""
+        """BLOCKED signal moves task to BACKLOG with reason."""
         task = await state_manager.create(
             task_factory(
                 title="Will block",
@@ -445,7 +440,7 @@ class TestIterationLoop:
     async def test_max_iterations_moves_to_backlog(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
     ):
-        """Reaching max iterations moves ticket to BACKLOG."""
+        """Reaching max iterations moves task to BACKLOG."""
         task = await state_manager.create(
             task_factory(
                 title="Will timeout",
@@ -526,7 +521,7 @@ class TestIterationLoop:
 
 
 class TestAutoReview:
-    """Review agent runs on ticket completion."""
+    """Review agent runs on task completion."""
 
     async def test_review_approve_sets_checks_passed(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
@@ -667,17 +662,17 @@ class TestAutomationServiceImplQueue:
 
 
 # =============================================================================
-# Feature: Session Management (PAIR Tickets)
+# Feature: Session Management (PAIR Tasks)
 # =============================================================================
 
 
 class TestSessionManagement:
-    """PAIR tickets can open and manage tmux sessions."""
+    """PAIR tasks can open and manage tmux sessions."""
 
-    async def test_create_session_for_pair_ticket(
+    async def test_create_session_for_pair_task(
         self, state_manager: TaskRepository, task_factory, task_service, git_repo: Path, mock_tmux
     ):
-        """Creating session for PAIR ticket creates tmux session."""
+        """Creating session for PAIR task creates tmux session."""
         from kagan.services.sessions import SessionServiceImpl
 
         task = await state_manager.create(
@@ -689,7 +684,7 @@ class TestSessionManagement:
         )
 
         config = create_test_config()
-        worktree_path = git_repo / ".kagan" / "worktrees" / task.id
+        worktree_path = get_worktree_base_dir() / "worktrees" / task.id
         worktree_path.mkdir(parents=True)
 
         session_mgr = SessionServiceImpl(git_repo, task_service, config)
@@ -698,9 +693,7 @@ class TestSessionManagement:
         assert session_name == f"kagan-{task.id}"
         assert f"kagan-{task.id}" in mock_tmux
 
-    async def test_session_exists_check(
-        self, task_service, git_repo: Path, mock_tmux
-    ):
+    async def test_session_exists_check(self, task_service, git_repo: Path, mock_tmux):
         """session_exists correctly reports session state."""
         from kagan.services.sessions import SessionServiceImpl
 
@@ -749,24 +742,24 @@ class TestSessionManagement:
 
 
 class TestWorktreeOperations:
-    """Git worktrees are managed for ticket isolation."""
+    """Git worktrees are managed for task isolation."""
 
     async def test_create_worktree(self, git_repo: Path):
         """Creating worktree creates isolated directory."""
         worktrees = WorktreeManager(git_repo)
 
-        wt_path = await worktrees.create("ticket-123", "Fix the bug")
+        wt_path = await worktrees.create("task-123", "Fix the bug")
 
         assert wt_path.exists()
-        assert wt_path.name == "ticket-123"
+        assert wt_path.name == "task-123"
         assert (wt_path / "README.md").exists()  # From initial commit
 
     async def test_get_worktree_path(self, git_repo: Path):
         """get_path returns path for existing worktree."""
         worktrees = WorktreeManager(git_repo)
-        await worktrees.create("ticket-abc", "Test task")
+        await worktrees.create("task-abc", "Test task")
 
-        path = await worktrees.get_path("ticket-abc")
+        path = await worktrees.get_path("task-abc")
 
         assert path is not None
         assert path.exists()
@@ -812,7 +805,7 @@ class TestWorktreeOperations:
         assert "already exists" in str(exc.value)
 
     async def test_list_all_worktrees(self, git_repo: Path):
-        """list_all returns all active worktree ticket IDs."""
+        """list_all returns all active worktree task IDs."""
         worktrees = WorktreeManager(git_repo)
         await worktrees.create("alpha", "Alpha task")
         await worktrees.create("beta", "Beta task")
@@ -840,7 +833,7 @@ class TestWorktreeOperations:
 
 
 class TestMergeOperations:
-    """Git merge operations for completed tickets."""
+    """Git merge operations for completed tasks."""
 
     async def test_merge_to_main_success(self, git_repo: Path):
         """Successful merge returns (True, message)."""
@@ -1039,18 +1032,18 @@ class TestAgentBlocked:
 
 
 # =============================================================================
-# Feature: Initialize Existing Tickets
+# Feature: Initialize Existing Tasks
 # =============================================================================
 
 
 class TestInitializeExisting:
-    """AutomationServiceImpl initializes existing IN_PROGRESS AUTO tickets on startup."""
+    """AutomationServiceImpl initializes existing IN_PROGRESS AUTO tasks on startup."""
 
-    async def test_existing_auto_tickets_queued_on_init(
+    async def test_existing_auto_tasks_queued_on_init(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
     ):
-        """Existing IN_PROGRESS AUTO tickets are queued for processing."""
-        # Create existing ticket before scheduler starts
+        """Existing IN_PROGRESS AUTO tasks are queued for processing."""
+        # Create existing task before scheduler starts
         task = await state_manager.create(
             task_factory(
                 title="Already in progress",
@@ -1102,19 +1095,19 @@ class TestInitializeExisting:
 class TestCapacityManagement:
     """AutomationServiceImpl respects max_concurrent_agents limit."""
 
-    async def test_waiting_tickets_processed_when_capacity_frees(
+    async def test_waiting_tasks_processed_when_capacity_frees(
         self, state_manager: TaskRepository, task_factory, git_repo: Path
     ):
-        """Waiting tickets are processed when running tickets complete."""
+        """Waiting tasks are processed when running tasks complete."""
         config = create_test_config(max_concurrent=1)
         worktrees = create_mock_worktree_manager()
 
         scheduler = build_automation(state_manager, worktrees, config)
 
-        # Simulate one running ticket
+        # Simulate one running task
         scheduler._running["running-1"] = RunningTaskState()
 
-        # Create waiting ticket
+        # Create waiting task
         await state_manager.create(
             task_factory(
                 title="Waiting",
@@ -1127,34 +1120,34 @@ class TestCapacityManagement:
         await scheduler.start()
         await scheduler._stop_if_running("running-1")
 
-        # Should trigger check for waiting tickets
+        # Should trigger check for waiting tasks
         await asyncio.sleep(0.1)
         await scheduler.stop()
 
     async def test_get_running_agent_returns_agent(self, state_manager: TaskRepository):
-        """get_running_agent returns the agent for a running ticket."""
+        """get_running_agent returns the agent for a running task."""
         config = create_test_config()
         worktrees = create_mock_worktree_manager()
 
         scheduler = build_automation(state_manager, worktrees, config)
 
         mock_agent = MagicMock()
-        scheduler._running["test-ticket"] = RunningTaskState(agent=mock_agent)
+        scheduler._running["test-task"] = RunningTaskState(agent=mock_agent)
 
-        result = scheduler.get_running_agent("test-ticket")
+        result = scheduler.get_running_agent("test-task")
 
         assert result is mock_agent
 
     async def test_get_iteration_count(self, state_manager: TaskRepository):
-        """get_iteration_count returns current iteration for running ticket."""
+        """get_iteration_count returns current iteration for running task."""
         config = create_test_config()
         worktrees = create_mock_worktree_manager()
 
         scheduler = build_automation(state_manager, worktrees, config)
 
-        scheduler._running["test-ticket"] = RunningTaskState(iteration=5)
+        scheduler._running["test-task"] = RunningTaskState(iteration=5)
 
-        count = scheduler.get_iteration_count("test-ticket")
+        count = scheduler.get_iteration_count("test-task")
 
         assert count == 5
 
@@ -1165,8 +1158,8 @@ class TestCapacityManagement:
 
         scheduler = build_automation(state_manager, worktrees, config)
 
-        scheduler._running["test-ticket"] = RunningTaskState(iteration=10)
+        scheduler._running["test-task"] = RunningTaskState(iteration=10)
 
-        scheduler.reset_iterations("test-ticket")
+        scheduler.reset_iterations("test-task")
 
-        assert scheduler.get_iteration_count("test-ticket") == 0
+        assert scheduler.get_iteration_count("test-task") == 0

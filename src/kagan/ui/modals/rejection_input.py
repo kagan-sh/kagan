@@ -1,9 +1,9 @@
 """Modal for entering rejection feedback.
 
 Returns a tuple of (feedback_text, action) where action is one of:
-- "retry": Move ticket to IN_PROGRESS and auto-restart agent
-- "stage": Move ticket to IN_PROGRESS and keep paused
-- None: Shelve/cancel - move ticket to BACKLOG
+- "retry": Move task to IN_PROGRESS and auto-restart agent
+- "stage": Move task to IN_PROGRESS and keep paused
+- None: Shelve/cancel - move task to BACKLOG
 """
 
 from __future__ import annotations
@@ -32,16 +32,14 @@ class RejectionInputModal(ModalScreen[tuple[str, str] | None]):
 
     BINDINGS = REJECTION_INPUT_BINDINGS
 
-    def __init__(self, ticket_title: str, **kwargs) -> None:
+    def __init__(self, task_title: str, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._ticket_title = ticket_title
+        self._task_title = task_title
 
     def compose(self) -> ComposeResult:
         with Vertical(id="rejection-input-container"):
             yield Label("Rejection Feedback", classes="modal-title")
-            yield Label(
-                f"Ticket: {self._ticket_title[:MODAL_TITLE_MAX_LENGTH]}", classes="ticket-label"
-            )
+            yield Label(f"Task: {self._task_title[:MODAL_TITLE_MAX_LENGTH]}", classes="task-label")
             yield Rule()
             yield Label("What needs to be fixed?", classes="prompt-label")
             yield TextArea(id="feedback-input")
@@ -85,5 +83,5 @@ class RejectionInputModal(ModalScreen[tuple[str, str] | None]):
         self.dismiss((feedback, "stage"))
 
     def action_shelve(self) -> None:
-        """Shelve the ticket - move to BACKLOG."""
+        """Shelve the task - move to BACKLOG."""
         self.dismiss(None)

@@ -12,8 +12,8 @@ if TYPE_CHECKING:
     from kagan.config import KaganConfig
     from kagan.core.models.entities import Task
     from kagan.services.automation import AutomationServiceImpl
+    from kagan.services.sessions import SessionService
     from kagan.services.tasks import TaskService
-    from kagan.services.sessions import SessionServiceImpl
 
 log = logging.getLogger(__name__)
 
@@ -21,20 +21,20 @@ log = logging.getLogger(__name__)
 class MergeService(Protocol):
     """Service interface for merge operations."""
 
-    async def delete_task(self, task: "Task") -> tuple[bool, str]: ...
+    async def delete_task(self, task: Task) -> tuple[bool, str]: ...
 
-    async def merge_task(self, task: "Task") -> tuple[bool, str]: ...
+    async def merge_task(self, task: Task) -> tuple[bool, str]: ...
 
-    async def close_exploratory(self, task: "Task") -> tuple[bool, str]: ...
+    async def close_exploratory(self, task: Task) -> tuple[bool, str]: ...
 
     async def apply_rejection_feedback(
         self,
-        task: "Task",
+        task: Task,
         feedback: str | None,
         action: str = "shelve",
-    ) -> "Task": ...
+    ) -> Task: ...
 
-    async def has_no_changes(self, task: "Task") -> bool: ...
+    async def has_no_changes(self, task: Task) -> bool: ...
 
 
 def _parse_conflict_files(git_output: str) -> list[str]:
@@ -80,7 +80,7 @@ class MergeServiceImpl:
         self,
         task_service: TaskService,
         worktrees: WorktreeManager,
-        sessions: SessionServiceImpl,
+        sessions: SessionService,
         automation: AutomationServiceImpl,
         config: KaganConfig,
     ) -> None:
@@ -181,9 +181,7 @@ class MergeServiceImpl:
                         merge_error=final_message[:500],
                         merge_readiness=MergeReadiness.BLOCKED,
                     )
-                    await self.tasks.append_event(
-                        task.id, "merge", f"Merge conflict: {error_msg}"
-                    )
+                    await self.tasks.append_event(task.id, "merge", f"Merge conflict: {error_msg}")
                 else:
                     # Non-conflict failures: keep in REVIEW with generic error
                     await self.tasks.update_fields(

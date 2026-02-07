@@ -178,11 +178,11 @@ KanbanColumn .empty-message {
 }
 
 /* =============================================================================
-   TICKET CARDS
+   TASK CARDS
    ============================================================================= */
 
 /* Card styles */
-TicketCard {
+TaskCard {
     width: 100%;
     height: auto;
     max-height: 10;
@@ -193,12 +193,12 @@ TicketCard {
     color: $text;
 }
 
-TicketCard:focus {
+TaskCard:focus {
     border: solid $primary;
     background: $panel;
 }
 
-TicketCard:hover {
+TaskCard:hover {
     background: $panel;
 }
 
@@ -207,30 +207,30 @@ TicketCard:hover {
    ============================================ */
 
 /* tmux session active - steady GREEN border (entire border) */
-TicketCard.session-active {
+TaskCard.session-active {
     border: solid $success;
 }
 
-TicketCard.session-active:focus {
+TaskCard.session-active:focus {
     border: solid $success;
 }
 
-TicketCard.session-active:hover {
+TaskCard.session-active:hover {
     border: solid $success;
     background: $panel;
 }
 
 /* Agent actively working - entire card pulses */
-TicketCard.agent-active {
+TaskCard.agent-active {
     border: solid $secondary;
 }
 
-TicketCard.agent-active:focus {
+TaskCard.agent-active:focus {
     border: solid $secondary;
 }
 
 /* Combined: session + agent active - agent style takes precedence */
-TicketCard.session-active.agent-active {
+TaskCard.session-active.agent-active {
     border: solid $secondary;
 }
 
@@ -239,38 +239,38 @@ TicketCard.session-active.agent-active {
    ============================================ */
 
 /* Review passed - green border */
-TicketCard.-review-passed {
+TaskCard.-review-passed {
     border: solid $success;
 }
 
-TicketCard.-review-passed:focus {
+TaskCard.-review-passed:focus {
     border: solid $success;
 }
 
 /* Review failed - red border */
-TicketCard.-review-failed {
+TaskCard.-review-failed {
     border: solid $error;
 }
 
-TicketCard.-review-failed:focus {
+TaskCard.-review-failed:focus {
     border: solid $error;
 }
 
 /* Review pending - yellow/warning border */
-TicketCard.-review-pending {
+TaskCard.-review-pending {
     border: solid $warning;
 }
 
-TicketCard.-review-pending:focus {
+TaskCard.-review-pending:focus {
     border: solid $warning;
 }
 
 /* Merge failed - orange border (review passed but merge failed) */
-TicketCard.-review-merge-failed {
+TaskCard.-review-merge-failed {
     border: solid $warning;
 }
 
-TicketCard.-review-merge-failed:focus {
+TaskCard.-review-merge-failed:focus {
     border: solid $warning;
 }
 
@@ -278,7 +278,7 @@ TicketCard.-review-merge-failed:focus {
    CARD CONTENT STYLES
    ============================================ */
 
-TicketCard .card-title {
+TaskCard .card-title {
     width: 100%;
     height: 1;
     text-style: bold;
@@ -287,93 +287,93 @@ TicketCard .card-title {
 }
 
 /* Second line of title (for long titles) */
-TicketCard .card-title-continued {
+TaskCard .card-title-continued {
     width: 100%;
     height: 1;
     text-style: bold;
     color: $text;
 }
 
-TicketCard .card-desc {
+TaskCard .card-desc {
     width: 100%;
     height: 1;
     color: $text-muted;
 }
 
-TicketCard .card-desc.high {
+TaskCard .card-desc.high {
     color: $priority-high;
 }
 
-TicketCard .card-desc.medium {
+TaskCard .card-desc.medium {
     color: $priority-medium;
 }
 
-TicketCard .card-desc.low {
+TaskCard .card-desc.low {
     color: $priority-low-text;
 }
 
-TicketCard .card-error {
+TaskCard .card-error {
     width: 100%;
     height: 1;
     color: $error;
 }
 
-TicketCard .card-blocked {
+TaskCard .card-blocked {
     width: 100%;
     height: 1;
     color: $warning;
 }
 
-TicketCard .card-meta {
+TaskCard .card-meta {
     width: 100%;
     height: 1;
     color: $text-disabled;
 }
 
-TicketCard .card-review {
+TaskCard .card-review {
     width: 100%;
     height: 1;
     color: $text;
 }
 
-TicketCard .card-checks {
+TaskCard .card-checks {
     width: 100%;
     height: 1;
     color: $success;
 }
 
 /* Review state colors for checks line */
-TicketCard .card-checks.passed {
+TaskCard .card-checks.passed {
     color: $success;
 }
 
-TicketCard .card-checks.failed {
+TaskCard .card-checks.failed {
     color: $error;
 }
 
-TicketCard .card-checks.pending {
+TaskCard .card-checks.pending {
     color: $warning;
 }
 
-TicketCard .card-readiness {
+TaskCard .card-readiness {
     width: 100%;
     height: 1;
     color: $text-muted;
 }
 
-TicketCard .card-readiness.readiness-ready {
+TaskCard .card-readiness.readiness-ready {
     color: $success;
 }
 
-TicketCard .card-readiness.readiness-risk {
+TaskCard .card-readiness.readiness-risk {
     color: $warning;
 }
 
-TicketCard .card-readiness.readiness-blocked {
+TaskCard .card-readiness.readiness-blocked {
     color: $error;
 }
 
-TicketCard .card-iteration {
+TaskCard .card-iteration {
     width: 100%;
     height: 1;
     color: $secondary;
@@ -383,13 +383,13 @@ TicketCard .card-iteration {
    MODALS
    ============================================================================= */
 
-/* Ticket details modal */
-TicketDetailsModal {
+/* Task details modal */
+TaskDetailsModal {
     align: center middle;
 }
 
-TicketDetailsModal > Vertical,
-TicketDetailsModal #ticket-details-container {
+TaskDetailsModal > Vertical,
+TaskDetailsModal #task-details-container {
     width: 80;
     max-height: 80%;
     border: thick $primary;
@@ -398,7 +398,7 @@ TicketDetailsModal #ticket-details-container {
     overflow-y: auto;
 }
 
-TicketDetailsModal .modal-title {
+TaskDetailsModal .modal-title {
     text-align: center;
     text-style: bold;
     width: 100%;
@@ -406,42 +406,42 @@ TicketDetailsModal .modal-title {
     color: $secondary;
 }
 
-TicketDetailsModal Rule {
+TaskDetailsModal Rule {
     margin: 1 0;
     color: $border;
 }
 
-TicketDetailsModal .badge-row {
+TaskDetailsModal .badge-row {
     width: 100%;
     height: auto;
 }
 
-TicketDetailsModal .badge {
+TaskDetailsModal .badge {
     padding: 0 1;
     margin-right: 1;
 }
 
-TicketDetailsModal .badge-priority-high {
+TaskDetailsModal .badge-priority-high {
     background: $priority-high;
     color: $priority-high-text;
 }
 
-TicketDetailsModal .badge-priority-medium {
+TaskDetailsModal .badge-priority-medium {
     background: $priority-medium;
     color: $priority-medium-text;
 }
 
-TicketDetailsModal .badge-priority-low {
+TaskDetailsModal .badge-priority-low {
     background: $priority-low;
     color: $priority-low-text;
 }
 
-TicketDetailsModal .badge-status {
+TaskDetailsModal .badge-status {
     background: $primary;
     color: $background;
 }
 
-TicketDetailsModal .badge-type {
+TaskDetailsModal .badge-type {
     background: $secondary;
     color: $background;
 }
@@ -456,34 +456,34 @@ TicketDetailsModal .badge-type {
     color: $background;
 }
 
-TicketDetailsModal .section-title {
+TaskDetailsModal .section-title {
     text-style: bold;
     color: $text-muted;
     width: auto;
 }
 
-TicketDetailsModal .ticket-title {
+TaskDetailsModal .task-title {
     text-style: bold;
     padding: 0 1;
     color: $text;
     background: $background;
 }
 
-TicketDetailsModal .description-header {
+TaskDetailsModal .description-header {
     width: 100%;
     height: 1;
 }
 
-TicketDetailsModal .header-spacer {
+TaskDetailsModal .header-spacer {
     width: 1fr;
 }
 
-TicketDetailsModal .expand-hint {
+TaskDetailsModal .expand-hint {
     width: auto;
     color: $primary;
 }
 
-TicketDetailsModal .ticket-description {
+TaskDetailsModal .task-description {
     padding: 1;
     background: $background;
     min-height: 3;
@@ -494,41 +494,41 @@ TicketDetailsModal .ticket-description {
 }
 
 /* Acceptance criteria section */
-TicketDetailsModal .acceptance-criteria-section {
+TaskDetailsModal .acceptance-criteria-section {
     width: 100%;
     height: auto;
     padding: 0 1;
 }
 
-TicketDetailsModal .ac-item {
+TaskDetailsModal .ac-item {
     color: $text;
     padding-left: 1;
 }
 
-TicketDetailsModal #ac-input {
+TaskDetailsModal #ac-input {
     height: 6;
     min-height: 4;
 }
 
 /* Review results section */
-TicketDetailsModal .review-results-section {
+TaskDetailsModal .review-results-section {
     width: 100%;
     height: auto;
     padding: 0 1;
 }
 
-TicketDetailsModal .review-status-row {
+TaskDetailsModal .review-status-row {
     width: 100%;
     height: auto;
     margin-bottom: 1;
 }
 
-TicketDetailsModal .review-label {
+TaskDetailsModal .review-label {
     padding-left: 2;
     color: $text-muted;
 }
 
-TicketDetailsModal .review-summary-text {
+TaskDetailsModal .review-summary-text {
     padding: 1;
     background: $surface;
     color: $text;
@@ -536,150 +536,150 @@ TicketDetailsModal .review-summary-text {
     height: auto;
 }
 
-TicketDetailsModal .merge-error-text {
+TaskDetailsModal .merge-error-text {
     padding: 1;
     color: $error;
 }
 
-TicketDetailsModal .merge-help-text {
+TaskDetailsModal .merge-help-text {
     padding: 1;
     color: $warning;
 }
 
-TicketDetailsModal .badge-checks-passed {
+TaskDetailsModal .badge-checks-passed {
     background: $success;
     color: $success-text;
 }
 
-TicketDetailsModal .badge-checks-failed {
+TaskDetailsModal .badge-checks-failed {
     background: $error;
     color: $error-text;
 }
 
-TicketDetailsModal .badge-checks-pending {
+TaskDetailsModal .badge-checks-pending {
     background: $warning;
     color: $warning-text;
 }
 
-TicketDetailsModal .badge-readiness-ready {
+TaskDetailsModal .badge-readiness-ready {
     background: $success;
     color: $success-text;
 }
 
-TicketDetailsModal .badge-readiness-risk {
+TaskDetailsModal .badge-readiness-risk {
     background: $warning;
     color: $warning-text;
 }
 
-TicketDetailsModal .badge-readiness-blocked {
+TaskDetailsModal .badge-readiness-blocked {
     background: $error;
     color: $error-text;
 }
 
-TicketDetailsModal .parallel-work-section {
+TaskDetailsModal .parallel-work-section {
     width: 100%;
     height: auto;
     padding: 0 1;
 }
 
-TicketDetailsModal #parallel-work-content {
+TaskDetailsModal #parallel-work-content {
     color: $text;
     padding: 1;
 }
 
-TicketDetailsModal .audit-section {
+TaskDetailsModal .audit-section {
     width: 100%;
     height: auto;
     padding: 0 1;
 }
 
-TicketDetailsModal #audit-content {
+TaskDetailsModal #audit-content {
     color: $text-muted;
     padding: 1;
 }
 
-TicketDetailsModal .meta-row {
+TaskDetailsModal .meta-row {
     width: 100%;
     height: auto;
 }
 
-TicketDetailsModal .ticket-meta {
+TaskDetailsModal .task-meta {
     color: $text-muted;
     width: auto;
 }
 
-TicketDetailsModal .meta-separator {
+TaskDetailsModal .meta-separator {
     width: auto;
     color: $border;
 }
 
-TicketDetailsModal .button-row {
+TaskDetailsModal .button-row {
     width: 100%;
     height: auto;
     padding-top: 1;
     align: center middle;
 }
 
-TicketDetailsModal Button {
+TaskDetailsModal Button {
     margin: 0 1;
 }
 
-/* Edit mode styles for TicketDetailsModal */
-TicketDetailsModal .edit-fields {
+/* Edit mode styles for TaskDetailsModal */
+TaskDetailsModal .edit-fields {
     display: none;
 }
 
-TicketDetailsModal.editing .edit-fields {
+TaskDetailsModal.editing .edit-fields {
     display: block;
 }
 
-TicketDetailsModal .view-only {
+TaskDetailsModal .view-only {
     display: block;
 }
 
-TicketDetailsModal.editing .view-only {
+TaskDetailsModal.editing .view-only {
     display: none;
 }
 
 /* Status field only shown in create mode during editing */
-TicketDetailsModal #status-field {
+TaskDetailsModal #status-field {
     display: none;
 }
 
-TicketDetailsModal.editing.create-mode #status-field {
+TaskDetailsModal.editing.create-mode #status-field {
     display: block;
 }
 
 /* Meta row hidden during editing */
-TicketDetailsModal.editing #meta-row {
+TaskDetailsModal.editing #meta-row {
     display: none;
 }
 
-TicketDetailsModal .form-field {
+TaskDetailsModal .form-field {
     width: 100%;
     height: auto;
     margin-bottom: 1;
 }
 
-TicketDetailsModal .form-label {
+TaskDetailsModal .form-label {
     width: auto;
     height: 1;
     padding-bottom: 0;
     color: $text-muted;
 }
 
-TicketDetailsModal Input {
+TaskDetailsModal Input {
     width: 100%;
     background: $background;
     color: $text;
     border: solid $border;
 }
 
-TicketDetailsModal Input:focus {
+TaskDetailsModal Input:focus {
     border: solid $primary;
 }
 
-TicketDetailsModal TextArea {
+TaskDetailsModal TextArea {
     width: 100%;
     height: 10;
     min-height: 6;
@@ -688,36 +688,36 @@ TicketDetailsModal TextArea {
     border: solid $border;
 }
 
-TicketDetailsModal TextArea:focus {
+TaskDetailsModal TextArea:focus {
     border: solid $primary;
 }
 
-TicketDetailsModal Select {
+TaskDetailsModal Select {
     width: 100%;
 }
 
 /* Horizontal field row for Priority/Agent in edit mode */
-TicketDetailsModal .field-row {
+TaskDetailsModal .field-row {
     width: 100%;
     height: auto;
     margin-bottom: 1;
 }
 
-TicketDetailsModal .field-half {
+TaskDetailsModal .field-half {
     width: 1fr;
     margin-right: 1;
 }
 
-TicketDetailsModal .field-half:last-child {
+TaskDetailsModal .field-half:last-child {
     margin-right: 0;
 }
 
-TicketDetailsModal .field-third {
+TaskDetailsModal .field-third {
     width: 1fr;
     margin-right: 1;
 }
 
-TicketDetailsModal .field-third:last-child {
+TaskDetailsModal .field-third:last-child {
     margin-right: 0;
 }
 
@@ -1642,7 +1642,7 @@ RejectionInputModal .modal-title {
     color: $error;
 }
 
-RejectionInputModal .ticket-label {
+RejectionInputModal .task-label {
     color: $text-muted;
 }
 
@@ -1849,12 +1849,12 @@ SettingsModal .button-row Button {
     margin: 0 1;
 }
 
-/* TicketEditorScreen styles */
-TicketEditorScreen {
+/* TaskEditorScreen styles */
+TaskEditorScreen {
     align: center middle;
 }
 
-#ticket-editor-container {
+#task-editor-container {
     width: 90%;
     max-width: 80;
     height: 85%;
@@ -1863,48 +1863,48 @@ TicketEditorScreen {
     padding: 1 2;
 }
 
-#ticket-tabs {
+#task-tabs {
     height: 1fr;
     width: 100%;
 }
 
-#ticket-tabs > ContentSwitcher {
+#task-tabs > ContentSwitcher {
     height: 1fr;
     padding: 1;
 }
 
-#ticket-tabs Tabs {
+#task-tabs Tabs {
     width: 100%;
     dock: top;
 }
 
-#ticket-tabs Tab {
+#task-tabs Tab {
     padding: 0 2;
 }
 
-#ticket-tabs Tab.-active {
+#task-tabs Tab.-active {
     background: $primary;
     color: $text;
 }
 
-.ticket-form {
+.task-form {
     width: 100%;
     height: 1fr;
     padding: 1;
 }
 
-.ticket-input {
+.task-input {
     width: 100%;
     margin-bottom: 1;
     background: $background;
     border: solid $border;
 }
 
-.ticket-input:focus {
+.task-input:focus {
     border: solid $primary;
 }
 
-.ticket-textarea {
+.task-textarea {
     width: 100%;
     height: 1fr;
     min-height: 8;
@@ -1913,11 +1913,11 @@ TicketEditorScreen {
     border: solid $border;
 }
 
-.ticket-textarea:focus {
+.task-textarea:focus {
     border: solid $primary;
 }
 
-.ticket-select {
+.task-select {
     width: 100%;
     margin-bottom: 1;
 }
@@ -2247,10 +2247,10 @@ HelpModal .modal-title {
 }
 
 /* =============================================================================
-   DUPLICATE TICKET MODAL
+   DUPLICATE TASK MODAL
    ============================================================================= */
 
-DuplicateTicketModal {
+DuplicateTaskModal {
     align: center middle;
 }
 
@@ -2263,7 +2263,7 @@ DuplicateTicketModal {
     padding: 1 2;
 }
 
-DuplicateTicketModal .modal-title {
+DuplicateTaskModal .modal-title {
     width: 100%;
     text-align: center;
     text-style: bold;
@@ -2271,63 +2271,63 @@ DuplicateTicketModal .modal-title {
     padding-bottom: 0;
 }
 
-DuplicateTicketModal .source-ref {
+DuplicateTaskModal .source-ref {
     width: 100%;
     text-align: center;
     color: $text-muted;
     padding-bottom: 1;
 }
 
-DuplicateTicketModal .section-title {
+DuplicateTaskModal .section-title {
     text-style: bold;
     color: $text;
     padding-bottom: 1;
 }
 
-DuplicateTicketModal .form-field {
+DuplicateTaskModal .form-field {
     width: 100%;
     height: auto;
     margin-bottom: 1;
 }
 
-DuplicateTicketModal .form-label {
+DuplicateTaskModal .form-label {
     width: auto;
     height: 1;
     color: $text-muted;
 }
 
-DuplicateTicketModal Input {
+DuplicateTaskModal Input {
     width: 100%;
     background: $background;
     color: $text;
     border: solid $border;
 }
 
-DuplicateTicketModal Input:focus {
+DuplicateTaskModal Input:focus {
     border: solid $primary;
 }
 
-DuplicateTicketModal .checkbox-group {
+DuplicateTaskModal .checkbox-group {
     width: 100%;
     height: auto;
     padding: 0 1;
 }
 
-DuplicateTicketModal Checkbox {
+DuplicateTaskModal Checkbox {
     width: 100%;
     height: auto;
     padding: 0;
     margin-bottom: 0;
 }
 
-DuplicateTicketModal .button-row {
+DuplicateTaskModal .button-row {
     width: 100%;
     height: auto;
     padding-top: 1;
     align: center middle;
 }
 
-DuplicateTicketModal Button {
+DuplicateTaskModal Button {
     margin: 0 1;
 }
 
@@ -2395,7 +2395,7 @@ DuplicateTicketModal Button {
     padding-bottom: 1;
 }
 
-.plan-approval #ticket-list {
+.plan-approval #task-list {
     width: 100%;
     height: auto;
     max-height: 15;
@@ -2403,7 +2403,7 @@ DuplicateTicketModal Button {
     margin-bottom: 1;
 }
 
-.plan-approval .ticket-row {
+.plan-approval .task-row {
     width: 100%;
     height: auto;
     padding: 0 1;
@@ -2411,39 +2411,39 @@ DuplicateTicketModal Button {
     border-left: solid $border;
 }
 
-.plan-approval .ticket-row:hover {
+.plan-approval .task-row:hover {
     background: $surface;
 }
 
-.plan-approval .ticket-row.selected {
+.plan-approval .task-row.selected {
     background: $primary 20%;
     border-left: thick $primary;
     color: $text;
 }
 
-/* Priority accent colors for ticket rows */
-.plan-approval .ticket-row.priority-critical {
+/* Priority accent colors for task rows */
+.plan-approval .task-row.priority-critical {
     border-left: solid $error;
     color: $error;
 }
 
-.plan-approval .ticket-row.priority-high {
+.plan-approval .task-row.priority-high {
     border-left: solid $warning;
 }
 
-.plan-approval .ticket-row.priority-medium {
+.plan-approval .task-row.priority-medium {
     border-left: solid #b8a965;
 }
 
-.plan-approval .ticket-row.priority-low {
+.plan-approval .task-row.priority-low {
     border-left: solid $success;
 }
 
-.plan-approval .ticket-title-text {
+.plan-approval .task-title-text {
     color: $text;
 }
 
-.plan-approval .ticket-priority-badge {
+.plan-approval .task-priority-badge {
     color: $text-muted;
     padding-left: 1;
 }

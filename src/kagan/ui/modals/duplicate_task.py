@@ -32,6 +32,7 @@ class DuplicateTaskModal(ModalScreen[dict[str, object] | None]):
             yield Static(f"Based on #{self.source.short_id}", classes="source-ref")
             yield Rule()
 
+            # Title (always copied, editable)
             with Vertical(classes="form-field"):
                 yield Label("Title:", classes="form-label")
                 yield Input(value=self.source.title, id="title-input")
@@ -39,6 +40,7 @@ class DuplicateTaskModal(ModalScreen[dict[str, object] | None]):
             yield Rule()
             yield Label("Copy fields:", classes="section-title")
 
+            # Checkboxes for optional fields
             with Vertical(classes="checkbox-group"):
                 yield Checkbox("Description", value=True, id="copy-description")
                 yield Checkbox("Acceptance Criteria", value=False, id="copy-criteria")
@@ -48,10 +50,10 @@ class DuplicateTaskModal(ModalScreen[dict[str, object] | None]):
 
             yield Rule()
             with Horizontal(classes="button-row"):
-                yield Button("[Enter] Create", variant="primary", id="create-btn")
+                yield Button("[Ctrl+S] Create", variant="primary", id="create-btn")
                 yield Button("[Esc] Cancel", id="cancel-btn")
 
-        yield Footer(show_command_palette=False)
+        yield Footer()
 
     def on_mount(self) -> None:
         """Focus the title input when modal opens."""
@@ -72,6 +74,7 @@ class DuplicateTaskModal(ModalScreen[dict[str, object] | None]):
             self.notify("Title is required", severity="error")
             return
 
+        # Build task data based on checkbox selections
         description = ""
         if self.query_one("#copy-description", Checkbox).value:
             description = self.source.description
@@ -92,6 +95,7 @@ class DuplicateTaskModal(ModalScreen[dict[str, object] | None]):
         if self.query_one("#copy-agent", Checkbox).value:
             agent_backend = self.source.agent_backend
 
+        # Build kwargs for task creation, only including set values
         kwargs: dict[str, object] = {
             "title": title,
             "description": description,

@@ -21,10 +21,10 @@ from kagan.adapters.db.schema import (
     Repo,
     Scratch,
     Task,
-    TaskPriority,
     TaskStatus,
 )
 from kagan.limits import SCRATCHPAD_LIMIT
+from kagan.paths import get_database_path
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -35,13 +35,13 @@ class TaskRepository:
 
     def __init__(
         self,
-        db_path: str | Path = ".kagan/state.db",
+        db_path: str | Path | None = None,
         *,
         project_root: Path | None = None,
         default_branch: str = "main",
         on_change: Callable[[str], None] | None = None,
     ) -> None:
-        self.db_path = Path(db_path)
+        self.db_path = Path(db_path) if db_path else get_database_path()
         self._engine: AsyncEngine | None = None
         self._session_factory: async_sessionmaker[AsyncSession] | None = None
         self._lock = asyncio.Lock()
@@ -78,7 +78,7 @@ class TaskRepository:
     async def _ensure_defaults(self) -> None:
         """Ensure a default project and repo exist."""
         async with self._get_session() as session:
-            result = await session.execute(select(Project).order_by(Project.created_at.asc()))
+            result = await session.execute(select(Project).order_by(col(Project.created_at).asc()))
             project = result.scalars().first()
             if project is None:
                 project = Project(
@@ -92,7 +92,9 @@ class TaskRepository:
             repo = None
             if project.id:
                 result = await session.execute(
-                    select(Repo).where(Repo.project_id == project.id).order_by(Repo.created_at.asc())
+                    select(Repo)
+                    .where(Repo.project_id == project.id)
+                    .order_by(col(Repo.created_at).asc())
                 )
                 repo = result.scalars().first()
             if repo is None and project.id:
@@ -131,8 +133,6 @@ class TaskRepository:
 
     async def create(self, task: Task) -> Task:
         """Create a new task."""
-        if task.project_id is None and self._default_project_id:
-            task.project_id = self._default_project_id
         if task.repo_id is None and self._default_repo_id:
             task.repo_id = self._default_repo_id
 
@@ -158,14 +158,14 @@ class TaskRepository:
             result = await session.execute(
                 select(Task).order_by(
                     case(
-                        (Task.status == TaskStatus.BACKLOG, 0),
-                        (Task.status == TaskStatus.IN_PROGRESS, 1),
-                        (Task.status == TaskStatus.REVIEW, 2),
-                        (Task.status == TaskStatus.DONE, 3),
+                        (col(Task.status) == TaskStatus.BACKLOG, 0),
+                        (col(Task.status) == TaskStatus.IN_PROGRESS, 1),
+                        (col(Task.status) == TaskStatus.REVIEW, 2),
+                        (col(Task.status) == TaskStatus.DONE, 3),
                         else_=99,
                     ),
                     col(Task.priority).desc(),
-                    Task.created_at.asc(),
+                    col(Task.created_at).asc(),
                 )
             )
             return result.scalars().all()
@@ -176,7 +176,7 @@ class TaskRepository:
             result = await session.execute(
                 select(Task)
                 .where(Task.status == status)
-                .order_by(col(Task.priority).desc(), Task.created_at.asc())
+                .order_by(col(Task.priority).desc(), col(Task.created_at).asc())
             )
             return result.scalars().all()
 
@@ -248,7 +248,7 @@ class TaskRepository:
         """Get task counts by status."""
         async with self._get_session() as session:
             result = await session.execute(
-                select(Task.status, func.count(Task.id)).group_by(Task.status)
+                select(Task.status, func.count(col(Task.id))).group_by(Task.status)
             )
             counts = {status: 0 for status in TaskStatus}
             for status, count in result.all():
@@ -268,10 +268,10 @@ class TaskRepository:
                 select(Task)
                 .where(
                     (Task.id == query)
-                    | (Task.title.ilike(pattern))
-                    | (Task.description.ilike(pattern))
+                    | (col(Task.title).ilike(pattern))
+                    | (col(Task.description).ilike(pattern))
                 )
-                .order_by(Task.updated_at.desc())
+                .order_by(col(Task.updated_at).desc())
             )
             return result.scalars().all()
 
@@ -346,7 +346,7 @@ class TaskRepository:
                     AgentTurn.kind == AgentTurnKind.LOG,
                     AgentTurn.source == log_type,
                 )
-                .order_by(AgentTurn.sequence.asc(), AgentTurn.created_at.asc())
+                .order_by(col(AgentTurn.sequence).asc(), col(AgentTurn.created_at).asc())
             )
             return result.scalars().all()
 
@@ -389,7 +389,7 @@ class TaskRepository:
                     AgentTurn.execution_id == execution.id,
                     AgentTurn.kind == AgentTurnKind.EVENT,
                 )
-                .order_by(AgentTurn.created_at.desc(), AgentTurn.id.desc())
+                .order_by(col(AgentTurn.created_at).desc(), col(AgentTurn.id).desc())
                 .limit(limit)
             )
             return result.scalars().all()

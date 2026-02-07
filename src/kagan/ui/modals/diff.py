@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class DiffModal(ModalScreen[str | None]):
-    """Modal for showing a ticket diff.
+    """Modal for showing a task diff.
 
     Returns:
         str | None:
@@ -29,11 +29,11 @@ class DiffModal(ModalScreen[str | None]):
 
     BINDINGS = DIFF_BINDINGS
 
-    def __init__(self, title: str, diff_text: str, ticket: Task | None = None, **kwargs) -> None:
+    def __init__(self, title: str, diff_text: str, task: Task | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._title = title
         self._diff_text = diff_text
-        self._ticket = ticket
+        self._task_model = task
 
     def compose(self) -> ComposeResult:
         with Vertical(id="diff-container"):

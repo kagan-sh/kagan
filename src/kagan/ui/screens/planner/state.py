@@ -11,6 +11,8 @@ from kagan.limits import MAX_ACCUMULATED_CHUNKS, MAX_CONVERSATION_HISTORY
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from acp.schema import PlanEntry
+
     from kagan.acp.agent import Agent
     from kagan.agents.refiner import PromptRefiner
     from kagan.core.models.entities import Task
@@ -23,7 +25,7 @@ class PlannerPhase(Enum):
     PROCESSING = auto()
     REFINING = auto()
     AWAITING_APPROVAL = auto()
-    CREATING_TICKETS = auto()
+    CREATING_TASKS = auto()
 
 
 @dataclass
@@ -41,10 +43,10 @@ class ChatMessage:
     role: Literal["user", "assistant"]
     content: str
     timestamp: datetime
-    plan_tickets: list[Task] | None = None
+    plan_tasks: list[Task] | None = None
     # Parsed todo entries for PlanDisplay restoration
-    todos: list[dict] | None = None
-    # Notes to display after this message (e.g., "Created N tickets", errors)
+    todos: list[PlanEntry] | list[dict[str, object]] | None = None
+    # Notes to display after this message (e.g., "Created N tasks", errors)
     notes: list[NoteInfo] = field(default_factory=list)
 
 
@@ -77,7 +79,7 @@ class PlannerState:
     # Conversation history for context injection
     conversation_history: list[ChatMessage] = field(default_factory=list)
 
-    # Pending plan tickets awaiting approval
+    # Pending plan tasks awaiting approval
     pending_plan: list[Task] | None = None
 
     # Input text to preserve across screen switches
@@ -109,11 +111,11 @@ class PlannerState:
             (PlannerPhase.PROCESSING, "error"): PlannerPhase.IDLE,
             (PlannerPhase.REFINING, "done"): PlannerPhase.IDLE,
             (PlannerPhase.REFINING, "error"): PlannerPhase.IDLE,
-            (PlannerPhase.AWAITING_APPROVAL, "approved"): PlannerPhase.CREATING_TICKETS,
+            (PlannerPhase.AWAITING_APPROVAL, "approved"): PlannerPhase.CREATING_TASKS,
             (PlannerPhase.AWAITING_APPROVAL, "rejected"): PlannerPhase.IDLE,
             (PlannerPhase.AWAITING_APPROVAL, "edit"): PlannerPhase.AWAITING_APPROVAL,
-            (PlannerPhase.CREATING_TICKETS, "done"): PlannerPhase.IDLE,
-            (PlannerPhase.CREATING_TICKETS, "error"): PlannerPhase.IDLE,
+            (PlannerPhase.CREATING_TASKS, "done"): PlannerPhase.IDLE,
+            (PlannerPhase.CREATING_TASKS, "error"): PlannerPhase.IDLE,
         }
 
         new_phase = transitions.get((self.phase, event), self.phase)

@@ -142,10 +142,10 @@ src/kagan/
     │   │   └── hints.py    # Keybinding hints
     │   ├── planner/        # Planner screen (chat-first)
     │   ├── welcome.py      # First-boot setup screen
-    │   ├── ticket_editor.py    # Ticket editor screen
+    │   ├── task_editor.py    # Task editor screen
     │   └── troubleshooting/    # Pre-flight check failures
     ├── widgets/
-    │   ├── card.py         # TicketCard widget
+    │   ├── card.py         # TaskCard widget
     │   ├── column.py       # KanbanColumn widget
     │   ├── header.py       # KaganHeader widget
     │   ├── status_bar.py   # StatusBar widget
@@ -157,7 +157,7 @@ src/kagan/
     │   ├── tool_call.py        # Tool call display
     │   └── permission_prompt.py # Permission prompt widget
     └── modals/
-        ├── ticket_details_modal.py  # Unified ticket view/edit/create modal
+        ├── task_details_modal.py  # Unified task view/edit/create modal
         ├── review.py           # Review modal with AI review
         ├── settings.py         # Settings modal
         ├── confirm.py          # Confirmation dialog
@@ -167,7 +167,7 @@ src/kagan/
         ├── description_editor.py   # Full-screen description editor
         ├── help.py             # Help modal
         ├── tmux_gateway.py     # Tmux gateway info modal
-        ├── duplicate_ticket.py # Duplicate ticket modal
+        ├── duplicate_task.py # Duplicate task modal
         └── actions.py          # Modal action enums
 ```
 
@@ -197,13 +197,13 @@ if TYPE_CHECKING:
 
 ### Naming Conventions
 
-| Type      | Convention        | Example                             |
-| --------- | ----------------- | ----------------------------------- |
-| Classes   | PascalCase        | `TicketCard`, `KanbanScreen`        |
+| Type      | Convention        | Example                           |
+| --------- | ----------------- | --------------------------------- |
+| Classes   | PascalCase        | `TaskCard`, `KanbanScreen`        |
 | Functions | snake_case        | `get_all_tasks`, `_refresh_board` |
-| Private   | underscore prefix | `_get_focused_card`                 |
-| Constants | UPPER_SNAKE       | `COLUMN_ORDER`, `MIN_WIDTH`         |
-| Enums     | PascalCase/UPPER  | `TaskStatus.BACKLOG`                |
+| Private   | underscore prefix | `_get_focused_card`               |
+| Constants | UPPER_SNAKE       | `COLUMN_ORDER`, `MIN_WIDTH`       |
+| Enums     | PascalCase/UPPER  | `TaskStatus.BACKLOG`              |
 
 ### Textual Patterns
 

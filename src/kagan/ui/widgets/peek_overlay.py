@@ -64,13 +64,13 @@ class PeekOverlay(Vertical):
 
     def update_content(
         self,
-        ticket_id: str,
+        task_id: str,
         title: str,
         status: str,
         content: str,
     ) -> None:
         """Update the overlay content."""
-        self._title_widget.update(f"#{ticket_id}: {title[:30]}")
+        self._title_widget.update(f"#{task_id}: {title[:30]}")
         self._status_widget.update(status)
         self._content_widget.update(content[:300] if content else "(No content)")
 

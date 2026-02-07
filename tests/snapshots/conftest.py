@@ -60,7 +60,7 @@ def _coerce_tool_call(tool_call: Any) -> ToolCall:
     if isinstance(tool_call, ToolCall):
         return tool_call
     if not isinstance(tool_call, dict):
-        return ToolCall(tool_call_id="unknown", title="Tool call")
+        return ToolCall(toolCallId="unknown", title="Tool call")
     data = dict(tool_call)
     if "toolCallId" not in data:
         if "id" in data:
@@ -412,7 +412,7 @@ async def snapshot_project(tmp_path: Path) -> SimpleNamespace:
 
     This fixture provides:
     - A real git repository with initial commit
-    - A .kagan/config.toml file
+    - A config.toml file stored outside the repo
     - Paths to DB and config for KaganApp initialization
     - Standardized for snapshot reproducibility
     """
@@ -422,9 +422,10 @@ async def snapshot_project(tmp_path: Path) -> SimpleNamespace:
     # Initialize real git repo with commit
     await init_git_repo_with_commit(project)
 
-    # Create .kagan directory with config
-    kagan_dir = project / ".kagan"
-    kagan_dir.mkdir()
+    config_dir = tmp_path / "kagan-config"
+    config_dir.mkdir()
+    data_dir = tmp_path / "kagan-data"
+    data_dir.mkdir()
 
     config_content = """# Kagan Snapshot Test Configuration
 [general]
@@ -441,13 +442,13 @@ run_command."*" = "echo mock-claude"
 interactive_command."*" = "echo mock-claude-interactive"
 active = true
 """
-    (kagan_dir / "config.toml").write_text(config_content)
+    config_path = config_dir / "config.toml"
+    config_path.write_text(config_content)
 
     return SimpleNamespace(
         root=project,
-        db=str(kagan_dir / "state.db"),
-        config=str(kagan_dir / "config.toml"),
-        kagan_dir=kagan_dir,
+        db=str(data_dir / "kagan.db"),
+        config=str(config_path),
     )
 
 
@@ -464,6 +465,7 @@ def mock_acp_agent_factory() -> MockAgentFactory:
             app = KaganApp(
                 db_path=snapshot_project.db,
                 config_path=snapshot_project.config,
+                project_root=snapshot_project.root,
                 agent_factory=mock_acp_agent_factory,
             )
     """
@@ -491,6 +493,7 @@ async def snapshot_app(
         db_path=snapshot_project.db,
         config_path=snapshot_project.config,
         lock_path=None,
+        project_root=snapshot_project.root,
         agent_factory=mock_acp_agent_factory,
     )
 

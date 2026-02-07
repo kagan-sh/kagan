@@ -27,18 +27,18 @@ KANBAN_BINDINGS: list[BindingType] = [
     # Global
     Binding("q", "quit", "Quit", priority=True),
     # Primary actions
-    Binding("n", "new_ticket", "New"),
-    Binding("N", "new_auto_ticket", "New AUTO", key_display="Shift+N"),
+    Binding("n", "new_task", "New"),
+    Binding("N", "new_auto_task", "New AUTO", key_display="Shift+N"),
     Binding("v", "view_details", "View"),
-    Binding("e", "edit_ticket", "Edit"),
+    Binding("e", "edit_task", "Edit"),
     Binding("enter", "open_session", "Open"),
     Binding("g", "activate_leader", "Go..."),
     Binding("slash", "toggle_search", "Search", key_display="/"),
     Binding("p", "open_planner", "Plan Mode"),
     Binding("comma", "open_settings", "Settings", key_display=","),
-    Binding("x", "delete_ticket_direct", "Delete"),
-    Binding("y", "duplicate_ticket", "Yank", show=False),
-    Binding("c", "copy_ticket_id", "Copy ID", show=False),
+    Binding("x", "delete_task_direct", "Delete"),
+    Binding("y", "duplicate_task", "Yank", show=False),
+    Binding("c", "copy_task_id", "Copy ID", show=False),
     # Navigation - vim style
     Binding("h", "focus_left", "Left", show=False),
     Binding("j", "focus_down", "Down", show=False),
@@ -105,7 +105,7 @@ DIFF_BINDINGS: list[BindingType] = [
     Binding("escape", "close", "Close"),
 ]
 
-DUPLICATE_TICKET_BINDINGS: list[BindingType] = [
+DUPLICATE_TASK_BINDINGS: list[BindingType] = [
     Binding("escape", "cancel", "Cancel"),
     Binding("ctrl+s", "create", "Create"),
 ]
@@ -148,7 +148,7 @@ DEBUG_LOG_BINDINGS: list[BindingType] = [
     Binding("s", "save_logs", "Save"),
 ]
 
-TICKET_DETAILS_BINDINGS: list[BindingType] = [
+TASK_DETAILS_BINDINGS: list[BindingType] = [
     Binding("y", "copy", "Copy"),
     Binding("escape", "close_or_cancel", "Close/Cancel"),
     Binding("e", "toggle_edit", "Edit"),
@@ -180,7 +180,7 @@ PLANNER_BINDINGS: list[BindingType] = [
     Binding("ctrl+e", "refine", "Enhance", priority=True),
 ]
 
-TICKET_EDITOR_BINDINGS: list[BindingType] = [
+TASK_EDITOR_BINDINGS: list[BindingType] = [
     Binding("escape", "cancel", "Cancel"),
     Binding("ctrl+s", "finish", "Finish Editing"),
 ]

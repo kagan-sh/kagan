@@ -18,6 +18,7 @@ from kagan.data.builtin_agents import (
 )
 from kagan.git_utils import get_current_branch, has_git_repo, list_local_branches
 from kagan.keybindings import WELCOME_BINDINGS
+from kagan.paths import ensure_directories, get_config_path
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -99,7 +100,7 @@ class WelcomeScreen(Screen):
             yield Label(
                 "Welcome! This is the first-time setup for Kagan.\n"
                 "Configure your AI assistant, base branch, and auto-mode preferences below.\n"
-                "This only needs to be done once - settings are saved to .kagan/config.toml",
+                f"This only needs to be done once - settings are saved to {get_config_path()}",
                 id="intro-text",
                 classes="info-label",
             )
@@ -227,8 +228,8 @@ class WelcomeScreen(Screen):
         base_branch: str,
     ) -> None:
         """Write config.toml file with correct ACP run commands."""
-        kagan_dir = Path(".kagan")
-        kagan_dir.mkdir(exist_ok=True)
+        ensure_directories()
+        config_path = get_config_path()
 
         # Note: .gitignore handling is done in git_utils.init_git_repo()
         # which is called from app.py after welcome screen completes
@@ -265,4 +266,4 @@ active = true''')
 {chr(10).join(agent_sections)}
 """
 
-        (kagan_dir / "config.toml").write_text(config_content)
+        config_path.write_text(config_content)

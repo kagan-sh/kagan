@@ -16,36 +16,36 @@ class KaganMCPServer:
     def __init__(self, state_manager: TaskService) -> None:
         self._state = state_manager
 
-    async def get_context(self, ticket_id: str) -> dict:
-        """Get ticket context for AI tools."""
-        ticket = await self._state.get_task(ticket_id)
-        if ticket is None:
-            raise ValueError(f"Ticket not found: {ticket_id}")
-        scratchpad = await self._state.get_scratchpad(ticket_id)
+    async def get_context(self, task_id: str) -> dict:
+        """Get task context for AI tools."""
+        task = await self._state.get_task(task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+        scratchpad = await self._state.get_scratchpad(task_id)
         return {
-            "ticket_id": ticket.id,
-            "title": ticket.title,
-            "description": ticket.description,
-            "acceptance_criteria": ticket.acceptance_criteria,
+            "task_id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "acceptance_criteria": task.acceptance_criteria,
             "scratchpad": scratchpad,
         }
 
-    async def update_scratchpad(self, ticket_id: str, content: str) -> bool:
-        """Append to ticket scratchpad."""
-        existing = await self._state.get_scratchpad(ticket_id)
+    async def update_scratchpad(self, task_id: str, content: str) -> bool:
+        """Append to task scratchpad."""
+        existing = await self._state.get_scratchpad(task_id)
         updated = f"{existing}\n{content}".strip() if existing else content
-        await self._state.update_scratchpad(ticket_id, updated)
+        await self._state.update_scratchpad(task_id, updated)
         return True
 
-    async def request_review(self, ticket_id: str, summary: str) -> dict:
-        """Mark ticket ready for review.
+    async def request_review(self, task_id: str, summary: str) -> dict:
+        """Mark task ready for review.
 
-        For PAIR mode tickets, this moves the ticket to REVIEW status.
-        AUTO mode tickets use agent-based review via the automation service instead.
+        For PAIR mode tasks, this moves the task to REVIEW status.
+        AUTO mode tasks use agent-based review via the automation service instead.
         """
-        ticket = await self._state.get_task(ticket_id)
-        if ticket is None:
-            raise ValueError(f"Ticket not found: {ticket_id}")
+        task = await self._state.get_task(task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
 
         # Check for uncommitted changes before allowing review
         has_uncommitted = await self._check_uncommitted_changes()
@@ -57,7 +57,7 @@ class KaganMCPServer:
             }
 
         await self._state.update_fields(
-            ticket_id,
+            task_id,
             review_summary=summary,
             checks_passed=None,
             status=TaskStatus.REVIEW,
@@ -65,7 +65,7 @@ class KaganMCPServer:
             merge_error=None,
             merge_readiness=MergeReadiness.RISK,
         )
-        await self._state.append_event(ticket_id, "review", "Review requested")
+        await self._state.append_event(task_id, "review", "Review requested")
         return {"status": "review", "message": "Ready for merge"}
 
     async def _check_uncommitted_changes(self) -> bool:
@@ -102,24 +102,24 @@ class KaganMCPServer:
 
         return False  # Only Kagan files are uncommitted
 
-    async def get_parallel_tickets(self, exclude_ticket_id: str | None = None) -> list[dict]:
-        """Get all IN_PROGRESS tickets for coordination awareness.
+    async def get_parallel_tasks(self, exclude_task_id: str | None = None) -> list[dict]:
+        """Get all IN_PROGRESS tasks for coordination awareness.
 
         Args:
-            exclude_ticket_id: Optionally exclude a ticket (caller's own ticket).
+            exclude_task_id: Optionally exclude a task (caller's own task).
 
         Returns:
-            List of ticket summaries: ticket_id, title, description, scratchpad.
+            List of task summaries: task_id, title, description, scratchpad.
         """
-        tickets = await self._state.get_by_status(TaskStatus.IN_PROGRESS)
+        tasks = await self._state.get_by_status(TaskStatus.IN_PROGRESS)
         result = []
-        for t in tickets:
-            if exclude_ticket_id and t.id == exclude_ticket_id:
+        for t in tasks:
+            if exclude_task_id and t.id == exclude_task_id:
                 continue
             scratchpad = await self._state.get_scratchpad(t.id)
             result.append(
                 {
-                    "ticket_id": t.id,
+                    "task_id": t.id,
                     "title": t.title,
                     "description": t.description,
                     "scratchpad": scratchpad,
@@ -128,23 +128,23 @@ class KaganMCPServer:
         return result
 
     async def get_agent_logs(
-        self, ticket_id: str, log_type: str = "implementation", limit: int = 1
+        self, task_id: str, log_type: str = "implementation", limit: int = 1
     ) -> list[dict]:
-        """Get agent execution logs for a ticket.
+        """Get agent execution logs for a task.
 
         Args:
-            ticket_id: The ticket to get logs for.
+            task_id: The task to get logs for.
             log_type: 'implementation' or 'review'.
             limit: Max iterations to return (most recent).
 
         Returns:
             List of log entries with iteration, content, created_at.
         """
-        ticket = await self._state.get_task(ticket_id)
-        if ticket is None:
-            raise ValueError(f"Ticket not found: {ticket_id}")
+        task = await self._state.get_task(task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
 
-        logs = await self._state.get_agent_logs(ticket_id, log_type)
+        logs = await self._state.get_agent_logs(task_id, log_type)
         # Get most recent N logs, then reverse for ascending order
         logs = sorted(logs, key=lambda x: x.sequence, reverse=True)[:limit]
         logs = list(reversed(logs))  # O(n) instead of O(n log n)

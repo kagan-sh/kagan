@@ -45,7 +45,7 @@ class ExecutionServiceImpl:
     """In-memory execution service (placeholder implementation)."""
 
     def __init__(self) -> None:
-        self._executions: dict[str, "ExecutionProcess"] = {}
+        self._executions: dict[str, ExecutionProcess] = {}
 
     async def request(
         self,

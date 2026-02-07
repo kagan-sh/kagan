@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from kagan.config import AgentConfig, KaganConfig
-    from kagan.core.models.entities import Task
     from kagan.services.tasks import TaskService
+    from kagan.services.types import TaskLike
 
 log = logging.getLogger(__name__)
 
@@ -24,17 +24,9 @@ log = logging.getLogger(__name__)
 class SessionService(Protocol):
     """Service interface for session operations."""
 
-    async def start(self, workspace_id: str, *, kind: str) -> str: ...
+    async def create_session(self, task: TaskLike, worktree_path: Path) -> str: ...
 
-    async def stop(self, session_id: str, *, reason: str | None = None) -> None: ...
-
-    async def get_session(self, session_id: str) -> dict | None: ...
-
-    async def list_sessions(self, *, workspace_id: str | None = None) -> list[dict]: ...
-
-    async def create_session(self, task: Task, worktree_path: Path) -> str: ...
-
-    async def create_resolution_session(self, task: Task, workdir: Path) -> str: ...
+    async def create_resolution_session(self, task: TaskLike, workdir: Path) -> str: ...
 
     async def attach_session(self, task_id: str) -> bool: ...
 
@@ -57,7 +49,7 @@ class SessionServiceImpl:
         self._tasks = task_service
         self._config = config
 
-    async def create_session(self, task: Task, worktree_path: Path) -> str:
+    async def create_session(self, task: TaskLike, worktree_path: Path) -> str:
         """Create tmux session with full context injection."""
         session_name = f"kagan-{task.id}"
 
@@ -69,9 +61,9 @@ class SessionServiceImpl:
             "-c",
             str(worktree_path),
             "-e",
-            f"KAGAN_TICKET_ID={task.id}",
+            f"KAGAN_TASK_ID={task.id}",
             "-e",
-            f"KAGAN_TICKET_TITLE={task.title}",
+            f"KAGAN_TASK_TITLE={task.title}",
             "-e",
             f"KAGAN_WORKTREE_PATH={worktree_path}",
             "-e",
@@ -101,7 +93,7 @@ class SessionServiceImpl:
     def _resolve_session_name(self, task_id: str) -> str:
         return f"kagan-resolve-{task_id}"
 
-    async def create_resolution_session(self, task: Task, workdir: Path) -> str:
+    async def create_resolution_session(self, task: TaskLike, workdir: Path) -> str:
         """Create tmux session for manual conflict resolution."""
         session_name = self._resolve_session_name(task.id)
 
@@ -113,9 +105,9 @@ class SessionServiceImpl:
             "-c",
             str(workdir),
             "-e",
-            f"KAGAN_TICKET_ID={task.id}",
+            f"KAGAN_TASK_ID={task.id}",
             "-e",
-            f"KAGAN_TICKET_TITLE={task.title}",
+            f"KAGAN_TASK_TITLE={task.title}",
             "-e",
             f"KAGAN_WORKTREE_PATH={workdir}",
             "-e",
@@ -128,7 +120,7 @@ class SessionServiceImpl:
 
         return session_name
 
-    def _get_agent_config(self, task: Task) -> AgentConfig:
+    def _get_agent_config(self, task: TaskLike) -> AgentConfig:
         """Get agent config for task."""
         return task.get_agent_config(self._config)
 
@@ -308,7 +300,7 @@ class SessionServiceImpl:
         async with aiofiles.open(gitignore, "w", encoding="utf-8") as f:
             await f.write(existing_content + addition)
 
-    def _build_startup_prompt(self, task: Task) -> str:
+    def _build_startup_prompt(self, task: TaskLike) -> str:
         """Build startup prompt for pair mode.
 
         This includes the task overview plus essential rules that were
@@ -316,7 +308,7 @@ class SessionServiceImpl:
         criteria and scratchpad) via the kagan_get_context MCP tool.
         """
         desc = task.description or "No description provided."
-        return f"""Hello! I'm starting a pair programming session for ticket **{task.id}**.
+        return f"""Hello! I'm starting a pair programming session for task **{task.id}**.
 
 Act as a Senior Developer collaborating with me on this implementation.
 
@@ -335,12 +327,12 @@ Act as a Senior Developer collaborating with me on this implementation.
 ## MCP Tools Available
 
 **Context Tools:**
-- `kagan_get_context` - Get full ticket details (acceptance criteria, scratchpad)
+- `kagan_get_context` - Get full task details (acceptance criteria, scratchpad)
 - `kagan_update_scratchpad` - Save progress notes for future reference
 
 **Coordination Tools (USE THESE):**
-- `kagan_get_parallel_tickets` - Discover concurrent work to avoid merge conflicts
-- `kagan_get_agent_logs` - Get execution logs from any ticket to learn from prior work
+- `kagan_get_parallel_tasks` - Discover concurrent work to avoid merge conflicts
+- `kagan_get_agent_logs` - Get execution logs from any task to learn from prior work
 
 **Completion Tools:**
 - `kagan_request_review` - Submit work for review (commit first!)
@@ -349,10 +341,10 @@ Act as a Senior Developer collaborating with me on this implementation.
 
 Before implementing, check for parallel work and historical context:
 
-1. **Check parallel work**: Call `kagan_get_parallel_tickets` with your ticket_id to exclude self.
-   Review concurrent tickets to identify overlapping file modifications or shared dependencies.
+1. **Check parallel work**: Call `kagan_get_parallel_tasks` with your task_id to exclude self.
+   Review concurrent tasks to identify overlapping file modifications or shared dependencies.
 
-2. **Learn from history**: Call `kagan_get_agent_logs` on related completed tickets.
+2. **Learn from history**: Call `kagan_get_agent_logs` on related completed tasks.
    Avoid repeating failed approaches; reuse successful patterns.
 
 3. **Coordinate strategy**: If overlap exists, plan which files to modify first or wait for.
@@ -360,8 +352,8 @@ Before implementing, check for parallel work and historical context:
 ## Setup Verification
 
 Please confirm you have access to the Kagan MCP tools by:
-1. Calling `kagan_get_context` with ticket_id: `{task.id}`
-2. Calling `kagan_get_parallel_tickets` to check for concurrent work
+1. Calling `kagan_get_context` with task_id: `{task.id}`
+2. Calling `kagan_get_parallel_tasks` to check for concurrent work
 
 After confirming MCP access, please:
 1. Summarize your understanding of this task (including acceptance criteria from MCP)

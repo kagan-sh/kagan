@@ -6,6 +6,7 @@ repositories should map to/from these entities.
 
 from __future__ import annotations
 
+from datetime import datetime  # noqa: TC003 - Pydantic needs runtime access
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,8 +25,6 @@ from kagan.core.models.enums import (
 )
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from kagan.config import KaganConfig
 
 
@@ -105,7 +104,7 @@ class Task(DomainModel):
         """Return human-readable priority label."""
         return self.priority.label
 
-    def get_agent_config(self, config: "KaganConfig") -> Any:
+    def get_agent_config(self, config: KaganConfig) -> Any:
         """Resolve agent config with priority order."""
         from kagan.config import get_fallback_agent_config
         from kagan.data.builtin_agents import get_builtin_agent

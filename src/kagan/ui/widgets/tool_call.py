@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from textual import containers, events, on
 from textual.content import Content
@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     ToolCallData = AcpToolCall
 else:
     ToolCallData = object
+
+ToolCallStatus = Literal["pending", "in_progress", "completed", "failed"]
 
 
 class ToolCallHeader(Static):
@@ -52,7 +54,7 @@ class ToolCall(containers.VerticalGroup):
         self._tool_call = tool_call
         self.refresh(recompose=True)
 
-    def update_status(self, status: str) -> None:
+    def update_status(self, status: ToolCallStatus) -> None:
         """Update tool call status and refresh display."""
         self._tool_call.status = status
         with suppress(NoMatches):

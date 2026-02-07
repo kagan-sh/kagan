@@ -50,13 +50,13 @@ async def _get_git_branch(repo_root: Path) -> str:
 class KaganHeader(Widget):
     """Header widget displaying app logo, title, version, and stats."""
 
-    ticket_count: reactive[int] = reactive(0)
+    task_count: reactive[int] = reactive(0)
     active_sessions: reactive[int] = reactive(0)
     git_branch: reactive[str] = reactive("")
 
-    def __init__(self, ticket_count: int = 0, **kwargs) -> None:
+    def __init__(self, task_count: int = 0, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.ticket_count = ticket_count
+        self.task_count = task_count
 
     def compose(self) -> ComposeResult:
         yield Label(KAGAN_LOGO_SMALL, classes="header-logo")
@@ -65,11 +65,11 @@ class KaganHeader(Widget):
         yield Label("", classes="header-spacer")
         yield Label("", id="header-branch", classes="header-branch")
         yield Label("", id="header-sessions", classes="header-sessions")
-        yield Label(f"Tickets: {self.ticket_count}", id="header-stats", classes="header-stats")
+        yield Label(f"Tasks: {self.task_count}", id="header-stats", classes="header-stats")
 
-    def watch_ticket_count(self, count: int) -> None:
+    def watch_task_count(self, count: int) -> None:
         if stats_label := safe_query_one(self, "#header-stats", Label):
-            stats_label.update(f"Tickets: {count}")
+            stats_label.update(f"Tasks: {count}")
 
     def watch_active_sessions(self, count: int) -> None:
         if sessions_label := safe_query_one(self, "#header-sessions", Label):
@@ -80,7 +80,7 @@ class KaganHeader(Widget):
             branch_label.update(f"⎇ {branch}" if branch else "")
 
     def update_count(self, count: int) -> None:
-        self.ticket_count = count
+        self.task_count = count
 
     def update_sessions(self, active: int) -> None:
         self.active_sessions = active

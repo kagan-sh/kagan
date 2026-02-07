@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from kagan.config import AgentConfig, KaganConfig
 
 from kagan.adapters.git.worktrees import WorktreeManager
+from kagan.paths import get_worktree_base_dir
 
 
 class MessageCapture:
@@ -131,21 +132,23 @@ class MergeScenarioBuilder:
         self.manager = WorktreeManager(repo_root=tmp_path)
         self.mock_run_git = AsyncMock()
         self.manager._run_git = self.mock_run_git
-        self.merge_path = tmp_path / ".kagan" / "merge-worktree"
+        base_dir = get_worktree_base_dir()
+        self.merge_path = base_dir / "merge-worktree"
         self.manager.ensure_merge_worktree = AsyncMock(return_value=self.merge_path)
         self.manager._reset_merge_worktree = AsyncMock(return_value=self.merge_path)
         self.manager._fast_forward_base = AsyncMock(return_value=(True, "Fast-forwarded main"))
         self.manager._merge_in_progress = AsyncMock(return_value=False)
-        self.ticket_id = ""
+        self.task_id = ""
         self.branch_name = ""
         self.commits: list[str] = []
         self.conflict_marker = ""
 
-    def with_worktree(self, ticket_id: str) -> MergeScenarioBuilder:
-        """Create worktree directory for ticket."""
-        path = self.tmp_path / ".kagan" / "worktrees" / ticket_id
+    def with_worktree(self, task_id: str) -> MergeScenarioBuilder:
+        """Create worktree directory for task."""
+        base_dir = get_worktree_base_dir()
+        path = base_dir / "worktrees" / task_id
         path.mkdir(parents=True)
-        self.ticket_id = ticket_id
+        self.task_id = task_id
         return self
 
     def with_branch(self, branch_name: str) -> MergeScenarioBuilder:

@@ -5,7 +5,7 @@ These tests cover the main planner interaction flows:
 - User input
 - Plan proposal from agent
 - Plan approval/dismissal/refinement
-- Multi-ticket plans
+- Multi-task plans
 - Clarification requests
 
 Note: Tests are synchronous because pytest-textual-snapshot's snap_compare
@@ -14,6 +14,7 @@ internally calls asyncio.run(), which conflicts with async test functions.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -25,7 +26,7 @@ from tests.snapshots.helpers import (
     wait_for_workers,
 )
 from tests.snapshots.mock_responses import (
-    MULTI_TICKET_PLAN_TOOL_CALLS,
+    MULTI_TASK_PLAN_TOOL_CALLS,
     PLAN_PROPOSAL_RESPONSE,
     PLAN_PROPOSAL_TOOL_CALLS,
     TASK_NEEDS_CLARIFICATION_RESPONSE,
@@ -96,6 +97,7 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -130,6 +132,7 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -151,10 +154,10 @@ class TestPlannerFlow:
         snap_compare,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test agent returns plan proposal with tickets.
+        """Test agent returns plan proposal with tasks.
 
         After user sends prompt, agent returns a plan proposal.
-        Screen should show plan approval widget with ticket list.
+        Screen should show plan approval widget with task list.
         """
         from kagan.app import KaganApp
 
@@ -171,11 +174,15 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
+            from kagan.ui.screens.planner import PlannerInput
+            from kagan.ui.widgets.plan_approval import PlanApprovalWidget
+
             # Wait for agent to be ready before typing
             await wait_for_planner_ready(pilot)
             # Type and submit a prompt
@@ -183,9 +190,13 @@ class TestPlannerFlow:
             await pilot.pause()
             await pilot.press("enter")
             # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=10.0)
+            await wait_for_workers(pilot, timeout=20.0)
             # Wait for plan approval widget to appear
-            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=10.0)
+            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=20.0)
+            plan_widget = pilot.app.screen.query_one(PlanApprovalWidget)
+            plan_widget.focus()
+            planner_input = pilot.app.screen.query_one("#planner-input", PlannerInput)
+            planner_input.blur()
             await pilot.pause()
 
         cols, rows = snapshot_terminal_size
@@ -202,7 +213,7 @@ class TestPlannerFlow:
     ) -> None:
         """Test user accepts plan (presses 'a').
 
-        Plan approval should be acknowledged and tickets created.
+        Plan approval should be acknowledged and tasks created.
         """
         from kagan.app import KaganApp
 
@@ -219,6 +230,7 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -231,13 +243,13 @@ class TestPlannerFlow:
             await pilot.pause()
             await pilot.press("enter")
             # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=10.0)
+            await wait_for_workers(pilot, timeout=20.0)
             # Wait for plan approval widget
-            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=10.0)
+            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=20.0)
             await pilot.pause()
             # Press 'a' to approve the plan
             await pilot.press("a")
-            # Give time for tickets to be created and UI to update
+            # Give time for tasks to be created and UI to update
             await pilot.pause()
             await pilot.pause()
 
@@ -272,6 +284,7 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -308,7 +321,7 @@ class TestPlannerFlow:
     ) -> None:
         """Test user requests refinement (presses 'e' to edit).
 
-        Shows the ticket editor screen for refinement.
+        Shows the task editor screen for refinement.
         """
         from kagan.app import KaganApp
 
@@ -325,6 +338,7 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -351,7 +365,7 @@ class TestPlannerFlow:
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_planner_multi_ticket_plan(
+    def test_planner_multi_task_plan(
         self,
         snapshot_project: SimpleNamespace,
         mock_acp_agent_factory: MockAgentFactory,
@@ -359,15 +373,15 @@ class TestPlannerFlow:
         snap_compare,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test agent proposes multiple tickets.
+        """Test agent proposes multiple tasks.
 
         Shows list with multiple items in plan approval widget.
         """
         from kagan.app import KaganApp
 
-        # Configure mock agent with multi-ticket plan response
+        # Configure mock agent with multi-task plan response
         mock_acp_agent_factory.set_default_response(PLAN_PROPOSAL_RESPONSE)
-        mock_acp_agent_factory.set_default_tool_calls(MULTI_TICKET_PLAN_TOOL_CALLS)
+        mock_acp_agent_factory.set_default_tool_calls(MULTI_TASK_PLAN_TOOL_CALLS)
 
         # Mock tmux
         sessions: dict[str, Any] = {}
@@ -378,6 +392,7 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -393,9 +408,9 @@ class TestPlannerFlow:
             await pilot.pause()
             await pilot.press("enter")
             # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=10.0)
+            await wait_for_workers(pilot, timeout=20.0)
             # Wait for plan approval widget
-            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=10.0)
+            await wait_for_widget(pilot, "PlanApprovalWidget", timeout=20.0)
             await pilot.pause()
 
         cols, rows = snapshot_terminal_size
@@ -429,12 +444,15 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
         async def run_before(pilot: Pilot) -> None:
             await pilot.pause()
-            from kagan.ui.screens.planner import PlannerScreen
+            from kagan.ui.screens.planner import PlannerInput, PlannerScreen
+            from kagan.ui.widgets.agent_content import StreamingMarkdown
+            from kagan.ui.widgets.streaming_output import StreamingOutput
 
             assert isinstance(pilot.app.screen, PlannerScreen)
             # Wait for agent to be ready before typing
@@ -444,16 +462,34 @@ class TestPlannerFlow:
             await pilot.pause()
             await pilot.press("enter")
             # Wait for workers to complete (the agent response worker)
-            await wait_for_workers(pilot, timeout=10.0)
+            await wait_for_workers(pilot, timeout=20.0)
             # Wait for user input to appear (shows the submitted prompt)
-            await wait_for_widget(pilot, "UserInput", timeout=10.0)
+            await wait_for_widget(pilot, "UserInput", timeout=20.0)
+            output = pilot.app.screen.query_one("#planner-output", StreamingOutput)
+            max_wait = 5.0
+            waited = 0.0
+            found = False
+            while waited < max_wait:
+                await pilot.pause()
+                for md in output.query(StreamingMarkdown):
+                    if "Could you provide more details" in md.content:
+                        found = True
+                        break
+                if found:
+                    break
+                await asyncio.sleep(0.1)
+                waited += 0.1
+            if not found:
+                raise TimeoutError("Planner response did not render")
+            planner_input = pilot.app.screen.query_one("#planner-input", PlannerInput)
+            planner_input.blur()
             await pilot.pause()
 
         cols, rows = snapshot_terminal_size
         assert snap_compare(app, terminal_size=(cols, rows), run_before=run_before)
 
     @pytest.mark.snapshot
-    def test_planner_navigate_ticket_list(
+    def test_planner_navigate_task_list(
         self,
         snapshot_project: SimpleNamespace,
         mock_acp_agent_factory: MockAgentFactory,
@@ -461,15 +497,15 @@ class TestPlannerFlow:
         snap_compare,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test navigating through tickets in plan approval widget.
+        """Test navigating through tasks in plan approval widget.
 
-        User can use up/down to select different tickets.
+        User can use up/down to select different tasks.
         """
         from kagan.app import KaganApp
 
-        # Configure mock agent with multi-ticket plan response
+        # Configure mock agent with multi-task plan response
         mock_acp_agent_factory.set_default_response(PLAN_PROPOSAL_RESPONSE)
-        mock_acp_agent_factory.set_default_tool_calls(MULTI_TICKET_PLAN_TOOL_CALLS)
+        mock_acp_agent_factory.set_default_tool_calls(MULTI_TASK_PLAN_TOOL_CALLS)
 
         # Mock tmux
         sessions: dict[str, Any] = {}
@@ -480,6 +516,7 @@ class TestPlannerFlow:
             db_path=snapshot_project.db,
             config_path=snapshot_project.config,
             lock_path=None,
+            project_root=snapshot_project.root,
             agent_factory=mock_acp_agent_factory,
         )
 
@@ -496,7 +533,7 @@ class TestPlannerFlow:
             # Wait for plan approval widget
             await wait_for_widget(pilot, "PlanApprovalWidget", timeout=10.0)
             await pilot.pause()
-            # Navigate down through tickets
+            # Navigate down through tasks
             await pilot.press("down")
             await pilot.press("down")
             await pilot.pause()

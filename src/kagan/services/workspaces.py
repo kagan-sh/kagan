@@ -6,11 +6,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 
 from kagan.adapters.git.worktrees import WorktreeManager
+from kagan.core.models.entities import Workspace as DomainWorkspace
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from kagan.adapters.git.worktrees import WorktreeManager
     from kagan.config import KaganConfig
     from kagan.core.models.entities import Workspace
     from kagan.services.tasks import TaskService
@@ -42,6 +42,41 @@ class WorkspaceService(Protocol):
     ) -> list[Workspace]:
         """List workspaces filtered by task or repo."""
 
+    async def create(self, task_id: TaskId, title: str, base_branch: str = "main") -> Path:
+        """Create a worktree for the task and return its path."""
+
+    async def delete(self, task_id: TaskId, *, delete_branch: bool = False) -> None:
+        """Delete a worktree and optionally its branch."""
+
+    async def get_path(self, task_id: TaskId) -> Path | None:
+        """Return the worktree path, if it exists."""
+
+    async def get_branch_name(self, task_id: TaskId) -> str | None:
+        """Return the branch name for a worktree."""
+
+    async def get_commit_log(self, task_id: TaskId, base_branch: str = "main") -> list[str]:
+        """Return commit messages for the task worktree."""
+
+    async def get_diff(self, task_id: TaskId, base_branch: str = "main") -> str:
+        """Return the diff between task branch and base."""
+
+    async def get_diff_stats(self, task_id: TaskId, base_branch: str = "main") -> str:
+        """Return diff stats for the task branch."""
+
+    async def get_files_changed(self, task_id: TaskId, base_branch: str = "main") -> list[str]:
+        """Return files changed by the task branch."""
+
+    async def get_merge_worktree_path(self, base_branch: str = "main") -> Path:
+        """Return the merge worktree path, creating it if needed."""
+
+    async def prepare_merge_conflicts(
+        self, task_id: TaskId, base_branch: str = "main"
+    ) -> tuple[bool, str]:
+        """Prepare merge worktree for manual conflict resolution."""
+
+    async def cleanup_orphans(self, valid_task_ids: set[TaskId]) -> list[str]:
+        """Remove worktrees not associated with any known task."""
+
 
 class WorkspaceServiceImpl(WorktreeManager):
     """Concrete WorkspaceService backed by git worktrees."""
@@ -57,8 +92,6 @@ class WorkspaceServiceImpl(WorktreeManager):
         *,
         repo_id: RepoId | None = None,
     ) -> Workspace:
-        from kagan.core.models.entities import Workspace as DomainWorkspace
-
         if task_id is None:
             raise ValueError("task_id is required to provision a workspace")
         task = await self._tasks.get_task(task_id)
@@ -85,8 +118,6 @@ class WorkspaceServiceImpl(WorktreeManager):
         await self.delete(workspace_id, delete_branch=True)
 
     async def get_workspace(self, workspace_id: WorkspaceId) -> Workspace | None:
-        from kagan.core.models.entities import Workspace as DomainWorkspace
-
         path = await self.get_path(workspace_id)
         if path is None:
             return None
@@ -111,8 +142,6 @@ class WorkspaceServiceImpl(WorktreeManager):
         task_id: TaskId | None = None,
         repo_id: RepoId | None = None,
     ) -> list[Workspace]:
-        from kagan.core.models.entities import Workspace as DomainWorkspace
-
         del repo_id
         workspace_ids = [task_id] if task_id else await self.list_all()
         workspaces: list[DomainWorkspace] = []

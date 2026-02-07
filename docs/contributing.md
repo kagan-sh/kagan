@@ -46,7 +46,7 @@ uv run poe check
 ```bash
 uv run pytest tests/ -v              # All tests (parallel by default)
 uv run pytest tests/e2e/test_critical_flows.py  # Single test file
-uv run pytest tests/e2e/test_critical_flows.py::TestAutoTicketLifecycle::test_auto_full_lifecycle  # Single test function
+uv run pytest tests/e2e/test_critical_flows.py::TestAutoTaskLifecycle::test_auto_full_lifecycle  # Single test function
 uv run pytest -m unit                # Unit tests only
 uv run pytest -m integration         # Integration tests
 uv run pytest -m e2e                 # End-to-end tests
