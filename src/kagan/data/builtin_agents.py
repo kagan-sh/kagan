@@ -67,6 +67,7 @@ BUILTIN_AGENTS: dict[str, BuiltinAgent] = {
             run_command={"*": "npx claude-code-acp"},
             interactive_command={"*": "claude"},
             active=True,
+            model_env_var="ANTHROPIC_MODEL",
         ),
         author="Anthropic",
         description="Agentic AI for coding tasks",
@@ -83,6 +84,7 @@ BUILTIN_AGENTS: dict[str, BuiltinAgent] = {
             run_command={"*": "opencode acp"},
             interactive_command={"*": "opencode"},
             active=True,
+            model_env_var="",  # Uses --model flag, not env var
         ),
         author="SST",
         description="Multi-model CLI with TUI",

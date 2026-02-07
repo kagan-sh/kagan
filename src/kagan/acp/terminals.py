@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from textual import log
-
 from kagan.acp.jsonrpc import RPCError
 from kagan.acp.terminal import TerminalRunner
 from kagan.ansi import clean_terminal_output
+from kagan.debug_log import log
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -92,6 +91,7 @@ class TerminalManager:
         if terminal := self._terminals.get(terminal_id):
             terminal.kill()
             terminal.release()
+            del self._terminals[terminal_id]
 
     async def wait_for_exit(self, terminal_id: str) -> tuple[int, str | None]:
         terminal = self._terminals.get(terminal_id)

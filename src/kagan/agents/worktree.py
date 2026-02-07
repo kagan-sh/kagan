@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 import unicodedata
 from pathlib import Path
+
+from kagan.debug_log import log
 
 
 class WorktreeError(Exception):
@@ -47,6 +50,24 @@ class WorktreeManager:
         """
         self.repo_root = repo_root or Path.cwd()
         self.worktrees_dir = self.repo_root / ".kagan" / "worktrees"
+        self._merge_worktree_dir = self.repo_root / ".kagan" / "merge-worktree"
+        self._merge_worktree_branch = "kagan/merge-worktree"
+        self._cache_ttl_seconds = 5.0
+        self._cache: dict[tuple[str, str, str], tuple[float, object]] = {}
+
+    def _get_cached(self, key: tuple[str, str, str]) -> object | None:
+        """Return cached value if within TTL."""
+        now = time.monotonic()
+        if key in self._cache:
+            ts, value = self._cache[key]
+            if now - ts <= self._cache_ttl_seconds:
+                return value
+            self._cache.pop(key, None)
+        return None
+
+    def _set_cached(self, key: tuple[str, str, str], value: object) -> None:
+        """Store a cached value with current timestamp."""
+        self._cache[key] = (time.monotonic(), value)
 
     async def _run_git(
         self, *args: str, check: bool = True, cwd: Path | None = None
@@ -71,6 +92,131 @@ class WorktreeManager:
     def _get_worktree_path(self, ticket_id: str) -> Path:
         """Get the worktree path for a ticket."""
         return self.worktrees_dir / ticket_id
+
+    def _get_merge_worktree_path(self) -> Path:
+        """Get the merge worktree path."""
+        return self._merge_worktree_dir
+
+    async def _ref_exists(self, ref: str, cwd: Path) -> bool:
+        """Return True if the git ref exists."""
+        stdout, _ = await self._run_git(
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            ref,
+            cwd=cwd,
+            check=False,
+        )
+        return bool(stdout.strip())
+
+    async def _merge_in_progress(self, cwd: Path) -> bool:
+        """Return True if a merge is in progress in the given worktree."""
+        stdout, _ = await self._run_git(
+            "rev-parse",
+            "-q",
+            "--verify",
+            "MERGE_HEAD",
+            cwd=cwd,
+            check=False,
+        )
+        return bool(stdout.strip())
+
+    async def ensure_merge_worktree(self, base_branch: str = "main") -> Path:
+        """Ensure the merge worktree exists and return its path."""
+        merge_path = self._get_merge_worktree_path()
+        merge_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if merge_path.exists():
+            return merge_path
+
+        await self._run_git(
+            "worktree",
+            "add",
+            "-B",
+            self._merge_worktree_branch,
+            str(merge_path),
+            base_branch,
+        )
+        return merge_path
+
+    async def get_merge_worktree_path(self, base_branch: str = "main") -> Path:
+        """Return the merge worktree path, creating it if needed."""
+        return await self.ensure_merge_worktree(base_branch)
+
+    async def _reset_merge_worktree(self, base_branch: str) -> Path:
+        """Reset merge worktree to the latest base branch."""
+        merge_path = await self.ensure_merge_worktree(base_branch)
+
+        await self._run_git("fetch", "origin", base_branch, cwd=merge_path, check=False)
+
+        base_ref = base_branch
+        if await self._ref_exists(f"refs/remotes/origin/{base_branch}", cwd=merge_path):
+            base_ref = f"origin/{base_branch}"
+
+        await self._run_git("checkout", self._merge_worktree_branch, cwd=merge_path)
+        await self._run_git("reset", "--hard", base_ref, cwd=merge_path)
+        return merge_path
+
+    async def prepare_merge_conflicts(
+        self, ticket_id: str, base_branch: str = "main"
+    ) -> tuple[bool, str]:
+        """Prepare merge worktree for manual conflict resolution."""
+        branch_name = await self.get_branch_name(ticket_id)
+        if branch_name is None:
+            return False, f"Could not determine branch for ticket {ticket_id}"
+
+        merge_path = await self.ensure_merge_worktree(base_branch)
+        if await self._merge_in_progress(merge_path):
+            return True, "Merge already in progress"
+
+        try:
+            await self._reset_merge_worktree(base_branch)
+            await self._run_git(
+                "merge",
+                "--squash",
+                branch_name,
+                cwd=merge_path,
+                check=False,
+            )
+            status_out, _ = await self._run_git(
+                "status", "--porcelain", cwd=merge_path, check=False
+            )
+            if any(marker in status_out for marker in ("UU ", "AA ", "DD ")):
+                return True, "Merge conflicts prepared"
+
+            await self._run_git("merge", "--abort", cwd=merge_path, check=False)
+            return False, "No conflicts detected"
+        except WorktreeError as exc:
+            return False, f"Prepare failed: {exc}"
+
+    async def _fast_forward_base(self, base_branch: str) -> tuple[bool, str]:
+        """Fast-forward the base branch to the merge worktree head."""
+        status_out, _ = await self._run_git("status", "--porcelain", check=False)
+        if status_out.strip():
+            return False, (
+                "Cannot update base branch: repository has uncommitted changes. "
+                "Please commit or stash your changes first."
+            )
+
+        head_branch, _ = await self._run_git("rev-parse", "--abbrev-ref", "HEAD", check=False)
+        if head_branch.strip() != base_branch:
+            return (
+                False,
+                f"Cannot update base branch: checked out on '{head_branch}'. "
+                f"Switch to '{base_branch}' and retry.",
+            )
+
+        try:
+            # Fast-forward local branch
+            await self._run_git(
+                "merge",
+                "--no-ff",
+                self._merge_worktree_branch,
+            )
+        except WorktreeError as exc:
+            return False, f"Fast-forward failed: {exc}"
+
+        return True, f"Fast-forwarded {base_branch} to merge worktree"
 
     def _get_branch_name(self, ticket_id: str, title: str) -> str:
         """Generate branch name for a ticket."""
@@ -220,6 +366,11 @@ class WorktreeManager:
         Returns:
             List of commit message strings (one-line format)
         """
+        cache_key = ("commit_log", ticket_id, base_branch)
+        cached = self._get_cached(cache_key)
+        if isinstance(cached, list):
+            return cached
+
         wt_path = await self.get_path(ticket_id)
         if wt_path is None:
             return []
@@ -230,7 +381,9 @@ class WorktreeManager:
             )
             if not stdout:
                 return []
-            return [line.strip() for line in stdout.split("\n") if line.strip()]
+            commits = [line.strip() for line in stdout.split("\n") if line.strip()]
+            self._set_cached(cache_key, commits)
+            return commits
         except WorktreeError:
             return []
 
@@ -294,7 +447,10 @@ class WorktreeManager:
         return header
 
     async def get_diff(self, ticket_id: str, base_branch: str = "main") -> str:
-        """Get diff output for a ticket's worktree."""
+        """Get git diff of changes compared to base branch.
+
+        Already non-blocking via async subprocess execution.
+        """
         wt_path = await self.get_path(ticket_id)
         if wt_path is None:
             return ""
@@ -309,6 +465,11 @@ class WorktreeManager:
 
     async def get_diff_stats(self, ticket_id: str, base_branch: str = "main") -> str:
         """Get diff statistics (files changed, insertions, deletions)."""
+        cache_key = ("diff_stats", ticket_id, base_branch)
+        cached = self._get_cached(cache_key)
+        if isinstance(cached, str):
+            return cached
+
         wt_path = await self.get_path(ticket_id)
         if wt_path is None:
             return ""
@@ -317,28 +478,39 @@ class WorktreeManager:
             stdout, _ = await self._run_git(
                 "diff", "--stat", f"{base_branch}..HEAD", cwd=wt_path, check=False
             )
-            return stdout.strip()
+            stats = stdout.strip()
+            self._set_cached(cache_key, stats)
+            return stats
         except WorktreeError:
             return ""
 
-    async def merge_to_main(
-        self, ticket_id: str, base_branch: str = "main", squash: bool = True
-    ) -> tuple[bool, str]:
-        """Merge the worktree branch back to the base branch.
+    async def get_files_changed(self, ticket_id: str, base_branch: str = "main") -> list[str]:
+        """Get file list changed in a ticket compared to base branch."""
+        cache_key = ("changed_files", ticket_id, base_branch)
+        cached = self._get_cached(cache_key)
+        if isinstance(cached, list):
+            return cached
 
-        Args:
-            ticket_id: Unique ticket identifier
-            base_branch: Target branch for merge
-            squash: If True, squash all commits into one with semantic message
+        wt_path = await self.get_path(ticket_id)
+        if wt_path is None:
+            return []
+
+        try:
+            stdout, _ = await self._run_git(
+                "diff", "--name-only", f"{base_branch}..HEAD", cwd=wt_path, check=False
+            )
+            files = [line.strip() for line in stdout.split("\n") if line.strip()]
+            self._set_cached(cache_key, files)
+            return files
+        except WorktreeError:
+            return []
+
+    async def preflight_merge(self, ticket_id: str, base_branch: str = "main") -> tuple[bool, str]:
+        """Check if a merge would conflict without committing changes.
 
         Returns:
-            Tuple of (success, message)
+            Tuple of (ok, message)
         """
-        import logging
-
-        log = logging.getLogger(__name__)
-
-        # Get worktree path and branch
         wt_path = await self.get_path(ticket_id)
         if wt_path is None:
             return False, f"Worktree not found for ticket {ticket_id}"
@@ -348,78 +520,270 @@ class WorktreeManager:
             return False, f"Could not determine branch for ticket {ticket_id}"
 
         merge_started = False
+        merge_path = await self.ensure_merge_worktree(base_branch)
         try:
-            # Check for uncommitted changes in main repo before merge
-            status_out, _ = await self._run_git("status", "--porcelain", check=False)
+            if await self._merge_in_progress(merge_path):
+                return False, "Merge worktree has unresolved conflicts. Resolve before merging."
+
+            await self._reset_merge_worktree(base_branch)
+            merge_started = True
+            await self._run_git(
+                "merge",
+                "--no-commit",
+                "--no-ff",
+                branch_name,
+                cwd=merge_path,
+                check=False,
+            )
+
+            status_out, _ = await self._run_git(
+                "status", "--porcelain", cwd=merge_path, check=False
+            )
+            if any(marker in status_out for marker in ("UU ", "AA ", "DD ")):
+                await self._run_git("merge", "--abort", cwd=merge_path, check=False)
+                merge_started = False
+                return False, "Merge conflict predicted. Please resolve before merging."
+
+            await self._run_git("merge", "--abort", cwd=merge_path, check=False)
+            merge_started = False
+            return True, "Preflight clean"
+        except WorktreeError as e:
+            if merge_started:
+                await self._run_git("merge", "--abort", cwd=merge_path, check=False)
+            return False, f"Preflight failed: {e}"
+        except Exception as e:
+            if merge_started:
+                await self._run_git("merge", "--abort", cwd=merge_path, check=False)
+            return False, f"Preflight failed: {e}"
+
+    async def rebase_onto_base(
+        self, ticket_id: str, base_branch: str = "main"
+    ) -> tuple[bool, str, list[str]]:
+        """Rebase the worktree branch onto the latest base branch.
+
+        This fetches the latest base branch and rebases the worktree branch onto it.
+        Used to resolve merge conflicts by updating the branch before retry.
+
+        Args:
+            ticket_id: Unique ticket identifier
+            base_branch: Base branch to rebase onto
+
+        Returns:
+            Tuple of (success, message, conflicting_files)
+            - success: True if rebase completed without conflicts
+            - message: Description of what happened
+            - conflicting_files: List of files with conflicts (empty if success)
+        """
+        wt_path = await self.get_path(ticket_id)
+        if wt_path is None:
+            return False, f"Worktree not found for ticket {ticket_id}", []
+
+        try:
+            # Fetch latest changes from origin
+            await self._run_git("fetch", "origin", base_branch, cwd=wt_path, check=False)
+
+            # Get the current branch name
+            branch_name = await self.get_branch_name(ticket_id)
+            if branch_name is None:
+                return False, "Could not determine branch name", []
+
+            # Check for uncommitted changes before rebase
+            status_out, _ = await self._run_git("status", "--porcelain", cwd=wt_path, check=False)
             if status_out.strip():
-                return False, (
-                    "Cannot merge: main repository has uncommitted changes. "
-                    "Please commit or stash your changes first."
+                return False, "Cannot rebase: worktree has uncommitted changes", []
+
+            # Start rebase onto origin/base_branch
+            stdout, stderr = await self._run_git(
+                "rebase", f"origin/{base_branch}", cwd=wt_path, check=False
+            )
+
+            # Check if rebase succeeded or had conflicts
+            combined_output = f"{stdout}\n{stderr}".lower()
+            if "conflict" in combined_output or "could not apply" in combined_output:
+                # Get list of conflicting files
+                status_out, _ = await self._run_git(
+                    "status", "--porcelain", cwd=wt_path, check=False
+                )
+                conflicting_files = []
+                for line in status_out.split("\n"):
+                    if line.startswith("UU ") or line.startswith("AA ") or line.startswith("DD "):
+                        # Extract filename (after the status prefix)
+                        filename = line[3:].strip()
+                        conflicting_files.append(filename)
+
+                # Abort the rebase to leave worktree in clean state
+                await self._run_git("rebase", "--abort", cwd=wt_path, check=False)
+
+                log.info(f"Rebase conflict for {ticket_id}: {conflicting_files}")
+                return (
+                    False,
+                    f"Rebase conflict in {len(conflicting_files)} file(s)",
+                    conflicting_files,
                 )
 
-            # Get commit log for semantic message
+            log.info(f"Successfully rebased {ticket_id} onto {base_branch}")
+            return True, f"Successfully rebased onto {base_branch}", []
+
+        except WorktreeError as e:
+            # Abort any in-progress rebase
+            await self._run_git("rebase", "--abort", cwd=wt_path, check=False)
+            return False, f"Rebase failed: {e}", []
+        except Exception as e:
+            # Abort any in-progress rebase
+            await self._run_git("rebase", "--abort", cwd=wt_path, check=False)
+            return False, f"Unexpected error during rebase: {e}", []
+
+    async def get_files_changed_on_base(
+        self, ticket_id: str, base_branch: str = "main"
+    ) -> list[str]:
+        """Get list of files changed on the base branch since our branch diverged.
+
+        Useful for understanding what might cause merge conflicts.
+
+        Args:
+            ticket_id: Unique ticket identifier
+            base_branch: Base branch to compare against
+
+        Returns:
+            List of files changed on base branch since divergence
+        """
+        wt_path = await self.get_path(ticket_id)
+        if wt_path is None:
+            return []
+
+        try:
+            # Find the merge base (where we diverged from base)
+            merge_base_out, _ = await self._run_git(
+                "merge-base", "HEAD", f"origin/{base_branch}", cwd=wt_path, check=False
+            )
+            if not merge_base_out.strip():
+                return []
+
+            merge_base = merge_base_out.strip()
+
+            # Get files changed on base branch since merge base
+            diff_out, _ = await self._run_git(
+                "diff", "--name-only", merge_base, f"origin/{base_branch}", cwd=wt_path, check=False
+            )
+            if not diff_out.strip():
+                return []
+
+            return [f.strip() for f in diff_out.split("\n") if f.strip()]
+        except WorktreeError:
+            return []
+
+    async def cleanup_orphans(self, valid_ticket_ids: set[str]) -> list[str]:
+        """Remove worktrees not associated with any known ticket.
+
+        Args:
+            valid_ticket_ids: Set of ticket IDs that exist in database.
+
+        Returns:
+            List of orphan ticket IDs that were cleaned up.
+        """
+        cleaned = []
+        for ticket_id in await self.list_all():
+            if ticket_id not in valid_ticket_ids:
+                await self.delete(ticket_id, delete_branch=True)
+                cleaned.append(ticket_id)
+        return cleaned
+
+    async def merge_to_main(
+        self,
+        ticket_id: str,
+        base_branch: str = "main",
+        squash: bool = True,
+        allow_conflicts: bool = True,
+    ) -> tuple[bool, str]:
+        """Merge the worktree branch via the merge worktree.
+
+        Args:
+            ticket_id: Unique ticket identifier
+            base_branch: Target branch for merge
+            squash: If True, squash all commits into one with semantic message
+            allow_conflicts: If True, leave conflicts in merge worktree for manual resolution
+
+        Returns:
+            Tuple of (success, message)
+        """
+        wt_path = await self.get_path(ticket_id)
+        if wt_path is None:
+            return False, f"Worktree not found for ticket {ticket_id}"
+
+        branch_name = await self.get_branch_name(ticket_id)
+        if branch_name is None:
+            return False, f"Could not determine branch for ticket {ticket_id}"
+
+        merge_path = await self.ensure_merge_worktree(base_branch)
+
+        try:
+            if await self._merge_in_progress(merge_path):
+                if not allow_conflicts:
+                    return False, "Merge worktree has unresolved conflicts. Resolve before merging."
+
+                status_out, _ = await self._run_git(
+                    "status", "--porcelain", cwd=merge_path, check=False
+                )
+                if any(marker in status_out for marker in ("UU ", "AA ", "DD ")):
+                    return False, "Merge conflicts still unresolved. Finish resolution first."
+
+                commits = await self.get_commit_log(ticket_id, base_branch)
+                if commits:
+                    title = self._format_title_from_branch(branch_name)
+                    staged, _ = await self._run_git(
+                        "diff", "--cached", "--name-only", cwd=merge_path, check=False
+                    )
+                    if staged.strip():
+                        commit_msg = await self.generate_semantic_commit(ticket_id, title, commits)
+                        await self._run_git("commit", "-m", commit_msg, cwd=merge_path)
+
+                return await self._fast_forward_base(base_branch)
+
+            await self._reset_merge_worktree(base_branch)
+
             commits = await self.get_commit_log(ticket_id, base_branch)
             if not commits:
                 return False, f"No commits to merge for ticket {ticket_id}"
 
-            # Read ticket title from branch name slug (fallback)
-            title = branch_name.split("/", 1)[-1]  # Remove kagan/ prefix
-            if "-" in title:
-                # Extract title part after ticket ID
-                parts = title.split("-", 1)
-                if len(parts) > 1:
-                    title = parts[1].replace("-", " ").title()
+            title = self._format_title_from_branch(branch_name)
 
-            # Checkout base branch in main repo
-            await self._run_git("checkout", base_branch)
-
-            # Merge the worktree branch
             if squash:
-                merge_started = True
-                await self._run_git("merge", "--squash", branch_name, check=False)
-                # Check for merge conflicts
-                status_out, _ = await self._run_git("status", "--porcelain", check=False)
-                if "UU " in status_out or "AA " in status_out or "DD " in status_out:
-                    # Abort the merge
-                    await self._run_git("merge", "--abort", check=False)
-                    merge_started = False
-                    return False, "Merge conflict detected. Please resolve manually."
+                await self._run_git("merge", "--squash", branch_name, cwd=merge_path, check=False)
+                status_out, _ = await self._run_git(
+                    "status", "--porcelain", cwd=merge_path, check=False
+                )
+                if any(marker in status_out for marker in ("UU ", "AA ", "DD ")):
+                    if not allow_conflicts:
+                        await self._run_git("merge", "--abort", cwd=merge_path, check=False)
+                    return False, "Merge conflict detected. Resolve in merge worktree."
 
-                # Generate semantic commit message
                 commit_msg = await self.generate_semantic_commit(ticket_id, title, commits)
-
-                # Commit the squashed changes
-                await self._run_git("commit", "-m", commit_msg)
-                merge_started = False  # Commit completed successfully
+                await self._run_git("commit", "-m", commit_msg, cwd=merge_path)
             else:
-                # Regular merge
-                merge_started = True
                 stdout, stderr = await self._run_git(
-                    "merge", branch_name, "-m", f"Merge branch '{branch_name}'", check=False
+                    "merge",
+                    branch_name,
+                    "-m",
+                    f"Merge branch '{branch_name}'",
+                    cwd=merge_path,
+                    check=False,
                 )
                 if "CONFLICT" in stderr or "CONFLICT" in stdout:
-                    await self._run_git("merge", "--abort", check=False)
-                    merge_started = False
-                    return False, "Merge conflict detected. Please resolve manually."
-                merge_started = False  # Merge completed successfully
+                    if not allow_conflicts:
+                        await self._run_git("merge", "--abort", cwd=merge_path, check=False)
+                    return False, "Merge conflict detected. Resolve in merge worktree."
 
-            return True, f"Successfully merged {branch_name} to {base_branch}"
-
+            return await self._fast_forward_base(base_branch)
         except WorktreeError as e:
-            # Ensure clean state on failure
-            if merge_started:
-                try:
-                    await self._run_git("merge", "--abort", check=False)
-                    log.debug(f"Aborted merge for ticket {ticket_id} after WorktreeError")
-                except Exception:
-                    pass  # Best effort cleanup
             return False, f"Merge failed: {e}"
         except Exception as e:
-            # Ensure clean state on failure
-            if merge_started:
-                try:
-                    await self._run_git("merge", "--abort", check=False)
-                    log.debug(f"Aborted merge for ticket {ticket_id} after unexpected error")
-                except Exception:
-                    pass  # Best effort cleanup
             return False, f"Unexpected error during merge: {e}"
+
+    def _format_title_from_branch(self, branch_name: str) -> str:
+        """Derive a readable title from a branch name."""
+        title = branch_name.split("/", 1)[-1]
+        if "-" in title:
+            parts = title.split("-", 1)
+            if len(parts) > 1:
+                title = parts[1].replace("-", " ").title()
+        return title

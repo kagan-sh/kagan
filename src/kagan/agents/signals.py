@@ -39,7 +39,8 @@ _PATTERNS = [
     (Signal.BLOCKED, re.compile(r'<blocked\s+reason="([^"]+)"\s*/?>', re.IGNORECASE)),
     (Signal.CONTINUE, re.compile(r"<continue\s*/?>", re.IGNORECASE)),
     # APPROVE captures summary (required), approach and key_files (optional)
-    (Signal.APPROVE, re.compile(r"<approve\s+[^>]*/?>")),
+    # Use \s* to allow <approve/> without attributes (edge case)
+    (Signal.APPROVE, re.compile(r"<approve\s*[^>]*/?>", re.IGNORECASE)),
     (Signal.REJECT, re.compile(r'<reject\s+reason="([^"]+)"\s*/?>', re.IGNORECASE)),
 ]
 

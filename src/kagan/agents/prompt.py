@@ -18,6 +18,8 @@ def build_prompt(
     max_iterations: int,
     scratchpad: str,
     hat: Any | None = None,
+    user_name: str = "Developer",
+    user_email: str = "developer@localhost",
 ) -> str:
     """Build the prompt for an agent iteration.
 
@@ -27,6 +29,8 @@ def build_prompt(
         max_iterations: Maximum allowed iterations.
         scratchpad: Previous progress notes from prior iterations.
         hat: Optional hat configuration for role-specific instructions.
+        user_name: Git user name for Co-authored-by attribution.
+        user_email: Git user email for Co-authored-by attribution.
 
     Returns:
         The formatted prompt string for the agent.
@@ -50,10 +54,13 @@ def build_prompt(
     full_description = full_description + criteria_section
 
     return ITERATION_PROMPT.format(
+        ticket_id=ticket.id,
         iteration=iteration,
         max_iterations=max_iterations,
         title=ticket.title,
         description=full_description,
         scratchpad=scratchpad or "(No previous progress - this is iteration 1)",
         hat_instructions=hat_section,
+        user_name=user_name,
+        user_email=user_email,
     )

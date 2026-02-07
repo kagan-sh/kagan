@@ -7,25 +7,28 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import weakref
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
-from textual import log
-
-from kagan.acp.agent import Agent
-from kagan.agents.config_resolver import resolve_agent_config
+from kagan.agents.agent_factory import AgentFactory, create_agent
+from kagan.agents.output import build_merge_conflict_note, serialize_agent_output
 from kagan.agents.prompt import build_prompt
 from kagan.agents.prompt_loader import get_review_prompt
 from kagan.agents.signals import Signal, SignalResult, parse_signal
 from kagan.constants import MODAL_TITLE_MAX_LENGTH
-from kagan.database.models import TicketStatus, TicketType
+from kagan.database.models import MergeReadiness, TicketStatus, TicketType
+from kagan.debug_log import log
+from kagan.git_utils import get_git_user_identity
 from kagan.limits import AGENT_TIMEOUT_LONG
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from kagan.acp.agent import Agent
     from kagan.agents.worktree import WorktreeManager
+    from kagan.app import KaganApp
     from kagan.config import AgentConfig, KaganConfig
     from kagan.database.manager import StateManager
     from kagan.database.models import Ticket
@@ -39,6 +42,8 @@ class RunningTicketState:
     task: asyncio.Task[None] | None = None
     agent: Agent | None = None
     iteration: int = 0
+    review_agent: Agent | None = None  # Review agent for watching
+    is_reviewing: bool = False  # Currently in review phase
 
 
 class Scheduler:
@@ -58,6 +63,8 @@ class Scheduler:
         on_ticket_changed: Callable[[], None] | None = None,
         on_iteration_changed: Callable[[str, int], None] | None = None,
         on_error: Callable[[str, str], None] | None = None,
+        app: KaganApp | None = None,
+        agent_factory: AgentFactory = create_agent,
     ) -> None:
         self._state = state_manager
         self._worktrees = worktree_manager
@@ -67,6 +74,8 @@ class Scheduler:
         self._on_ticket_changed = on_ticket_changed
         self._on_iteration_changed = on_iteration_changed
         self._on_error = on_error
+        self._app = app
+        self._agent_factory = agent_factory
 
         # Event queue for reactive processing
         self._event_queue: asyncio.Queue[tuple[str, TicketStatus | None, TicketStatus | None]] = (
@@ -74,6 +83,15 @@ class Scheduler:
         )
         self._worker_task: asyncio.Task[None] | None = None
         self._started = False
+
+        # Lock to serialize merge operations (prevents race conditions when
+        # multiple tickets complete around the same time)
+        self._merge_lock = asyncio.Lock()
+
+    @property
+    def merge_lock(self) -> asyncio.Lock:
+        """Lock for serializing merge operations."""
+        return self._merge_lock
 
     def start(self) -> None:
         """Start the scheduler's event processing loop."""
@@ -150,8 +168,9 @@ class Scheduler:
         # React to status
         if new_status == TicketStatus.IN_PROGRESS:
             await self._ensure_running(ticket)
-        elif old_status == TicketStatus.IN_PROGRESS:
-            # Moved OUT of IN_PROGRESS - stop if running
+        elif old_status == TicketStatus.IN_PROGRESS and new_status != TicketStatus.REVIEW:
+            # Moved OUT of IN_PROGRESS to non-REVIEW status - stop if running
+            # Don't stop for REVIEW transitions as that's part of normal completion flow
             await self._stop_if_running(ticket_id)
 
     async def _ensure_running(self, ticket: Ticket) -> None:
@@ -162,11 +181,10 @@ class Scheduler:
 
         max_agents = self._config.general.max_concurrent_agents
         if len(self._running) >= max_agents:
-            log.info(f"At capacity ({max_agents}), queueing {ticket.id} for retry")
-            # Re-queue for later attempt
-            await asyncio.sleep(1)
-            await self._event_queue.put((ticket.id, None, TicketStatus.IN_PROGRESS))
-            return
+            log.debug(
+                f"At capacity ({max_agents}), ticket {ticket.id[:8]} will start when capacity frees"
+            )
+            return  # Don't re-queue - will be checked when capacity frees
 
         await self._spawn(ticket)
 
@@ -174,6 +192,20 @@ class Scheduler:
         """Spawn an agent for a ticket. Called only from worker loop."""
         title = ticket.title[:MODAL_TITLE_MAX_LENGTH]
         log.info(f"Spawning agent for AUTO ticket {ticket.id}: {title}")
+
+        # Reset review state from previous attempts
+        await self._state.update_ticket(
+            ticket.id,
+            checks_passed=None,
+            review_summary=None,
+            merge_failed=False,
+            merge_error=None,
+            last_error=None,
+            block_reason=None,
+        )
+
+        # Clear previous agent logs for fresh retry
+        await self._state.clear_agent_logs(ticket.id)
 
         # Add to _running BEFORE creating task to avoid race condition
         # where task checks _running before we've added the entry
@@ -183,13 +215,7 @@ class Scheduler:
         task = asyncio.create_task(self._run_ticket_loop(ticket))
         state.task = task
 
-        def on_done(_: asyncio.Task[None]) -> None:
-            # Cleanup when task completes - safe because worker loop is separate
-            self._running.pop(ticket.id, None)
-            if self._on_iteration_changed:
-                self._on_iteration_changed(ticket.id, 0)
-
-        task.add_done_callback(on_done)
+        task.add_done_callback(self._make_done_callback(ticket.id))
 
     async def _stop_if_running(self, ticket_id: str) -> None:
         """Stop agent if running. Called only from worker loop."""
@@ -212,6 +238,44 @@ class Scheduler:
         if self._on_iteration_changed:
             self._on_iteration_changed(ticket_id, 0)
 
+        # After freeing capacity, check for waiting IN_PROGRESS AUTO tickets
+        asyncio.create_task(self._check_waiting_tickets())
+
+    async def _check_waiting_tickets(self) -> None:
+        """Check if any IN_PROGRESS AUTO tickets are waiting to start."""
+        max_agents = self._config.general.max_concurrent_agents
+        if len(self._running) >= max_agents:
+            return
+
+        # Get all tickets
+        tickets = await self._state.get_all_tickets()
+        for ticket in tickets:
+            if (
+                ticket.status == TicketStatus.IN_PROGRESS
+                and ticket.ticket_type == TicketType.AUTO
+                and ticket.id not in self._running
+            ):
+                # Trigger check for this ticket
+                await self._event_queue.put((ticket.id, None, TicketStatus.IN_PROGRESS))
+                return  # Only queue one at a time
+
+    def _handle_task_done(self, ticket_id: str, task: asyncio.Task[None]) -> None:
+        """Handle agent task completion."""
+        self._running.pop(ticket_id, None)
+        if self._on_iteration_changed:
+            self._on_iteration_changed(ticket_id, 0)
+
+    def _make_done_callback(self, ticket_id: str) -> Callable[[asyncio.Task[None]], None]:
+        """Create task done callback with weak self reference."""
+        weak_self = weakref.ref(self)
+
+        def on_done(task: asyncio.Task[None]) -> None:
+            scheduler = weak_self()
+            if scheduler is not None:
+                scheduler._handle_task_done(ticket_id, task)
+
+        return on_done
+
     # --- Public API (thread-safe via queue) ---
 
     @property
@@ -224,9 +288,16 @@ class Scheduler:
         return ticket_id in self._running
 
     def get_running_agent(self, ticket_id: str) -> Agent | None:
-        """Get the running agent for a ticket (for watch functionality)."""
-        state = self._running.get(ticket_id)
-        return state.agent if state else None
+        """Get the running agent for a ticket (for watch functionality).
+
+        Returns None if the ticket is not running (not in _running).
+        May also return None during brief initialization window when ticket
+        is in _running but agent hasn't been created yet.
+        """
+        if ticket_id not in self._running:
+            return None
+        state = self._running[ticket_id]
+        return state.agent
 
     def get_iteration_count(self, ticket_id: str) -> int:
         """Get current iteration count for a ticket."""
@@ -248,6 +319,16 @@ class Scheduler:
                 self._on_iteration_changed(ticket_id, 0)
         else:
             log.debug(f"Cannot reset iterations for {ticket_id}: not running")
+
+    def is_reviewing(self, ticket_id: str) -> bool:
+        """Check if ticket is currently in review phase."""
+        state = self._running.get(ticket_id)
+        return state.is_reviewing if state else False
+
+    def get_review_agent(self, ticket_id: str) -> Agent | None:
+        """Get the running review agent for a ticket (for watch functionality)."""
+        state = self._running.get(ticket_id)
+        return state.review_agent if state else None
 
     async def stop_ticket(self, ticket_id: str) -> bool:
         """Request to stop a ticket. Returns True if was running."""
@@ -303,6 +384,8 @@ class Scheduler:
         """Notify that an error occurred for a ticket."""
         if self._on_error:
             self._on_error(ticket_id, message)
+        # Persist error to database
+        _ = asyncio.create_task(self._state.update_ticket(ticket_id, last_error=message[:500]))
 
     async def _run_ticket_loop(self, ticket: Ticket) -> None:
         """Run the iterative loop for a ticket until completion."""
@@ -319,31 +402,47 @@ class Scheduler:
                 )
             log.info(f"Worktree path: {wt_path}")
 
+            # Get git user identity for Co-authored-by attribution
+            user_name, user_email = await get_git_user_identity()
+            log.debug(f"Git user identity: {user_name} <{user_email}>")
+
             # Get agent config
             agent_config = self._get_agent_config(ticket)
             log.debug(f"Agent config: {agent_config.name}")
             max_iterations = self._config.general.max_iterations
             log.info(f"Starting iterations for {ticket.id}, max={max_iterations}")
 
+            agent: Agent | None = None
+
             for iteration in range(1, max_iterations + 1):
-                # Check if we're still supposed to be running
-                if ticket.id not in self._running:
-                    log.info(f"Ticket {ticket.id} stopped, exiting loop")
-                    return
-
-                state = self._running[ticket.id]
-                state.iteration = iteration
-
-                # Increment lifetime total_iterations in database (the "odometer")
+                # Increment lifetime total_iterations in database
                 await self._state.increment_total_iterations(ticket.id)
 
+                # Update iteration count in running state
+                state = self._running.get(ticket.id)
+                if state:
+                    state.iteration = iteration
                 if self._on_iteration_changed:
                     self._on_iteration_changed(ticket.id, iteration)
                 log.debug(f"Ticket {ticket.id} iteration {iteration}/{max_iterations}")
 
-                signal = await self._run_iteration(
-                    ticket, wt_path, agent_config, iteration, max_iterations
+                signal, agent = await self._run_iteration(
+                    ticket,
+                    wt_path,
+                    agent_config,
+                    iteration,
+                    max_iterations,
+                    agent=agent,
+                    user_name=user_name,
+                    user_email=user_email,
                 )
+
+                # Update agent in running state
+                if agent is not None:
+                    state = self._running.get(ticket.id)
+                    if state:
+                        state.agent = agent
+
                 log.debug(f"Ticket {ticket.id} iteration {iteration} signal: {signal}")
 
                 if signal.signal == Signal.COMPLETE:
@@ -377,103 +476,203 @@ class Scheduler:
             log.info(f"Ticket loop ended for {ticket.id}")
 
     def _get_agent_config(self, ticket: Ticket) -> AgentConfig:
-        """Get agent config for a ticket using unified resolver."""
-        return resolve_agent_config(ticket, self._config)
+        """Get agent config for a ticket."""
+        return ticket.get_agent_config(self._config)
 
-    async def _run_iteration(
-        self,
-        ticket: Ticket,
-        wt_path: Path,
-        agent_config: AgentConfig,
-        iteration: int,
-        max_iterations: int,
-    ) -> SignalResult:
-        """Run a single iteration for a ticket."""
-        # Get or create agent
-        state = self._running.get(ticket.id)
-        agent = state.agent if state else None
+    def _notify_user(
+        self, message: str, title: str, severity: Literal["information", "warning", "error"]
+    ) -> None:
+        """Send a notification to the user via the app if available.
 
-        if agent is None:
-            agent = Agent(wt_path, agent_config)
-            agent.set_auto_approve(self._config.general.auto_approve)
-            agent.start()
-            if state:
-                state.agent = agent
+        Args:
+            message: The notification message.
+            title: The notification title.
+            severity: The severity level (information, warning, error).
+        """
+        if self._app is not None:
+            self._app.notify(message, title=title, severity=severity)
 
-            try:
-                await agent.wait_ready(timeout=AGENT_TIMEOUT_LONG)
-            except TimeoutError:
-                log.error(f"Agent timeout for ticket {ticket.id}")
-                return parse_signal('<blocked reason="Agent failed to start"/>')
-        else:
-            # Re-sync auto_approve from config in case it changed
-            agent.set_auto_approve(self._config.general.auto_approve)
+    def _apply_model_override(self, agent: Agent, agent_config: AgentConfig, context: str) -> None:
+        """Apply model override to agent if configured.
 
-        # Build prompt with scratchpad context
-        scratchpad = await self._state.get_scratchpad(ticket.id)
-        prompt = build_prompt(
-            ticket=ticket,
-            iteration=iteration,
-            max_iterations=max_iterations,
-            scratchpad=scratchpad,
+        Args:
+            agent: The agent to configure.
+            agent_config: The agent configuration.
+            context: Context string for logging (e.g., "ticket ABC-123" or "review").
+        """
+        # Inline model resolution
+        model = None
+        if "claude" in agent_config.identity.lower():
+            model = self._config.general.default_model_claude
+        elif "opencode" in agent_config.identity.lower():
+            model = self._config.general.default_model_opencode
+
+        if model:
+            agent.set_model_override(model)
+            log.info(f"Applied model override for {context}: {model}")
+
+    async def _auto_merge(self, ticket: Ticket) -> None:
+        """Auto-merge ticket to main and move to DONE.
+
+        Only called when auto_merge config is enabled.
+        If merge fails due to conflict and auto_retry_on_merge_conflict is also enabled,
+        attempts to rebase the branch and retry the ticket from IN_PROGRESS.
+
+        Uses a lock to serialize merge operations, preventing race conditions when
+        multiple tickets complete around the same time.
+        """
+        async with self._merge_lock:
+            log.info(f"Acquired merge lock for ticket {ticket.id}")
+            base = self._config.general.default_base_branch
+            success, message = await self._worktrees.merge_to_main(  # type: ignore[misc]
+                ticket.id,
+                base_branch=base,
+                allow_conflicts=False,
+            )
+
+            if success:
+                await self._worktrees.delete(ticket.id, delete_branch=True)
+                if self._sessions is not None:
+                    await self._sessions.kill_session(ticket.id)
+                await self._update_ticket_status(ticket.id, TicketStatus.DONE)
+                log.info(f"Auto-merged ticket {ticket.id}: {ticket.title}")
+                await self._state.append_ticket_event(ticket.id, "merge", f"Auto-merged to {base}")
+            else:
+                # Check if this is a merge conflict and auto-retry is enabled
+                is_conflict = "conflict" in message.lower()
+                should_retry = is_conflict and self._config.general.auto_retry_on_merge_conflict
+
+                if should_retry:
+                    log.info(f"Merge conflict for {ticket.id}, attempting rebase and retry")
+                    await self._state.append_ticket_event(
+                        ticket.id, "merge", f"Auto-merge conflict: {message}"
+                    )
+                    await self._handle_merge_conflict_retry(ticket, base, message)
+                else:
+                    # Standard failure handling - stay in REVIEW with error
+                    log.warning(f"Auto-merge failed for {ticket.id}: {message}")
+                    await self._state.update_ticket(
+                        ticket.id,
+                        merge_failed=True,
+                        merge_error=message[:500] if message else "Unknown error",
+                        merge_readiness=MergeReadiness.BLOCKED,
+                    )
+                    await self._state.append_ticket_event(
+                        ticket.id, "merge", f"Auto-merge failed: {message}"
+                    )
+                    self._notify_user(
+                        f"⚠ Merge failed: {message[:50]}",
+                        title="Merge Error",
+                        severity="error",
+                    )
+
+            self._notify_ticket_changed()
+            log.info(f"Released merge lock for ticket {ticket.id}")
+
+    async def _handle_merge_conflict_retry(
+        self, ticket: Ticket, base_branch: str, original_error: str
+    ) -> None:
+        """Handle merge conflict by rebasing and sending ticket back to IN_PROGRESS.
+
+        This gives the agent a chance to resolve conflicts after rebasing onto
+        the latest base branch.
+        """
+        wt_path = await self._worktrees.get_path(ticket.id)
+        if wt_path is None:
+            log.error(f"Cannot retry {ticket.id}: worktree not found")
+            await self._state.update_ticket(
+                ticket.id,
+                merge_failed=True,
+                merge_error="Worktree not found for conflict retry",
+            )
+            return
+
+        # Get info about what changed on base branch (for context)
+        files_on_base = await self._worktrees.get_files_changed_on_base(ticket.id, base_branch)
+
+        # Attempt to rebase onto latest base branch
+        rebase_success, rebase_msg, conflict_files = await self._worktrees.rebase_onto_base(
+            ticket.id, base_branch
         )
 
-        # Send prompt and get response
-        log.info(f"Sending prompt to agent for ticket {ticket.id}, iteration {iteration}")
-        try:
-            await agent.send_prompt(prompt)
-        except Exception as e:
-            log.error(f"Agent prompt failed for {ticket.id}: {e}")
-            return parse_signal(f'<blocked reason="Agent error: {e}"/>')
+        if not rebase_success and conflict_files:
+            # Rebase had conflicts - this is expected, the agent needs to fix them
+            # The rebase was aborted, so we'll let the agent handle it manually
+            log.info(f"Rebase conflict for {ticket.id}, agent will resolve: {conflict_files}")
 
-        # Get response and parse signal
-        response = agent.get_response_text()
-        signal_result = parse_signal(response)
+        # Build detailed context for the scratchpad
+        scratchpad = await self._state.get_scratchpad(ticket.id)
+        conflict_note = build_merge_conflict_note(
+            original_error=original_error,
+            rebase_success=rebase_success,
+            rebase_msg=rebase_msg,
+            conflict_files=conflict_files,
+            files_on_base=files_on_base,
+            base_branch=base_branch,
+        )
+        await self._state.update_scratchpad(ticket.id, scratchpad + conflict_note)
 
-        # Update scratchpad with progress
-        progress_note = f"\n\n--- Iteration {iteration} ---\n{response[-2000:]}"
-        await self._state.update_scratchpad(ticket.id, scratchpad + progress_note)
-
-        return signal_result
-
-    async def _handle_complete(self, ticket: Ticket) -> None:
-        """Handle ticket completion - run review, optionally auto-merge."""
-        wt_path = await self._worktrees.get_path(ticket.id)
-        checks_passed = False
-        review_summary = ""
-
-        if wt_path is not None:
-            checks_passed, review_summary = await self._run_review(ticket, wt_path)
-            status = "approved" if checks_passed else "rejected"
-            log.info(f"Ticket {ticket.id} review: {status}")
-
-        # Update ticket with review results and move to REVIEW
+        # Clear the review state since we're retrying
         await self._state.update_ticket(
             ticket.id,
-            status=TicketStatus.REVIEW,
-            checks_passed=checks_passed,
-            review_summary=review_summary,
+            status=TicketStatus.IN_PROGRESS,
+            checks_passed=None,
+            review_summary=None,
+            merge_failed=False,
+            merge_error=None,
+            merge_readiness=MergeReadiness.RISK,
         )
-        self._notify_ticket_changed()
+        await self._state.append_ticket_event(
+            ticket.id, "merge", "Merge conflict retry: moved back to IN_PROGRESS"
+        )
 
-        # Auto-merge if enabled and review passed
-        if self._config.general.auto_merge and checks_passed:
-            log.info(f"Auto-merging ticket {ticket.id}")
-            await self._auto_merge(ticket)
+        # Notify user about the retry
+        self._notify_user(
+            f"🔄 Merge conflict - retrying: {ticket.title[:30]}",
+            title="Auto-Retry",
+            severity="warning",
+        )
 
-    async def _run_review(self, ticket: Ticket, wt_path: Path) -> tuple[bool, str]:
-        """Run agent-based review and return (passed, summary)."""
+        log.info(f"Ticket {ticket.id} sent back to IN_PROGRESS for merge conflict resolution")
+
+        # Queue the ticket for processing (it's now IN_PROGRESS again)
+        await self._event_queue.put((ticket.id, TicketStatus.REVIEW, TicketStatus.IN_PROGRESS))
+
+    async def _update_ticket_status(self, ticket_id: str, status: TicketStatus) -> None:
+        """Update ticket status."""
+        await self._state.update_ticket(ticket_id, status=status)
+
+    # --- Methods merged from TicketRunner ---
+
+    async def run_review(self, ticket: Ticket, wt_path: Path) -> tuple[bool, str]:
+        """Run agent-based review and return (passed, summary).
+
+        Args:
+            ticket: The ticket to review.
+            wt_path: Path to the worktree.
+
+        Returns:
+            Tuple of (passed, summary).
+        """
         agent_config = self._get_agent_config(ticket)
         prompt = await self._build_review_prompt(ticket)
 
-        agent = Agent(wt_path, agent_config, read_only=True)
+        agent = self._agent_factory(wt_path, agent_config, read_only=True)
         agent.set_auto_approve(True)
+
+        # Apply model override for review
+        self._apply_model_override(agent, agent_config, f"review of ticket {ticket.id}")
+
         agent.start()
 
         try:
             await agent.wait_ready(timeout=AGENT_TIMEOUT_LONG)
             await agent.send_prompt(prompt)
             response = agent.get_response_text()
+
+            # Persist review logs
+            serialized_output = serialize_agent_output(agent)
+            await self._state.append_agent_log(ticket.id, "review", 1, serialized_output)
 
             signal = parse_signal(response)
             if signal.signal == Signal.APPROVE:
@@ -491,35 +690,131 @@ class Scheduler:
         finally:
             await agent.stop()
 
-    async def _build_review_prompt(self, ticket: Ticket) -> str:
-        """Build review prompt from template with commits and diff."""
-        base = self._config.general.default_base_branch
-        commits = await self._worktrees.get_commit_log(ticket.id, base)
-        diff_summary = await self._worktrees.get_diff_stats(ticket.id, base)
+    async def _run_iteration(
+        self,
+        ticket: Ticket,
+        wt_path: Path,
+        agent_config: AgentConfig,
+        iteration: int,
+        max_iterations: int,
+        agent: Agent | None = None,
+        user_name: str = "Developer",
+        user_email: str = "developer@localhost",
+    ) -> tuple[SignalResult, Agent | None]:
+        """Run a single iteration for a ticket.
 
-        return get_review_prompt(
-            title=ticket.title,
-            ticket_id=ticket.id,
-            description=ticket.description or "",
-            commits="\n".join(f"- {c}" for c in commits) if commits else "No commits",
-            diff_summary=diff_summary or "No changes",
+        Returns:
+            Tuple of (signal_result, agent) where agent is the created/reused agent.
+        """
+        # Get or create agent
+        if agent is None:
+            agent = self._agent_factory(wt_path, agent_config)
+            agent.set_auto_approve(self._config.general.auto_approve)
+
+            # Apply model override
+            self._apply_model_override(agent, agent_config, f"ticket {ticket.id}")
+
+            agent.start()
+
+            # Expose the agent immediately so watch mode can attach during startup.
+            state = self._running.get(ticket.id)
+            if state:
+                state.agent = agent
+
+            try:
+                await agent.wait_ready(timeout=AGENT_TIMEOUT_LONG)
+            except TimeoutError:
+                log.error(f"Agent timeout for ticket {ticket.id}")
+                return (parse_signal('<blocked reason="Agent failed to start"/>'), None)
+        else:
+            # Re-sync auto_approve from config
+            agent.set_auto_approve(self._config.general.auto_approve)
+
+        # Build prompt with scratchpad context
+        scratchpad = await self._state.get_scratchpad(ticket.id)
+        prompt = build_prompt(
+            ticket=ticket,
+            iteration=iteration,
+            max_iterations=max_iterations,
+            scratchpad=scratchpad,
+            user_name=user_name,
+            user_email=user_email,
         )
 
-    async def _auto_merge(self, ticket: Ticket) -> None:
-        """Auto-merge ticket to main and move to DONE."""
-        base = self._config.general.default_base_branch
-        success, message = await self._worktrees.merge_to_main(ticket.id, base_branch=base)
+        # Send prompt and get response
+        log.info(f"Sending prompt to agent for ticket {ticket.id}, iteration {iteration}")
+        try:
+            await agent.send_prompt(prompt)
+        except Exception as e:
+            log.error(f"Agent prompt failed for {ticket.id}: {e}")
+            return (parse_signal(f'<blocked reason="Agent error: {e}"/>'), agent)
+        finally:
+            # Clear tool calls to prevent memory accumulation
+            agent.clear_tool_calls()
 
-        if success:
-            await self._worktrees.delete(ticket.id, delete_branch=True)
-            if self._sessions is not None:
-                await self._sessions.kill_session(ticket.id)
-            await self._update_ticket_status(ticket.id, TicketStatus.DONE)
-            log.info(f"Auto-merged ticket {ticket.id}: {ticket.title}")
-        else:
-            log.warning(f"Auto-merge failed for {ticket.id}: {message}")
+        # Get response and parse signal
+        response = agent.get_response_text()
+        signal_result = parse_signal(response)
 
+        # Persist FULL agent output as JSON
+        serialized_output = serialize_agent_output(agent)
+        await self._state.append_agent_log(
+            ticket.id, "implementation", iteration, serialized_output
+        )
+
+        # Update scratchpad with progress
+        progress_note = f"\n\n--- Iteration {iteration} ---\n{response[-2000:]}"
+        await self._state.update_scratchpad(ticket.id, scratchpad + progress_note)
+
+        return (signal_result, agent)
+
+    async def _handle_complete(self, ticket: Ticket) -> None:
+        """Handle ticket completion - move to REVIEW immediately, then run review."""
+        # Move to REVIEW status IMMEDIATELY
+        await self._state.update_ticket(
+            ticket.id,
+            status=TicketStatus.REVIEW,
+            merge_failed=False,
+            merge_error=None,
+            merge_readiness=MergeReadiness.RISK,
+        )
         self._notify_ticket_changed()
+
+        wt_path = await self._worktrees.get_path(ticket.id)
+        checks_passed = False
+        review_summary = ""
+
+        if wt_path is not None:
+            checks_passed, review_summary = await self.run_review(ticket, wt_path)
+
+            status = "approved" if checks_passed else "rejected"
+            log.info(f"Ticket {ticket.id} review: {status}")
+
+            # Emit toast notification for review result
+            if checks_passed:
+                self._notify_user(
+                    f"✓ Review passed: {ticket.title[:30]}",
+                    title="Review Complete",
+                    severity="information",
+                )
+            else:
+                self._notify_user(
+                    f"✗ Review failed: {review_summary[:50]}",
+                    title="Review Complete",
+                    severity="warning",
+                )
+
+        # Update ticket with review results
+        review_updates = {
+            "checks_passed": checks_passed,
+            "review_summary": review_summary,
+        }
+        if not checks_passed:
+            review_updates["merge_readiness"] = MergeReadiness.BLOCKED
+        await self._state.update_ticket(ticket.id, **review_updates)
+        self._notify_ticket_changed()
+        review_event = "Review passed" if checks_passed else f"Review failed: {review_summary}"
+        await self._state.append_ticket_event(ticket.id, "review", review_event[:200])
 
     async def _handle_blocked(self, ticket: Ticket, reason: str) -> None:
         """Handle blocked ticket - move back to BACKLOG with reason."""
@@ -527,7 +822,9 @@ class Scheduler:
         block_note = f"\n\n--- BLOCKED ---\nReason: {reason}\n"
         await self._state.update_scratchpad(ticket.id, scratchpad + block_note)
 
-        await self._update_ticket_status(ticket.id, TicketStatus.BACKLOG)
+        await self._state.update_ticket(
+            ticket.id, status=TicketStatus.BACKLOG, block_reason=reason[:500]
+        )
         self._notify_ticket_changed()
 
     async def _handle_max_iterations(self, ticket: Ticket) -> None:
@@ -542,6 +839,16 @@ class Scheduler:
         await self._update_ticket_status(ticket.id, TicketStatus.BACKLOG)
         self._notify_ticket_changed()
 
-    async def _update_ticket_status(self, ticket_id: str, status: TicketStatus) -> None:
-        """Update ticket status."""
-        await self._state.update_ticket(ticket_id, status=status)
+    async def _build_review_prompt(self, ticket: Ticket) -> str:
+        """Build review prompt from template with commits and diff."""
+        base = self._config.general.default_base_branch
+        commits = await self._worktrees.get_commit_log(ticket.id, base)
+        diff_summary = await self._worktrees.get_diff_stats(ticket.id, base)
+
+        return get_review_prompt(
+            title=ticket.title,
+            ticket_id=ticket.id,
+            description=ticket.description or "",
+            commits="\n".join(f"- {c}" for c in commits) if commits else "No commits",
+            diff_summary=diff_summary or "No changes",
+        )

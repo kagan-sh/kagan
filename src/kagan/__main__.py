@@ -221,7 +221,12 @@ def tui(db: str, config: str, skip_preflight: bool, skip_update_check: bool) -> 
 
 
 @cli.command()
-def mcp() -> None:
+@click.option(
+    "--readonly",
+    is_flag=True,
+    help="Expose only read-only coordination tools (for ACP agents)",
+)
+def mcp(readonly: bool) -> None:
     """Run the MCP server (STDIO transport).
 
     This command is typically invoked by AI agents (Claude Code, OpenCode, etc.)
@@ -229,10 +234,13 @@ def mcp() -> None:
 
     The MCP server finds the nearest .kagan/ directory by traversing up
     from the current working directory.
+
+    Use --readonly for ACP agents to expose only coordination tools
+    (get_parallel_tickets, get_agent_logs).
     """
     from kagan.mcp.server import main as mcp_main
 
-    mcp_main()
+    mcp_main(readonly=readonly)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from kagan.constants import KAGAN_GENERATED_PATTERNS
 from kagan.database.manager import StateManager  # noqa: TC001
-from kagan.database.models import TicketStatus
+from kagan.database.models import MergeReadiness, TicketStatus
 
 
 class KaganMCPServer:
@@ -61,7 +61,11 @@ class KaganMCPServer:
             review_summary=summary,
             checks_passed=None,
             status=TicketStatus.REVIEW,
+            merge_failed=False,
+            merge_error=None,
+            merge_readiness=MergeReadiness.RISK,
         )
+        await self._state.append_ticket_event(ticket_id, "review", "Review requested")
         return {"status": "review", "message": "Ready for merge"}
 
     async def _check_uncommitted_changes(self) -> bool:
@@ -97,3 +101,58 @@ class KaganMCPServer:
                 return True  # Found a non-Kagan uncommitted change
 
         return False  # Only Kagan files are uncommitted
+
+    async def get_parallel_tickets(self, exclude_ticket_id: str | None = None) -> list[dict]:
+        """Get all IN_PROGRESS tickets for coordination awareness.
+
+        Args:
+            exclude_ticket_id: Optionally exclude a ticket (caller's own ticket).
+
+        Returns:
+            List of ticket summaries: ticket_id, title, description, scratchpad.
+        """
+        tickets = await self._state.get_tickets_by_status(TicketStatus.IN_PROGRESS)
+        result = []
+        for t in tickets:
+            if exclude_ticket_id and t.id == exclude_ticket_id:
+                continue
+            scratchpad = await self._state.get_scratchpad(t.id)
+            result.append(
+                {
+                    "ticket_id": t.id,
+                    "title": t.title,
+                    "description": t.description,
+                    "scratchpad": scratchpad,
+                }
+            )
+        return result
+
+    async def get_agent_logs(
+        self, ticket_id: str, log_type: str = "implementation", limit: int = 1
+    ) -> list[dict]:
+        """Get agent execution logs for a ticket.
+
+        Args:
+            ticket_id: The ticket to get logs for.
+            log_type: 'implementation' or 'review'.
+            limit: Max iterations to return (most recent).
+
+        Returns:
+            List of log entries with iteration, content, created_at.
+        """
+        ticket = await self._state.get_ticket(ticket_id)
+        if ticket is None:
+            raise ValueError(f"Ticket not found: {ticket_id}")
+
+        logs = await self._state.get_agent_logs(ticket_id, log_type)
+        # Get most recent N logs, then reverse for ascending order
+        logs = sorted(logs, key=lambda x: x.iteration, reverse=True)[:limit]
+        logs = list(reversed(logs))  # O(n) instead of O(n log n)
+        return [
+            {
+                "iteration": log.iteration,
+                "content": log.content,
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in logs
+        ]

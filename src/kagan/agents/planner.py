@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import re
-from typing import TYPE_CHECKING
-from xml.etree import ElementTree as ET
+import json
+from typing import TYPE_CHECKING, Any, Literal
 
-from kagan.database.models import Ticket, TicketPriority
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+
+from kagan.database.models import Ticket, TicketPriority, TicketType
 
 if TYPE_CHECKING:
     from kagan.acp import protocol
@@ -18,40 +19,46 @@ if TYPE_CHECKING:
 PLANNER_PROMPT = """\
 You are a Planning Specialist that designs well-scoped units of work as development tickets.
 
+## Core Principles
+
+- Iterative refinement: draft, check, refine.
+- Clarity & specificity: concise, unambiguous, structured output.
+- Learning by example: follow the example patterns below.
+- Structured reasoning: think step by step internally, then summarize as concise todos.
+
+## Safety & Secrets
+
+Never access or request secrets/credentials/keys (e.g., `.env`, `.env.*`, `id_rsa`,
+`*.pem`, `*.key`, `credentials.json`). If the request depends on secrets, ask for
+redacted values or suggest safe mock inputs.
+
 ## Your Role
 
-You analyze requests and create tickets in XML format. Worker agents execute tickets later.
+You analyze requests and propose tickets for workers to execute later.
 
 Your outputs are limited to:
 - Clarifying questions (when requests are ambiguous)
-- <todos> blocks showing your planning steps
-- <plan> XML blocks containing tickets for workers to execute
+- A single tool call to `propose_plan` with the tickets and todos
+- A short confirmation sentence after the tool call
 
 When a user requests "create a script" or "write code", design a ticket
 describing what a worker should build.
 
-## Output Format
+## Output Contract (Tool Call)
 
-Always output a <todos> block first, then a <plan> block:
+Always call the MCP tool `propose_plan` exactly once with structured arguments.
+After the tool call, reply with one short confirmation sentence.
 
-<todos>
-  <todo status="pending">Analyze the request scope</todo>
-  <todo status="in_progress">Break into focused tickets</todo>
-  <todo status="pending">Define acceptance criteria</todo>
-</todos>
-
-<plan>
-<ticket>
-  <title>Verb + clear objective</title>
-  <type>AUTO or PAIR</type>
-  <description>What to build and why</description>
-  <acceptance_criteria>
-    <criterion>Criterion 1</criterion>
-    <criterion>Criterion 2</criterion>
-  </acceptance_criteria>
-  <priority>medium</priority>
-</ticket>
-</plan>
+Tool arguments:
+- tickets: list of ticket objects
+  - title: string (verb + clear objective)
+  - type: "AUTO" or "PAIR"
+  - description: string (what to build and why)
+  - acceptance_criteria: list of strings (2-5 testable conditions)
+  - priority: "low" | "medium" | "high"
+- todos: list of todo objects (3-6 items)
+  - content: short summary of the planning steps
+  - status: "pending" | "in_progress" | "completed" | "failed"
 
 ## Ticket Design Guidelines
 
@@ -84,11 +91,13 @@ Always output a <todos> block first, then a <plan> block:
 
 ## Workflow
 
+Let's think step by step for complex requests.
+
 1. Analyze the request for clarity
 2. Ask 1-2 clarifying questions if the scope is ambiguous
 3. Break complex requests into 2-5 focused tickets
-4. Output <todos> showing your planning steps
-5. Output <plan> with the ticket XML
+4. Provide concise todos for the planning steps
+5. Call `propose_plan` with the tickets and todos
 
 ## Examples
 
@@ -96,243 +105,240 @@ Always output a <todos> block first, then a <plan> block:
 
 User: "Login button doesn't work on mobile"
 
-<todos>
-  <todo status="completed">Analyze the bug report scope</todo>
-  <todo status="completed">Identify this as a clear reproduction issue</todo>
-  <todo status="completed">Define testable acceptance criteria</todo>
-</todos>
+Tool call arguments:
+{
+  "tickets": [
+    {
+      "title": "Fix mobile login button tap handling",
+      "type": "AUTO",
+      "description": "Investigate touch/click handlers and CSS layering to ensure taps trigger "
+        "login on mobile.",
+      "acceptance_criteria": [
+        "Login button responds to tap on iOS Safari and Android Chrome",
+        "Login action triggers network request when button is tapped",
+        "No visual overlap blocks the button on mobile breakpoints"
+      ],
+      "priority": "high"
+    }
+  ],
+  "todos": [
+    {"content": "Analyze the bug report scope", "status": "completed"},
+    {"content": "Identify likely mobile interaction issues", "status": "completed"},
+    {"content": "Define testable acceptance criteria", "status": "completed"}
+  ]
+}
 
-<plan>
-<ticket>
-  <title>Fix login button tap handling on mobile devices</title>
-  <type>AUTO</type>
-  <description>The login button is unresponsive on mobile browsers. Users report tapping
-the button has no effect. This is likely a touch event handling issue or a CSS problem
-where another element overlays the button. Investigate and fix the interaction.</description>
-  <acceptance_criteria>
-    <criterion>Login button responds to touch events on iOS Safari and Android Chrome</criterion>
-    <criterion>Button shows visual feedback (pressed state) when tapped</criterion>
-    <criterion>Login form submits successfully after button tap on mobile</criterion>
-  </acceptance_criteria>
-  <priority>high</priority>
-</ticket>
-</plan>
+### Example 2: Feature Work
 
-### Example 2: Feature Design
+User: "Add a dark mode toggle"
 
-User: "Add user profile editing"
+Tool call arguments:
+{
+  "tickets": [
+    {
+      "title": "Add dark mode theme variables",
+      "type": "AUTO",
+      "description": "Create CSS variables for dark mode and apply to core UI components.",
+      "acceptance_criteria": [
+        "Dark mode variables exist for background, text, and accents",
+        "Core UI components use the new variables",
+        "Theme can be toggled via a single class or attribute"
+      ],
+      "priority": "medium"
+    },
+    {
+      "title": "Add UI toggle for dark mode",
+      "type": "PAIR",
+      "description": "Add a toggle in settings or header; decide placement and UX with a human "
+        "partner.",
+      "acceptance_criteria": [
+        "Toggle is visible and accessible in the UI",
+        "Toggle switches between light and dark themes",
+        "Theme preference persists across reloads"
+      ],
+      "priority": "medium"
+    }
+  ],
+  "todos": [
+    {"content": "Determine scope and key UI surfaces", "status": "completed"},
+    {"content": "Split into styling and UX tasks", "status": "completed"},
+    {"content": "Define acceptance criteria", "status": "completed"}
+  ]
+}
 
-<todos>
-  <todo status="completed">Analyze feature scope and requirements</todo>
-  <todo status="completed">Identify UX decisions requiring human input</todo>
-  <todo status="completed">Split into design phase and implementation phase</todo>
-</todos>
+### Example 3: Refactor
 
-<plan>
-<ticket>
-  <title>Design user profile editing UX and field requirements</title>
-  <type>PAIR</type>
-  <description>Define the user experience for profile editing. Need to decide which
-fields are editable (display name, avatar, bio, email, etc.), validation rules, and
-whether changes require email confirmation. This requires product decisions.</description>
-  <acceptance_criteria>
-    <criterion>List of editable profile fields is finalized</criterion>
-    <criterion>Validation rules for each field are documented</criterion>
-    <criterion>Decision made on email change confirmation flow</criterion>
-    <criterion>Wireframe or mockup of edit profile screen approved</criterion>
-  </acceptance_criteria>
-  <priority>medium</priority>
-</ticket>
-<ticket>
-  <title>Implement user profile editing based on approved design</title>
-  <type>AUTO</type>
-  <description>Build the profile editing feature according to the approved design from
-the previous ticket. Implement the edit form, validation, API endpoints, and database
-updates for user profile changes.</description>
-  <acceptance_criteria>
-    <criterion>Edit profile form renders with all approved fields</criterion>
-    <criterion>Form validates input according to documented rules</criterion>
-    <criterion>API endpoint saves profile changes to database</criterion>
-    <criterion>Success/error feedback displayed to user after save</criterion>
-  </acceptance_criteria>
-  <priority>medium</priority>
-</ticket>
-</plan>
+User: "Refactor the API client to reduce duplication"
 
-### Example 3: Refactoring
+Tool call arguments:
+{
+  "tickets": [
+    {
+      "title": "Refactor API client request helpers",
+      "type": "AUTO",
+      "description": "Consolidate duplicate request logic into shared helpers with clear "
+        "interfaces.",
+      "acceptance_criteria": [
+        "Shared helper handles auth headers and retries",
+        "Existing callers migrated to the helper",
+        "No behavior regressions in existing API calls"
+      ],
+      "priority": "low"
+    }
+  ],
+  "todos": [
+    {"content": "Identify repeated API client patterns", "status": "completed"},
+    {"content": "Design a shared helper interface", "status": "completed"},
+    {"content": "Define regression-safe acceptance criteria", "status": "completed"}
+  ]
+}
 
-User: "Clean up the database queries, they're duplicated everywhere"
+{conversation_context}## User Request
 
-<todos>
-  <todo status="completed">Analyze the refactoring scope</todo>
-  <todo status="completed">Determine this is a consolidation task with clear scope</todo>
-  <todo status="completed">Define criteria for successful code cleanup</todo>
-</todos>
+<input>
+{user_request}
+</input>
 
-<plan>
-<ticket>
-  <title>Refactor duplicated database queries into reusable repository layer</title>
-  <type>AUTO</type>
-  <description>Multiple modules contain duplicated database query logic. Consolidate
-these into a repository pattern with reusable query methods. This improves
-maintainability and reduces bugs from inconsistent query implementations.</description>
-  <acceptance_criteria>
-    <criterion>Repository classes created for each major entity</criterion>
-    <criterion>All duplicated queries replaced with calls to repository methods</criterion>
-    <criterion>Existing tests pass after refactoring</criterion>
-    <criterion>No raw SQL queries remain outside the repository layer</criterion>
-  </acceptance_criteria>
-  <priority>low</priority>
-</ticket>
-</plan>
-
-### Example 4: DevOps/Infrastructure
-
-User: "Set up CI pipeline for the project"
-
-<todos>
-  <todo status="completed">Analyze CI/CD requirements</todo>
-  <todo status="completed">Identify pipeline stages needed</todo>
-  <todo status="completed">Determine configuration decisions requiring input</todo>
-</todos>
-
-<plan>
-<ticket>
-  <title>Define CI pipeline stages and deployment strategy</title>
-  <type>PAIR</type>
-  <description>Determine the CI/CD pipeline configuration including: which CI platform
-to use (GitHub Actions, GitLab CI, etc.), pipeline stages (lint, test, build, deploy),
-environment targets (staging, production), and deployment triggers. These are
-infrastructure decisions requiring team input.</description>
-  <acceptance_criteria>
-    <criterion>CI platform selected and documented</criterion>
-    <criterion>Pipeline stages defined with clear purpose for each</criterion>
-    <criterion>Deployment environments and triggers agreed upon</criterion>
-  </acceptance_criteria>
-  <priority>medium</priority>
-</ticket>
-<ticket>
-  <title>Implement CI pipeline configuration based on approved design</title>
-  <type>AUTO</type>
-  <description>Create the CI pipeline configuration files based on the approved design.
-Set up linting, testing, building, and deployment stages. Configure environment
-variables and secrets handling.</description>
-  <acceptance_criteria>
-    <criterion>Pipeline configuration file created and committed</criterion>
-    <criterion>Lint stage runs and catches style violations</criterion>
-    <criterion>Test stage executes full test suite</criterion>
-    <criterion>Build stage produces deployable artifacts</criterion>
-    <criterion>Pipeline triggers correctly on push/PR events</criterion>
-  </acceptance_criteria>
-  <priority>medium</priority>
-</ticket>
-</plan>
-
-### Example 5: Documentation
-
-User: "The API docs are outdated, need to update them"
-
-<todos>
-  <todo status="completed">Analyze documentation update scope</todo>
-  <todo status="completed">Determine this is a clear maintenance task</todo>
-  <todo status="completed">Define criteria for complete documentation</todo>
-</todos>
-
-<plan>
-<ticket>
-  <title>Update API documentation to reflect current endpoints</title>
-  <type>AUTO</type>
-  <description>The API documentation has drifted from the actual implementation.
-Audit all API endpoints, update request/response schemas, add missing endpoints,
-and remove deprecated ones. Ensure examples are accurate and runnable.</description>
-  <acceptance_criteria>
-    <criterion>All current API endpoints are documented</criterion>
-    <criterion>Request and response schemas match actual API behavior</criterion>
-    <criterion>Example requests return expected responses when executed</criterion>
-    <criterion>Deprecated endpoints are marked or removed from docs</criterion>
-  </acceptance_criteria>
-  <priority>low</priority>
-</ticket>
-</plan>
+Call `propose_plan` with the tickets and todos now.
 """
 
-
-def parse_plan(response: str) -> list[Ticket]:
-    """Parse multiple tickets from agent response using stdlib XML parser.
-
-    Returns empty list if no <plan> block found or parsing fails.
-    """
-
-    match = re.search(r"<plan>(.*?)</plan>", response, re.DOTALL | re.IGNORECASE)
-    if not match:
-        return []
-
-    try:
-        root = ET.fromstring(f"<root>{match.group(1)}</root>")
-    except ET.ParseError:
-        return []
-
-    return [_element_to_ticket(el) for el in root.findall("ticket")]
+PROPOSE_PLAN_TOOL_NAME = "propose_plan"
 
 
-def parse_todos(response: str) -> list[protocol.PlanEntry]:
-    """Parse todos from agent response for PlanDisplay widget.
+class ProposedTodo(BaseModel):
+    """Planner todo entry for plan display."""
 
-    Extracts <todos> block and converts to PlanEntry list.
-    Returns empty list if no <todos> block found or parsing fails.
-    """
-    match = re.search(r"<todos>(.*?)</todos>", response, re.DOTALL | re.IGNORECASE)
-    if not match:
-        return []
+    model_config = ConfigDict(extra="ignore")
 
-    try:
-        root = ET.fromstring(f"<root>{match.group(1)}</root>")
-    except ET.ParseError:
-        return []
+    content: str = Field(..., min_length=1, max_length=200)
+    status: Literal["pending", "in_progress", "completed", "failed"] = "completed"
 
-    entries: list[protocol.PlanEntry] = []
-    for el in root.findall("todo"):
-        content = (el.text or "").strip()
-        if not content:
-            continue
+    @field_validator("content", mode="before")
+    @classmethod
+    def _clean_content(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
 
-        status = el.get("status", "pending")
-        # Normalize status to valid PlanEntry values
-        if status not in ("pending", "in_progress", "completed", "failed"):
-            status = "pending"
-
-        entries.append({"content": content, "status": status})
-
-    return entries
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_status(cls, v: Any) -> str:
+        if v is None:
+            return "pending"
+        value = str(v).lower()
+        if value in ("pending", "in_progress", "completed", "failed"):
+            return value
+        return "pending"
 
 
-def _element_to_ticket(el: ET.Element) -> Ticket:
-    """Convert XML element to Ticket. Pure function."""
-    from kagan.database.models import TicketType
+class ProposedTicket(BaseModel):
+    """Planner ticket proposal parsed from tool call arguments."""
 
-    def text(tag: str, default: str = "") -> str:
-        child = el.find(tag)
-        return (child.text or "").strip() if child is not None else default
+    model_config = ConfigDict(extra="ignore")
 
-    def criteria() -> list[str]:
-        ac = el.find("acceptance_criteria")
-        if ac is None:
+    title: str = Field(..., min_length=1, max_length=200)
+    type: Literal["AUTO", "PAIR"] = "PAIR"
+    description: str = Field("", max_length=10000)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    priority: Literal["low", "medium", "high"] = "medium"
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _clean_title(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _clean_description(cls, v: Any) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalize_type(cls, v: Any) -> str:
+        if v is None:
+            return "PAIR"
+        value = str(v).upper()
+        return "AUTO" if value == "AUTO" else "PAIR"
+
+    @field_validator("priority", mode="before")
+    @classmethod
+    def _normalize_priority(cls, v: Any) -> str:
+        if v is None:
+            return "medium"
+        value = str(v).lower()
+        if value in ("low", "medium", "high"):
+            return value
+        return "medium"
+
+    @field_validator("acceptance_criteria", mode="before")
+    @classmethod
+    def _coerce_criteria(cls, v: Any) -> list[str]:
+        if v is None:
             return []
-        return [c.text.strip() for c in ac.findall("criterion") if c.text]
+        if isinstance(v, str):
+            return [v]
+        if isinstance(v, list):
+            return v
+        return [str(v)]
 
-    type_str = text("type", "PAIR").upper()
-    ticket_type = TicketType.AUTO if type_str == "AUTO" else TicketType.PAIR
+    @field_validator("acceptance_criteria")
+    @classmethod
+    def _clean_criteria(cls, v: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for item in v:
+            text = str(item).strip()
+            if text:
+                cleaned.append(text)
+        return cleaned
 
-    priority_map = {"low": TicketPriority.LOW, "high": TicketPriority.HIGH}
-    priority = priority_map.get(text("priority", "medium").lower(), TicketPriority.MEDIUM)
 
-    return Ticket.create(
-        title=text("title", "Untitled")[:200],
-        description=text("description"),
-        ticket_type=ticket_type,
-        priority=priority,
-        acceptance_criteria=criteria(),
-    )
+class PlanProposal(BaseModel):
+    """Validated plan proposal from the planner tool call."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tickets: list[ProposedTicket] = Field(..., min_length=1)
+    todos: list[ProposedTodo] = Field(default_factory=list)
+
+    @field_validator("todos", mode="before")
+    @classmethod
+    def _coerce_todos(cls, v: Any) -> list[Any]:
+        """Coerce invalid todos input to empty list (LLM might send wrong type)."""
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return v
+        # LLM sent invalid type (string, object, etc.) - gracefully handle
+        return []
+
+    def to_tickets(self) -> list[Ticket]:
+        """Convert proposed tickets into Ticket models."""
+        tickets: list[Ticket] = []
+        for item in self.tickets:
+            ticket_type = TicketType.AUTO if item.type == "AUTO" else TicketType.PAIR
+            priority_map = {
+                "low": TicketPriority.LOW,
+                "medium": TicketPriority.MEDIUM,
+                "high": TicketPriority.HIGH,
+            }
+            tickets.append(
+                Ticket.create(
+                    title=item.title[:200],
+                    description=item.description,
+                    ticket_type=ticket_type,
+                    priority=priority_map.get(item.priority, TicketPriority.MEDIUM),
+                    acceptance_criteria=item.acceptance_criteria,
+                )
+            )
+        return tickets
+
+    def to_plan_entries(self) -> list[dict[str, str]]:
+        """Convert todos to plan display entries."""
+        return [{"content": todo.content, "status": todo.status} for todo in self.todos]
 
 
 def build_planner_prompt(
@@ -369,10 +375,146 @@ def build_planner_prompt(
 
 """
 
-    return f"""{PLANNER_PROMPT}
-{context_section}## User Request
+    return PLANNER_PROMPT.replace("{conversation_context}", context_section).replace(
+        "{user_request}", user_input
+    )
 
-{user_input}
 
-Output the <plan> XML block with tickets now.
-"""
+def parse_proposed_plan(
+    tool_calls: dict[str, Any],
+) -> tuple[list[Ticket], list[protocol.PlanEntry] | None, str | None]:
+    """Parse proposed tickets from tool calls.
+
+    Returns (tickets, todos, error). If no proposal is found, returns empty tickets and None.
+    """
+    if not tool_calls:
+        return [], None, None
+
+    selected = _select_propose_plan_call(list(tool_calls.values()))
+    if selected is None:
+        return [], None, None
+
+    payload = _extract_plan_payload(selected)
+    if payload is None:
+        return [], None, "propose_plan was called without readable arguments."
+
+    try:
+        proposal = PlanProposal.model_validate(payload)
+    except ValidationError as exc:
+        return [], None, _format_plan_error(exc)
+
+    tickets = proposal.to_tickets()
+    todos = proposal.to_plan_entries()
+    return tickets, todos or None, None
+
+
+def _select_propose_plan_call(calls: list[dict[str, Any]]) -> dict[str, Any] | None:
+    matches = [call for call in calls if _tool_call_name(call) == PROPOSE_PLAN_TOOL_NAME]
+    if not matches:
+        for call in reversed(calls):
+            payload = _extract_plan_payload(call)
+            if payload and "tickets" in payload:
+                return call
+        return None
+
+    for call in reversed(matches):
+        status = str(call.get("status", "")).lower()
+        if status == "completed":
+            return call
+    return matches[-1]
+
+
+def _tool_call_name(tool_call: dict[str, Any]) -> str:
+    """Extract tool name from tool call, handling MCP prefixes."""
+    for key in ("name", "toolName", "title"):
+        if key in tool_call and tool_call[key] is not None:
+            name = str(tool_call[key]).strip().lower()
+            # Strip MCP prefix if present (e.g., "mcp__kagan__propose_plan" -> "propose_plan")
+            if "__" in name:
+                name = name.split("__")[-1]
+            return name
+
+    # Check _meta.claudeCode.toolName (Claude Code specific)
+    meta = tool_call.get("_meta")
+    if isinstance(meta, dict):
+        claude_code = meta.get("claudeCode")
+        if isinstance(claude_code, dict):
+            tool_name = claude_code.get("toolName")
+            if tool_name is not None:
+                name = str(tool_name).strip().lower()
+                if "__" in name:
+                    name = name.split("__")[-1]
+                return name
+
+    tool_info = tool_call.get("tool")
+    if isinstance(tool_info, dict):
+        for key in ("name", "toolName", "title"):
+            if key in tool_info and tool_info[key] is not None:
+                name = str(tool_info[key]).strip().lower()
+                if "__" in name:
+                    name = name.split("__")[-1]
+                return name
+    return ""
+
+
+def _extract_plan_payload(tool_call: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract the plan payload from a tool call, supporting multiple protocols."""
+    # Check common argument keys (including ACP's rawInput)
+    for key in ("rawInput", "arguments", "input", "params", "args"):
+        payload = _parse_payload(tool_call.get(key))
+        if payload is not None:
+            return payload
+
+    tool_info = tool_call.get("tool")
+    if isinstance(tool_info, dict):
+        for key in ("rawInput", "arguments", "input", "params", "args"):
+            payload = _parse_payload(tool_info.get(key))
+            if payload is not None:
+                return payload
+
+    content_list = tool_call.get("content")
+    if isinstance(content_list, list):
+        for item in content_list:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "content":
+                continue
+            content = item.get("content")
+            if not isinstance(content, dict):
+                continue
+            if content.get("type") != "text":
+                continue
+            payload = _parse_payload(content.get("text"))
+            if payload is not None:
+                return payload
+
+    return None
+
+
+def _parse_payload(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _format_plan_error(error: ValidationError) -> str:
+    issues = error.errors()
+    snippets: list[str] = []
+    for issue in issues[:3]:
+        loc = ".".join(str(part) for part in issue.get("loc", []))
+        msg = issue.get("msg", "Invalid value")
+        snippets.append(f"{loc}: {msg}".strip(": "))
+    suffix = "..." if len(issues) > 3 else ""
+    details = "; ".join(snippets) if snippets else "Invalid plan proposal."
+    issue_count = len(issues)
+    return (
+        f"Invalid plan proposal ({issue_count} issue{'s' if issue_count != 1 else ''}): "
+        f"{details}{suffix}"
+    )

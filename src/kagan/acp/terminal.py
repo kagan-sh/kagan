@@ -25,11 +25,7 @@ class TerminalState:
 
 
 class TerminalRunner:
-    """Runs terminal commands for ACP agents.
-
-    This is a simplified version of toad's TerminalTool that runs
-    commands without a full PTY, suitable for headless operation.
-    """
+    """Runs terminal commands for ACP agents."""
 
     def __init__(
         self,

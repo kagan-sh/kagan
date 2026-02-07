@@ -16,6 +16,7 @@ APP_BINDINGS: list[BindingType] = [
     Binding("f1", "show_help", "Help", key_display="F1", priority=True),
     Binding("question_mark", "show_help", "", show=False, key_display="?"),
     Binding("ctrl+p", "command_palette", "Palette", show=False),
+    Binding("f12", "toggle_debug_log", "Debug", show=False),
 ]
 
 # =============================================================================
@@ -93,8 +94,8 @@ CONFIRM_BINDINGS: list[BindingType] = [
 ]
 
 DESCRIPTION_EDITOR_BINDINGS: list[BindingType] = [
-    Binding("escape", "done", "Done"),
-    Binding("ctrl+s", "done", "Save"),
+    Binding("escape", "cancel", "Cancel"),
+    Binding("ctrl+s", "save", "Save"),
 ]
 
 DIFF_BINDINGS: list[BindingType] = [
@@ -132,12 +133,19 @@ REVIEW_BINDINGS: list[BindingType] = [
     Binding("escape", "close_or_cancel", "Close/Cancel"),
     Binding("a", "approve", "Approve"),
     Binding("r", "reject", "Reject"),
-    Binding("g", "generate_review", "Generate"),
+    Binding("g", "generate_review", "AI Review"),
+    Binding("s", "generate_review", "Start Review", show=False),
 ]
 
 SETTINGS_BINDINGS: list[BindingType] = [
     Binding("escape", "cancel", "Cancel"),
     Binding("ctrl+s", "save", "Save"),
+]
+
+DEBUG_LOG_BINDINGS: list[BindingType] = [
+    Binding("escape", "close", "Close"),
+    Binding("c", "clear_logs", "Clear"),
+    Binding("s", "save_logs", "Save"),
 ]
 
 TICKET_DETAILS_BINDINGS: list[BindingType] = [
@@ -147,7 +155,7 @@ TICKET_DETAILS_BINDINGS: list[BindingType] = [
     Binding("d", "delete", "Delete"),
     Binding("f", "expand_description", "Expand"),
     Binding("f5", "full_editor", "Full Editor", key_display="F5"),
-    Binding("ctrl+s", "save", "Save", show=False),
+    Binding("ctrl+s", "save", "Save", key_display="^s"),
 ]
 
 TMUX_GATEWAY_BINDINGS: list[BindingType] = [

@@ -30,3 +30,8 @@ type TerminalOutputResponse = dict[str, Any]
 type FileSystemCapability = dict[str, bool]
 type ClientCapabilities = dict[str, Any]
 type AgentCapabilities = dict[str, Any]
+
+# Model-related types (from ACP schema)
+type ModelId = str
+type ModelInfo = dict[str, Any]  # {modelId, name, description?}
+type SessionModelState = dict[str, Any]  # {availableModels, currentModelId}

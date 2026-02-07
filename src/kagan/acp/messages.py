@@ -21,6 +21,14 @@ class Mode(NamedTuple):
     description: str | None
 
 
+class Model(NamedTuple):
+    """An available LLM model."""
+
+    id: str
+    name: str
+    description: str | None
+
+
 class Answer(NamedTuple):
     """Permission dialog answer."""
 
@@ -33,14 +41,14 @@ class AgentMessage(Message):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentReady(AgentMessage):
     """Agent is initialized and ready for prompts."""
 
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentFail(AgentMessage):
     """Agent failed to start or encountered an error."""
 
@@ -48,14 +56,14 @@ class AgentFail(AgentMessage):
     details: str = ""
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentComplete(AgentMessage):
     """Agent completed its response."""
 
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class AgentUpdate(AgentMessage):
     """Agent sent text content."""
 
@@ -63,7 +71,7 @@ class AgentUpdate(AgentMessage):
     text: str
 
 
-@dataclass
+@dataclass(slots=True)
 class Thinking(AgentMessage):
     """Agent thinking/reasoning content."""
 
@@ -71,14 +79,14 @@ class Thinking(AgentMessage):
     text: str
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolCall(AgentMessage):
     """Agent is making a tool call."""
 
     tool_call: protocol.ToolCall
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolCallUpdate(AgentMessage):
     """Tool call status update."""
 
@@ -86,14 +94,14 @@ class ToolCallUpdate(AgentMessage):
     update: protocol.ToolCallUpdate
 
 
-@dataclass
+@dataclass(slots=True)
 class Plan(AgentMessage):
     """Agent's plan entries."""
 
     entries: list[protocol.PlanEntry]
 
 
-@dataclass
+@dataclass(slots=True)
 class RequestPermission(AgentMessage):
     """Agent needs permission for an operation."""
 
@@ -102,7 +110,7 @@ class RequestPermission(AgentMessage):
     result_future: asyncio.Future[Answer]
 
 
-@dataclass
+@dataclass(slots=True)
 class SetModes(AgentMessage):
     """Agent reported available modes."""
 
@@ -110,14 +118,29 @@ class SetModes(AgentMessage):
     modes: dict[str, Mode]
 
 
-@dataclass
+@dataclass(slots=True)
 class ModeUpdate(AgentMessage):
     """Agent informed us about a mode change."""
 
     current_mode: str
 
 
-@dataclass
+@dataclass(slots=True)
+class SetModels(AgentMessage):
+    """Agent reported available models."""
+
+    current_model: str
+    models: dict[str, Model]
+
+
+@dataclass(slots=True)
+class ModelUpdate(AgentMessage):
+    """Agent informed us about a model change."""
+
+    current_model: str
+
+
+@dataclass(slots=True)
 class AvailableCommandsUpdate(AgentMessage):
     """Agent is reporting its slash commands."""
 

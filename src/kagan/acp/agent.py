@@ -9,12 +9,11 @@ import os
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
-from textual import log
-
 from kagan.acp import messages, protocol
 from kagan.acp.buffers import AgentBuffers
 from kagan.acp.jsonrpc import Client, RPCError, Server
 from kagan.acp.terminals import TerminalManager
+from kagan.debug_log import log
 from kagan.limits import SHUTDOWN_TIMEOUT, SUBPROCESS_LIMIT
 
 if TYPE_CHECKING:
@@ -30,6 +29,48 @@ NAME = "kagan"
 TITLE = "Kagan"
 VERSION = "0.1.0"
 
+_SENSITIVE_FILENAMES = {
+    ".npmrc",
+    ".pypirc",
+    ".netrc",
+    "credentials.json",
+    "credentials.yaml",
+    "credentials.yml",
+    "secret.json",
+    "secret.yaml",
+    "secret.yml",
+    "secrets.json",
+    "secrets.yaml",
+    "secrets.yml",
+    "token.json",
+    "tokens.json",
+    "id_rsa",
+    "id_rsa.pub",
+    "id_ed25519",
+    "id_ed25519.pub",
+}
+
+_SENSITIVE_EXTENSIONS = {
+    ".pem",
+    ".key",
+    ".p12",
+    ".pfx",
+    ".crt",
+    ".cer",
+    ".der",
+    ".jks",
+    ".kdbx",
+    ".gpg",
+}
+
+_SENSITIVE_DIRS = {
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".azure",
+    ".kube",
+}
+
 
 class Agent:
     """ACP-based agent communication via JSON-RPC over subprocess."""
@@ -40,6 +81,7 @@ class Agent:
         self.project_root = project_root
         self._agent_config = agent_config
         self._read_only = read_only
+        self._model_override: str | None = None
 
         # JSON-RPC server for incoming requests
         self._server = Server()
@@ -105,6 +147,15 @@ class Agent:
         self._auto_approve = enabled
         log.debug(f"Auto-approve mode: {enabled}")
 
+    def set_model_override(self, model_id: str | None) -> None:
+        """Set the model override for this agent session."""
+        self._model_override = model_id
+        log.debug(f"Model override set: {model_id}")
+
+    def get_model_override(self) -> str | None:
+        """Get the current model override."""
+        return self._model_override
+
     def start(self, message_target: MessagePump | None = None) -> None:
         log.info(f"Starting agent for project: {self.project_root}")
         log.debug(f"Agent config: {self._agent_config}")
@@ -121,6 +172,19 @@ class Agent:
         PIPE = asyncio.subprocess.PIPE
         env = os.environ.copy()
         env["KAGAN_CWD"] = str(self.project_root.absolute())
+
+        # Inject model override via environment variable if configured
+        if self._model_override:
+            if self._agent_config.model_env_var:
+                # Standard env var injection (e.g., ANTHROPIC_MODEL for Claude)
+                env_var = self._agent_config.model_env_var
+                env[env_var] = self._model_override
+                log.info(f"[_run_agent] Model override: {env_var}={self._model_override}")
+            elif "opencode" in self._agent_config.identity.lower():
+                # OpenCode uses OPENCODE_CONFIG_CONTENT for runtime config override
+                config_content = json.dumps({"model": self._model_override})
+                env["OPENCODE_CONFIG_CONTENT"] = config_content
+                log.info(f"[_run_agent] OpenCode model override: {self._model_override}")
 
         command = self.command
         if command is None:
@@ -187,6 +251,27 @@ class Agent:
             task.add_done_callback(tasks.discard)
 
         log.info(f"[_run_agent] Read loop ended after {line_count} lines")
+
+        # Check for non-zero exit code and report failure
+        if self._process.returncode:
+            if self._process.stderr is not None:
+                try:
+                    fail_details = (await self._process.stderr.read()).decode("utf-8", "replace")
+                except Exception as e:
+                    fail_details = f"Failed to read stderr: {e}"
+            else:
+                fail_details = "stderr not available"
+            log.error(
+                f"[_run_agent] Agent exited with code {self._process.returncode}: "
+                f"{fail_details[:500]}"
+            )
+            self.post_message(
+                messages.AgentFail(
+                    f"Agent exited with code {self._process.returncode}",
+                    fail_details,
+                )
+            )
+
         self._done_event.set()
 
     async def _handle_request(self, request: dict[str, Any]) -> None:
@@ -363,7 +448,12 @@ class Agent:
     ) -> dict[str, str]:
         """Read a file in the project."""
         log.info(f"[RPC] fs/read_text_file: path={path}, line={line}, limit={limit}")
-        read_path = self.project_root / path
+        read_path = self._resolve_read_path(path)
+        if read_path is None:
+            raise ValueError("Access denied: path outside project root")
+        if self._is_sensitive_path(read_path):
+            log.warning(f"[RPC] fs/read_text_file: BLOCKED sensitive path {read_path}")
+            raise ValueError("Access denied: sensitive file")
         try:
             text = read_path.read_text(encoding="utf-8", errors="ignore")
             log.debug(f"[RPC] fs/read_text_file: read {len(text)} chars from {read_path}")
@@ -379,6 +469,56 @@ class Agent:
             )
 
         return {"content": text}
+
+    def _resolve_read_path(self, path: str) -> Path | None:
+        """Resolve and validate read path is inside the project root."""
+        project_root = self.project_root.resolve()
+        read_path = (self.project_root / path).resolve()
+        if not read_path.is_relative_to(project_root):
+            log.warning(f"[RPC] fs/read_text_file: BLOCKED path traversal {read_path}")
+            return None
+        return read_path
+
+    def _is_sensitive_path(self, path: Path) -> bool:
+        """Determine whether a path appears to contain secrets or credentials."""
+        name = path.name.lower()
+        if name == ".env" or name.startswith(".env."):
+            return True
+        if name in _SENSITIVE_FILENAMES:
+            return True
+        if path.suffix.lower() in _SENSITIVE_EXTENSIONS:
+            return True
+        return any(part.lower() in _SENSITIVE_DIRS for part in path.parts)
+
+    def _command_mentions_sensitive(self, command: str, args: list[str] | None) -> bool:
+        """Check whether a command references likely sensitive filenames."""
+        tokens = [command] + (args or [])
+        haystack = " ".join(tokens).lower()
+        sensitive_markers = (
+            ".env",
+            "id_rsa",
+            "id_ed25519",
+            "credentials.json",
+            "credentials.yml",
+            "credentials.yaml",
+            "secrets.json",
+            "secrets.yml",
+            "secrets.yaml",
+            "secret.json",
+            "secret.yml",
+            "secret.yaml",
+            ".pem",
+            ".key",
+            ".p12",
+            ".pfx",
+            ".crt",
+            ".cer",
+            ".der",
+            ".jks",
+            ".kdbx",
+            ".gpg",
+        )
+        return any(marker in haystack for marker in sensitive_markers)
 
     def _rpc_write_text_file(self, sessionId: str, path: str, content: str) -> None:
         """Write a file in the project."""
@@ -409,6 +549,9 @@ class Agent:
         if self._read_only:
             log.warning(f"[RPC] terminal/create: BLOCKED in read-only mode (command={command})")
             raise ValueError("Terminal operations not permitted in read-only mode")
+        if self._command_mentions_sensitive(command, args):
+            log.warning(f"[RPC] terminal/create: BLOCKED sensitive command {command}")
+            raise ValueError("Terminal command blocked: references sensitive files")
 
         terminal_id, cmd_display = await self._terminals.create(
             command=command,
@@ -487,7 +630,16 @@ class Agent:
         cwd = str(self.project_root.absolute())
         log.info(f"[_acp_new_session] Sending session/new request with cwd={cwd}")
 
-        call = self._client.call("session/new", cwd=cwd, mcpServers=[])
+        # Configure Kagan MCP server in read-only mode for coordination awareness
+        # ACP protocol requires: name, command, args (required arrays), env (required array)
+        kagan_mcp: dict[str, object] = {
+            "name": "kagan",
+            "command": "kagan",
+            "args": ["mcp", "--readonly"],
+            "env": [],
+        }
+
+        call = self._client.call("session/new", cwd=cwd, mcpServers=[kagan_mcp])
 
         log.info("[_acp_new_session] Waiting for response...")
         result = await call.wait()
@@ -515,6 +667,10 @@ class Agent:
             log.error(f"[wait_ready] Timeout after {timeout}s waiting for agent")
             raise
 
+    def clear_tool_calls(self) -> None:
+        """Clear accumulated tool calls."""
+        self.tool_calls.clear()
+
     async def send_prompt(self, prompt: str) -> str | None:
         log.info(f"Sending prompt to agent (len={len(prompt)})")
         log.debug(f"Prompt content: {prompt[:500]}...")
@@ -524,7 +680,18 @@ class Agent:
 
         call = self._client.call("session/prompt", prompt=content, sessionId=self.session_id)
 
-        result = await call.wait()
+        try:
+            result = await call.wait()
+        except RPCError as e:
+            # Log and post AgentFail for visibility, then re-raise so scheduler
+            # can handle it properly (move ticket to BACKLOG with reason)
+            log.error(f"[send_prompt] RPC error: {e}")
+            error_details = ""
+            if hasattr(e, "data") and isinstance(e.data, dict):
+                error_details = str(e.data.get("details") or e.data.get("error") or "")
+            self.post_message(messages.AgentFail(f"Agent error: {e}", error_details))
+            raise  # Re-raise so scheduler handles ticket state properly
+
         stop_reason = result.get("stopReason") if result else None
         resp_len = len(self.get_response_text())
         log.info(f"Agent response complete. stop_reason={stop_reason}, response_len={resp_len}")

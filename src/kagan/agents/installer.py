@@ -8,12 +8,19 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 # Default timeout for installation (2 minutes)
 INSTALL_TIMEOUT_SECONDS = 120
 
+# Supported agent types
+type AgentType = Literal["claude", "opencode"]
+
 # Agent-specific install commands
-INSTALL_COMMANDS = {
+INSTALL_COMMANDS: dict[AgentType, str] = {
     "claude": "curl -fsSL https://claude.ai/install.sh | sh",
     "opencode": "npm i -g opencode-ai",
 }
@@ -26,7 +33,7 @@ class InstallerError(Exception):
     """Raised when installation operations fail."""
 
 
-def get_install_command(agent: str = "claude") -> str:
+def get_install_command(agent: AgentType = "claude") -> str:
     """Return the install command string for display.
 
     Args:
@@ -67,6 +74,79 @@ def check_opencode_installed() -> bool:
     return shutil.which("opencode") is not None
 
 
+async def _run_install(
+    command: str,
+    verify_fn: Callable[[], bool | Awaitable[bool]],
+    agent_name: str,
+    success_msg: str,
+    path_hint: str,
+    timeout: float,
+) -> tuple[bool, str]:
+    """Run an installation command and verify success.
+
+    Args:
+        command: Shell command to execute
+        verify_fn: Function to verify installation (sync or async)
+        agent_name: Human-readable agent name for error messages
+        success_msg: Message to return on success
+        path_hint: Hint about PATH if command not found after install
+        timeout: Maximum time in seconds to wait
+
+    Returns:
+        A tuple of (success, message)
+    """
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(),
+                timeout=timeout,
+            )
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return False, f"Installation timed out after {timeout} seconds"
+
+        stdout_str = stdout.decode().strip()
+        stderr_str = stderr.decode().strip()
+
+        if proc.returncode == 0:
+            # Verify installation - handle both sync and async verify functions
+            result = verify_fn()
+            if asyncio.iscoroutine(result):
+                verified = await result
+            else:
+                verified = result
+
+            if verified:
+                return True, success_msg
+            else:
+                return True, f"Installation completed. {path_hint}"
+        else:
+            error_details = []
+            if stderr_str:
+                error_details.append(stderr_str)
+            if stdout_str:
+                error_details.append(stdout_str)
+
+            error_message = (
+                "; ".join(error_details)
+                if error_details
+                else f"Installation failed with exit code {proc.returncode}"
+            )
+            return False, f"Installation failed: {error_message}"
+
+    except FileNotFoundError:
+        return False, f"Installation failed: required command not found for {agent_name}"
+    except OSError as e:
+        return False, f"Installation failed: {e}"
+
+
 async def install_claude_code(
     timeout: float = INSTALL_TIMEOUT_SECONDS,
 ) -> tuple[bool, str]:
@@ -83,59 +163,14 @@ async def install_claude_code(
         - success: True if installation completed successfully
         - message: Descriptive message about the result or error
     """
-    try:
-        # Use shell=True to properly pipe curl to sh
-        # This matches how a user would run the command manually
-        proc = await asyncio.create_subprocess_shell(
-            INSTALL_COMMANDS["claude"],
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(),
-                timeout=timeout,
-            )
-        except TimeoutError:
-            # Kill the process if it times out
-            proc.kill()
-            await proc.wait()
-            return False, f"Installation timed out after {timeout} seconds"
-
-        stdout_str = stdout.decode().strip()
-        stderr_str = stderr.decode().strip()
-
-        if proc.returncode == 0:
-            # Verify installation was successful
-            if await check_claude_code_installed():
-                return True, "Claude Code installed successfully"
-            else:
-                # Installation script succeeded but claude not in PATH
-                # This might happen if the user needs to restart their shell
-                return True, (
-                    "Installation script completed. "
-                    "You may need to restart your shell or add claude to your PATH."
-                )
-        else:
-            # Collect error information
-            error_details = []
-            if stderr_str:
-                error_details.append(stderr_str)
-            if stdout_str:
-                error_details.append(stdout_str)
-
-            error_message = (
-                "; ".join(error_details)
-                if error_details
-                else f"Installation failed with exit code {proc.returncode}"
-            )
-            return False, f"Installation failed: {error_message}"
-
-    except FileNotFoundError:
-        return False, "Installation failed: curl command not found. Please install curl."
-    except OSError as e:
-        return False, f"Installation failed: {e}"
+    return await _run_install(
+        command=INSTALL_COMMANDS["claude"],
+        verify_fn=check_claude_code_installed,
+        agent_name="Claude Code",
+        success_msg="Claude Code installed successfully",
+        path_hint="You may need to restart your shell or add claude to your PATH.",
+        timeout=timeout,
+    )
 
 
 async def install_opencode(
@@ -161,61 +196,18 @@ async def install_opencode(
             "Please install Node.js and npm first: https://nodejs.org/"
         )
 
-    try:
-        proc = await asyncio.create_subprocess_shell(
-            INSTALL_COMMANDS["opencode"],
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(),
-                timeout=timeout,
-            )
-        except TimeoutError:
-            # Kill the process if it times out
-            proc.kill()
-            await proc.wait()
-            return False, f"Installation timed out after {timeout} seconds"
-
-        stdout_str = stdout.decode().strip()
-        stderr_str = stderr.decode().strip()
-
-        if proc.returncode == 0:
-            # Verify installation was successful
-            if check_opencode_installed():
-                return True, "OpenCode installed successfully"
-            else:
-                # Installation succeeded but opencode not in PATH
-                # This might happen if npm global bin is not in PATH
-                return True, (
-                    "Installation completed. "
-                    "You may need to add npm global bin directory to your PATH."
-                )
-        else:
-            # Collect error information
-            error_details = []
-            if stderr_str:
-                error_details.append(stderr_str)
-            if stdout_str:
-                error_details.append(stdout_str)
-
-            error_message = (
-                "; ".join(error_details)
-                if error_details
-                else f"Installation failed with exit code {proc.returncode}"
-            )
-            return False, f"Installation failed: {error_message}"
-
-    except FileNotFoundError:
-        return False, "Installation failed: npm command not found. Please install Node.js and npm."
-    except OSError as e:
-        return False, f"Installation failed: {e}"
+    return await _run_install(
+        command=INSTALL_COMMANDS["opencode"],
+        verify_fn=check_opencode_installed,
+        agent_name="OpenCode",
+        success_msg="OpenCode installed successfully",
+        path_hint="You may need to add npm global bin directory to your PATH.",
+        timeout=timeout,
+    )
 
 
 async def install_agent(
-    agent: str,
+    agent: AgentType,
     timeout: float = INSTALL_TIMEOUT_SECONDS,
 ) -> tuple[bool, str]:
     """Install the specified coding agent.

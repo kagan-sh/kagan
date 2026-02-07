@@ -122,9 +122,14 @@ class PendingCall:
 
     async def wait(self, timeout: float | None = None) -> Any:
         """Wait for the response."""
-        if timeout is not None:
-            return await asyncio.wait_for(self.future, timeout)
-        return await self.future
+        try:
+            if timeout is not None:
+                return await asyncio.wait_for(self.future, timeout)
+            return await self.future
+        finally:
+            # Explicit cleanup: cancel future if not done
+            if not self.future.done():
+                self.future.cancel()
 
 
 class Client:
