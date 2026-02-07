@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from textual.widgets import Markdown
-from textual.widgets.markdown import MarkdownStream
+
+if TYPE_CHECKING:
+    from textual.widgets.markdown import MarkdownStream
 
 
 class StreamingMarkdown(Markdown):

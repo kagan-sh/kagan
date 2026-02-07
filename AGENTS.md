@@ -1,405 +1,212 @@
-# Kagan - Agent Guidelines
+# Agent Development Guide for Kagan
 
-AI-powered Kanban TUI for autonomous development workflows. Python 3.12+ with Textual framework.
+Comprehensive instructions for AI coding agents working in the Kagan repository.
 
-## MANDATORY: Internal Documentation
+## Project Overview
 
-**BEFORE modifying any code, you MUST read the relevant internal documentation:**
+Kagan is an AI-powered Kanban TUI for autonomous development workflows built with Python 3.12+, Textual, and async/await patterns.
 
-| Action                                                            | Required Reading                                                 |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **Understand codebase architecture** (START HERE for exploration) | [docs/internal/ARCHITECTURE.md](docs/internal/ARCHITECTURE.md)   |
-| Modify/create UI code (`ui/`, `app.py`, widgets, screens, modals) | [docs/internal/textual_rules.md](docs/internal/textual_rules.md) |
-| Modify/create any test file                                       | [docs/internal/testing_rules.md](docs/internal/testing_rules.md) |
-| Modify/create CSS styles                                          | [docs/internal/textual_rules.md](docs/internal/textual_rules.md) |
+## Commands
 
-**For codebase exploration queries**: Read `docs/internal/ARCHITECTURE.md` FIRST - it contains the complete architecture reference including project structure, ticket models, keybindings, screen navigation, modal system, state machine, and common patterns. This eliminates the need for full codebase scans.
-
-**Failure to read these docs before making changes will result in incorrect patterns and failed reviews.**
-
-## Build & Development Commands
+### Setup & Running
 
 ```bash
-# Run application
-uv run kagan                    # Production mode
-uv run poe dev                  # Dev mode with hot reload
+uv sync --dev                    # Install dependencies
+uv run pre-commit install        # Install pre-commit hooks
+uv run poe dev                   # Run with live reload
+uv run kagan                     # Run normally
+uv run kagan mcp                 # Run as MCP server
+```
 
-# Testing
-uv run pytest tests/ -v                                    # All tests
-uv run pytest tests/test_database.py -v                    # Single file
-uv run pytest tests/test_database.py::TestTicketCRUD -v    # Single class
-uv run pytest tests/test_database.py::TestTicketCRUD::test_create_ticket -v  # Single test
-uv run pytest -m unit                                      # By marker (unit/integration/e2e/snapshot)
+### Testing
 
-# Linting & Formatting
-uv run poe fix                  # Auto-fix + format (run this first!)
-uv run poe lint                 # Run ruff linter
-uv run poe format               # Format with ruff
-uv run poe typecheck            # Run pyrefly type checker
-uv run poe check                # lint + typecheck + test
+```bash
+# Run all tests (parallel by default)
+uv run pytest tests/
 
-# Snapshot tests
-UPDATE_SNAPSHOTS=1 uv run pytest tests/test_snapshots.py --snapshot-update
+# Run single test file
+uv run pytest tests/e2e/test_critical_flows.py
+
+# Run single test function
+uv run pytest tests/e2e/test_critical_flows.py::TestAutoTicketLifecycle::test_auto_full_lifecycle
+
+# Run by marker
+uv run pytest -m unit            # Pure logic
+uv run pytest -m integration     # Real filesystem/DB
+uv run pytest -m e2e            # Full app
+uv run pytest -m "not slow"     # Exclude slow tests
+
+# Sequential (debugging)
+uv run pytest tests/ -n 0
+```
+
+### Linting & Type Checking
+
+```bash
+uv run poe lint                  # Lint with ruff
+uv run poe format                # Format with ruff
+uv run poe typecheck             # Type check with pyrefly
+uv run poe fix                   # Fix lint + format
+uv run poe check                 # Lint + typecheck + test
+uv run pre-commit run --all-files
+```
+
+## Code Style
+
+### Import Order (Ruff/isort-compatible)
+
+```python
+from __future__ import annotations  # Always first
+
+import asyncio  # Standard library
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from pydantic import BaseModel  # Third-party
+from textual.app import App
+
+from kagan.config import KaganConfig  # Local
+
+if TYPE_CHECKING:  # At end
+    from collections.abc import Callable
+```
+
+### Type Annotations (MANDATORY)
+
+- Use Python 3.12+ syntax: `list[str]`, `dict[str, Any]`, `str | None`
+- Use `type` aliases: `type OS = Literal["linux", "macos", "windows", "*"]`
+- Use `TYPE_CHECKING` blocks to avoid circular imports
+- All functions must have type annotations
+
+### Formatting (Ruff enforced)
+
+- **Line length**: 100 chars
+- **Quotes**: Double quotes
+- **Indentation**: 4 spaces
+- **Docstrings**: Google-style with triple double-quotes
+
+### Naming
+
+- Functions/variables: `snake_case`
+- Classes: `PascalCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Private: `_private_method`
+
+### Error Handling
+
+- Define custom exceptions: `class WorktreeError(Exception): ...`
+- Use dataclasses for error details (see `GitError` in `git_utils.py`)
+- Always include context in exception messages
+- Use `try/finally` with `await manager.close()`
+
+### Async/Await (CRITICAL)
+
+- **All I/O must be async** (database, subprocess, file I/O)
+- Use `asyncio.create_subprocess_exec`, never `subprocess.run`
+- Use `aiosqlite`, never blocking `sqlite3`
+- Use `asyncio.Lock` for concurrent access
+- Use `async with` for resource management
+
+### Pydantic (v2 API)
+
+- Use `BaseModel`, `Field`, `ConfigDict`
+- Use `@field_validator` decorator
+- Use `model_validate`, `model_dump` methods
+
+### Textual UI
+
+- Use `BINDINGS` class attribute (no ClassVar needed)
+- Use `compose()` for widget hierarchy
+- CSS in `src/kagan/styles/*.tcss`
+- Use `reactive()` for state
+- Use `Signal[T]` for pub/sub
+
+### Database
+
+- Use `StateManager` for all DB access
+- Use predefined queries from `queries.py` (no raw SQL)
+- Always close: `await manager.close()` or `async with`
+- Register callbacks: `manager.set_status_change_callback()`
+
+### Git
+
+- Use async functions from `git_utils.py`
+- Check for `GitError` in results
+- Never use blocking git commands
+- Use worktrees for parallel execution
+
+## Testing
+
+### Markers
+
+- `@pytest.mark.unit` - Pure logic
+- `@pytest.mark.integration` - Real filesystem/DB
+- `@pytest.mark.e2e` - Full app
+- `@pytest.mark.snapshot` - Visual regression
+- `@pytest.mark.property` - Hypothesis property-based
+- `@pytest.mark.slow` - Tests >5 seconds
+
+### Patterns
+
+- Use descriptive class/function names: `TestAutoTicketLifecycle::test_auto_full_lifecycle`
+- Use fixtures from `conftest.py` and helpers from `tests/helpers/`
+- Mark async tests: `async def test_...`
+- Use `await pilot.pause()` in Textual tests
+- Configure Hypothesis: `settings.register_profile("aggressive", max_examples=100, deadline=None)`
+- Reduce `max_examples=10` for DB operations
+
+## Git Commits (Conventional Commits)
+
+**Format**: `<type>(<scope>): <description>`
+
+**Types** (semantic-release):
+
+- `feat` - New feature (minor bump)
+- `fix` - Bug fix (patch bump)
+- `perf` - Performance (patch bump)
+- `docs` - Documentation (patch bump)
+- `refactor`, `test`, `chore`, `ci`, `build`, `style` - No version bump
+
+**Examples**:
+
+```
+feat: add auto-merge capability for REVIEW tickets
+fix: resolve UI freezes from blocking git operations
+perf(ci): optimize test parallelization
+refactor(tests): reduce httpx_mock usage
+ci: fix cd failing due to lack of git profile
 ```
 
 ## Project Structure
 
 ```
 src/kagan/
-├── app.py              # Main KaganApp class
-├── constants.py        # COLUMN_ORDER, STATUS_LABELS, PRIORITY_LABELS
-├── config.py           # Configuration models
-├── keybindings.py      # Centralized keybinding registry (single file)
-├── database/           # models.py (Pydantic), manager.py (async StateManager)
-├── cli/                # CLI commands (update.py, tools.py)
-├── mcp/                # MCP server for AI tool communication
+├── database/           # SQLite (aiosqlite): manager.py, models.py, queries.py, schema.sql
+├── agents/             # Agent management: scheduler, worktree, installer
+├── ui/                 # Textual components: screens/, modals/, forms/, widgets/
+├── acp/                # Autonomous Coding Protocol (MCP server)
+├── cli/                # Click CLI commands
+├── lifecycle/          # Ticket lifecycle logic
 ├── sessions/           # tmux session management
-├── agents/             # Planner agent + worktree management
-├── acp/                # Agent Control Protocol (agent.py, protocol.py, terminals.py)
-├── styles/kagan.tcss   # ALL CSS here (no DEFAULT_CSS in Python!)
-└── ui/
-    ├── screens/        # kanban/, planner.py, welcome.py, approval.py
-    ├── widgets/        # card.py, column.py, header.py, search_bar.py
-    └── modals/         # ticket_details_modal.py, review.py, confirm.py, help.py
+├── styles/             # Textual CSS
+├── app.py              # Main Textual App
+├── config.py           # TOML configuration
+├── git_utils.py        # Async git operations
+└── __main__.py         # CLI entry point
+
+tests/
+├── e2e/                # End-to-end tests
+├── integration/        # Real filesystem/DB tests
+├── property/           # Hypothesis tests
+├── snapshot/           # Visual regression
+├── helpers/            # Test helpers & page objects
+└── conftest.py         # Pytest fixtures
 ```
 
-## Code Style
-
-### Imports
-
-Order: stdlib -> third-party -> local. Always use `from __future__ import annotations`.
-
-```python
-from __future__ import annotations
-from typing import TYPE_CHECKING, cast
-from kagan.constants import COLUMN_ORDER
-
-if TYPE_CHECKING:
-    from kagan.app import KaganApp
-```
-
-### Type Annotations
-
-- Always annotate function signatures and class attributes
-- Use `X | None` union syntax (not `Optional[X]`)
-- Use `TYPE_CHECKING` block for type-only imports
-- Use `cast()` for type narrowing: `return cast("KaganApp", self.app)`
-
-### Naming Conventions
-
-| Type      | Convention        | Example                             |
-| --------- | ----------------- | ----------------------------------- |
-| Classes   | PascalCase        | `TicketCard`, `KanbanScreen`        |
-| Functions | snake_case        | `get_all_tickets`, `_refresh_board` |
-| Private   | underscore prefix | `_get_focused_card`                 |
-| Constants | UPPER_SNAKE       | `COLUMN_ORDER`, `MIN_WIDTH`         |
-| Enums     | PascalCase/UPPER  | `TicketStatus.BACKLOG`              |
-
-### Enums (database-safe)
-
-```python
-class TicketStatus(str, Enum):
-    BACKLOG = "BACKLOG"
-
-
-class TicketPriority(int, Enum):
-    LOW = 0
-```
-
-### Pydantic Models
-
-```python
-class Ticket(BaseModel):
-    id: str = Field(default_factory=lambda: uuid4().hex[:8])
-    title: str = Field(..., min_length=1, max_length=200)
-    model_config = ConfigDict(use_enum_values=True)
-```
-
-## Testing
-
-**IMPORTANT**: Before writing or modifying ANY test, read [docs/internal/testing_rules.md](docs/internal/testing_rules.md).
-
-**Framework**: pytest with pytest-asyncio (auto mode), pytest-cov, pytest-textual-snapshot
-
-| Category    | Marker                    | Mocking Allowed        |
-| ----------- | ------------------------- | ---------------------- |
-| unit        | `pytest.mark.unit`        | None (pure logic)      |
-| integration | `pytest.mark.integration` | External services only |
-| e2e         | `pytest.mark.e2e`         | Network calls only     |
-| snapshot    | `pytest.mark.snapshot`    | None                   |
-
-### Test Fixtures (from conftest.py)
-
-`state_manager`, `git_repo`, `mock_agent`, `mock_worktree_manager`, `mock_session_manager`, `e2e_project`, `e2e_app`
-
-```python
-async def test_navigation(self, e2e_app: KaganApp):
-    async with e2e_app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("j")
-        await pilot.pause()
-```
-
-### Test Rules
-
-- E2E tests mock at boundaries (network), not internals
-- Avoid tautological tests (mock A, assert A)
-- Use `@pytest.mark.parametrize` to reduce duplication
-- Keep test files compact (never exceed 1000 LOC); check conftest.py before creating fixtures
-
-## Ruff Configuration
-
-Line length: 100. Target: Python 3.12. Rules: E, F, I, UP, B, SIM, TCH, RUF.
-**Always run `uv run poe fix` before manual edits** - ruff auto-fixes most issues.
-Ignored: `RUF012` (Textual class attrs), `SIM102/SIM117` (nested if/with allowed).
-
-## Key Rules
-
-1. **CSS in `.tcss` only** - All styles in `kagan.tcss`, never use `DEFAULT_CSS`
-1. **Async database** - All DB operations via aiosqlite StateManager
-1. **Constants module** - Use `kagan.constants` for shared values
-1. **Property assertions** - Use `@property` with `assert` for required state
-1. **Compact modules** - Keep modules compact and focused; never exceed 1000 LOC per file
-1. **Keybindings in registry only** - All bindings defined in `kagan.keybindings`
-
-## Ticket State Machine
-
-Kagan has two ticket modes with fundamentally different behaviors:
-
-### AUTO Mode (Autonomous Execution)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         AUTO TICKET STATE MACHINE                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                              ┌──────────┐
-                              │ BACKLOG  │◄─────────────────────────────┐
-                              └────┬─────┘                              │
-                                   │                                    │
-                     User moves to IN_PROGRESS                          │
-                     (or auto_start on launch)                          │
-                                   │                                    │
-                                   ▼                                    │
-                        ┌──────────────────┐                            │
-            ┌──────────►│   IN_PROGRESS    │                            │
-            │           │  ┌────────────┐  │                            │
-            │           │  │   Agent    │  │                            │
-            │           │  │  Running   │  │                            │
-            │           │  └────────────┘  │                            │
-            │           └────────┬─────────┘                            │
-            │                    │                                      │
-            │      ┌─────────────┼─────────────┬────────────────────────┤
-            │      │             │             │                        │
-            │      ▼             ▼             ▼                        │
-            │  <continue/>   <complete/>   <blocked/>              Error/Timeout
-            │      │             │         Max iterations              │
-            │      │             │             │                        │
-            │      │             ▼             │                        │
-            │      │      ┌──────────┐         │                        │
-            │      │      │  REVIEW  │         │                        │
-            │      │      └────┬─────┘         │                        │
-            │      │           │               │                        │
-            │      │     ┌─────┴─────┐         │                        │
-            │      │     │           │         │                        │
-            │      │     ▼           ▼         │                        │
-            │      │  Approved   Rejected      │                        │
-            │      │     │           │         │                        │
-            │      │     │           │         │                        │
-            └──────┘     │           └─────────┴────────────────────────┘
-                         │
-                         ▼ (if auto_merge enabled)
-                    ┌──────────┐
-                    │   DONE   │
-                    └──────────┘
-
-SIGNALS (agent responses):
-  • <continue/> → Stay in IN_PROGRESS, run next iteration
-  • <complete/> → Move to REVIEW, run automated review
-  • <blocked reason="..."/> → Move to BACKLOG with reason
-
-AUTOMATIC BEHAVIORS:
-  • Moving to IN_PROGRESS → Spawns agent automatically
-  • Moving OUT of IN_PROGRESS → Stops agent automatically
-  • On startup (if auto_start=true) → Spawns agents for existing IN_PROGRESS tickets
-  • After <complete/> → Runs automated review agent
-  • If review passes + auto_merge=true → Merges to main, moves to DONE
-```
-
-### PAIR Mode (Human-Driven)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         PAIR TICKET STATE MACHINE                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                              ┌──────────┐
-                              │ BACKLOG  │◄────────────────────────────┐
-                              └────┬─────┘                             │
-                                   │                                   │
-                             User action                               │
-                                   │                                   │
-                                   ▼                                   │
-                        ┌──────────────────┐                           │
-                        │   IN_PROGRESS    │                           │
-                        │  ┌────────────┐  │                           │
-                        │  │   Human    │  │                           │
-                        │  │  Working   │  │                           │
-                        │  └────────────┘  │                           │
-                        └────────┬─────────┘                           │
-                                 │                                     │
-                           User action                                 │
-                                 │                                     │
-                      ┌──────────┴──────────┐                          │
-                      │                     │                          │
-                      ▼                     ▼                          │
-               ┌──────────┐          ┌──────────┐                      │
-               │  REVIEW  │          │ BACKLOG  │──────────────────────┤
-               └────┬─────┘          └──────────┘                      │
-                    │                                                  │
-              User action                                              │
-                    │                                                  │
-         ┌──────────┴──────────┐                                       │
-         │                     │                                       │
-         ▼                     ▼                                       │
-    ┌──────────┐         ┌──────────┐                                  │
-    │   DONE   │         │ BACKLOG  │──────────────────────────────────┘
-    └──────────┘         └──────────┘
-
-NO AUTOMATIC BEHAVIORS:
-  • All state transitions are manual (user-initiated)
-  • No agent spawning or stopping
-  • No automated review
-  • No auto-merge
-  • Use for human-driven development with optional AI pair assistance
-```
-
-### Transition Summary
-
-| From → To             | AUTO Ticket                        | PAIR Ticket |
-| --------------------- | ---------------------------------- | ----------- |
-| BACKLOG → IN_PROGRESS | **Spawns agent** automatically     | Manual only |
-| IN_PROGRESS → REVIEW  | Agent signals `<complete/>`        | Manual only |
-| IN_PROGRESS → BACKLOG | `<blocked/>`, max iter, or error   | Manual only |
-| REVIEW → DONE         | Auto-merge (if enabled + passed)   | Manual only |
-| REVIEW → BACKLOG      | Manual rejection                   | Manual only |
-| Any → (stop agent)    | Automatic on exit from IN_PROGRESS | N/A         |
-
-### Configuration Options
-
-For the complete configuration reference, see **[docs/config.md](docs/config.md)**.
-
-Key settings affecting agent behavior:
-
-| Setting          | Purpose                                         |
-| ---------------- | ----------------------------------------------- |
-| `auto_start`     | Spawn agents for IN_PROGRESS tickets on startup |
-| `auto_merge`     | Auto-merge to main when review passes           |
-| `max_iterations` | Max agent iterations before moving to BACKLOG   |
-
-## Agent Roles and Capabilities
-
-Different agent contexts have different capability profiles controlled by the `read_only` parameter:
-
-| Agent Context    | Location           | read_only | Write Files | Terminal | Purpose                           |
-| ---------------- | ------------------ | --------- | ----------- | -------- | --------------------------------- |
-| Planner          | `planner.py:115`   | Yes       | No          | No       | Create tickets from natural lang  |
-| Refiner          | `refiner.py:66`    | Yes       | No          | No       | Enhance prompts before submission |
-| Review Modal     | `review.py:132`    | Yes       | No          | No       | AI-powered code review            |
-| Scheduler Review | `scheduler.py:269` | Yes       | No          | No       | Automated ticket review           |
-| Worker           | `scheduler.py:191` | No        | Yes         | Yes      | Execute ticket implementation     |
-
-### Setting Agent Capabilities
-
-```python
-from kagan.acp.agent import Agent
-
-# Read-only agent (planner, refiner, reviewer)
-agent = Agent(project_root, config, read_only=True)
-
-# Full capability agent (worker)
-agent = Agent(project_root, config)  # read_only=False by default
-```
-
-### Why Read-Only Mode?
-
-Read-only mode enforces **capability-based access control** at the ACP protocol level:
-
-1. **Hard enforcement**: Agents cannot write files or run commands, regardless of prompts
-1. **Defense in depth**: RPC handlers also reject operations if `read_only=True`
-1. **Prevents prompt injection**: Even if an agent is tricked, it lacks the capability to act
-
-This follows the principle: "Give agents the minimal capabilities required for their job."
-
-## Keybindings Registry
-
-**All keybindings are defined in `src/kagan/keybindings.py`** - this is the single source of truth for code.
-
-For the complete list of user-facing keyboard shortcuts, see **[docs/keybindings.md](docs/keybindings.md)**.
-
-### Adding/Modifying Keybindings
-
-The module uses Textual's native `Binding` class directly:
-
-1. **Define in keybindings.py** - Add `Binding` to the appropriate collection (`APP_BINDINGS`, `KANBAN_BINDINGS`, etc.)
-1. **Use in component** - Assign collection to `BINDINGS` class variable
-1. **Update docs/keybindings.md** - Add the new shortcut to the user-facing documentation
-
-```python
-# In keybindings.py
-KANBAN_BINDINGS: list[BindingType] = [
-    Binding("n", "new_ticket", "New"),
-    Binding("N", "new_auto_ticket", "New AUTO", key_display="Shift+N"),
-    # ...
-]
-
-# In screens/kanban.py
-from kagan.keybindings import KANBAN_BINDINGS
-
-
-class KanbanScreen(Screen):
-    BINDINGS = KANBAN_BINDINGS
-```
-
-### Terminal-Safe Keys
-
-Avoid these conflicts:
-
-- `ctrl+d` → Use `x` (Unix EOF)
-- `ctrl+m` → Use `m` (terminal Enter)
-- `ctrl+,` → Use `,` (cross-platform issues)
-
-For test fixtures:
-
-```python
-await asyncio.create_subprocess_exec("git", "config", "commit.gpgsign", "false", cwd=repo_path)
-```
-
-## Commit Messages
-
-**IMPORTANT: Follow Conventional Commits strictly.** Semantic release automates versioning based on commit prefixes.
-
-```
-<type>: <description>
-
-[optional body]
-```
-
-| Type        | Version Bump | Changelog | Use When                                  |
-| ----------- | ------------ | --------- | ----------------------------------------- |
-| `feat:`     | Minor        | Yes       | New user-facing feature                   |
-| `fix:`      | Patch        | Yes       | Bug fix affecting users                   |
-| `perf:`     | Patch        | Yes       | Performance improvement users will notice |
-| `refactor:` | None         | Yes       | Code restructure without behavior change  |
-| `docs:`     | None         | No        | Documentation only                        |
-| `test:`     | None         | No        | Adding/updating tests                     |
-| `chore:`    | None         | No        | Maintenance (deps, configs)               |
-| `ci:`       | None         | No        | CI/CD changes                             |
-| `style:`    | None         | No        | Formatting, whitespace                    |
-| `build:`    | None         | No        | Build system changes                      |
-
-**Critical Rules:**
-
-1. User-facing changes MUST use `feat:`, `fix:`, or `perf:` - these trigger releases
-1. Mixed changes (e.g., feature + tests) use the highest-impact type (`feat:`)
-1. Breaking changes add `BREAKING CHANGE:` in body or `!` after type (`feat!:`)
-1. Never use `chore:` or `docs:` for changes that affect user behavior
+## Notes
+
+- Python 3.12+ required
+- Use `uv` for all package management
+- Pre-commit hooks must pass
+- CI: Ubuntu + macOS (full matrix on main)
+- System deps: `tmux`, `git`

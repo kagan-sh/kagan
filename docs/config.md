@@ -18,23 +18,29 @@ Kagan configuration lives in `.kagan/config.toml`, created automatically on firs
 auto_start = false
 auto_approve = false
 auto_merge = false
+auto_retry_on_merge_conflict = true
+require_review_approval = false
+serialize_merges = false
 default_base_branch = "main"
 default_worker_agent = "claude"
-max_concurrent_agents = 3
+max_concurrent_agents = 1
 max_iterations = 10
 iteration_delay_seconds = 2.0
 ```
 
-| Setting                   | Default    | Purpose                                            |
-| ------------------------- | ---------- | -------------------------------------------------- |
-| `auto_start`              | `false`    | Auto-run agents for IN_PROGRESS tickets on startup |
-| `auto_approve`            | `false`    | Skip permission prompts for AI actions             |
-| `auto_merge`              | `false`    | Auto-merge tickets after review passes             |
-| `default_base_branch`     | `"main"`   | Base branch for worktrees and merges               |
-| `default_worker_agent`    | `"claude"` | Default agent for new tickets                      |
-| `max_concurrent_agents`   | `3`        | Maximum parallel AUTO agents                       |
-| `max_iterations`          | `10`       | Max agent iterations before BACKLOG                |
-| `iteration_delay_seconds` | `2.0`      | Delay between agent iterations                     |
+| Setting                        | Default    | Purpose                                            |
+| ------------------------------ | ---------- | -------------------------------------------------- |
+| `auto_start`                   | `false`    | Auto-run agents for IN_PROGRESS tickets on startup |
+| `auto_approve`                 | `false`    | Skip permission prompts for AI actions             |
+| `auto_merge`                   | `false`    | Auto-merge tickets after review passes             |
+| `auto_retry_on_merge_conflict` | `true`     | Retry auto-merge after rebase on conflicts         |
+| `require_review_approval`      | `false`    | Require review approval before merge actions       |
+| `serialize_merges`             | `false`    | Serialize manual merges to reduce conflicts        |
+| `default_base_branch`          | `"main"`   | Base branch for worktrees and merges               |
+| `default_worker_agent`         | `"claude"` | Default agent for new tickets                      |
+| `max_concurrent_agents`        | `1`        | Maximum parallel AUTO agents                       |
+| `max_iterations`               | `10`       | Max agent iterations before BACKLOG                |
+| `iteration_delay_seconds`      | `2.0`      | Delay between agent iterations                     |
 
 ## Agent Configuration
 

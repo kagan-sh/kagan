@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     import aiosqlite
 
 
-class TicketStatus(str, Enum):
+class TicketStatus(StrEnum):
     """Ticket status values for Kanban columns."""
 
     BACKLOG = "BACKLOG"
@@ -61,14 +61,14 @@ class TicketPriority(int, Enum):
         return {self.LOW: "low", self.MEDIUM: "medium", self.HIGH: "high"}[self]
 
 
-class TicketType(str, Enum):
+class TicketType(StrEnum):
     """Ticket execution type."""
 
     AUTO = "AUTO"  # Autonomous execution via ACP scheduler
     PAIR = "PAIR"  # Pair programming via tmux session
 
 
-class MergeReadiness(str, Enum):
+class MergeReadiness(StrEnum):
     """Merge readiness indicator for REVIEW tickets."""
 
     READY = "ready"

@@ -64,6 +64,7 @@ Press `g`, then:
 | `p`        | Open planner mode      |
 | `,`        | Open settings          |
 | `F1` / `?` | Show help              |
+| `F12`      | Debug log viewer       |
 | `Ctrl+P`   | Command palette        |
 | `Escape`   | Deselect / close modal |
 | `q`        | Quit                   |
@@ -135,6 +136,15 @@ The **Retry** action resets the iteration counter for a fresh attempt.
 | `y`      | Copy output  |
 | `c`      | Cancel agent |
 | `Escape` | Close        |
+
+### Debug Log Modal
+
+| Key      | Action                          |
+| -------- | ------------------------------- |
+| `c`      | Clear all logs                  |
+| `s`      | Save logs to `.kagan/debug.log` |
+| `F12`    | Toggle modal (close)            |
+| `Escape` | Close                           |
 
 ### Settings Modal
 
