@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from tests.helpers.mocks import create_mock_session_manager, create_test_config
 
 from kagan.agents.scheduler import Scheduler
@@ -894,3 +896,200 @@ class TestTicketSearch:
 
         results = await state_manager.search_tickets("")
         assert len(results) == 0
+
+
+# =============================================================================
+# Unit Tests: Merge Conflict Parsing
+# =============================================================================
+
+
+@pytest.mark.unit
+class TestParseConflictFiles:
+    """Unit tests for _parse_conflict_files() helper function."""
+
+    def test_parse_single_conflict(self):
+        """Parses single file conflict from git output."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = "CONFLICT (content): Merge conflict in src/app.py"
+        result = _parse_conflict_files(git_output)
+
+        assert result == ["src/app.py"]
+
+    def test_parse_multiple_conflicts(self):
+        """Parses multiple file conflicts from git output."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = """
+CONFLICT (content): Merge conflict in src/database/models.py
+CONFLICT (content): Merge conflict in tests/test_app.py
+CONFLICT (content): Merge conflict in README.md
+        """
+        result = _parse_conflict_files(git_output)
+
+        assert len(result) == 3
+        assert "src/database/models.py" in result
+        assert "tests/test_app.py" in result
+        assert "README.md" in result
+
+    def test_parse_rename_conflict(self):
+        """Parses rename/delete conflicts from git output."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = "CONFLICT (rename/delete): Merge conflict in old_file.py"
+        result = _parse_conflict_files(git_output)
+
+        assert result == ["old_file.py"]
+
+    def test_parse_modify_delete_conflict(self):
+        """Parses modify/delete conflicts from git output."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = "CONFLICT (modify/delete): Merge conflict in config.yaml"
+        result = _parse_conflict_files(git_output)
+
+        assert result == ["config.yaml"]
+
+    def test_parse_empty_output(self):
+        """Returns empty list for empty output."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        result = _parse_conflict_files("")
+
+        assert result == []
+
+    def test_parse_no_conflicts(self):
+        """Returns empty list when no conflicts in output."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = """
+Merging:
+Auto-merging src/app.py
+Fast-forward merge completed successfully
+        """
+        result = _parse_conflict_files(git_output)
+
+        assert result == []
+
+    def test_parse_multiline_with_other_text(self):
+        """Extracts conflicts from verbose git output."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = """
+Auto-merging src/utils.py
+CONFLICT (content): Merge conflict in src/utils.py
+Automatic merge failed; fix conflicts and then commit the result.
+Auto-merging tests/test_utils.py
+CONFLICT (content): Merge conflict in tests/test_utils.py
+        """
+        result = _parse_conflict_files(git_output)
+
+        assert len(result) == 2
+        assert "src/utils.py" in result
+        assert "tests/test_utils.py" in result
+
+    def test_parse_file_with_spaces(self):
+        """Handles file paths with spaces correctly."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = "CONFLICT (content): Merge conflict in my documents/file name.txt"
+        result = _parse_conflict_files(git_output)
+
+        assert result == ["my documents/file name.txt"]
+
+    def test_parse_file_with_special_chars(self):
+        """Handles file paths with special characters."""
+        from kagan.lifecycle.ticket_lifecycle import _parse_conflict_files
+
+        git_output = "CONFLICT (content): Merge conflict in src/user-config_v2.0.py"
+        result = _parse_conflict_files(git_output)
+
+        assert result == ["src/user-config_v2.0.py"]
+
+
+@pytest.mark.unit
+class TestIsMergeConflict:
+    """Unit tests for _is_merge_conflict() helper function."""
+
+    def test_detects_conflict_keyword(self):
+        """Detects 'CONFLICT' keyword in message."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert _is_merge_conflict("CONFLICT (content): Merge conflict in app.py")
+
+    def test_detects_merge_conflict_phrase(self):
+        """Detects 'Merge conflict' phrase in message."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert _is_merge_conflict("Merge conflict in src/database.py")
+
+    def test_detects_conflict_in_phrase(self):
+        """Detects 'conflict in' phrase in message."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert _is_merge_conflict("There is a conflict in the file")
+
+    def test_detects_fix_conflicts_phrase(self):
+        """Detects 'fix conflicts' phrase in message."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert _is_merge_conflict("Please fix conflicts and commit")
+
+    def test_case_insensitive_detection(self):
+        """Conflict detection is case-insensitive."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert _is_merge_conflict("conflict detected")
+        assert _is_merge_conflict("CONFLICT DETECTED")
+        assert _is_merge_conflict("Conflict Detected")
+        assert _is_merge_conflict("merge CONFLICT in file")
+
+    def test_no_conflict_in_success_message(self):
+        """Returns False for successful merge messages."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert not _is_merge_conflict("Merge completed successfully")
+        assert not _is_merge_conflict("Fast-forward merge")
+        assert not _is_merge_conflict("Already up to date")
+
+    def test_no_conflict_in_empty_message(self):
+        """Returns False for empty message."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert not _is_merge_conflict("")
+
+    def test_no_conflict_in_unrelated_error(self):
+        """Returns False for non-conflict errors."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        assert not _is_merge_conflict("Permission denied")
+        assert not _is_merge_conflict("Network error occurred")
+        assert not _is_merge_conflict("Branch not found")
+
+    def test_conflict_in_multiline_message(self):
+        """Detects conflicts in multi-line messages."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        message = """
+Auto-merging src/app.py
+CONFLICT (content): Merge conflict in src/app.py
+Automatic merge failed; fix conflicts and then commit the result.
+        """
+        assert _is_merge_conflict(message)
+
+    def test_partial_word_match_excluded(self):
+        """Does not match partial words like 'conflicting' unless 'conflict' is found."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        # These should match because they contain "conflict"
+        assert _is_merge_conflict("conflicting changes detected")
+        assert _is_merge_conflict("conflicts found in files")
+
+    def test_no_false_positives(self):
+        """Does not detect conflicts in messages about conflict resolution."""
+        from kagan.lifecycle.ticket_lifecycle import _is_merge_conflict
+
+        # Should NOT match - these don't contain the conflict indicators
+        assert not _is_merge_conflict("All issues resolved")
+        assert not _is_merge_conflict("Merge strategy applied")
+        assert not _is_merge_conflict("Branch merged without issues")
