@@ -416,6 +416,8 @@ class ReviewModal(
         await self._refresh_runtime_state()
 
     async def _refresh_runtime_state(self) -> None:
+        if not self.is_mounted:
+            return
         app = cast("KaganApp", self.app)
         latest = await app.ctx.task_service.get_task(self._task_model.id)
         if latest is not None:

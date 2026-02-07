@@ -115,6 +115,8 @@ class KanbanBoardController:
             self.screen.remove_class("too-small")
 
     async def refresh_board(self) -> None:
+        if not self.screen.is_mounted:
+            return
         focused_task_id = None
         focused = self.screen.app.focused
         if isinstance(focused, TaskCard) and focused.task_model:
