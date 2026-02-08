@@ -1,1 +1,1 @@
-"""Adapter layer for external systems (db, git, executors)."""
+"""Adapter layer for external systems (db, git)."""
