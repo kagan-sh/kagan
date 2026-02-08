@@ -46,24 +46,26 @@ class SearchBar(Widget):
 
     def watch_is_visible(self, is_visible: bool) -> None:
         """Toggle visibility CSS class."""
+        inp = safe_query_one(self, "#search-input", Input)
         if is_visible:
             self.add_class("visible")
+            if inp is not None:
+                inp.can_focus = True
+                inp.focus()
         else:
             self.remove_class("visible")
+            if inp is not None:
+                inp.can_focus = False
+            if self.search_query:
+                self.clear()
 
     def show(self) -> None:
         """Show the search bar and focus the input."""
         self.is_visible = True
-        if inp := safe_query_one(self, "#search-input", Input):
-            inp.can_focus = True
-            inp.focus()
 
     def hide(self) -> None:
         """Hide the search bar and clear the query."""
         self.is_visible = False
-        if inp := safe_query_one(self, "#search-input", Input):
-            inp.can_focus = False
-        self.clear()
 
     def clear(self) -> None:
         """Clear the search query."""

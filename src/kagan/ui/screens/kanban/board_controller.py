@@ -22,7 +22,6 @@ from kagan.ui.widgets.card import TaskCard
 from kagan.ui.widgets.column import KanbanColumn
 from kagan.ui.widgets.keybinding_hint import KanbanHintBar
 from kagan.ui.widgets.offline_banner import OfflineBanner
-from kagan.ui.widgets.search_bar import SearchBar
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -52,11 +51,8 @@ class KanbanBoardController:
             self.screen._refresh_timer = None
 
     async def reset_for_repo_change(self) -> None:
-        with suppress(NoMatches):
-            search_bar = self.screen.query_one("#search-bar", SearchBar)
-            if search_bar.is_visible:
-                search_bar.hide()
-                search_bar.clear()
+        if self.screen.search_visible:
+            self.screen.search_visible = False
         self.screen._ui_state.filtered_tasks = None
         self.screen._task_hashes.clear()
         self.screen._tasks = []

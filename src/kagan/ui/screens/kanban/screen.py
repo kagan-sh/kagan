@@ -9,6 +9,7 @@ from textual import getters, on
 from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.css.query import NoMatches
+from textual.reactive import var
 from textual.widgets import Static
 
 from kagan.constants import (
@@ -30,6 +31,11 @@ from kagan.ui.screen_result import await_screen_result
 from kagan.ui.screens.base import KaganScreen
 from kagan.ui.screens.kanban import focus
 from kagan.ui.screens.kanban.board_controller import KanbanBoardController
+from kagan.ui.screens.kanban.commands import (
+    KANBAN_ACTIONS,
+    KanbanCommandProvider,
+    get_kanban_action,
+)
 from kagan.ui.screens.kanban.review_controller import KanbanReviewController
 from kagan.ui.screens.kanban.session_controller import KanbanSessionController
 from kagan.ui.screens.kanban.state import KanbanUiState
@@ -43,6 +49,8 @@ from kagan.ui.widgets.peek_overlay import PeekOverlay
 from kagan.ui.widgets.search_bar import SearchBar
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
+
     from textual import events
     from textual.app import ComposeResult
     from textual.timer import Timer
@@ -61,7 +69,9 @@ BRANCH_LOOKUP_TIMEOUT_SECONDS = 1.0
 class KanbanScreen(KaganScreen):
     """Main Kanban board screen with 4 columns."""
 
+    COMMANDS = {KanbanCommandProvider}
     BINDINGS = KANBAN_BINDINGS
+    search_visible: var[bool] = var(False, init=False)
 
     header = getters.query_one(KaganHeader)
 
@@ -78,30 +88,9 @@ class KanbanScreen(KaganScreen):
         self._review = KanbanReviewController(self)
         self._session = KanbanSessionController(self)
 
-    _TASK_REQUIRED_ACTIONS = frozenset(
-        {
-            "edit_task",
-            "delete_task",
-            "delete_task_direct",
-            "view_details",
-            "open_session",
-            "move_forward",
-            "move_backward",
-            "duplicate_task",
-            "merge",
-            "merge_direct",
-            "view_diff",
-            "open_review",
-            "start_agent",
-            "stop_agent",
-        }
-    )
-
+    _TASK_REQUIRED_ACTIONS = frozenset(item.action for item in KANBAN_ACTIONS if item.requires_task)
     _AGENT_REQUIRED_ACTIONS = frozenset(
-        {
-            "start_agent",
-            "open_planner",
-        }
+        item.action for item in KANBAN_ACTIONS if item.requires_agent
     )
 
     def _validate_action(self, action: str) -> tuple[bool, str | None]:
@@ -166,7 +155,7 @@ class KanbanScreen(KaganScreen):
 
     def compose(self) -> ComposeResult:
         yield KaganHeader(task_count=0)
-        yield SearchBar(id="search-bar")
+        yield SearchBar(id="search-bar").data_bind(is_visible=KanbanScreen.search_visible)
         with Container(classes="board-container"):
             with Horizontal(classes="board"):
                 for status in COLUMN_ORDER:
@@ -216,6 +205,14 @@ class KanbanScreen(KaganScreen):
     async def reset_for_repo_change(self) -> None:
         await self._board.reset_for_repo_change()
 
+    async def prepare_for_planner_return(self) -> None:
+        """Ensure board reflects planner-created tasks when returning from planner."""
+        if self.search_visible:
+            self.search_visible = False
+        self._ui_state.filtered_tasks = None
+        await self._board.refresh_board()
+        self._board.sync_agent_states()
+
     @on(OfflineBanner.Reconnect)
     def on_offline_banner_reconnect(self, event: OfflineBanner.Reconnect) -> None:
         """Handle reconnect from offline banner - refresh agent health check."""
@@ -249,15 +246,11 @@ class KanbanScreen(KaganScreen):
                 return
         except NoMatches:
             pass
-        try:
-            search_bar = self.query_one("#search-bar", SearchBar)
-            if search_bar.is_visible:
-                search_bar.hide()
-                self._ui_state.filtered_tasks = None
-                self.run_worker(self._board.refresh_board())
-                return
-        except NoMatches:
-            pass
+        if self.search_visible:
+            self.search_visible = False
+            self._ui_state.filtered_tasks = None
+            self.run_worker(self._board.refresh_board())
+            return
         self.app.set_focus(None)
 
     def action_quit(self) -> None:
@@ -266,7 +259,10 @@ class KanbanScreen(KaganScreen):
     def action_interrupt(self) -> None:
         self.app.exit()
 
-    async def action_toggle_peek(self) -> None:
+    def action_toggle_peek(self) -> None:
+        self._dispatch_kanban_action("toggle_peek")
+
+    async def _toggle_peek_flow(self, task: Task) -> None:
         card = focus.get_focused_card(self)
         if not card or not card.task_model:
             return
@@ -277,10 +273,7 @@ class KanbanScreen(KaganScreen):
         if not overlay.toggle():
             return
 
-        task = card.task_model
-        task_type = task.task_type
-
-        if task_type == TaskType.AUTO:
+        if task.task_type == TaskType.AUTO:
             if self._is_runtime_running(task.id):
                 run_count = self._runtime_run_count(task.id)
                 run_label = f" (Run {run_count})" if run_count > 0 else ""
@@ -323,16 +316,15 @@ class KanbanScreen(KaganScreen):
                 self.notify(reason, severity="warning")
 
     def action_toggle_search(self) -> None:
-        try:
-            search_bar = self.query_one("#search-bar", SearchBar)
-            if search_bar.is_visible:
-                search_bar.hide()
-                self._ui_state.filtered_tasks = None
-                self.run_worker(self._board.refresh_board())
-            else:
-                search_bar.show()
-        except NoMatches:
-            pass
+        self._dispatch_kanban_action("toggle_search")
+
+    async def _toggle_search_flow(self) -> None:
+        if self.search_visible:
+            self.search_visible = False
+            self._ui_state.filtered_tasks = None
+            await self._board.refresh_board()
+            return
+        self.search_visible = True
 
     @on(SearchBar.QueryChanged)
     def on_search_query_changed(self, event: SearchBar.QueryChanged) -> None:
@@ -353,14 +345,144 @@ class KanbanScreen(KaganScreen):
         self._ui_state.filtered_tasks = filtered_tasks
         await self._board.refresh_board()
 
+    def _focused_task(self, *, notify_on_missing: bool = False) -> Task | None:
+        card = focus.get_focused_card(self)
+        if not card or not card.task_model:
+            if notify_on_missing:
+                self.notify("No task selected", severity="warning")
+            return None
+        return card.task_model
+
+    def _run_worker_for_action(self, action: str, operation: Awaitable[None]) -> None:
+        spec = get_kanban_action(action)
+        if spec is None:
+            self.run_worker(operation)
+            return
+
+        if spec.worker_group is not None:
+            self.run_worker(
+                operation,
+                group=spec.worker_group,
+                exclusive=spec.exclusive,
+                exit_on_error=spec.exit_on_error,
+            )
+            return
+
+        self.run_worker(
+            operation,
+            exclusive=spec.exclusive,
+            exit_on_error=spec.exit_on_error,
+        )
+
+    def _dispatch_kanban_action(
+        self,
+        action: str,
+        *,
+        notify_on_missing_task: bool = False,
+    ) -> bool:
+        operation = self._resolve_kanban_action_operation(
+            action,
+            notify_on_missing_task=notify_on_missing_task,
+        )
+        if operation is None:
+            return False
+        self._run_worker_for_action(action, operation)
+        return True
+
+    def run_kanban_action(self, action: str) -> None:
+        """Dispatch a Kanban action through the shared action table."""
+        notify_on_missing = action == "duplicate_task"
+        if self._dispatch_kanban_action(action, notify_on_missing_task=notify_on_missing):
+            return
+        action_method = getattr(self, f"action_{action}", None)
+        if action_method is None:
+            return
+        result = action_method()
+        if asyncio.iscoroutine(result):
+            self.run_worker(result)
+
+    def _resolve_kanban_action_operation(
+        self,
+        action: str,
+        *,
+        notify_on_missing_task: bool = False,
+    ) -> Awaitable[None] | None:
+        task: Task | None = None
+        spec = get_kanban_action(action)
+        if spec is not None and spec.requires_task:
+            task = self._focused_task(notify_on_missing=notify_on_missing_task)
+            if task is None:
+                return None
+
+        if action == "new_task":
+            return self._open_task_details_modal()
+        if action == "new_auto_task":
+            return self._open_task_details_modal(initial_type=TaskType.AUTO)
+        if action == "edit_task":
+            if task is None:
+                return None
+            return self._open_task_details_modal(task=task, start_editing=True)
+        if action == "delete_task_direct":
+            if task is None:
+                return None
+            return self._confirm_and_delete_task(task)
+        if action == "merge_direct":
+            return self._review.action_merge_direct()
+        if action == "rebase":
+            return self._review.action_rebase()
+        if action == "move_forward":
+            return self._review.move_task(forward=True)
+        if action == "move_backward":
+            return self._review.move_task(forward=False)
+        if action == "duplicate_task":
+            if task is None:
+                return None
+            return self._run_duplicate_task_flow(task)
+        if action == "view_details":
+            if task is None:
+                return None
+            return self._open_task_details_modal(task=task)
+        if action == "toggle_peek":
+            if task is None:
+                return None
+            return self._toggle_peek_flow(task)
+        if action == "toggle_search":
+            return self._toggle_search_flow()
+        if action == "open_session":
+            if task is None:
+                return None
+            return self._session.open_session_flow(task)
+        if action == "start_agent":
+            if task is None:
+                return None
+            return self._session.start_agent_flow(task)
+        if action == "stop_agent":
+            if task is None:
+                return None
+            return self._stop_agent_flow(task)
+        if action == "switch_global_agent":
+            return self._switch_global_agent_flow()
+        if action == "open_settings":
+            return self._open_settings_flow()
+        if action == "view_diff":
+            return self._review.action_view_diff()
+        if action == "open_review":
+            return self._review.action_open_review()
+        if action == "set_task_branch":
+            if task is None:
+                return None
+            return self._set_task_branch_flow(task)
+        if action == "set_default_branch":
+            return self._set_default_branch_flow()
+        if action == "open_planner":
+            return self._open_planner_flow()
+        return None
+
     def action_new_task(self) -> None:
-        self.run_worker(self._open_task_details_modal(), group="task-modal-new")
+        self._dispatch_kanban_action("new_task")
 
     def action_new_auto_task(self) -> None:
-        self.run_worker(
-            self._open_task_details_modal(initial_type=TaskType.AUTO),
-            group="task-modal-new-auto",
-        )
+        self._dispatch_kanban_action("new_auto_task")
 
     async def _open_task_details_modal(
         self,
@@ -421,34 +543,10 @@ class KanbanScreen(KaganScreen):
         self.notify("Task updated")
 
     def action_edit_task(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            return
-        task = card.task_model
-        self.run_worker(
-            self._open_task_details_modal(task=task, start_editing=True),
-            group=f"task-modal-edit-{task.id}",
-        )
-
-    def action_delete_task(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            return
-        task = card.task_model
-        self.run_worker(
-            self._confirm_and_delete_task(task),
-            group=f"delete-task-{task.id}",
-        )
+        self._dispatch_kanban_action("edit_task")
 
     def action_delete_task_direct(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            return
-        task = card.task_model
-        self.run_worker(
-            self._confirm_and_delete_task(task),
-            group=f"delete-task-direct-{task.id}",
-        )
+        self._dispatch_kanban_action("delete_task_direct")
 
     async def _confirm_and_delete_task(self, task: Task) -> None:
         self._ui_state.pending_delete_task = task
@@ -467,27 +565,19 @@ class KanbanScreen(KaganScreen):
         focus.focus_first_card(self)
 
     def action_merge_direct(self) -> None:
-        self.run_worker(self._review.action_merge_direct(), group="review-merge-direct")
+        self._dispatch_kanban_action("merge_direct")
 
     def action_rebase(self) -> None:
-        self.run_worker(self._review.action_rebase(), group="review-rebase")
+        self._dispatch_kanban_action("rebase")
 
     def action_move_forward(self) -> None:
-        self.run_worker(self._review.move_task(forward=True), group="review-move-forward")
+        self._dispatch_kanban_action("move_forward")
 
     def action_move_backward(self) -> None:
-        self.run_worker(self._review.move_task(forward=False), group="review-move-backward")
+        self._dispatch_kanban_action("move_backward")
 
     def action_duplicate_task(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            self.notify("No task selected", severity="warning")
-            return
-        task = card.task_model
-        self.run_worker(
-            self._run_duplicate_task_flow(task),
-            group=f"duplicate-task-{task.id}",
-        )
+        self._dispatch_kanban_action("duplicate_task", notify_on_missing_task=True)
 
     async def _run_duplicate_task_flow(self, source_task: Task) -> None:
         from kagan.ui.modals.duplicate_task import DuplicateTaskModal
@@ -510,21 +600,13 @@ class KanbanScreen(KaganScreen):
         focus.focus_column(self, TaskStatus.BACKLOG)
 
     def action_copy_task_id(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            self.notify("No task selected", severity="warning")
+        task = self._focused_task(notify_on_missing=True)
+        if task is None:
             return
-        copy_with_notification(self.app, f"#{card.task_model.short_id}", "Task ID")
+        copy_with_notification(self.app, f"#{task.short_id}", "Task ID")
 
     def action_view_details(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            return
-        task = card.task_model
-        self.run_worker(
-            self._open_task_details_modal(task=task),
-            group=f"task-modal-view-{task.id}",
-        )
+        self._dispatch_kanban_action("view_details")
 
     def action_expand_description(self) -> None:
         """Expand description in full-screen editor (read-only from Kanban)."""
@@ -539,29 +621,15 @@ class KanbanScreen(KaganScreen):
         self.app.push_screen(modal)
 
     def action_open_session(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            return
-        self.run_worker(
-            self._session.open_session_flow(card.task_model),
-            group=f"open-session-{card.task_model.id}",
-        )
+        self._dispatch_kanban_action("open_session")
 
     def action_start_agent(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            return
-        self.run_worker(
-            self._session.start_agent_flow(card.task_model),
-            group=f"start-agent-{card.task_model.id}",
-        )
+        self._dispatch_kanban_action("start_agent")
 
     async def action_stop_agent(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            return
-        task = card.task_model
+        self._dispatch_kanban_action("stop_agent")
 
+    async def _stop_agent_flow(self, task: Task) -> None:
         self.notify("Stopping agent...", severity="information")
 
         result = self.ctx.automation_service.stop_task(task.id)
@@ -574,15 +642,14 @@ class KanbanScreen(KaganScreen):
         self.notify(f"Agent stopped: {task.id[:8]}", severity="information")
 
     def action_open_planner(self) -> None:
+        self._dispatch_kanban_action("open_planner")
+
+    async def _open_planner_flow(self) -> None:
         self.app.push_screen(PlannerScreen(agent_factory=self.kagan_app._agent_factory))
 
     def action_switch_global_agent(self) -> None:
         """Open global agent picker."""
-        self.run_worker(
-            self._switch_global_agent_flow(),
-            exclusive=True,
-            exit_on_error=False,
-        )
+        self._dispatch_kanban_action("switch_global_agent")
 
     async def _switch_global_agent_flow(self) -> None:
         from kagan.ui.modals import GlobalAgentPickerModal
@@ -596,12 +663,7 @@ class KanbanScreen(KaganScreen):
         await self._session.apply_global_agent_selection(selected)
 
     async def action_open_settings(self) -> None:
-        self.run_worker(
-            self._open_settings_flow(),
-            group="open-settings",
-            exclusive=True,
-            exit_on_error=False,
-        )
+        self._dispatch_kanban_action("open_settings")
 
     async def _open_settings_flow(self) -> None:
         from kagan.ui.modals import SettingsModal
@@ -622,31 +684,16 @@ class KanbanScreen(KaganScreen):
         self.header.update_agent_from_config(self.kagan_app.config)
         self.notify("Settings saved")
 
-    def action_merge(self) -> None:
-        self.run_worker(self._review.action_merge(), group="review-merge")
-
     def action_view_diff(self) -> None:
-        self.run_worker(self._review.action_view_diff(), group="review-view-diff")
+        self._dispatch_kanban_action("view_diff")
 
     def action_open_review(self) -> None:
-        self.run_worker(self._review.action_open_review(), group="review-open")
+        self._dispatch_kanban_action("open_review")
 
     def action_set_task_branch(self) -> None:
-        self.run_worker(
-            self._set_task_branch_flow(),
-            group="set-task-branch",
-            exclusive=True,
-            exit_on_error=False,
-        )
+        self._dispatch_kanban_action("set_task_branch")
 
-    async def _set_task_branch_flow(self) -> None:
-        card = focus.get_focused_card(self)
-        if not card or not card.task_model:
-            self.notify("No task focused", severity="warning")
-            return
-
-        task = card.task_model
-
+    async def _set_task_branch_flow(self, task: Task) -> None:
         branches = await self._load_branch_candidates()
 
         modal = BaseBranchModal(
@@ -665,12 +712,7 @@ class KanbanScreen(KaganScreen):
         self.notify(f"Branch set to: {branch or '(default)'}")
 
     def action_set_default_branch(self) -> None:
-        self.run_worker(
-            self._set_default_branch_flow(),
-            group="set-default-branch",
-            exclusive=True,
-            exit_on_error=False,
-        )
+        self._dispatch_kanban_action("set_default_branch")
 
     async def _set_default_branch_flow(self) -> None:
         config = self.kagan_app.config

@@ -594,17 +594,6 @@ class KaganApp(App):
             if asyncio.iscoroutine(result):
                 self.run_worker(result)
 
-    def _screen_allows_action(self, screen: Screen, action: str) -> bool:
-        if not hasattr(screen, f"action_{action}"):
-            return False
-        check_action = getattr(screen, "check_action", None)
-        if check_action is None:
-            return True
-        try:
-            return check_action(action, ()) is True
-        except Exception:
-            return False
-
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
         yield from super().get_system_commands(screen)
         yield SystemCommand("Help", "Open help", self.action_show_help)
@@ -624,50 +613,6 @@ class KaganApp(App):
             lambda: self._run_action("toggle_debug_log", target="app"),
         )
         yield SystemCommand("Quit", "Exit Kagan", self.exit)
-
-        def _make_screen_callback(action_name: str):
-            def _callback() -> None:
-                self._run_action(action_name, target="screen")
-
-            return _callback
-
-        from kagan.ui.screens.kanban import KanbanScreen
-        from kagan.ui.screens.planner import PlannerScreen
-
-        if isinstance(screen, KanbanScreen):
-            kanban_actions = [
-                ("Task: New", "Create a new task", "new_task"),
-                ("Task: New AUTO", "Create a new AUTO task", "new_auto_task"),
-                ("Task: Open", "Open session or start task", "open_session"),
-                ("Task: Edit", "Edit selected task", "edit_task"),
-                ("Task: View Details", "View task details", "view_details"),
-                ("Task: Delete", "Delete selected task", "delete_task_direct"),
-                ("Task: Duplicate", "Duplicate selected task", "duplicate_task"),
-                ("Task: Peek", "Toggle peek overlay", "toggle_peek"),
-                ("Task: Move Left", "Move task to previous column", "move_backward"),
-                ("Task: Move Right", "Move task to next column", "move_forward"),
-                ("Task: Start Agent", "Start AUTO agent", "start_agent"),
-                ("Task: Stop Agent", "Stop AUTO agent", "stop_agent"),
-                ("Task: View Diff", "View diff (REVIEW tasks)", "view_diff"),
-                ("Task: Review", "Open review modal", "open_review"),
-                ("Task: Merge", "Merge task", "merge_direct"),
-                ("Board: Search", "Toggle search bar", "toggle_search"),
-                ("Board: Plan Mode", "Open planner", "open_planner"),
-                ("Board: Settings", "Open settings", "open_settings"),
-            ]
-            for title, help_text, action in kanban_actions:
-                if self._screen_allows_action(screen, action):
-                    yield SystemCommand(title, help_text, _make_screen_callback(action))
-
-        if isinstance(screen, PlannerScreen):
-            planner_actions = [
-                ("Planner: Enhance", "Refine prompt", "refine"),
-                ("Planner: Back to Board", "Return to board", "to_board"),
-                ("Planner: Stop", "Stop planner", "cancel"),
-            ]
-            for title, help_text, action in planner_actions:
-                if self._screen_allows_action(screen, action):
-                    yield SystemCommand(title, help_text, _make_screen_callback(action))
 
     def action_show_help(self) -> None:
         """Open the help modal."""
