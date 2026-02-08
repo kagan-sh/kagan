@@ -15,7 +15,7 @@ from textual.widgets.option_list import Option
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
-    from kagan.ui.screens.planner.state import SlashCommand
+    from kagan.ui.utils.slash_registry import SlashCommand
 
 
 class SlashComplete(VerticalGroup):

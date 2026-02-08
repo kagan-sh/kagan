@@ -52,14 +52,6 @@ class ChatMessage:
 
 
 @dataclass
-class SlashCommand:
-    """A slash command available in the planner."""
-
-    command: str
-    help: str
-
-
-@dataclass
 class PlannerState:
     """Unified state for the planner screen.
 
