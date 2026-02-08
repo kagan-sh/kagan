@@ -2,6 +2,62 @@
 
 <!-- version list -->
 
+## v0.4.1-beta.1 (2026-02-08)
+
+### Bug Fixes
+
+- Allow Escape to close review modal during automation-managed live streams
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Refresh Kanban board when returning from planner to show newly created tasks
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Run MCP server in degraded mode instead of crashing outside a Kagan project
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Skip auto-update for local/file-source installations
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+### Refactoring
+
+- Add generic slash command registry with alias support
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Consolidate ACP message routing into shared AgentStreamRouter
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Extract task form building and field collection into reusable methods
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Modernize planner screen with command provider, reactive bindings, and stream router
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Project cleanup ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Unify Kanban screen with command palette provider, action dispatch table, and reactive search
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+- Use structured result types in session controller and add AUTO task restart flow
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+### Testing
+
+- Update snapshots, add AUTO restart test, skip flaky Windows CI tests
+  ([#20](https://github.com/kagan-sh/kagan/pull/20),
+  [`939c2e7`](https://github.com/kagan-sh/kagan/commit/939c2e76f5bf221b9b7b7ca5a74ccaf6b4388345))
+
+
 ## v0.4.0 (2026-02-08)
 
 
