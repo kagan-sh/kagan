@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from tests.snapshots.conftest import MockAgentFactory
 
 # Fixed reference times for deterministic snapshot output.
-# _format_time() computes ``_utcnow() - last_opened`` so we keep these
+# _format_time() computes ``utc_now() - last_opened`` so we keep these
 # exactly 23 h apart so the rendered label is always "23h ↵".
 _FIXED_OPENED = datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC)
 _FIXED_NOW = _FIXED_OPENED + timedelta(hours=23)
@@ -53,7 +53,7 @@ class TestWelcomeScreen:
 
         # Freeze the clock used by _format_time() so the relative time
         # label is always "23h ↵" regardless of when the test executes.
-        monkeypatch.setattr("kagan.ui.screens.welcome._utcnow", lambda: _FIXED_NOW)
+        monkeypatch.setattr("kagan.ui.screens.welcome.utc_now", lambda: _FIXED_NOW)
 
         app = KaganApp(
             db_path=snapshot_project.db,

@@ -7,24 +7,26 @@ uncommitted changes must be auto-committed instead of causing hard failures.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from tests.helpers.git import configure_git_user, init_git_repo_with_commit
 from tests.helpers.mocks import create_mock_workspace_service, create_test_config
 
+from kagan.adapters.db.repositories import ExecutionRepository
 from kagan.adapters.git.operations import GitOperationsAdapter
 from kagan.adapters.git.worktrees import GitWorktreeAdapter
 from kagan.bootstrap import InMemoryEventBus
 from kagan.core.models.enums import TaskStatus, TaskType
-from kagan.services.automation import AutomationService
-from kagan.services.executions import ExecutionServiceImpl
-from kagan.services.tasks import TaskService
+from kagan.services.automation import AutomationServiceImpl
+from kagan.services.runtime import RuntimeServiceImpl
+from kagan.services.tasks import TaskServiceImpl
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from kagan.adapters.db.repositories import TaskRepository
+    from kagan.services.projects import ProjectService
 
 
 async def _init_repo(tmp_path: Path, name: str = "wt") -> Path:
@@ -58,22 +60,29 @@ class TestAutoCommitOnComplete:
         )
 
         event_bus = InMemoryEventBus()
-        task_service = TaskService(state_manager, event_bus)
+        task_service = TaskServiceImpl(state_manager, event_bus)
         ws = create_mock_workspace_service()
         ws.get_path = AsyncMock(return_value=worktree)
         config = create_test_config(auto_review=False)
         git_adapter = GitOperationsAdapter()
+        execution_service = ExecutionRepository(state_manager.session_factory)
+        runtime_service = RuntimeServiceImpl(
+            project_service=cast("ProjectService", MagicMock()),
+            session_factory=state_manager.session_factory,
+            execution_service=execution_service,
+        )
 
-        svc = AutomationService(
+        svc = AutomationServiceImpl(
             task_service,
             ws,
             config,
-            execution_service=ExecutionServiceImpl(state_manager),
+            execution_service=execution_service,
             event_bus=event_bus,
             git_adapter=git_adapter,
+            runtime_service=runtime_service,
         )
 
-        await svc._handle_complete(task)
+        await svc._engine._handle_complete(task)
 
         # Worktree is now clean
         assert not await git_adapter.has_uncommitted_changes(str(worktree))
@@ -97,22 +106,29 @@ class TestAutoCommitOnComplete:
         )
 
         event_bus = InMemoryEventBus()
-        task_service = TaskService(state_manager, event_bus)
+        task_service = TaskServiceImpl(state_manager, event_bus)
         ws = create_mock_workspace_service()
         ws.get_path = AsyncMock(return_value=worktree)
         config = create_test_config(auto_review=False)
         git_adapter = GitOperationsAdapter()
+        execution_service = ExecutionRepository(state_manager.session_factory)
+        runtime_service = RuntimeServiceImpl(
+            project_service=cast("ProjectService", MagicMock()),
+            session_factory=state_manager.session_factory,
+            execution_service=execution_service,
+        )
 
-        svc = AutomationService(
+        svc = AutomationServiceImpl(
             task_service,
             ws,
             config,
-            execution_service=ExecutionServiceImpl(state_manager),
+            execution_service=execution_service,
             event_bus=event_bus,
             git_adapter=git_adapter,
+            runtime_service=runtime_service,
         )
 
-        await svc._handle_complete(task)
+        await svc._engine._handle_complete(task)
 
         fetched = await state_manager.get(task.id)
         assert fetched is not None
@@ -125,7 +141,7 @@ class TestAutoCommitOnMerge:
     async def test_merge_auto_commits_instead_of_failing(self, tmp_path: Path):
         """merge_repo auto-commits uncommitted changes instead of returning failure."""
         from kagan.adapters.db.schema import Repo, Workspace, WorkspaceRepo
-        from kagan.services.merges import MergeService, MergeStrategy
+        from kagan.services.merges import MergeServiceImpl, MergeStrategy
 
         worktree = await _init_repo(tmp_path)
         await _make_dirty(worktree)
@@ -134,7 +150,7 @@ class TestAutoCommitOnMerge:
         assert await git_adapter.has_uncommitted_changes(str(worktree))
 
         # Build MergeService with mocked dependencies
-        merge_svc = MergeService(
+        merge_svc = MergeServiceImpl(
             MagicMock(),  # task_service
             MagicMock(),  # workspace_service
             MagicMock(),  # session_service
@@ -163,8 +179,10 @@ class TestAutoCommitOnMerge:
         mock_result = MagicMock()
         mock_result.first.return_value = (workspace_repo, repo, workspace)
 
-        mock_session = AsyncMock()
+        mock_session = MagicMock()
         mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
@@ -188,7 +206,7 @@ class TestAutoCommitOnRebase:
     async def test_rebase_auto_commits_instead_of_failing(self, tmp_path: Path):
         """rebase_onto_base auto-commits uncommitted changes instead of returning failure."""
         from kagan.adapters.db.schema import Repo, Workspace, WorkspaceRepo
-        from kagan.services.workspaces import WorkspaceService
+        from kagan.services.workspaces import WorkspaceServiceImpl
 
         # Set up bare repo + cloned worktree with a dirty file
         bare = tmp_path / "bare.git"
@@ -254,7 +272,7 @@ class TestAutoCommitOnRebase:
         workspace_repo_mock.target_branch = "main"
 
         # Create WorkspaceService with __new__ then mock DB-access methods
-        ws_svc = WorkspaceService.__new__(WorkspaceService)
+        ws_svc = WorkspaceServiceImpl.__new__(WorkspaceServiceImpl)
         ws_svc._git = GitWorktreeAdapter()
 
         with (

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 from kagan.config import AgentConfig, KaganConfig
 from kagan.core.models.enums import PairTerminalBackend, SessionType, TaskStatus, TaskType
-from kagan.services.sessions import SessionService
+from kagan.services.sessions import SessionServiceImpl
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
@@ -47,7 +47,7 @@ class _Proc:
 
 def _build_service(
     default_backend: Literal["tmux", "vscode", "cursor"] | None = None,
-) -> tuple[SessionService, SimpleNamespace, SimpleNamespace]:
+) -> tuple[SessionServiceImpl, SimpleNamespace, SimpleNamespace]:
     config = KaganConfig()
     if default_backend is not None:
         config.general.default_pair_terminal_backend = default_backend
@@ -61,7 +61,7 @@ def _build_service(
         list_workspaces=AsyncMock(return_value=[SimpleNamespace(id="ws-1")]),
         get_path=AsyncMock(return_value=None),
     )
-    service = SessionService(
+    service = SessionServiceImpl(
         project_root=Path("."),
         task_service=cast("Any", task_service),
         workspace_service=cast("Any", workspace_service),
@@ -152,8 +152,8 @@ async def test_create_session_vscode_launches_external_command_and_writes_bundle
     tmp_path: Path,
 ) -> None:
     service, task_service, _workspace_service = _build_service(default_backend=None)
-    service._write_context_files = SessionService._write_context_files.__get__(
-        service, SessionService
+    service._write_context_files = SessionServiceImpl._write_context_files.__get__(
+        service, SessionServiceImpl
     )
     task = _TaskStub(terminal_backend=cast("Any", "vscode"))
 
@@ -194,8 +194,8 @@ async def test_create_session_cursor_writes_cursor_mcp_config(
     tmp_path: Path,
 ) -> None:
     service, _task_service, _workspace_service = _build_service(default_backend=None)
-    service._write_context_files = SessionService._write_context_files.__get__(
-        service, SessionService
+    service._write_context_files = SessionServiceImpl._write_context_files.__get__(
+        service, SessionServiceImpl
     )
     task = _TaskStub(terminal_backend=cast("Any", "cursor"))
 

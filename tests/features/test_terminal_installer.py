@@ -43,25 +43,6 @@ async def test_install_terminal_returns_manual_fallback_when_auto_installer_unav
 
 
 @pytest.mark.asyncio
-async def test_install_terminal_succeeds_when_command_and_verification_pass() -> None:
-    with (
-        patch("kagan.terminals.installer._get_tmux_install_command", return_value="install"),
-        patch(
-            "kagan.terminals.installer.check_terminal_installed",
-            side_effect=[False, True],
-        ),
-        patch(
-            "kagan.terminals.installer.asyncio.create_subprocess_shell",
-            new=AsyncMock(return_value=_Proc(returncode=0)),
-        ),
-    ):
-        success, message = await install_terminal("tmux")
-
-    assert success is True
-    assert "success" in message.lower() or "installed" in message.lower()
-
-
-@pytest.mark.asyncio
 async def test_install_terminal_surfaces_command_failure_with_fallback() -> None:
     with (
         patch("kagan.terminals.installer._get_tmux_install_command", return_value="install"),

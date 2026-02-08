@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from kagan.config import AgentConfig, KaganConfig
-from kagan.services.sessions import SessionService
+from kagan.services.sessions import SessionServiceImpl
 
 if TYPE_CHECKING:
     from kagan.services.tasks import TaskService
@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 _IS_WINDOWS = platform.system() == "Windows"
 
 
-def _build_service() -> SessionService:
-    return SessionService(
+def _build_service() -> SessionServiceImpl:
+    return SessionServiceImpl(
         project_root=Path("."),
         task_service=cast("TaskService", object()),
         workspace_service=cast("WorkspaceService", object()),

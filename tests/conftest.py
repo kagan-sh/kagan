@@ -106,9 +106,9 @@ def event_bus() -> InMemoryEventBus:
 @pytest.fixture
 def task_service(state_manager: TaskRepository, event_bus: InMemoryEventBus) -> TaskService:
     """Create a TaskService backed by the test repository."""
-    from kagan.services.tasks import TaskService
+    from kagan.services.tasks import TaskServiceImpl
 
-    return TaskService(state_manager, event_bus)
+    return TaskServiceImpl(state_manager, event_bus)
 
 
 @pytest.fixture
@@ -268,29 +268,10 @@ def mock_agent_spawn(monkeypatch):
 
 @pytest.fixture
 def mock_agent_factory():
-    """Factory that returns a mock Agent for testing."""
-    from kagan.acp.agent import Agent
-    from kagan.acp.buffers import AgentBuffers
+    """Factory that returns deterministic mock agents for testing."""
+    from tests.helpers.mocks import MockAgentFactory
 
-    def factory(project_root, agent_config, *, read_only=False):
-        mock_agent = MagicMock(spec=Agent)
-        buffers = AgentBuffers()
-        buffers.append_response("Done. <complete/>")
-
-        mock_agent.set_auto_approve = MagicMock()
-        mock_agent.set_model_override = MagicMock()
-        mock_agent.start = MagicMock()
-        mock_agent.wait_ready = AsyncMock()
-        mock_agent.send_prompt = AsyncMock()
-        mock_agent.get_response_text = MagicMock(side_effect=buffers.get_response_text)
-        mock_agent.get_tool_calls = MagicMock(return_value=[])
-        mock_agent.get_thinking_text = MagicMock(return_value="")
-        mock_agent.clear_tool_calls = MagicMock()
-        mock_agent.stop = AsyncMock()
-        mock_agent._buffers = buffers
-        return mock_agent
-
-    return factory
+    return MockAgentFactory()
 
 
 @pytest.fixture
@@ -396,15 +377,15 @@ def auto_mock_terminals_for_app_tests(request, monkeypatch):
 
     # Safety: never spawn real terminal attach/external launcher subprocesses in app tests.
     monkeypatch.setattr(
-        "kagan.services.sessions.SessionService._attach_tmux_session",
+        "kagan.services.sessions.SessionServiceImpl._attach_tmux_session",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "kagan.services.sessions.SessionService._attach_wezterm_session",
+        "kagan.services.sessions.SessionServiceImpl._attach_wezterm_session",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "kagan.services.sessions.SessionService._launch_external_launcher",
+        "kagan.services.sessions.SessionServiceImpl._launch_external_launcher",
         AsyncMock(return_value=True),
     )
 

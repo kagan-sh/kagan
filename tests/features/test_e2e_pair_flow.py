@@ -20,7 +20,7 @@ from textual.widgets import Button, Input, Switch
 from kagan.app import KaganApp
 from kagan.core.models.enums import TaskStatus, TaskType
 from kagan.mcp.tools import KaganMCPServer
-from kagan.services.sessions import SessionService
+from kagan.services.sessions import SessionServiceImpl
 from kagan.ui.modals.new_project import NewProjectModal
 from kagan.ui.modals.review import ReviewModal
 from kagan.ui.screens.kanban import KanbanScreen
@@ -89,10 +89,10 @@ async def test_pair_flow_review_to_done(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
     monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
-    async def _fast_attach(self: SessionService, _session_name: str) -> bool:
+    async def _fast_attach(self: SessionServiceImpl, _session_name: str) -> bool:
         return True
 
-    monkeypatch.setattr(SessionService, "_attach_tmux_session", _fast_attach)
+    monkeypatch.setattr(SessionServiceImpl, "_attach_tmux_session", _fast_attach)
 
     app = KaganApp(
         db_path=str(db_path),

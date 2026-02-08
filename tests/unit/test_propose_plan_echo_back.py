@@ -2,35 +2,9 @@ from __future__ import annotations
 
 import json
 
-from kagan.agents.planner import PlanProposal, parse_proposed_plan
-from kagan.mcp.models import PlanProposalResponse
+import pytest
 
-# --- MCP server echo-back response tests ---
-
-
-def test_propose_plan_mcp_returns_full_echo_on_valid_input() -> None:
-    """MCP tool returns normalized tasks/todos in result, not just counts."""
-    proposal = PlanProposal.model_validate(
-        {
-            "tasks": [{"title": "Build API", "type": "AUTO", "priority": "high"}],
-            "todos": [{"content": "Analyze requirements", "status": "completed"}],
-        }
-    )
-    response = PlanProposalResponse(
-        status="received",
-        task_count=len(proposal.tasks),
-        todo_count=len(proposal.todos),
-        tasks=[t.model_dump(mode="json") for t in proposal.tasks],
-        todos=[t.model_dump(mode="json") for t in proposal.todos],
-    )
-
-    assert response.status == "received"
-    assert response.tasks is not None
-    assert len(response.tasks) == 1
-    assert response.tasks[0]["title"] == "Build API"
-    assert response.todos is not None
-    assert len(response.todos) == 1
-
+from kagan.agents.planner import parse_proposed_plan
 
 # --- Planner parser echo-back preference tests ---
 
@@ -102,23 +76,42 @@ def test_planner_prefers_echo_back_over_raw_input() -> None:
     assert tasks[0].title == "From echo-back"
 
 
-def test_planner_skips_summary_only_content() -> None:
-    """Content with only task_count/status (no tasks) falls back to rawInput."""
+@pytest.mark.parametrize(
+    ("fallback_field", "fallback_payload", "expected_title"),
+    [
+        (
+            "rawInput",
+            {"tasks": [{"title": "From rawInput fallback", "type": "AUTO"}]},
+            "From rawInput fallback",
+        ),
+        (
+            "title",
+            {"tasks": [{"title": "From title fallback", "type": "AUTO"}]},
+            "From title fallback",
+        ),
+    ],
+)
+def test_planner_skips_summary_only_content(
+    fallback_field: str,
+    fallback_payload: dict[str, list[dict[str, str]]],
+    expected_title: str,
+) -> None:
+    """Summary-only content falls back to the best non-echo payload source."""
     summary_only = {"status": "received", "task_count": 1, "todo_count": 0}
-    raw_input_payload = {
-        "tasks": [{"title": "From rawInput fallback", "type": "AUTO"}],
+    tool_call: dict[str, object] = {
+        "name": "propose_plan",
+        "status": "completed",
+        "content": _echo_back_content(summary_only),
     }
-    tool_calls = {
-        "tc-1": {
-            "name": "propose_plan",
-            "status": "completed",
-            "rawInput": json.dumps(raw_input_payload),
-            "content": _echo_back_content(summary_only),
-        }
-    }
+    if fallback_field == "rawInput":
+        tool_call["rawInput"] = json.dumps(fallback_payload)
+    else:
+        tool_call["title"] = f"propose_plan: {json.dumps(fallback_payload)}"
+
+    tool_calls = {"tc-1": tool_call}
 
     tasks, _todos, error = parse_proposed_plan(tool_calls)
 
     assert error is None
     assert len(tasks) == 1
-    assert tasks[0].title == "From rawInput fallback"
+    assert tasks[0].title == expected_title

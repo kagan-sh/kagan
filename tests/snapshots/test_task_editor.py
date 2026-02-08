@@ -8,9 +8,9 @@ import pytest
 from syrupy.extensions.image import SVGImageSnapshotExtension
 
 from kagan.adapters.db.repositories import TaskRepository
+from kagan.adapters.db.schema import Task
 from kagan.adapters.db.schema import Task as DbTask
 from kagan.app import KaganApp
-from kagan.core.models.entities import Task
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
 from tests.helpers.journey_runner import execute_test_actions
 from tests.helpers.wait import wait_for_screen

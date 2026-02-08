@@ -65,7 +65,7 @@ async def _wait_for_agent_logs(app: KaganApp, task_id: str, timeout: float = 20.
     while elapsed < timeout:
         execution = await app.ctx.execution_service.get_latest_execution_for_task(task_id)
         if execution:
-            logs = await app.ctx.execution_service.get_logs(execution.id)
+            logs = await app.ctx.execution_service.get_execution_logs(execution.id)
             if logs and logs.logs:
                 return
         await asyncio.sleep(0.1)

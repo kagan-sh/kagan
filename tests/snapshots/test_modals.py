@@ -19,7 +19,11 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from syrupy.extensions.image import SVGImageSnapshotExtension
 
-from kagan.adapters.db.repositories import TaskRepository
+from kagan.adapters.db.repositories import (
+    ExecutionRepository,
+    SessionRecordRepository,
+    TaskRepository,
+)
 from kagan.adapters.db.schema import Task
 from kagan.app import KaganApp
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
@@ -388,18 +392,20 @@ class TestReviewModal:
             )
             session_factory = manager._session_factory
             assert session_factory is not None
+            session_repo = SessionRecordRepository(session_factory)
+            execution_repo = ExecutionRepository(session_factory)
 
             async with session_factory() as session:
                 session.add(workspace)
                 await session.commit()
                 await session.refresh(workspace)
 
-            session_record = await manager.create_session_record(
+            session_record = await session_repo.create_session_record(
                 workspace_id=workspace.id,
                 session_type=SessionType.ACP,
                 external_id=None,
             )
-            execution = await manager.create_execution(
+            execution = await execution_repo.create_execution(
                 session_id=session_record.id,
                 run_reason=ExecutionRunReason.CODINGAGENT,
                 executor_action={},
@@ -414,7 +420,7 @@ class TestReviewModal:
                     ],
                 }
             )
-            await manager.append_execution_log(execution.id, impl_log)
+            await execution_repo.append_execution_log(execution.id, impl_log)
 
             review_log = json.dumps(
                 {
@@ -424,7 +430,7 @@ class TestReviewModal:
                     ],
                 }
             )
-            await manager.append_execution_log(execution.id, review_log)
+            await execution_repo.append_execution_log(execution.id, review_log)
 
             await manager.close()
             return project

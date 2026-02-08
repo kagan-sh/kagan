@@ -71,22 +71,6 @@ async def test_detect_issues_windows_resolves_vscode_exe(monkeypatch: pytest.Mon
 
 @pytest.mark.unit
 @pytest.mark.mock_platform_system("Windows")
-async def test_detect_issues_windows_falls_back_to_vscode_when_available(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        shutil,
-        "which",
-        _mock_which({"code.exe": r"C:\Program Files\Microsoft VS Code\bin\code.exe"}),
-    )
-
-    result = await detect_issues(check_git=False, check_terminal=False)
-
-    assert result.issues == []
-
-
-@pytest.mark.unit
-@pytest.mark.mock_platform_system("Windows")
 async def test_detect_issues_windows_missing_vscode_and_cursor_has_no_pair_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

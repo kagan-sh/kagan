@@ -23,7 +23,7 @@ from textual.widgets import Button, Input, ListView, Switch
 from kagan.app import KaganApp
 from kagan.core.models.enums import TaskStatus, TaskType
 from kagan.mcp.tools import KaganMCPServer
-from kagan.services.sessions import SessionService
+from kagan.services.sessions import SessionServiceImpl
 from kagan.ui.modals.folder_picker import FolderPickerModal
 from kagan.ui.modals.new_project import NewProjectModal
 from kagan.ui.modals.task_details_modal import TaskDetailsModal
@@ -36,7 +36,7 @@ from kagan.ui.widgets.card import TaskCard
 from kagan.ui.widgets.plan_approval import PlanApprovalWidget
 
 if TYPE_CHECKING:
-    from kagan.core.models.entities import Task
+    from kagan.adapters.db.schema import Task
 
 
 PLAN_RESPONSE = """\
@@ -436,10 +436,10 @@ async def test_multi_project_ui_journey(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr("kagan.tmux.run_tmux", fake_tmux)
     monkeypatch.setattr("kagan.services.sessions.run_tmux", fake_tmux)
 
-    async def _fast_attach(self: SessionService, _session_name: str) -> bool:
+    async def _fast_attach(self: SessionServiceImpl, _session_name: str) -> bool:
         return True
 
-    monkeypatch.setattr(SessionService, "_attach_tmux_session", _fast_attach)
+    monkeypatch.setattr(SessionServiceImpl, "_attach_tmux_session", _fast_attach)
 
     app = KaganApp(
         db_path=str(db_path),

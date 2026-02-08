@@ -168,31 +168,6 @@ def test_parse_proposed_plan_prefers_richer_non_title_payload() -> None:
     assert todos is None
 
 
-def test_parse_proposed_plan_skips_content_result_payload() -> None:
-    tool_calls = {
-        "tc-plan": {
-            "name": "propose_plan",
-            "status": "completed",
-            "title": 'propose_plan: {"tasks":[{"title":"Initialize project"}],"todos":[]}',
-            "content": [
-                {
-                    "type": "content",
-                    "content": {
-                        "type": "text",
-                        "text": '{"status":"received","task_count":4,"todo_count":4}',
-                    },
-                }
-            ],
-        }
-    }
-
-    tasks, _todos, error = parse_proposed_plan(tool_calls)
-
-    assert error is None
-    assert len(tasks) == 1
-    assert tasks[0].title == "Initialize project"
-
-
 def test_parse_proposed_plan_ignores_non_plan_tool_with_tasks_payload() -> None:
     tool_calls = {
         "tc-shell": {

@@ -15,24 +15,32 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 from tests.helpers.mocks import create_mock_workspace_service, create_test_config
 
+from kagan.adapters.db.repositories import ExecutionRepository
 from kagan.agents.signals import Signal, parse_signal
 from kagan.bootstrap import InMemoryEventBus
+from kagan.core.events import (
+    AutomationAgentAttached,
+    AutomationReviewAgentAttached,
+    AutomationTaskEnded,
+    AutomationTaskStarted,
+)
 from kagan.core.models.enums import ExecutionKind, TaskStatus, TaskType
 from kagan.paths import get_worktree_base_dir
-from kagan.services.automation import AutomationService, RunningTaskState
-from kagan.services.executions import ExecutionServiceImpl
+from kagan.services.automation import AutomationServiceImpl, RunningTaskState
 from kagan.services.queued_messages import QueuedMessageServiceImpl
-from kagan.services.tasks import TaskService
+from kagan.services.runtime import RuntimeServiceImpl
+from kagan.services.tasks import TaskServiceImpl
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from kagan.adapters.db.repositories import TaskRepository
+    from kagan.services.projects import ProjectService
 
 
 def build_automation(
@@ -43,13 +51,19 @@ def build_automation(
     agent_factory=None,
     session_service=None,
     queued_message_service=None,
-) -> AutomationService:
+    event_bus: InMemoryEventBus | None = None,
+) -> AutomationServiceImpl:
     """Helper to build AutomationService with a fresh event bus."""
-    event_bus = InMemoryEventBus()
-    task_service = TaskService(state_manager, event_bus)
-    execution_service = ExecutionServiceImpl(state_manager)
+    event_bus = event_bus or InMemoryEventBus()
+    task_service = TaskServiceImpl(state_manager, event_bus)
+    execution_service = ExecutionRepository(state_manager.session_factory)
+    runtime_service = RuntimeServiceImpl(
+        project_service=cast("ProjectService", MagicMock()),
+        session_factory=state_manager.session_factory,
+        execution_service=execution_service,
+    )
     if agent_factory is None:
-        return AutomationService(
+        return AutomationServiceImpl(
             task_service,
             workspace_service,
             config,
@@ -57,8 +71,9 @@ def build_automation(
             execution_service=execution_service,
             event_bus=event_bus,
             queued_message_service=queued_message_service,
+            runtime_service=runtime_service,
         )
-    return AutomationService(
+    return AutomationServiceImpl(
         task_service,
         workspace_service,
         config,
@@ -67,6 +82,7 @@ def build_automation(
         agent_factory=agent_factory,
         event_bus=event_bus,
         queued_message_service=queued_message_service,
+        runtime_service=runtime_service,
     )
 
 
@@ -167,8 +183,10 @@ class TestAgentStopping:
 
         mock_agent = MagicMock()
         mock_agent.stop = AsyncMock()
-        state = RunningTaskState(agent=mock_agent)
-        scheduler._running["test-task"] = state
+        state = RunningTaskState()
+        scheduler._engine._running["test-task"] = state
+        scheduler._engine._runtime_service.mark_started("test-task")
+        scheduler._engine._runtime_service.attach_running_agent("test-task", mock_agent)
 
         result = await scheduler.stop_task("test-task")
 
@@ -198,15 +216,17 @@ class TestAgentStopping:
         mock_agent.stop = AsyncMock()
         mock_task = MagicMock()
         mock_task.done = MagicMock(return_value=True)
-        state = RunningTaskState(agent=mock_agent, task=mock_task)
-        scheduler._running["test-task"] = state
+        state = RunningTaskState(task=mock_task)
+        scheduler._engine._running["test-task"] = state
+        scheduler._engine._runtime_service.mark_started("test-task")
+        scheduler._engine._runtime_service.attach_running_agent("test-task", mock_agent)
 
         await scheduler.handle_status_change(
             "test-task", TaskStatus.IN_PROGRESS, TaskStatus.BACKLOG
         )
         await asyncio.sleep(0.1)
 
-        assert "test-task" not in scheduler._running
+        assert "test-task" not in scheduler._engine._running
         await scheduler.stop()
 
 
@@ -269,12 +289,12 @@ class TestExecutionRuns:
             agent_factory=blocked_factory,
         )
 
-        await scheduler._run_task_loop(task)
+        await scheduler._engine._run_task_loop(task)
 
         fetched = await state_manager.get(task.id)
         assert fetched is not None
         assert fetched.status == TaskStatus.BACKLOG
-        scratchpad = await state_manager.get_scratchpad(task.id)
+        scratchpad = await scheduler._engine._tasks.get_scratchpad(task.id)
         assert "Missing API key" in scratchpad
 
     async def test_execution_logs_and_turns_saved(
@@ -316,16 +336,18 @@ class TestExecutionRuns:
             agent_factory=mock_agent_factory,
         )
 
-        await scheduler._run_task_loop(task)
+        await scheduler._engine._run_task_loop(task)
 
         fetched = await state_manager.get(task.id)
         assert fetched is not None
-        execution = await state_manager.get_latest_execution_for_task(task.id)
+        executions = scheduler._engine._executions
+        assert executions is not None
+        execution = await executions.get_latest_execution_for_task(task.id)
         assert execution is not None
-        logs = await state_manager.get_execution_logs(execution.id)
+        logs = await executions.get_execution_logs(execution.id)
         assert logs is not None
         assert logs.logs
-        turns = await state_manager.list_agent_turns(execution.id)
+        turns = await executions.list_agent_turns(execution.id)
         assert turns
 
     async def test_queued_messages_restart_before_review_transition(
@@ -375,22 +397,118 @@ class TestExecutionRuns:
             queued_message_service=queued,
         )
         handle_complete = AsyncMock()
-        scheduler._handle_complete = handle_complete  # type: ignore[method-assign]
-
-        await scheduler._run_task_loop(task)
+        scheduler._engine._handle_complete = handle_complete  # type: ignore[method-assign]
+        await scheduler._engine._spawn(task)
+        state = scheduler._engine._running.get(task.id)
+        assert state is not None
+        assert state.task is not None
+        await state.task
+        for _ in range(10):
+            if not scheduler._engine._event_queue.empty():
+                break
+            await asyncio.sleep(0.01)
 
         handle_complete.assert_not_awaited()
         fetched = await state_manager.get(task.id)
         assert fetched is not None
         assert fetched.status == TaskStatus.IN_PROGRESS
-        scratchpad = await state_manager.get_scratchpad(task.id)
+        scratchpad = await scheduler._engine._tasks.get_scratchpad(task.id)
         assert "Continue with queue feedback" in scratchpad
-        assert not scheduler._event_queue.empty()
-        queued_event = scheduler._event_queue.get_nowait()
+        assert not scheduler._engine._event_queue.empty()
+        queued_event = scheduler._engine._event_queue.get_nowait()
         assert queued_event.kind == ExecutionKind.SPAWN
+        assert task.id not in scheduler._engine._running
 
         status = await queued.get_status(task.id, lane="implementation")
         assert status.has_queued is False
+
+
+class TestAutomationRuntimeEvents:
+    """Automation lifecycle publishes runtime state events for UI listeners."""
+
+    async def test_runtime_lifecycle_events_are_published(
+        self, state_manager: TaskRepository, task_factory, git_repo: Path, mock_agent_factory
+    ) -> None:
+        task = await state_manager.create(
+            task_factory(
+                title="Runtime events",
+                status=TaskStatus.IN_PROGRESS,
+                task_type=TaskType.AUTO,
+            )
+        )
+
+        config = create_test_config()
+        worktrees = create_mock_workspace_service()
+        await worktrees.create(task.id)
+        assert state_manager._session_factory is not None
+        from kagan.adapters.db.schema import Workspace
+        from kagan.core.models.enums import WorkspaceStatus
+
+        async with state_manager._session_factory() as session:
+            workspace = Workspace(
+                project_id=task.project_id,
+                task_id=task.id,
+                branch_name="automation/runtime-events",
+                path="/tmp/worktree",
+                status=WorkspaceStatus.ACTIVE,
+            )
+            session.add(workspace)
+            await session.commit()
+            await session.refresh(workspace)
+        worktrees.list_workspaces.return_value = [workspace]
+
+        event_bus = InMemoryEventBus()
+        published: list[object] = []
+        event_bus.add_handler(lambda event: published.append(event))
+
+        scheduler = build_automation(
+            state_manager,
+            worktrees,
+            config,
+            agent_factory=mock_agent_factory,
+            event_bus=event_bus,
+        )
+
+        await scheduler._engine._spawn(task)
+        state = scheduler._engine._running.get(task.id)
+        assert state is not None
+        assert state.task is not None
+        await state.task
+
+        for _ in range(20):
+            if any(isinstance(event, AutomationTaskEnded) for event in published):
+                break
+            await asyncio.sleep(0.01)
+
+        assert any(isinstance(event, AutomationTaskStarted) for event in published)
+        assert any(isinstance(event, AutomationAgentAttached) for event in published)
+        assert any(isinstance(event, AutomationReviewAgentAttached) for event in published)
+        assert any(isinstance(event, AutomationTaskEnded) for event in published)
+
+        await scheduler.stop()
+
+    async def test_wait_for_running_agent_handles_delayed_spawn_transition(
+        self, state_manager: TaskRepository
+    ) -> None:
+        config = create_test_config()
+        worktrees = create_mock_workspace_service()
+        scheduler = build_automation(state_manager, worktrees, config)
+        agent = MagicMock()
+
+        async def _set_running_later() -> None:
+            await asyncio.sleep(0.05)
+            scheduler._engine._running["delayed-task"] = RunningTaskState()
+            scheduler._engine._runtime_service.mark_started("delayed-task")
+            scheduler._engine._runtime_service.attach_running_agent("delayed-task", agent)
+
+        asyncio.create_task(_set_running_later())
+        found = await scheduler.wait_for_running_agent(
+            "delayed-task",
+            timeout=0.5,
+            interval=0.01,
+        )
+
+        assert found is agent
 
 
 class TestSessionManagement:
@@ -406,7 +524,7 @@ class TestSessionManagement:
         mock_tmux,
     ):
         """Creating session for PAIR task creates tmux session."""
-        from kagan.services.sessions import SessionService
+        from kagan.services.sessions import SessionServiceImpl
 
         task = await state_manager.create(
             task_factory(
@@ -436,7 +554,7 @@ class TestSessionManagement:
             await session.refresh(workspace)
         mock_workspace_service.list_workspaces.return_value = [workspace]
 
-        session_mgr = SessionService(git_repo, task_service, mock_workspace_service, config)
+        session_mgr = SessionServiceImpl(git_repo, task_service, mock_workspace_service, config)
         session_name = await session_mgr.create_session(task, worktree_path)
 
         assert session_name == f"kagan-{task.id}"

@@ -10,6 +10,7 @@ def test_tui_preflight_uses_configured_pair_terminal_backend(
     monkeypatch,
     tmp_path,
 ) -> None:
+    import kagan.cli.commands.tui as tui_command
     from kagan import __main__ as cli_main
 
     captured: dict[str, object] = {}
@@ -30,9 +31,9 @@ def test_tui_preflight_uses_configured_pair_terminal_backend(
     config = KaganConfig()
     config.general.default_pair_terminal_backend = "tmux"
 
-    monkeypatch.setattr(cli_main, "_check_for_updates_gate", lambda: None)
-    monkeypatch.setattr(cli_main, "_auto_cleanup_done_workspaces", lambda _db: None)
-    monkeypatch.setattr(cli_main, "_display_agent_status", lambda: {"claude": True})
+    monkeypatch.setattr(tui_command, "_check_for_updates_gate", lambda: None)
+    monkeypatch.setattr(tui_command, "_auto_cleanup_done_workspaces", lambda _db: None)
+    monkeypatch.setattr(tui_command, "_display_agent_status", lambda: {"claude": True})
     monkeypatch.setattr("kagan.config.KaganConfig.load", lambda _path=None: config)
     monkeypatch.setattr("kagan.preflight.detect_issues", fake_detect_issues)
     monkeypatch.setattr(

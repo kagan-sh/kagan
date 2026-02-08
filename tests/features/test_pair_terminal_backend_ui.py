@@ -9,8 +9,8 @@ from tests.helpers.wait import wait_for_screen
 from textual.app import App, ComposeResult
 from textual.widgets import Button, Input, Select, Static
 
+from kagan.adapters.db.schema import Task
 from kagan.config import KaganConfig
-from kagan.core.models.entities import Task
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
 from kagan.ui.modals.settings import SettingsModal
 from kagan.ui.modals.task_details_modal import TaskDetailsModal
@@ -131,7 +131,7 @@ async def test_task_editor_toggles_terminal_backend_with_type_change() -> None:
 @pytest.mark.asyncio
 async def test_task_editor_invalid_pair_backend_falls_back_to_tmux() -> None:
     now = datetime.now()
-    task = Task.model_construct(
+    task = Task(
         id="task-2",
         project_id="proj-1",
         title="Editor invalid backend task",
@@ -139,15 +139,10 @@ async def test_task_editor_invalid_pair_backend_falls_back_to_tmux() -> None:
         status=TaskStatus.BACKLOG,
         priority=TaskPriority.MEDIUM,
         task_type=TaskType.PAIR,
-        terminal_backend="invalid-launcher",
-        assigned_hat=None,
-        agent_backend=None,
-        parent_id=None,
-        acceptance_criteria=[],
-        base_branch=None,
         created_at=now,
         updated_at=now,
     )
+    task.terminal_backend = "invalid-launcher"
     app = _ModalHarnessApp(KaganConfig())
 
     async with app.run_test(size=(120, 40)) as pilot:

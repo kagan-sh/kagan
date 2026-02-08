@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from typing import Any, cast
 
 from acp.schema import ToolCall as AcpToolCall
@@ -13,8 +12,11 @@ from kagan.agents.output import serialize_agent_output
 
 class _FakeAgent:
     def __init__(self, buffered_messages: list[object], response_text: str) -> None:
-        self._buffers = SimpleNamespace(messages=buffered_messages)
+        self._messages = list(buffered_messages)
         self._response_text = response_text
+
+    def get_messages(self) -> list[object]:
+        return list(self._messages)
 
     def get_response_text(self) -> str:
         return self._response_text

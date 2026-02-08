@@ -40,12 +40,15 @@ def create_mock_workspace_service() -> MagicMock:
 def create_mock_agent(response: str = "Done! <complete/>") -> MagicMock:
     """Create a mock ACP agent with configurable response."""
     agent = MagicMock()
+    buffers = AgentBuffers()
+    buffers.append_response(response)
     agent._read_only = False
     agent.set_auto_approve = MagicMock()
     agent.start = MagicMock()
     agent.wait_ready = AsyncMock()
     agent.send_prompt = AsyncMock()
-    agent.get_response_text = MagicMock(return_value=response)
+    agent.get_response_text = MagicMock(side_effect=buffers.get_response_text)
+    agent.get_messages = MagicMock(side_effect=lambda: list(buffers.messages))
     agent.stop = AsyncMock()
     return agent
 
@@ -233,6 +236,9 @@ class MockAgent:
 
     def get_response_text(self) -> str:
         return self._buffers.get_response_text()
+
+    def get_messages(self) -> list[Any]:
+        return list(self._buffers.messages)
 
     def get_tool_calls(self) -> dict[str, ToolCall]:
         return self._tool_calls

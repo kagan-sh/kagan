@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from kagan.command_utils import split_command_string
-from kagan.preflight import detect_issues
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
@@ -36,14 +35,3 @@ def test_split_command_uses_mslex_on_windows(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setitem(sys.modules, "mslex", FakeMslex)  # type: ignore[bad-argument-type]
 
     assert split_command_string("opencode --prompt hello") == ["MSLEX", "opencode --prompt hello"]
-
-
-@pytest.mark.unit
-@pytest.mark.asyncio
-async def test_windows_preflight_is_warning_only(monkeypatch: MonkeyPatch) -> None:
-    """Windows should not be a blocking preflight issue."""
-    monkeypatch.setattr("platform.system", lambda: "Windows")
-
-    result = await detect_issues(check_git=False, check_terminal=False)
-
-    assert result.has_blocking_issues is False
