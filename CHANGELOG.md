@@ -2,6 +2,80 @@
 
 <!-- version list -->
 
+## v0.4.0-beta.1 (2026-02-08)
+
+### Bug Fixes
+
+- Handles database connection errors gracefully ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Output streaming and branch popup bug fixes; cleanup and refinements
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+### Chores
+
+- Remove Makefile and dead code script, update docs formatting
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+### Features
+
+- Add unified RuntimeService for session, startup, and task orchestration
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+### Refactoring
+
+- Add KaganModalScreen base class, screen_result helper, and update UI layer
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Add UTC time helper, session factory protocol, and standardize schema timestamps
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Extract CLI commands from __main__.py into cli/commands package
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Extract planner models, parser, and prompts into dedicated modules
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Extract shared git adapter base and add protocol interfaces
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Remove executors adapter, domain entities module, and executions service
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Split automation.py into automation package with clear responsibilities
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Split monolithic repositories.py into focused repository modules
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Split preflight.py monolith into preflight package
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Split workspaces.py into workspaces package ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+- Update app startup, bootstrap DI, service protocols, and screen wiring
+  ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+### Testing
+
+- Add and update tests for all refactored modules ([#19](https://github.com/kagan-sh/kagan/pull/19),
+  [`8904a04`](https://github.com/kagan-sh/kagan/commit/8904a04142db7c2248984b8d8323860ed65fe6ba))
+
+
 ## v0.3.0 (2026-02-07)
 
 
