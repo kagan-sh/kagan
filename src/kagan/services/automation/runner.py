@@ -1,21 +1,24 @@
-"""Reactive automation service for AUTO task execution."""
-
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import weakref
-from dataclasses import dataclass
-from datetime import datetime
 from typing import TYPE_CHECKING
 
-from kagan.agents.agent_factory import AgentFactory, create_agent
+from kagan.adapters.db.repositories.base import RepositoryClosing
 from kagan.agents.output import serialize_agent_output
 from kagan.agents.prompt import build_prompt
-from kagan.agents.prompt_loader import get_review_prompt
 from kagan.agents.signals import Signal, SignalResult, parse_signal
 from kagan.constants import MODAL_TITLE_MAX_LENGTH
-from kagan.core.events import DomainEvent, EventBus, TaskStatusChanged
+from kagan.core.events import (
+    AutomationAgentAttached,
+    AutomationReviewAgentAttached,
+    AutomationTaskEnded,
+    AutomationTaskStarted,
+    DomainEvent,
+    EventBus,
+    TaskStatusChanged,
+)
 from kagan.core.models.enums import (
     ExecutionKind,
     ExecutionRunReason,
@@ -24,105 +27,108 @@ from kagan.core.models.enums import (
     SessionStatus,
     SessionType,
     TaskStatus,
-    TaskType,
 )
+from kagan.core.time import utc_now
 from kagan.debug_log import log
 from kagan.git_utils import get_git_user_identity
 from kagan.limits import AGENT_TIMEOUT_LONG
+from kagan.utils.background_tasks import BackgroundTasks
+
+from .policy import can_spawn_new_agent, is_auto_task, should_stop_running_on_status_change
+from .reviewer import AutomationReviewer
+from .state import AutomationEvent, RunningTaskState
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from kagan.acp.agent import Agent
-    from kagan.adapters.git.operations import GitOperationsAdapter
+    from kagan.acp import Agent
+    from kagan.adapters.db.repositories import ExecutionRepository
+    from kagan.adapters.git.operations import GitOperationsProtocol
+    from kagan.agents.agent_factory import AgentFactory
     from kagan.config import AgentConfig, KaganConfig
-    from kagan.services.executions import ExecutionService
-    from kagan.services.merges import MergeService
     from kagan.services.queued_messages import QueuedMessage, QueuedMessageService
+    from kagan.services.runtime import RuntimeService, RuntimeTaskView
     from kagan.services.sessions import SessionService
     from kagan.services.tasks import TaskService
     from kagan.services.types import TaskLike
     from kagan.services.workspaces import WorkspaceService
 
 
-@dataclass(slots=True)
-class RunningTaskState:
-    """State for a currently running task."""
-
-    task: asyncio.Task[None] | None = None
-    agent: Agent | None = None
-    run_count: int = 0
-    review_agent: Agent | None = None
-    is_reviewing: bool = False
-    session_id: str | None = None
-    execution_id: str | None = None
-
-
-@dataclass(slots=True)
-class AutomationEvent:
-    """Queue item for automation worker."""
-
-    kind: ExecutionKind
-    task_id: str
-    old_status: TaskStatus | None = None
-    new_status: TaskStatus | None = None
-
-
-class AutomationService:
-    """Reactive automation service for AUTO task processing.
-
-    Instead of polling, reacts to task status changes via a queue.
-    Single worker loop processes all spawn/stop requests sequentially,
-    eliminating race conditions.
-    """
+class AutomationEngine:
+    _tasks: TaskService
+    _workspaces: WorkspaceService
+    _config: KaganConfig
+    _sessions: SessionService | None
+    _executions: ExecutionRepository | None
+    _queued: QueuedMessageService | None
+    _running: dict[str, RunningTaskState]
+    _on_task_changed: Callable[[], None] | None
+    _on_error: Callable[[str, str], None] | None
+    _notifier: Callable[[str, str, NotificationSeverity], None] | None
+    _agent_factory: AgentFactory
+    _event_bus: EventBus | None
+    _git: GitOperationsProtocol | None
+    _runtime_service: RuntimeService
+    _event_queue: asyncio.Queue[AutomationEvent]
+    _worker_task: asyncio.Task[None] | None
+    _event_task: asyncio.Task[None] | None
+    _background_tasks: BackgroundTasks
+    _started: bool
+    _reviewer: AutomationReviewer
 
     def __init__(
         self,
+        *,
         task_service: TaskService,
         workspace_service: WorkspaceService,
         config: KaganConfig,
+        runtime_service: RuntimeService,
         session_service: SessionService | None = None,
-        execution_service: ExecutionService | None = None,
-        merge_service: MergeService | None = None,
+        execution_service: ExecutionRepository | None = None,
         on_task_changed: Callable[[], None] | None = None,
         on_error: Callable[[str, str], None] | None = None,
         notifier: Callable[[str, str, NotificationSeverity], None] | None = None,
-        agent_factory: AgentFactory = create_agent,
+        agent_factory: AgentFactory,
         event_bus: EventBus | None = None,
         queued_message_service: QueuedMessageService | None = None,
-        git_adapter: GitOperationsAdapter | None = None,
+        git_adapter: GitOperationsProtocol | None = None,
     ) -> None:
         self._tasks = task_service
         self._workspaces = workspace_service
         self._config = config
         self._sessions = session_service
         self._executions = execution_service
-        self._merge_service = merge_service
         self._queued = queued_message_service
-        self._running: dict[str, RunningTaskState] = {}
+        self._running = {}
         self._on_task_changed = on_task_changed
         self._on_error = on_error
         self._notifier = notifier
         self._agent_factory = agent_factory
         self._event_bus = event_bus
         self._git = git_adapter
+        self._runtime_service = runtime_service
 
-        self._event_queue: asyncio.Queue[AutomationEvent] = asyncio.Queue()
-        self._worker_task: asyncio.Task[None] | None = None
-        self._event_task: asyncio.Task[None] | None = None
+        self._event_queue = asyncio.Queue()
+        self._worker_task = None
+        self._event_task = None
+        self._background_tasks = BackgroundTasks()
         self._started = False
 
-        self._merge_lock = asyncio.Lock()
-
-    @property
-    def merge_lock(self) -> asyncio.Lock:
-        """Lock for serializing merge operations."""
-        return self._merge_lock
-
-    def set_merge_service(self, merge_service: MergeService) -> None:
-        """Attach merge service after initialization to avoid circular wiring."""
-        self._merge_service = merge_service
+        self._reviewer = AutomationReviewer(
+            task_service=task_service,
+            workspace_service=workspace_service,
+            config=config,
+            execution_service=execution_service,
+            notifier=notifier,
+            agent_factory=agent_factory,
+            git_adapter=git_adapter,
+            runtime_service=runtime_service,
+            get_agent_config=self._get_agent_config,
+            apply_model_override=self._apply_model_override,
+            set_review_agent=self._set_review_agent,
+            notify_task_changed=self._notify_task_changed,
+        )
 
     async def start(self) -> None:
         """Start the automation event processing loop."""
@@ -133,6 +139,21 @@ class AutomationService:
         if self._event_bus:
             self._event_task = asyncio.create_task(self._event_loop())
         log.info("Automation service started (reactive mode)")
+
+    def _check_runtime_view_consistency(self, task_id: str, *, phase: str) -> None:
+        """Log lifecycle mismatches between worker and runtime view state."""
+        view = self._runtime_service.get(task_id)
+
+        has_state = task_id in self._running
+        has_view = view is not None and view.is_running
+        if has_state != has_view:
+            log.warning(
+                f"Runtime state mismatch at {phase} for task {task_id}: "
+                f"has_state={has_state}, has_view={has_view}"
+            )
+
+    def _runtime_view(self, task_id: str) -> RuntimeTaskView | None:
+        return self._runtime_service.get(task_id)
 
     async def handle_event(self, event: DomainEvent) -> None:
         """Process a domain event and trigger actions."""
@@ -208,11 +229,10 @@ class AutomationService:
             await self._stop_if_running(task_id)
             return
 
-        if task.task_type != TaskType.AUTO:
+        if not is_auto_task(task.task_type):
             return
 
-        if old_status == TaskStatus.IN_PROGRESS and new_status != TaskStatus.REVIEW:
-            # Don't stop for REVIEW transitions as that's part of normal completion flow
+        if should_stop_running_on_status_change(old_status=old_status, new_status=new_status):
             await self._stop_if_running(task_id)
 
     async def _process_spawn(self, task_id: str) -> None:
@@ -224,11 +244,11 @@ class AutomationService:
         task = await self._tasks.get_task(task_id)
         if task is None:
             return
-        if task.task_type != TaskType.AUTO:
+        if not is_auto_task(task.task_type):
             return
 
         max_agents = self._config.general.max_concurrent_agents
-        if len(self._running) >= max_agents:
+        if not can_spawn_new_agent(running_count=len(self._running), max_agents=max_agents):
             log.debug(f"At capacity ({max_agents}), task {task.id[:8]} will not start")
             return
 
@@ -241,6 +261,9 @@ class AutomationService:
 
         state = RunningTaskState()
         self._running[task.id] = state
+        self._runtime_service.mark_started(task.id)
+        self._check_runtime_view_consistency(task.id, phase="mark_started")
+        await self._publish_runtime_event(AutomationTaskStarted(task_id=task.id))
 
         runner_task = asyncio.create_task(self._run_task_loop(task))
         state.task = runner_task
@@ -254,20 +277,27 @@ class AutomationService:
             return
 
         log.info(f"Stopping agent for task {task_id}")
+        runtime_view = self._runtime_view(task_id)
 
-        if state.agent is not None:
-            await state.agent.stop()
+        if runtime_view is not None and runtime_view.running_agent is not None:
+            await runtime_view.running_agent.stop()
+        if runtime_view is not None and runtime_view.review_agent is not None:
+            await runtime_view.review_agent.stop()
 
-        if state.task is not None and not state.task.done():
-            state.task.cancel()
+        state.pending_respawn = False
+        task_handle = state.task
+        if task_handle is not None and not task_handle.done():
+            task_handle.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await state.task
+                await task_handle
 
-        self._running.pop(task_id, None)
+        if task_id in self._running:
+            await self._remove_running_state(task_id)
 
     def _handle_task_done(self, task_id: str, task: asyncio.Task[None]) -> None:
         """Handle agent task completion."""
-        self._running.pop(task_id, None)
+        del task
+        self._remove_running_state_soon(task_id)
 
     def _make_done_callback(self, task_id: str) -> Callable[[asyncio.Task[None]], None]:
         """Create task done callback with weak self reference."""
@@ -283,43 +313,74 @@ class AutomationService:
     @property
     def running_tasks(self) -> set[str]:
         """Get set of currently running task IDs."""
-        return set(self._running.keys())
+        return self._runtime_service.running_tasks()
 
     def is_running(self, task_id: str) -> bool:
         """Check if a task is currently being processed."""
-        return task_id in self._running
+        view = self._runtime_view(task_id)
+        return view.is_running if view is not None else False
 
     def get_running_agent(self, task_id: str) -> Agent | None:
         """Get the running agent for a task (for watch functionality).
 
-        Returns None if the task is not running (not in _running).
+        Returns None if the task is not running.
         May also return None during brief initialization window when task
-        is in _running but agent hasn't been created yet.
+        is running but agent hasn't been created yet.
         """
-        if task_id not in self._running:
+        view = self._runtime_view(task_id)
+        if view is None or not view.is_running:
             return None
-        state = self._running[task_id]
-        return state.agent
+        return view.running_agent
+
+    async def wait_for_running_agent(
+        self,
+        task_id: str,
+        *,
+        timeout: float = 2.0,
+        interval: float = 0.05,
+    ) -> Agent | None:
+        """Wait for a task's running agent reference to become available.
+
+        Returns None if the task stops running or timeout is reached.
+        """
+        if timeout <= 0:
+            return self.get_running_agent(task_id)
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        seen_running = False
+
+        while True:
+            if self.is_running(task_id):
+                seen_running = True
+            agent = self.get_running_agent(task_id)
+            if agent is not None:
+                return agent
+            if seen_running and not self.is_running(task_id):
+                return None
+            if loop.time() >= deadline:
+                return None
+            await asyncio.sleep(interval)
 
     def get_execution_id(self, task_id: str) -> str | None:
         """Get execution id for a running task."""
-        state = self._running.get(task_id)
-        return state.execution_id if state else None
+        view = self._runtime_view(task_id)
+        return view.execution_id if view is not None else None
 
     def get_run_count(self, task_id: str) -> int:
         """Get current run count for a task."""
-        state = self._running.get(task_id)
-        return state.run_count if state else 0
+        view = self._runtime_view(task_id)
+        return view.run_count if view is not None else 0
 
     def is_reviewing(self, task_id: str) -> bool:
         """Check if task is currently in review phase."""
-        state = self._running.get(task_id)
-        return state.is_reviewing if state else False
+        view = self._runtime_view(task_id)
+        return view.is_reviewing if view is not None else False
 
     def get_review_agent(self, task_id: str) -> Agent | None:
         """Get the running review agent for a task (for watch functionality)."""
-        state = self._running.get(task_id)
-        return state.review_agent if state else None
+        view = self._runtime_view(task_id)
+        return view.review_agent if view is not None else None
 
     async def stop_task(self, task_id: str) -> bool:
         """Request to stop a task. Returns True if was running."""
@@ -343,7 +404,7 @@ class AutomationService:
         """
         if task.id in self._running:
             return False
-        if task.task_type != TaskType.AUTO:
+        if not is_auto_task(task.task_type):
             return False
 
         await self._event_queue.put(AutomationEvent(kind=ExecutionKind.SPAWN, task_id=task.id))
@@ -365,12 +426,23 @@ class AutomationService:
 
         for task_id, state in list(self._running.items()):
             log.info(f"Stopping agent for task {task_id}")
-            if state.agent is not None:
-                await state.agent.stop()
+            runtime_view = self._runtime_view(task_id)
+            if runtime_view is not None and runtime_view.running_agent is not None:
+                await runtime_view.running_agent.stop()
+            if runtime_view is not None and runtime_view.review_agent is not None:
+                await runtime_view.review_agent.stop()
+            state.pending_respawn = False
             if state.task is not None and not state.task.done():
                 state.task.cancel()
-
-        self._running.clear()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await state.task
+            if task_id in self._running:
+                await self._remove_running_state(task_id)
+        await self._background_tasks.shutdown()
+        if self._sessions is not None:
+            shutdown = getattr(self._sessions, "shutdown", None)
+            if shutdown is not None:
+                await shutdown()
         self._started = False
 
     def _notify_task_changed(self) -> None:
@@ -383,12 +455,89 @@ class AutomationService:
         if self._on_error:
             self._on_error(task_id, message)
 
+    async def _publish_runtime_event(self, event: DomainEvent) -> None:
+        """Publish automation runtime events when event bus is configured."""
+        if self._event_bus is None:
+            return
+        await self._event_bus.publish(event)
+
+    def _publish_runtime_event_soon(self, event: DomainEvent) -> None:
+        """Schedule runtime event publication from sync callback contexts."""
+        if self._event_bus is None:
+            return
+        with contextlib.suppress(RuntimeError):
+            self._background_tasks.spawn(self._event_bus.publish(event))
+
+    async def _remove_running_state(self, task_id: str) -> None:
+        """Remove running state and emit lifecycle-ended event once."""
+        removed = self._running.pop(task_id, None)
+        if removed is None:
+            return
+        self._runtime_service.mark_ended(task_id)
+        self._check_runtime_view_consistency(task_id, phase="mark_ended")
+        await self._publish_runtime_event(AutomationTaskEnded(task_id=task_id))
+        if removed.pending_respawn:
+            await self._event_queue.put(AutomationEvent(kind=ExecutionKind.SPAWN, task_id=task_id))
+
+    def _remove_running_state_soon(self, task_id: str) -> None:
+        """Sync variant of running-state removal for task callbacks."""
+        removed = self._running.pop(task_id, None)
+        if removed is None:
+            return
+        self._runtime_service.mark_ended(task_id)
+        self._check_runtime_view_consistency(task_id, phase="mark_ended_sync")
+        self._publish_runtime_event_soon(AutomationTaskEnded(task_id=task_id))
+        if removed.pending_respawn:
+            with contextlib.suppress(RuntimeError):
+                self._background_tasks.spawn(
+                    self._event_queue.put(
+                        AutomationEvent(kind=ExecutionKind.SPAWN, task_id=task_id)
+                    )
+                )
+
+    async def _set_running_agent(self, task_id: str, agent: Agent) -> None:
+        """Attach implementation agent to runtime state and emit attach event."""
+        state = self._running.get(task_id)
+        if state is None:
+            return
+        previous = self._runtime_view(task_id)
+        is_first_attach = previous is None or previous.running_agent is None
+        self._runtime_service.attach_running_agent(task_id, agent)
+        self._check_runtime_view_consistency(task_id, phase="attach_running_agent")
+        if is_first_attach:
+            await self._publish_runtime_event(AutomationAgentAttached(task_id=task_id))
+
+    async def _set_review_agent(self, task_id: str, agent: Agent) -> None:
+        """Attach review agent to runtime state and emit attach event."""
+        state = self._running.get(task_id)
+        if state is None:
+            return
+        previous = self._runtime_view(task_id)
+        is_first_attach = previous is None or previous.review_agent is None
+        self._runtime_service.attach_review_agent(task_id, agent)
+        self._check_runtime_view_consistency(task_id, phase="attach_review_agent")
+        if is_first_attach:
+            await self._publish_runtime_event(AutomationReviewAgentAttached(task_id=task_id))
+
+    async def run_review(
+        self, task: TaskLike, wt_path: Path, execution_id: str
+    ) -> tuple[bool, str]:
+        return await self._reviewer.run_review(task, wt_path, execution_id)
+
+    async def _handle_complete(self, task: TaskLike) -> None:
+        await self._reviewer._handle_complete(task)
+
+    async def _handle_blocked(self, task: TaskLike, reason: str) -> None:
+        await self._reviewer._handle_blocked(task, reason)
+
     async def _run_task_loop(self, task: TaskLike) -> None:
         """Run a single execution for a task."""
         log.info(f"Starting task loop for {task.id}")
         self._notify_error(task.id, "Agent starting...")
         final_status: ExecutionStatus | None = None
         agent: Agent | None = None
+        execution_id: str | None = None
+        session_id: str | None = None
 
         try:
             wt_path = await self._workspaces.get_path(task.id)
@@ -440,18 +589,19 @@ class AutomationService:
                 session_type=SessionType.ACP,
                 external_id=None,
             )
+            session_id = session_record.id
 
             execution = await self._executions.create_execution(
-                session_id=session_record.id,
+                session_id=session_id,
                 run_reason=ExecutionRunReason.CODINGAGENT,
                 executor_action={},
             )
+            execution_id = execution.id
 
             state = self._running.get(task.id)
             if state:
-                state.session_id = session_record.id
-                state.execution_id = execution.id
-                state.run_count = 0
+                state.session_id = session_id
+            self._runtime_service.set_execution(task.id, execution_id, 0)
 
             user_name, user_email = await get_git_user_identity()
             log.debug(f"Git user identity: {user_name} <{user_email}>")
@@ -461,24 +611,17 @@ class AutomationService:
             run_count = await self._executions.count_executions_for_task(task.id)
             log.info(f"Starting run for {task.id}, run={run_count}")
 
-            state = self._running.get(task.id)
-            if state:
-                state.run_count = run_count
+            self._runtime_service.set_execution(task.id, execution_id, run_count)
 
             signal, agent = await self._run_execution(
                 task,
                 wt_path,
                 agent_config,
                 run_count,
-                execution.id,
+                execution_id,
                 user_name=user_name,
                 user_email=user_email,
             )
-
-            if agent is not None:
-                state = self._running.get(task.id)
-                if state:
-                    state.agent = agent
 
             log.debug(f"Task {task.id} run {run_count} signal: {signal}")
 
@@ -488,16 +631,19 @@ class AutomationService:
                 state = self._running.get(task.id)
                 queued = await self._take_implementation_queue(
                     task.id,
-                    state.session_id if state else None,
+                    session_id,
                 )
                 if queued is not None:
                     await self._append_queued_message_to_scratchpad(task.id, queued.content)
                     await self._update_task_status(task.id, TaskStatus.IN_PROGRESS)
                     self._notify_task_changed()
                     log.info(f"Task {task.id} has queued messages, re-spawning")
-                    await self._event_queue.put(
-                        AutomationEvent(kind=ExecutionKind.SPAWN, task_id=task.id)
-                    )
+                    if state is not None:
+                        state.pending_respawn = True
+                    else:
+                        await self._event_queue.put(
+                            AutomationEvent(kind=ExecutionKind.SPAWN, task_id=task.id)
+                        )
                     return
 
                 log.info(f"Task {task.id} completed, moving to REVIEW")
@@ -529,17 +675,16 @@ class AutomationService:
         finally:
             if agent is not None:
                 await agent.stop()
-            state = self._running.get(task.id)
-            if state and self._executions and state.execution_id:
-                await self._executions.update_execution(
-                    state.execution_id,
-                    status=final_status or ExecutionStatus.FAILED,
-                    completed_at=datetime.now(),
-                )
-            if state and state.session_id:
-                await self._tasks.close_session_record(
-                    state.session_id, status=SessionStatus.CLOSED
-                )
+            if self._executions and execution_id is not None:
+                with contextlib.suppress(RepositoryClosing):
+                    await self._executions.update_execution(
+                        execution_id,
+                        status=final_status or ExecutionStatus.FAILED,
+                        completed_at=utc_now(),
+                    )
+            if session_id is not None:
+                with contextlib.suppress(RepositoryClosing):
+                    await self._tasks.close_session_record(session_id, status=SessionStatus.CLOSED)
             log.info(f"Task loop ended for {task.id}")
 
     def _get_agent_config(self, task: TaskLike) -> AgentConfig:
@@ -599,67 +744,6 @@ class AutomationService:
         user_note = f"\n\n--- USER MESSAGE ---\n{_truncate_queue_payload(content)}"
         await self._tasks.update_scratchpad(task_id, scratchpad + user_note)
 
-    async def run_review(
-        self, task: TaskLike, wt_path: Path, execution_id: str
-    ) -> tuple[bool, str]:
-        """Run agent-based review and return (passed, summary).
-
-        Args:
-            task: The task to review.
-            wt_path: Path to the worktree.
-
-        Returns:
-            Tuple of (passed, summary).
-        """
-        agent_config = self._get_agent_config(task)
-        prompt = await self._build_review_prompt(task)
-
-        agent = self._agent_factory(wt_path, agent_config, read_only=True)
-        agent.set_auto_approve(True)
-
-        self._apply_model_override(agent, agent_config, f"review of task {task.id}")
-
-        agent.start()
-
-        state = self._running.get(task.id)
-        if state:
-            state.review_agent = agent
-            state.is_reviewing = True
-
-        try:
-            await agent.wait_ready(timeout=AGENT_TIMEOUT_LONG)
-            await agent.send_prompt(prompt)
-            response = agent.get_response_text()
-
-            serialized_output = serialize_agent_output(agent)
-            if self._executions is not None:
-                await self._executions.append_log(execution_id, serialized_output)
-                await self._executions.append_agent_turn(
-                    execution_id,
-                    prompt=prompt,
-                    summary=response,
-                )
-
-            signal = parse_signal(response)
-            if signal.signal == Signal.APPROVE:
-                return True, signal.reason
-            elif signal.signal == Signal.REJECT:
-                return False, signal.reason
-            else:
-                return False, "No review signal found in agent response"
-        except TimeoutError:
-            log.error(f"Review agent timeout for task {task.id}")
-            return False, "Review agent timed out"
-        except Exception as e:
-            log.error(f"Review agent failed for {task.id}: {e}")
-            return False, f"Review agent error: {e}"
-        finally:
-            state = self._running.get(task.id)
-            if state:
-                state.review_agent = None
-                state.is_reviewing = False
-            await agent.stop()
-
     async def _run_execution(
         self,
         task: TaskLike,
@@ -685,9 +769,7 @@ class AutomationService:
 
         agent.start()
 
-        state = self._running.get(task.id)
-        if state:
-            state.agent = agent
+        await self._set_running_agent(task.id, agent)
 
         try:
             await agent.wait_ready(timeout=AGENT_TIMEOUT_LONG)
@@ -718,7 +800,7 @@ class AutomationService:
 
         serialized_output = serialize_agent_output(agent)
         if self._executions is not None:
-            await self._executions.append_log(execution_id, serialized_output)
+            await self._executions.append_execution_log(execution_id, serialized_output)
             await self._executions.append_agent_turn(
                 execution_id,
                 prompt=prompt,
@@ -729,95 +811,6 @@ class AutomationService:
         await self._tasks.update_scratchpad(task.id, scratchpad + progress_note)
 
         return (signal_result, agent)
-
-    async def _handle_complete(self, task: TaskLike) -> None:
-        """Handle task completion - auto-commit leftover changes, move to REVIEW, then review."""
-        # Safety net: commit any uncommitted changes the agent left behind
-        wt_path = await self._workspaces.get_path(task.id)
-        if wt_path is not None and self._git is not None:
-            if await self._git.has_uncommitted_changes(str(wt_path)):
-                short_id = task.id[:8]
-                await self._git.commit_all(
-                    str(wt_path),
-                    f"chore: adding uncommitted agent changes ({short_id})",
-                )
-                log.info(f"Auto-committed leftover changes for task {task.id}")
-
-        await self._tasks.update_fields(task.id, status=TaskStatus.REVIEW)
-        self._notify_task_changed()
-
-        if not self._config.general.auto_review:
-            log.info(f"Auto review disabled, skipping review for task {task.id}")
-            return
-
-        wt_path = await self._workspaces.get_path(task.id)
-        review_passed = False
-        review_note = ""
-        review_attempted = False
-        execution_id = None
-        state = self._running.get(task.id)
-        if state:
-            execution_id = state.execution_id
-
-        if wt_path is not None and execution_id is not None:
-            review_passed, review_note = await self.run_review(task, wt_path, execution_id)
-            review_attempted = True
-
-            status = "approved" if review_passed else "rejected"
-            log.info(f"Task {task.id} review: {status}")
-
-            if review_passed:
-                self._notify_user(
-                    f"✓ Review passed: {task.title[:30]}",
-                    title="Review Complete",
-                    severity=NotificationSeverity.INFORMATION,
-                )
-            else:
-                self._notify_user(
-                    f"✗ Review failed: {review_note[:50]}",
-                    title="Review Complete",
-                    severity=NotificationSeverity.WARNING,
-                )
-
-        if review_note:
-            scratchpad = await self._tasks.get_scratchpad(task.id)
-            note = f"\n\n--- REVIEW ---\n{review_note}"
-            await self._tasks.update_scratchpad(task.id, scratchpad + note)
-            self._notify_task_changed()
-
-        if review_attempted and execution_id is not None and self._executions is not None:
-            review_result = {
-                "status": "approved" if review_passed else "rejected",
-                "summary": review_note,
-                "completed_at": datetime.now().isoformat(),
-            }
-            await self._executions.update_execution(
-                execution_id,
-                metadata={"review_result": review_result},
-            )
-
-    async def _handle_blocked(self, task: TaskLike, reason: str) -> None:
-        """Handle blocked task - move back to BACKLOG with reason."""
-        scratchpad = await self._tasks.get_scratchpad(task.id)
-        block_note = f"\n\n--- BLOCKED ---\nReason: {reason}\n"
-        await self._tasks.update_scratchpad(task.id, scratchpad + block_note)
-
-        await self._tasks.update_fields(task.id, status=TaskStatus.BACKLOG)
-        self._notify_task_changed()
-
-    async def _build_review_prompt(self, task: TaskLike) -> str:
-        """Build review prompt from template with commits and diff."""
-        base = task.base_branch or self._config.general.default_base_branch
-        commits = await self._workspaces.get_commit_log(task.id, base)
-        diff_summary = await self._workspaces.get_diff_stats(task.id, base)
-
-        return get_review_prompt(
-            title=task.title,
-            task_id=task.id,
-            description=task.description or "",
-            commits="\n".join(f"- {c}" for c in commits) if commits else "No commits",
-            diff_summary=diff_summary or "No changes",
-        )
 
 
 def _truncate_queue_payload(content: str, max_chars: int = 8000) -> str:
