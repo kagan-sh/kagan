@@ -200,15 +200,6 @@ class NotificationSeverity(StrEnum):
     ERROR = "error"
 
 
-class OperatingSystem(StrEnum):
-    """Operating system identifiers for agent configuration."""
-
-    LINUX = "linux"
-    MACOS = "macos"
-    WINDOWS = "windows"
-    ANY = "*"
-
-
 class ChatRole(StrEnum):
     """Chat message roles."""
 
