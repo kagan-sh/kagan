@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.5.0 (2026-02-12)
+
+### Documentation
+
+- Fix Snyk badge and move to secondary row [skip ci]
+  ([`9d3af86`](https://github.com/kagan-sh/kagan/commit/9d3af861a395d23c7ef1de8ddb18032e19778547))
+
+
 ## v0.5.0-beta.1 (2026-02-12)
 
 ### Bug Fixes
