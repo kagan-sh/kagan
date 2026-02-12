@@ -11,17 +11,19 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _write_runtime_files(runtime_dir: Path, *, owner_pid: int) -> None:
+def _write_runtime_files(
+    runtime_dir: Path,
+    *,
+    owner_pid: int,
+    transport: str = "socket",
+    address: str = "/tmp/kagan-core.sock",
+    port: int | None = None,
+) -> None:
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    (runtime_dir / "endpoint.json").write_text(
-        json.dumps(
-            {
-                "transport": "socket",
-                "address": "/tmp/kagan-core.sock",
-            }
-        ),
-        encoding="utf-8",
-    )
+    endpoint_payload: dict[str, object] = {"transport": transport, "address": address}
+    if port is not None:
+        endpoint_payload["port"] = port
+    (runtime_dir / "endpoint.json").write_text(json.dumps(endpoint_payload), encoding="utf-8")
     (runtime_dir / "token").write_text("lease-token", encoding="utf-8")
     (runtime_dir / "core.lease.json").write_text(
         json.dumps(
@@ -63,6 +65,25 @@ def test_discover_core_endpoint_rejects_stale_dead_lease(monkeypatch, tmp_path: 
     _write_runtime_files(runtime_dir, owner_pid=424242)
     monkeypatch.setenv("KAGAN_CORE_RUNTIME_DIR", str(runtime_dir))
     monkeypatch.setattr("kagan.core.ipc.discovery._is_process_alive", lambda _pid: False)
+
+    endpoint = discover_core_endpoint()
+
+    assert endpoint is None
+
+
+def test_discover_core_endpoint_rejects_unreachable_tcp_endpoint(
+    monkeypatch, tmp_path: Path
+) -> None:
+    runtime_dir = tmp_path / "core-runtime"
+    _write_runtime_files(
+        runtime_dir,
+        owner_pid=os.getpid(),
+        transport="tcp",
+        address="127.0.0.1",
+        port=54321,
+    )
+    monkeypatch.setenv("KAGAN_CORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setattr("kagan.core.ipc.discovery._is_tcp_endpoint_reachable", lambda *_: False)
 
     endpoint = discover_core_endpoint()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -82,6 +83,14 @@ def _is_process_alive(pid: int) -> bool:
     return pid_exists(pid)
 
 
+def _is_tcp_endpoint_reachable(address: str, port: int) -> bool:
+    try:
+        with socket.create_connection((address, port), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
 def discover_core_endpoint() -> CoreEndpoint | None:
     """Discover a running Kagan core by reading runtime files.
 
@@ -113,6 +122,18 @@ def discover_core_endpoint() -> CoreEndpoint | None:
     if pid is not None and not _is_process_alive(pid):
         logger.info("Core process (PID %d) is no longer running; stale endpoint", pid)
         return None
+    if normalized_transport == "tcp":
+        raw_port = data.get("port")
+        if not isinstance(raw_port, int) or raw_port <= 0:
+            logger.warning("Malformed TCP endpoint file at %s", endpoint_path)
+            return None
+        if not _is_tcp_endpoint_reachable(str(address), raw_port):
+            logger.info(
+                "Core endpoint tcp://%s:%s is unreachable; treating runtime metadata as stale",
+                address,
+                raw_port,
+            )
+            return None
 
     token = _read_text(get_core_token_path())
 
