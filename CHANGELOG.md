@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v0.5.0-beta.1 (2026-02-12)
+
+### Bug Fixes
+
+- **core**: Reject unreachable tcp endpoints during discovery
+  ([#21](https://github.com/kagan-sh/kagan/pull/21),
+  [`f5c94c3`](https://github.com/kagan-sh/kagan/commit/f5c94c3c06c727dec6097122e59a51d583714e34))
+
+- **tui**: Read boundary scan files as utf-8 ([#21](https://github.com/kagan-sh/kagan/pull/21),
+  [`f5c94c3`](https://github.com/kagan-sh/kagan/commit/f5c94c3c06c727dec6097122e59a51d583714e34))
+
+- **windows**: Stabilize daemon startup lock and console output
+  ([#21](https://github.com/kagan-sh/kagan/pull/21),
+  [`f5c94c3`](https://github.com/kagan-sh/kagan/commit/f5c94c3c06c727dec6097122e59a51d583714e34))
+
+### Features
+
+- Admin mcp; decoupled and refined architecture; initial work on plugin system
+  ([#21](https://github.com/kagan-sh/kagan/pull/21),
+  [`f5c94c3`](https://github.com/kagan-sh/kagan/commit/f5c94c3c06c727dec6097122e59a51d583714e34))
+
+- Decoupled into core; tui; mcp components; full admin control over kagan board via admin roled mcp
+  ([#21](https://github.com/kagan-sh/kagan/pull/21),
+  [`f5c94c3`](https://github.com/kagan-sh/kagan/commit/f5c94c3c06c727dec6097122e59a51d583714e34))
+
+
 ## v0.4.1 (2026-02-08)
 
 
