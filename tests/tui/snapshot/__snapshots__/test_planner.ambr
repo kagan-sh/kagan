@@ -1,0 +1,59 @@
+# serializer version: 1
+# name: TestPlannerFlow.test_planner_journey
+  '''
+  --- SNAPSHOT: empty ---
+  <> KAGAN
+  <>Snapshot Test Project / snapshot_project⎇ main│AI: Claude│CORE:DISCONNECTED│📋 0 tasks│? help
+  Plan Mode
+  <> ██╗ ██╗ █████╗ ██████╗ █████╗ ███╗ ██╗ <>
+  <> ██║ ██╔╝██╔══██╗██╔════╝ ██╔══██╗████╗ ██║ <>
+  <> █████╔╝ ███████║██║ ███╗███████║██╔██╗ ██║ <>
+  <> ██╔═██╗ ██╔══██║██║ ██║██╔══██║██║╚██╗██║ <>
+  <> ██║ ██╗██║ ██║╚██████╔╝██║ ██║██║ ╚████║ <>
+  <> ╚═╝ ╚═╝╚═╝ ╚═╝ ╚═════╝ ╚═╝ ╚═╝╚═╝ ╚═══╝ <>
+  🎯 Plan Your Work
+  Describe what you want to build or accomplish.
+  Kagan will help break it down into actionable tasks.
+  Examples:
+  • "Add user authentication with OAuth2"
+  • "Refactor the payment module for better testing"
+  • "Fix the bug where users can't upload images"
+  * ReadyPress ? for help
+  ┌────────────────────────────────┐
+  │Describe your task... (/ for commands, Ctrl+C to clear or stop)│
+  └────────────────────────────────┘
+  ^c Stop esc Board F2 Enhance
+  
+  --- SNAPSHOT: plan ---
+  <> KAGAN
+  <>Snapshot Test Project / snapshot_project⎇ main│AI: Claude│CORE:DISCONNECTED│📋 0 tasks│? help
+  Plan Mode
+  ╭────────────────────────────────╮
+  ││
+  │ * Analyze authentication requirements│
+  │ * Design JWT token structure│▂▂
+  │ * Create task breakdown│
+  │ ◐ Validate against security best practices│
+  ││
+  ╰────────────────────────────────╯
+  ╭────────────────────────────────╮
+  ││
+  │📋 Generated Plan (2 tasks)│
+  │Use ↑/↓ to navigate, Enter to preview│
+  ││
+  ││ ⚡ AUTO Implement user authentication │
+  ││ ⚡ AUTO Add user registration flow │
+  ││
+  ││
+  │▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔│
+  │ Approve Edit Dismiss│
+  │▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁│
+  ││
+  ╰────────────────────────────────╯
+  * ReadyPress ? for help
+  ┌────────────────────────────────┐
+  │Describe your task... (/ for commands, Ctrl+C to clear or stop)│
+  └────────────────────────────────┘
+  a Approve e Edit d Dismiss ^c Stop F2 Enhance . Actions ? Help
+  '''
+# ---

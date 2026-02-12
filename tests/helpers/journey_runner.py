@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import io
 import re
 import xml.etree.ElementTree as ET
@@ -116,7 +115,7 @@ async def _wait_for_screen(pilot: Pilot, screen_type: type, timeout: float = 5.0
         for screen in pilot.app.screen_stack:
             if isinstance(screen, screen_type):
                 return
-        await asyncio.sleep(0.1)
+        await pilot.pause(0.1)
         waited += 0.1
     raise AssertionError(f"Timed out waiting for screen {screen_type.__name__}")
 
@@ -155,7 +154,7 @@ async def execute_test_actions(
                     )
                 svg_path.write_text(svg_content)
         elif wait_match:
-            await asyncio.sleep(float(wait_match.group(1)))
+            await pilot.pause(float(wait_match.group(1)))
         elif wait_screen_match:
             if screen_registry is None:
                 raise AssertionError("screen_registry is required for wait_screen(...) actions")
@@ -180,5 +179,6 @@ def bundle_snapshots(
     parts: list[str] = []
     for name, svg in snapshots.items():
         content = normalizer(svg) if normalizer else svg
+        content = content.replace("\r\n", "\n").rstrip()
         parts.append(f"--- SNAPSHOT: {name} ---\n{content}")
     return "\n\n".join(parts)

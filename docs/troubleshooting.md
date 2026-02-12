@@ -1,132 +1,81 @@
+---
+title: Troubleshooting
+description: Fast fixes for common issues
+icon: material/bug
+---
+
 # Troubleshooting
 
-Common issues and solutions when running Kagan.
+## TL;DR
+
+1. Check terminal size (`>= 80x20`)
+1. Check agent binaries in `PATH`
+1. Open debug log with `F12`
+1. Use `kagan reset` for stale local state
+
+## Quick fix table
+
+| Symptom                                      | Fast fix                                         |
+| -------------------------------------------- | ------------------------------------------------ |
+| Agent not detected                           | Verify CLI binary in `PATH`, restart terminal    |
+| PAIR session won't open                      | Install/select backend (`tmux`, VS Code, Cursor) |
+| Instance lock error                          | Close duplicate instance or run `kagan reset`    |
+| Merge conflict in REVIEW                     | Resolve in merge worktree, retry merge           |
+| MCP says `AUTH_STALE_TOKEN`                  | Restart MCP client or run `kagan core restart`   |
+| UI looks broken                              | Resize terminal to at least `80x20`              |
+| `kagan core status` says metadata incomplete | Run `kagan core stop` then `kagan core start`    |
 
 ## Windows
 
-### Microsoft Visual C++ Redistributable
+### Native extension install errors (`vcruntime`, `cl.exe`)
 
-Some Python packages used by Kagan include native extensions that require the
-Microsoft Visual C++ Redistributable. If you see build errors mentioning missing
-`vcruntime` or `cl.exe`, install the redistributable:
+Install [Microsoft Visual C++ Redistributable](https://go.microsoft.com/fwlink/?LinkID=135170).
 
-**Download:** [Microsoft Visual C++ Redistributable](https://go.microsoft.com/fwlink/?LinkID=135170)
-
-After installing, restart your terminal and retry the Kagan installation.
-
-### Windows Installation (PowerShell)
-
-The recommended way to install Kagan on Windows is with the all-in-one installer that
-bundles `uv` and a compatible Python version:
+### Recommended install path
 
 ```powershell
 iwr -useb uvget.me/install.ps1 -OutFile install.ps1; .\install.ps1 kagan
 ```
 
-Alternatively, if you already have `uv` and Python 3.12+ installed:
+### PAIR backend
 
-```powershell
-uv tool install kagan
-```
-
-### PAIR Mode on Windows
-
-Windows does not support tmux natively. Kagan defaults to VS Code as the PAIR terminal
-backend on Windows. You can also use Cursor:
+Windows defaults to VS Code. Override:
 
 ```toml
 [general]
 default_pair_terminal_backend = "vscode"  # or "cursor"
 ```
 
-Make sure `code` (VS Code) or `cursor` is available in your PATH.
-
 ## macOS / Linux
 
-### tmux Not Found
-
-PAIR mode defaults to tmux on macOS and Linux. Install it:
+### `tmux` not found
 
 ```bash
-# macOS
-brew install tmux
-
-# Debian / Ubuntu
-sudo apt install tmux
-
-# Fedora / RHEL
-sudo dnf install tmux
+brew install tmux            # macOS
+sudo apt install tmux        # Debian / Ubuntu
+sudo dnf install tmux        # Fedora / RHEL
 ```
 
-Alternatively, switch to VS Code or Cursor as the PAIR backend:
+Or switch backend:
 
 ```toml
 [general]
 default_pair_terminal_backend = "vscode"
 ```
 
-### Permission Denied on Install Script
-
-If the `curl` install script fails with a permission error:
-
-```bash
-curl -fsSL https://uvget.me/install.sh | bash -s -- kagan
-```
-
-Try running with explicit permission:
-
-```bash
-curl -fsSL https://uvget.me/install.sh -o install.sh && chmod +x install.sh && ./install.sh kagan
-```
-
 ## General
 
-### Agent Not Detected
+- **Agent not detected**: verify binary (`which claude`, etc.), restart terminal, check `F12` debug log.
+- **Instance lock error**: close other Kagan instances for same repo, or `kagan reset`.
+- **Merge conflicts**: open resolve from Task Details, resolve in worktree, retry. Consider `serialize_merges = true`.
 
-Kagan auto-detects installed AI CLI agents on startup. If your agent is not detected:
-
-1. Make sure the agent's CLI binary is in your `PATH`
-1. Run `which claude`, `which opencode`, `which gemini`, etc. to verify
-1. Restart your terminal after installing an agent
-1. Check the Debug Log (++f12++) for detection details
-
-### Instance Lock Error
-
-Kagan enforces one instance per repository. If you see "instance locked":
-
-1. Close any other running Kagan instances for the same repo
-1. If the lock is stale (e.g. after a crash), use `kagan reset` to clean up
-1. Or delete the lock file manually from the XDG data directory
-
-### Merge Conflicts
-
-If a merge fails in REVIEW:
-
-1. Kagan shows merge readiness (Ready / At Risk / Blocked) before you merge
-1. Use the resolve action in Task Details to open a terminal in the merge worktree
-1. Fix conflicts manually, then retry the merge
-1. Consider enabling `serialize_merges = true` in config to reduce conflicts when running
-   multiple parallel agents
-
-### Small Terminal Window
-
-Kagan requires a minimum terminal size of 80 columns by 20 rows. If the UI looks broken,
-resize your terminal window or reduce the font size.
-
-### Database Reset
-
-If you need a fresh start:
+### Reset local state
 
 ```bash
-# Interactive reset (choose what to reset)
-kagan reset
-
-# Nuclear reset (removes all data)
-kagan reset --force
+kagan reset         # interactive
+kagan reset --force # delete all local state
 ```
 
-Data is stored in XDG-compliant locations:
+`kagan reset` stops a running core daemon before deleting state.
 
-- Database: `~/.local/share/kagan/kagan.db`
-- Config: `~/.config/kagan/config.toml`
-- Worktrees: system temp directory (e.g., `/var/tmp/kagan/worktrees/`)
+Data paths: `~/.local/share/kagan/kagan.db`, `~/.config/kagan/config.toml`, system temp dir (`/var/tmp/kagan/worktrees/`).

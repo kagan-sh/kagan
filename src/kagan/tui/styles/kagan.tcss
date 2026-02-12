@@ -1,0 +1,3548 @@
+/* Kagan TUI Styles - Khagan Night Theme */
+/* Uses Textual design tokens for theme compatibility */
+
+/* =============================================================================
+   DESIGN TOKENS - Premium Kagan Night Theme
+   ============================================================================= */
+
+/* Spacing Scale (consistent rhythm) */
+$space-xs: 0;
+$space-sm: 1;
+$space-md: 2;
+$space-lg: 3;
+$space-xl: 4;
+
+/* Semantic Status Colors */
+$status-running: $secondary;      /* Gold - active/in-progress */
+$status-success: $success;        /* Green - passed/complete */
+$status-warning: $warning;        /* Yellow - needs attention */
+$status-error: $error;            /* Red - failed/blocked */
+$status-idle: $text-muted;        /* Gray - inactive */
+
+/* State Opacities */
+$opacity-disabled: 40%;
+$opacity-hover: 10%;
+$opacity-focus: 20%;
+
+/* =============================================================================
+   BADGE SYSTEM
+   ============================================================================= */
+
+/* Badge Base */
+.badge { padding: 0 1; height: 1; min-width: 3; }
+.badge-sm { padding: 0; min-width: 1; }
+.badge-primary { background: $primary; color: $background; }
+.badge-success { background: $success; color: $background; }
+.badge-warning { background: $warning; color: $background; }
+.badge-error { background: $error; color: $text; }
+.badge-muted { background: $surface; color: $text-muted; }
+
+/* =============================================================================
+   BUTTON VARIANTS
+   ============================================================================= */
+
+.btn-icon { min-width: 3; padding: 0 1; }
+.btn-compact { min-width: auto; padding: 0 1; }
+.btn-wide { min-width: 20; }
+Button:disabled { text-opacity: 40%; background: $surface; }
+
+/* =============================================================================
+   CSS VARIABLES
+   ============================================================================= */
+
+/* Priority colors - semantic aliases for consistency */
+$priority-high: $error;
+$priority-high-text: $text;
+$priority-medium: $warning;
+$priority-medium-text: $background;
+$priority-low: $border;
+$priority-low-text: $text-muted;
+
+/* Status badge text colors - use dark text for visibility on colored backgrounds */
+$success-text: $background;
+$error-text: $text;
+$warning-text: $background;
+
+/* Common spacing */
+$modal-padding: 1 2;
+$card-margin: 0 0 1 0;
+
+/* Common border styles */
+$border-standard: solid $border;
+$border-focused: solid $primary;
+$border-modal: round $primary;
+
+/* =============================================================================
+   GLOBAL STYLES
+   ============================================================================= */
+
+/* Global app styles */
+Screen {
+    background: $background;
+}
+
+/* =============================================================================
+   HEADER & FOOTER
+   ============================================================================= */
+
+/* Custom KaganHeader styles - Khagan Night theme */
+KaganHeader {
+    dock: top;
+    width: 100%;
+    height: 3;
+    background: $panel;
+    color: $text;
+    layout: horizontal;
+    padding: 0 1;
+    align: left middle;
+}
+
+KaganHeader .header-logo {
+    width: auto;
+    color: $secondary;
+    text-style: bold;
+    padding-right: 1;
+}
+
+KaganHeader .header-title {
+    width: auto;
+    color: $primary;
+    text-style: bold;
+}
+
+KaganHeader .header-repo {
+    width: auto;
+    color: $text-muted;
+}
+
+KaganHeader .header-version {
+    width: auto;
+    color: $text-muted;
+    padding-left: 1;
+}
+
+KaganHeader .header-spacer {
+    width: 1fr;
+}
+
+KaganHeader .header-branch {
+    width: auto;
+    color: $text-muted;
+    padding-right: 2;
+}
+
+KaganHeader .header-sessions {
+    width: auto;
+    padding-right: 2;
+}
+
+KaganHeader .header-sessions {
+    color: $text-muted;
+}
+
+KaganHeader .header-agent {
+    width: auto;
+    color: $secondary;
+    text-style: bold;
+    padding-right: 2;
+}
+
+KaganHeader .header-stats {
+    width: auto;
+    color: $text;
+}
+
+/* Footer styles - subtle appearance */
+Footer {
+    background: $surface;
+}
+
+FooterKey > .footer-key--key {
+    background: transparent;
+    color: $text-muted;
+    text-style: bold;
+}
+
+FooterKey > .footer-key--description {
+    color: $text-disabled;
+}
+
+/* Modal Footer - dock to bottom of screen */
+ModalScreen Footer {
+    dock: bottom;
+}
+
+/* =============================================================================
+   KANBAN BOARD
+   ============================================================================= */
+
+/* Kanban board styles */
+.board-container {
+    width: 100%;
+    height: 1fr;
+    padding: 0;
+    background: $background;
+}
+
+.board {
+    width: 100%;
+    height: 100%;
+}
+
+/* Column styles - flush layout with border separators */
+KanbanColumn {
+    width: 1fr;
+    height: 100%;
+    border-right: solid $border;
+    padding: 0;
+    margin: 0;
+    background: $surface;
+}
+
+/* No right border on last column */
+KanbanColumn:last-child {
+    border-right: none;
+}
+
+KanbanColumn .column-header {
+    width: 100%;
+    height: 3;
+    padding: 0 1;
+    align: center middle;
+}
+
+KanbanColumn .column-header-text {
+    text-style: bold;
+    color: $text;
+    width: auto;
+    text-align: center;
+}
+
+KanbanColumn .column-count {
+    color: $text-muted;
+}
+
+KanbanColumn .column-content {
+    width: 100%;
+    height: 1fr;
+    padding: 0;
+    border-top: solid $border;
+}
+
+KanbanColumn .column-empty {
+    width: 100%;
+    height: 1fr;
+    align: center middle;
+}
+
+KanbanColumn .empty-message {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding: 2;
+}
+
+/* =============================================================================
+   TASK CARDS
+   ============================================================================= */
+
+/* Card styles - bottom-border only, flush within column */
+TaskCard {
+    width: 100%;
+    height: 4;
+    margin: 0;
+    padding: 0;
+    border-bottom: solid $border;
+    background: $surface;
+    color: $text;
+}
+
+TaskCard:focus {
+    border-bottom: solid $primary;
+    background: $panel;
+}
+
+TaskCard:hover {
+    background: $panel;
+}
+
+/* ============================================
+   CARD CONTENT STYLES
+   ============================================ */
+
+TaskCard .card-row {
+    width: 100%;
+    height: 1;
+    padding: 0 1;
+}
+
+TaskCard .card-rail {
+    width: 1;
+    text-style: bold;
+    color: $border;
+}
+
+TaskCard .card-rail.rail-normal {
+    color: $border;
+}
+
+TaskCard .card-rail.rail-running {
+    color: $secondary;
+}
+
+TaskCard .card-rail.rail-warning {
+    color: $warning;
+}
+
+TaskCard .card-rail.rail-error {
+    color: $error;
+}
+
+TaskCard .card-rail.rail-success {
+    color: $success;
+}
+
+TaskCard:focus .card-rail.rail-normal {
+    color: $primary;
+}
+
+TaskCard .card-title {
+    width: 1fr;
+    height: 1;
+    text-style: bold;
+    color: $text;
+}
+
+TaskCard .card-desc {
+    width: 1fr;
+    height: 1;
+    color: $text-muted;
+}
+
+TaskCard .card-desc-empty {
+    color: $text-disabled;
+    text-style: italic;
+}
+
+TaskCard .card-badge-row {
+    width: 100%;
+    height: 1;
+}
+
+/* Right-aligned card ID (muted) */
+TaskCard .card-id {
+    width: auto;
+    height: 1;
+    color: $text-muted;
+}
+
+/* Branch badge - shows git branch name */
+TaskCard .card-branch {
+    width: auto;
+    height: 1;
+    color: $text-muted;
+    text-style: italic;
+    margin-left: 1;
+}
+
+/* Spacer pushes priority badge right */
+TaskCard .card-spacer {
+    width: 1fr;
+    height: 1;
+}
+
+TaskCard .card-badge {
+    height: 1;
+    padding: 0 1;
+    margin-right: 1;
+    text-style: bold;
+    background: $surface;
+    color: $text;
+}
+
+TaskCard .card-badge-type {
+    background: $secondary;
+    color: $background;
+}
+
+TaskCard .card-badge-backend {
+    background: $panel;
+    color: $text;
+}
+
+TaskCard .card-badge-priority.priority-high {
+    background: $priority-high;
+    color: $priority-high-text;
+}
+
+TaskCard .card-badge-priority.priority-medium {
+    background: $priority-medium;
+    color: $priority-medium-text;
+}
+
+TaskCard .card-badge-priority.priority-low {
+    background: $priority-low;
+    color: $priority-low-text;
+}
+
+TaskCard .card-review {
+    width: 100%;
+    height: 1;
+    color: $text;
+}
+
+TaskCard .card-checks {
+    width: 100%;
+    height: 1;
+    color: $success;
+}
+
+/* Review state colors for checks line */
+TaskCard .card-checks.passed {
+    color: $success;
+}
+
+TaskCard .card-checks.failed {
+    color: $error;
+}
+
+TaskCard .card-checks.pending {
+    color: $warning;
+}
+
+TaskCard .card-readiness {
+    width: 100%;
+    height: 1;
+    color: $text-muted;
+}
+
+TaskCard .card-readiness.readiness-ready {
+    color: $success;
+}
+
+TaskCard .card-readiness.readiness-risk {
+    color: $warning;
+}
+
+TaskCard .card-readiness.readiness-blocked {
+    color: $error;
+}
+
+/* Card status indicators */
+TaskCard .card-indicator {
+    width: 2;
+    height: 1;
+    text-style: bold;
+}
+
+TaskCard .indicator-running { color: $status-running; }
+TaskCard .indicator-idle    { color: $status-idle; }
+TaskCard .indicator-reviewing { color: $accent; }
+TaskCard .indicator-blocked { color: $status-error; }
+TaskCard .indicator-passed  { color: $status-success; }
+TaskCard .indicator-failed  { color: $status-error; }
+
+/* =============================================================================
+   MODALS
+   ============================================================================= */
+
+/* Task details modal */
+TaskDetailsModal {
+    align: center middle;
+}
+
+TaskDetailsModal > Vertical,
+TaskDetailsModal #task-details-container {
+    width: 80;
+    max-height: 80%;
+    border: round $primary;
+    background: $surface;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+TaskDetailsModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+    color: $secondary;
+}
+
+TaskDetailsModal Rule {
+    margin: 1 0;
+    color: $border;
+}
+
+TaskDetailsModal .badge-row {
+    width: 100%;
+    height: auto;
+}
+
+TaskDetailsModal .badge {
+    padding: 0 1;
+    margin-right: 1;
+}
+
+TaskDetailsModal .badge-priority-high {
+    background: $priority-high;
+    color: $priority-high-text;
+}
+
+TaskDetailsModal .badge-priority-medium {
+    background: $priority-medium;
+    color: $priority-medium-text;
+}
+
+TaskDetailsModal .badge-priority-low {
+    background: $priority-low;
+    color: $priority-low-text;
+}
+
+TaskDetailsModal .badge-status {
+    background: $primary;
+    color: $background;
+}
+
+TaskDetailsModal .badge-type {
+    background: $secondary;
+    color: $background;
+}
+
+.badge-agent {
+    background: $secondary;
+    color: $background;
+}
+
+.badge-model {
+    background: $accent;
+    color: $background;
+}
+
+TaskDetailsModal .section-title {
+    text-style: bold;
+    color: $text-muted;
+    width: auto;
+}
+
+TaskDetailsModal .task-title {
+    text-style: bold;
+    padding: 0 1;
+    color: $text;
+    background: $background;
+}
+
+TaskDetailsModal .description-header {
+    width: 100%;
+    height: 1;
+}
+
+TaskDetailsModal .header-spacer {
+    width: 1fr;
+}
+
+TaskDetailsModal .expand-hint {
+    width: auto;
+    color: $primary;
+}
+
+TaskDetailsModal .task-description {
+    padding: 1;
+    background: $background;
+    min-height: 3;
+    max-height: 10;
+    height: auto;
+    color: $text;
+    overflow-y: auto;
+}
+
+/* Acceptance criteria section */
+TaskDetailsModal .acceptance-criteria-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TaskDetailsModal .ac-item {
+    color: $text;
+    padding-left: 1;
+}
+
+TaskDetailsModal #ac-input {
+    height: 6;
+    min-height: 4;
+}
+
+/* Review results section */
+TaskDetailsModal .review-results-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TaskDetailsModal .review-status-row {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+TaskDetailsModal .review-label {
+    padding-left: 2;
+    color: $text-muted;
+}
+
+TaskDetailsModal .review-summary-text {
+    padding: 1;
+    background: $surface;
+    color: $text;
+    width: 100%;
+    height: auto;
+}
+
+TaskDetailsModal .merge-error-text {
+    padding: 1;
+    color: $error;
+}
+
+TaskDetailsModal .merge-help-text {
+    padding: 1;
+    color: $warning;
+}
+
+TaskDetailsModal .badge-checks-passed {
+    background: $success;
+    color: $success-text;
+}
+
+TaskDetailsModal .badge-checks-failed {
+    background: $error;
+    color: $error-text;
+}
+
+TaskDetailsModal .badge-checks-pending {
+    background: $warning;
+    color: $warning-text;
+}
+
+TaskDetailsModal .badge-readiness-ready {
+    background: $success;
+    color: $success-text;
+}
+
+TaskDetailsModal .badge-readiness-risk {
+    background: $warning;
+    color: $warning-text;
+}
+
+TaskDetailsModal .badge-readiness-blocked {
+    background: $error;
+    color: $error-text;
+}
+
+TaskDetailsModal .parallel-work-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TaskDetailsModal #parallel-work-content {
+    color: $text;
+    padding: 1;
+}
+
+TaskDetailsModal .audit-section {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+TaskDetailsModal #audit-content {
+    color: $text-muted;
+    padding: 1;
+}
+
+TaskDetailsModal .meta-row {
+    width: 100%;
+    height: auto;
+}
+
+TaskDetailsModal .task-meta {
+    color: $text-muted;
+    width: auto;
+}
+
+TaskDetailsModal .meta-separator {
+    width: auto;
+    color: $border;
+}
+
+TaskDetailsModal .button-row {
+    width: 100%;
+    height: auto;
+    padding-top: 1;
+    align: center middle;
+}
+
+TaskDetailsModal Button {
+    margin: 0 1;
+}
+
+/* Edit mode styles for TaskDetailsModal */
+TaskDetailsModal .edit-fields {
+    display: none;
+}
+
+TaskDetailsModal.editing .edit-fields {
+    display: block;
+}
+
+TaskDetailsModal .view-only {
+    display: block;
+}
+
+TaskDetailsModal.editing .view-only {
+    display: none;
+}
+
+/* Status field only shown in create mode during editing */
+TaskDetailsModal #status-field {
+    display: none;
+}
+
+TaskDetailsModal.editing.create-mode #status-field {
+    display: block;
+}
+
+/* Meta row hidden during editing */
+TaskDetailsModal.editing #meta-row {
+    display: none;
+}
+
+TaskDetailsModal .form-field {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+TaskDetailsModal .form-label {
+    width: auto;
+    height: 1;
+    padding-bottom: 0;
+    color: $text;
+    text-style: bold;
+}
+
+TaskDetailsModal Input {
+    width: 100%;
+    background: $background;
+    color: $text;
+    border: solid $border;
+}
+
+TaskDetailsModal Input:focus {
+    border: solid $primary;
+}
+
+TaskDetailsModal TextArea {
+    width: 100%;
+    height: 10;
+    min-height: 6;
+    background: $background;
+    color: $text;
+    border: solid $border;
+}
+
+TaskDetailsModal TextArea:focus {
+    border: solid $primary;
+}
+
+TaskDetailsModal Select {
+    width: 100%;
+}
+
+/* Horizontal field row for Priority/Agent in edit mode */
+TaskDetailsModal .field-row {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+TaskDetailsModal .field-half {
+    width: 1fr;
+    margin-right: 1;
+}
+
+TaskDetailsModal .field-half:last-child {
+    margin-right: 0;
+}
+
+TaskDetailsModal .field-third {
+    width: 1fr;
+    margin-right: 1;
+}
+
+TaskDetailsModal .field-third:last-child {
+    margin-right: 0;
+}
+
+/* Base branch section for view and edit modes */
+TaskDetailsModal .base-branch-section {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+TaskDetailsModal .base-branch-section.view-only {
+    height: auto;
+}
+
+TaskDetailsModal .base-branch-section .form-label {
+    color: $text-muted;
+}
+
+/* BaseBranchInput styling */
+BaseBranchInput {
+    width: 100%;
+    background: $background;
+    color: $text;
+    border: solid $border;
+}
+
+BaseBranchInput:focus {
+    border: solid $primary;
+}
+
+/* Full-screen description editor modal */
+DescriptionEditorModal {
+    align: center middle;
+}
+
+DescriptionEditorModal #description-editor-container {
+    width: 90%;
+    height: 90%;
+    border: round $primary;
+    background: $surface;
+    padding: 0;
+}
+
+DescriptionEditorModal #description-editor-header {
+    width: 100%;
+    height: 3;
+    padding: 1 2;
+    background: $panel;
+}
+
+DescriptionEditorModal #editor-title {
+    width: auto;
+    text-style: bold;
+    color: $secondary;
+}
+
+DescriptionEditorModal #header-spacer {
+    width: 1fr;
+}
+
+DescriptionEditorModal #editor-hint {
+    width: auto;
+    color: $primary;
+}
+
+DescriptionEditorModal #description-textarea {
+    width: 100%;
+    height: 1fr;
+    background: $background;
+    color: $text;
+    border: none;
+    padding: 0;
+}
+
+DescriptionEditorModal #description-textarea:focus {
+    border: none;
+}
+
+DescriptionEditorModal #description-editor-status {
+    width: 100%;
+    height: 1;
+    padding: 0 2;
+    background: $panel;
+}
+
+DescriptionEditorModal #cursor-position {
+    width: auto;
+    color: $text-muted;
+}
+
+DescriptionEditorModal #status-spacer {
+    width: 1fr;
+}
+
+DescriptionEditorModal #line-count {
+    width: auto;
+    color: $text-muted;
+}
+
+/* Empty state */
+.empty-state {
+    width: 100%;
+    height: 100%;
+    align: center middle;
+}
+
+.empty-message {
+    text-align: center;
+    color: $text-muted;
+    padding: 2;
+}
+
+/* =============================================================================
+   SCREENS
+   ============================================================================= */
+
+/* KanbanScreen styles */
+KanbanScreen {
+    layout: vertical;
+    background: $background;
+    layers: base overlay;
+}
+
+KanbanScreen .size-warning {
+    width: 100%;
+    height: 100%;
+    align: center middle;
+    background: $surface;
+    display: none;
+}
+
+KanbanScreen .size-warning-text {
+    text-align: center;
+    color: $warning;
+    text-style: bold;
+}
+
+KanbanScreen.too-small .board-container {
+    display: none;
+}
+
+KanbanScreen.too-small .size-warning {
+    display: block;
+}
+
+/* ConfirmModal styles */
+ConfirmModal {
+    align: center middle;
+}
+
+ConfirmModal > Container {
+    width: 50;
+    height: auto;
+    border: round $error;
+    background: $surface;
+    padding: 2 3;
+}
+
+ConfirmModal .confirm-title {
+    text-style: bold;
+    text-align: center;
+    padding-bottom: 1;
+    color: $error;
+}
+
+ConfirmModal .confirm-message {
+    text-align: center;
+    padding-bottom: 1;
+    color: $text;
+}
+
+ConfirmModal .confirm-hint {
+    text-align: center;
+    color: $text-muted;
+}
+
+/* =============================================================================
+   BASE BRANCH MODAL
+   ============================================================================= */
+
+BaseBranchModal {
+    align: center middle;
+}
+
+#branch-modal-container {
+    width: 60;
+    height: auto;
+    border: round $primary;
+    background: $surface;
+    padding: 2 3;
+}
+
+#branch-modal-title {
+    text-style: bold;
+    text-align: center;
+    width: 100%;
+    padding-bottom: 1;
+    color: $secondary;
+}
+
+#branch-modal-description {
+    text-align: center;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+BaseBranchModal #branch-select {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+BaseBranchModal #branch-custom-input {
+    width: 100%;
+    margin-bottom: 1;
+    background: $background;
+    border: solid $border;
+}
+
+BaseBranchModal #branch-custom-input:focus {
+    border: solid $primary;
+}
+
+BaseBranchModal #branch-custom-input.hidden {
+    display: none;
+}
+
+#branch-modal-buttons {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    padding-top: 1;
+}
+
+#branch-modal-buttons Button {
+    margin: 0 1;
+}
+
+/* =============================================================================
+   PAIR INSTRUCTIONS MODAL (tmux gateway)
+   ============================================================================= */
+
+PairInstructionsModal {
+    align: center middle;
+}
+
+#pair-instructions-container {
+    width: 70;
+    height: auto;
+    max-height: 32;
+    border: round $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
+PairInstructionsModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    color: $secondary;
+    padding-bottom: 1;
+}
+
+PairInstructionsModal .section-title {
+    text-style: bold;
+    color: $text-muted;
+    width: 100%;
+    text-align: center;
+    padding: 1 0;
+}
+
+.tmux-intro {
+    width: 100%;
+    text-align: center;
+    color: $text;
+    padding: 1 0;
+}
+
+.hotkey-list {
+    width: 100%;
+    padding: 0 2;
+}
+
+.tmux-hotkey-row {
+    width: 100%;
+    height: 1;
+    padding: 0 1;
+}
+
+.tmux-key {
+    width: 16;
+    min-width: 16;
+    color: $primary;
+    text-style: bold;
+}
+
+.tmux-desc {
+    width: 1fr;
+    color: $text;
+}
+
+.tmux-link {
+    width: 100%;
+    text-align: center;
+    color: $secondary;
+    padding: 1 0;
+}
+
+.tmux-link:hover {
+    text-style: bold underline;
+    tint: $primary 10%;
+}
+
+.tmux-hint {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
+}
+
+/* DiffModal styles */
+DiffModal {
+    align: center middle;
+}
+
+#diff-container {
+    width: 90%;
+    height: 80%;
+    background: $surface;
+    border: round $primary;
+    padding: 1 2;
+}
+
+#diff-log {
+    height: 1fr;
+    background: $background;
+    border: round $border;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+/* PlannerScreen styles */
+PlannerScreen {
+    layout: vertical;
+    background: $background;
+}
+
+#planner-container {
+    width: 100%;
+    height: 1fr;
+    padding: 1;
+    layout: vertical;
+}
+
+#planner-header {
+    width: 100%;
+    height: auto;
+    max-height: 3;
+    color: $text-muted;
+    padding-bottom: 2;
+    text-style: bold;
+}
+
+#planner-output {
+    width: 100%;
+    height: 1fr;
+    display: none;
+}
+
+#planner-output.visible {
+    display: block;
+}
+
+#planner-output > ScrollableContainer {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+/* Bottom container for StatusBar + Input */
+#planner-bottom {
+    dock: bottom;
+    height: auto;
+    width: 100%;
+}
+
+#planner-input {
+    width: 100%;
+    padding: 0 1;
+    background: transparent;
+    border: solid $border;
+    height: auto;
+    min-height: 1;
+    max-height: 6;
+}
+
+#planner-input:focus {
+    border: solid $primary;
+}
+
+#planner-input.-disabled {
+    text-opacity: 40%;
+    border: solid $border;
+}
+
+/* Refinement mode visual feedback */
+#planner-input.-refining {
+    border: solid $secondary;
+    text-opacity: 60%;
+}
+
+#planner-input.-refining:focus {
+    border: solid $secondary;
+}
+
+/* Planner empty state */
+.planner-empty-state {
+    width: 100%;
+    height: 1fr;
+    align: center middle;
+    content-align: center middle;
+    padding: 1;
+}
+
+.planner-empty-content {
+    width: auto;
+    min-width: 70;
+    max-width: 90;
+    height: auto;
+    align: center middle;
+    content-align: center middle;
+}
+
+.planner-empty-card {
+    width: 100%;
+    height: auto;
+    border: none;
+    background: transparent;
+    padding: 1 2;
+    align: center middle;
+}
+
+#planner-empty-logo {
+    width: auto;
+    content-align: center middle;
+    text-align: center;
+    color: $primary;
+    padding-bottom: 1;
+}
+
+#planner-empty-heading {
+    width: 100%;
+    text-style: bold underline;
+    color: $secondary;
+    text-align: center;
+    content-align: center middle;
+    padding-bottom: 1;
+}
+
+#planner-empty-description {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+#planner-empty-examples {
+    width: 100%;
+    align: center middle;
+}
+
+.planner-empty-section-title {
+    color: $text-muted;
+    text-style: bold;
+    text-align: center;
+    width: 100%;
+    padding-top: 1;
+}
+
+.planner-empty-example {
+    color: $text;
+    text-align: center;
+    width: 100%;
+}
+
+
+/* EmptyState widget */
+.empty-state {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    content-align: center middle;
+    padding: 2;
+}
+
+.empty-state-card {
+    width: auto;
+    min-width: 70;
+    max-width: 90;
+    height: auto;
+    border: none;
+    background: transparent;
+    padding: 1 2;
+    align: center middle;
+}
+
+#empty-state-logo {
+    width: auto;
+    content-align: center middle;
+    text-align: center;
+    color: $primary;
+    padding-bottom: 1;
+}
+
+.empty-card-title {
+    width: 100%;
+    text-style: bold underline;
+    color: $secondary;
+    text-align: center;
+    content-align: center middle;
+    padding-bottom: 1;
+}
+
+.empty-card-section {
+    color: $text-muted;
+    text-style: bold;
+    padding-top: 1;
+    text-align: center;
+    width: 100%;
+}
+
+.card-item-compact {
+    color: $text;
+    text-align: center;
+    width: 100%;
+}
+
+/* StatusBar widget */
+StatusBar {
+    height: 1;
+    background: $panel;
+    layout: horizontal;
+    padding: 0 1;
+}
+
+/* StatusBar in planner - positioned above input via planner-bottom container */
+#planner-bottom StatusBar {
+    /* Match the input's width: account for input's border (1 cell each side) */
+    margin: 0 1;
+}
+
+.status-left {
+    width: auto;
+    color: $text;
+}
+
+.status-right {
+    width: 1fr;
+    text-align: right;
+    color: $text-muted;
+}
+
+/* =============================================================================
+   WELCOME SCREEN
+   ============================================================================= */
+
+/* Welcome Screen Styles */
+WelcomeScreen {
+    align: center middle;
+    background: $background;
+}
+
+#welcome-container {
+    width: 95%;
+    max-width: 70;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: round $primary;
+    background: $surface;
+    overflow-y: auto;
+}
+
+#logo {
+    width: 100%;
+    text-align: center;
+    color: $primary;
+    padding: 0 0 1 0;
+}
+
+#subtitle {
+    text-align: center;
+    margin-bottom: 1;
+    color: $text;
+    width: 100%;
+}
+
+.section-label {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+#base-branch-select {
+    width: 100%;
+    margin: 0 0 1 0;
+}
+
+.info-label {
+    color: $text-muted;
+}
+
+.settings-header {
+    margin-top: 1;
+}
+
+.toggle-row {
+    width: 100%;
+    min-height: 3;
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
+    align: left middle;
+}
+
+.toggle-text {
+    padding-left: 1;
+    color: $text-muted;
+}
+
+#git-init-hint {
+    text-align: center;
+    margin: 1 0 0 0;
+    width: 100%;
+}
+
+#buttons {
+    margin-top: 2;
+    margin-bottom: 2;
+    width: 100%;
+    align: center middle;
+}
+
+#buttons Button {
+    min-width: 20;
+}
+
+/* Welcome screen footer positioning */
+WelcomeScreen Footer {
+    dock: bottom;
+}
+
+.hidden {
+    display: none;
+}
+
+/* === Welcome Screen Project Picker === */
+#recent-header {
+    padding: 0 0 1 0;
+    text-style: bold;
+    color: $text-muted;
+}
+
+#project-list {
+    height: 6;
+    max-height: 6;
+    min-height: 0;
+    margin-bottom: 1;
+    padding: 0;
+}
+
+#project-list > ListItem {
+    padding: 0;
+    height: auto;
+}
+
+#empty-state {
+    text-align: center;
+    color: $text-muted;
+    padding: 2;
+}
+
+.project-item {
+    padding: 0 1;
+    height: 1;
+}
+
+.project-name {
+    text-style: bold;
+    color: $text;
+    height: 1;
+    width: 22;
+}
+
+.project-repos {
+    color: $text-muted;
+    height: 1;
+    width: 1fr;
+}
+
+.project-tasks {
+    color: $text-muted;
+    height: 1;
+    width: 20;
+}
+
+.project-time {
+    width: 8;
+    color: $text-muted;
+    text-align: right;
+}
+
+#actions {
+    padding: 0 0 1 0;
+    height: auto;
+    align: center middle;
+}
+
+#actions Button {
+    margin: 0 1;
+}
+
+#admin-mcp-hint {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding: 0 1 1 1;
+}
+
+/* =============================================================================
+   REVIEW MODAL
+   ============================================================================= */
+
+ReviewModal {
+    align: center middle;
+}
+
+#review-modal-container {
+    width: 95%;
+    height: 90%;
+    background: $surface;
+    border: round $primary;
+    padding: 1 2;
+    overflow: hidden;
+}
+
+ReviewModal .modal-title {
+    text-style: bold;
+    color: $secondary;
+}
+
+ReviewModal #review-title {
+    width: 100%;
+    text-align: left;
+    padding-bottom: 0;
+}
+
+ReviewModal .branch-info {
+    width: 100%;
+    text-align: left;
+    color: $text-muted;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-bottom: 1;
+}
+
+ReviewModal .section-title {
+    text-style: bold;
+    color: $text-muted;
+    padding-top: 1;
+    padding-bottom: 0;
+}
+
+#review-meta-row {
+    display: none;
+}
+
+#review-tabs {
+    height: 1fr;
+}
+
+ReviewModal TabbedContent {
+    height: 1fr;
+}
+
+ReviewModal TabbedContent > ContentSwitcher {
+    height: 1fr;
+}
+
+ReviewModal TabPane {
+    height: 1fr;
+}
+
+#review-summary-scroll {
+    height: 1fr;
+    padding-right: 1;
+}
+
+#review-stats {
+    height: auto;
+    margin: 0 0 1 0;
+    align: left middle;
+}
+
+#review-stats .stat-card {
+    height: 3;
+    min-width: 18;
+    padding: 0 1;
+    text-align: center;
+    background: $background;
+    border: round $border;
+    margin-right: 1;
+}
+
+#commits-table {
+    height: auto;
+    max-height: 8;
+    background: $surface;
+    border: none;
+}
+
+#diff-stats {
+    padding: 0 1;
+    background: $background;
+    border: round $border;
+    height: auto;
+    min-height: 2;
+    max-height: 6;
+}
+
+#review-description {
+    padding: 0 1;
+    background: $background;
+    border: round $border;
+    height: auto;
+}
+
+#task-output-status {
+    color: $text-muted;
+    padding: 0 1;
+}
+
+#diff-pane {
+    height: 1fr;
+    width: 100%;
+}
+
+#diff-files {
+    width: 32;
+    height: 1fr;
+    background: $surface;
+    border: round $border;
+    margin-right: 1;
+}
+
+#diff-files.hidden {
+    display: none;
+}
+
+#diff-log {
+    height: 1fr;
+    background: $background;
+    border: none;
+}
+
+/* AI Review section - expandable, takes remaining space */
+#ai-review-section {
+    height: 1fr;
+    min-height: 10;
+    padding-top: 1;
+}
+
+#ai-review-header {
+    width: 100%;
+    height: auto;
+    align: left middle;
+    margin-bottom: 1;
+}
+
+#ai-review-header .spacer {
+    width: 1fr;
+}
+
+.task-output-state-note {
+    color: $text-muted;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+.phase-badge {
+    width: auto;
+    padding: 0 1;
+    text-style: bold;
+    border: round $border;
+    background: $panel;
+    margin-left: 1;
+}
+
+.decision-badge {
+    width: auto;
+    padding: 0 1;
+    text-style: bold;
+    border: round $border;
+    background: $panel;
+}
+
+.decision-pending {
+    color: $text-muted;
+}
+
+.decision-approved {
+    color: $success;
+    border: round $success;
+}
+
+.decision-rejected {
+    color: $error;
+    border: round $error;
+}
+
+.phase-idle {
+    color: $text-muted;
+}
+
+.phase-thinking {
+    color: $warning;
+}
+
+.phase-streaming {
+    color: $secondary;
+}
+
+.phase-complete {
+    color: $success;
+}
+
+/* ChatPanel inside ReviewModal - must fill available space */
+#ai-review-chat {
+    height: 1fr;
+    min-height: 8;
+}
+
+#ai-review-chat.hidden {
+    display: none;
+}
+
+/* StreamingOutput inside review chat - explicit height */
+#ai-review-output {
+    height: 1fr;
+    min-height: 6;
+    background: $background;
+    border: round $border;
+}
+
+ReviewModal .hint-label {
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
+}
+
+ReviewModal .button-row {
+    dock: bottom;
+    align: center middle;
+    border-top: solid $border;
+    padding: 1 0;
+    height: auto;
+    width: 100%;
+    background: $surface;
+}
+
+ReviewModal .button-row .button-group {
+    height: auto;
+    align: center middle;
+}
+
+ReviewModal .button-row .spacer {
+    width: 1fr;
+}
+
+ReviewModal .button-row .button-group-start Button {
+    margin-right: 1;
+}
+
+ReviewModal .button-row .button-group-end Button {
+    margin-left: 1;
+}
+
+#ai-review-chat.queue-disabled .chat-input {
+    display: none;
+}
+
+#review-agent-output-chat.queue-disabled .chat-input {
+    display: none;
+}
+
+/* =============================================================================
+   REJECTION INPUT MODAL
+   ============================================================================= */
+
+RejectionInputModal {
+    align: center middle;
+}
+
+#rejection-input-container {
+    width: 70;
+    height: auto;
+    background: $surface;
+    border: round $error;
+    padding: 2 3;
+}
+
+RejectionInputModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+    color: $error;
+}
+
+RejectionInputModal .task-label {
+    color: $text-muted;
+}
+
+RejectionInputModal .prompt-label {
+    color: $text;
+    padding-top: 1;
+}
+
+#feedback-input {
+    height: 10;
+    background: $background;
+    border: solid $border;
+}
+
+#feedback-input:focus {
+    border: solid $primary;
+}
+
+RejectionInputModal .hint-label {
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
+}
+
+RejectionInputModal .button-row {
+    height: auto;
+    align: center middle;
+    padding-top: 1;
+}
+
+RejectionInputModal .button-row Button {
+    margin: 0 1;
+}
+
+/* =============================================================================
+   STREAMING OUTPUT WIDGET
+   ============================================================================= */
+
+/* StreamingOutput widget */
+StreamingOutput {
+    height: 1fr;
+    width: 1fr;
+}
+
+StreamingOutput > ScrollableContainer {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+StreamingOutput > ScrollableContainer > Markdown {
+    padding: 0;
+}
+
+StreamingOutput > RichLog {
+    height: auto;
+    max-height: 8;
+    border-top: solid $surface-lighten-2;
+}
+
+/* =============================================================================
+   SEARCH BAR
+   ============================================================================= */
+
+/* SearchBar widget - hidden by default */
+SearchBar {
+    dock: top;
+    width: 100%;
+    height: 3;
+    display: none;
+    padding: 0 1;
+    background: $panel;
+}
+
+SearchBar.visible {
+    display: block;
+}
+
+SearchBar Input {
+    width: 100%;
+    border: round $primary;
+    background: $background;
+}
+
+SearchBar Input:focus {
+    border: round $secondary;
+}
+
+/* Review queue hint */
+#review-queue-hint {
+    dock: bottom;
+    width: 100%;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    text-align: center;
+    layer: overlay;
+    padding: 0 1;
+    offset-y: 100%;
+}
+
+#review-queue-hint.visible {
+    offset-y: 0;
+}
+
+/* =============================================================================
+   GLOBAL AGENT PICKER MODAL
+   ============================================================================= */
+
+GlobalAgentPickerModal {
+    align: center middle;
+}
+
+#agent-picker-container {
+    width: 60;
+    height: auto;
+    max-height: 80%;
+    background: $surface;
+    border: round $primary;
+    padding: 1 2;
+}
+
+#agent-picker-description {
+    width: 100%;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+#agent-picker-body {
+    width: 100%;
+    height: auto;
+}
+
+#agent-picker-options {
+    width: 100%;
+    height: auto;
+    max-height: 10;
+    border: solid $border;
+    background: $background;
+}
+
+#agent-picker-options > .option-list--option-highlighted {
+    background: $primary 30%;
+    color: $text;
+}
+
+/* =============================================================================
+   SETTINGS MODAL
+   ============================================================================= */
+
+SettingsModal {
+    align: center middle;
+}
+
+#settings-container {
+    width: 70;
+    height: auto;
+    max-height: 90%;
+    background: $surface;
+    border: round $primary;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+SettingsModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    color: $primary;
+}
+
+SettingsModal Rule {
+    margin: 0;
+    color: $border;
+}
+
+SettingsModal .section-title {
+    text-style: bold;
+    color: $text-muted;
+    margin-top: 1;
+}
+
+SettingsModal .setting-row {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+SettingsModal .setting-label {
+    padding-left: 1;
+    color: $text;
+}
+
+SettingsModal .input-group {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+SettingsModal .input-label {
+    color: $text-muted;
+}
+
+SettingsModal Input {
+    width: 100%;
+    background: $background;
+    color: $text;
+    border: solid $border;
+}
+
+SettingsModal Input:focus {
+    border: solid $primary;
+}
+
+SettingsModal Select {
+    width: 100%;
+}
+
+SettingsModal .button-row {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    margin-top: 1;
+}
+
+SettingsModal .button-row Button {
+    margin: 0 1;
+}
+
+/* TaskEditorScreen styles */
+TaskEditorScreen {
+    align: center middle;
+}
+
+#task-editor-container {
+    width: 90%;
+    max-width: 80;
+    height: 85%;
+    background: $surface;
+    border: round $primary;
+    padding: 1 2;
+}
+
+#task-tabs {
+    height: 1fr;
+    width: 100%;
+}
+
+#task-tabs > ContentSwitcher {
+    height: 1fr;
+    padding: 1;
+}
+
+#task-tabs Tabs {
+    width: 100%;
+    dock: top;
+}
+
+#task-tabs Tab {
+    padding: 0 2;
+}
+
+#task-tabs Tab.-active {
+    background: $primary;
+    color: $text;
+}
+
+.task-form {
+    width: 100%;
+    height: 1fr;
+    padding: 1;
+    overflow-y: auto;
+}
+
+.task-input {
+    width: 100%;
+    margin-bottom: 1;
+    background: $background;
+    border: solid $border;
+}
+
+.task-input:focus {
+    border: solid $primary;
+}
+
+.task-textarea {
+    width: 100%;
+    height: auto;
+    min-height: 4;
+    max-height: 10;
+    margin-bottom: 1;
+    background: $background;
+    border: solid $border;
+}
+
+.task-textarea:focus {
+    border: solid $primary;
+}
+
+.task-select {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+.task-label {
+    width: 100%;
+    height: 1;
+    color: $text;
+    text-style: bold;
+}
+
+#finish-btn {
+    dock: bottom;
+    width: 100%;
+    margin-top: 1;
+}
+
+/* =============================================================================
+   STREAMING OUTPUT & AGENT CONTENT WIDGETS
+   ============================================================================= */
+
+/* ChatPanel widget */
+ChatPanel {
+    width: 100%;
+    height: 1fr;
+}
+
+ChatPanel .chat-output {
+    height: 1fr;
+}
+
+ChatPanel .chat-input {
+    height: auto;
+    padding-top: 1;
+    border-top: solid $border;
+}
+
+ChatPanel .chat-input-area {
+    height: auto;
+    min-height: 3;
+    max-height: 8;
+    border: round $border;
+    background: $background;
+}
+
+ChatPanel .chat-input-area:focus {
+    border: round $primary;
+}
+
+/* Queued messages container */
+ChatPanel .queued-messages-container {
+    width: 100%;
+    height: auto;
+    max-height: 8;
+    margin-bottom: 1;
+    border: round $border;
+    background: $surface;
+    padding: 0 1;
+}
+
+ChatPanel .queued-messages-header {
+    width: 100%;
+    height: 1;
+    color: $text-muted;
+    text-style: italic;
+    padding: 0;
+}
+
+ChatPanel .queued-message-row {
+    width: 100%;
+    height: auto;
+    align: left middle;
+    padding: 0;
+}
+
+ChatPanel .queued-message-text {
+    width: 1fr;
+    height: auto;
+    color: $text;
+    padding: 0;
+}
+
+ChatPanel .queued-message-remove {
+    width: 3;
+    min-width: 3;
+    height: 1;
+    background: transparent;
+    color: $error;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+ChatPanel .queued-message-remove:hover {
+    background: $error;
+    color: $background;
+}
+
+/* StreamingOutput container (VerticalScroll) */
+StreamingOutput {
+    width: 100%;
+    height: 1fr;
+    min-height: 5;
+    padding: 1;
+    scrollbar-gutter: stable;
+}
+
+/* UserInput widget */
+.user-input {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+    padding: 0 1;
+}
+
+.user-input-prompt {
+    width: auto;
+    min-width: 3;
+    color: $primary;
+    text-style: bold;
+    margin-right: 1;
+}
+
+.user-input-content {
+    width: 1fr;
+    height: auto;
+    color: $primary;
+}
+
+.user-input-content > * {
+    margin: 0;
+}
+
+/* AgentResponse widget */
+.agent-response {
+    width: 100%;
+    height: auto;
+    min-height: 1;
+    margin-bottom: 1;
+    padding: 0 1;
+    background: transparent;
+}
+
+.agent-response > * {
+    margin: 0;
+}
+
+/* AgentThought widget */
+.agent-thought {
+    width: 100%;
+    height: auto;
+    min-height: 1;
+    margin-bottom: 1;
+    padding: 0 1;
+    color: $text-muted;
+    background: transparent;
+}
+
+.agent-thought > * {
+    margin: 0;
+}
+
+/* Copyable content hover states */
+.agent-response:hover,
+.agent-thought:hover,
+.user-input:hover {
+    tint: $primary 10%;
+}
+
+ToolCall:hover {
+    tint: $primary 10%;
+}
+
+.plan-entry:hover {
+    tint: $primary 10%;
+}
+
+/* ToolCall widget (expandable tool call display) */
+.tool-call {
+    width: 100%;
+    height: auto;
+    margin-bottom: 1;
+}
+
+#tool-content {
+    display: none;
+}
+
+ToolCall.-expanded #tool-content {
+    display: block;
+}
+
+ToolCallHeader {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+ToolCallHeader:hover {
+    background: $surface;
+}
+
+TextContent {
+    width: 100%;
+    height: auto;
+    padding: 0 2;
+    color: $text-muted;
+}
+
+MarkdownContent {
+    width: 100%;
+    height: auto;
+    padding: 0 2;
+    margin: 0;
+}
+
+.tool-content-label {
+    width: 100%;
+    height: auto;
+    padding: 0 2;
+    margin-top: 1;
+    color: $text-muted;
+    text-style: bold;
+}
+
+.tool-diff {
+    color: $text;
+}
+
+/* Streaming notes with status classes */
+.streaming-note {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+.streaming-note.success {
+    color: $success;
+}
+
+.streaming-note.error {
+    color: $error;
+}
+
+.streaming-note.warning {
+    color: $warning;
+}
+
+.streaming-note.info {
+    color: $text-muted;
+}
+
+.streaming-note.dismissed {
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* Thinking indicator */
+.thinking-indicator {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* Turn separator */
+.turn-separator {
+    width: 100%;
+    height: 1;
+    margin: 1 0;
+    background: $border;
+}
+
+/* Enhanced plan display */
+.plan-display {
+    width: 100%;
+    height: auto;
+    margin: 1 0;
+    padding: 1;
+    border: round $border;
+    background: $surface;
+}
+
+.plan-display .plan-title {
+    color: $text-muted;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+/* Streaming indicator (awaiting response) */
+.streaming-indicator {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+/* =============================================================================
+   PERMISSION PROMPT WIDGET
+   ============================================================================= */
+
+/* Permission Prompt Widget */
+.permission-prompt {
+    background: $surface;
+    border: round $warning;
+    padding: 1 2;
+    margin: 1 0;
+}
+
+.permission-prompt .permission-header {
+    text-style: bold;
+    color: $warning;
+}
+
+.permission-prompt .permission-tool {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+.permission-prompt .permission-buttons {
+    margin-top: 1;
+    height: auto;
+}
+
+.permission-prompt .permission-buttons Button {
+    margin-right: 1;
+}
+
+.permission-prompt .permission-timer {
+    margin-top: 1;
+    color: $text-muted;
+    text-style: italic;
+}
+
+/* =============================================================================
+   HELP MODAL
+   ============================================================================= */
+
+HelpModal {
+    align: center middle;
+}
+
+#help-container {
+    width: 90%;
+    max-width: 100;
+    height: 85%;
+    background: $surface;
+    border: round $primary;
+    padding: 1 2;
+}
+
+HelpModal .modal-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    padding-bottom: 1;
+    color: $primary;
+}
+
+#help-tabs {
+    height: 1fr;
+}
+
+#help-tabs > ContentSwitcher {
+    height: 1fr;
+    padding: 0;
+}
+
+#help-tabs TabPane {
+    padding: 0;
+}
+
+#help-tabs TabPane > VerticalScroll {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+}
+
+.help-section-title {
+    text-style: bold underline;
+    color: $secondary;
+    padding-top: 1;
+    padding-bottom: 1;
+}
+
+.help-subsection {
+    text-style: bold;
+    color: $text;
+    padding-top: 1;
+}
+
+.help-paragraph {
+    color: $text;
+    padding: 0 1;
+}
+
+.help-paragraph-indented {
+    color: $text;
+    padding: 0 2;
+}
+
+.help-code {
+    color: $text-muted;
+}
+
+.help-key-row {
+    width: 100%;
+    height: 1;
+    padding: 0 1;
+}
+
+.help-key {
+    width: 16;
+    min-width: 16;
+    color: $primary;
+    text-style: bold;
+}
+
+.help-desc {
+    width: 1fr;
+    color: $text;
+}
+
+/* =============================================================================
+   SLASH COMPLETE WIDGET (Autocomplete Overlay)
+   ============================================================================= */
+
+/* Slash command autocomplete dropdown overlay - full width, above status bar */
+.slash-complete {
+    dock: bottom;
+    width: 100%;
+    height: auto;
+    max-height: 6;
+    background: $surface;
+    border-top: solid $primary;
+    padding: 0;
+    margin: 0;
+}
+
+.slash-complete #slash-options {
+    width: 100%;
+    height: auto;
+    max-height: 5;
+    background: $surface;
+    scrollbar-gutter: stable;
+}
+
+.slash-complete #slash-options > .option-list--option {
+    padding: 0 1;
+    color: $text;
+}
+
+.slash-complete #slash-options > .option-list--option-highlighted {
+    background: $primary;
+    color: $background;
+}
+
+.slash-complete #slash-options > .option-list--option-hover {
+    background: $panel;
+}
+
+/* =============================================================================
+   TASK MENTION AUTOCOMPLETE DROPDOWN
+   ============================================================================= */
+
+/* Task mention autocomplete dropdown overlay - full width, above status bar */
+.task-mention-complete {
+    dock: bottom;
+    width: 100%;
+    height: auto;
+    max-height: 8;
+    display: none;
+    background: $surface;
+    border-top: solid $primary;
+    padding: 0;
+    margin: 0;
+}
+
+.task-mention-complete.visible {
+    display: block;
+}
+
+.task-mention-complete #mention-options {
+    width: 100%;
+    height: auto;
+    max-height: 7;
+    background: $surface;
+    scrollbar-gutter: stable;
+}
+
+.task-mention-complete #mention-options > .option-list--option {
+    padding: 0 1;
+    color: $text;
+}
+
+.task-mention-complete #mention-options > .option-list--option-highlighted {
+    background: $primary;
+    color: $background;
+}
+
+.task-mention-complete #mention-options > .option-list--option-hover {
+    background: $panel;
+}
+
+/* =============================================================================
+   PLAN APPROVAL WIDGET (Inline Plan Review)
+   ============================================================================= */
+
+/* Plan approval inline widget - similar pattern to permission-prompt */
+.plan-approval {
+    background: $panel;
+    border: round $primary;
+    padding: 1 2;
+    margin: 1 0;
+    width: 100%;
+    height: auto;
+}
+
+.plan-approval .plan-header {
+    text-style: bold;
+    color: $secondary;
+    padding-bottom: 0;
+}
+
+.plan-approval .plan-hint {
+    color: $text-muted;
+    text-style: italic;
+    padding-bottom: 1;
+}
+
+.plan-approval #task-list {
+    width: 100%;
+    height: auto;
+    max-height: 15;
+    padding: 0;
+    margin-bottom: 1;
+}
+
+.plan-approval .task-row {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 0;
+    border-left: solid $border;
+}
+
+.plan-approval .task-row:hover {
+    background: $surface;
+}
+
+.plan-approval .task-row.selected {
+    background: $primary 20%;
+    border-left: thick $primary;
+    color: $text;
+}
+
+/* Priority accent colors for task rows */
+.plan-approval .task-row.priority-critical {
+    border-left: solid $error;
+    color: $error;
+}
+
+.plan-approval .task-row.priority-high {
+    border-left: solid $warning;
+}
+
+.plan-approval .task-row.priority-medium {
+    border-left: solid #b8a965;
+}
+
+.plan-approval .task-row.priority-low {
+    border-left: solid $success;
+}
+
+.plan-approval .task-title-text {
+    color: $text;
+}
+
+.plan-approval .task-priority-badge {
+    color: $text-muted;
+    padding-left: 1;
+}
+
+.plan-approval #approval-buttons {
+    width: 100%;
+    height: auto;
+    layout: horizontal;
+    align: center middle;
+    padding-top: 1;
+}
+
+.plan-approval #approval-buttons Button {
+    margin: 0 1;
+}
+
+.plan-approval .approval-hint {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    padding-top: 1;
+}
+
+/* =============================================================================
+   DEBUG LOG MODAL
+   ============================================================================= */
+
+DebugLogModal {
+    align: center middle;
+}
+
+#debug-log-container {
+    width: 90%;
+    height: 90%;
+    background: $surface;
+    border: round $primary;
+    padding: 1;
+}
+
+#debug-log {
+    height: 1fr;
+    background: $surface-darken-1;
+    border: round $primary-lighten-2;
+    padding: 0 1;
+}
+
+/* =============================================================================
+   KEYBINDING HINT WIDGET (single-line — Welcome, RepoPicker, etc.)
+   ============================================================================= */
+
+KeybindingHint {
+    dock: bottom;
+    height: 1;
+    background: $surface;
+    color: $text-muted;
+    text-align: center;
+    padding: 0 1;
+}
+
+KeybindingHint:empty {
+    display: none;
+}
+
+/* =============================================================================
+   KANBAN HINT BAR (two-row — Kanban board)
+   ============================================================================= */
+
+KanbanHintBar {
+    dock: bottom;
+    height: 2;
+    background: $surface;
+    color: $text-muted;
+}
+
+KanbanHintBar .hint-bar-row {
+    height: 1;
+    width: 100%;
+}
+
+/* Row 1: Navigation — movement arrows */
+KanbanHintBar .hint-bar-nav {
+    background: $surface;
+}
+
+KanbanHintBar .hint-nav-left {
+    width: 1fr;
+    text-align: left;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+KanbanHintBar .hint-nav-center {
+    width: auto;
+    text-align: center;
+    padding: 0 2;
+    color: $text-disabled;
+}
+
+KanbanHintBar .hint-nav-right {
+    width: 1fr;
+    text-align: right;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+/* Row 2: Actions — context-sensitive + global */
+KanbanHintBar .hint-bar-actions {
+    background: $surface;
+}
+
+KanbanHintBar .hint-actions-left {
+    width: 1fr;
+    text-align: left;
+}
+
+KanbanHintBar .hint-actions {
+    width: auto;
+    text-align: center;
+    padding: 0 2;
+    color: $text-muted;
+}
+
+KanbanHintBar .hint-global {
+    width: 1fr;
+    text-align: right;
+    padding: 0 1;
+    color: $text-disabled;
+}
+
+/* =============================================================================
+   NEW PROJECT MODAL
+   ============================================================================= */
+
+NewProjectModal {
+    align: center middle;
+}
+
+NewProjectModal #dialog {
+    width: 60;
+    height: auto;
+    border: round $primary;
+    background: $surface;
+    padding: 2 3;
+}
+
+NewProjectModal .dialog-title {
+    text-align: center;
+    text-style: bold;
+    color: $secondary;
+    padding-bottom: 1;
+}
+
+NewProjectModal .field {
+    height: auto;
+    margin: 1 0 0 0;
+}
+
+NewProjectModal .field-label {
+    margin-bottom: 0;
+    color: $text;
+    text-style: bold;
+}
+
+NewProjectModal .hint {
+    color: $text-muted;
+    text-style: italic;
+}
+
+NewProjectModal #dialog-actions {
+    height: auto;
+    margin-top: 2;
+    align: center middle;
+}
+
+NewProjectModal #dialog-actions Button {
+    margin: 0 1;
+    min-width: 16;
+}
+
+/* =============================================================================
+   FOLDER PICKER MODAL
+   ============================================================================= */
+
+FolderPickerModal {
+    align: center middle;
+}
+
+FolderPickerModal #dialog {
+    width: 60;
+    height: auto;
+    border: round $primary;
+    background: $surface;
+    padding: 2 3;
+}
+
+FolderPickerModal .dialog-title {
+    text-align: center;
+    text-style: bold;
+    color: $secondary;
+    padding-bottom: 1;
+}
+
+FolderPickerModal .field {
+    height: auto;
+    margin: 1 0 0 0;
+}
+
+FolderPickerModal .field-label {
+    margin-bottom: 0;
+    color: $text;
+    text-style: bold;
+}
+
+FolderPickerModal .hint {
+    color: $text-muted;
+    text-style: italic;
+}
+
+FolderPickerModal #dialog-actions {
+    height: auto;
+    margin-top: 2;
+    align: center middle;
+}
+
+FolderPickerModal #folder-tree {
+    height: 12;
+    max-height: 14;
+    border: round $border;
+    background: $background;
+    padding: 0 1;
+}
+
+FolderPickerModal #dialog-actions Button {
+    margin: 0 1;
+    min-width: 16;
+}
+
+/* === Start Workspace Modal === */
+StartWorkspaceModal {
+    align: center middle;
+}
+
+StartWorkspaceModal #dialog {
+    width: 70;
+    height: auto;
+    max-height: 80%;
+    border: round $primary;
+    padding: 2 3;
+}
+
+StartWorkspaceModal .dialog-title {
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+StartWorkspaceModal .task-name {
+    color: $text;
+    padding-bottom: 1;
+}
+
+StartWorkspaceModal .section-header {
+    text-style: bold;
+    padding: 1 0 0 0;
+}
+
+StartWorkspaceModal .section-hint {
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+StartWorkspaceModal #repo-list {
+    height: auto;
+    max-height: 20;
+    border: solid $surface;
+    padding: 1;
+}
+
+StartWorkspaceModal .repo-row {
+    height: 3;
+}
+
+StartWorkspaceModal .repo-path {
+    color: $text-muted;
+    padding-left: 2;
+}
+
+StartWorkspaceModal .repo-branch {
+    dock: right;
+    color: $text-muted;
+}
+
+StartWorkspaceModal #executor-section {
+    padding-top: 1;
+}
+
+StartWorkspaceModal #actions {
+    height: auto;
+    margin-top: 2;
+    align: center middle;
+}
+
+StartWorkspaceModal #actions Button {
+    margin: 0 1;
+    min-width: 16;
+}
+
+StartWorkspaceModal .error {
+    color: $error;
+    padding-top: 1;
+}
+
+/* === Workspace Repos Widget === */
+WorkspaceReposWidget {
+    height: auto;
+    border: solid $primary;
+    padding: 1;
+}
+
+WorkspaceReposWidget .repo-item {
+    height: 3;
+    padding: 0 1;
+}
+
+WorkspaceReposWidget .repo-name {
+    width: 20;
+}
+
+WorkspaceReposWidget .has-changes {
+    color: $warning;
+}
+
+WorkspaceReposWidget .no-changes {
+    color: $text-muted;
+}
+
+WorkspaceReposWidget .target-branch {
+    width: 15;
+    color: $text-muted;
+}
+
+WorkspaceReposWidget .diff-stats {
+    width: 12;
+}
+
+WorkspaceReposWidget .btn-diff, WorkspaceReposWidget .btn-merge {
+    margin-left: 1;
+}
+
+/* === Merge Dialog === */
+MergeDialog {
+    align: center middle;
+}
+
+#merge-container {
+    width: 70;
+    height: auto;
+    max-height: 80%;
+    background: $surface;
+    border: round $primary;
+    padding: 2 3;
+}
+
+MergeDialog .merge-row {
+    height: 3;
+    padding: 0 1;
+}
+
+MergeDialog .target-branch {
+    color: $text-muted;
+    margin-left: 2;
+}
+
+MergeDialog .diff-stats {
+    dock: right;
+}
+
+#strategy-select {
+    margin: 1 0;
+}
+
+#button-row {
+    height: auto;
+    margin-top: 1;
+    align: center middle;
+}
+
+/* === Diff Modal === */
+DiffModal {
+    align: center middle;
+}
+
+#diff-container {
+    width: 90%;
+    height: 90%;
+    background: $surface;
+    border: round $primary;
+}
+
+DiffModal .diff-content {
+    background: $background;
+    padding: 1;
+}
+
+DiffModal .diff-header {
+    background: $primary-darken-2;
+    padding: 0 1;
+}
+
+/* =============================================================================
+   ONBOARDING SCREEN
+   ============================================================================= */
+
+OnboardingScreen {
+    align: center middle;
+    background: $background;
+}
+
+#onboarding-container {
+    width: 70;
+    height: auto;
+    max-height: 90%;
+    background: $surface;
+    border: round $primary;
+    padding: 2 3;
+    overflow-y: auto;
+}
+
+/* --- Logo zone --- */
+#onboarding-logo {
+    width: 100%;
+    text-align: center;
+    color: $secondary;
+    padding: 0;
+}
+
+#onboarding-subtitle {
+    text-align: center;
+    color: $text-muted;
+    text-style: italic;
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#onboarding-divider {
+    color: $border;
+    margin: 0 2 1 2;
+}
+
+/* --- Form zone --- */
+#onboarding-form {
+    width: 100%;
+    height: auto;
+    padding: 0 1;
+}
+
+#onboarding-form .form-label {
+    color: $text;
+    text-style: bold;
+    margin-top: 1;
+    margin-bottom: 0;
+}
+
+#onboarding-form .form-hint {
+    color: $text-muted;
+}
+
+#onboarding-form Select {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+/* --- Toggle row --- */
+#auto-review-row {
+    width: 100%;
+    height: auto;
+    margin-top: 1;
+    padding: 1 1;
+    background: $surface;
+    border: round $border;
+    align: left middle;
+}
+
+#auto-review-info {
+    width: 1fr;
+    height: auto;
+}
+
+#auto-review-row .form-label {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* --- CTA zone --- */
+#onboarding-actions {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    margin-top: 2;
+}
+
+#onboarding-actions Button {
+    margin: 0 1;
+    min-width: 24;
+}
+
+/* =============================================================================
+   CWD SUGGESTION BANNER (Inside Welcome Container)
+   ============================================================================= */
+
+#cwd-suggestion-banner {
+    width: 100%;
+    height: auto;
+    background: $primary 10%;
+    border: solid $primary;
+    padding: 1 2;
+    margin: 1 0;
+}
+
+#cwd-title {
+    text-style: bold;
+    color: $primary;
+}
+
+#cwd-path {
+    color: $text-muted;
+    margin-left: 2;
+    margin-bottom: 1;
+}
+
+#cwd-actions {
+    height: auto;
+    margin-left: 2;
+}
+
+#cwd-actions Button {
+    margin-right: 1;
+}
+
+/* =============================================================================
+   OFFLINE BANNER
+   ============================================================================= */
+
+OfflineBanner {
+    dock: top;
+    width: 100%;
+    height: auto;
+    background: $warning 20%;
+    border-bottom: solid $warning;
+    padding: 1 2;
+}
+
+#offline-title {
+    text-style: bold;
+    color: $warning;
+}
+
+#offline-message {
+    color: $text-muted;
+    margin-left: 2;
+}
+
+#offline-actions {
+    margin-top: 1;
+    height: auto;
+}
+
+#offline-actions Button {
+    margin-right: 1;
+}
+
+/* =============================================================================
+   CONTINUE HIGHLIGHT (Welcome Screen)
+   ============================================================================= */
+
+#continue-highlight {
+    display: none;
+    width: 100%;
+    height: auto;
+    background: $primary 10%;
+    border: solid $primary;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#continue-title {
+    text-style: bold;
+    color: $primary;
+}
+
+#continue-project-name {
+    text-style: bold;
+    color: $text;
+    margin-left: 1;
+}
+
+#continue-project-info {
+    color: $text-muted;
+    margin-left: 1;
+}
+
+#continue-hint {
+    color: $text-muted;
+    margin-top: 0;
+}
+
+/* Project shortcut number indicator */
+.project-shortcut {
+    width: 4;
+    color: $primary;
+    text-style: bold;
+}
+
+/* =============================================================================
+   REPO PICKER SCREEN
+   ============================================================================= */
+
+RepoPickerScreen {
+    align: center middle;
+    background: $background;
+}
+
+#repo-picker-container {
+    width: 70;
+    height: auto;
+    max-height: 70%;
+    background: $surface;
+    border: solid $primary;
+    padding: 1 2;
+}
+
+#repo-picker-logo {
+    width: 100%;
+    text-align: center;
+    color: $secondary;
+    text-style: bold;
+}
+
+#repo-picker-subtitle {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#repo-picker-project-name {
+    width: 100%;
+    text-align: center;
+    color: $text;
+    margin-bottom: 1;
+}
+
+#repo-picker-empty {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    margin: 1 0;
+}
+
+#repo-list {
+    height: 8;
+    max-height: 8;
+    background: $surface;
+    border: solid $surface-lighten-2;
+    padding: 0;
+}
+
+#repo-picker-actions {
+    width: 100%;
+    padding-top: 0;
+    align: center middle;
+    margin-top: 0;
+}
+
+#repo-picker-actions Button {
+    margin-right: 2;
+}
+
+.repo-item {
+    padding: 0 1;
+    height: 1;
+}
+
+#repo-list > ListItem {
+    background: $surface;
+    padding: 0;
+    height: 1;
+}
+
+#repo-list > ListItem.-hovered,
+#repo-list > ListItem.-highlight {
+    background: $surface-lighten-2;
+}
+
+#repo-list:focus > ListItem.-highlight {
+    background: $primary 15%;
+}
+
+.repo-indicator {
+    width: 3;
+    color: $primary;
+    text-style: bold;
+}
+
+.repo-info {
+    width: 1fr;
+    height: 1;
+}
+
+.repo-name {
+    color: $primary;
+    text-style: bold;
+    height: 1;
+}
+
+.repo-path {
+    color: $text-muted;
+    height: 1;
+    width: 1fr;
+}
+
+.repo-tasks {
+    width: auto;
+    color: $text-muted;
+    text-align: right;
+}
+
+/* ===========================================================================
+   AGENT CHOICE MODAL
+   =========================================================================== */
+
+AgentChoiceModal {
+    align: center middle;
+}
+
+#agent-choice-container {
+    width: 65;
+    height: auto;
+    max-height: 80%;
+    border: round $primary;
+    background: $surface;
+    padding: 2 3;
+}
+
+#agent-choice-title {
+    text-style: bold;
+    text-align: center;
+    width: 100%;
+    color: $warning;
+    padding-bottom: 1;
+}
+
+#agent-choice-description {
+    text-align: center;
+    width: 100%;
+    padding-bottom: 1;
+}
+
+#agent-choice-options {
+    width: 100%;
+    height: auto;
+    align: center middle;
+}
+
+#fallback-label {
+    text-align: center;
+    width: 100%;
+    padding: 1 0;
+    color: $text-muted;
+}
+
+#agent-list {
+    width: 100%;
+    height: auto;
+    max-height: 10;
+    margin-bottom: 1;
+}
+
+#agent-choice-options Button {
+    margin: 0 1;
+}
+
+#agent-choice-status {
+    text-align: center;
+    width: 100%;
+    min-height: 1;
+    color: $text-muted;
+}
+
+/* =============================================================================
+   INSTANCE LOCKED MODAL
+   ============================================================================= */
+
+/* Instance Locked Modal */
+InstanceLockedModal {
+    align: center middle;
+}
+
+#instance-locked-container {
+    width: 60;
+    height: auto;
+    max-height: 16;
+    background: $surface;
+    border: thick $error;
+    padding: 1 2;
+}
+
+#instance-locked-title {
+    text-align: center;
+    text-style: bold;
+    color: $error;
+    margin-bottom: 1;
+}
+
+#instance-locked-message,
+#instance-locked-note {
+    text-align: center;
+    margin-bottom: 1;
+}
+
+#instance-locked-info {
+    text-align: center;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#instance-locked-quit {
+    width: 100%;
+    margin-top: 1;
+}
+
+/* =============================================================================
+   PEEK OVERLAY
+   ============================================================================= */
+
+PeekOverlay {
+    layer: overlay;
+    width: 50;
+    height: auto;
+    max-height: 12;
+    background: $surface;
+    border: round $primary;
+    padding: 1;
+    display: none;
+    position: absolute;
+    overflow-y: auto;
+}
+
+PeekOverlay.visible {
+    display: block;
+}
+
+PeekOverlay .peek-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+PeekOverlay .peek-status {
+    color: $text;
+}
+
+PeekOverlay .peek-content {
+    color: $text-muted;
+}

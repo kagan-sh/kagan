@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from kagan.constants import DEFAULT_DB_PATH
+from kagan.core.constants import DEFAULT_DB_PATH
 
 
 async def _list_projects_data(
@@ -17,8 +17,8 @@ async def _list_projects_data(
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from sqlmodel import col, func, select
 
-    from kagan.adapters.db.engine import create_db_engine
-    from kagan.adapters.db.schema import Project, ProjectRepo, Repo, Task
+    from kagan.core.adapters.db.engine import create_db_engine
+    from kagan.core.adapters.db.schema import Project, ProjectRepo, Repo, Task
     from kagan.core.models.enums import TaskStatus
 
     engine = await create_db_engine(db_path)

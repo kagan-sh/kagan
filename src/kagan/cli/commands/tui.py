@@ -14,14 +14,34 @@ from typing import TYPE_CHECKING
 import click
 
 from kagan.cli.update import check_for_updates, prompt_and_update
-from kagan.constants import DEFAULT_DB_PATH
+from kagan.core.constants import DEFAULT_DB_PATH
+from kagan.core.paths import get_config_path
 from kagan.core.time import utc_now
-from kagan.paths import get_config_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from kagan.preflight import DetectedIssue
+    from kagan.core.preflight import DetectedIssue, PreflightResult
+
+
+def _ensure_core_ready_for_cli(db_path: str) -> None:
+    """Auto-start core daemon for TUI clients when config allows it."""
+    from kagan.core.config import KaganConfig
+    from kagan.core.launcher import ensure_core_running_sync
+
+    config = KaganConfig.load(get_config_path())
+    if not config.general.core_autostart:
+        return
+
+    try:
+        ensure_core_running_sync(
+            config=config,
+            config_path=get_config_path(),
+            db_path=Path(db_path),
+        )
+    except Exception as exc:
+        click.secho(f"Failed to start core daemon: {exc}", fg="red")
+        sys.exit(1)
 
 
 def _check_for_updates_gate() -> None:
@@ -53,9 +73,9 @@ async def _cleanup_done_workspaces(db_path: str, older_than_days: int) -> int:
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from sqlmodel import col, select
 
-    from kagan.adapters.db.engine import create_db_engine
-    from kagan.adapters.db.schema import Task, Workspace, WorkspaceRepo
-    from kagan.adapters.git.worktrees import GitWorktreeAdapter
+    from kagan.core.adapters.db.engine import create_db_engine
+    from kagan.core.adapters.db.schema import Task, Workspace, WorkspaceRepo
+    from kagan.core.adapters.git.worktrees import GitWorktreeAdapter
     from kagan.core.models.enums import TaskStatus, WorkspaceStatus
 
     cutoff = utc_now() - timedelta(days=older_than_days)
@@ -114,7 +134,7 @@ def _auto_cleanup_done_workspaces(db_path: str, *, older_than_days: int = 7) -> 
 
 def _display_issue(issue: DetectedIssue) -> None:
     preset = issue.preset
-    from kagan.preflight import IssueSeverity
+    from kagan.core.preflight import IssueSeverity
 
     severity_label = "BLOCKING" if preset.severity == IssueSeverity.BLOCKING else "WARNING"
     severity_color = "red" if preset.severity == IssueSeverity.BLOCKING else "yellow"
@@ -135,7 +155,7 @@ def _display_issue(issue: DetectedIssue) -> None:
 def _handle_no_agents(issues: Sequence[DetectedIssue]) -> None:
     """Show all agent options and prompt for installation."""
     del issues
-    from kagan.builtin_agents import list_builtin_agents
+    from kagan.core.builtin_agents import list_builtin_agents
 
     click.echo()
     click.secho("  No AI Agents Found", fg="red", bold=True)
@@ -161,7 +181,7 @@ def _handle_no_agents(issues: Sequence[DetectedIssue]) -> None:
 
     click.echo()
     click.echo(f"  Installing {selected.config.name}...")
-    from kagan.agents.installer import install_agent
+    from kagan.core.agents.installer import install_agent
 
     success, message = asyncio.run(install_agent(selected.config.short_name))
     if success:
@@ -174,7 +194,7 @@ def _handle_no_agents(issues: Sequence[DetectedIssue]) -> None:
 
 def _display_agent_status() -> dict[str, bool]:
     """Display per-agent availability status and return status dict."""
-    from kagan.builtin_agents import get_agent_status, list_builtin_agents
+    from kagan.core.builtin_agents import get_agent_status, list_builtin_agents
 
     agents = list_builtin_agents()
     status = get_agent_status()
@@ -205,10 +225,10 @@ def _display_agent_status() -> dict[str, bool]:
     return status
 
 
-def _handle_preflight_issues(result: object, severity_enum: type) -> None:
+def _handle_preflight_issues(result: PreflightResult, severity_enum: type) -> None:
     """Display preflight issues. Exit on blocking; prompt on warnings-only."""
-    issues = result.issues  # type: ignore[attr-defined]
-    has_blocking = result.has_blocking_issues  # type: ignore[attr-defined]
+    issues = result.issues
+    has_blocking = result.has_blocking_issues
 
     blocking_count = sum(1 for i in issues if i.preset.severity == severity_enum.BLOCKING)
     warning_count = sum(1 for i in issues if i.preset.severity == severity_enum.WARNING)
@@ -257,13 +277,13 @@ def tui(db: str, skip_preflight: bool, skip_update_check: bool) -> None:
 
         agent_status = _display_agent_status()
         if not any(agent_status.values()):
-            from kagan.preflight import create_no_agents_issues
+            from kagan.core.preflight import create_no_agents_issues
 
             _handle_no_agents(create_no_agents_issues())
 
-        from kagan.builtin_agents import get_first_available_agent
-        from kagan.config import KaganConfig
-        from kagan.preflight import IssueSeverity, detect_issues
+        from kagan.core.builtin_agents import get_first_available_agent
+        from kagan.core.config import KaganConfig
+        from kagan.core.preflight import IssueSeverity, detect_issues
 
         default_pair_terminal_backend = "vscode" if platform.system() == "Windows" else "tmux"
         try:
@@ -290,7 +310,8 @@ def tui(db: str, skip_preflight: bool, skip_update_check: bool) -> None:
             if result.issues:
                 _handle_preflight_issues(result, IssueSeverity)
 
-    from kagan.app import KaganApp
+    from kagan.tui.app import KaganApp
 
+    _ensure_core_ready_for_cli(db_path)
     app = KaganApp(db_path=db_path)
     app.run()

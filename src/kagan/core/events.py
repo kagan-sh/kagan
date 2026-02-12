@@ -80,6 +80,13 @@ class TaskUpdated:
 
 
 @dataclass(frozen=True)
+class TaskDeleted:
+    task_id: str
+    event_id: str = field(default_factory=_new_event_id)
+    occurred_at: datetime = field(default_factory=_now)
+
+
+@dataclass(frozen=True)
 class TaskStatusChanged:
     task_id: str
     from_status: TaskStatus
@@ -191,5 +198,41 @@ class ScriptCompleted:
     script_type: str
     success: bool
     exit_code: int
+    event_id: str = field(default_factory=_new_event_id)
+    occurred_at: datetime = field(default_factory=_now)
+
+
+@dataclass(frozen=True)
+class CoreHostStarting:
+    """Emitted when the core host begins startup."""
+
+    event_id: str = field(default_factory=_new_event_id)
+    occurred_at: datetime = field(default_factory=_now)
+
+
+@dataclass(frozen=True)
+class CoreHostRunning:
+    """Emitted when the core host is fully running and accepting connections."""
+
+    transport: str
+    address: str
+    port: int | None = None
+    event_id: str = field(default_factory=_new_event_id)
+    occurred_at: datetime = field(default_factory=_now)
+
+
+@dataclass(frozen=True)
+class CoreHostDraining:
+    """Emitted when the core host begins graceful shutdown."""
+
+    reason: str
+    event_id: str = field(default_factory=_new_event_id)
+    occurred_at: datetime = field(default_factory=_now)
+
+
+@dataclass(frozen=True)
+class CoreHostStopped:
+    """Emitted when the core host has fully stopped."""
+
     event_id: str = field(default_factory=_new_event_id)
     occurred_at: datetime = field(default_factory=_now)

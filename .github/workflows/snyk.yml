@@ -1,0 +1,82 @@
+name: Snyk Security
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/assets/**"
+      - "mkdocs.yml"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/assets/**"
+      - "mkdocs.yml"
+  schedule:
+    - cron: "0 6 * * 1" # Weekly on Monday at 06:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  snyk-deps:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v7
+      - uses: snyk/actions/setup@master
+
+      - name: Export requirements for Snyk
+        run: |
+          uv export --format requirements-txt --no-hashes --no-editable --no-emit-workspace --no-header \
+            | grep -v "^#" | grep -v "^$" | grep "==" > requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Snyk dependency scan
+        id: snyk-deps-scan
+        run: snyk test --file=requirements.txt --package-manager=pip --severity-threshold=high --sarif-file-output=snyk-deps.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload dependency scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('snyk-deps.sarif') != ''
+        with:
+          sarif_file: snyk-deps.sarif
+          category: snyk-dependencies
+
+      - name: Snyk monitor (main only)
+        if: github.ref == 'refs/heads/main' && steps.snyk-deps-scan.outcome == 'success'
+        run: snyk monitor --file=requirements.txt --package-manager=pip --skip-unresolved --project-name=kagan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  snyk-code:
+    name: Code Analysis (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: snyk/actions/setup@master
+
+      - name: Snyk code scan
+        run: snyk code test --sarif-file-output=snyk-code.sarif
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload code scan results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('snyk-code.sarif') != ''
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code

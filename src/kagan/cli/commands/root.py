@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version
+
 import click
 
-from kagan import __version__
+__version__ = version("kagan")
 from kagan.cli.tools import tools
 from kagan.cli.update import update
 
+from .core import core
 from .list_projects import list_cmd
 from .mcp import mcp
 from .reset import reset
@@ -33,3 +36,4 @@ cli.add_command(tui)
 cli.add_command(reset)
 cli.add_command(list_cmd)
 cli.add_command(mcp)
+cli.add_command(core)

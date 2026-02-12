@@ -1,0 +1,82 @@
+# serializer version: 1
+# name: TestReviewModal.test_review_and_diff_journey
+  '''
+  --- SNAPSHOT: review_modal ---
+  <> KAGAN
+  ╭────────────────────────────────╮
+  ││
+  │Task Output: Add user profile endpoint│
+  │Branch: review/review01 → main│
+  ││
+  │Task: REVIEW | Runtime: running│
+  ││
+  │────────────────────────────────│
+  ││
+  │SummaryDiffReview OutputAgent Output│
+  │━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╸━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━│
+  ││
+  │╭────────────────────────────────╮╭────────────────────────────────╮│
+  │Review Output│Decision: Pending││o Ready││
+  │╰────────────────────────────────╯╰────────────────────────────────╯│
+  ││
+  │Reviewer has not run yet. Task is in REVIEW.│
+  ││
+  │╭────────────────────────────────╮│
+  ││││
+  ││││
+  ││││
+  ││││
+  │╰────────────────────────────────╯│
+  ││
+  │────────────────────────────────│
+  ││
+  │────────────────────────────────│
+  ││
+  │▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔│
+  │ Rebase (R) Review (g) Close task Reject (r) │
+  │▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁│
+  ││
+  ││
+  ╰────────────────────────────────╯
+  1 Summary 2 Diff Tab 3 Review Tab 4 Output Tab Enter Approve Shift+R Rebase r Reject a Start Agent s Stop Agent
+  
+  --- SNAPSHOT: diff_modal ---
+  <> KAGAN
+  ╭────────────────────────────────╮
+  ││
+  │Diff: review01 Add user profile endpoint│
+  │(No diff available)│
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  ││
+  │────────────────────────────────│
+  ││
+  ││
+  │▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔│
+  │ Close │
+  │▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁│
+  ││
+  ╰────────────────────────────────╯
+  Enter Approve r Reject esc Close
+  '''
+# ---

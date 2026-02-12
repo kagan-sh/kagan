@@ -1,5 +1,7 @@
 """Core domain enums."""
 
+from __future__ import annotations
+
 from enum import IntEnum, StrEnum
 
 
@@ -12,9 +14,9 @@ class TaskStatus(StrEnum):
     DONE = "DONE"
 
     @classmethod
-    def next_status(cls, current: "TaskStatus") -> "TaskStatus | None":
+    def next_status(cls, current: TaskStatus) -> TaskStatus | None:
         """Return the next status in the workflow."""
-        from kagan.constants import COLUMN_ORDER
+        from kagan.core.constants import COLUMN_ORDER
 
         idx = COLUMN_ORDER.index(current)
         if idx < len(COLUMN_ORDER) - 1:
@@ -22,14 +24,35 @@ class TaskStatus(StrEnum):
         return None
 
     @classmethod
-    def prev_status(cls, current: "TaskStatus") -> "TaskStatus | None":
+    def prev_status(cls, current: TaskStatus) -> TaskStatus | None:
         """Return the previous status in the workflow."""
-        from kagan.constants import COLUMN_ORDER
+        from kagan.core.constants import COLUMN_ORDER
 
         idx = COLUMN_ORDER.index(current)
         if idx > 0:
             return COLUMN_ORDER[idx - 1]
         return None
+
+
+def transition_status_from_agent_complete(current_status: TaskStatus, success: bool) -> TaskStatus:
+    """Return next status after an implementation agent run completes."""
+    if success and current_status == TaskStatus.IN_PROGRESS:
+        return TaskStatus.REVIEW
+    return current_status
+
+
+def transition_status_from_review_pass(current_status: TaskStatus) -> TaskStatus:
+    """Return next status after review approval."""
+    if current_status == TaskStatus.REVIEW:
+        return TaskStatus.DONE
+    return current_status
+
+
+def transition_status_from_review_reject(current_status: TaskStatus) -> TaskStatus:
+    """Return next status after review rejection."""
+    if current_status == TaskStatus.REVIEW:
+        return TaskStatus.IN_PROGRESS
+    return current_status
 
 
 class TaskPriority(IntEnum):
@@ -60,10 +83,58 @@ class TaskType(StrEnum):
 class PairTerminalBackend(StrEnum):
     """Launcher/backend options for PAIR task sessions."""
 
-    WEZTERM = "wezterm"
     TMUX = "tmux"
     VSCODE = "vscode"
     CURSOR = "cursor"
+
+
+VALID_PAIR_BACKENDS: frozenset[str] = frozenset(b.value for b in PairTerminalBackend)
+
+
+def coerce_pair_backend(value: object) -> str | None:
+    """Coerce a value to a valid pair backend string, or return None."""
+    if isinstance(value, PairTerminalBackend):
+        return value.value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in VALID_PAIR_BACKENDS:
+            return normalized
+    return None
+
+
+class McpIdentity(StrEnum):
+    """Well-known MCP identity labels."""
+
+    DEFAULT = "kagan"
+    ADMIN = "kagan_admin"
+
+
+VALID_MCP_IDENTITIES: frozenset[str] = frozenset(identity.value for identity in McpIdentity)
+
+
+def coerce_mcp_identity(value: object) -> str | None:
+    """Coerce a value to a known MCP identity string, or return None."""
+    if isinstance(value, McpIdentity):
+        return value.value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in VALID_MCP_IDENTITIES:
+            return normalized
+    return None
+
+
+def resolve_pair_backend(
+    task_backend: object = None,
+    config_backend: object = None,
+) -> str:
+    """Resolve pair terminal backend: task → config → tmux default."""
+    coerced = coerce_pair_backend(task_backend)
+    if coerced is not None:
+        return coerced
+    coerced = coerce_pair_backend(config_backend)
+    if coerced is not None:
+        return coerced
+    return PairTerminalBackend.TMUX.value
 
 
 class WorkspaceStatus(StrEnum):
@@ -77,7 +148,6 @@ class SessionType(StrEnum):
     """Session backend types."""
 
     TMUX = "TMUX"
-    WEZTERM = "WEZTERM"
     ACP = "ACP"
     SCRIPT = "SCRIPT"
 
@@ -139,23 +209,6 @@ class AgentStatus(StrEnum):
 
     AVAILABLE = "available"
     UNAVAILABLE = "unavailable"
-
-
-class McpFileFormat(StrEnum):
-    """MCP configuration file formats."""
-
-    CLAUDE = "claude"
-    CODEX = "codex"
-    COPILOT = "copilot"
-    OPENCODE = "opencode"
-
-
-class McpInstallMethod(StrEnum):
-    """MCP installation methods."""
-
-    CLI = "cli"
-    FILE = "file"
-    MANUAL = "manual"
 
 
 class ReviewResult(StrEnum):
@@ -243,6 +296,14 @@ class StreamPhase(StrEnum):
         }[self]
 
 
+class ProposalStatus(StrEnum):
+    """Planner proposal lifecycle status."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class PlanStatus(StrEnum):
     """Plan entry status values."""
 
@@ -269,6 +330,7 @@ class CardIndicator(StrEnum):
     RUNNING = "running"
     IDLE = "idle"
     REVIEWING = "reviewing"
+    BLOCKED = "blocked"
     PASSED = "passed"
     FAILED = "failed"
 
@@ -280,6 +342,7 @@ class CardIndicator(StrEnum):
             self.RUNNING: "▶",
             self.IDLE: "⏸",
             self.REVIEWING: "⟳",
+            self.BLOCKED: "⛔",
             self.PASSED: "✓",
             self.FAILED: "✗",
         }[self]

@@ -450,3 +450,8 @@
 .md-typeset hr {
   border-color: #2a3342;
 }
+
+/* Hide hr inside grid cards (Material uses hr as structural separator) */
+.md-typeset .grid.cards hr {
+  border-color: transparent;
+}

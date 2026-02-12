@@ -1,5 +1,6 @@
 """Test helpers package."""
 
+from tests.helpers.config import write_test_config
 from tests.helpers.git import configure_git_user, init_git_repo_with_commit
 from tests.helpers.mocks import (
     MockAgent,
@@ -10,6 +11,7 @@ from tests.helpers.mocks import (
     create_mock_process,
     create_mock_workspace_service,
     create_test_config,
+    install_fake_tmux,
 )
 from tests.helpers.wait import (
     type_text,
@@ -19,7 +21,6 @@ from tests.helpers.wait import (
     wait_for_task_status,
     wait_for_text,
     wait_for_widget,
-    wait_for_workers,
 )
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "create_mock_workspace_service",
     "create_test_config",
     "init_git_repo_with_commit",
+    "install_fake_tmux",
     "type_text",
     "wait_for_modal",
     "wait_for_planner_ready",
@@ -40,5 +42,5 @@ __all__ = [
     "wait_for_task_status",
     "wait_for_text",
     "wait_for_widget",
-    "wait_for_workers",
+    "write_test_config",
 ]

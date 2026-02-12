@@ -7,14 +7,16 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, distribution
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 
 import click
-import httpx
 from packaging.version import Version
 from packaging.version import parse as parse_version
 
-from kagan import __version__
+__version__ = _pkg_version("kagan")
 
 PYPI_URL = "https://pypi.org/pypi/kagan/json"
 TIMEOUT_SECONDS = 5.0
@@ -93,34 +95,32 @@ def fetch_latest_version(prerelease: bool = False, timeout: float = TIMEOUT_SECO
         Latest version string, or None if fetch failed.
     """
     try:
-        with httpx.Client(timeout=timeout) as client:
-            response = client.get(PYPI_URL)
-            response.raise_for_status()
-            data = response.json()
-
-            if prerelease:
-                releases = data.get("releases", {})
-                if not releases:
-                    return data.get("info", {}).get("version")
-
-                versions = []
-                for ver_str in releases:
-                    try:
-                        versions.append(parse_version(ver_str))
-                    except Exception:
-                        continue
-
-                if versions:
-                    return str(max(versions))
-                return None
-            else:
-                return data.get("info", {}).get("version")
-    except httpx.TimeoutException:
+        with urlopen(PYPI_URL, timeout=timeout) as response:
+            data = json.load(response)
+    except TimeoutError:
         return None
-    except httpx.HTTPError:
+    except (HTTPError, URLError, OSError):
         return None
-    except Exception:
+    except json.JSONDecodeError:
         return None
+
+    if prerelease:
+        releases = data.get("releases", {})
+        if not releases:
+            return data.get("info", {}).get("version")
+
+        versions = []
+        for ver_str in releases:
+            try:
+                versions.append(parse_version(ver_str))
+            except Exception:
+                continue
+
+        if versions:
+            return str(max(versions))
+        return None
+
+    return data.get("info", {}).get("version")
 
 
 def check_for_updates(prerelease: bool = False) -> UpdateCheckResult:

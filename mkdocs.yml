@@ -8,6 +8,7 @@ site_dir: site
 
 repo_url: https://github.com/aorumbayev/kagan
 repo_name: aorumbayev/kagan
+edit_uri: edit/main/docs/
 
 theme:
   name: material
@@ -24,8 +25,11 @@ theme:
     code: JetBrains Mono
 
   features:
-    # Navigation - simplified for single-page focus
+    # Navigation
     - navigation.instant
+    - navigation.tabs
+    - navigation.path
+    - navigation.indexes
     - navigation.tracking
     - navigation.top
     - navigation.footer
@@ -36,7 +40,11 @@ theme:
 
     # Content
     - content.code.copy
+    - content.code.select
+    - content.code.annotate
     - content.tabs.link
+    - content.action.edit
+    - content.tooltips
 
     # Table of contents
     - toc.follow
@@ -78,6 +86,9 @@ markdown_extensions:
       smart_enable: all
   - pymdownx.caret
   - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -97,11 +108,28 @@ markdown_extensions:
 plugins:
   - search
 
+exclude_docs: |
+  standalone-mcp-core-refactor-execution.md
+  standalone-mcp-core-refactor-scratchpad.md
+
 nav:
   - Home: index.md
-  - Task Modes: task-modes.md
-  - Multi-Repo Guide: multi-repo-guide.md
-  - Keyboard Shortcuts: keybindings.md
-  - Configuration: config.md
+  - Getting started:
+      - getting-started/index.md
+      - 5-Minute Quickstart: getting-started/quickstart.md
+      - Command Reference: getting-started/commands.md
+  - How-to:
+      - how-to/index.md
+      - AUTO vs PAIR: how-to/task-modes.md
+      - MCP Setup: how-to/mcp-setup.md
+      - Admin MCP for Editors: how-to/admin-mcp-editors.md
+      - Multi-Repo Guide: how-to/multi-repo.md
+  - Reference:
+      - reference/index.md
+      - Architecture (Contributors): reference/architecture.md
+      - Plugin SDK Lifecycle: reference/plugin-sdk.md
+      - Keyboard Shortcuts: reference/keybindings.md
+      - Configuration: reference/configuration.md
+      - MCP Tools Reference: reference/mcp-tools.md
   - Troubleshooting: troubleshooting.md
   - Contributing: contributing.md

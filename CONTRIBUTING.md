@@ -49,6 +49,7 @@ Run the full suite:
 
 ```bash
 uv run poe check      # lint + typecheck + test
+uv run poe check-full # full quality gates
 ```
 
 ## Testing
@@ -58,19 +59,18 @@ uv run poe check      # lint + typecheck + test
 uv run pytest tests/ -v
 
 # Single file
-uv run pytest tests/features/test_agent_automation.py -v
+uv run pytest tests/core/unit/test_runtime_state_service.py -v
 
 # Single class
-uv run pytest tests/features/test_agent_automation.py::TestIterationLoop -v
+uv run pytest tests/core/unit/test_runtime_state_service.py::TestRuntimeStateService -v
 
 # Single test
-uv run pytest tests/features/test_agent_automation.py::TestIterationLoop::test_complete_signal_moves_to_review -v
+uv run pytest tests/mcp/contract/test_mcp_v2_end_to_end.py::test_end_to_end_job_flow_uses_submit_wait_events_contract -v
 
 # By marker
-uv run pytest -m unit -v              # Unit tests
-uv run pytest -m integration -v       # Integration tests
-uv run pytest -m e2e -v               # End-to-end tests
-uv run pytest -m "not slow" -v        # Exclude slow tests
+uv run pytest tests/ -m "core and unit" -v
+uv run pytest tests/ -m "mcp and contract" -v
+uv run pytest tests/ -m "tui and snapshot" -v
 uv run pytest tests/ -n 0 -v          # Sequential (for debugging)
 ```
 
@@ -79,14 +79,14 @@ uv run pytest tests/ -n 0 -v          # Sequential (for debugging)
 Snapshot tests must run sequentially (no parallel):
 
 ```bash
-uv run poe test-snapshot              # Run snapshot tests
+uv run poe test-tui-snapshot          # Run snapshot tests
 uv run poe test-snapshot-update       # Update snapshots
 ```
 
 ## Docs Preview
 
 ```bash
-uv run mkdocs serve
+uv run poe docs-serve
 ```
 
 Open `http://127.0.0.1:8000/` in your browser.
@@ -112,109 +112,58 @@ This command:
 
 The `--dryrun` flag validates workflow syntax and structure without actually running containers.
 
-## Project Structure
+## Quick Architecture Orientation
+
+Kagan is a single Python package (`src/kagan/`) with four top-level modules:
 
 ```
 src/kagan/
-├── app.py              # Main KaganApp class
-├── bootstrap.py        # AppContext + event bus wiring
-├── constants.py        # COLUMN_ORDER, STATUS_LABELS, PRIORITY_LABELS
-├── config.py           # Configuration models (Pydantic)
-├── limits.py           # Timeouts and buffer limits
-├── theme.py            # Custom Textual theme
-├── lock.py             # Instance lock (single instance)
-├── git_utils.py        # Git helper functions
-├── keybindings.py      # Centralized keybinding registry (single file)
-├── builtin_agents.py   # Built-in agent definitions (Claude, OpenCode, Codex, Gemini, Kimi, Copilot)
-├── preflight.py        # Pre-flight checks and agent detection
-├── __main__.py         # CLI entry point (Click-based)
-├── adapters/
-│   ├── db/             # SQLModel schema + repositories
-│   ├── git/            # Worktree/diff/merge adapters
-│   └── executors/      # ACP/tmux/script executors
-├── core/
-│   ├── models/         # Domain entities + enums
-│   ├── events.py       # Domain events + bus contracts
-│   └── policies.py     # Status transition policies
-├── services/           # Task/workspace/session/merge automation services
-│   ├── automation.py
-│   ├── tasks.py
-│   ├── workspaces.py
-│   ├── sessions.py
-│   ├── executions.py
-│   └── merges.py
-├── cli/                # CLI commands
-│   ├── update.py       # Update command
-│   └── tools.py        # Prompt enhancement tools
-├── ansi/               # ANSI escape code handling
-│   └── cleaner.py      # ANSI code cleaning utilities
-├── mcp/                # Model Context Protocol server
-│   ├── server.py       # FastMCP server setup
-│   └── tools.py        # MCP tool implementations
-├── sessions/           # tmux helpers
-│   └── tmux.py         # tmux command helpers
-├── agents/             # Planner agent + prompts
-│   ├── planner.py      # Planner prompt + XML parsing
-│   ├── refiner.py      # Prompt refinement agent
-│   ├── refinement_rules.py  # Refinement rules
-│   ├── signals.py      # Agent completion signals parser
-│   ├── prompt.py       # Prompt building for AUTO mode
-│   ├── prompt_loader.py    # Template loading for prompts
-│   ├── installer.py    # Agent installation helpers
-│   └── config_resolver.py  # Agent config resolution
-├── acp/                # Agent Control Protocol
-│   ├── kagan_agent.py  # ACP Agent class (JSON-RPC over subprocess)
-│   ├── messages.py     # Textual messages for agent events
-│   ├── terminals.py    # Terminal management for agents
-│   ├── terminal.py     # Single terminal handling
-│   └── buffers.py      # Response buffering
-├── styles/
-│   └── kagan.tcss      # ALL CSS here (no DEFAULT_CSS in Python!)
-└── ui/
-    ├── utils/              # UI utilities
-    │   ├── clipboard.py    # Clipboard operations
-    │   └── animation.py    # UI animations
-    ├── screens/
-    │   ├── base.py         # KaganScreen base class
-    │   ├── kanban/         # Main Kanban board
-    │   │   ├── screen.py   # KanbanScreen implementation
-    │   │   ├── focus.py    # Focus management helpers
-    │   │   └── hints.py    # Keybinding hints
-    │   ├── planner/        # Planner screen (chat-first AI planner)
-    │   ├── welcome.py      # Project picker screen
-    │   ├── onboarding.py   # First-boot setup screen
-    │   ├── task_editor.py  # Task editor screen
-    │   ├── repo_picker.py  # Multi-repo selector
-    │   └── troubleshooting/ # Pre-flight check failure screen
-    ├── widgets/
-    │   ├── card.py         # TaskCard widget
-    │   ├── column.py       # KanbanColumn widget
-    │   ├── header.py       # KaganHeader widget
-    │   ├── status_bar.py   # StatusBar widget
-    │   ├── search_bar.py   # SearchBar widget
-    │   ├── empty_state.py  # EmptyState widget
-    │   ├── streaming_output.py  # StreamingOutput widget
-    │   ├── plan_display.py     # Plan display widget
-    │   ├── agent_content.py    # Agent content display
-    │   ├── tool_call.py        # Tool call display
-    │   └── permission_prompt.py # Permission prompt widget
-    └── modals/
-        ├── task_details_modal.py  # Unified task view/edit/create modal
-        ├── review.py           # Review modal with AI review
-        ├── settings.py         # Settings modal
-        ├── confirm.py          # Confirmation dialog
-        ├── diff.py             # Diff viewer modal
-        ├── agent_output.py     # Agent output viewer
-        ├── rejection_input.py  # Rejection feedback modal
-        ├── description_editor.py   # Full-screen description editor
-        ├── help.py             # Help modal
-        ├── tmux_gateway.py     # Tmux gateway info modal
-        ├── duplicate_task.py   # Duplicate task modal
-        ├── global_agent_picker.py  # Agent switcher modal
-        ├── agent_install.py    # Agent installation modal
-        ├── agent_choice.py     # Agent choice modal
-        └── actions.py          # Modal action enums
+  core/   — domain models, services, adapters, IPC, agents
+  tui/    — Textual UI (screens, widgets, modals, styles)
+  mcp/    — MCP server bridge and tool registration
+  cli/    — CLI entry points
 ```
+
+### Architecture Contract
+
+Read and follow the architecture contract before making structural changes:
+
+- [`docs/reference/architecture.md`](docs/reference/architecture.md)
+
+**Dependency rule:** `core` has no dependency on `tui`, `mcp`, or `cli`.
+`tui` and `mcp` depend only on `core`. `cli` assembles entry points.
+
+### 30-Minute Onboarding Path
+
+1. **Clone and install** (2 min): `git clone ... && cd kagan && uv sync --dev`
+1. **Read this file** (5 min): Understand prerequisites, linting, test commands
+1. **Skim architecture** (5 min): Read `docs/reference/architecture.md`
+1. **Run the app** (2 min): `uv run kagan` to see the Kanban TUI
+1. **Run the quality gate** (5 min): `uv run poe check`
+1. **Pick a task** and explore the relevant module for orientation (10 min)
+
+### Source Layout
+
+```
+src/kagan/
+  core/                    # Domain models, services, adapters, agents, IPC
+  tui/                     # app.py, ui/, styles/, keybindings, theme
+  mcp/                     # mcp/server.py, mcp/tools.py, registrars
+  cli/                     # CLI commands
+  __main__.py              # Entry point
+tests/
+  core/                    # Unit + smoke tests for kagan.core
+  mcp/                     # Contract + smoke tests for kagan.mcp
+  tui/                     # Snapshot + smoke tests for kagan.tui
+```
+
+### Where to Put Things
+
+- New domain models, services, persistence adapters, IPC/runtime contracts: `src/kagan/core/`
+- New MCP tool bindings/bridge behavior: `src/kagan/mcp/`
+- New Textual screens/widgets/modals/styles/keybindings: `src/kagan/tui/`
+- CLI entrypoints/commands: `src/kagan/cli/`
+- Cross-cutting tests belong under `tests/{core,mcp,tui}/` by boundary, not implementation detail.
 
 ## Code Style
 
@@ -292,7 +241,7 @@ git config commit.gpgsign false
 1. **Async database** - All DB operations via SQLModel TaskRepository
 1. **Constants module** - Use `kagan.constants` for shared values
 1. **Property assertions** - Use `@property` with `assert` for required state
-1. **Module size limits** - Keep modules ~150-250 LOC; test files < 200 LOC
+1. **Module boundaries by change** - Split modules when responsibilities or change cadence diverge; keep cohesive code together even if large.
 
 ## Notes
 

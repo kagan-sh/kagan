@@ -6,19 +6,14 @@ import asyncio
 from pathlib import Path
 
 import click
-from rich._spinners import SPINNERS
 from rich.console import Console
-
-from kagan.ui.utils.animation import WAVE_FRAMES, WAVE_INTERVAL_MS
-
-SPINNERS["portal"] = {"interval": WAVE_INTERVAL_MS, "frames": WAVE_FRAMES}
 
 TOOL_CHOICES = ("claude", "opencode")
 
 
 def _get_default_tool() -> str:
     """Auto-detect the first available AI tool."""
-    from kagan.builtin_agents import get_all_agent_availability
+    from kagan.core.builtin_agents import get_all_agent_availability
 
     for availability in get_all_agent_availability():
         if availability.is_available:
@@ -60,8 +55,8 @@ def enhance(prompt: str | None, tool: str | None, file_path: Path | None) -> Non
         kagan tools enhance --file prompt.txt
         kagan tools enhance -f requirements.md -t claude
     """
-    from kagan.agents.refiner import PromptRefiner
-    from kagan.builtin_agents import get_builtin_agent
+    from kagan.core.agents.refiner import PromptRefiner
+    from kagan.core.builtin_agents import get_builtin_agent
 
     if file_path is not None:
         prompt = file_path.read_text().strip()
@@ -87,7 +82,7 @@ def enhance(prompt: str | None, tool: str | None, file_path: Path | None) -> Non
         finally:
             await refiner.stop()
 
-    with console.status("[cyan]Enhancing...", spinner="portal"):
+    with console.status("[cyan]Enhancing...", spinner="dots"):
         try:
             result = asyncio.run(_enhance())
         except Exception as e:

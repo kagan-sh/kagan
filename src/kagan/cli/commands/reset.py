@@ -3,13 +3,24 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import json
+import os
 import shutil
+import signal
+import time
 from pathlib import Path
 
 import click
 
-from kagan.constants import DEFAULT_DB_PATH
-from kagan.paths import get_cache_dir, get_config_dir, get_data_dir, get_worktree_base_dir
+from kagan.core.constants import DEFAULT_DB_PATH
+from kagan.core.paths import (
+    get_cache_dir,
+    get_config_dir,
+    get_core_runtime_dir,
+    get_data_dir,
+    get_worktree_base_dir,
+)
 
 
 async def _get_projects(db_path: str) -> list[tuple[str, str]]:
@@ -17,8 +28,8 @@ async def _get_projects(db_path: str) -> list[tuple[str, str]]:
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from sqlmodel import select
 
-    from kagan.adapters.db.engine import create_db_engine
-    from kagan.adapters.db.schema import Project
+    from kagan.core.adapters.db.engine import create_db_engine
+    from kagan.core.adapters.db.schema import Project
 
     engine = await create_db_engine(db_path)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -36,20 +47,18 @@ async def _delete_project_data(db_path: str, project_id: str) -> str:
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from sqlmodel import col, select
 
-    from kagan.adapters.db.engine import create_db_engine
-    from kagan.adapters.db.schema import (
+    from kagan.core.adapters.db.engine import create_db_engine
+    from kagan.core.adapters.db.schema import (
         CodingAgentTurn,
         ExecutionProcess,
         ExecutionProcessLog,
         ExecutionProcessRepoState,
-        Image,
         Merge,
         Project,
         ProjectRepo,
         Session,
         Task,
         TaskLink,
-        TaskTag,
         Workspace,
         WorkspaceRepo,
     )
@@ -69,81 +78,61 @@ async def _delete_project_data(db_path: str, project_id: str) -> str:
             )
             ws_ids = [r[0] for r in ws_rows.all()]
 
-            sess_ids: list[str] = []
-            if ws_ids:
-                sess_rows = await session.execute(
-                    select(Session.id).where(col(Session.workspace_id).in_(ws_ids))
-                )
-                sess_ids = [r[0] for r in sess_rows.all()]
+            sess_rows = await session.execute(
+                select(Session.id).where(col(Session.workspace_id).in_(ws_ids))
+            )
+            sess_ids = [r[0] for r in sess_rows.all()]
 
-            exec_ids: list[str] = []
-            if sess_ids:
-                exec_rows = await session.execute(
-                    select(ExecutionProcess.id).where(
-                        col(ExecutionProcess.session_id).in_(sess_ids)
-                    )
-                )
-                exec_ids = [r[0] for r in exec_rows.all()]
+            exec_rows = await session.execute(
+                select(ExecutionProcess.id).where(col(ExecutionProcess.session_id).in_(sess_ids))
+            )
+            exec_ids = [r[0] for r in exec_rows.all()]
 
-            if exec_ids:
-                for model in (
-                    ExecutionProcessRepoState,
-                    ExecutionProcessLog,
-                    CodingAgentTurn,
-                ):
-                    await session.execute(
-                        delete(model).where(col(model.execution_process_id).in_(exec_ids))
-                    )
-
+            for model in (ExecutionProcessRepoState, ExecutionProcessLog, CodingAgentTurn):
                 await session.execute(
-                    delete(ExecutionProcess).where(col(ExecutionProcess.id).in_(exec_ids))
+                    delete(model).where(col(model.execution_process_id).in_(exec_ids))
                 )
 
-            if sess_ids:
-                await session.execute(delete(Session).where(col(Session.id).in_(sess_ids)))
+            await session.execute(
+                delete(ExecutionProcess).where(col(ExecutionProcess.id).in_(exec_ids))
+            )
+            await session.execute(delete(Session).where(col(Session.id).in_(sess_ids)))
 
-            if ws_ids:
-                wr_rows = await session.execute(
-                    select(WorkspaceRepo).where(col(WorkspaceRepo.workspace_id).in_(ws_ids))
-                )
-                for (wr,) in wr_rows.all():
-                    if wr.worktree_path:
-                        shutil.rmtree(wr.worktree_path, ignore_errors=True)
+            wr_rows = await session.execute(
+                select(WorkspaceRepo).where(col(WorkspaceRepo.workspace_id).in_(ws_ids))
+            )
+            for (wr,) in wr_rows.all():
+                if wr.worktree_path:
+                    shutil.rmtree(wr.worktree_path, ignore_errors=True)
 
-                w_rows = await session.execute(
-                    select(Workspace).where(col(Workspace.id).in_(ws_ids))
-                )
-                for (workspace,) in w_rows.all():
-                    if workspace.path and Path(workspace.path).exists():
-                        shutil.rmtree(workspace.path, ignore_errors=True)
+            w_rows = await session.execute(select(Workspace).where(col(Workspace.id).in_(ws_ids)))
+            for (workspace,) in w_rows.all():
+                if workspace.path and Path(workspace.path).exists():
+                    shutil.rmtree(workspace.path, ignore_errors=True)
 
-                await session.execute(delete(Merge).where(col(Merge.workspace_id).in_(ws_ids)))
-                await session.execute(
-                    delete(WorkspaceRepo).where(col(WorkspaceRepo.workspace_id).in_(ws_ids))
-                )
-                await session.execute(delete(Workspace).where(col(Workspace.id).in_(ws_ids)))
+            await session.execute(delete(Merge).where(col(Merge.workspace_id).in_(ws_ids)))
+            await session.execute(
+                delete(WorkspaceRepo).where(col(WorkspaceRepo.workspace_id).in_(ws_ids))
+            )
+            await session.execute(delete(Workspace).where(col(Workspace.id).in_(ws_ids)))
 
             task_rows = await session.execute(
                 select(Task.id).where(col(Task.project_id) == project_id)
             )
             task_ids = [r[0] for r in task_rows.all()]
 
-            if task_ids:
-                await session.execute(
-                    delete(TaskLink).where(
-                        col(TaskLink.task_id).in_(task_ids)
-                        | col(TaskLink.ref_task_id).in_(task_ids)
-                    )
+            await session.execute(
+                delete(TaskLink).where(
+                    col(TaskLink.task_id).in_(task_ids) | col(TaskLink.ref_task_id).in_(task_ids)
                 )
-                await session.execute(delete(TaskTag).where(col(TaskTag.task_id).in_(task_ids)))
-                await session.execute(delete(Image).where(col(Image.task_id).in_(task_ids)))
-                await session.execute(
-                    update(Task)
-                    .where(col(Task.project_id) == project_id)
-                    .where(col(Task.parent_id).isnot(None))
-                    .values(parent_id=None)
-                )
-                await session.execute(delete(Task).where(col(Task.project_id) == project_id))
+            )
+            await session.execute(
+                update(Task)
+                .where(col(Task.project_id) == project_id)
+                .where(col(Task.parent_id).isnot(None))
+                .values(parent_id=None)
+            )
+            await session.execute(delete(Task).where(col(Task.project_id) == project_id))
 
             await session.execute(
                 delete(ProjectRepo).where(col(ProjectRepo.project_id) == project_id)
@@ -166,8 +155,81 @@ def _format_size(size_bytes: int | float) -> str:
     return f"{size:.1f} TB"
 
 
+def _read_pid(path: Path) -> int | None:
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        import psutil
+
+        return psutil.pid_exists(pid)
+    except Exception:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
+def _read_lease_owner_pid(path: Path) -> int | None:
+    try:
+        lease_data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(lease_data, dict):
+        return None
+
+    raw_owner_pid = lease_data.get("owner_pid")
+    if isinstance(raw_owner_pid, int):
+        return raw_owner_pid
+    if isinstance(raw_owner_pid, str):
+        with contextlib.suppress(ValueError):
+            return int(raw_owner_pid)
+    return None
+
+
+def _stop_core_before_reset() -> None:
+    """Stop running core process before deleting runtime/data directories."""
+    lock_path = get_core_runtime_dir() / "core.instance.lock"
+    lease_path = get_core_runtime_dir() / "core.lease.json"
+    lease_pid = _read_lease_owner_pid(lease_path)
+    pids = {
+        pid for path in (lock_path,) if (pid := _read_pid(path)) is not None and _pid_exists(pid)
+    }
+    if lease_pid is not None and _pid_exists(lease_pid):
+        pids.add(lease_pid)
+    if not pids:
+        return
+
+    click.echo("Stopping running core before reset...")
+    for pid in pids:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGTERM)
+
+    deadline = time.time() + 3.0
+    while time.time() < deadline:
+        if not any(_pid_exists(pid) for pid in pids):
+            return
+        time.sleep(0.1)
+
+    for pid in pids:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
+
+
 def _reset_all(existing_dirs: list[tuple[str, Path]], force: bool) -> None:
     """Nuclear reset: delete all Kagan directories."""
+    _stop_core_before_reset()
     click.echo()
     click.secho(
         "WARNING: This will permanently delete the following:",
@@ -233,6 +295,24 @@ def _reset_all(existing_dirs: list[tuple[str, Path]], force: bool) -> None:
         )
 
 
+def _prompt_reset_choice(projects: list[tuple[str, str]]) -> int:
+    click.echo()
+    click.secho("What would you like to reset?", bold=True)
+    click.echo()
+    click.echo(f"  {click.style('1', fg='cyan', bold=True)}) Reset all (nuclear wipe)")
+    for i, (project_id, project_name) in enumerate(projects, start=2):
+        click.echo(
+            f"  {click.style(str(i), fg='cyan', bold=True)}) "
+            f"Project: {project_name} (id: {project_id})"
+        )
+    click.echo()
+    return click.prompt(
+        "Select option",
+        type=click.IntRange(1, len(projects) + 1),
+        default=1,
+    )
+
+
 @click.command()
 @click.option(
     "--force",
@@ -277,8 +357,6 @@ def reset(force: bool) -> None:
     db_file = Path(DEFAULT_DB_PATH)
     projects: list[tuple[str, str]] = []
     if db_file.exists():
-        import contextlib
-
         with contextlib.suppress(Exception):
             projects = asyncio.run(_get_projects(DEFAULT_DB_PATH))
 
@@ -286,23 +364,7 @@ def reset(force: bool) -> None:
         _reset_all(existing_dirs, force=False)
         return
 
-    click.echo()
-    click.secho("What would you like to reset?", bold=True)
-    click.echo()
-    click.echo(f"  {click.style('1', fg='cyan', bold=True)}) Reset all (nuclear wipe)")
-    for i, (project_id, project_name) in enumerate(projects, start=2):
-        click.echo(
-            f"  {click.style(str(i), fg='cyan', bold=True)}) "
-            f"Project: {project_name} (id: {project_id})"
-        )
-    click.echo()
-
-    choice = click.prompt(
-        "Select option",
-        type=click.IntRange(1, len(projects) + 1),
-        default=1,
-    )
-
+    choice = _prompt_reset_choice(projects)
     if choice == 1:
         _reset_all(existing_dirs, force=False)
         return

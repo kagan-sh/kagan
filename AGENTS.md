@@ -1,162 +1,169 @@
-# AGENTS.md — Coding Agent Instructions for Kagan
+# AGENTS.md - Kagan Coding Agent Guide
 
-Kagan is an AI-powered Kanban TUI for autonomous development workflows.
-Built with Python 3.12+, Textual, SQLModel, and the Agent Control Protocol (ACP).
+Purpose: give coding agents the minimum high-signal rules needed to ship safe, testable changes.
 
-## Build, Lint, and Test Commands
+## Rule Scope and Precedence
+
+- This file is the canonical repo-wide agent instruction file.
+- `.github/copilot-instructions.md` defers to this file.
+- No Cursor rules are currently present (`.cursorrules` and `.cursor/rules/` absent).
+- Keep this file concise and action-oriented; avoid architecture essays and ticket-era process detail.
+- Keep entries short, self-contained, and broadly applicable.
+- Avoid conflicting instructions across files.
+- Put file-type or directory-specific rules in `.github/instructions/*.instructions.md` if needed.
+
+## Engineering Principles (PEP 20, Pragmatic Form)
+
+- Prefer explicit over implicit behavior.
+- Prefer simple, readable solutions over clever ones.
+- Avoid ambiguity; define assumptions in code/tests.
+- Fail loudly on invalid state unless failure is intentionally suppressed.
+- Keep one obvious way to do routine tasks (build, test, lint, release).
+
+## Instruction Maintenance
+
+- Treat this file as operational policy, not a design document.
+- Keep critical commands and rules near the top.
+- Remove stale migration-era instructions once they stop affecting behavior.
+- Prefer additive, scoped updates over large rewrites.
+
+## Setup
 
 ```bash
-uv sync                         # Install dependencies
-uv run poe dev                  # Run app with hot reload
-uv run poe fix                  # Auto-fix lint + format (ALWAYS run before committing)
-uv run poe lint                 # Ruff linter (check only)
-uv run poe format               # Ruff formatter only
-uv run poe typecheck            # Pyrefly type checker
-uv run poe check                # Full suite: lint + typecheck + test
+uv sync --dev
+uv run kagan
+uv run poe dev
 ```
 
-### Running Tests
+## Build / Lint / Format / Typecheck
 
 ```bash
-uv run pytest tests/ -v                                                   # All tests
-uv run pytest tests/features/test_agent_automation.py -v                  # Single file
-uv run pytest tests/features/test_agent_automation.py::TestClass::test_x -v  # Single test
-uv run pytest -k "test_name_pattern" -v                                   # Pattern match
-uv run pytest -m unit -v              # By marker: unit, integration, e2e, snapshot, property, slow
-uv run poe test-snapshot              # Snapshot tests (MUST run sequentially, no parallel)
-uv run poe test-snapshot-update       # Update snapshots
+uv build --wheel --package kagan
+uv run poe lint
+uv run poe format
+uv run poe fix
+uv run poe typecheck
+uv run poe check
+uv run pre-commit run --all-files
 ```
 
-## Project Structure
+## Test Commands (Use These First)
 
+```bash
+# all tests
+uv run poe test
+uv run pytest tests/ -v
+
+# single file/class/test
+uv run pytest tests/core/unit/test_runtime_state_service.py -v
+uv run pytest tests/core/unit/test_runtime_state_service.py::TestRuntimeStateService -v
+uv run pytest tests/mcp/contract/test_mcp_v2_end_to_end.py::test_end_to_end_job_flow_uses_submit_wait_events_contract -v
+
+# filter
+uv run pytest tests/ -k "runtime and refresh" -v
+uv run pytest tests/ -m "core and unit" -v
+
+# sequential (debug/snapshot safety)
+uv run pytest tests/ -n 0 -v
 ```
-src/kagan/
-├── app.py, bootstrap.py    # KaganApp + AppContext (DI container)
-├── constants.py            # Shared constants (COLUMN_ORDER, STATUS_LABELS)
-├── keybindings.py          # ALL keybindings (single file)
-├── config.py               # KaganConfig (Pydantic-based)
-├── adapters/db/            # schema.py (SQLModel), repositories.py
-├── core/models/            # entities.py, enums.py, policies.py
-├── services/               # Protocol interfaces + *Impl classes
-├── agents/                 # Prompt building, signal parsing, agent coordination
-├── acp/                    # Agent Control Protocol (JSON-RPC over subprocess)
-├── ui/screens/             # KaganScreen subclasses (kanban/, planner/, task_editor)
-├── ui/widgets/             # Reusable widgets (card, column, chat_panel)
-├── ui/modals/              # ModalScreen subclasses (review, diff, settings)
-└── styles/kagan.tcss       # ALL CSS — single source of truth
-tests/
-├── conftest.py             # Core fixtures (state_manager, event_bus, task_factory)
-├── helpers/                # wait.py, mocks.py, journey_runner.py
-├── features/               # Feature/E2E tests (user journeys)
-├── snapshots/              # Visual regression tests
-└── property/               # Hypothesis property-based tests
+
+## High-Signal Test Profiles
+
+```bash
+uv run poe test-core
+uv run poe test-mcp
+uv run poe test-smoke
+uv run poe test-tui-snapshot
+uv run poe test-snapshot-update
 ```
+
+## Pytest and Marker Policy
+
+- Default addopts include `-n auto --dist=loadgroup`.
+- Snapshot tests must run with `-n 0`.
+- Package/type markers are path-assigned in `tests/conftest.py`.
+- Do not manually add: `core`, `mcp`, `tui`, `unit`, `contract`, `snapshot`, `smoke`.
+- `integration` marker is deprecated/disallowed for explicit use.
+
+Path mapping:
+
+- `tests/core/unit/*` -> `core`, `unit`
+- `tests/core/smoke/*` -> `core`, `smoke`
+- `tests/mcp/contract/*` -> `mcp`, `contract`
+- `tests/mcp/smoke/*` -> `mcp`, `smoke`
+- `tests/tui/snapshot/*` -> `tui`, `snapshot`
+- `tests/tui/smoke/*` -> `tui`, `smoke`
 
 ## Code Style
 
-### Ruff Configuration
+- Ruff is source of truth (`line-length = 100`, target `py312`).
+- Use `from __future__ import annotations` in Python modules.
+- Import order:
+  - standard library
+  - third-party
+  - local `kagan.*`
+  - type-only imports under `if TYPE_CHECKING:`
+- Type annotate public APIs and meaningful internal boundaries.
+- Prefer `X | None` over `Optional[X]`.
+- Use `Protocol` for service interfaces/boundaries.
+- Naming:
+  - classes: `PascalCase`
+  - functions/variables: `snake_case`
+  - constants: `UPPER_SNAKE_CASE`
+  - private members: `_leading_underscore`
 
-Line length: **100**. Target: **py312**. Rules: `E, F, I, UP, B, SIM, TCH, RUF`.
-Intentionally ignored: `RUF012` (Textual class attrs), `RUF006` (fire-and-forget tasks),
-`SIM102`/`SIM117` (nested if/with for readability).
+## Error Handling and Safety
 
-### Imports
+- Never use bare `except:`.
+- Catch specific exceptions when possible.
+- Use `ValueError` for invalid input/data-contract violations.
+- Use `RuntimeError` for runtime/environment failures.
+- Preserve causal chain with `raise ... from exc`.
+- Broad `except Exception` only at explicit resilience boundaries.
+- In critical core files, broad exceptions require `quality-allow-broad-except`.
+- In critical core files, unbounded queues require `quality-allow-unbounded-queue`.
 
-```python
-from __future__ import annotations  # ALWAYS first line in every file
+## Stable Architecture Boundaries
 
-from datetime import datetime  # 1. Standard library
-from typing import TYPE_CHECKING, cast
+- Core daemon owns mutable runtime state.
+- SQLite is the single persisted source of truth.
+- DB writes happen through core services/adapters only.
+- TUI, MCP, and CLI are frontends over core operations.
+- No client-side mutation fallback around core.
+- Direct subprocess calls are only allowed in:
+  - `src/kagan/core/adapters/process.py`
 
-from pydantic import BaseModel  # 2. Third-party
-from textual.app import ComposeResult
+## TUI Rules
 
-from kagan.constants import COLUMN_ORDER  # 3. Local
+- Keep Textual styling in:
+  - `src/kagan/tui/styles/kagan.tcss`
+- Do not add `DEFAULT_CSS` in Python widgets/screens.
+- Reuse shared keybindings from:
+  - `src/kagan/tui/keybindings.py`
 
-if TYPE_CHECKING:  # 4. Type-only imports
-    from kagan.app import KaganApp
+## Docs and Workflow Validation
+
+```bash
+uv run poe docs-serve
+uv run poe docs-build
+uv run poe workflows-check
 ```
 
-### Types
+## Commit Conventions
 
-- Always annotate function signatures and class attributes
-- Use `X | None` (not `Optional[X]`); use `TYPE_CHECKING` for circular imports
-- Use `cast("TargetType", value)` for type narrowing
+- Allowed tags:
+  - `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `style`, `refactor`, `test`
+- Keep commits small and single-purpose.
+- In CI/automation contexts, disable GPG signing if needed:
+  - `git config commit.gpgsign false`
+- Before push:
+  - `uv run poe fix`
+  - `uv run poe check`
 
-### Naming
+## Done Checklist for Agents
 
-| Element   | Convention   | Example                           |
-| --------- | ------------ | --------------------------------- |
-| Classes   | PascalCase   | `TaskCard`, `KanbanScreen`        |
-| Functions | snake_case   | `get_all_tasks`, `_refresh_board` |
-| Private   | `_` prefix   | `_repo`, `_build_prompt`          |
-| Constants | UPPER_SNAKE  | `COLUMN_ORDER`, `DEFAULT_DB_PATH` |
-| Enums     | UPPER values | `TaskStatus.BACKLOG`              |
-
-### Error Handling
-
-- Prefer result objects (`success: bool` + `error`) for expected failures over exceptions
-- Use specific exception types, never bare `except:`; use `contextlib.suppress()` when intentional
-- Keep modules **150–250 LOC**; test files **< 200 LOC**
-
-## Textual UI Patterns
-
-### CSS: Centralized Only
-
-**All styles go in `src/kagan/styles/kagan.tcss`**. Never use `DEFAULT_CSS` or inline CSS.
-
-### Messages, Handlers, Reactives
-
-```python
-@dataclass
-class Selected(Message):
-    task: Task
-
-
-@on(Button.Pressed, "#save-btn")
-def on_save(self) -> None:
-    self.action_submit()
-
-
-tasks: reactive[list[Task]] = reactive(list, recompose=True)
-```
-
-### Screens and Modals
-
-- Screens inherit from `KaganScreen` (in `ui/screens/base.py`)
-- Modals use `ModalScreen[ReturnType]` for typed return values
-- All keybindings defined centrally in `keybindings.py`
-
-## Service Layer
-
-- Define interfaces with `Protocol`, implement with `*Impl` suffix
-- Constructor-based DI via `AppContext` (`bootstrap.py`). All I/O is async
-- All DB access through `TaskRepository`; cross-service comms via `EventBus` events
-
-```python
-class TaskService(Protocol):
-    async def create_task(self, title: str) -> Task: ...
-
-
-class TaskServiceImpl:
-    def __init__(self, repo: TaskRepository, event_bus: EventBus) -> None:
-        self._repo = repo
-        self._events = event_bus
-```
-
-## Testing
-
-- Tests organized by **user-facing features**, not implementation layers
-- Snapshot tests use `snap_compare()` fixture; run sequentially only
-- Use `wait_for_screen()` / `wait_for_widget()` from `tests/helpers/wait.py`
-  (never `wait_for_workers()` — orphaned workers cause timeouts)
-- E2E tests use real DB + mocked agents (`MockAgent`, `MockAgentFactory`)
-- Key fixtures: `state_manager`, `event_bus`, `task_service`, `task_factory`, `git_repo`
-
-## Git Commit Rules
-
-- Disable GPG signing: `git config commit.gpgsign false`
-- Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`
-- `feat:` triggers minor version bump; `fix:`/`perf:`/`docs:` trigger patch
-- Keep commits atomic and focused
-- Always run `uv run poe fix` before committing
+- Ran the smallest relevant tests first, then broader gates as needed.
+- Do not claim completion without executing verification commands.
+- Updated tests/docs when behavior or contracts changed.
+- Kept changes within existing boundaries unless task explicitly required boundary changes.
+- Left a short summary with changed files and verification commands executed.

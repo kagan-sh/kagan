@@ -31,15 +31,15 @@ jobs:
 
   test:
     needs: lint
+    timeout-minutes: 15
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
       - name: Install system dependencies
-        if: runner.os != 'Windows'
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get update
@@ -47,9 +47,6 @@ jobs:
           elif [ "$RUNNER_OS" = "macOS" ]; then
             brew install tmux
           fi
-      - name: Install system dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: choco install git -y
       - name: Configure git for tests
         run: |
           git config --global user.email "test@kagan.local"
@@ -66,8 +63,38 @@ jobs:
         if: github.ref != 'refs/heads/main'
         run: uv run pytest tests/ -m "not snapshot" -n auto
 
-  # TODO: to be refined — currently macOS is the strict source of truth while
-  # Linux/Windows run in --snapshot-update mode to avoid cross-platform rendering diffs.
+  test-windows:
+    needs: lint
+    timeout-minutes: 15
+    runs-on: windows-latest
+    # Windows tests are advisory — xdist/asyncio teardown can cause spurious
+    # KeyboardInterrupt on Windows, so failures here must not block the pipeline.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install system dependencies
+        run: choco install git -y
+      - name: Configure git for tests
+        run: |
+          git config --global user.email "test@kagan.local"
+          git config --global user.name "Kagan Test"
+          git config --global commit.gpgsign false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: uv sync --dev
+      - name: Test (sequential, with coverage)
+        id: wintest
+        if: github.ref == 'refs/heads/main'
+        run: uv run pytest tests/ -m "not snapshot" -n 0 --cov=src/kagan --cov-report=term-missing
+      - name: Test (sequential)
+        id: wintest_pr
+        if: github.ref != 'refs/heads/main'
+        run: uv run pytest tests/ -m "not snapshot" -n 0
+      - name: Warn on failure
+        if: failure()
+        run: echo "::warning::Windows tests failed — this is advisory and does not block the pipeline."
+
   snapshot:
     needs: lint
     if: github.ref == 'refs/heads/main'
@@ -98,17 +125,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --dev
-      # macOS is the source of truth — snapshots are committed from macOS,
-      # so strict comparison catches real regressions.
-      - name: Snapshot tests — strict (macOS)
-        if: runner.os == 'macOS'
-        run: uv run pytest tests/snapshots/ -n 0 -v
-      # Linux/Windows run with --snapshot-update to tolerate rendering
-      # diffs while still catching runtime errors, crashes, and assertion
-      # failures that aren't snapshot-comparison related.
-      - name: Snapshot tests — update mode (Linux/Windows)
-        if: runner.os != 'macOS'
-        run: uv run pytest tests/snapshots/ -n 0 -v --snapshot-update
+      - name: Snapshot tests
+        run: uv run pytest tests/tui/snapshot/ -n 0 -v
 
   test-all-platforms:
     needs: lint

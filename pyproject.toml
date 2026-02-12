@@ -2,7 +2,6 @@
 name = "kagan"
 version = "0.4.1"
 description = "AI-powered Kanban TUI for autonomous development workflows"
-readme = "README.md"
 license = "MIT"
 authors = [
     { name = "Altynbek Orumbayev", email = "altynbek.orumbayev@makerx.com.au" }
@@ -24,26 +23,24 @@ classifiers = [
     "Typing :: Typed",
 ]
 requires-python = ">=3.12,<3.14"
+readme = "README.md"
 dependencies = [
-    "textual>=7.0.0",
-    "aiosqlite>=0.22.0",
-    "greenlet>=3.1.0",  # Required by SQLAlchemy for async operations
-    "pydantic>=2.10.0",
     "agent-client-protocol>=0.7.0,<1.0.0",
-    "sqlmodel>=0.0.22",
-    "rich>=14.0.0",
-    "psutil>=7.0.0",
-    "typeguard>=4.4.0",
-    "mcp>=1.0.0",
-    "click>=8.1.0",
-    "httpx>=0.27.0",
-    "pyperclip>=1.11.0",
-    "packaging>=24.0",
-    "tomlkit>=0.13.0",
     "aiofiles>=24.1.0",
-    "platformdirs>=4.3.0",
+    "aiosqlite>=0.22.0",
+    "click>=8.1.0",
     "filelock>=3.16.0",
+    "greenlet>=3.1.0",
+    "mcp>=1.26.0,<2.0.0",
     "mslex>=1.3.0",
+    "packaging>=24.0",
+    "platformdirs>=4.3.0",
+    "pydantic>=2.10.0",
+    "pyperclip>=1.11.0",
+    "rich>=14.0.0",
+    "sqlmodel>=0.0.22",
+    "textual>=7.0.0",
+    "tomlkit>=0.13.0",
 ]
 
 [project.scripts]
@@ -60,22 +57,20 @@ Changelog = "https://github.com/aorumbayev/kagan/blob/main/CHANGELOG.md"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/kagan"]
+
 [dependency-groups]
 dev = [
     "poethepoet>=0.40.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
-    "pytest-httpx>=0.35.0",
-    "pytest-mock>=3.14.0",
     "ruff>=0.14.14",
     "pyrefly>=0.50.0",
-    "pytest-sugar>=1.1.1",
     "pytest-textual-snapshot>=1.0.0",
-    "textual-dev>=1.8.0",
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.5.0",
-    "mkdocs-mermaid2-plugin>=1.2.3",
     "pytest-cov>=7.0.0",
     "pytest-xdist>=3.8.0",
     "python-semantic-release>=10.5.3",
@@ -107,17 +102,28 @@ project_includes = ["src", "tests"]
 search_path = ["src", "."]
 permissive-ignores = true
 
+# Pyrefly does not fully resolve cross-module imports in large projects.
+# These are suppressed to avoid false positives. Re-evaluate on pyrefly updates.
+[tool.pyrefly.errors]
+missing-import = false
+missing-attribute = false
+missing-module-attribute = false
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+python_files = ["test_*.py", "*_cases.py"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "unit: pure logic tests with no I/O",
-    "integration: tests with real filesystem/DB, mocked externals",
+    "contract: protocol/schema boundary tests",
+    "smoke: critical user-path and transport checks",
     "snapshot: visual regression tests",
-    "e2e: full application tests",
     "property: property-based tests with hypothesis",
+    "core: tests scoped to kagan-core behaviors",
+    "mcp: tests scoped to kagan-mcp protocol boundary",
+    "tui: tests scoped to textual UI flows and rendering",
     "mock_platform_system(name): override platform.system() for the test",
 ]
 addopts = "-n auto --dist=loadgroup"
@@ -141,12 +147,30 @@ test = "pytest tests/"
 lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
 typecheck = "pyrefly check src/ tests/"
-check = ["lint", "typecheck", "test"]
+check = ["lint", "typecheck", "test-core", "test-mcp", "test-smoke"]
 docs-serve = "mkdocs serve"
 docs-build = "mkdocs build"
 # Snapshot tests (run sequentially - parallel can cause issues with snapshots)
-test-snapshot = "pytest tests/snapshots/ -n 0 -v"
-test-snapshot-update = "pytest tests/snapshots/ -n 0 -v --snapshot-update"
+test-core = "pytest tests/core/unit/ -m \"core and unit\" -v"
+test-mcp = "pytest tests/mcp/contract/ -m \"mcp and contract\" -v"
+test-tui-snapshot = "pytest tests/tui/snapshot/ -m \"tui and snapshot\" -n 0 -v"
+test-smoke-core = "pytest tests/core/smoke/ tests/mcp/smoke/ -m smoke -v"
+test-smoke-tui = "pytest tests/tui/smoke/ -m \"tui and smoke\" -n 0 -v"
+test-smoke = ["test-smoke-core", "test-smoke-tui"]
+test-snapshot = "pytest tests/tui/snapshot/ -n 0 -v"
+test-snapshot-update = "pytest tests/tui/snapshot/ -n 0 -v --snapshot-update"
+
+[tool.poe.tasks.install-local]
+help = "Install kagan as a local CLI tool (replaces any existing install)"
+cmd = "uv tool install --force --reinstall ."
+
+[tool.poe.tasks.dev-setup]
+help = "Install local CLI, reset DB, and stop core daemon"
+sequence = [
+    { ref = "install-local" },
+    { cmd = "kagan reset --force" },
+    { shell = "kagan core stop || true" },
+]
 
 [tool.poe.tasks.fix]
 help = "Fix linting issues and format code"
@@ -177,7 +201,7 @@ sequence = [
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-build_command = "pip install uv && uv build"
+build_command = "pip install uv && uv build --wheel"
 commit_message = "{version}\n\n[skip ci] Automatically generated by python-semantic-release"
 tag_format = "v{version}"
 allow_zero_version = true
