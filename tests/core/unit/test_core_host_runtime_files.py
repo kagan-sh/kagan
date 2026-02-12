@@ -156,15 +156,15 @@ def test_core_instance_lock_retries_once_for_stale_lease(monkeypatch, tmp_path: 
     )
     lock = CoreInstanceLock(lock_path, lease_path=lease_path)
     attempts = {"count": 0}
-    original_try = CoreInstanceLock._try_acquire_handle
+    original_try = CoreInstanceLock._try_acquire_lock
 
     def _fake_try(self):
         attempts["count"] += 1
         if attempts["count"] == 1:
-            return None
+            return False
         return original_try(self)
 
-    monkeypatch.setattr(CoreInstanceLock, "_try_acquire_handle", _fake_try)
+    monkeypatch.setattr(CoreInstanceLock, "_try_acquire_lock", _fake_try)
     monkeypatch.setattr(CoreInstanceLock, "_pid_is_running", staticmethod(lambda _pid: False))
 
     assert lock.acquire() is True
@@ -184,11 +184,11 @@ def test_core_instance_lock_does_not_reclaim_live_lease(monkeypatch, tmp_path: P
     lock = CoreInstanceLock(lock_path, lease_path=lease_path)
     attempts = {"count": 0}
 
-    def _always_fail(_self) -> None:
+    def _always_fail(_self) -> bool:
         attempts["count"] += 1
-        return None
+        return False
 
-    monkeypatch.setattr(CoreInstanceLock, "_try_acquire_handle", _always_fail)
+    monkeypatch.setattr(CoreInstanceLock, "_try_acquire_lock", _always_fail)
     monkeypatch.setattr(CoreInstanceLock, "_pid_is_running", staticmethod(lambda _pid: True))
 
     assert lock.acquire() is False

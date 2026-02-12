@@ -15,6 +15,8 @@ from pathlib import Path
 
 from filelock import FileLock, Timeout
 
+from kagan.core.process_liveness import pid_exists
+
 LOCKS_DIR_NAME = "locks"
 
 
@@ -114,17 +116,7 @@ class InstanceLock:
 
     @staticmethod
     def _pid_is_running(pid: int) -> bool:
-        if pid <= 0:
-            return False
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            return True
-        except OSError:
-            return False
-        return True
+        return pid_exists(pid)
 
     def _is_stale_holder(self, holder: LockInfo) -> bool:
         if holder.pid == os.getpid():

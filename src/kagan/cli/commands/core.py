@@ -16,6 +16,7 @@ from kagan.core.paths import (
     get_core_runtime_dir,
     get_core_token_path,
 )
+from kagan.core.process_liveness import pid_exists
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -52,16 +53,7 @@ def _read_pid(path: Path) -> int | None:
 
 
 def _pid_exists(pid: int) -> bool:
-    try:
-        import psutil
-
-        return psutil.pid_exists(pid)
-    except Exception:
-        try:
-            os.kill(pid, 0)
-            return True
-        except OSError:
-            return False
+    return pid_exists(pid)
 
 
 def _discover_running_pid_fallback() -> int | None:

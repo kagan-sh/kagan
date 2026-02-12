@@ -21,6 +21,7 @@ from kagan.core.paths import (
     get_data_dir,
     get_worktree_base_dir,
 )
+from kagan.core.process_liveness import pid_exists
 
 
 async def _get_projects(db_path: str) -> list[tuple[str, str]]:
@@ -169,16 +170,7 @@ def _read_pid(path: Path) -> int | None:
 
 
 def _pid_exists(pid: int) -> bool:
-    try:
-        import psutil
-
-        return psutil.pid_exists(pid)
-    except Exception:
-        try:
-            os.kill(pid, 0)
-            return True
-        except OSError:
-            return False
+    return pid_exists(pid)
 
 
 def _read_lease_owner_pid(path: Path) -> int | None:

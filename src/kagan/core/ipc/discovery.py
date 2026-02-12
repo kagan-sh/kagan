@@ -12,6 +12,7 @@ from kagan.core.paths import (
     get_core_runtime_dir,
     get_core_token_path,
 )
+from kagan.core.process_liveness import pid_exists
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -78,19 +79,7 @@ def _read_pid_from_lease() -> int | None:
 
 def _is_process_alive(pid: int) -> bool:
     """Check whether a process with the given PID is alive."""
-    try:
-        import psutil
-
-        return psutil.pid_exists(pid)
-    except Exception:
-        # Fallback: POSIX signal-0 check
-        import os
-
-        try:
-            os.kill(pid, 0)
-            return True
-        except (OSError, ProcessLookupError):
-            return False
+    return pid_exists(pid)
 
 
 def discover_core_endpoint() -> CoreEndpoint | None:

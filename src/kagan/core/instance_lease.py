@@ -11,11 +11,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from filelock import FileLock, Timeout
+
+from kagan.core.process_liveness import pid_exists
 from kagan.core.time import utc_now
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from typing import TextIO
 
 logger = logging.getLogger(__name__)
 
@@ -52,59 +54,31 @@ class CoreInstanceLock:
     def __init__(self, path: Path, *, lease_path: Path) -> None:
         self._path = path
         self._lease_path = lease_path
-        self._handle: TextIO | None = None
+        self._lock = FileLock(str(path), blocking=False)
+        self._acquired = False
 
     def acquire(self, *, _retry_stale: bool = True) -> bool:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        handle = self._try_acquire_handle()
-        if handle is None:
+        if not self._try_acquire_lock():
             if _retry_stale and self._cleanup_stale_lease():
+                self._lock = FileLock(str(self._path), blocking=False)
                 return self.acquire(_retry_stale=False)
             return False
 
-        self._handle = handle
-        self._write_lock_owner_pid()
+        self._acquired = True
         self._write_lease_record(heartbeat_at=utc_now())
         return True
 
-    def _try_acquire_handle(self) -> TextIO | None:
-        handle = self._path.open("a+", encoding="utf-8")
+    def _try_acquire_lock(self) -> bool:
         try:
-            if os.name == "nt":
-                import msvcrt
-
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            handle.close()
-            return None
-        return handle
-
-    def _write_lock_owner_pid(self) -> None:
-        handle = self._handle
-        if handle is None:
-            return
-        handle.seek(0)
-        handle.truncate(0)
-        handle.write(f"{os.getpid()}\n")
-        handle.flush()
+            self._lock.acquire(timeout=0)
+        except Timeout:
+            return False
+        return True
 
     @staticmethod
     def _pid_is_running(pid: int) -> bool:
-        if pid <= 0:
-            return False
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            return True
-        except OSError:
-            return False
-        return True
+        return pid_exists(pid)
 
     def _read_lease_record(self) -> CoreLeaseRecord | None:
         try:
@@ -197,7 +171,7 @@ class CoreInstanceLock:
         )
 
     def heartbeat(self) -> None:
-        if self._handle is None:
+        if not self._acquired:
             return
         current = self._read_lease_record()
         if current is None:
@@ -220,22 +194,13 @@ class CoreInstanceLock:
         )
 
     def release(self) -> None:
-        handle = self._handle
-        if handle is None:
+        if not self._acquired:
             return
+
         try:
-            if os.name == "nt":
-                import msvcrt
-
-                with contextlib.suppress(OSError):
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            self._lock.release()
         finally:
-            self._handle = None
-            handle.close()
+            self._acquired = False
         with contextlib.suppress(OSError):
             self._path.unlink()
         with contextlib.suppress(OSError):

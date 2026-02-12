@@ -198,6 +198,8 @@ def _display_agent_status() -> dict[str, bool]:
 
     agents = list_builtin_agents()
     status = get_agent_status()
+    stdout_encoding = (getattr(sys.stdout, "encoding", None) or "utf-8").lower()
+    unicode_icons = "utf" in stdout_encoding
 
     click.echo()
     click.secho("  AI Agents:", bold=True)
@@ -207,10 +209,12 @@ def _display_agent_status() -> dict[str, bool]:
         available = status.get(name, False)
 
         if available:
-            icon = click.style("✓", fg="green")
+            icon_text = "✓" if unicode_icons else "[x]"
+            icon = click.style(icon_text, fg="green")
             label = click.style(agent.config.name, fg="green")
         else:
-            icon = click.style("○", fg="bright_black")
+            icon_text = "○" if unicode_icons else "[ ]"
+            icon = click.style(icon_text, fg="bright_black")
             label = click.style(f"{agent.config.name} (not installed)", fg="bright_black")
 
         click.echo(f"    {icon} {label}")
