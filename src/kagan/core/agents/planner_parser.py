@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from kagan.core.adapters.db.schema import Task
 
 
-PROPOSE_PLAN_TOOL_NAME = "propose_plan"
+PLAN_SUBMIT_TOOL_NAME = "plan_submit"
 _KAGAN_MCP_SERVER_NAME = get_mcp_server_name().strip().lower()
 _PLAN_PAYLOAD_WRAPPER_KEYS = (
     "arguments",
@@ -52,18 +52,18 @@ def parse_proposed_plan(
         count=len(tool_calls),
         ids=list(tool_calls.keys())[:6],
     )
-    selected = _select_propose_plan_call(list(tool_calls.values()))
+    selected = _select_plan_submit_call(list(tool_calls.values()))
     if selected is None:
-        debug_log.debug("[PlannerParse] No propose_plan call selected")
+        debug_log.debug("[PlannerParse] No plan_submit call selected")
         return [], None, None
 
     payload_info = _extract_plan_payload_with_source(selected)
     if payload_info is None:
         debug_log.warning(
-            "[PlannerParse] propose_plan selected but no readable payload",
+            "[PlannerParse] plan_submit selected but no readable payload",
             selected=_summarize_tool_call(selected),
         )
-        return [], None, "propose_plan was called without readable arguments."
+        return [], None, "plan_submit was called without readable arguments."
     payload, source = payload_info
     debug_log.debug(
         "[PlannerParse] Parsed payload candidate",
@@ -94,15 +94,15 @@ def parse_proposed_plan(
     return tasks, todos or None, None
 
 
-def _select_propose_plan_call(
+def _select_plan_submit_call(
     calls: list[ToolCall | dict[str, Any]],
 ) -> ToolCall | dict[str, Any] | None:
-    # Match tool names ending with "propose_plan" to handle MCP prefixes
-    # (e.g., "kagan_propose_plan", "mcp__kagan__propose_plan", "propose_plan").
+    # Match tool names ending with "plan_submit" to handle MCP prefixes
+    # (e.g., "kagan_plan_submit", "mcp__kagan__plan_submit", "plan_submit").
     # Prefer higher-confidence payload sources and richer task lists over title previews.
     ranked_matches: list[tuple[int, int, int, int, ToolCall | dict[str, Any]]] = []
     for index, call in enumerate(calls):
-        if not _is_kagan_propose_plan_call(call):
+        if not _is_kagan_plan_submit_call(call):
             continue
         payload_info = _extract_plan_payload_with_source(call)
         if payload_info is None:
@@ -119,28 +119,28 @@ def _select_propose_plan_call(
     return None
 
 
-def _is_kagan_propose_plan_call(tool_call: ToolCall | dict[str, Any]) -> bool:
+def _is_kagan_plan_submit_call(tool_call: ToolCall | dict[str, Any]) -> bool:
     for raw_name in _candidate_tool_names(tool_call):
         raw_lower = raw_name.strip().lower()
-        if raw_lower.startswith(f"mcp__{_KAGAN_MCP_SERVER_NAME}__{PROPOSE_PLAN_TOOL_NAME}"):
+        if raw_lower.startswith(f"mcp__{_KAGAN_MCP_SERVER_NAME}__{PLAN_SUBMIT_TOOL_NAME}"):
             return True
-        if raw_lower.startswith(f"{_KAGAN_MCP_SERVER_NAME}_{PROPOSE_PLAN_TOOL_NAME}"):
+        if raw_lower.startswith(f"{_KAGAN_MCP_SERVER_NAME}_{PLAN_SUBMIT_TOOL_NAME}"):
             return True
-        if raw_lower.startswith(PROPOSE_PLAN_TOOL_NAME):
+        if raw_lower.startswith(PLAN_SUBMIT_TOOL_NAME):
             return True
         if (
-            f"tool={PROPOSE_PLAN_TOOL_NAME}" in raw_lower
-            or f"name={PROPOSE_PLAN_TOOL_NAME}" in raw_lower
-            or f"toolname={PROPOSE_PLAN_TOOL_NAME}" in raw_lower
+            f"tool={PLAN_SUBMIT_TOOL_NAME}" in raw_lower
+            or f"name={PLAN_SUBMIT_TOOL_NAME}" in raw_lower
+            or f"toolname={PLAN_SUBMIT_TOOL_NAME}" in raw_lower
         ):
             return True
 
         normalized = _normalize_tool_name(raw_name)
-        if normalized == PROPOSE_PLAN_TOOL_NAME:
+        if normalized == PLAN_SUBMIT_TOOL_NAME:
             return True
         if normalized in {
-            f"{_KAGAN_MCP_SERVER_NAME}_{PROPOSE_PLAN_TOOL_NAME}",
-            f"mcp__{_KAGAN_MCP_SERVER_NAME}__{PROPOSE_PLAN_TOOL_NAME}",
+            f"{_KAGAN_MCP_SERVER_NAME}_{PLAN_SUBMIT_TOOL_NAME}",
+            f"mcp__{_KAGAN_MCP_SERVER_NAME}__{PLAN_SUBMIT_TOOL_NAME}",
         }:
             return True
     return False

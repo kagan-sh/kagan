@@ -23,48 +23,38 @@ def full_mcp():
 
 
 _ANNOTATION_MATRIX: dict[str, tuple[bool, bool, bool]] = {
-    "get_task": (True, False, True),
-    "tasks_list": (True, False, True),
-    "tasks_wait": (True, False, True),
-    "sessions_exists": (True, False, True),
-    "projects_list": (True, False, True),
-    "repos_list": (True, False, True),
-    "audit_tail": (True, False, True),
+    "task_get": (True, False, True),
+    "task_list": (True, False, True),
+    "task_wait": (True, False, True),
+    "project_list": (True, False, True),
+    "repo_list": (True, False, True),
+    "audit_list": (True, False, True),
     "settings_get": (True, False, True),
-    "get_context": (True, False, True),
-    "propose_plan": (False, False, False),
-    "update_scratchpad": (False, False, False),
-    "request_review": (False, False, False),
-    "tasks_create": (False, False, False),
-    "tasks_update": (False, False, False),
-    "tasks_move": (False, False, False),
-    "jobs_submit": (False, False, False),
-    "jobs_get": (True, False, True),
-    "jobs_wait": (True, False, True),
-    "jobs_events": (True, False, True),
-    "jobs_list_actions": (True, False, True),
-    "jobs_cancel": (False, False, False),
-    "sessions_create": (False, False, False),
-    "sessions_kill": (False, False, False),
-    "settings_update": (False, False, False),
-    "projects_create": (False, False, False),
-    "projects_open": (False, False, False),
-    "tasks_delete": (False, True, False),
-    "review": (False, True, False),
+    "plan_submit": (False, False, False),
+    "task_create": (False, False, False),
+    "task_patch": (False, False, False),
+    "task_delete": (False, True, False),
+    "job_start": (False, False, False),
+    "job_poll": (True, False, True),
+    "job_cancel": (False, False, False),
+    "session_manage": (False, False, False),
+    "project_open": (False, False, False),
+    "settings_set": (False, False, False),
+    "review_apply": (False, True, False),
 }
 
 _FULL_MODE_ANNOTATION_MATRIX: dict[str, tuple[bool, bool, bool]] = {
-    name: annotation for name, annotation in _ANNOTATION_MATRIX.items() if name != "propose_plan"
+    name: annotation for name, annotation in _ANNOTATION_MATRIX.items() if name != "plan_submit"
 }
 
 _READONLY_TOOLS = {
-    "propose_plan",
-    "get_task",
-    "tasks_list",
-    "tasks_wait",
-    "projects_list",
-    "repos_list",
-    "audit_tail",
+    "plan_submit",
+    "task_get",
+    "task_list",
+    "task_wait",
+    "project_list",
+    "repo_list",
+    "audit_list",
 }
 
 

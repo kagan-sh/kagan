@@ -143,9 +143,9 @@ def test_create_server_applies_runtime_capability_override() -> None:
     )
     names = _tool_names(mcp)
 
-    assert "tasks_list" in names
-    assert "tasks_update" not in names
-    assert "request_review" not in names
+    assert "task_list" in names
+    assert "task_patch" not in names
+    assert "review_apply" not in names
 
 
 def test_create_server_caps_profile_by_identity_ceiling() -> None:
@@ -156,10 +156,10 @@ def test_create_server_caps_profile_by_identity_ceiling() -> None:
     )
     names = _tool_names(mcp)
 
-    assert "sessions_create" in names
-    assert "request_review" in names
-    assert "settings_update" not in names
-    assert "projects_open" not in names
+    assert "session_manage" in names
+    assert "task_patch" in names
+    assert "settings_set" not in names
+    assert "project_open" not in names
 
 
 def test_create_server_keeps_maintainer_for_admin_identity() -> None:
@@ -169,8 +169,8 @@ def test_create_server_keeps_maintainer_for_admin_identity() -> None:
     )
     names = _tool_names(mcp)
 
-    assert "settings_update" in names
-    assert "projects_open" in names
+    assert "settings_set" in names
+    assert "project_open" in names
 
 
 @pytest.mark.asyncio

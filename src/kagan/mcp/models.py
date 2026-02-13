@@ -111,7 +111,7 @@ class TaskRuntimeState(BaseModel):
 
 
 class TaskContext(BaseModel):
-    """Full context for working on a task. Returned by get_context."""
+    """Full context for working on a task. Returned by task_get(mode=context)."""
 
     task_id: str = Field(description="Unique task identifier")
     title: str = Field(description="Task title")
@@ -152,7 +152,7 @@ class TaskSummary(BaseModel):
 
 
 class TaskDetails(BaseModel):
-    """Detailed task information. Returned by get_task."""
+    """Detailed task information. Returned by task_get."""
 
     task_id: str = Field(description="Unique task identifier")
     title: str = Field(description="Task title")
@@ -172,7 +172,7 @@ class TaskDetails(BaseModel):
 
 
 class TaskWaitResponse(BaseModel):
-    """Response from tasks_wait long-poll tool."""
+    """Response from task_wait long-poll tool."""
 
     changed: bool = Field(description="Whether the task changed before timeout")
     timed_out: bool = Field(description="Whether the wait timed out without a change")
@@ -194,13 +194,13 @@ class TaskWaitResponse(BaseModel):
 
 
 class ReviewResponse(MutatingResponse):
-    """Response from request_review tool."""
+    """Response from task_patch(transition="request_review") tool."""
 
     status: str = Field(description="'review' for success, 'error' for failure")
 
 
 class PlanProposalResponse(MutatingResponse):
-    """Response from propose_plan tool."""
+    """Response from plan_submit tool."""
 
     status: str = Field(description="'received' when plan was accepted")
     task_count: int = Field(description="Number of tasks in the proposal")
@@ -216,21 +216,21 @@ class PlanProposalResponse(MutatingResponse):
 
 
 class TaskListResponse(BaseModel):
-    """Response from tasks_list tool."""
+    """Response from task_list tool."""
 
     tasks: list[TaskSummary] = Field(default_factory=list, description="List of tasks")
     count: int = Field(default=0, description="Total number of tasks returned")
 
 
 class TaskCreateResponse(TaskScopedMutatingResponse):
-    """Response from tasks_create tool."""
+    """Response from task_create tool."""
 
     title: str = Field(description="Task title")
     status: str = Field(description="Initial status (usually 'backlog')")
 
 
 class TaskUpdateResponse(TaskScopedMutatingResponse):
-    """Response from tasks_update tool."""
+    """Response from task_patch tool."""
 
     current_task_type: str | None = Field(
         default=None,
@@ -239,23 +239,23 @@ class TaskUpdateResponse(TaskScopedMutatingResponse):
 
 
 class ScratchpadUpdateResponse(TaskScopedMutatingResponse):
-    """Response from update_scratchpad tool."""
+    """Response from task_patch(append_note) tool."""
 
 
 class TaskMoveResponse(TaskScopedMutatingResponse):
-    """Response from tasks_move tool."""
+    """Response from task_patch(set_status) tool."""
 
     new_status: str | None = Field(default=None, description="The new status after the move")
 
 
 class JobResponse(JobScopedResponse):
-    """Response from jobs_submit, jobs_get, jobs_wait, and jobs_cancel tools."""
+    """Response from job_start, job_poll, and job_cancel tools."""
 
     action: str | None = Field(default=None, description="Submitted job action")
     status: str | None = Field(default=None, description="Current job status")
     timed_out: bool | None = Field(
         default=None,
-        description="Whether jobs_wait returned before terminal status due to timeout",
+        description="Whether job_poll(wait=true) returned before terminal status due to timeout",
     )
     timeout_metadata: dict[str, object] | None = Field(
         default=None,
@@ -278,11 +278,11 @@ class JobResponse(JobScopedResponse):
 
 
 class JobActionsResponse(BaseModel):
-    """Response from jobs_list_actions tool."""
+    """Response from job_start action validation tool."""
 
     actions: list[str] = Field(
         default_factory=list,
-        description="Valid action names accepted by jobs_submit",
+        description="Valid action names accepted by job_start",
     )
 
 
@@ -301,7 +301,7 @@ class JobEvent(BaseModel):
 
 
 class JobEventsResponse(JobScopedResponse):
-    """Response from jobs_events tool."""
+    """Response from job_poll(events=true) tool."""
 
     events: list[JobEvent] = Field(
         default_factory=list,
@@ -316,7 +316,7 @@ class JobEventsResponse(JobScopedResponse):
 
 
 class SessionCreateResponse(TaskScopedMutatingResponse):
-    """Response from sessions_create tool with human handoff details."""
+    """Response from session_manage(open) tool with human handoff details."""
 
     session_name: str = Field(description="Session identifier (e.g., tmux session name)")
     backend: str = Field(description="PAIR backend (tmux, vscode, cursor)")
@@ -341,7 +341,7 @@ class SessionCreateResponse(TaskScopedMutatingResponse):
 
 
 class SessionExistsResponse(BaseModel):
-    """Response from sessions_exists tool."""
+    """Response from session_manage(read) tool."""
 
     task_id: str = Field(description="ID of the task")
     exists: bool = Field(description="Whether a PAIR session currently exists")
@@ -354,11 +354,11 @@ class SessionExistsResponse(BaseModel):
 
 
 class SessionKillResponse(TaskScopedMutatingResponse):
-    """Response from sessions_kill tool."""
+    """Response from session_manage(close) tool."""
 
 
 class TaskDeleteResponse(TaskScopedMutatingResponse):
-    """Response from tasks_delete tool."""
+    """Response from task_delete tool."""
 
 
 class ProjectInfo(BaseModel):
@@ -370,21 +370,21 @@ class ProjectInfo(BaseModel):
 
 
 class ProjectListResponse(BaseModel):
-    """Response from projects_list tool."""
+    """Response from project_list tool."""
 
     projects: list[ProjectInfo] = Field(default_factory=list, description="List of projects")
     count: int = Field(default=0, description="Total number of projects returned")
 
 
 class ProjectOpenResponse(MutatingResponse):
-    """Response from projects_open tool."""
+    """Response from project_open tool."""
 
     project_id: str = Field(description="ID of the opened project")
     name: str = Field(description="Project name")
 
 
 class ProjectCreateResponse(MutatingResponse):
-    """Response from projects_create tool."""
+    """Response from project_create tool."""
 
     project_id: str = Field(description="ID of the created project")
     name: str = Field(description="Project name")
@@ -402,7 +402,7 @@ class RepoListItem(BaseModel):
 
 
 class RepoListResponse(BaseModel):
-    """Response from repos_list tool."""
+    """Response from repo_list tool."""
 
     repos: list[RepoListItem] = Field(default_factory=list, description="List of repositories")
     count: int = Field(default=0, description="Total number of repos returned")
@@ -425,7 +425,7 @@ class AuditEvent(BaseModel):
 
 
 class AuditTailResponse(BaseModel):
-    """Response from audit_tail tool."""
+    """Response from audit_list tool."""
 
     events: list[AuditEvent] = Field(default_factory=list, description="List of audit events")
     count: int = Field(default=0, description="Total number of events returned")
@@ -456,7 +456,7 @@ class SettingsGetResponse(BaseModel):
 
 
 class SettingsUpdateResponse(MutatingResponse):
-    """Response from settings_update tool."""
+    """Response from settings_set tool."""
 
     updated: dict[str, object] = Field(
         default_factory=dict,

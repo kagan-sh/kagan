@@ -75,11 +75,11 @@ def build_prompt(
     coordination_guardrails = (
         "## Coordination Guardrails (Overlap-Only, No Inter-Agent Chat)\n"
         "- Use MCP task state as source of truth: "
-        "`tasks_list`, `get_task`, and `get_context`.\n"
+        "`task_list` and `task_get`.\n"
         "- Do NOT attempt direct/free-form communication with other agents.\n"
         "- If overlap is detected, coordinate by choosing "
         "non-overlapping files or sequencing work.\n"
-        "- Record assumptions and overlap decisions in `update_scratchpad`, not chat.\n"
+        "- Record assumptions and overlap decisions in `task_patch(append_note=...)`, not chat.\n"
     )
 
     return RUN_PROMPT.format(

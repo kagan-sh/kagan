@@ -1,4 +1,4 @@
-"""MCP contract tests for tasks_wait long-poll primitive."""
+"""MCP contract tests for task_wait long-poll primitive."""
 
 from __future__ import annotations
 

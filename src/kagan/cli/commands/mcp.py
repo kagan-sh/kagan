@@ -57,7 +57,7 @@ def mcp(
     directory is a Kagan-managed project.
 
     Use --readonly for ACP agents to expose only coordination tools
-    (tasks_list, get_task).
+    (task_list, task_get).
     """
     if capability is not None and capability not in _VALID_CAPABILITIES:
         valid = ", ".join(sorted(_VALID_CAPABILITIES))

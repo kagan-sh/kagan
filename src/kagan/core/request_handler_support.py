@@ -162,9 +162,13 @@ def session_create_error_response(task_id: str, exc: Exception) -> dict[str, Any
             "task_id": task_id,
             "message": str(exc),
             "code": "TASK_TYPE_MISMATCH",
-            "hint": "Set task_type to PAIR before calling sessions_create.",
-            "next_tool": "tasks_update",
-            "next_arguments": {"task_id": task_id, "task_type": TaskType.PAIR.value},
+            "hint": "Set task_type to PAIR before opening a PAIR session.",
+            "next_tool": "task_patch",
+            "next_arguments": {
+                "task_id": task_id,
+                "transition": "set_task_type",
+                "set": {"task_type": TaskType.PAIR.value},
+            },
             "current_task_type": exc.current_task_type,
         }
     if isinstance(exc, WorkspaceNotFoundError):
@@ -181,9 +185,9 @@ def session_create_error_response(task_id: str, exc: Exception) -> dict[str, Any
             "task_id": task_id,
             "message": str(exc),
             "code": "INVALID_WORKTREE_PATH",
-            "hint": "Use sessions_exists to inspect the expected worktree_path.",
-            "next_tool": "sessions_exists",
-            "next_arguments": {"task_id": task_id},
+            "hint": "Use session_manage(action='read') to inspect expected worktree_path.",
+            "next_tool": "session_manage",
+            "next_arguments": {"action": "read", "task_id": task_id},
         }
     if isinstance(exc, SessionCreateFailedError):
         return {
@@ -191,7 +195,7 @@ def session_create_error_response(task_id: str, exc: Exception) -> dict[str, Any
             "task_id": task_id,
             "message": str(exc),
             "code": "SESSION_CREATE_FAILED",
-            "hint": "Confirm workspace path and terminal backend, then retry sessions_create.",
+            "hint": "Confirm workspace path and terminal backend, then retry session_manage(open).",
         }
     msg = f"Unsupported session_create exception: {type(exc).__name__}"
     raise TypeError(msg)

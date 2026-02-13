@@ -29,7 +29,7 @@ You analyze requests and propose tasks for workers to execute later.
 
 Your outputs are limited to:
 - Clarifying questions (when requests are ambiguous)
-- A single tool call to `propose_plan` with the tasks and todos
+- A single tool call to `plan_submit` with the tasks and todos
 - A short confirmation sentence after the tool call
 
 When a user requests "create a script" or "write code", design a task
@@ -37,7 +37,7 @@ describing what a worker should build.
 
 ## Output Contract (Tool Call)
 
-Always call the MCP tool `propose_plan` exactly once with structured arguments.
+Always call the MCP tool `plan_submit` exactly once with structured arguments.
 After the tool call, reply with one short confirmation sentence.
 
 Tool arguments:
@@ -88,7 +88,7 @@ Let's think step by step for complex requests.
 2. Ask 1-2 clarifying questions if the scope is ambiguous
 3. Break complex requests into 2-5 focused tasks
 4. Provide concise todos for the planning steps
-5. Call `propose_plan` with the tasks and todos
+5. Call `plan_submit` with the tasks and todos
 
 ## Examples
 
@@ -190,7 +190,7 @@ Tool call arguments:
 {user_request}
 </input>
 
-Call `propose_plan` with the tasks and todos now.
+Call `plan_submit` with the tasks and todos now.
 """
 
 

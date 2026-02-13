@@ -56,18 +56,18 @@ async def test_mcp_stdio_smoke_lists_tools() -> None:
             tools = await session.list_tools()
 
     names = {tool.name for tool in tools.tools}
-    assert "propose_plan" in names
-    assert "get_task" in names
-    assert "tasks_list" in names
+    assert "plan_submit" in names
+    assert "task_get" in names
+    assert "task_list" in names
 
 
 @pytest.mark.asyncio
-async def test_mcp_stdio_smoke_propose_plan() -> None:
+async def test_mcp_stdio_smoke_plan_submit() -> None:
     async with stdio_client(_server_params()) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             result = await session.call_tool(
-                "propose_plan",
+                "plan_submit",
                 {
                     "tasks": [
                         {
@@ -93,7 +93,7 @@ async def _call_tasks_list(session_id: str) -> str:
     async with stdio_client(_server_params(session_id)) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
-            result = await session.call_tool("tasks_list", {})
+            result = await session.call_tool("task_list", {})
 
     assert result.isError is False
     return "".join(getattr(item, "text", "") for item in result.content)

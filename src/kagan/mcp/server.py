@@ -53,9 +53,9 @@ from kagan.mcp.registrars import (
     JOB_TERMINAL_STATUSES,
     TASK_TYPE_AUTO,
     TASK_TYPE_VALUES,
-    TOOL_GET_TASK,
-    TOOL_JOBS_WAIT,
-    TOOL_TASKS_UPDATE,
+    TOOL_JOB_POLL,
+    TOOL_TASK_GET,
+    TOOL_TASK_PATCH,
     SharedToolRegistrationContext,
     TaskStatusInput,
     TaskTypeInput,
@@ -356,11 +356,11 @@ def _build_server_instructions(readonly: bool) -> str:
         "Kagan is a Kanban-style task management system for AI-assisted development.",
         "",
         "The task_id is provided in your system prompt when Kagan assigns you work.",
-        "Use get_task to inspect any task (with include_logs=true for execution history).",
-        "Use tasks_list to coordinate with other agents.",
+        "Use task_get to inspect any task (with include_logs=true for execution history).",
+        "Use task_list to coordinate with other agents.",
         "Important: status is Kanban column, task_type is execution mode (AUTO/PAIR).",
-        "Use jobs_submit to spawn agents. jobs_wait tracks the spawn only.",
-        "Use tasks_wait to long-poll for agent completion (wait_for_status).",
+        "Use job_start to spawn agents. job_poll(wait=true) tracks spawn state.",
+        "Use task_wait to long-poll for agent completion (wait_for_status).",
         "If a tool returns next_tool/next_arguments, use them for deterministic recovery.",
     ]
     if readonly:
@@ -376,15 +376,15 @@ def _build_server_instructions(readonly: bool) -> str:
             [
                 "",
                 "When assigned a task, follow this workflow:",
-                "1. Call get_context with your task_id to get requirements and codebase context",
-                "2. Use update_scratchpad to record progress, decisions, and blockers",
-                "3. Call jobs_list_actions to discover valid job actions.",
-                "4. For automation runs: set task_type='AUTO', then call jobs_submit.",
-                "5. Use jobs_wait to confirm the spawn succeeded (short timeout).",
-                "6. Use tasks_wait(task_id, wait_for_status=['REVIEW','DONE'],",
+                "1. Call task_get(mode='context') with your task_id for full bounded context",
+                "2. Use task_patch(append_note=...) to record progress and blockers",
+                "3. For automation runs: set task_type='AUTO' using task_patch.",
+                "4. Call job_start to submit work.",
+                "5. Use job_poll(wait=true) to confirm the spawn succeeded (short timeout).",
+                "6. Use task_wait(task_id, wait_for_status=['REVIEW','DONE'],",
                 "   timeout_seconds=900) to long-poll until the agent completes.",
-                "7. Use jobs_cancel only to stop in-flight work.",
-                "8. Call request_review when implementation is complete",
+                "7. Use job_cancel only to stop in-flight work.",
+                "8. Call task_patch(transition='request_review') when implementation is complete",
             ]
         )
     return "\n".join(base)
@@ -611,21 +611,25 @@ def _derive_job_get_recovery(
     normalized_status = status.lower() if isinstance(status, str) else None
     if timed_out or code == JOB_CODE_JOB_TIMEOUT:
         return (
-            TOOL_JOBS_WAIT,
-            {"job_id": job_id, "task_id": task_id, "timeout_seconds": 1.5},
-            "Wait timed out before terminal status. Call jobs_wait again.",
+            TOOL_JOB_POLL,
+            {"job_id": job_id, "task_id": task_id, "wait": True, "timeout_seconds": 1.5},
+            "Wait timed out before terminal status. Call job_poll(wait=true) again.",
         )
     if normalized_status in JOB_NON_TERMINAL_STATUSES:
         return (
-            TOOL_JOBS_WAIT,
-            {"job_id": job_id, "task_id": task_id, "timeout_seconds": 1.5},
-            "Job is still in progress. Call jobs_wait until status is terminal.",
+            TOOL_JOB_POLL,
+            {"job_id": job_id, "task_id": task_id, "wait": True, "timeout_seconds": 1.5},
+            "Job is still in progress. Call job_poll(wait=true) until terminal.",
         )
     if code == JOB_CODE_TASK_TYPE_MISMATCH:
         return (
-            TOOL_TASKS_UPDATE,
-            {"task_id": task_id, "task_type": TASK_TYPE_AUTO},
-            "Set task_type to AUTO before resubmitting jobs_submit.",
+            TOOL_TASK_PATCH,
+            {
+                "task_id": task_id,
+                "transition": "set_task_type",
+                "set": {"task_type": TASK_TYPE_AUTO},
+            },
+            "Set task_type to AUTO before resubmitting job_start.",
         )
     if code == JOB_CODE_START_BLOCKED:
         blocked_ids_raw: list[object] = []
@@ -636,24 +640,24 @@ def _derive_job_get_recovery(
         blocked_ids = [str(value) for value in blocked_ids_raw if str(value).strip()]
         if blocked_ids:
             return (
-                TOOL_GET_TASK,
+                TOOL_TASK_GET,
                 {"task_id": blocked_ids[0], "mode": "summary"},
-                "Resolve the blocking task first, then resubmit jobs_submit.",
+                "Resolve the blocking task first, then resubmit job_start.",
             )
         return (
-            TOOL_GET_TASK,
+            TOOL_TASK_GET,
             {"task_id": task_id, "mode": "summary"},
             "Inspect runtime details and retry after the blocking condition clears.",
         )
     if code == JOB_CODE_START_PENDING:
         return (
-            TOOL_JOBS_WAIT,
-            {"job_id": job_id, "task_id": task_id, "timeout_seconds": 1.5},
-            "Start is pending scheduler admission. Keep calling jobs_wait until it resolves.",
+            TOOL_JOB_POLL,
+            {"job_id": job_id, "task_id": task_id, "wait": True, "timeout_seconds": 1.5},
+            "Start is pending scheduler admission. Keep calling job_poll(wait=true).",
         )
     if code == JOB_CODE_NOT_RUNNING:
         return (
-            TOOL_GET_TASK,
+            TOOL_TASK_GET,
             {"task_id": task_id, "include_logs": True, "mode": "summary"},
             "Agent is not running. Inspect latest runtime/logs before retrying.",
         )

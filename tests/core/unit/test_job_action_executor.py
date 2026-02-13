@@ -53,8 +53,12 @@ async def test_execute_start_agent_rejects_non_auto_task() -> None:
     assert result["task_id"] == "task-1"
     assert result["message"] == "Only AUTO tasks can start agents"
     assert result["code"] == "TASK_TYPE_MISMATCH"
-    assert result["next_tool"] == "tasks_update"
-    assert result["next_arguments"] == {"task_id": "task-1", "task_type": TaskType.AUTO.value}
+    assert result["next_tool"] == "task_patch"
+    assert result["next_arguments"] == {
+        "task_id": "task-1",
+        "transition": "set_task_type",
+        "set": {"task_type": TaskType.AUTO.value},
+    }
     assert result["current_task_type"] == TaskType.PAIR.value
     assert "jobs.submit" in result["hint"]
     automation_service.spawn_for_task.assert_not_awaited()
@@ -161,8 +165,8 @@ async def test_execute_job_action_rejects_unsupported_action() -> None:
         "success": False,
         "message": "Unsupported job action 'restart_agent'",
         "code": "UNSUPPORTED_ACTION",
-        "hint": "Call jobs_list_actions to discover valid action names.",
-        "next_tool": "jobs_list_actions",
-        "next_arguments": {},
+        "hint": "Use one of: start_agent, stop_agent",
+        "next_tool": "job_start",
+        "next_arguments": {"task_id": "task-1", "action": "start_agent"},
         "supported_actions": ["start_agent", "stop_agent"],
     }

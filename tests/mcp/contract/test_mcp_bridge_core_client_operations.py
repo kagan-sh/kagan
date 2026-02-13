@@ -51,7 +51,7 @@ async def test_request_review_preserves_recovery_fields() -> None:
             "message": "Review blocked",
             "code": "REVIEW_BLOCKED",
             "hint": "Resolve overlap and retry.",
-            "next_tool": "tasks_update",
+            "next_tool": "task_patch",
             "next_arguments": {"task_id": "T1", "status": "IN_PROGRESS"},
         }
     )
@@ -60,7 +60,7 @@ async def test_request_review_preserves_recovery_fields() -> None:
 
     assert result["code"] == "REVIEW_BLOCKED"
     assert result["hint"] == "Resolve overlap and retry."
-    assert result["next_tool"] == "tasks_update"
+    assert result["next_tool"] == "task_patch"
     assert result["next_arguments"] == {"task_id": "T1", "status": "IN_PROGRESS"}
 
 

@@ -656,8 +656,8 @@ async def handle_job_submit(api: KaganAPI, params: dict[str, Any]) -> dict[str, 
             "message": unsupported_message,
             "code": "UNSUPPORTED_ACTION",
             "hint": f"Use one of: {', '.join(supported)}",
-            "next_tool": "jobs_list_actions",
-            "next_arguments": {},
+            "next_tool": "job_start",
+            "next_arguments": {"task_id": task_id_raw, "action": supported[0]},
             "supported_actions": supported,
         }
 
