@@ -1,107 +1,179 @@
 ---
-title: MCP Tools Reference
-description: Tool catalog, annotations, and capability profiles
+title: MCP tools reference
+description: Tool catalog, capability profiles, and recovery semantics
 icon: material/tools
 ---
 
-# MCP Tools Reference
+# MCP tools reference
 
-## Tool annotations
+## Annotation model
 
-- `read-only`: no state mutation
-- `mutating`: changes state
-- `destructive`: irreversible or high-impact
+| Annotation    | Meaning                            |
+| ------------- | ---------------------------------- |
+| `read-only`   | Reads state only                   |
+| `mutating`    | Modifies state                     |
+| `destructive` | Irreversible/high-impact operation |
 
 ## Tool catalog
 
-### Context and coordination
+### Shared coordination
 
-| Tool                                  | Annotation  | Purpose                                           |
-| ------------------------------------- | ----------- | ------------------------------------------------- |
-| `get_context(task_id)`                | `read-only` | Task details + workspace context                  |
-| `get_task(task_id, ...)`              | `read-only` | Task details with optional logs/scratchpad/review |
-| `update_scratchpad(task_id, content)` | `mutating`  | Append notes and progress                         |
-| `request_review(task_id, summary)`    | `mutating`  | Move task to `REVIEW`                             |
+| Tool                         | Annotation  | Purpose                                        |
+| ---------------------------- | ----------- | ---------------------------------------------- |
+| `propose_plan(tasks, todos)` | `mutating`  | Submit structured plan payload                 |
+| `get_task(task_id, ...)`     | `read-only` | Read task with optional logs/review/scratchpad |
+| `tasks_list(...)`            | `read-only` | List tasks                                     |
+| `tasks_wait(task_id, ...)`   | `read-only` | Long-poll until task status changes or timeout |
+| `projects_list(...)`         | `read-only` | List projects                                  |
+| `repos_list(project_id)`     | `read-only` | List repos in project                          |
+| `audit_tail(...)`            | `read-only` | Read recent audit events                       |
 
-### Task management
+### Task and project operations
 
-| Tool                        | Annotation    | Purpose              |
-| --------------------------- | ------------- | -------------------- |
-| `tasks_list(...)`           | `read-only`   | List tasks           |
-| `tasks_create(...)`         | `mutating`    | Create task          |
-| `tasks_update(...)`         | `mutating`    | Update task fields   |
-| `tasks_move(...)`           | `mutating`    | Move status column   |
-| `jobs_submit(task_id, ...)` | `mutating`    | Submit AUTO job      |
-| `jobs_get(job_id, task_id)` | `read-only`   | Read job status      |
-| `jobs_wait(job_id, ...)`    | `read-only`   | Wait for job status  |
-| `jobs_cancel(job_id, ...)`  | `mutating`    | Cancel submitted job |
-| `tasks_delete(task_id)`     | `destructive` | Delete task          |
+| Tool                                  | Annotation    | Purpose                  |
+| ------------------------------------- | ------------- | ------------------------ |
+| `get_context(task_id)`                | `read-only`   | Task + workspace context |
+| `update_scratchpad(task_id, content)` | `mutating`    | Append task notes        |
+| `tasks_create(...)`                   | `mutating`    | Create task              |
+| `tasks_update(...)`                   | `mutating`    | Update task fields       |
+| `tasks_move(task_id, status)`         | `mutating`    | Move Kanban status       |
+| `tasks_delete(task_id)`               | `destructive` | Delete task              |
+| `projects_create(...)`                | `mutating`    | Create project           |
+| `projects_open(project_id)`           | `mutating`    | Open/switch project      |
 
-**Key distinctions:**
+### Automation jobs (AUTO)
 
-- **`status`** = Kanban column (`BACKLOG`/`IN_PROGRESS`/`REVIEW`/`DONE`); **`task_type`** = execution mode (`AUTO`/`PAIR`).
-- **`jobs_submit`**: requires `task_type="AUTO"`; may return `START_PENDING` before admission.
-- **`tasks_create`/`tasks_update`**: auto-normalize `status="AUTO"|"PAIR"` into `task_type` (code: `STATUS_WAS_TASK_TYPE`).
-- **`tasks_move`**: rejects `status="AUTO"|"PAIR"` with remediation (`next_tool="tasks_update"`).
-- **`get_task(include_logs=true)`**: `mode="summary"` limits payload; `mode="full"` includes deeper history within a budget.
-- **Runtime fields** on `tasks_list`/`get_task`/`get_context`: `is_running`, `is_reviewing`, `is_blocked`, `is_pending`, + detail fields.
+| Tool                                | Annotation  | Purpose                               |
+| ----------------------------------- | ----------- | ------------------------------------- |
+| `jobs_list_actions()`               | `read-only` | List valid `jobs_submit` action names |
+| `jobs_submit(task_id, action, ...)` | `mutating`  | Submit async automation job           |
+| `jobs_get(job_id, task_id)`         | `read-only` | Get job status/result                 |
+| `jobs_wait(job_id, task_id, ...)`   | `read-only` | Wait until terminal status or timeout |
+| `jobs_events(job_id, task_id, ...)` | `read-only` | Read paginated job events             |
+| `jobs_cancel(job_id, task_id)`      | `mutating`  | Cancel submitted job                  |
 
-### PAIR session control
+### PAIR sessions
 
-| Tool                   | Annotation  | Purpose                   |
-| ---------------------- | ----------- | ------------------------- |
-| `sessions_create(...)` | `mutating`  | Create/reuse PAIR session |
-| `sessions_exists(...)` | `read-only` | Check session existence   |
-| `sessions_kill(...)`   | `mutating`  | Terminate session         |
+| Tool                       | Annotation  | Purpose                      |
+| -------------------------- | ----------- | ---------------------------- |
+| `sessions_create(...)`     | `mutating`  | Create/reuse PAIR session    |
+| `sessions_exists(task_id)` | `read-only` | Check PAIR session existence |
+| `sessions_kill(task_id)`   | `mutating`  | Terminate PAIR session       |
 
-### Projects and repos
+### Review and settings
 
-| Tool                        | Annotation  | Purpose             |
-| --------------------------- | ----------- | ------------------- |
-| `projects_list(...)`        | `read-only` | List projects       |
-| `projects_create(...)`      | `mutating`  | Create a project    |
-| `projects_open(project_id)` | `mutating`  | Open/switch project |
-| `repos_list(project_id)`    | `read-only` | List repos          |
+| Tool                               | Annotation    | Purpose                                |
+| ---------------------------------- | ------------- | -------------------------------------- |
+| `request_review(task_id, summary)` | `mutating`    | Move task to `REVIEW`                  |
+| `review(task_id, action, ...)`     | `destructive` | `approve`, `reject`, `merge`, `rebase` |
+| `settings_get()`                   | `read-only`   | Read allowlisted settings              |
+| `settings_update(...)`             | `mutating`    | Update allowlisted settings            |
 
-### Review and planning
+## `tasks_wait` long-poll API
 
-| Tool                           | Annotation    | Purpose                                |
-| ------------------------------ | ------------- | -------------------------------------- |
-| `review(task_id, action, ...)` | `destructive` | `approve`, `reject`, `merge`, `rebase` |
-| `propose_plan(tasks, todos)`   | `mutating`    | Submit structured plan (planner only)  |
-| `audit_tail(...)`              | `read-only`   | Read recent audit events               |
+`tasks_wait` blocks until a target task changes status or the timeout elapses.
+It uses event-driven wakeup (no polling loops) for efficient orchestration.
 
-### Settings
+### Parameters
 
-| Tool                   | Annotation  | Purpose                     |
-| ---------------------- | ----------- | --------------------------- |
-| `settings_get()`       | `read-only` | Fetch allowlisted settings  |
-| `settings_update(...)` | `mutating`  | Update allowlisted settings |
+| Parameter         | Type           | Default               | Description                                             |
+| ----------------- | -------------- | --------------------- | ------------------------------------------------------- |
+| `task_id`         | `string`       | required              | Task to watch                                           |
+| `timeout_seconds` | `float`        | server default (900s) | Max wait time; capped at server max                     |
+| `wait_for_status` | `list[string]` | `null` (any change)   | Target statuses to wait for (e.g. `["REVIEW", "DONE"]`) |
+| `from_updated_at` | `string`       | `null`                | ISO timestamp cursor for race-safe resume               |
 
-## Recovery-friendly responses
+### Response fields
 
-Mutating tools may return `code`, `hint`, `next_tool`, and `next_arguments` for deterministic recovery. Connection failures return `DISCONNECTED` or `AUTH_STALE_TOKEN`. Follow these fields directly instead of guessing a retry.
+| Field             | Type     | Description                                       |
+| ----------------- | -------- | ------------------------------------------------- |
+| `changed`         | `bool`   | Whether the task changed before timeout           |
+| `timed_out`       | `bool`   | Whether the wait timed out                        |
+| `task_id`         | `string` | ID of the watched task                            |
+| `previous_status` | `string` | Status when wait started                          |
+| `current_status`  | `string` | Status when wait ended                            |
+| `changed_at`      | `string` | ISO timestamp of the change                       |
+| `task`            | `object` | Compact task snapshot (no large logs/scratchpads) |
+| `code`            | `string` | Machine-readable result code                      |
+
+### Response codes
+
+| Code                   | Meaning                                                          |
+| ---------------------- | ---------------------------------------------------------------- |
+| `TASK_CHANGED`         | Status changed during wait                                       |
+| `ALREADY_AT_STATUS`    | Task was already at a target status (immediate return)           |
+| `CHANGED_SINCE_CURSOR` | Task changed since `from_updated_at` cursor (race-safe catch-up) |
+| `WAIT_TIMEOUT`         | No change detected within timeout                                |
+| `WAIT_INTERRUPTED`     | Wait was cancelled/interrupted                                   |
+| `TASK_DELETED`         | Task was deleted during wait                                     |
+| `INVALID_TIMEOUT`      | Invalid timeout value                                            |
+
+### Timeout configuration
+
+Default and max timeouts are server-side configurable via settings:
+
+- `general.tasks_wait_default_timeout_seconds` (default: 900)
+- `general.tasks_wait_max_timeout_seconds` (default: 900)
+
+### Worktree base-ref strategy
+
+`settings_update` can also set `general.worktree_base_ref_strategy`:
+
+- `remote` (default): prefer `origin/<base_branch>` when present
+- `local_if_ahead`: use local `<base_branch>` only when it is ahead of `origin/<base_branch>`
+- `local`: always prefer local `<base_branch>`
+
+### Orchestration pattern
+
+```
+# Wait for task to reach REVIEW or DONE
+result = tasks_wait(task_id="T-1", wait_for_status=["REVIEW", "DONE"])
+
+# Race-safe resume after reconnect
+result = tasks_wait(task_id="T-1", from_updated_at=last_known_updated_at)
+
+# Short poll with timeout
+result = tasks_wait(task_id="T-1", timeout_seconds=30)
+if result.timed_out:
+    # retry or take action
+```
+
+## Task field semantics
+
+- `status` is Kanban state: `BACKLOG`, `IN_PROGRESS`, `REVIEW`, `DONE`.
+- `task_type` is execution mode: `AUTO`, `PAIR`.
+
+Recovery behavior:
+
+- `tasks_move(status="AUTO"|"PAIR")` returns recovery metadata pointing to `tasks_update(..., task_type=...)`.
+- `jobs_submit` requires `task_type="AUTO"`.
+
+## Common recovery codes
+
+| Code                   | Meaning                                         | Typical action                      |
+| ---------------------- | ----------------------------------------------- | ----------------------------------- |
+| `START_PENDING`        | Job accepted, pending scheduler admission       | Poll `jobs_wait` or `jobs_get`      |
+| `DISCONNECTED`         | Core unavailable                                | Start/restart core, retry           |
+| `AUTH_STALE_TOKEN`     | MCP token is stale after core restart           | Reconnect MCP client                |
+| `STATUS_WAS_TASK_TYPE` | `status` was used where `task_type` is required | Retry with `tasks_update`           |
+| `WAIT_TIMEOUT`         | `tasks_wait` timed out without a change         | Retry with same or adjusted timeout |
+| `WAIT_INTERRUPTED`     | `tasks_wait` was interrupted/cancelled          | Retry with `from_updated_at` cursor |
 
 ## Capability profiles
 
-Hierarchical -- higher profiles include lower permissions.
+Higher profiles include lower-level permissions.
 
-| Profile       | Includes                                                   |
-| ------------- | ---------------------------------------------------------- |
-| `viewer`      | Read-only queries                                          |
-| `planner`     | `viewer` + `propose_plan`                                  |
-| `pair_worker` | `planner` + task progress tools                            |
-| `operator`    | `pair_worker` + create/update/move + review approve/reject |
-| `maintainer`  | `operator` + destructive/admin actions                     |
+| Profile       | Scope                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| `viewer`      | Read-only operations                                                   |
+| `planner`     | `viewer` + planning surface                                            |
+| `pair_worker` | `planner` + task progress tools                                        |
+| `operator`    | `pair_worker` + create/update/move + non-destructive review operations |
+| `maintainer`  | `operator` + destructive/admin operations                              |
 
 ## Identity lanes
 
-- `kagan`: safe default lane
-- `kagan_admin`: explicit admin lane for external orchestration
-
-## Security defaults
-
-1. Prefer `viewer` or `pair_worker` for automation
-1. Use `maintainer` only for trusted admin flows
-1. Scope sessions with `--session-id` where possible
-1. Use `--readonly` for reporting/inspection agents
+| Identity      | Notes                                         |
+| ------------- | --------------------------------------------- |
+| `kagan`       | Default safe lane                             |
+| `kagan_admin` | Explicit elevated lane for trusted automation |

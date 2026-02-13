@@ -1,81 +1,165 @@
 ---
 title: Troubleshooting
-description: Fast fixes for common issues
+description: Symptom-first fixes for common Kagan issues
 icon: material/bug
 ---
 
 # Troubleshooting
 
-## TL;DR
+Use exact symptom text to find fixes quickly.
 
-1. Check terminal size (`>= 80x20`)
-1. Check agent binaries in `PATH`
-1. Open debug log with `F12`
-1. Use `kagan reset` for stale local state
+## `Core process is running, but runtime metadata is incomplete.`
 
-## Quick fix table
+Cause:
 
-| Symptom                                      | Fast fix                                         |
-| -------------------------------------------- | ------------------------------------------------ |
-| Agent not detected                           | Verify CLI binary in `PATH`, restart terminal    |
-| PAIR session won't open                      | Install/select backend (`tmux`, VS Code, Cursor) |
-| Instance lock error                          | Close duplicate instance or run `kagan reset`    |
-| Merge conflict in REVIEW                     | Resolve in merge worktree, retry merge           |
-| MCP says `AUTH_STALE_TOKEN`                  | Restart MCP client or run `kagan core restart`   |
-| UI looks broken                              | Resize terminal to at least `80x20`              |
-| `kagan core status` says metadata incomplete | Run `kagan core stop` then `kagan core start`    |
+- Core runtime files are stale or partially missing.
 
-## Windows
+Fix:
 
-### Native extension install errors (`vcruntime`, `cl.exe`)
-
-Install [Microsoft Visual C++ Redistributable](https://go.microsoft.com/fwlink/?LinkID=135170).
-
-### Recommended install path
-
-```powershell
-iwr -useb uvget.me/install.ps1 -OutFile install.ps1; .\install.ps1 kagan
+```bash
+kagan core stop
+kagan core start
+kagan core status
 ```
 
-### PAIR backend
+## `AUTH_STALE_TOKEN`
 
-Windows defaults to VS Code. Override:
+Cause:
 
-```toml
-[general]
-default_pair_terminal_backend = "vscode"  # or "cursor"
+- MCP client token became stale after core restart.
+
+Fix:
+
+1. Restart/reconnect the MCP client process.
+1. If needed, restart core lifecycle:
+
+```bash
+kagan core stop
+kagan core start
 ```
 
-## macOS / Linux
+## `DISCONNECTED`
 
-### `tmux` not found
+Cause:
+
+- MCP client cannot reach the core endpoint.
+
+Fix:
+
+1. Launch Kagan once in the project (`kagan`) or start core manually.
+1. Re-run MCP:
+
+```bash
+kagan mcp
+```
+
+## `START_PENDING`
+
+Cause:
+
+- `jobs_submit` accepted the request but scheduler admission is still pending.
+
+Fix:
+
+- Poll with `jobs_wait` or `jobs_get` until the state becomes running/terminal.
+
+## `PAIR terminal backend is set to tmux, but tmux was not found in PATH.`
+
+Cause:
+
+- PAIR backend is `tmux`, but `tmux` is not installed or not in `PATH`.
+
+Fix:
 
 ```bash
 brew install tmux            # macOS
-sudo apt install tmux        # Debian / Ubuntu
-sudo dnf install tmux        # Fedora / RHEL
+sudo apt install tmux        # Debian/Ubuntu
+sudo dnf install tmux        # Fedora/RHEL
 ```
 
-Or switch backend:
+Or set a different backend:
 
 ```toml
 [general]
 default_pair_terminal_backend = "vscode"
 ```
 
-## General
+## `Unsupported external PAIR launcher: <backend>`
 
-- **Agent not detected**: verify binary (`which claude`, etc.), restart terminal, check `F12` debug log.
-- **Instance lock error**: close other Kagan instances for same repo, or `kagan reset`.
-- **Merge conflicts**: open resolve from Task Details, resolve in worktree, retry. Consider `serialize_merges = true`.
+Cause:
 
-### Reset local state
+- PAIR backend value is invalid.
 
-```bash
-kagan reset         # interactive
-kagan reset --force # delete all local state
+Fix:
+
+Set one of the supported values:
+
+```toml
+[general]
+default_pair_terminal_backend = "tmux"   # or "vscode" or "cursor"
 ```
 
-`kagan reset` stops a running core daemon before deleting state.
+## `Another Kagan instance is already running in this repository.`
 
-Data paths: `~/.local/share/kagan/kagan.db`, `~/.config/kagan/config.toml`, system temp dir (`/var/tmp/kagan/worktrees/`).
+Cause:
+
+- A second Kagan instance holds the repository lock.
+
+Fix:
+
+1. Close the other instance.
+1. Start Kagan again in this repo.
+1. If lock state is stale, run reset as a last resort:
+
+```bash
+kagan reset
+```
+
+## `Git is required but was not found on your system.`
+
+Cause:
+
+- Git is missing.
+
+Fix:
+
+Install Git, then relaunch Kagan.
+
+- macOS: `brew install git`
+- Debian/Ubuntu: `sudo apt install git`
+- Fedora/RHEL: `sudo dnf install git`
+
+## `Git user identity is not configured.`
+
+Cause:
+
+- Global Git identity is missing.
+
+Fix:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+## UI rendering issues in terminal
+
+Cause:
+
+- Terminal is too small or does not support expected features.
+
+Fix:
+
+1. Resize terminal to at least `80x20`.
+1. Use a modern terminal with truecolor support.
+1. Open debug log from TUI with `F12` for extra diagnostics.
+
+## Nuclear cleanup
+
+Use only when standard recovery fails.
+
+```bash
+kagan reset --force
+```
+
+This permanently removes local Kagan state.

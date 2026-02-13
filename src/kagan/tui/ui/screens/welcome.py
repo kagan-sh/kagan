@@ -153,7 +153,7 @@ class WelcomeScreen(KaganScreen):
 
             yield Label(
                 "Control Kagan from your editor via Admin MCP"
-                " — docs.kagan.sh/how-to/admin-mcp-editors",
+                " — docs.kagan.sh/guides/editor-mcp-setup/",
                 id="admin-mcp-hint",
             )
 

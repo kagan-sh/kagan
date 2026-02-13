@@ -23,9 +23,10 @@
 </p>
 
 <p align="center">
-  <a href="https://docs.kagan.sh">Documentation</a> •
-  <a href="https://docs.kagan.sh/install">Install</a> •
-  <a href="https://docs.kagan.sh/quickstart">Quickstart</a> •
+  <a href="https://docs.kagan.sh/">Documentation</a> •
+  <a href="https://docs.kagan.sh/quickstart/">Quickstart</a> •
+  <a href="https://docs.kagan.sh/guides/mcp-setup/">MCP Setup</a> •
+  <a href="https://docs.kagan.sh/reference/cli/">CLI Reference</a> •
   <a href="https://github.com/aorumbayev/kagan/issues">Issues</a>
 </p>
 
@@ -123,7 +124,7 @@ Use `viewer`/`pair_worker` profiles for safer day-to-day automation.
 
 ## Documentation
 
-Full docs at **[docs.kagan.sh](https://docs.kagan.sh)** -- [User Guide](https://docs.kagan.sh/user-guide/) | [MCP Server](https://docs.kagan.sh/mcp/)
+Full docs at **[docs.kagan.sh](https://docs.kagan.sh/)** -- [5-Minute Quickstart](https://docs.kagan.sh/quickstart/) | [MCP Setup](https://docs.kagan.sh/guides/mcp-setup/) | [Editor MCP Setup](https://docs.kagan.sh/guides/editor-mcp-setup/)
 
 ## License
 

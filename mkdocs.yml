@@ -56,6 +56,7 @@ extra_css:
   - stylesheets/extra.css
 
 extra_javascript:
+  - javascripts/layout.js
   - https://unpkg.com/mermaid@10/dist/mermaid.min.js
 
 extra:
@@ -111,25 +112,22 @@ plugins:
 exclude_docs: |
   standalone-mcp-core-refactor-execution.md
   standalone-mcp-core-refactor-scratchpad.md
+  internal/**
 
 nav:
   - Home: index.md
-  - Getting started:
-      - getting-started/index.md
-      - 5-Minute Quickstart: getting-started/quickstart.md
-      - Command Reference: getting-started/commands.md
-  - How-to:
-      - how-to/index.md
-      - AUTO vs PAIR: how-to/task-modes.md
-      - MCP Setup: how-to/mcp-setup.md
-      - Admin MCP for Editors: how-to/admin-mcp-editors.md
-      - Multi-Repo Guide: how-to/multi-repo.md
+  - Quickstart: quickstart.md
+  - Concepts:
+      - Architecture overview: concepts/architecture-overview.md
+  - Guides:
+      - AUTO vs PAIR: guides/modes-auto-vs-pair.md
+      - MCP setup: guides/mcp-setup.md
+      - Editor MCP setup: guides/editor-mcp-setup.md
+      - Multi-repo: guides/multi-repo.md
+      - Upgrades and reset: guides/upgrades-and-reset.md
   - Reference:
-      - reference/index.md
-      - Architecture (Contributors): reference/architecture.md
-      - Plugin SDK Lifecycle: reference/plugin-sdk.md
-      - Keyboard Shortcuts: reference/keybindings.md
-      - Configuration: reference/configuration.md
-      - MCP Tools Reference: reference/mcp-tools.md
+      - CLI reference: reference/cli.md
+      - Configuration reference: reference/configuration.md
+      - Keybindings reference: reference/keybindings.md
+      - MCP tools reference: reference/mcp-tools.md
   - Troubleshooting: troubleshooting.md
-  - Contributing: contributing.md
