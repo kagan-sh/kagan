@@ -12,10 +12,8 @@ from tests.helpers.wait import wait_until
 from kagan.core.models.enums import TaskStatus, TaskType
 from kagan.core.services.automation.runner import (
     AutomationEngine,
-    BlockedSpawnState,
     RunningTaskState,
 )
-from kagan.core.time import utc_now
 
 if TYPE_CHECKING:
     from kagan.core.agents.agent_factory import AgentFactory
@@ -71,17 +69,6 @@ def _build_engine(
         get_scratchpad=AsyncMock(side_effect=_get_scratchpad),
         update_scratchpad=AsyncMock(side_effect=_update_scratchpad),
     )
-    blocked_calls: list[tuple[str, str, tuple[str, ...], tuple[str, ...]]] = []
-    cleared_calls: list[str] = []
-
-    def _mark_blocked(
-        task_id: str,
-        *,
-        reason: str,
-        blocked_by_task_ids: tuple[str, ...] = (),
-        overlap_hints: tuple[str, ...] = (),
-    ) -> None:
-        blocked_calls.append((task_id, reason, tuple(blocked_by_task_ids), tuple(overlap_hints)))
 
     runtime_service = SimpleNamespace(
         get=lambda _task_id: None,
@@ -92,8 +79,8 @@ def _build_engine(
         attach_running_agent=lambda _task_id, _agent: None,
         attach_review_agent=lambda _task_id, _agent: None,
         clear_review_agent=lambda _task_id: None,
-        mark_blocked=_mark_blocked,
-        clear_blocked=lambda task_id: cleared_calls.append(task_id),
+        mark_pending=lambda _task_id, reason: None,
+        clear_pending=lambda _task_id: None,
     )
     engine = AutomationEngine(
         task_service=cast("TaskService", task_service),
@@ -111,8 +98,6 @@ def _build_engine(
         engine._running[task.id] = RunningTaskState()
 
     cast("Any", engine)._spawn = _fake_spawn
-    engine._test_blocked_calls = blocked_calls  # type: ignore[attr-defined]
-    engine._test_cleared_calls = cleared_calls  # type: ignore[attr-defined]
     return engine, spawned
 
 
@@ -216,7 +201,13 @@ async def test_callback_path_drains_pending_spawns_when_slot_frees() -> None:
     assert spawned == ["task-b"]
 
 
-async def test_conflicting_pending_task_is_blocked_until_blocker_done() -> None:
+async def test_overlapping_descriptions_spawn_in_parallel() -> None:
+    """Verify tasks with overlapping text hints spawn in parallel.
+
+    Previously, tasks mentioning the same files (e.g., src/calculator.py) would
+    be blocked from parallel execution. Now, conflicts are handled at merge time
+    via rebase, so tasks should spawn unconditionally when capacity is available.
+    """
     task_a = _Task(
         id="task-a",
         status=TaskStatus.IN_PROGRESS,
@@ -233,95 +224,40 @@ async def test_conflicting_pending_task_is_blocked_until_blocker_done() -> None:
         tasks_by_id={"task-a": task_a, "task-b": task_b},
         max_concurrent=2,
     )
-    engine._running["task-a"] = RunningTaskState()
 
+    # Both tasks should spawn immediately when capacity allows
+    assert await engine.spawn_for_task(task_a) is True
     assert await engine.spawn_for_task(task_b) is True
 
-    assert spawned == []
+    # Both tasks should have spawned (no overlap blocking)
+    assert "task-a" in spawned
+    assert "task-b" in spawned
+    assert len(spawned) == 2
+
+
+async def test_multiple_tasks_spawn_up_to_capacity_limit() -> None:
+    """Verify multiple tasks spawn up to capacity regardless of content overlap."""
+    task_a = _Task(id="task-a", title="tests", description="Run tests")
+    task_b = _Task(id="task-b", title="tests", description="Run tests")
+    task_c = _Task(id="task-c", title="tests", description="Run tests")
+    engine, spawned = _build_engine(
+        tasks_by_id={"task-a": task_a, "task-b": task_b, "task-c": task_c},
+        max_concurrent=2,
+    )
+
+    # Spawn all three tasks
+    assert await engine.spawn_for_task(task_a) is True
+    assert await engine.spawn_for_task(task_b) is True
+    assert await engine.spawn_for_task(task_c) is True
+
+    # Two should have spawned (capacity limit), one should be pending
+    assert len(spawned) == 2
+    assert list(engine._pending_spawn_queue) == ["task-c"]
+
+    # Release one slot
+    await engine._remove_running_state(spawned[0])
+
+    # Third task should now spawn
+    assert "task-c" in spawned
+    assert len(spawned) == 3
     assert list(engine._pending_spawn_queue) == []
-    assert task_b.status == TaskStatus.BACKLOG
-    assert "task-b" in engine._blocked_pending
-    blocked_calls = engine._test_blocked_calls  # type: ignore[attr-defined]
-    assert blocked_calls
-    assert blocked_calls[-1][0] == "task-b"
-    assert blocked_calls[-1][2] == ("task-a",)
-
-    task_a.status = TaskStatus.DONE
-    await engine._process_status_event("task-a", TaskStatus.IN_PROGRESS, TaskStatus.DONE)
-
-    assert spawned == ["task-b"]
-    assert task_b.status == TaskStatus.IN_PROGRESS
-    assert "task-b" not in engine._blocked_pending
-    cleared_calls = engine._test_cleared_calls  # type: ignore[attr-defined]
-    assert "task-b" in cleared_calls
-
-
-async def test_conflicting_pending_task_resumes_when_blocker_returns_to_backlog() -> None:
-    task_a = _Task(
-        id="task-a",
-        status=TaskStatus.IN_PROGRESS,
-        title="calculator core",
-        description="Touches src/calculator.py",
-    )
-    task_b = _Task(
-        id="task-b",
-        status=TaskStatus.IN_PROGRESS,
-        title="calculator tests",
-        description="Update src/calculator.py and tests/test_calculator.py",
-    )
-    engine, spawned = _build_engine(
-        tasks_by_id={"task-a": task_a, "task-b": task_b},
-        max_concurrent=2,
-    )
-    engine._running["task-a"] = RunningTaskState()
-
-    assert await engine.spawn_for_task(task_b) is True
-
-    assert spawned == []
-    assert task_b.status == TaskStatus.BACKLOG
-    assert "task-b" in engine._blocked_pending
-
-    task_a.status = TaskStatus.BACKLOG
-    await engine._process_status_event("task-a", TaskStatus.REVIEW, TaskStatus.BACKLOG)
-
-    assert spawned == ["task-b"]
-    assert task_b.status == TaskStatus.IN_PROGRESS
-    assert "task-b" not in engine._blocked_pending
-
-
-async def test_stale_in_progress_event_does_not_clear_blocked_backlog_task() -> None:
-    task_a = _Task(
-        id="task-a",
-        status=TaskStatus.IN_PROGRESS,
-        title="calculator core",
-        description="Touches src/calculator.py",
-    )
-    task_b = _Task(
-        id="task-b",
-        status=TaskStatus.BACKLOG,
-        title="calculator tests",
-        description="Update src/calculator.py and tests/test_calculator.py",
-    )
-    engine, _spawned = _build_engine(
-        tasks_by_id={"task-a": task_a, "task-b": task_b},
-        max_concurrent=2,
-    )
-    engine._blocked_pending["task-b"] = BlockedSpawnState(
-        task_id="task-b",
-        blocker_task_ids=("task-a",),
-        overlap_hints=("src/calculator.py",),
-        reason="Waiting on #task-a",
-        blocked_at=utc_now(),
-    )
-    engine._mark_runtime_blocked(
-        "task-b",
-        reason="Waiting on #task-a",
-        blocked_by_task_ids=("task-a",),
-        overlap_hints=("src/calculator.py",),
-    )
-
-    await engine._process_status_event("task-b", TaskStatus.BACKLOG, TaskStatus.IN_PROGRESS)
-
-    assert "task-b" in engine._blocked_pending
-    cleared_calls = engine._test_cleared_calls  # type: ignore[attr-defined]
-    assert "task-b" not in cleared_calls
