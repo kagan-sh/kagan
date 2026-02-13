@@ -14,6 +14,7 @@ READONLY_TOOLS = {
     "propose_plan",
     "get_task",
     "tasks_list",
+    "tasks_wait",
     "projects_list",
     "repos_list",
     "audit_tail",
@@ -27,6 +28,7 @@ FULL_TOOLS = {
     "request_review",
     # v2 read-only
     "tasks_list",
+    "tasks_wait",
     "projects_list",
     "repos_list",
     "audit_tail",
