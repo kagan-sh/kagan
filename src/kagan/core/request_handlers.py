@@ -30,6 +30,7 @@ from kagan.core.request_handler_support import (
 )
 
 if TYPE_CHECKING:
+    from kagan.core.adapters.db.schema import Task
     from kagan.core.api import KaganAPI
     from kagan.core.models.enums import PairTerminalBackend, TaskPriority, TaskStatus, TaskType
 
@@ -303,6 +304,220 @@ async def handle_task_update_scratchpad(api: KaganAPI, params: dict[str, Any]) -
     content = params["content"]
     await f.update_scratchpad(task_id, content)
     return {"success": True, "task_id": task_id}
+
+
+async def handle_task_wait(api: KaganAPI, params: dict[str, Any]) -> dict[str, Any]:
+    """Wait for a task status change using event-driven wakeup."""
+    import asyncio
+
+    from kagan.core.events import TaskDeleted, TaskStatusChanged, TaskUpdated
+    from kagan.core.models.enums import TaskStatus
+
+    f = _assert_api(api)
+    task_id = params["task_id"]
+
+    # Parse timeout
+    raw_timeout = params.get("timeout_seconds")
+    config = f.ctx.config
+    default_timeout = config.general.tasks_wait_default_timeout_seconds
+    max_timeout = config.general.tasks_wait_max_timeout_seconds
+
+    if raw_timeout is None:
+        timeout_seconds = float(default_timeout)
+    else:
+        if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, int | float):
+            return {
+                "changed": False,
+                "timed_out": False,
+                "task_id": task_id,
+                "code": "INVALID_TIMEOUT",
+                "message": "timeout_seconds must be a positive number",
+            }
+        timeout_seconds = float(raw_timeout)
+        if timeout_seconds <= 0:
+            return {
+                "changed": False,
+                "timed_out": False,
+                "task_id": task_id,
+                "code": "INVALID_TIMEOUT",
+                "message": "timeout_seconds must be > 0",
+            }
+        if timeout_seconds > max_timeout:
+            return {
+                "changed": False,
+                "timed_out": False,
+                "task_id": task_id,
+                "code": "INVALID_TIMEOUT",
+                "message": (f"timeout_seconds exceeds server maximum of {max_timeout}s"),
+            }
+
+    # Parse wait_for_status filter
+    wait_for_status: set[str] | None = None
+    raw_status_filter = params.get("wait_for_status")
+    if raw_status_filter is not None:
+        if not isinstance(raw_status_filter, list):
+            return {
+                "changed": False,
+                "timed_out": False,
+                "task_id": task_id,
+                "code": "INVALID_PARAMS",
+                "message": "wait_for_status must be a list of status strings",
+            }
+        valid_statuses = {s.value for s in TaskStatus}
+        normalized: set[str] = set()
+        for raw_s in raw_status_filter:
+            s_upper = str(raw_s).strip().upper()
+            if s_upper not in valid_statuses:
+                return {
+                    "changed": False,
+                    "timed_out": False,
+                    "task_id": task_id,
+                    "code": "INVALID_PARAMS",
+                    "message": (
+                        f"Invalid status filter value: {raw_s!r}. "
+                        f"Expected one of: {', '.join(sorted(valid_statuses))}"
+                    ),
+                }
+            normalized.add(s_upper)
+        wait_for_status = normalized
+
+    # Race-safe guard: from_updated_at
+    from_updated_at = _non_empty_str(params.get("from_updated_at"))
+
+    # Get current task state
+    task = await f.get_task(task_id)
+    if task is None:
+        return _task_not_found_response(task_id)
+
+    previous_status = task.status.value
+    previous_updated_at = task.updated_at.isoformat()
+
+    # Immediate return: task already in target status
+    if wait_for_status is not None and previous_status in wait_for_status:
+        return {
+            "changed": True,
+            "timed_out": False,
+            "task_id": task_id,
+            "previous_status": previous_status,
+            "current_status": previous_status,
+            "changed_at": previous_updated_at,
+            "task": _compact_task_snapshot(task),
+            "code": "ALREADY_AT_STATUS",
+            "message": f"Task already at target status {previous_status}",
+        }
+
+    # Race-safe: detect changes since from_updated_at
+    if from_updated_at is not None and previous_updated_at != from_updated_at:
+        if wait_for_status is None or previous_status in wait_for_status:
+            return {
+                "changed": True,
+                "timed_out": False,
+                "task_id": task_id,
+                "previous_status": None,
+                "current_status": previous_status,
+                "changed_at": previous_updated_at,
+                "task": _compact_task_snapshot(task),
+                "code": "CHANGED_SINCE_CURSOR",
+                "message": "Task changed since from_updated_at cursor",
+            }
+
+    # Event-driven wait using asyncio.Event
+    wake_event = asyncio.Event()
+    change_info: dict[str, Any] = {}
+
+    def _on_event(event: object) -> None:
+        if isinstance(event, TaskStatusChanged) and event.task_id == task_id:
+            if wait_for_status is not None and event.to_status.value not in wait_for_status:
+                return
+            change_info["from_status"] = event.from_status.value
+            change_info["to_status"] = event.to_status.value
+            change_info["changed_at"] = event.updated_at.isoformat()
+            wake_event.set()
+        elif isinstance(event, TaskUpdated) and event.task_id == task_id:
+            if wait_for_status is not None:
+                return
+            change_info["changed_at"] = event.updated_at.isoformat()
+            wake_event.set()
+        elif isinstance(event, TaskDeleted) and event.task_id == task_id:
+            change_info["deleted"] = True
+            wake_event.set()
+
+    event_bus = f.ctx.event_bus
+    event_bus.add_handler(_on_event)
+    try:
+        try:
+            await asyncio.wait_for(wake_event.wait(), timeout=timeout_seconds)
+        except TimeoutError:
+            return {
+                "changed": False,
+                "timed_out": True,
+                "task_id": task_id,
+                "previous_status": previous_status,
+                "current_status": previous_status,
+                "changed_at": None,
+                "task": None,
+                "code": "WAIT_TIMEOUT",
+                "message": f"No change detected within {timeout_seconds}s",
+            }
+    except asyncio.CancelledError:
+        return {
+            "changed": False,
+            "timed_out": False,
+            "task_id": task_id,
+            "previous_status": previous_status,
+            "current_status": previous_status,
+            "changed_at": None,
+            "task": None,
+            "code": "WAIT_INTERRUPTED",
+            "message": "Wait was interrupted",
+        }
+    finally:
+        event_bus.remove_handler(_on_event)
+
+    # Deleted case
+    if change_info.get("deleted"):
+        return {
+            "changed": True,
+            "timed_out": False,
+            "task_id": task_id,
+            "previous_status": previous_status,
+            "current_status": None,
+            "changed_at": change_info.get("changed_at"),
+            "task": None,
+            "code": "TASK_DELETED",
+            "message": f"Task {task_id} was deleted during wait",
+        }
+
+    # Re-fetch for fresh snapshot
+    updated_task = await f.get_task(task_id)
+    current_status = (
+        updated_task.status.value if updated_task is not None else change_info.get("to_status")
+    )
+    return {
+        "changed": True,
+        "timed_out": False,
+        "task_id": task_id,
+        "previous_status": change_info.get("from_status", previous_status),
+        "current_status": current_status,
+        "changed_at": change_info.get("changed_at"),
+        "task": _compact_task_snapshot(updated_task) if updated_task else None,
+        "code": "TASK_CHANGED",
+        "message": f"Task status changed: {previous_status} -> {current_status}",
+    }
+
+
+def _compact_task_snapshot(task: Task) -> dict[str, Any]:
+    """Build a compact task snapshot without large logs/scratchpads."""
+    return {
+        "id": task.id,
+        "title": task.title,
+        "status": task.status.value,
+        "priority": task.priority.value if task.priority else None,
+        "task_type": task.task_type.value if task.task_type else None,
+        "project_id": task.project_id,
+        "updated_at": task.updated_at.isoformat(),
+        "created_at": task.created_at.isoformat(),
+    }
 
 
 async def handle_review_request(api: KaganAPI, params: dict[str, Any]) -> dict[str, Any]:

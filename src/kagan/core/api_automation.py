@@ -359,6 +359,28 @@ class AutomationApiMixin:
         """Clean up workspaces whose tasks no longer exist."""
         return await self._ctx.workspace_service.cleanup_orphans(valid_task_ids)
 
+    async def run_workspace_janitor(
+        self,
+        valid_workspace_ids: set[str],
+        *,
+        prune_worktrees: bool = True,
+        gc_branches: bool = True,
+    ) -> Any:
+        """Run janitor cleanup for stale worktrees and orphan kagan/* branches.
+
+        This performs two cleanup operations:
+        1. Worktree pruning: Runs `git worktree prune` on all project repos.
+        2. Branch GC: Deletes orphaned `kagan/*` branches not in valid_workspace_ids.
+
+        Returns:
+            JanitorResult with worktrees_pruned, branches_deleted, repos_processed.
+        """
+        return await self._ctx.workspace_service.run_janitor(
+            valid_workspace_ids,
+            prune_worktrees=prune_worktrees,
+            gc_branches=gc_branches,
+        )
+
     async def get_workspace_diff(self, task_id: str, *, base_branch: str) -> str:
         """Get the diff for a task's workspace against a base branch."""
         return await self._ctx.workspace_service.get_diff(task_id, base_branch)

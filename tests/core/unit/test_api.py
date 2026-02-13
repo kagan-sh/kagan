@@ -373,6 +373,7 @@ class TestSettingsAndAudit:
         settings = await api.get_settings()
         assert "general.default_base_branch" in settings
         assert settings["general.default_base_branch"] == "main"
+        assert settings["general.worktree_base_ref_strategy"] == "remote"
 
     async def test_update_settings(self, handle_env: tuple) -> None:
         _repo, api, _ctx = handle_env
@@ -381,6 +382,27 @@ class TestSettingsAndAudit:
         assert updates["general.auto_review"] is True
         settings = await api.get_settings()
         assert settings["general.auto_review"] is True
+
+    async def test_update_settings_worktree_base_ref_strategy(self, handle_env: tuple) -> None:
+        _repo, api, _ctx = handle_env
+        success, _msg, updates = await api.update_settings(
+            {"general.worktree_base_ref_strategy": "local_if_ahead"}
+        )
+        assert success is True
+        assert updates["general.worktree_base_ref_strategy"] == "local_if_ahead"
+        settings = await api.get_settings()
+        assert settings["general.worktree_base_ref_strategy"] == "local_if_ahead"
+
+    async def test_update_settings_rejects_invalid_worktree_base_ref_strategy(
+        self,
+        handle_env: tuple,
+    ) -> None:
+        _repo, api, _ctx = handle_env
+        success, message, _updates = await api.update_settings(
+            {"general.worktree_base_ref_strategy": "invalid"}
+        )
+        assert success is False
+        assert "must be one of" in message
 
     async def test_update_settings_empty(self, handle_env: tuple) -> None:
         _repo, api, _ctx = handle_env

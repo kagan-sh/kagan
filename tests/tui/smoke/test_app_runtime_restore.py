@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 from kagan.core.adapters.db.schema import Repo
+from kagan.core.constants import KAGAN_BRANCH_CONFIGURED_KEY
 from kagan.core.instance_lock import LockInfo
 from kagan.core.services.runtime import RuntimeSessionEvent, StartupSessionDecision
 from kagan.tui.app import KaganApp
@@ -139,7 +140,7 @@ async def test_apply_active_repo_bootstraps_session_service_when_core_connected(
     app._dispatch_runtime_session = cast("Any", dispatch_runtime)
 
     repo_path = tmp_path / "new-repo"
-    repo = Repo(name="new-repo", path=str(repo_path))
+    repo = Repo(name="new-repo", path=str(repo_path), scripts={KAGAN_BRANCH_CONFIGURED_KEY: "true"})
 
     opened = await app._apply_active_repo(repo, project_id="proj-1")
 

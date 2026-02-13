@@ -39,10 +39,16 @@ type PairTerminalBackendLiteral = Literal[
     "vscode",
     "cursor",
 ]
+type WorktreeBaseRefStrategyLiteral = Literal[
+    "remote",
+    "local_if_ahead",
+    "local",
+]
 
 _OS_MAP = {"Linux": "linux", "Darwin": "macos", "Windows": "windows"}
 CURRENT_OS: str = _OS_MAP.get(platform.system(), "linux")
 PAIR_TERMINAL_BACKEND_VALUES = frozenset({"tmux", "vscode", "cursor"})
+WORKTREE_BASE_REF_STRATEGY_VALUES = frozenset({"remote", "local_if_ahead", "local"})
 
 
 def _default_pair_terminal_backend() -> PairTerminalBackendLiteral:
@@ -82,6 +88,14 @@ class GeneralConfig(BaseModel):
         description="MCP server name for tool registration and config entries",
     )
     default_base_branch: str = Field(default="main")
+    auto_sync_base_branch: bool = Field(
+        default=True,
+        description="Auto-update repo base branch when git branch changes",
+    )
+    worktree_base_ref_strategy: WorktreeBaseRefStrategyLiteral = Field(
+        default="remote",
+        description=("Worktree base ref preference: remote (default), local_if_ahead, or local"),
+    )
     auto_review: bool = Field(default=True, description="Run AI review on task completion")
     auto_approve: bool = Field(
         default=False,
@@ -131,6 +145,25 @@ class GeneralConfig(BaseModel):
         default="auto",
         description="IPC transport preference: auto|socket|tcp",
     )
+    tasks_wait_default_timeout_seconds: int = Field(
+        default=900,
+        description="Default timeout in seconds for tasks_wait long-poll (15 minutes)",
+    )
+    tasks_wait_max_timeout_seconds: int = Field(
+        default=900,
+        description="Maximum allowed timeout in seconds for tasks_wait long-poll",
+    )
+
+    @field_validator("worktree_base_ref_strategy", mode="before")
+    @classmethod
+    def validate_worktree_base_ref_strategy(cls, value: object) -> str:
+        """Gracefully coerce invalid base-ref strategy values to remote."""
+        match value:
+            case str() as strategy if strategy in WORKTREE_BASE_REF_STRATEGY_VALUES:
+                return strategy
+            case _:
+                pass
+        return "remote"
 
     @field_validator("default_pair_terminal_backend", mode="before")
     @classmethod

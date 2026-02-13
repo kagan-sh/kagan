@@ -16,7 +16,11 @@ if TYPE_CHECKING:
 
     from textual.app import ComposeResult
 
-    from kagan.core.config import KaganConfig, PairTerminalBackendLiteral
+    from kagan.core.config import (
+        KaganConfig,
+        PairTerminalBackendLiteral,
+        WorktreeBaseRefStrategyLiteral,
+    )
 
 
 def _normalize_pair_terminal_backend(value: object) -> PairTerminalBackendLiteral:
@@ -25,6 +29,14 @@ def _normalize_pair_terminal_backend(value: object) -> PairTerminalBackendLitera
             return backend
         case _:
             return "tmux"
+
+
+def _normalize_worktree_base_ref_strategy(value: object) -> WorktreeBaseRefStrategyLiteral:
+    match value:
+        case "remote" | "local_if_ahead" | "local" as strategy:
+            return strategy
+        case _:
+            return "remote"
 
 
 class SettingsModal(ModalScreen[bool]):
@@ -86,6 +98,12 @@ class SettingsModal(ModalScreen[bool]):
                     id="base-branch-input",
                     placeholder="main",
                 )
+            with Horizontal(classes="setting-row"):
+                yield Switch(
+                    value=self._config.general.auto_sync_base_branch,
+                    id="auto-sync-base-branch-switch",
+                )
+                yield Label("Auto-sync base branch", classes="setting-label")
             with Vertical(classes="input-group"):
                 yield Label("Max concurrent agents", classes="input-label")
                 yield Input(
@@ -115,6 +133,18 @@ class SettingsModal(ModalScreen[bool]):
                     ],
                     value=self._config.general.default_pair_terminal_backend,
                     id="default-pair-terminal-select",
+                    allow_blank=False,
+                )
+            with Vertical(classes="input-group"):
+                yield Label("Worktree base ref", classes="input-label")
+                yield Select[str](
+                    options=[
+                        ("Remote (origin/<base>)", "remote"),
+                        ("Local if ahead", "local_if_ahead"),
+                        ("Local", "local"),
+                    ],
+                    value=self._config.general.worktree_base_ref_strategy,
+                    id="worktree-base-ref-strategy-select",
                     allow_blank=False,
                 )
 
@@ -193,12 +223,17 @@ class SettingsModal(ModalScreen[bool]):
         require_review_approval = self.query_one("#require-review-approval-switch", Switch).value
         serialize_merges = self.query_one("#serialize-merges-switch", Switch).value
         skip_pair_instructions = self.query_one("#skip-pair-instructions-switch", Switch).value
+        auto_sync_base_branch = self.query_one("#auto-sync-base-branch-switch", Switch).value
         base_branch = self.query_one("#base-branch-input", Input).value
         max_agents_str = self.query_one("#max-agents-input", Input).value
         default_agent_select = self.query_one("#default-agent-select", Select)
         default_agent = str(default_agent_select.value) if default_agent_select.value else "claude"
         pair_terminal_select = self.query_one("#default-pair-terminal-select", Select)
         pair_terminal_backend = _normalize_pair_terminal_backend(pair_terminal_select.value)
+        base_ref_strategy_select = self.query_one("#worktree-base-ref-strategy-select", Select)
+        worktree_base_ref_strategy = _normalize_worktree_base_ref_strategy(
+            base_ref_strategy_select.value
+        )
         default_model_claude = self.query_one("#default-model-claude-input", Input).value
         default_model_claude = default_model_claude.strip() or None
         default_model_opencode = self.query_one("#default-model-opencode-input", Input).value
@@ -223,9 +258,11 @@ class SettingsModal(ModalScreen[bool]):
         self._config.general.require_review_approval = require_review_approval
         self._config.general.serialize_merges = serialize_merges
         self._config.general.default_base_branch = base_branch
+        self._config.general.auto_sync_base_branch = auto_sync_base_branch
         self._config.general.max_concurrent_agents = max_agents
         self._config.general.default_worker_agent = default_agent
         self._config.general.default_pair_terminal_backend = pair_terminal_backend
+        self._config.general.worktree_base_ref_strategy = worktree_base_ref_strategy
         self._config.general.default_model_claude = default_model_claude
         self._config.general.default_model_opencode = default_model_opencode
         self._config.general.default_model_codex = default_model_codex
@@ -299,6 +336,8 @@ active = true'''
             f"require_review_approval = {str(general.require_review_approval).lower()}",
             f"serialize_merges = {str(general.serialize_merges).lower()}",
             f'default_base_branch = "{general.default_base_branch}"',
+            f"auto_sync_base_branch = {str(general.auto_sync_base_branch).lower()}",
+            f'worktree_base_ref_strategy = "{general.worktree_base_ref_strategy}"',
             f'default_worker_agent = "{general.default_worker_agent}"',
             f'default_pair_terminal_backend = "{general.default_pair_terminal_backend}"',
             f"max_concurrent_agents = {general.max_concurrent_agents}",

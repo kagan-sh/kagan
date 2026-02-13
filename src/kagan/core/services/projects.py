@@ -73,6 +73,15 @@ class ProjectService(Protocol):
         """Find project containing the repo."""
         ...
 
+    async def update_repo_default_branch(
+        self,
+        repo_id: RepoId,
+        branch: str,
+        *,
+        mark_configured: bool = False,
+    ) -> Repo | None:
+        """Update Repo.default_branch, optionally marking branch as configured."""
+        ...
 
 class ProjectServiceImpl:
     """Concrete ProjectService backed by session factory, EventBus, and RepoRepository."""
@@ -242,6 +251,18 @@ class ProjectServiceImpl:
                 }
                 for project_repo, repo in result.all()
             ]
+
+    async def update_repo_default_branch(
+        self,
+        repo_id: str,
+        branch: str,
+        *,
+        mark_configured: bool = False,
+    ) -> Repo | None:
+        """Update Repo.default_branch, optionally marking branch as configured."""
+        return await self._repo_repository.update_default_branch(
+            repo_id, branch, mark_configured=mark_configured
+        )
 
     async def find_project_by_repo_path(self, repo_path: str | Path) -> Project | None:
         """Find project containing the repo."""

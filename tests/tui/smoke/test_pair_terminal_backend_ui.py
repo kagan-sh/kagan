@@ -189,6 +189,35 @@ async def test_settings_modal_updates_default_pair_terminal_backend(tmp_path: Pa
 
 
 @pytest.mark.asyncio
+async def test_settings_modal_updates_worktree_base_ref_strategy(tmp_path: Path) -> None:
+    config = KaganConfig()
+    config_path = tmp_path / "config.toml"
+    app = _ModalHarnessApp(config)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        loop = asyncio.get_running_loop()
+        result_future: asyncio.Future[object | None] = loop.create_future()
+        pilot.app.push_screen(
+            SettingsModal(config, config_path),
+            callback=lambda result: result_future.set_result(result),
+        )
+        modal = await wait_for_screen(pilot, SettingsModal, timeout=5.0)
+
+        select = modal.query_one("#worktree-base-ref-strategy-select", Select)
+        select.value = "local_if_ahead"
+        await pilot.pause()
+        modal.query_one("#save-btn", Button).press()
+        await pilot.pause()
+
+        result = await result_future
+
+    assert result is True
+    assert config.general.worktree_base_ref_strategy == "local_if_ahead"
+    config_text = config_path.read_text(encoding="utf-8")
+    assert 'worktree_base_ref_strategy = "local_if_ahead"' in config_text
+
+
+@pytest.mark.asyncio
 async def test_settings_modal_updates_additional_default_models(tmp_path: Path) -> None:
     config = KaganConfig()
     config_path = tmp_path / "config.toml"

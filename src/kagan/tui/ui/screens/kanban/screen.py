@@ -18,6 +18,7 @@ from kagan.core.constants import (
     MIN_SCREEN_HEIGHT,
     MIN_SCREEN_WIDTH,
 )
+from kagan.core.git_utils import get_current_branch
 from kagan.core.models.enums import TaskStatus, TaskType
 from kagan.tui.keybindings import KANBAN_BINDINGS
 from kagan.tui.ui.modals.description_editor import DescriptionEditorModal
@@ -115,6 +116,8 @@ class KanbanScreen(KaganScreen):
 
     header = getters.query_one(KaganHeader)
 
+    BRANCH_SYNC_INTERVAL_SECONDS: float = 5.0
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._tasks: list[Task] = []
@@ -127,6 +130,7 @@ class KanbanScreen(KaganScreen):
         self._agent_offline: bool = False
         self._merge_failed_tasks: set[str] = set()
         self._search_request_id: int = 0
+        self._branch_sync_timer: Timer | None = None
         self._board = KanbanBoardController(self)
         self._review = KanbanReviewController(self)
         self._session = KanbanSessionController(self)
@@ -272,21 +276,22 @@ class KanbanScreen(KaganScreen):
         self.kagan_app.task_changed_signal.subscribe(self, self._on_task_changed)
         self._board.start_background_sync()
         self._board.sync_agent_states()
-        from kagan.tui.ui.widgets.header import _get_git_branch
-
         if self.ctx.active_repo_id is None:
             self.header.update_branch("")
             return
-        branch = await _get_git_branch(self.kagan_app.project_root)
+        branch = await get_current_branch(self.kagan_app.project_root)
         self.header.update_branch(branch)
+        self._start_branch_sync()
 
     def on_unmount(self) -> None:
+        self._stop_branch_sync()
         with suppress(Exception):
             self.kagan_app.task_changed_signal.unsubscribe(self)
         self.invalidate_search_requests(cancel_workers=True)
         self._board.cleanup_on_unmount()
 
     async def on_screen_suspend(self) -> None:
+        self._stop_branch_sync()
         self._board.stop_background_sync()
 
     async def _on_task_changed(self, _task_id: str) -> None:
@@ -302,6 +307,7 @@ class KanbanScreen(KaganScreen):
         self._board.check_screen_size()
 
     async def on_screen_resume(self) -> None:
+        self._start_branch_sync()
         self._board.start_background_sync()
         await self._board.refresh_board()
         self._board.sync_agent_states()
@@ -770,6 +776,33 @@ class KanbanScreen(KaganScreen):
 
     async def _set_default_branch_flow(self) -> None:
         await self._task_controller.set_default_branch_flow()
+
+    def _start_branch_sync(self) -> None:
+        """Start periodic git branch polling for auto-sync."""
+        if self._branch_sync_timer is not None:
+            return
+        self._branch_sync_timer = self.set_interval(
+            self.BRANCH_SYNC_INTERVAL_SECONDS,
+            self._schedule_branch_sync,
+        )
+
+    def _stop_branch_sync(self) -> None:
+        """Stop periodic git branch polling."""
+        if self._branch_sync_timer is None:
+            return
+        self._branch_sync_timer.stop()
+        self._branch_sync_timer = None
+
+    def _schedule_branch_sync(self) -> None:
+        """Schedule a background worker for branch sync."""
+        if not self.is_mounted or not self.app.is_running:
+            return
+        self.run_worker(
+            self.auto_sync_branch(self.header),
+            group="kanban-branch-sync",
+            exclusive=True,
+            exit_on_error=False,
+        )
 
     def on_task_card_selected(self, message: TaskCard.Selected) -> None:
         self.action_view_details()

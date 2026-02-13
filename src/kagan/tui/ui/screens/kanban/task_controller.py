@@ -273,4 +273,7 @@ class KanbanTaskController:
         if branch is not None:
             config.general.default_base_branch = branch or "main"
             await config.save(self.screen.kagan_app.config_path)
+            repo_id = self.screen.ctx.active_repo_id
+            if repo_id:
+                await self.screen.ctx.api.update_repo_default_branch(repo_id, branch or "main")
             self.screen.notify(f"Default branch set to: {branch or 'main'}")

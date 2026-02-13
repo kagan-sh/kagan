@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from kagan.core.builtin_agents import BUILTIN_AGENTS
+from kagan.core.config import WORKTREE_BASE_REF_STRATEGY_VALUES
 from kagan.core.models.enums import VALID_PAIR_BACKENDS
 
 if TYPE_CHECKING:
@@ -18,6 +19,8 @@ EXPOSED_SETTINGS: tuple[str, ...] = (
     "general.require_review_approval",
     "general.serialize_merges",
     "general.default_base_branch",
+    "general.auto_sync_base_branch",
+    "general.worktree_base_ref_strategy",
     "general.max_concurrent_agents",
     "general.default_worker_agent",
     "general.default_pair_terminal_backend",
@@ -27,6 +30,8 @@ EXPOSED_SETTINGS: tuple[str, ...] = (
     "general.default_model_gemini",
     "general.default_model_kimi",
     "general.default_model_copilot",
+    "general.tasks_wait_default_timeout_seconds",
+    "general.tasks_wait_max_timeout_seconds",
     "ui.skip_pair_instructions",
 )
 
@@ -35,7 +40,12 @@ _BOOL_FIELDS: set[str] = {
     "general.auto_approve",
     "general.require_review_approval",
     "general.serialize_merges",
+    "general.auto_sync_base_branch",
     "ui.skip_pair_instructions",
+}
+_TIMEOUT_SECONDS_FIELDS: set[str] = {
+    "general.tasks_wait_default_timeout_seconds",
+    "general.tasks_wait_max_timeout_seconds",
 }
 _OPTIONAL_MODEL_FIELDS: set[str] = {
     "general.default_model_claude",
@@ -56,6 +66,8 @@ def exposed_settings_snapshot(config: KaganConfig) -> dict[str, object]:
         "general.require_review_approval": config.general.require_review_approval,
         "general.serialize_merges": config.general.serialize_merges,
         "general.default_base_branch": config.general.default_base_branch,
+        "general.auto_sync_base_branch": config.general.auto_sync_base_branch,
+        "general.worktree_base_ref_strategy": config.general.worktree_base_ref_strategy,
         "general.max_concurrent_agents": config.general.max_concurrent_agents,
         "general.default_worker_agent": config.general.default_worker_agent,
         "general.default_pair_terminal_backend": config.general.default_pair_terminal_backend,
@@ -65,6 +77,10 @@ def exposed_settings_snapshot(config: KaganConfig) -> dict[str, object]:
         "general.default_model_gemini": config.general.default_model_gemini,
         "general.default_model_kimi": config.general.default_model_kimi,
         "general.default_model_copilot": config.general.default_model_copilot,
+        "general.tasks_wait_default_timeout_seconds": (
+            config.general.tasks_wait_default_timeout_seconds
+        ),
+        "general.tasks_wait_max_timeout_seconds": (config.general.tasks_wait_max_timeout_seconds),
         "ui.skip_pair_instructions": config.ui.skip_pair_instructions,
     }
 
@@ -91,11 +107,25 @@ def _normalize_value(key: str, value: object) -> object:
     if key == "general.default_base_branch":
         return _normalize_non_empty_string(key, value)
 
+    if key == "general.worktree_base_ref_strategy":
+        strategy = _normalize_non_empty_string(key, value)
+        if strategy not in WORKTREE_BASE_REF_STRATEGY_VALUES:
+            options = ", ".join(sorted(WORKTREE_BASE_REF_STRATEGY_VALUES))
+            raise ValueError(f"general.worktree_base_ref_strategy must be one of: {options}")
+        return strategy
+
     if key == "general.max_concurrent_agents":
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError("general.max_concurrent_agents must be an integer")
         if value < 1 or value > 10:
             raise ValueError("general.max_concurrent_agents must be between 1 and 10")
+        return value
+
+    if key in _TIMEOUT_SECONDS_FIELDS:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{key} must be a positive integer")
+        if value < 1 or value > 3600:
+            raise ValueError(f"{key} must be between 1 and 3600")
         return value
 
     if key == "general.default_worker_agent":

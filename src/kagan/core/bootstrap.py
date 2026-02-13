@@ -454,7 +454,7 @@ async def create_app_context(
         event_bus,
         repo_repository,
     )
-    git_adapter = GitWorktreeAdapter()
+    git_adapter = GitWorktreeAdapter(base_ref_strategy=config.general.worktree_base_ref_strategy)
     git_ops_adapter = GitOperationsAdapter()
     ctx.workspace_service = WorkspaceServiceImpl(
         session_factory,

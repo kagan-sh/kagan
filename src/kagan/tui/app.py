@@ -22,8 +22,10 @@ from kagan.core.config import KaganConfig
 from kagan.core.constants import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_DB_PATH,
+    KAGAN_BRANCH_CONFIGURED_KEY,
 )
 from kagan.core.debug_log import setup_debug_logging
+from kagan.core.git_utils import get_current_branch, get_remote_default_branch
 from kagan.core.instance_lock import InstanceLock, LockInfo
 from kagan.core.services.runtime import RuntimeContextState, RuntimeSessionEvent
 from kagan.core.terminal import supports_truecolor
@@ -169,6 +171,7 @@ class KaganApp(App):
 
             await self._reconcile_worktrees()
             await self._reconcile_sessions()
+            await self._run_janitor()
 
             await ctx.api.start_automation()
             self.log("Automation service initialized (reactive mode)")
@@ -403,7 +406,26 @@ class KaganApp(App):
         )
 
         self.ctx.api.bootstrap_session_service(self.project_root, self.config)
+
+        if not (repo.scripts or {}).get(KAGAN_BRANCH_CONFIGURED_KEY):
+            await self._first_time_branch_setup(repo)
+
         return True
+
+    async def _first_time_branch_setup(self, repo: Repo) -> None:
+        """Auto-detect and set the base branch on first repo open."""
+        detected_default = await get_remote_default_branch(self.project_root)
+        branch = (
+            detected_default
+            or repo.default_branch
+            or self.config.general.default_base_branch
+            or "main"
+        )
+        if branch == "HEAD":
+            branch = self.config.general.default_base_branch or "main"
+        await self.ctx.api.update_repo_default_branch(repo.id, branch, mark_configured=True)
+        self.config.general.default_base_branch = branch
+        await self.config.save(self.config_path)
 
     def _clear_active_repo(self) -> None:
         """Clear active repo selection when a project has no repos."""
@@ -464,6 +486,22 @@ class KaganApp(App):
                     continue
         except TmuxError:
             pass
+
+    async def _run_janitor(self) -> None:
+        """Run janitor to prune stale worktrees and clean up orphan kagan/* branches."""
+        ctx = self.ctx
+        workspaces = await ctx.api.list_workspaces()
+        valid_workspace_ids = {ws.id for ws in workspaces}
+
+        result = await ctx.api.run_workspace_janitor(valid_workspace_ids)
+
+        if result.total_cleaned > 0:
+            details: list[str] = []
+            if result.worktrees_pruned > 0:
+                details.append(f"{result.worktrees_pruned} stale worktree ref(s)")
+            if result.branches_deleted:
+                details.append(f"{len(result.branches_deleted)} orphan branch(es)")
+            self.log(f"Janitor cleaned: {', '.join(details)}")
 
     async def cleanup(self) -> None:
         """Terminate all agents and close resources.
@@ -589,7 +627,7 @@ class KaganApp(App):
         from textual.css.query import NoMatches
 
         from kagan.tui.ui.screens.base import KaganScreen
-        from kagan.tui.ui.widgets.header import KaganHeader, _get_git_branch
+        from kagan.tui.ui.widgets.header import KaganHeader
 
         screen = self.screen
         if not isinstance(screen, KaganScreen):
@@ -603,7 +641,7 @@ class KaganApp(App):
         if self.ctx.active_repo_id is None:
             header.update_branch("")
             return
-        branch = await _get_git_branch(self.project_root)
+        branch = await get_current_branch(self.project_root)
         header.update_branch(branch)
 
     def _run_action(self, action: str, *, target: str = "screen") -> None:

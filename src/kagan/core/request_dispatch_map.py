@@ -48,16 +48,18 @@ def build_request_dispatch_map() -> dict[tuple[str, str], RequestHandler]:
         handle_task_search,
         handle_task_update,
         handle_task_update_scratchpad,
+        handle_task_wait,
     )
 
     return {
-        # Tasks (11)
+        # Tasks (12)
         ("tasks", "get"): handle_task_get,
         ("tasks", "list"): handle_task_list,
         ("tasks", "search"): handle_task_search,
         ("tasks", "scratchpad"): handle_task_scratchpad,
         ("tasks", "context"): handle_task_context,
         ("tasks", "logs"): handle_task_logs,
+        ("tasks", "wait"): handle_task_wait,
         ("tasks", "create"): handle_task_create,
         ("tasks", "update"): handle_task_update,
         ("tasks", "move"): handle_task_move,

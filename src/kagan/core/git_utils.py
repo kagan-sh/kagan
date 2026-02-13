@@ -233,6 +233,28 @@ async def get_current_branch(repo_root: Path) -> str:
         return ""
 
 
+async def get_remote_default_branch(repo_root: Path) -> str:
+    """Return the remote default branch name, or empty string if unavailable."""
+    if not await has_git_repo(repo_root):
+        return ""
+    try:
+        result = await _run_git(
+            "symbolic-ref",
+            "--short",
+            "refs/remotes/origin/HEAD",
+            repo_root=repo_root,
+            timeout=GIT_QUERY_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            return ""
+        ref = result.stdout_text().strip()
+        if ref.startswith("origin/"):
+            return ref.removeprefix("origin/")
+        return ""
+    except (FileNotFoundError, TimeoutError):
+        return ""
+
+
 async def has_commits(repo_root: Path) -> bool:
     """Return True if the git repo has at least one commit."""
     try:

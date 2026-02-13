@@ -78,6 +78,7 @@ async def _bootstrap_planner_app(
     for index, repo_path in enumerate(repos):
         repo_row, _ = await repo_repo.get_or_create(repo_path, default_branch="main")
         if repo_row.id:
+            await repo_repo.update_default_branch(repo_row.id, "main", mark_configured=True)
             await repo_repo.add_to_project(project_id, repo_row.id, is_primary=index == 0)
     await task_repo.close()
 
@@ -174,8 +175,10 @@ async def test_planner_header_task_count_refreshes_after_external_task_create(
         )
 
         await wait_until(
-            lambda: f"📋 {initial_count + 1} tasks"
-            in str(planner.query_one("#header-stats", Label).render()),
+            lambda: (
+                f"📋 {initial_count + 1} tasks"
+                in str(planner.query_one("#header-stats", Label).render())
+            ),
             timeout=8.0,
             description="planner header task count updates after external create",
         )

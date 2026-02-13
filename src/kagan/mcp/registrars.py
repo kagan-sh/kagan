@@ -61,6 +61,7 @@ from kagan.mcp.models import (
     TaskRuntimeState,
     TaskSummary,
     TaskUpdateResponse,
+    TaskWaitResponse,
 )
 
 if TYPE_CHECKING:
@@ -159,6 +160,7 @@ _PROJECTS_REPOS = protocol_call(ProtocolCapability.PROJECTS, ProjectsMethod.REPO
 _AUDIT_LIST = protocol_call(ProtocolCapability.AUDIT, AuditMethod.LIST)
 
 # Task CRUD
+_TASKS_WAIT = protocol_call(ProtocolCapability.TASKS, TasksMethod.WAIT)
 _TASKS_UPDATE_SCRATCHPAD = protocol_call(ProtocolCapability.TASKS, TasksMethod.UPDATE_SCRATCHPAD)
 _TASKS_CREATE = protocol_call(ProtocolCapability.TASKS, TasksMethod.CREATE)
 _TASKS_UPDATE = protocol_call(ProtocolCapability.TASKS, TasksMethod.UPDATE)
@@ -370,6 +372,48 @@ def register_shared_tools(
                 for t in raw.get("tasks", [])
             ]
             return TaskListResponse(tasks=tasks, count=raw.get("count", len(tasks)))
+
+    if allows_all(_TASKS_WAIT):
+
+        @mcp.tool(annotations=_READ_ONLY)
+        async def tasks_wait(
+            task_id: str,
+            timeout_seconds: float | None = None,
+            wait_for_status: list[str] | None = None,
+            from_updated_at: str | None = None,
+            ctx: MCPContext | None = None,
+        ) -> TaskWaitResponse:
+            """Wait for task status change or timeout (long-poll).
+
+            Blocks until the target task changes status, reaches a specific
+            status from wait_for_status, or the timeout elapses.
+
+            Use from_updated_at for race-safe resumption after reconnect.
+
+            Args:
+                task_id: The task to watch.
+                timeout_seconds: Max wait time (default: server configured, max: server configured).
+                wait_for_status: Optional list of target statuses to wait for (e.g. REVIEW, DONE).
+                from_updated_at: ISO timestamp cursor for race-safe resume (no lost wakeups).
+            """
+            bridge = _require_bridge(ctx)
+            raw = await bridge.wait_task(
+                task_id,
+                timeout_seconds=timeout_seconds,
+                wait_for_status=wait_for_status,
+                from_updated_at=from_updated_at,
+            )
+            return TaskWaitResponse(
+                changed=bool(raw.get("changed", False)),
+                timed_out=bool(raw.get("timed_out", False)),
+                task_id=raw.get("task_id", task_id),
+                previous_status=raw.get("previous_status"),
+                current_status=raw.get("current_status"),
+                changed_at=raw.get("changed_at"),
+                task=raw.get("task"),
+                code=raw.get("code"),
+                message=raw.get("message"),
+            )
 
     if allows_all(_PROJECTS_LIST):
 
@@ -1027,7 +1071,11 @@ def register_job_tools(
                     "timeout_seconds": 1.5,
                 }
                 if hint is None:
-                    hint = "Call jobs_wait until the job reaches a terminal status."
+                    hint = (
+                        "Call jobs_wait to confirm the spawn succeeded, then call "
+                        "tasks_wait(task_id, wait_for_status=['REVIEW','DONE'], "
+                        "timeout_seconds=900) to long-poll until the agent completes."
+                    )
             return _build_job_response(
                 raw=raw,
                 envelope=envelope,
@@ -1455,6 +1503,8 @@ def register_admin_tools(
             require_review_approval: bool | None = None,
             serialize_merges: bool | None = None,
             default_base_branch: str | None = None,
+            auto_sync_base_branch: bool | None = None,
+            worktree_base_ref_strategy: str | None = None,
             max_concurrent_agents: int | None = None,
             default_worker_agent: str | None = None,
             default_pair_terminal_backend: str | None = None,
@@ -1464,6 +1514,8 @@ def register_admin_tools(
             default_model_gemini: str | None = None,
             default_model_kimi: str | None = None,
             default_model_copilot: str | None = None,
+            tasks_wait_default_timeout_seconds: int | None = None,
+            tasks_wait_max_timeout_seconds: int | None = None,
             skip_pair_instructions: bool | None = None,
             ctx: MCPContext | None = None,
         ) -> SettingsUpdateResponse:
@@ -1480,6 +1532,8 @@ def register_admin_tools(
                     "require_review_approval": require_review_approval,
                     "serialize_merges": serialize_merges,
                     "default_base_branch": default_base_branch,
+                    "auto_sync_base_branch": auto_sync_base_branch,
+                    "worktree_base_ref_strategy": worktree_base_ref_strategy,
                     "max_concurrent_agents": max_concurrent_agents,
                     "default_worker_agent": default_worker_agent,
                     "default_pair_terminal_backend": default_pair_terminal_backend,
@@ -1489,6 +1543,8 @@ def register_admin_tools(
                     "default_model_gemini": default_model_gemini,
                     "default_model_kimi": default_model_kimi,
                     "default_model_copilot": default_model_copilot,
+                    "tasks_wait_default_timeout_seconds": tasks_wait_default_timeout_seconds,
+                    "tasks_wait_max_timeout_seconds": tasks_wait_max_timeout_seconds,
                     "skip_pair_instructions": skip_pair_instructions,
                 }
             )
@@ -1603,7 +1659,6 @@ def register_full_mode_tools(
         mutating_annotation=mutating_annotation,
         destructive_annotation=destructive_annotation,
     )
-
 
 __all__ = [
     "SharedToolRegistrationContext",

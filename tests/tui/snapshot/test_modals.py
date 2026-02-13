@@ -192,6 +192,7 @@ class TestReviewModal:
             repo_repo = RepoRepository(manager._session_factory)
             repo, _ = await repo_repo.get_or_create(project.root, default_branch="main")
             if repo.id:
+                await repo_repo.update_default_branch(repo.id, "main", mark_configured=True)
                 await repo_repo.add_to_project(project_id, repo.id, is_primary=True)
 
             task = Task(

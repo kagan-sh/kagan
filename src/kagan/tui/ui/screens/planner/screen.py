@@ -24,6 +24,7 @@ from kagan.core.agents.agent_factory import AgentFactory, create_agent
 from kagan.core.agents.planner import build_planner_prompt, parse_proposed_plan
 from kagan.core.config import get_fallback_agent_config
 from kagan.core.constants import BOX_DRAWING, KAGAN_LOGO, PLANNER_TITLE_MAX_LENGTH
+from kagan.core.git_utils import get_current_branch
 from kagan.core.limits import AGENT_TIMEOUT
 from kagan.core.models.enums import ChatRole, ProposalStatus
 from kagan.core.services.permission_policy import AgentPermissionScope, resolve_auto_approve
@@ -309,8 +310,6 @@ class PlannerScreen(KaganScreen):
 
     async def on_mount(self) -> None:
         """Mount planner widgets and initialize agent/session state."""
-        from kagan.tui.ui.widgets.header import _get_git_branch
-
         await self.sync_header_context(self.header)
         self.kagan_app.task_changed_signal.subscribe(self, self._on_task_changed)
         self._start_header_sync()
@@ -326,7 +325,7 @@ class PlannerScreen(KaganScreen):
             await self._discard_persistent_state(self.kagan_app.planner_state)
             return
 
-        branch = await _get_git_branch(self.kagan_app.project_root)
+        branch = await get_current_branch(self.kagan_app.project_root)
         self.header.update_branch(branch)
 
         if not self.ctx.api.is_agent_available():
@@ -429,6 +428,7 @@ class PlannerScreen(KaganScreen):
         """Synchronize planner header counters from the task backend."""
         try:
             await self.sync_header_context(self.header)
+            await self.auto_sync_branch(self.header)
         except (RepositoryClosing, OperationalError):
             return
 
@@ -1291,6 +1291,9 @@ class PlannerScreen(KaganScreen):
         if result is not None:
             config.general.default_base_branch = result
             await config.save(self.kagan_app.config_path)
+            repo_id = self.ctx.active_repo_id
+            if repo_id:
+                await self.ctx.api.update_repo_default_branch(repo_id, result or "main")
             self.notify(f"Default branch set to: {result}")
 
     async def _execute_clear(self, *, notify: bool = True) -> None:

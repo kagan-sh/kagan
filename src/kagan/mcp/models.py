@@ -171,6 +171,28 @@ class TaskDetails(BaseModel):
     )
 
 
+class TaskWaitResponse(BaseModel):
+    """Response from tasks_wait long-poll tool."""
+
+    changed: bool = Field(description="Whether the task changed before timeout")
+    timed_out: bool = Field(description="Whether the wait timed out without a change")
+    task_id: str = Field(description="ID of the watched task")
+    previous_status: str | None = Field(
+        default=None, description="Task status at the start of the wait"
+    )
+    current_status: str | None = Field(
+        default=None, description="Task status at the end of the wait"
+    )
+    changed_at: str | None = Field(
+        default=None, description="ISO timestamp of the status change event"
+    )
+    task: dict[str, object] | None = Field(
+        default=None, description="Compact task snapshot (no large logs/scratchpads)"
+    )
+    code: str | None = Field(default=None, description="Machine-readable status code")
+    message: str | None = Field(default=None, description="Human-readable status message")
+
+
 class ReviewResponse(MutatingResponse):
     """Response from request_review tool."""
 

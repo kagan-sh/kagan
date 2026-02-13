@@ -138,6 +138,8 @@ _SETTINGS_UPDATE_FIELD_MAP: dict[str, str] = {
     "require_review_approval": "general.require_review_approval",
     "serialize_merges": "general.serialize_merges",
     "default_base_branch": "general.default_base_branch",
+    "auto_sync_base_branch": "general.auto_sync_base_branch",
+    "worktree_base_ref_strategy": "general.worktree_base_ref_strategy",
     "max_concurrent_agents": "general.max_concurrent_agents",
     "default_worker_agent": "general.default_worker_agent",
     "default_pair_terminal_backend": "general.default_pair_terminal_backend",
@@ -147,6 +149,8 @@ _SETTINGS_UPDATE_FIELD_MAP: dict[str, str] = {
     "default_model_gemini": "general.default_model_gemini",
     "default_model_kimi": "general.default_model_kimi",
     "default_model_copilot": "general.default_model_copilot",
+    "tasks_wait_default_timeout_seconds": "general.tasks_wait_default_timeout_seconds",
+    "tasks_wait_max_timeout_seconds": "general.tasks_wait_max_timeout_seconds",
     "skip_pair_instructions": "ui.skip_pair_instructions",
 }
 
@@ -357,7 +361,8 @@ def _build_server_instructions(readonly: bool) -> str:
         "Use get_task to inspect any task (with include_logs=true for execution history).",
         "Use tasks_list to coordinate with other agents.",
         "Important: status is Kanban column, task_type is execution mode (AUTO/PAIR).",
-        "Use jobs_submit/jobs_wait/jobs_get/jobs_events/jobs_cancel for async automation control.",
+        "Use jobs_submit to spawn agents. jobs_wait tracks the spawn only.",
+        "Use tasks_wait to long-poll for agent completion (wait_for_status).",
         "If a tool returns next_tool/next_arguments, use them for deterministic recovery.",
     ]
     if readonly:
@@ -377,9 +382,11 @@ def _build_server_instructions(readonly: bool) -> str:
                 "2. Use update_scratchpad to record progress, decisions, and blockers",
                 "3. Call jobs_list_actions to discover valid job actions.",
                 "4. For automation runs: set task_type='AUTO', then call jobs_submit.",
-                "5. Track progress with jobs_wait/jobs_get and inspect timeline with jobs_events.",
-                "6. Use jobs_cancel only to stop in-flight work.",
-                "7. Call request_review when implementation is complete",
+                "5. Use jobs_wait to confirm the spawn succeeded (short timeout).",
+                "6. Use tasks_wait(task_id, wait_for_status=['REVIEW','DONE'],",
+                "   timeout_seconds=900) to long-poll until the agent completes.",
+                "7. Use jobs_cancel only to stop in-flight work.",
+                "8. Call request_review when implementation is complete",
             ]
         )
     return "\n".join(base)

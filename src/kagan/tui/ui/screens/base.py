@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, cast
 
 from textual.screen import Screen
 
+from kagan.core.git_utils import get_current_branch
+
 if TYPE_CHECKING:
     from kagan.core.adapters.db.schema import Project, Repo
     from kagan.core.bootstrap import AppContext
@@ -76,6 +78,23 @@ class KaganScreen(Screen):
         if repo is None:
             repo = repos[0]
         return repo.display_name or repo.name
+
+    async def auto_sync_branch(self, header: KaganHeader) -> None:
+        """If auto_sync enabled and git branch changed, update Repo.default_branch."""
+        config = self.kagan_app.config
+        if not config.general.auto_sync_base_branch:
+            return
+
+        repo_id = self.ctx.active_repo_id
+        if repo_id is None:
+            return
+
+        current_branch = await get_current_branch(self.kagan_app.project_root)
+        if not current_branch or current_branch == header.git_branch:
+            return
+
+        header.update_branch(current_branch)
+        await self.ctx.api.update_repo_default_branch(repo_id, current_branch)
 
     @staticmethod
     def _match_repo(

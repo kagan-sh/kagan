@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
@@ -16,8 +15,6 @@ from kagan.core.constants import KAGAN_LOGO_SMALL
 from kagan.tui.ui.utils import safe_query_one
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from textual.app import ComposeResult
 
     from kagan.core.config import KaganConfig
@@ -56,26 +53,6 @@ def _get_version() -> str:
         return version("kagan")
     except PackageNotFoundError:
         return "dev"
-
-
-async def _get_git_branch(repo_root: Path) -> str:
-    """Get current git branch name."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "rev-parse",
-            "--abbrev-ref",
-            "HEAD",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=repo_root,
-        )
-        stdout, _ = await proc.communicate()
-        if proc.returncode == 0:
-            return stdout.decode().strip()
-    except (OSError, FileNotFoundError):
-        pass
-    return ""
 
 
 class KaganHeader(Widget):

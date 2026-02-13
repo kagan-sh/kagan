@@ -25,6 +25,7 @@ def full_mcp():
 _ANNOTATION_MATRIX: dict[str, tuple[bool, bool, bool]] = {
     "get_task": (True, False, True),
     "tasks_list": (True, False, True),
+    "tasks_wait": (True, False, True),
     "sessions_exists": (True, False, True),
     "projects_list": (True, False, True),
     "repos_list": (True, False, True),
@@ -60,6 +61,7 @@ _READONLY_TOOLS = {
     "propose_plan",
     "get_task",
     "tasks_list",
+    "tasks_wait",
     "projects_list",
     "repos_list",
     "audit_tail",

@@ -467,6 +467,24 @@ class CoreClientBridge:
         """Move task to new status column."""
         return await self._command("tasks", "move", {"task_id": task_id, "status": status})
 
+    async def wait_task(
+        self,
+        task_id: str,
+        *,
+        timeout_seconds: float | None = None,
+        wait_for_status: list[str] | None = None,
+        from_updated_at: str | None = None,
+    ) -> dict:
+        """Block until target task changes or timeout elapses."""
+        params: dict[str, Any] = {"task_id": task_id}
+        if timeout_seconds is not None:
+            params["timeout_seconds"] = timeout_seconds
+        if wait_for_status is not None:
+            params["wait_for_status"] = wait_for_status
+        if from_updated_at is not None:
+            params["from_updated_at"] = from_updated_at
+        return await self._query("tasks", "wait", params)
+
     async def submit_job(
         self,
         *,
@@ -574,7 +592,6 @@ class CoreClientBridge:
     async def update_settings(self, fields: dict[str, Any]) -> dict:
         """Update allowlisted settings fields."""
         return await self._command("settings", "update", {"fields": fields})
-
 
 def _format_review_feedback(review_result: object) -> str | None:
     """Format review result dict into a human-readable string."""
