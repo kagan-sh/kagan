@@ -378,8 +378,8 @@ def register_shared_tools(
         @mcp.tool(annotations=_READ_ONLY)
         async def tasks_wait(
             task_id: str,
-            timeout_seconds: float | None = None,
-            wait_for_status: list[str] | None = None,
+            timeout_seconds: float | str | None = None,
+            wait_for_status: list[str] | str | None = None,
             from_updated_at: str | None = None,
             ctx: MCPContext | None = None,
         ) -> TaskWaitResponse:
@@ -393,7 +393,7 @@ def register_shared_tools(
             Args:
                 task_id: The task to watch.
                 timeout_seconds: Max wait time (default: server configured, max: server configured).
-                wait_for_status: Optional list of target statuses to wait for (e.g. REVIEW, DONE).
+                wait_for_status: Target statuses (list, CSV string, or JSON list string).
                 from_updated_at: ISO timestamp cursor for race-safe resume (no lost wakeups).
             """
             bridge = _require_bridge(ctx)
@@ -635,7 +635,7 @@ def register_task_tools(
             agent_backend: str | None = None,
             parent_id: str | None = None,
             base_branch: str | None = None,
-            acceptance_criteria: list[str] | None = None,
+            acceptance_criteria: list[str] | str | None = None,
             created_by: str | None = None,
             ctx: MCPContext | None = None,
         ) -> TaskCreateResponse:
@@ -697,7 +697,7 @@ def register_task_tools(
             parent_id: str | None = None,
             project_id: str | None = None,
             base_branch: str | None = None,
-            acceptance_criteria: list[str] | None = None,
+            acceptance_criteria: list[str] | str | None = None,
             ctx: MCPContext | None = None,
         ) -> TaskUpdateResponse:
             """Update task fields.

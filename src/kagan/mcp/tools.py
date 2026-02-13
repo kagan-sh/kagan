@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from contextlib import suppress
 from dataclasses import dataclass
@@ -15,12 +16,20 @@ logger = logging.getLogger(__name__)
 _AUTH_FAILED_CODE = "AUTH_FAILED"
 _SUMMARY_TEXT_LIMIT = 8_000
 _FULL_TEXT_LIMIT = 32_000
+_SUMMARY_DESCRIPTION_LIMIT = 2_000
+_FULL_DESCRIPTION_LIMIT = 8_000
+_SUMMARY_ACCEPTANCE_ITEM_LIMIT = 400
+_FULL_ACCEPTANCE_ITEM_LIMIT = 1_000
+_SUMMARY_ACCEPTANCE_ITEMS = 20
+_FULL_ACCEPTANCE_ITEMS = 50
 _SUMMARY_LOG_ENTRY_LIMIT = 2_500
 _FULL_LOG_ENTRY_LIMIT = 10_000
 _SUMMARY_LOG_ENTRIES = 3
 _FULL_LOG_ENTRIES = 10
 _SUMMARY_LOG_BUDGET = 7_500
 _FULL_LOG_BUDGET = 24_000
+_SUMMARY_RESPONSE_BUDGET = 12_000
+_FULL_RESPONSE_BUDGET = 40_000
 _QUERY_UNAVAILABLE_CODES = {"UNKNOWN_METHOD", "UNAUTHORIZED"}
 
 
@@ -159,6 +168,71 @@ class CoreClientBridge:
         omitted_chars = len(value) - limit
         return f"{value[:limit]}\n\n[truncated {omitted_chars} chars]"
 
+    @classmethod
+    def _truncate_acceptance_criteria(cls, value: object, *, mode: str) -> list[str] | None:
+        if not isinstance(value, list):
+            return None
+
+        item_limit = (
+            _FULL_ACCEPTANCE_ITEM_LIMIT if mode == "full" else _SUMMARY_ACCEPTANCE_ITEM_LIMIT
+        )
+        max_items = _FULL_ACCEPTANCE_ITEMS if mode == "full" else _SUMMARY_ACCEPTANCE_ITEMS
+
+        criteria = [cls._truncate_text(str(item), limit=item_limit) or "" for item in value]
+        if len(criteria) <= max_items:
+            return criteria
+
+        omitted_count = len(criteria) - max_items
+        return [*criteria[:max_items], f"[truncated {omitted_count} criteria]"]
+
+    @classmethod
+    def _fit_task_payload_budget(cls, payload: dict[str, Any], *, mode: str) -> dict[str, Any]:
+        budget = _FULL_RESPONSE_BUDGET if mode == "full" else _SUMMARY_RESPONSE_BUDGET
+        serialized = json.dumps(payload, ensure_ascii=True, default=str)
+        if len(serialized) <= budget:
+            return payload
+
+        trimmed = dict(payload)
+        if isinstance(trimmed.get("scratchpad"), str):
+            scratchpad_limit = max(0, budget // 3)
+            trimmed["scratchpad"] = cls._truncate_text(
+                trimmed["scratchpad"],
+                limit=scratchpad_limit,
+            )
+
+        if isinstance(trimmed.get("description"), str):
+            description_limit = max(0, budget // 4)
+            trimmed["description"] = cls._truncate_text(
+                trimmed["description"],
+                limit=description_limit,
+            )
+
+        serialized = json.dumps(trimmed, ensure_ascii=True, default=str)
+        if len(serialized) <= budget:
+            return trimmed
+
+        if isinstance(trimmed.get("logs"), list):
+            logs_budget = max(0, budget // 3)
+            trimmed["logs"] = cls._trim_logs_to_budget(trimmed["logs"], budget_chars=logs_budget)
+
+        serialized = json.dumps(trimmed, ensure_ascii=True, default=str)
+        if len(serialized) <= budget:
+            return trimmed
+
+        # Last-resort safety valve for transport framing limits.
+        trimmed.pop("logs", None)
+        if isinstance(trimmed.get("scratchpad"), str):
+            trimmed["scratchpad"] = cls._truncate_text(
+                trimmed["scratchpad"],
+                limit=max(0, budget // 4),
+            )
+        if isinstance(trimmed.get("description"), str):
+            trimmed["description"] = cls._truncate_text(
+                trimmed["description"],
+                limit=max(0, budget // 5),
+            )
+        return trimmed
+
     async def _refresh_client_from_discovery(self) -> bool:
         from kagan.core.ipc.client import IPCClient
         from kagan.core.ipc.discovery import discover_core_endpoint
@@ -239,7 +313,10 @@ class CoreClientBridge:
                 return resp.result or {}
 
             code = resp.error.code if resp.error else "UNKNOWN"
-            message = resp.error.message if resp.error else "Unknown error"
+            raw_message = resp.error.message if resp.error else None
+            message = str(raw_message).strip() if raw_message is not None else ""
+            if not message:
+                message = f"{capability}.{method} request failed"
             if code == _AUTH_FAILED_CODE and attempt < max_attempts - 1:
                 if await self._recover_client(refresh_endpoint=True):
                     continue
@@ -289,8 +366,18 @@ class CoreClientBridge:
             "task_id": task_data["id"],
             "title": task_data["title"],
             "status": task_data["status"],
-            "description": task_data.get("description"),
-            "acceptance_criteria": task_data.get("acceptance_criteria"),
+            "description": self._truncate_text(
+                task_data.get("description"),
+                limit=(
+                    _FULL_DESCRIPTION_LIMIT
+                    if mode_name == "full"
+                    else _SUMMARY_DESCRIPTION_LIMIT
+                ),
+            ),
+            "acceptance_criteria": self._truncate_acceptance_criteria(
+                task_data.get("acceptance_criteria"),
+                mode=mode_name,
+            ),
             "runtime": task_data.get("runtime"),
         }
 
@@ -339,7 +426,7 @@ class CoreClientBridge:
             # Review feedback not yet available via core; return None
             response["review_feedback"] = None
 
-        return response
+        return self._fit_task_payload_budget(response, mode=mode_name)
 
     async def get_scratchpad(self, task_id: str) -> str:
         """Get a task's scratchpad content."""
@@ -431,7 +518,7 @@ class CoreClientBridge:
         agent_backend: str | None = None,
         parent_id: str | None = None,
         base_branch: str | None = None,
-        acceptance_criteria: list[str] | None = None,
+        acceptance_criteria: list[str] | str | None = None,
         created_by: str | None = None,
     ) -> dict:
         """Create a new task."""
@@ -471,14 +558,22 @@ class CoreClientBridge:
         self,
         task_id: str,
         *,
-        timeout_seconds: float | None = None,
-        wait_for_status: list[str] | None = None,
+        timeout_seconds: float | str | None = None,
+        wait_for_status: list[str] | str | None = None,
         from_updated_at: str | None = None,
     ) -> dict:
         """Block until target task changes or timeout elapses."""
         params: dict[str, Any] = {"task_id": task_id}
         if timeout_seconds is not None:
-            params["timeout_seconds"] = timeout_seconds
+            if isinstance(timeout_seconds, str):
+                normalized_timeout = timeout_seconds.strip()
+                if normalized_timeout:
+                    with suppress(ValueError):
+                        params["timeout_seconds"] = float(normalized_timeout)
+                if "timeout_seconds" not in params:
+                    params["timeout_seconds"] = timeout_seconds
+            else:
+                params["timeout_seconds"] = timeout_seconds
         if wait_for_status is not None:
             params["wait_for_status"] = wait_for_status
         if from_updated_at is not None:

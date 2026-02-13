@@ -79,8 +79,8 @@ It uses event-driven wakeup (no polling loops) for efficient orchestration.
 | Parameter         | Type           | Default               | Description                                             |
 | ----------------- | -------------- | --------------------- | ------------------------------------------------------- |
 | `task_id`         | `string`       | required              | Task to watch                                           |
-| `timeout_seconds` | `float`        | server default (900s) | Max wait time; capped at server max                     |
-| `wait_for_status` | `list[string]` | `null` (any change)   | Target statuses to wait for (e.g. `["REVIEW", "DONE"]`) |
+| `timeout_seconds` | `float|string` | server default (900s) | Max wait time; numeric strings are accepted              |
+| `wait_for_status` | `list|string`  | `null` (any change)   | Status list, CSV string, or JSON list string             |
 | `from_updated_at` | `string`       | `null`                | ISO timestamp cursor for race-safe resume               |
 
 ### Response fields
@@ -142,6 +142,7 @@ if result.timed_out:
 
 - `status` is Kanban state: `BACKLOG`, `IN_PROGRESS`, `REVIEW`, `DONE`.
 - `task_type` is execution mode: `AUTO`, `PAIR`.
+- `acceptance_criteria` accepts either a single string or a list of strings.
 
 Recovery behavior:
 

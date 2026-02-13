@@ -4,16 +4,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-from tests.core.unit._api_helpers import build_api
-
-
-@pytest.fixture
-async def api_env(tmp_path):
-    """Build a test API environment with real task/project services."""
-    task_repo, api, ctx = await build_api(tmp_path)
-    return task_repo, api, ctx
-
 
 async def test_task_wait_not_found(api_env):
     """tasks.wait returns TASK_NOT_FOUND for missing task."""
@@ -233,11 +223,45 @@ async def test_task_wait_default_timeout_from_config(api_env):
 
 
 async def test_task_wait_non_list_status_filter(api_env):
-    """tasks.wait rejects non-list wait_for_status."""
+    """tasks.wait rejects unsupported wait_for_status types."""
     from kagan.core.request_handlers import handle_task_wait
 
     _, api, _ = api_env
     task = await api.create_task("Wait test", "desc")
-    result = await handle_task_wait(api, {"task_id": task.id, "wait_for_status": "REVIEW"})
+    result = await handle_task_wait(api, {"task_id": task.id, "wait_for_status": 123})
     assert result["code"] == "INVALID_PARAMS"
-    assert "list" in result["message"]
+    assert "wait_for_status" in result["message"]
+
+
+async def test_task_wait_accepts_timeout_string(api_env):
+    """tasks.wait accepts numeric timeout_seconds sent as string."""
+    from kagan.core.request_handlers import handle_task_wait
+
+    _, api, _ = api_env
+    task = await api.create_task("Wait test", "desc")
+    result = await handle_task_wait(api, {"task_id": task.id, "timeout_seconds": "0.05"})
+    assert result["timed_out"] is True
+    assert result["code"] == "WAIT_TIMEOUT"
+
+
+async def test_task_wait_accepts_csv_status_filter(api_env):
+    """tasks.wait accepts comma-separated wait_for_status strings."""
+    from kagan.core.request_handlers import handle_task_wait
+
+    _, api, _ = api_env
+    task = await api.create_task("Wait test", "desc")
+    result = await handle_task_wait(api, {"task_id": task.id, "wait_for_status": "BACKLOG,REVIEW"})
+    assert result["changed"] is True
+    assert result["code"] == "ALREADY_AT_STATUS"
+    assert result["current_status"] == "BACKLOG"
+
+
+async def test_task_wait_accepts_json_status_filter_string(api_env):
+    """tasks.wait accepts JSON list strings for wait_for_status."""
+    from kagan.core.request_handlers import handle_task_wait
+
+    _, api, _ = api_env
+    task = await api.create_task("Wait test", "desc")
+    result = await handle_task_wait(api, {"task_id": task.id, "wait_for_status": '["BACKLOG"]'})
+    assert result["changed"] is True
+    assert result["code"] == "ALREADY_AT_STATUS"

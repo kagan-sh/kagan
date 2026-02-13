@@ -215,3 +215,39 @@ async def test_wait_task_race_safe_cursor() -> None:
     assert result["changed"] is True
     assert result["code"] == "CHANGED_SINCE_CURSOR"
     assert calls[0]["params"]["from_updated_at"] == "2026-02-13T08:00:00+00:00"
+
+
+async def test_wait_task_accepts_string_timeout_and_status_filter() -> None:
+    """Bridge forwards string-based wait params for tolerant server parsing."""
+    calls: list[dict[str, Any]] = []
+    bridge = _bridge_for_routes(
+        {
+            ("tasks", "wait"): {
+                "changed": False,
+                "timed_out": True,
+                "task_id": "T-700",
+                "code": "WAIT_TIMEOUT",
+                "message": "No change detected within 30s",
+            },
+        },
+        captured_calls=calls,
+    )
+
+    result = await bridge.wait_task(
+        "T-700",
+        timeout_seconds="30",
+        wait_for_status="REVIEW,DONE",
+    )
+
+    assert result["timed_out"] is True
+    assert calls == [
+        {
+            "capability": "tasks",
+            "method": "wait",
+            "params": {
+                "task_id": "T-700",
+                "timeout_seconds": 30.0,
+                "wait_for_status": "REVIEW,DONE",
+            },
+        }
+    ]

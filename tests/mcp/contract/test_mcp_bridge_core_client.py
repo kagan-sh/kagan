@@ -406,6 +406,30 @@ async def test_get_task_summary_mode_truncates_large_fields() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_task_summary_mode_truncates_description_and_acceptance_criteria() -> None:
+    """get_task(mode=summary) trims oversized description and criteria lists."""
+    client = make_client(
+        {
+            "found": True,
+            "task": {
+                "id": "T-TRUNC",
+                "title": "Big task",
+                "status": "backlog",
+                "description": "d" * 8_000,
+                "acceptance_criteria": [f"criterion-{idx}-" + ("x" * 800) for idx in range(30)],
+            },
+        }
+    )
+    bridge = CoreClientBridge(client, SESSION)
+    result = await bridge.get_task("T-TRUNC", mode="summary")
+
+    assert "[truncated " in (result["description"] or "")
+    assert isinstance(result["acceptance_criteria"], list)
+    assert len(result["acceptance_criteria"]) == 21
+    assert result["acceptance_criteria"][-1].startswith("[truncated ")
+
+
+@pytest.mark.asyncio
 async def test_list_tasks_with_coordination_filters() -> None:
     """list_tasks should pass filter/exclusion/scratchpad flags to tasks.list."""
     client = make_client(
@@ -503,6 +527,29 @@ async def test_create_task_accepts_extended_fields() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_task_accepts_scalar_acceptance_criteria() -> None:
+    client = make_client({"success": True, "task_id": "T1"})
+    bridge = CoreClientBridge(client, SESSION)
+    await bridge.create_task(
+        title="New task",
+        acceptance_criteria="single criterion",
+    )
+
+    client.request.assert_called_once_with(
+        session_id=SESSION,
+        session_profile=None,
+        session_origin=None,
+        capability="tasks",
+        method="create",
+        params={
+            "title": "New task",
+            "description": "",
+            "acceptance_criteria": "single criterion",
+        },
+    )
+
+
+@pytest.mark.asyncio
 async def test_update_task_accepts_extended_fields() -> None:
     client = make_client({"success": True, "task_id": "T1"})
     bridge = CoreClientBridge(client, SESSION)
@@ -538,3 +585,33 @@ async def test_update_task_accepts_extended_fields() -> None:
             "acceptance_criteria": ["done"],
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_bridge_error_uses_fallback_message_when_core_message_empty() -> None:
+    client = AsyncMock()
+
+    async def mock_request(
+        *,
+        session_id,
+        session_profile,
+        session_origin,
+        capability,
+        method,
+        params,
+    ):
+        del session_id, session_profile, session_origin, capability, method, params
+        return CoreResponse(
+            request_id="r1",
+            ok=False,
+            error=CoreErrorDetail(code="INVALID_PARAMS", message=""),
+        )
+
+    client.request = mock_request
+    bridge = CoreClientBridge(client, SESSION)
+
+    with pytest.raises(MCPBridgeError) as exc_info:
+        await bridge.get_context("TASK-001")
+
+    assert exc_info.value.code == "INVALID_PARAMS"
+    assert exc_info.value.message == "tasks.context request failed"

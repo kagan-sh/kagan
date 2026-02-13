@@ -8,6 +8,7 @@ the ``_REQUEST_DISPATCH_MAP``.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -165,9 +166,87 @@ def _parse_terminal_backend(value: object) -> PairTerminalBackend | None:
 def _parse_acceptance_criteria(value: object) -> list[str]:
     if value is None:
         return []
+    if isinstance(value, str):
+        normalized = value.strip()
+        return [normalized] if normalized else []
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
-    raise ValueError("acceptance_criteria must be a list of strings")
+    raise ValueError("acceptance_criteria must be a string or list of strings")
+
+
+def _parse_wait_timeout_seconds(
+    value: object,
+    *,
+    default_timeout: int,
+    max_timeout: int,
+) -> float | str:
+    if value is None:
+        return float(default_timeout)
+
+    if isinstance(value, bool):
+        return "timeout_seconds must be a positive number"
+
+    timeout_seconds: float
+    if isinstance(value, int | float):
+        timeout_seconds = float(value)
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return "timeout_seconds must be a positive number"
+        try:
+            timeout_seconds = float(normalized)
+        except ValueError:
+            return "timeout_seconds must be a positive number"
+    else:
+        return "timeout_seconds must be a positive number"
+
+    if timeout_seconds <= 0:
+        return "timeout_seconds must be > 0"
+    if timeout_seconds > max_timeout:
+        return f"timeout_seconds exceeds server maximum of {max_timeout}s"
+    return timeout_seconds
+
+
+def _parse_wait_for_status_filter(value: object) -> set[str] | str | None:
+    from kagan.core.models.enums import TaskStatus
+
+    if value is None:
+        return None
+
+    values: list[object]
+    if isinstance(value, list):
+        values = value
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if normalized.startswith("[") and normalized.endswith("]"):
+            try:
+                parsed = json.loads(normalized)
+            except json.JSONDecodeError:
+                return "wait_for_status JSON string must decode to a list of statuses"
+            if not isinstance(parsed, list):
+                return "wait_for_status JSON string must decode to a list of statuses"
+            values = parsed
+        else:
+            values = [part for part in normalized.split(",") if part.strip()]
+    else:
+        return "wait_for_status must be a list of status strings"
+
+    valid_statuses = {status.value for status in TaskStatus}
+    parsed_statuses: set[str] = set()
+    for raw_value in values:
+        status = str(raw_value).strip().upper().replace("-", "_").replace(" ", "_")
+        if status == "INPROGRESS":
+            status = "IN_PROGRESS"
+        if status not in valid_statuses:
+            return (
+                f"Invalid status filter value: {raw_value!r}. "
+                f"Expected one of: {', '.join(sorted(valid_statuses))}"
+            )
+        parsed_statuses.add(status)
+
+    return parsed_statuses
 
 
 def _build_update_fields(params: dict[str, Any]) -> dict[str, object]:
@@ -205,6 +284,7 @@ async def handle_task_list(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
     from kagan.core.models.enums import TaskStatus
 
     project_id = params.get("project_id")
+    include_scratchpad = bool(params.get("include_scratchpad", False))
     status: TaskStatus | None = None
     status_filter = _non_empty_str(params.get("filter"))
     if status_filter is not None:
@@ -215,8 +295,15 @@ async def handle_task_list(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
     excluded_task_ids = set(_str_list(params.get("exclude_task_ids")))
     filtered_tasks = [t for t in tasks if t.id not in excluded_task_ids]
 
+    serialized_tasks: list[dict[str, Any]] = []
+    for task in filtered_tasks:
+        task_payload = task_to_dict(task)
+        if include_scratchpad:
+            task_payload["scratchpad"] = await api.get_scratchpad(task.id)
+        serialized_tasks.append(task_payload)
+
     return {
-        "tasks": [task_to_dict(t) for t in filtered_tasks],
+        "tasks": serialized_tasks,
         "count": len(filtered_tasks),
     }
 
@@ -311,75 +398,40 @@ async def handle_task_wait(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
     import asyncio
 
     from kagan.core.events import TaskDeleted, TaskStatusChanged, TaskUpdated
-    from kagan.core.models.enums import TaskStatus
-
     f = _assert_api(api)
     task_id = params["task_id"]
 
     # Parse timeout
-    raw_timeout = params.get("timeout_seconds")
     config = f.ctx.config
     default_timeout = config.general.tasks_wait_default_timeout_seconds
     max_timeout = config.general.tasks_wait_max_timeout_seconds
 
-    if raw_timeout is None:
-        timeout_seconds = float(default_timeout)
-    else:
-        if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, int | float):
-            return {
-                "changed": False,
-                "timed_out": False,
-                "task_id": task_id,
-                "code": "INVALID_TIMEOUT",
-                "message": "timeout_seconds must be a positive number",
-            }
-        timeout_seconds = float(raw_timeout)
-        if timeout_seconds <= 0:
-            return {
-                "changed": False,
-                "timed_out": False,
-                "task_id": task_id,
-                "code": "INVALID_TIMEOUT",
-                "message": "timeout_seconds must be > 0",
-            }
-        if timeout_seconds > max_timeout:
-            return {
-                "changed": False,
-                "timed_out": False,
-                "task_id": task_id,
-                "code": "INVALID_TIMEOUT",
-                "message": (f"timeout_seconds exceeds server maximum of {max_timeout}s"),
-            }
+    parsed_timeout = _parse_wait_timeout_seconds(
+        params.get("timeout_seconds"),
+        default_timeout=default_timeout,
+        max_timeout=max_timeout,
+    )
+    if isinstance(parsed_timeout, str):
+        return {
+            "changed": False,
+            "timed_out": False,
+            "task_id": task_id,
+            "code": "INVALID_TIMEOUT",
+            "message": parsed_timeout,
+        }
+    timeout_seconds = parsed_timeout
 
     # Parse wait_for_status filter
-    wait_for_status: set[str] | None = None
-    raw_status_filter = params.get("wait_for_status")
-    if raw_status_filter is not None:
-        if not isinstance(raw_status_filter, list):
-            return {
-                "changed": False,
-                "timed_out": False,
-                "task_id": task_id,
-                "code": "INVALID_PARAMS",
-                "message": "wait_for_status must be a list of status strings",
-            }
-        valid_statuses = {s.value for s in TaskStatus}
-        normalized: set[str] = set()
-        for raw_s in raw_status_filter:
-            s_upper = str(raw_s).strip().upper()
-            if s_upper not in valid_statuses:
-                return {
-                    "changed": False,
-                    "timed_out": False,
-                    "task_id": task_id,
-                    "code": "INVALID_PARAMS",
-                    "message": (
-                        f"Invalid status filter value: {raw_s!r}. "
-                        f"Expected one of: {', '.join(sorted(valid_statuses))}"
-                    ),
-                }
-            normalized.add(s_upper)
-        wait_for_status = normalized
+    parsed_wait_for_status = _parse_wait_for_status_filter(params.get("wait_for_status"))
+    if isinstance(parsed_wait_for_status, str):
+        return {
+            "changed": False,
+            "timed_out": False,
+            "task_id": task_id,
+            "code": "INVALID_PARAMS",
+            "message": parsed_wait_for_status,
+        }
+    wait_for_status = parsed_wait_for_status
 
     # Race-safe guard: from_updated_at
     from_updated_at = _non_empty_str(params.get("from_updated_at"))
