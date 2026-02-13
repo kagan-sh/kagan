@@ -88,6 +88,16 @@ uv run poe test-snapshot-update
 - Do not write tautology tests (tests that only restate implementation internals).
 - Prefer tests that validate useful user-facing behavior and observable outcomes.
 
+## Test Value Gate (Mandatory)
+
+- Add tests only for user-visible behavior, API/contract guarantees, or real regressions.
+- Do not add tautology tests or pass-through wiring tests already covered elsewhere.
+- Search first (`rg`) for existing coverage and extend current tests instead of adding near-duplicates.
+- Reuse fixtures/helpers from `tests/**/conftest.py` and `tests/helpers/**`; avoid local fixtures when reusable ones exist.
+- Every new test must fail on the pre-fix path and pass after the fix.
+- If a new fixture is unavoidable, add a one-line comment explaining why shared fixtures are insufficient.
+- Before commit, remove or merge redundant tests introduced during the change.
+
 Path mapping:
 
 - `tests/core/unit/*` -> `core`, `unit`
