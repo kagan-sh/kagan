@@ -582,9 +582,12 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
         return status.value.replace("_", " ")
 
     def _build_agent_options(self) -> list[tuple[str, str]]:
+        from kagan.core.builtin_agents import BUILTIN_AGENTS
+
         kagan_app = self.kagan_app
         default_agent = self._get_default_agent_key()
         options: list[tuple[str, str]] = []
+        seen: set[str] = set()
 
         if hasattr(kagan_app, "config") and kagan_app.config.agents:
             for name, agent in kagan_app.config.agents.items():
@@ -592,14 +595,14 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
                     continue
                 label = self._format_agent_label(agent.name, name == default_agent)
                 options.append((label, name))
-            options.sort(key=lambda item: 0 if item[1] == default_agent else 1)
-            return options
-
-        from kagan.core.builtin_agents import BUILTIN_AGENTS
+                seen.add(name)
 
         for name, agent in BUILTIN_AGENTS.items():
+            if name in seen:
+                continue
             label = self._format_agent_label(agent.config.name, name == default_agent)
             options.append((label, name))
+
         options.sort(key=lambda item: 0 if item[1] == default_agent else 1)
         return options
 

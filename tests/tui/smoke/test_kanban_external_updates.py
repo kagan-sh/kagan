@@ -425,8 +425,10 @@ async def test_external_task_move_refreshes_column_membership(
         await app.ctx.task_service.move(task.id, TaskStatus.IN_PROGRESS)
 
         await wait_until(
-            lambda: _column_has_task(kanban, TaskStatus.IN_PROGRESS, task.id)
-            and not _column_has_task(kanban, TaskStatus.BACKLOG, task.id),
+            lambda: (
+                _column_has_task(kanban, TaskStatus.IN_PROGRESS, task.id)
+                and not _column_has_task(kanban, TaskStatus.BACKLOG, task.id)
+            ),
             timeout=5.0,
             description="task moved to in-progress column",
         )

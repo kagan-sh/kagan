@@ -507,7 +507,10 @@ class ReviewModal(KaganModalScreen[str | None]):
         await self._stream_attach_live_output_if_available(wait_for_agent=wait_for_live_agent)
         await self._stream_attach_live_review_if_available()
         try:
-            if self._is_running and not self._live_output_attached:
+            should_poll = (self._is_running and not self._live_output_attached) or (
+                self._is_reviewing and not self._review_log_loaded
+            )
+            if should_poll:
                 await self._stream_load_agent_output_history()
             await asyncio.gather(
                 self._queue_refresh_review_state(),
@@ -739,30 +742,40 @@ class ReviewModal(KaganModalScreen[str | None]):
             return
 
         indexed_entries = [
-            (str(getattr(entry, "id", f"idx-{index}")), entry)
+            (str(getattr(entry, "id", f"idx-{index}")), index, entry)
             for index, entry in enumerate(entries)
         ]
         new_entries = [
-            (entry_id, entry)
-            for entry_id, entry in indexed_entries
+            (entry_id, index, entry)
+            for entry_id, index, entry in indexed_entries
             if entry_id not in self._loaded_agent_output_entry_ids
         ]
         if not new_entries:
             return
 
-        has_review_result = False
         execution = await self.ctx.api.get_execution(execution_id)
+        has_review_result = False
+        review_log_start_index: int | None = None
         if execution and execution.metadata_:
             has_review_result = "review_result" in execution.metadata_
+            review_log_start_index = execution.metadata_.get("review_log_start_index")
 
-        review_entry_id = (
-            indexed_entries[-1][0] if has_review_result and len(indexed_entries) > 1 else None
-        )
+        # Determine which entries are review vs implementation
+        review_indices: set[int] = set()
+        if review_log_start_index is not None:
+            # Use the boundary marker stored before review began
+            review_indices = {i for i in range(review_log_start_index, len(indexed_entries))}
+        elif has_review_result and len(indexed_entries) > 1:
+            # Backward compat: fall back to "last entry = review" heuristic
+            review_indices = {len(indexed_entries) - 1}
+
         rendered_impl_output = False
         has_impl_entries = False
-        for entry_id, entry in new_entries:
+        review_new_entries = []
+        for entry_id, index, entry in new_entries:
             self._loaded_agent_output_entry_ids.add(entry_id)
-            if review_entry_id is not None and entry_id == review_entry_id:
+            if index in review_indices:
+                review_new_entries.append(entry)
                 continue
             has_impl_entries = True
             if not entry.logs:
@@ -777,23 +790,18 @@ class ReviewModal(KaganModalScreen[str | None]):
                 classes="warning",
             )
 
-        if review_entry_id is not None:
-            review_entries = [
-                entry for entry_id, entry in new_entries if entry_id == review_entry_id
-            ]
-        else:
-            review_entries = []
-        if review_entries:
+        if review_new_entries:
             chat_panel = self._stream_review_output_panel()
             chat_panel.remove_class("hidden")
-            for entry in review_entries:
+            for entry in review_new_entries:
                 if not entry.logs:
                     continue
                 for line in entry.logs.splitlines():
                     await chat_panel._render_log_line(line)
             self._review_log_loaded = True
-            self._state_sync_decision_from_output()
-            self._state_set_phase(StreamPhase.COMPLETE)
+            if has_review_result:
+                self._state_sync_decision_from_output()
+                self._state_set_phase(StreamPhase.COMPLETE)
 
     async def _stream_attach_live_review_if_available(self) -> None:
         if self._live_review_attached:
