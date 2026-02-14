@@ -37,8 +37,8 @@
 - Lease expiry + maintainer takeover path.
 
 ## Next Actions
-1. ~~Implement official `kagan_github` plugin skeleton and operation contract.~~ Done (GH-001)
-2. ~~Add repo connect + gh preflight + issue sync baseline.~~ Done (GH-002, GH-003)
+1. Implement official `kagan_github` plugin skeleton and operation contract. (GH-001 — backlog)
+2. Add repo connect + gh preflight + issue sync baseline. (GH-002, GH-003 — backlog)
 3. Implement TUI connected-repo UX and sync controls. (GH-004 — unblocked)
 4. Implement lease/lock policy and UI affordances. (GH-008 — unblocked)
 5. Implement AUTO/PAIR sync mode policy. (GH-009 — unblocked)

@@ -1,8 +1,9 @@
 # GH-003 - Issue Sync and Mapping Projection
 
-Status: Done
+Status: Backlog
 Owner: Codex
 Depends On: GH-002
+Note: Not started in current repo state; implementation details below are draft planning notes.
 
 ## Outcome
 GitHub issues are synchronized into Kagan task projections.
@@ -19,7 +20,10 @@ GitHub issues are synchronized into Kagan task projections.
 - Mapping recovery path exists for drift.
 
 ## Verification
-- Unit tests for insert/update/reopen/close flows.
+- Focused unit tests for user-visible sync outcomes:
+  - insert/update/reopen/close projection behavior
+  - idempotent no-churn re-sync behavior
+  - deterministic mode resolution and mapping repair outcomes
 
 ## Implementation Summary
 
@@ -33,23 +37,19 @@ GitHub issues are synchronized into Kagan task projections.
 - `src/kagan/core/plugins/official/github/runtime.py` - Implemented `handle_sync_issues()` handler
 
 ### Test File Added
-- `tests/core/unit/test_github_issue_sync.py` - 30 unit tests covering:
-  - Label-based task type resolution (AUTO/PAIR)
-  - Issue state to task status mapping
-  - Task title/description formatting
-  - Checkpoint serialization/loading
-  - Issue-to-task mapping persistence
-  - gh issue list JSON parsing
-  - Insert flow (new issues create tasks)
-  - Update flow (modified issues update tasks)
-  - Close flow (closed issues move tasks to DONE)
-  - Reopen flow (reopened issues move tasks back to BACKLOG)
+- `tests/core/unit/test_github_issue_sync.py` - focused tests covering:
+  - Insert/update/reopen/close task projection behavior from issue state
   - Idempotency (re-running sync without changes = no churn)
-  - Mode resolution from labels
+  - Mode resolution from labels/defaults
+  - Mapping drift recovery behavior
 
 ### Key Design Decisions
 1. **Checkpoint storage**: Uses `Repo.scripts` JSON storage for `kagan.github.sync_checkpoint`
 2. **Issue mapping**: Uses `Repo.scripts` for `kagan.github.issue_mapping` with bidirectional lookup
-3. **Mode resolution**: Labels `kagan:auto` and `kagan:pair` control TaskType; defaults to PAIR
+3. **Mode resolution**: Labels `kagan:mode:auto` and `kagan:mode:pair` control TaskType; defaults to PAIR
 4. **Task title format**: `[GH-{number}] {title}` for clear attribution
 5. **Drift recovery**: If mapped task is deleted, sync recreates it with updated mapping
+
+## Refinement Notes (Post-Review)
+- Avoid over-testing parse/checkpoint internals when end-to-end sync behavior already covers them.
+- Prefer a small, high-signal suite over broad helper-level coverage.

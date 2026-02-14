@@ -1,8 +1,9 @@
 # GH-002 - Repo Connect and gh Preflight
 
-Status: Done
+Status: Backlog
 Owner: Codex
 Depends On: GH-001
+Note: Not started in current repo state; implementation details below are draft planning notes.
 
 ## Outcome
 User can connect a repo to GitHub with deterministic gh preflight checks.

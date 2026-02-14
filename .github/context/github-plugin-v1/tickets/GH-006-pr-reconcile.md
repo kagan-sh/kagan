@@ -19,3 +19,4 @@ PR status reconciliation updates task state automatically.
 
 ## Verification
 - Unit tests for open/merged/closed transitions.
+- Keep tests focused on idempotent user-visible board outcomes, not polling-loop internals.

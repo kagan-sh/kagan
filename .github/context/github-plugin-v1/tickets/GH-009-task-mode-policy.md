@@ -28,3 +28,4 @@ Synced GitHub issues map to task execution mode deterministically.
 ## Verification
 - Unit tests for label combinations and fallback behavior.
 - TUI display test for synced mode indicator.
+- Keep coverage minimal and contract-focused; avoid tautological tests for enum/constants wiring.

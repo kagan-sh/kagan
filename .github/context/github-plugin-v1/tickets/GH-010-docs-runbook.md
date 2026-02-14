@@ -20,6 +20,7 @@ Contributors and alpha users can set up and operate GitHub plugin V1 without gue
 - Docs are concise, actionable, and match implemented behavior.
 - Includes operator checklist for routine sync/reconcile usage.
 - Includes persona quality-gate checklist results for this initiative.
+- Includes a concise test-value rubric: only non-tautological, user-visible behavior tests are expected.
 
 ## Verification
 - Manual docs walkthrough from clean environment.

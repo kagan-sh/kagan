@@ -20,3 +20,4 @@ Kanban UI clearly reflects GitHub-connected repo mode and sync operations.
 
 ## Verification
 - TUI smoke tests for visibility and action triggers.
+- Tests must remain minimal and user-facing (no widget-internal tautology assertions).

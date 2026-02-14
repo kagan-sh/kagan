@@ -104,6 +104,15 @@ KaganHeader .header-logo {
     padding-right: 1;
 }
 
+KaganHeader .header-logo.logo-connected {
+    color: $secondary;
+}
+
+KaganHeader .header-logo.logo-disconnected {
+    color: $text-muted;
+    text-opacity: 60%;
+}
+
 KaganHeader .header-title {
     width: auto;
     color: $primary;
@@ -144,6 +153,11 @@ KaganHeader .header-agent {
     width: auto;
     color: $secondary;
     text-style: bold;
+    padding-right: 2;
+}
+
+KaganHeader .core-status {
+    width: auto;
     padding-right: 2;
 }
 

@@ -25,3 +25,4 @@ Only one active Kagan instance can work a GitHub issue at a time by default.
 ## Verification
 - Unit tests for lease state transitions and contention.
 - TUI/MCP tests for blocked + takeover flows.
+- Avoid duplicative helper-level lease parsing tests when contention/takeover behavior is already covered end-to-end.

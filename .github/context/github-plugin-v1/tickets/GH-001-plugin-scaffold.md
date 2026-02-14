@@ -1,8 +1,9 @@
 # GH-001 - Official Plugin Scaffold and Operation Contract
 
-Status: Done
+Status: Backlog
 Owner: Codex
 Depends On: -
+Note: Not started in current repo state; implementation details below are draft planning notes.
 
 ## Outcome
 Introduce the first official bundled GitHub plugin package and register it through bootstrap.
@@ -19,7 +20,10 @@ Introduce the first official bundled GitHub plugin package and register it throu
 - Core CLI startup path does not eagerly import GitHub plugin runtime modules.
 
 ## Verification
-- Unit tests for plugin registration and capability ownership.
+- Focused unit tests for user-visible scaffold behavior:
+  - plugin registration ownership/collision behavior
+  - lazy runtime loading on invocation
+  - contract probe response surface
 
 ## Implementation Summary
 
@@ -43,4 +47,8 @@ Introduce the first official bundled GitHub plugin package and register it throu
 2. **Lazy loading**: Runtime module imported only when operations are invoked via `importlib.import_module()`; `lru_cache` prevents re-imports
 3. **Capability profile**: All operations gated to `CapabilityProfile.MAINTAINER`
 4. **Contract stability**: Method names defined as `Literal` types in `contract.py` for V1 freeze
-5. **Operation dispatch**: Each method has a dedicated `_dispatch_*` shim for clear stack traces
+5. **Operation dispatch**: Prefer direct dispatch table mappings; add wrapper shims only when they enforce distinct policy/error boundaries.
+
+## Refinement Notes (Post-Review)
+- Avoid extra wrapper layers added only for style/readability if they do not change behavior.
+- Test contract behavior, not private helper names or type alias internals.

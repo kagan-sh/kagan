@@ -1,8 +1,9 @@
 # GH-007 - MCP Admin Operations and Contracts
 
-Status: Done
+Status: Backlog
 Owner: Codex
 Depends On: GH-003
+Note: Not started in current repo state; implementation details below are draft planning notes.
 
 ## Outcome
 Expose minimal admin-safe MCP operations for GitHub plugin lifecycle.
@@ -18,7 +19,10 @@ Expose minimal admin-safe MCP operations for GitHub plugin lifecycle.
 - Tool names/params/error codes are documented and treated as stable V1 contract.
 
 ## Verification
-- MCP contract tests for all V1 operations.
+- Focused MCP contract tests for externally visible guarantees:
+  - tool names + required params
+  - profile/policy denied behavior
+  - success/error payload codes and remediation hints
 
 ## Implementation Summary
 
@@ -37,19 +41,20 @@ Expose minimal admin-safe MCP operations for GitHub plugin lifecycle.
   - `github_sync_issues()`
 
 ### Test File Added
-- `tests/mcp/contract/test_mcp_github_tools.py` — 17 contract tests covering:
+- `tests/mcp/contract/test_mcp_github_tools.py` — focused contract tests covering:
   - V1 tool name stability (names are frozen contract)
   - Capability profile gating (MAINTAINER only)
-  - Response model field stability
-  - Error code documentation
   - Parameter schema stability
-  - Read-only vs mutating operation flags
+  - Error code/hint behavior and read-only vs mutating policy flags
 
 ### Key Design Decisions
 1. **MAINTAINER-only**: All GitHub MCP tools require `CapabilityProfile.MAINTAINER`
 2. **Bridge pattern**: MCP tools delegate to plugin runtime via `_command("kagan_github", ...)` — no duplicate logic
 3. **Stable contract**: Tool names, param schemas, and response fields treated as V1 freeze
 4. **Machine-readable errors**: All failure responses include `code`, `message`, `hint` for admin tooling
+
+## Refinement Notes (Post-Review)
+- Do not freeze private model/class names as part of V1 guarantees; freeze only external MCP schema/contract behavior.
 
 ## Contract Scope Clarification
 - V1 contract freeze in this ticket applies to GitHub plugin admin tools only:

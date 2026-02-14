@@ -20,3 +20,4 @@ Moving tasks into REVIEW requires a linked PR and offers create/link actions.
 
 ## Verification
 - Unit and TUI tests for transition gate behavior.
+- Prioritize user-observable outcomes (blocked transition reason, create/link success path) over internal transition helper coverage.

@@ -34,6 +34,7 @@ HEADER_SEPARATOR = "│"
 
 @dataclass
 class _HeaderLabels:
+    logo: Label
     project: Label
     repo: Label
     branch: Label
@@ -42,8 +43,6 @@ class _HeaderLabels:
     sep_sessions: Label
     agent: Label
     sep_agent: Label
-    core_status: Label
-    sep_core_status: Label
     stats: Label
 
 
@@ -76,7 +75,7 @@ class KaganHeader(Widget):
         self.task_count = task_count
 
     def compose(self) -> ComposeResult:
-        yield Label(KAGAN_LOGO_SMALL, classes="header-logo")
+        yield Label(KAGAN_LOGO_SMALL, id="header-logo", classes="header-logo")
         yield Label("", id="header-project", classes="header-title")
         yield Label("", id="header-repo", classes="header-repo")
 
@@ -88,8 +87,6 @@ class KaganHeader(Widget):
         yield Label(HEADER_SEPARATOR, id="sep-sessions", classes="header-branch")
         yield Label("", id="header-agent", classes="header-agent")
         yield Label(HEADER_SEPARATOR, id="sep-agent", classes="header-branch")
-        yield Label("", id="header-core-status", classes="core-status")
-        yield Label(HEADER_SEPARATOR, id="sep-core-status", classes="header-branch")
         yield Label("", id="header-stats", classes="header-stats")
         yield Label(HEADER_SEPARATOR, id="sep-stats", classes="header-branch")
         yield Label("? help", id="header-help", classes="header-branch")
@@ -109,6 +106,7 @@ class KaganHeader(Widget):
         if self._labels is not None:
             return self._labels
 
+        logo_label = safe_query_one(self, "#header-logo", Label)
         project_label = safe_query_one(self, "#header-project", Label)
         repo_label = safe_query_one(self, "#header-repo", Label)
         branch_label = safe_query_one(self, "#header-branch", Label)
@@ -117,11 +115,10 @@ class KaganHeader(Widget):
         sep_sessions = safe_query_one(self, "#sep-sessions", Label)
         agent_label = safe_query_one(self, "#header-agent", Label)
         sep_agent = safe_query_one(self, "#sep-agent", Label)
-        core_status_label = safe_query_one(self, "#header-core-status", Label)
-        sep_core_status = safe_query_one(self, "#sep-core-status", Label)
         stats_label = safe_query_one(self, "#header-stats", Label)
 
         all_labels = (
+            logo_label,
             project_label,
             repo_label,
             branch_label,
@@ -130,13 +127,12 @@ class KaganHeader(Widget):
             sep_sessions,
             agent_label,
             sep_agent,
-            core_status_label,
-            sep_core_status,
             stats_label,
         )
         if any(label is None for label in all_labels):
             return None
 
+        assert logo_label is not None
         assert project_label is not None
         assert repo_label is not None
         assert branch_label is not None
@@ -145,11 +141,10 @@ class KaganHeader(Widget):
         assert sep_sessions is not None
         assert agent_label is not None
         assert sep_agent is not None
-        assert core_status_label is not None
-        assert sep_core_status is not None
         assert stats_label is not None
 
         self._labels = _HeaderLabels(
+            logo=logo_label,
             project=project_label,
             repo=repo_label,
             branch=branch_label,
@@ -158,8 +153,6 @@ class KaganHeader(Widget):
             sep_sessions=sep_sessions,
             agent=agent_label,
             sep_agent=sep_agent,
-            core_status=core_status_label,
-            sep_core_status=sep_core_status,
             stats=stats_label,
         )
         return self._labels
@@ -234,13 +227,16 @@ class KaganHeader(Widget):
         labels.sep_agent.display = False
 
     def _update_core_status_display(self) -> None:
-        """Update core connection status label and separator visibility."""
+        """Update logo color based on core connection status."""
         labels = self._cache_labels()
         if labels is None:
             return
-        labels.core_status.update(f"CORE:{self.core_status}")
-        labels.core_status.display = True
-        labels.sep_core_status.display = True
+        if self.core_status == "CONNECTED":
+            labels.logo.set_class(False, "logo-disconnected")
+            labels.logo.set_class(True, "logo-connected")
+        else:
+            labels.logo.set_class(False, "logo-connected")
+            labels.logo.set_class(True, "logo-disconnected")
 
     def watch_task_count(self, count: int) -> None:
         self._update_stats_display()

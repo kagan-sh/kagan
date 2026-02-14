@@ -19,6 +19,8 @@ Ship the first official bundled GitHub plugin that makes the Kanban board the be
 - Build for contributor readability first.
 - Add guardrails before automation.
 - Enforce Zen of Python: explicit, simple, readable, one obvious way.
+- Default to a thin path: runtime handler -> `GhCliAdapter` -> existing core services.
+- Add new abstraction only when it removes real duplication across multiple operations.
 
 ## Persona Lens (Alpha Translation)
 - Dag (terminal infra): keep rendering/event changes minimal, avoid flicker regressions, and track terminal compatibility findings.
@@ -34,17 +36,40 @@ Ship the first official bundled GitHub plugin that makes the Kanban board the be
 - Terminal baseline: verify behavior in at least `Terminal.app`, `iTerm2`/`WezTerm`, and `tmux` before release notes.
 - Dependency discipline: no new runtime dependency for GitHub plugin V1 unless justified in initiative docs.
 - Contract stability: `kagan_github_*` method names and payload schema frozen within V1 once released.
+- Security baseline: subprocess calls use argv lists (no shell interpolation), validated identifiers, and secret redaction.
+- Efficiency baseline: incremental sync/reconcile scopes only; no full-board churn for unchanged inputs.
 
-## Architecture Shape (V1)
-- `kagan_github` official plugin capability.
-- `GhCliAdapter` for all GitHub calls.
-- `IssueSyncService` for issue projection into tasks.
-- `PrWorkflowService` for create/link/reconcile PR operations.
-- `LeaseService` for issue lease acquire/renew/release semantics.
-- `GitHubPolicy` rules for board transitions:
+## Architecture Shape (V1, Minimal)
+- One official capability: `kagan_github`.
+- One runtime handler module that dispatches operations.
+- One GitHub transport adapter: `GhCliAdapter` for all `gh` reads/writes.
+- Existing core services remain the only write path to persisted state.
+- Small helper modules (`sync`, `policy`, `lease`) are allowed when they keep handlers readable.
+- Do not split into service-per-operation class hierarchies in V1 unless reuse is proven.
+- Transition policy remains explicit:
   - `REVIEW` requires linked open PR.
   - merged PR transitions task to `DONE`.
   - closed unmerged PR transitions task to `IN_PROGRESS`.
+
+## Security Baseline (V1)
+- Build command invocations as validated argv lists; never execute interpolated shell strings.
+- Allow only expected `gh` command families for each operation.
+- Validate repo/owner/issue/PR identifiers before command execution.
+- Redact token-like values in logs and surfaced errors.
+- Keep mutating GitHub operations maintainer-scoped.
+
+## Efficiency Baseline (V1)
+- Default to incremental sync from stored checkpoints.
+- Reconcile scope should target linked-PR tasks instead of scanning unrelated tasks.
+- No always-on reconcile daemon for V1; use explicit action or simple periodic trigger.
+- Keep operation responses bounded (summary first, capped item details).
+
+## Test Value Gate (Mandatory)
+- Tests must target user-visible behavior and contract guarantees only.
+- For each behavior, prefer minimal high-signal coverage: one success path and one meaningful failure/edge path.
+- Prioritize: idempotency/no-churn, status transitions, lease contention outcomes, and machine-readable error codes/hints.
+- Avoid tautology tests for private helpers, constant literals, dispatch wiring, or type alias internals.
+- Extend existing tests before adding near-duplicates.
 
 ## Lease/Lock Model (V1)
 - Default behavior: enabled (`enforced`) for GitHub-connected repos.
@@ -89,4 +114,4 @@ Ship the first official bundled GitHub plugin that makes the Kanban board the be
 - Admin MCP surface exists for connect/sync/reconcile/repair.
 - AUTO/PAIR mode for synced tasks follows deterministic label/default policy.
 - Initiative quality gates are documented and validated in release notes/docs.
-- Tests cover critical flows and failure paths.
+- Tests cover critical user-facing flows and failure paths without tautological internals.
