@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 GITHUB_SYNC_CHECKPOINT_KEY: Final = "kagan.github.sync_checkpoint"
 GITHUB_ISSUE_MAPPING_KEY: Final = "kagan.github.issue_mapping"
 GITHUB_DEFAULT_MODE_KEY: Final = "kagan.github.default_mode"
+GITHUB_TASK_PR_MAPPING_KEY: Final = "kagan.github.task_pr_mapping"
 
 # Mode labels for deterministic task type resolution
 MODE_LABEL_AUTO: Final = "kagan:mode:auto"
@@ -87,6 +88,97 @@ class IssueMapping:
         issue_to_task = {int(k): v for k, v in data.get("issue_to_task", {}).items()}
         task_to_issue = data.get("task_to_issue", {})
         return cls(issue_to_task=issue_to_task, task_to_issue=task_to_issue)
+
+
+@dataclass(frozen=True, slots=True)
+class TaskPRLink:
+    """PR linkage for a task."""
+
+    pr_number: int
+    pr_url: str
+    pr_state: str  # "OPEN", "CLOSED", "MERGED"
+    head_branch: str
+    base_branch: str
+    linked_at: str  # ISO timestamp
+
+
+@dataclass
+class TaskPRMapping:
+    """Mapping between tasks and their linked PRs."""
+
+    task_to_pr: dict[str, TaskPRLink] = field(default_factory=dict)
+
+    def get_pr(self, task_id: str) -> TaskPRLink | None:
+        return self.task_to_pr.get(task_id)
+
+    def has_pr(self, task_id: str) -> bool:
+        return task_id in self.task_to_pr
+
+    def link_pr(
+        self,
+        task_id: str,
+        pr_number: int,
+        pr_url: str,
+        pr_state: str,
+        head_branch: str,
+        base_branch: str,
+        linked_at: str,
+    ) -> None:
+        self.task_to_pr[task_id] = TaskPRLink(
+            pr_number=pr_number,
+            pr_url=pr_url,
+            pr_state=pr_state,
+            head_branch=head_branch,
+            base_branch=base_branch,
+            linked_at=linked_at,
+        )
+
+    def unlink_pr(self, task_id: str) -> None:
+        self.task_to_pr.pop(task_id, None)
+
+    def update_pr_state(self, task_id: str, pr_state: str) -> None:
+        link = self.task_to_pr.get(task_id)
+        if link is not None:
+            self.task_to_pr[task_id] = TaskPRLink(
+                pr_number=link.pr_number,
+                pr_url=link.pr_url,
+                pr_state=pr_state,
+                head_branch=link.head_branch,
+                base_branch=link.base_branch,
+                linked_at=link.linked_at,
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "task_to_pr": {
+                task_id: {
+                    "pr_number": link.pr_number,
+                    "pr_url": link.pr_url,
+                    "pr_state": link.pr_state,
+                    "head_branch": link.head_branch,
+                    "base_branch": link.base_branch,
+                    "linked_at": link.linked_at,
+                }
+                for task_id, link in self.task_to_pr.items()
+            }
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> TaskPRMapping:
+        if not data:
+            return cls()
+        task_to_pr: dict[str, TaskPRLink] = {}
+        for task_id, link_data in data.get("task_to_pr", {}).items():
+            if isinstance(link_data, dict):
+                task_to_pr[task_id] = TaskPRLink(
+                    pr_number=int(link_data.get("pr_number", 0)),
+                    pr_url=link_data.get("pr_url", ""),
+                    pr_state=link_data.get("pr_state", "OPEN"),
+                    head_branch=link_data.get("head_branch", ""),
+                    base_branch=link_data.get("base_branch", ""),
+                    linked_at=link_data.get("linked_at", ""),
+                )
+        return cls(task_to_pr=task_to_pr)
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,6 +353,27 @@ def load_repo_default_mode(scripts: dict[str, str] | None) -> TaskType | None:
         return None
 
 
+def load_task_pr_mapping(scripts: dict[str, str] | None) -> TaskPRMapping:
+    """Load task-to-PR mapping from Repo.scripts.
+
+    Args:
+        scripts: The repo scripts dict (Repo.scripts).
+
+    Returns:
+        TaskPRMapping instance (empty if not configured).
+    """
+    if not scripts:
+        return TaskPRMapping()
+    raw = scripts.get(GITHUB_TASK_PR_MAPPING_KEY)
+    if not raw:
+        return TaskPRMapping()
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        return TaskPRMapping.from_dict(data)
+    except (json.JSONDecodeError, TypeError):
+        return TaskPRMapping()
+
+
 def compute_issue_changes(
     issue: GhIssue,
     mapping: IssueMapping,
@@ -341,6 +454,7 @@ __all__ = [
     "GITHUB_DEFAULT_MODE_KEY",
     "GITHUB_ISSUE_MAPPING_KEY",
     "GITHUB_SYNC_CHECKPOINT_KEY",
+    "GITHUB_TASK_PR_MAPPING_KEY",
     "MODE_LABEL_AUTO",
     "MODE_LABEL_PAIR",
     "V1_DEFAULT_MODE",
@@ -349,11 +463,14 @@ __all__ = [
     "SyncCheckpoint",
     "SyncOutcome",
     "SyncResult",
+    "TaskPRLink",
+    "TaskPRMapping",
     "build_task_title_from_issue",
     "compute_issue_changes",
     "load_checkpoint",
     "load_mapping",
     "load_repo_default_mode",
+    "load_task_pr_mapping",
     "resolve_task_status_from_issue_state",
     "resolve_task_type_from_labels",
 ]

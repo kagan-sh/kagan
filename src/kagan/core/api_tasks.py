@@ -364,7 +364,21 @@ class TaskApiMixin:
         description="Mark task ready for review.",
     )
     async def request_review(self, task_id: str, summary: str = "") -> Task | None:
-        """Move task to REVIEW status."""
+        """Move task to REVIEW status.
+
+        For tasks in GitHub-connected repos, enforces guardrails:
+        - Blocks if no linked PR exists
+        - Blocks if lease is held by another instance
+        """
+        task = await self._ctx.task_service.get_task(task_id)
+        if task is None:
+            return None
+
+        # Check REVIEW transition guardrails for GitHub-connected repos
+        guardrail_result = await self._check_review_guardrails(task)
+        if not guardrail_result["allowed"]:
+            raise ValueError(guardrail_result["message"])
+
         task = await self._ctx.task_service.set_status(
             task_id, TaskStatus.REVIEW, reason="Review requested"
         )
@@ -376,6 +390,90 @@ class TaskApiMixin:
                 approved=False,
             )
         return task
+
+    async def _check_review_guardrails(self, task: Task) -> dict[str, Any]:
+        """Check REVIEW transition guardrails for GitHub-connected repos.
+
+        For repos connected to GitHub:
+        - Blocks if no linked PR exists (task must have a PR to enter REVIEW)
+        - Blocks if lease is held by another instance
+
+        Returns dict with 'allowed' bool and optional 'message'/'code'/'hint'.
+        """
+        import json
+
+        from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, resolve_gh_cli
+        from kagan.core.plugins.github.lease import get_lease_state
+        from kagan.core.plugins.github.sync import (
+            load_mapping,
+            load_task_pr_mapping,
+        )
+
+        # Get project repos to check for GitHub connections
+        try:
+            repos = await self._ctx.project_service.get_project_repos(task.project_id)
+        except Exception:
+            # If we can't get repos, allow the transition (non-blocking)
+            return {"allowed": True}
+
+        if not repos:
+            return {"allowed": True}
+
+        # Check each repo for GitHub connection
+        for repo in repos:
+            connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+            if not connection_raw:
+                # Repo not connected to GitHub - skip guardrails for this repo
+                continue
+
+            # Repo is GitHub-connected - check PR linkage
+            pr_mapping = load_task_pr_mapping(repo.scripts)
+            if not pr_mapping.has_pr(task.id):
+                return {
+                    "allowed": False,
+                    "code": "REVIEW_BLOCKED_NO_PR",
+                    "message": (
+                        "REVIEW transition blocked: no linked PR. "
+                        "Create or link a PR before requesting review."
+                    ),
+                    "hint": "Use create_pr_for_task or link_pr_to_task first.",
+                }
+
+            # Check lease state if task is linked to an issue
+            issue_mapping = load_mapping(repo.scripts)
+            issue_number = issue_mapping.get_issue_number(task.id)
+            if issue_number is not None:
+                # Task is linked to a GitHub issue - check lease
+                connection = (
+                    json.loads(connection_raw)
+                    if isinstance(connection_raw, str)
+                    else connection_raw
+                )
+                owner = connection.get("owner", "")
+                repo_name = connection.get("name", "")
+
+                cli_info = resolve_gh_cli()
+                if cli_info.available and cli_info.path:
+                    state, _error = get_lease_state(
+                        cli_info.path, repo.path, owner, repo_name, issue_number
+                    )
+                    if state is not None and state.is_locked:
+                        if not state.is_held_by_current_instance:
+                            holder_info = ""
+                            if state.holder:
+                                holder_info = f" (held by {state.holder.instance_id})"
+                            return {
+                                "allowed": False,
+                                "code": "REVIEW_BLOCKED_LEASE",
+                                "message": (
+                                    f"REVIEW transition blocked: lease held by another instance"
+                                    f"{holder_info}. "
+                                    "Wait for the other instance to release the lease."
+                                ),
+                                "hint": "The issue is being worked on by another Kagan instance.",
+                            }
+
+        return {"allowed": True}
 
     @expose(
         "review",
