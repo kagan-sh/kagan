@@ -19,7 +19,8 @@ Ship the first official bundled GitHub plugin that makes the Kanban board the be
 - Build for contributor readability first.
 - Add guardrails before automation.
 - Enforce Zen of Python: explicit, simple, readable, one obvious way.
-- Default to a thin path: runtime handler -> `GhCliAdapter` -> existing core services.
+- Default to a thin path: `plugin.py` dispatch -> `entrypoints/plugin_handlers.py` ->
+  `application/use_cases.py` -> ports/adapters -> existing core services.
 - Add new abstraction only when it removes real duplication across multiple operations.
 
 ## Persona Lens (Alpha Translation)
@@ -39,13 +40,17 @@ Ship the first official bundled GitHub plugin that makes the Kanban board the be
 - Security baseline: subprocess calls use argv lists (no shell interpolation), validated identifiers, and secret redaction.
 - Efficiency baseline: incremental sync/reconcile scopes only; no full-board churn for unchanged inputs.
 
-## Architecture Shape (V1, Minimal)
+## Architecture Shape (V1, Refactored)
 - One official capability: `kagan_github`.
-- One runtime handler module that dispatches operations.
-- One GitHub transport adapter: `GhCliAdapter` for all `gh` reads/writes.
+- `plugin.py` is registration + lazy dispatch only.
+- `entrypoints/plugin_handlers.py` maps payloads to typed request objects and delegates.
+- `application/use_cases.py` owns orchestration, policy, and response shaping.
+- `ports/` defines boundaries (`core_gateway`, `gh_client`).
+- `adapters/` implements those ports (`core_gateway.py`, `gh_cli_client.py`).
 - Existing core services remain the only write path to persisted state.
-- Small helper modules (`sync`, `policy`, `lease`) are allowed when they keep handlers readable.
-- Do not split into service-per-operation class hierarchies in V1 unless reuse is proven.
+- Repo script JSON encoding/decoding is isolated to `domain/repo_state.py`.
+- No compatibility layer retained for removed `runtime.py`, `service.py`, or
+  `operations/*` module shapes.
 - Transition policy remains explicit:
   - `REVIEW` requires linked open PR.
   - merged PR transitions task to `DONE`.
@@ -111,7 +116,8 @@ Ship the first official bundled GitHub plugin that makes the Kanban board the be
 - Lease/lock behavior prevents concurrent active work on the same issue by default.
 - REVIEW gate enforces PR linkage.
 - PR merge/close reconciliation updates board states correctly.
-- Admin MCP surface exists for connect/sync/reconcile/repair.
+- Admin MCP V1 surface exists and is stable for `contract_probe`, `connect_repo`, and
+  `sync_issues`.
 - AUTO/PAIR mode for synced tasks follows deterministic label/default policy.
 - Initiative quality gates are documented and validated in release notes/docs.
 - Tests cover critical user-facing flows and failure paths without tautological internals.

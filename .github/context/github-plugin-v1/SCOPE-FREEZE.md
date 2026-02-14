@@ -6,7 +6,7 @@
 - GitHub issue sync into Kanban tasks.
 - Label-based lease/lock coordination for multi-developer concurrency.
 - PR create/link/reconcile for REVIEW/DONE transitions.
-- Minimal MCP admin operations for connect/sync/reconcile/repair.
+- Minimal MCP admin operations for contract probe + connect + sync.
 
 ## Out of Scope (V1)
 - Webhooks and GitHub App event ingestion.
@@ -15,7 +15,7 @@
 - Separate distributed lock service outside GitHub labels/comments.
 - Third-party plugin marketplace/registry.
 - Cross-repo portfolio views.
-- New service-per-operation architecture framework or plugin microservice split.
+- Plugin microservice split or cross-process plugin runtime.
 
 ## Guardrails
 - No new persistence system outside existing SQLite boundaries.
@@ -25,7 +25,9 @@
 - Lease metadata must remain human-readable in GitHub.
 - Default sync mode for issue-backed tasks is explicit and documented.
 - Apply persona quality gates from `PERSONA-QUALITY-GATES.md` with alpha pragmatism (no heavyweight platform process).
-- Keep default implementation shape minimal: runtime handler -> `GhCliAdapter` -> existing core services.
+- Keep default implementation shape minimal: `plugin.py` dispatch ->
+  `entrypoints/plugin_handlers.py` -> `application/use_cases.py` -> ports/adapters ->
+  existing core services.
 - No always-on reconcile worker in V1; reconcile runs from explicit actions or lightweight scheduled entrypoints.
 - GitHub command execution must use validated argv invocation, never shell interpolation.
 - All added tests must satisfy the Test Value Gate: non-tautological, user-facing, and minimal.

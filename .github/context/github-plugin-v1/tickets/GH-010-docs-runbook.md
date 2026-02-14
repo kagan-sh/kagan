@@ -1,7 +1,8 @@
 # GH-010 - Docs and Operator Runbook
 
-Status: Todo
+Status: Done
 Owner: Codex
+Completion: Implemented in `7326c988` on 2026-02-14.
 Depends On: GH-006, GH-007, GH-008, GH-009
 
 ## Outcome
@@ -12,7 +13,7 @@ Contributors and alpha users can set up and operate GitHub plugin V1 without gue
 - Known limits (polling, no webhooks, rate-limit behavior).
 - Lease/lock behavior and takeover policy.
 - AUTO/PAIR sync mode policy and defaults.
-- Troubleshooting and repair flow.
+- Troubleshooting and mapping-drift recovery flow (via normal sync path).
 - Terminal compatibility notes for supported alpha baseline environments.
 - Explicit alpha tradeoffs (what is intentionally not implemented yet).
 

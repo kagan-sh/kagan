@@ -1,7 +1,8 @@
 # GH-007 - MCP Admin Operations and Contracts
 
-Status: Complete
+Status: Done
 Owner: Codex
+Completion: Implemented in `7781002a` on 2026-02-14.
 Depends On: GH-003
 
 ## Outcome
@@ -51,8 +52,9 @@ Expose minimal admin-safe MCP operations for GitHub plugin lifecycle.
 | `GH_PROJECT_REQUIRED` | connect_repo, sync_issues | project_id missing or invalid |
 | `GH_REPO_REQUIRED` | connect_repo, sync_issues | repo_id required for multi-repo |
 | `GH_CLI_NOT_AVAILABLE` | connect_repo, sync_issues | gh CLI not installed |
-| `GH_CLI_NOT_AUTHENTICATED` | connect_repo | gh CLI not authenticated |
-| `GH_REPO_NOT_FOUND` | connect_repo | Repository not accessible |
+| `GH_AUTH_REQUIRED` | connect_repo | gh CLI not authenticated |
+| `GH_REPO_ACCESS_DENIED` | connect_repo | Repository not accessible |
+| `GH_REPO_METADATA_INVALID` | connect_repo | Stored connection metadata invalid |
 | `GH_NOT_CONNECTED` | sync_issues | Repo not connected to GitHub |
 | `GH_SYNC_FAILED` | sync_issues | Issue fetch failed |
 | `ALREADY_CONNECTED` | connect_repo | Repo already connected (idempotent) |

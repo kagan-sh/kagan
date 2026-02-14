@@ -3,7 +3,7 @@
 ## Initiative
 - Name: `github-plugin-v1`
 - Scope mode: MVP only
-- Priority: ship official plugin UX first
+- Priority: shipped; now tracking post-delivery architecture notes
 
 ## Locked Decisions
 - Official plugin bundled in core.
@@ -23,6 +23,9 @@
 - Avoid introducing package registry/signing workflows in this initiative.
 - TUI should expose only high-signal GitHub actions in connected repos.
 - Apply `PERSONA-QUALITY-GATES.md` with MVP pragmatism.
+- Post-refactor module boundary is fixed to:
+  - `plugin.py` -> `entrypoints/plugin_handlers.py` -> `application/use_cases.py`
+  - ports (`core_gateway`, `gh_client`) with adapters (`core_gateway.py`, `gh_cli_client.py`)
 
 ## Risks
 - Rate-limit behavior on large repos.
@@ -32,16 +35,11 @@
 
 ## Mitigations
 - Incremental sync with checkpoints.
-- Explicit mapping repair operation.
+- Mapping drift recovery handled inline during sync (no explicit repair operation).
 - Clear connected-repo badges and action labels in TUI.
 - Lease expiry + maintainer takeover path.
 
-## Next Actions
-1. Implement official `kagan_github` plugin skeleton and operation contract. (GH-001 — backlog)
-2. Add repo connect + gh preflight + issue sync baseline. (GH-002, GH-003 — backlog)
-3. Implement TUI connected-repo UX and sync controls. (GH-004 — unblocked)
-4. Implement lease/lock policy and UI affordances. (GH-008 — unblocked)
-5. Implement AUTO/PAIR sync mode policy. (GH-009 — unblocked)
-6. Implement PR create/link and REVIEW gate. (GH-005 — blocked by GH-004)
-7. Implement PR reconcile and board transitions. (GH-006 — blocked by GH-005)
-8. Write docs and operator runbook. (GH-010 — blocked by GH-006, GH-008, GH-009)
+## Completion Notes
+1. Tickets GH-001..GH-010 are complete and landed.
+2. Guardrails and contract alignment hardening landed post-ticket.
+3. Architecture pivot landed with decoupled plugin layers and no compatibility shim path.

@@ -26,6 +26,6 @@ Each subdirectory is a self-contained archive or active initiative.
 
 | Directory | Initiative | Tickets | Status |
 |-----------|-----------|---------|--------|
-| `github-plugin-v1/` | First official bundled GitHub plugin (Kanban-first MVP) | GH-001..GH-008 | Active |
+| `github-plugin-v1/` | First official bundled GitHub plugin (Kanban-first MVP) | GH-001..GH-010 | Complete |
 | `alpha-strangler-migration/` | Facade-first strangler migration + alpha hardening | T-000..T-083 | Complete |
 | `alpha-unified-consolidation/` | Unified remaining work (polish + model consistency) via 3 non-overlapping streams | U-WS1..U-WS3 | Active |

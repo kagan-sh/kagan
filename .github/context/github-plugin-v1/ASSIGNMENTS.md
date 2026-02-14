@@ -1,54 +1,24 @@
 # Assignments
 
-## Workstream 1: Core Plugin + Sync
-- Owner: Codex
-- Scope:
-  - official `kagan_github` plugin registration
-  - gh preflight/connect flow
-  - issue sync projection + mapping
-- Deliverables:
-  - plugin module in `src/kagan/core/plugins/official/github/`
-  - tests for sync and mapping behavior
+Initiative ownership remained with Codex for all streams.
 
-## Workstream 2: TUI UX
-- Owner: Codex
-- Scope:
-  - connected-repo indicator
-  - sync/reconcile actions
-  - REVIEW gate requiring PR link
-  - lease/lock holder visibility and takeover action
-- Deliverables:
-  - kanban UI/controller updates
-  - smoke tests for core user paths
+## Executed Workstreams
+- WS1 Core plugin + sync baseline (`GH-001..GH-003`) — complete.
+- WS2 TUI connected-repo UX + REVIEW/PR workflow (`GH-004..GH-006`) — complete.
+- WS3 MCP admin surface (`GH-007`) — complete.
+- WS4 Collaboration policy (`GH-008..GH-009`) — complete.
+- WS5 Docs and runbook (`GH-010`) — complete.
+- WS6 Post-ticket architecture pivot/refactor — complete.
 
-## Workstream 3: MCP Admin Surface
-- Owner: Codex
-- Scope:
-  - `kagan_github_*` MCP operations
-  - admin-safe errors and remediation hints
-- Deliverables:
-  - MCP registrar/tool mapping
-  - contract tests for key operations
-
-## Workstream 4: Collaboration Policy
-- Owner: Codex
-- Scope:
-  - label/comment-based lease enforcement
-  - AUTO/PAIR sync mode label/default policy
-- Deliverables:
-  - policy implementation + tests
-  - user-facing docs for policy behavior
-
-## Workstream 5: Quality Gate Pass
-- Owner: Codex
-- Scope:
-  - apply `PERSONA-QUALITY-GATES.md` checks to implementation and docs
-  - ensure no over-engineered infrastructure is introduced for V1
-- Deliverables:
-  - concise validation notes in runbook/release docs
-  - explicit known-limitations section for alpha users
-
-## Human Review Checkpoints
-- Approve scope freeze before WS2 starts.
-- Approve command names before MCP exposure.
-- Approve final UX text before merge.
+## WS6 Refactor Deliverables
+- Removed monolithic `runtime.py`/`service.py` orchestration path.
+- Introduced bounded module layout:
+  - `entrypoints/plugin_handlers.py`
+  - `application/use_cases.py`
+  - `domain/*`
+  - `ports/*`
+  - `adapters/*`
+- Retained stable contract surfaces:
+  - capability `kagan_github`
+  - MCP V1 admin tools (`contract_probe`, `connect_repo`, `sync_issues`)
+- Kept persistence writes routed through core services via `adapters/core_gateway.py`.

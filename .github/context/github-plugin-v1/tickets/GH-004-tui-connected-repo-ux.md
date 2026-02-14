@@ -1,7 +1,8 @@
 # GH-004 - TUI Connected-Repo UX and Sync Controls
 
-Status: Todo
+Status: Done
 Owner: Codex
+Completion: Implemented in `2a0c25af` on 2026-02-14.
 Depends On: GH-003
 
 ## Outcome
@@ -21,3 +22,8 @@ Kanban UI clearly reflects GitHub-connected repo mode and sync operations.
 ## Verification
 - TUI smoke tests for visibility and action triggers.
 - Tests must remain minimal and user-facing (no widget-internal tautology assertions).
+
+## Implementation Notes
+- Header/status widgets now surface connected and synced state explicitly.
+- Connected-repo actions are reachable through keyboard-driven command flows.
+- TUI remains a thin client over core GitHub API operations.

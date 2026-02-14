@@ -1,7 +1,8 @@
 # GH-008 - Lease/Lock Coordination via Labels and Comments
 
-Status: Todo
+Status: Done
 Owner: Codex
+Completion: Implemented in `4427cfa6` on 2026-02-14.
 Depends On: GH-003
 
 ## Outcome
@@ -26,3 +27,8 @@ Only one active Kagan instance can work a GitHub issue at a time by default.
 - Unit tests for lease state transitions and contention.
 - TUI/MCP tests for blocked + takeover flows.
 - Avoid duplicative helper-level lease parsing tests when contention/takeover behavior is already covered end-to-end.
+
+## Implementation Notes
+- Lease operations (`acquire_lease`, `release_lease`, `get_lease_state`) are implemented in plugin use cases.
+- Lock signal remains `kagan:locked` with marker-comment holder metadata.
+- Cross-device contention is enforced via `kagan_instance_id` lease identity.

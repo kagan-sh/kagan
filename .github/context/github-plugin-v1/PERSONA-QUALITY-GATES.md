@@ -25,7 +25,8 @@ It is intentionally strict on product clarity and safety, and intentionally ligh
 - Prefer stdlib over new dependencies for V1.
 - Keep interfaces typed at plugin boundaries.
 - Avoid abstraction layers that do not reduce current complexity.
-- Keep default call path simple: runtime handler -> adapter -> existing core services.
+- Keep default call path simple: `plugin.py` dispatch -> `entrypoints/plugin_handlers.py` ->
+  `application/use_cases.py` -> ports/adapters -> existing core services.
 - Subprocess safety: argv-only invocation, validated identifiers, and redaction of secret-like values in logs/errors.
 - Tests must validate user-observable behavior, not internal tautologies.
 - Prefer extending existing tests over adding near-duplicate wiring tests.
