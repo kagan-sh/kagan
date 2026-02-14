@@ -9,16 +9,11 @@ Tests critical user-facing behavior:
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
-from unittest.mock import patch
-
-import pytest
 
 from kagan.core.plugins.github.lease import (
     LEASE_COMMENT_MARKER,
     LEASE_DURATION_SECONDS,
     LEASE_HELD_BY_OTHER,
-    LEASE_LABEL,
     LEASE_STALE_THRESHOLD_SECONDS,
     LeaseAcquireResult,
     LeaseHolder,
@@ -28,9 +23,6 @@ from kagan.core.plugins.github.lease import (
     create_lease_holder,
     parse_lease_comment,
 )
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestLeaseHolder:
