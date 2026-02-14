@@ -949,15 +949,22 @@ async def handle_link_pr_to_task(ctx: AppContext, params: dict[str, Any]) -> dic
 
 
 async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
-    """Reconcile the PR status for a task from GitHub.
+    """Reconcile PR status for a task and apply deterministic board transitions.
+
+    This operation is idempotent and safe to re-run. It fetches the current PR
+    state from GitHub and updates the task status deterministically:
+    - Merged PR -> task moves to DONE
+    - Closed (unmerged) PR -> task moves to IN_PROGRESS
+    - Open PR -> no task status change
 
     Params:
         project_id: Required project ID
         repo_id: Optional repo ID (required for multi-repo projects)
         task_id: Required task ID
 
-    Returns success with updated PR info or error with details.
+    Returns success with updated PR and task info or error with retry guidance.
     """
+    from kagan.core.models.enums import TaskStatus
     from kagan.core.plugins.github.gh_adapter import run_gh_pr_view
     from kagan.core.plugins.github.sync import load_task_pr_mapping
 
@@ -1002,6 +1009,16 @@ async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) ->
             "hint": "Use create_pr_for_task or link_pr_to_task first",
         }
 
+    # Get task to check current status
+    task = await ctx.task_service.get_task(task_id)
+    if task is None:
+        return {
+            "success": False,
+            "code": GH_TASK_REQUIRED,
+            "message": f"Task not found: {task_id}",
+            "hint": "Verify the task_id exists",
+        }
+
     # Resolve gh CLI
     cli_info = resolve_gh_cli()
     if not cli_info.available or not cli_info.path:
@@ -1009,16 +1026,17 @@ async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) ->
             "success": False,
             "code": "GH_CLI_NOT_AVAILABLE",
             "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/",
+            "hint": "Install gh CLI: https://cli.github.com/. Retry after installing.",
         }
 
-    # Get current PR status
+    # Get current PR status from GitHub
     pr_data, error = run_gh_pr_view(cli_info.path, repo.path, pr_link.pr_number)
     if error:
         return {
             "success": False,
             "code": GH_PR_NOT_FOUND,
-            "message": f"Failed to find PR #{pr_link.pr_number}: {error}",
+            "message": f"Failed to fetch PR #{pr_link.pr_number}: {error}",
+            "hint": "Check network connectivity and GitHub access. Retry the reconcile operation.",
         }
 
     if pr_data is None:
@@ -1026,25 +1044,77 @@ async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) ->
             "success": False,
             "code": GH_PR_NOT_FOUND,
             "message": f"PR #{pr_link.pr_number} not found",
+            "hint": "The PR may have been deleted. Consider unlinking and creating a new PR.",
         }
 
-    # Update status if changed
-    if pr_data.state != pr_link.pr_state:
+    # Track changes for response
+    pr_state_changed = pr_data.state != pr_link.pr_state
+    task_status_changed = False
+    previous_task_status = task.status
+    new_task_status = task.status
+
+    # Update PR mapping if state changed
+    if pr_state_changed:
         pr_mapping.update_pr_state(task_id, pr_data.state)
         await _upsert_repo_pr_mapping(ctx, repo.id, pr_mapping)
+
+    # Deterministic task status transitions based on PR state
+    # These transitions are idempotent - running reconcile multiple times
+    # produces the same result
+    if pr_data.state == "MERGED":
+        # Merged PR -> DONE (work is complete and integrated)
+        if task.status != TaskStatus.DONE:
+            await ctx.task_service.update_fields(task_id, status=TaskStatus.DONE)
+            task_status_changed = True
+            new_task_status = TaskStatus.DONE
+    elif pr_data.state == "CLOSED":
+        # Closed without merge -> IN_PROGRESS (work needs attention)
+        # Only transition if not already DONE (to avoid overriding completed tasks)
+        if task.status != TaskStatus.DONE and task.status != TaskStatus.IN_PROGRESS:
+            await ctx.task_service.update_fields(task_id, status=TaskStatus.IN_PROGRESS)
+            task_status_changed = True
+            new_task_status = TaskStatus.IN_PROGRESS
+    # For "OPEN" state, no task status change is applied
 
     return {
         "success": True,
         "code": "PR_STATUS_RECONCILED",
-        "message": f"PR #{pr_data.number} status: {pr_data.state}",
+        "message": _build_reconcile_message(pr_data.number, pr_data.state, task_status_changed),
         "pr": {
             "number": pr_data.number,
             "url": pr_data.url,
             "state": pr_data.state,
             "previous_state": pr_link.pr_state,
-            "changed": pr_data.state != pr_link.pr_state,
+            "state_changed": pr_state_changed,
+        },
+        "task": {
+            "id": task_id,
+            "status": (
+                new_task_status.value
+                if hasattr(new_task_status, "value")
+                else str(new_task_status)
+            ),
+            "previous_status": (
+                previous_task_status.value
+                if hasattr(previous_task_status, "value")
+                else str(previous_task_status)
+            ),
+            "status_changed": task_status_changed,
         },
     }
+
+
+def _build_reconcile_message(pr_number: int, pr_state: str, task_changed: bool) -> str:
+    """Build a human-readable reconcile result message."""
+    if pr_state == "MERGED":
+        if task_changed:
+            return f"PR #{pr_number} merged. Task moved to DONE."
+        return f"PR #{pr_number} merged. Task already DONE."
+    if pr_state == "CLOSED":
+        if task_changed:
+            return f"PR #{pr_number} closed without merge. Task moved to IN_PROGRESS."
+        return f"PR #{pr_number} closed without merge. Task status unchanged."
+    return f"PR #{pr_number} is open. No task status change."
 
 
 async def _upsert_repo_pr_mapping(
