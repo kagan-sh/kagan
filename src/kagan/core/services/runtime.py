@@ -614,7 +614,7 @@ class RuntimeServiceImpl:
                         return self._readiness(
                             output_mode=AutoOutputMode.BACKFILL,
                             execution_id=live.execution_id,
-                            is_running=False,
+                            is_running=True,
                             message=blocked_message,
                         )
                     return self._readiness(

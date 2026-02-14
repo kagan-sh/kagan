@@ -393,7 +393,7 @@ class WelcomeScreen(KaganScreen):
         await self.app.push_screen(
             SettingsModal(
                 config=self.ctx.config,
-                config_path=self.ctx.config_path,
+                api=self.ctx.api,
             )
         )
 

@@ -31,6 +31,23 @@ class _ModalHarnessApp(App[None]):
         yield Static("host")
 
 
+class _SettingsApiStub:
+    def __init__(self, config: KaganConfig, config_path: Path) -> None:
+        self._config = config
+        self._config_path = config_path
+
+    async def update_settings(
+        self,
+        fields: dict[str, object],
+    ) -> tuple[bool, str, dict[str, object], dict[str, object]]:
+        for key, value in fields.items():
+            section_name, field_name = key.split(".", 1)
+            section = getattr(self._config, section_name)
+            setattr(section, field_name, value)
+        await self._config.save(self._config_path)
+        return True, "Settings updated", dict(fields), {}
+
+
 @pytest.mark.asyncio
 async def test_task_details_modal_persists_pair_terminal_backend() -> None:
     app = _ModalHarnessApp(KaganConfig())
@@ -167,12 +184,13 @@ async def test_settings_modal_updates_default_pair_terminal_backend(tmp_path: Pa
     config = KaganConfig()
     config_path = tmp_path / "config.toml"
     app = _ModalHarnessApp(config)
+    settings_api = _SettingsApiStub(config, config_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
         loop = asyncio.get_running_loop()
         result_future: asyncio.Future[object | None] = loop.create_future()
         pilot.app.push_screen(
-            SettingsModal(config, config_path),
+            SettingsModal(config, settings_api),
             callback=lambda result: result_future.set_result(result),
         )
         modal = await wait_for_screen(pilot, SettingsModal, timeout=5.0)
@@ -193,12 +211,13 @@ async def test_settings_modal_updates_worktree_base_ref_strategy(tmp_path: Path)
     config = KaganConfig()
     config_path = tmp_path / "config.toml"
     app = _ModalHarnessApp(config)
+    settings_api = _SettingsApiStub(config, config_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
         loop = asyncio.get_running_loop()
         result_future: asyncio.Future[object | None] = loop.create_future()
         pilot.app.push_screen(
-            SettingsModal(config, config_path),
+            SettingsModal(config, settings_api),
             callback=lambda result: result_future.set_result(result),
         )
         modal = await wait_for_screen(pilot, SettingsModal, timeout=5.0)
@@ -222,12 +241,13 @@ async def test_settings_modal_updates_additional_default_models(tmp_path: Path) 
     config = KaganConfig()
     config_path = tmp_path / "config.toml"
     app = _ModalHarnessApp(config)
+    settings_api = _SettingsApiStub(config, config_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
         loop = asyncio.get_running_loop()
         result_future: asyncio.Future[object | None] = loop.create_future()
         pilot.app.push_screen(
-            SettingsModal(config, config_path),
+            SettingsModal(config, settings_api),
             callback=lambda result: result_future.set_result(result),
         )
         modal = await wait_for_screen(pilot, SettingsModal, timeout=5.0)

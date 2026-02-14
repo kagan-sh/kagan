@@ -153,7 +153,12 @@ class KaganApp(App):
             config=self.config,
             config_path=self.config_path,
             db_path=self.db_path,
-            api=CoreBackedApi(client, session_id=session_id),
+            api=CoreBackedApi(
+                client,
+                session_id=session_id,
+                config_path=self.config_path,
+                db_path=self.db_path,
+            ),
         )
         self.log("Core-backed context initialized", session_id=session_id)
 

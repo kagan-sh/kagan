@@ -171,6 +171,16 @@ class ReviewModal(KaganModalScreen[str | None]):
         return ()
 
     @classmethod
+    def _execution_metadata(cls, execution: object | None) -> dict[str, Any]:
+        metadata = cls._state_attr(execution, "metadata_", None)
+        if isinstance(metadata, dict):
+            return metadata
+        metadata = cls._state_attr(execution, "metadata", None)
+        if isinstance(metadata, dict):
+            return metadata
+        return {}
+
+    @classmethod
     def _stream_resolve_live_handle(
         cls,
         source: object | None,
@@ -560,7 +570,7 @@ class ReviewModal(KaganModalScreen[str | None]):
         await self._stream_attach_live_review_if_available()
         try:
             should_poll = (self._is_running and not self._live_output_attached) or (
-                self._is_reviewing and not self._review_log_loaded
+                self._is_reviewing and not self._live_review_attached
             )
             if should_poll:
                 await self._stream_load_agent_output_history()
@@ -804,11 +814,9 @@ class ReviewModal(KaganModalScreen[str | None]):
             return
 
         execution = await self.ctx.api.get_execution(execution_id)
-        has_review_result = False
-        review_log_start_index: int | None = None
-        if execution and execution.metadata_:
-            has_review_result = "review_result" in execution.metadata_
-            review_log_start_index = execution.metadata_.get("review_log_start_index")
+        metadata = self._execution_metadata(execution)
+        has_review_result = "review_result" in metadata
+        review_log_start_index = metadata.get("review_log_start_index")
 
         # Determine which entries are review vs implementation
         review_indices: set[int] = set()
@@ -929,9 +937,10 @@ class ReviewModal(KaganModalScreen[str | None]):
         if execution_id is None:
             return
         execution = await self.ctx.api.get_execution(execution_id)
-        if execution is None or not execution.metadata_:
+        metadata = self._execution_metadata(execution)
+        if not metadata:
             return
-        review_result = execution.metadata_.get("review_result")
+        review_result = metadata.get("review_result")
         if review_result is None:
             return
 

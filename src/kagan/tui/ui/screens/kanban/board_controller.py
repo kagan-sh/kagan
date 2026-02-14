@@ -501,7 +501,7 @@ class KanbanBoardController:
             new_tasks = await self.screen.ctx.api.list_tasks(
                 project_id=self.screen.ctx.active_project_id
             )
-        except (RepositoryClosing, OperationalError):
+        except (ConnectionError, RepositoryClosing, OperationalError):
             return
 
         auto_task_ids = [task.id for task in new_tasks if task.task_type == TaskType.AUTO]

@@ -5,6 +5,8 @@ TUI uses this module to behave as a thin IPC client over the core host.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -166,13 +168,85 @@ class CoreBackedApi:
         session_id: str,
         session_profile: str = "maintainer",
         session_origin: str = SessionOrigin.TUI.value,
+        config_path: Path | None = None,
+        db_path: Path | None = None,
     ) -> None:
         self._client = client
         self._session_id = session_id
         self._session_profile = session_profile
         self._session_origin = session_origin
+        self._config_path = config_path
+        self._db_path = db_path
+        self._reconnect_lock = asyncio.Lock()
         self._runtime_by_task: dict[str, dict[str, Any]] = {}
         self._runtime_state = RuntimeContextState()
+
+    async def _request_core(
+        self,
+        *,
+        capability: str,
+        method: str,
+        params: dict[str, Any],
+        request_timeout_seconds: float | None = None,
+    ) -> Any:
+        await self._ensure_connected()
+        try:
+            response = await self._client.request(
+                session_id=self._session_id,
+                session_profile=self._session_profile,
+                session_origin=self._session_origin,
+                capability=capability,
+                method=method,
+                params=params,
+                request_timeout_seconds=request_timeout_seconds,
+            )
+        except ConnectionError:
+            await self._reconnect_client()
+            response = await self._client.request(
+                session_id=self._session_id,
+                session_profile=self._session_profile,
+                session_origin=self._session_origin,
+                capability=capability,
+                method=method,
+                params=params,
+                request_timeout_seconds=request_timeout_seconds,
+            )
+        if not response.ok:
+            raise _raise_core_error(method, response.error.message if response.error else None)
+        return response.result or {}
+
+    async def _ensure_connected(self) -> None:
+        if self._client.is_connected:
+            return
+        await self._reconnect_client()
+
+    async def _reconnect_client(self) -> None:
+        async with self._reconnect_lock:
+            if self._client.is_connected:
+                return
+
+            with contextlib.suppress(ConnectionError, OSError):
+                await self._client.connect()
+            if self._client.is_connected:
+                return
+
+            if self._config_path is None or self._db_path is None:
+                msg = "Client is not connected; call connect() first"
+                raise ConnectionError(msg)
+
+            from kagan.core.launcher import ensure_core_running
+
+            endpoint = await ensure_core_running(
+                config_path=self._config_path,
+                db_path=self._db_path,
+            )
+            with contextlib.suppress(ConnectionError, OSError):
+                await self._client.close()
+            self._client._endpoint = endpoint  # type: ignore[attr-defined]  # quality-allow-private
+            self._client._transport = self._client._transport_for_endpoint(  # type: ignore[attr-defined]  # quality-allow-private
+                endpoint
+            )
+            await self._client.connect()
 
     async def _call_core(
         self,
@@ -181,21 +255,12 @@ class CoreBackedApi:
         kwargs: dict[str, Any] | None = None,
         request_timeout_seconds: float | None = None,
     ) -> Any:
-        response = await self._client.request(
-            session_id=self._session_id,
-            session_profile=self._session_profile,
-            session_origin=self._session_origin,
+        payload = await self._request_core(
             capability="tui",
             method="api_call",
-            params={
-                "method": method,
-                "kwargs": kwargs or {},
-            },
+            params={"method": method, "kwargs": kwargs or {}},
             request_timeout_seconds=request_timeout_seconds,
         )
-        if not response.ok:
-            raise _raise_core_error(method, response.error.message if response.error else None)
-        payload = response.result or {}
         if not bool(payload.get("success", False)):
             raise _raise_core_error(method, str(payload.get("message", "")))
         return payload.get("value")
@@ -383,6 +448,42 @@ class CoreBackedApi:
         if not isinstance(raw, dict):
             return None
         return _repo_from_payload(raw)
+
+    async def get_settings(self) -> dict[str, object]:
+        payload = await self._request_core(
+            capability="settings",
+            method="get",
+            params={},
+        )
+        raw = payload.get("settings")
+        if not isinstance(raw, dict):
+            return {}
+        return {str(key): value for key, value in raw.items()}
+
+    async def update_settings(
+        self,
+        fields: dict[str, object],
+    ) -> tuple[bool, str, dict[str, object], dict[str, object]]:
+        payload = await self._request_core(
+            capability="settings",
+            method="update",
+            params={"fields": dict(fields)},
+        )
+        success = bool(payload.get("success", False))
+        message = str(payload.get("message", ""))
+        updated_raw = payload.get("updated")
+        settings_raw = payload.get("settings")
+        updated = (
+            {str(key): value for key, value in updated_raw.items()}
+            if isinstance(updated_raw, dict)
+            else {}
+        )
+        settings = (
+            {str(key): value for key, value in settings_raw.items()}
+            if isinstance(settings_raw, dict)
+            else {}
+        )
+        return success, message, updated, settings
 
     async def submit_job(
         self,

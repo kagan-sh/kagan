@@ -740,10 +740,9 @@ class KanbanScreen(KaganScreen):
         from kagan.tui.ui.modals import SettingsModal
 
         config = self.kagan_app.config
-        config_path = self.kagan_app.config_path
         result = await await_screen_result(
             self.app,
-            SettingsModal(config, config_path),
+            SettingsModal(config, self.ctx.api),
         )
         self._on_settings_result(result)
 
@@ -752,6 +751,7 @@ class KanbanScreen(KaganScreen):
             return
         config_path = self.kagan_app.config_path
         self.kagan_app.config = self.kagan_app.config.load(config_path)
+        self.ctx.config = self.kagan_app.config
         self.header.update_agent_from_config(self.kagan_app.config)
         self.notify("Settings saved")
 
