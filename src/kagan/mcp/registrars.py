@@ -1547,6 +1547,11 @@ def register_admin_tools(
 GITHUB_TOOL_CONTRACT_PROBE = "kagan_github_contract_probe"
 GITHUB_TOOL_CONNECT_REPO = "kagan_github_connect_repo"
 GITHUB_TOOL_SYNC_ISSUES = "kagan_github_sync_issues"
+GITHUB_MCP_V1_TOOLS = (
+    GITHUB_TOOL_CONTRACT_PROBE,
+    GITHUB_TOOL_CONNECT_REPO,
+    GITHUB_TOOL_SYNC_ISSUES,
+)
 
 
 def register_github_tools(
@@ -1595,6 +1600,8 @@ def register_github_tools(
             capability=raw.get("capability", ""),
             method=raw.get("method", ""),
             canonical_methods=raw.get("canonical_methods", []),
+            canonical_scope=raw.get("canonical_scope", "plugin_capability"),
+            mcp_v1_tools=list(GITHUB_MCP_V1_TOOLS),
             echo=raw.get("echo"),
         )
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Final
 from kagan.core.models.enums import TaskStatus
 from kagan.core.plugins.github.contract import (
     GITHUB_CANONICAL_METHODS,
+    GITHUB_CANONICAL_METHODS_SCOPE,
     GITHUB_CAPABILITY,
     GITHUB_CONTRACT_PROBE_METHOD,
     GITHUB_CONTRACT_VERSION,
@@ -101,6 +102,7 @@ class GitHubPluginUseCases:
             "capability": GITHUB_CAPABILITY,
             "method": GITHUB_CONTRACT_PROBE_METHOD,
             "canonical_methods": list(GITHUB_CANONICAL_METHODS),
+            "canonical_scope": GITHUB_CANONICAL_METHODS_SCOPE,
             "reserved_official_capability": RESERVED_GITHUB_CAPABILITY,
             "echo": request.echo,
         }
@@ -731,8 +733,22 @@ class GitHubPluginUseCases:
                 "Create a workspace for the task first",
             )
 
-        workspace = workspaces[0]
-        head_branch = workspace.branch_name
+        workspace, workspace_error = await self._resolve_workspace_for_repo(
+            task_id=request.task_id,
+            repo=repo,
+            workspaces=workspaces,
+        )
+        if workspace_error is not None:
+            return workspace_error
+        assert workspace is not None
+
+        head_branch = self._non_empty_str(getattr(workspace, "branch_name", None))
+        if head_branch is None:
+            return self._error(
+                GH_WORKSPACE_REQUIRED,
+                f"Workspace {workspace.id} has no branch name",
+                "Recreate workspace for this task before creating a PR",
+            )
 
         pr_title = request.title or task.title
         pr_body = request.body or task.description or ""
@@ -1003,6 +1019,52 @@ class GitHubPluginUseCases:
             "message": "REVIEW transition blocked: failed to verify GitHub guardrails.",
             "hint": f"Resolve GitHub plugin health and retry. Details: {detail}",
         }
+
+    async def _resolve_workspace_for_repo(
+        self,
+        *,
+        task_id: str,
+        repo: Any,
+        workspaces: list[Any],
+    ) -> tuple[Any | None, dict[str, Any] | None]:
+        repo_id = repo.id if hasattr(repo, "id") else None
+        if not isinstance(repo_id, str) or not repo_id:
+            repo_label = self._repo_identifier(repo)
+            return None, self._error(
+                GH_REPO_REQUIRED,
+                f"Repository {repo_label} has no stable repo_id",
+                "Reconnect repository metadata and retry PR creation.",
+            )
+
+        matching_workspaces: list[Any] = []
+        for workspace in workspaces:
+            workspace_repos = await self._core.get_workspace_repos(workspace.id)
+            for workspace_repo in workspace_repos:
+                if not isinstance(workspace_repo, dict):
+                    continue
+                workspace_repo_id = workspace_repo.get("repo_id")
+                if isinstance(workspace_repo_id, str) and workspace_repo_id == repo_id:
+                    matching_workspaces.append(workspace)
+                    break
+
+        if not matching_workspaces:
+            return None, self._error(
+                GH_WORKSPACE_REQUIRED,
+                f"Task has no workspace for repo_id {repo_id}",
+                "Create a workspace for this repo before creating a PR.",
+            )
+
+        if len(matching_workspaces) > 1:
+            workspace_ids = ", ".join(
+                str(getattr(workspace, "id", "")) for workspace in matching_workspaces
+            )
+            return None, self._error(
+                GH_WORKSPACE_REQUIRED,
+                f"Task has multiple workspaces for repo_id {repo_id}: {workspace_ids}",
+                "Prune stale workspaces and retry PR creation.",
+            )
+
+        return matching_workspaces[0], None
 
     async def _resolve_workspace_owner_candidates(
         self,

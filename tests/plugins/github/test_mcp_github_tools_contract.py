@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import pytest
 
+from kagan.core.plugins.github.contract import GITHUB_CANONICAL_METHODS
 from kagan.mcp.registrars import (
+    GITHUB_MCP_V1_TOOLS,
     GITHUB_TOOL_CONNECT_REPO,
     GITHUB_TOOL_CONTRACT_PROBE,
     GITHUB_TOOL_SYNC_ISSUES,
@@ -71,6 +73,14 @@ def test_v1_tool_names_follow_naming_convention() -> None:
     """All GitHub tools follow kagan_github_* naming convention."""
     for name in V1_GITHUB_TOOLS:
         assert name.startswith("kagan_github_"), f"Tool {name} must start with kagan_github_"
+
+
+def test_mcp_v1_tools_are_documented_subset_of_plugin_capability_methods() -> None:
+    """MCP V1 exposes an admin subset; canonical methods describe plugin capability surface."""
+    assert frozenset(GITHUB_MCP_V1_TOOLS) == V1_GITHUB_TOOLS
+    canonical = set(GITHUB_CANONICAL_METHODS)
+    assert {"connect_repo", "sync_issues"} <= canonical
+    assert "contract_probe" not in canonical
 
 
 # ---------------------------------------------------------------------------

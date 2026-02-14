@@ -283,6 +283,8 @@ class CoreBackedApi:
 
     def _cache_task_runtime(self, task_payload: dict[str, Any]) -> None:
         task_id = task_payload.get("id")
+        if not isinstance(task_id, str):
+            task_id = task_payload.get("task_id")
         runtime = task_payload.get("runtime")
         if isinstance(task_id, str) and isinstance(runtime, dict):
             self._runtime_by_task[task_id] = dict(runtime)
@@ -974,7 +976,9 @@ class CoreBackedApi:
         return bool(view and view.get("is_running"))
 
     async def reconcile_running_tasks(self, task_ids: list[str]) -> None:
-        await self._call_core("reconcile_running_tasks", kwargs={"task_ids": task_ids})
+        raw = await self._call_core("reconcile_running_tasks", kwargs={"task_ids": task_ids})
+        payloads = [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+        self._cache_task_runtimes(payloads)
 
     async def resolve_task_base_branch(self, task: Task | str | dict[str, Any]) -> str:
         raw = await self._call_core(

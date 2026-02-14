@@ -16,6 +16,7 @@ from kagan.core.ipc.contracts import CoreRequest
 from kagan.core.plugins.examples import register_example_plugins
 from kagan.core.plugins.github import (
     GITHUB_CANONICAL_METHODS,
+    GITHUB_CANONICAL_METHODS_SCOPE,
     GITHUB_CAPABILITY,
     GITHUB_CONTRACT_PROBE_METHOD,
     GITHUB_CONTRACT_VERSION,
@@ -403,6 +404,7 @@ async def test_core_host_github_probe_loads_handlers_and_contract_stable() -> No
         "capability": GITHUB_CAPABILITY,
         "method": GITHUB_CONTRACT_PROBE_METHOD,
         "canonical_methods": list(GITHUB_CANONICAL_METHODS),
+        "canonical_scope": GITHUB_CANONICAL_METHODS_SCOPE,
         "reserved_official_capability": RESERVED_GITHUB_CAPABILITY,
         "echo": "hello",
     }

@@ -419,7 +419,17 @@ class GitHubContractProbeResponse(MutatingResponse):
     method: str = Field(description="Method name (contract_probe)")
     canonical_methods: list[str] = Field(
         default_factory=list,
-        description="List of canonical methods supported by this plugin",
+        description="Canonical plugin capability methods (not limited to MCP V1 tools)",
+    )
+    canonical_scope: str = Field(
+        default="plugin_capability",
+        description=(
+            "Scope of canonical_methods; plugin_capability indicates non-MCP operations may appear"
+        ),
+    )
+    mcp_v1_tools: list[str] = Field(
+        default_factory=list,
+        description="MCP V1 tool names exposed by this server profile",
     )
     echo: str | None = Field(
         default=None,

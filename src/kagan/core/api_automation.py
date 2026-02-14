@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from kagan.core.models.enums import TaskType
+from kagan.core.runtime_helpers import runtime_snapshot_for_task
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -275,9 +276,23 @@ class AutomationApiMixin:
         """Return the set of currently running task IDs."""
         return self._ctx.runtime_service.running_tasks()
 
-    async def reconcile_running_tasks(self, task_ids: Sequence[str]) -> None:
-        """Synchronize runtime task projections with database state."""
-        await self._ctx.runtime_service.reconcile_running_tasks(task_ids)
+    async def reconcile_running_tasks(self, task_ids: Sequence[str]) -> list[dict[str, Any]]:
+        """Synchronize runtime task projections and return refreshed runtime snapshots."""
+        unique_task_ids = tuple(dict.fromkeys(task_ids))
+        if not unique_task_ids:
+            return []
+
+        await self._ctx.runtime_service.reconcile_running_tasks(unique_task_ids)
+        return [
+            {
+                "task_id": task_id,
+                "runtime": runtime_snapshot_for_task(
+                    task_id=task_id,
+                    runtime_service=self._ctx.runtime_service,
+                ),
+            }
+            for task_id in unique_task_ids
+        ]
 
     async def decide_startup(self, cwd: Path) -> Any:
         """Determine startup flow based on persisted runtime state and cwd."""

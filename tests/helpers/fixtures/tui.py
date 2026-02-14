@@ -140,14 +140,21 @@ def auto_mock_terminals_for_app_tests(request, monkeypatch):
     """Auto-mock terminal backends for app-driven tests (external system boundary)."""
     from tests.helpers.mocks import install_fake_tmux
 
-    force_core_backed = any(
-        token in request.node.nodeid
-        for token in (
-            "test_core_client_regressions.py",
-            "test_tui_core_attach.py",
-        )
+    nodeid = request.node.nodeid
+    local_context_smoke_files = (
+        "test_branch_popup.py",
+        "test_enter_flow_streaming.py",
+        "test_e2e_full_flow.py",
+        "test_kanban_external_updates.py",
+        "test_multi_project_journey_cases.py",
+        "test_planner_board_refresh.py",
+        "test_welcome_recent_projects.py",
     )
-    if force_core_backed:
+    force_local_context = "tests/tui/snapshot/" in nodeid or any(
+        filename in nodeid for filename in local_context_smoke_files
+    )
+    prefer_core_backed = "tests/tui/smoke/" in nodeid and not force_local_context
+    if prefer_core_backed:
         monkeypatch.delenv("KAGAN_TUI_USE_LOCAL_CONTEXT", raising=False)
     else:
         monkeypatch.setenv("KAGAN_TUI_USE_LOCAL_CONTEXT", "1")

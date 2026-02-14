@@ -14,17 +14,25 @@ from kagan.core.plugins.github.application.use_cases import (
     GH_ISSUE_NUMBER_INVALID,
     GH_PR_NUMBER_INVALID,
     GH_SYNC_FAILED,
+    GH_WORKSPACE_REQUIRED,
+    PR_CREATED,
     REVIEW_BLOCKED_NO_PR,
     GitHubPluginUseCases,
 )
 from kagan.core.plugins.github.domain.models import (
     AcquireLeaseInput,
     ConnectRepoInput,
+    CreatePrForTaskInput,
     LinkPrToTaskInput,
     SyncIssuesInput,
     ValidateReviewTransitionInput,
 )
-from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, GhIssue, GhRepoView
+from kagan.core.plugins.github.gh_adapter import (
+    GITHUB_CONNECTION_KEY,
+    GhIssue,
+    GhPullRequest,
+    GhRepoView,
+)
 from kagan.core.plugins.github.sync import GITHUB_ISSUE_MAPPING_KEY, GITHUB_TASK_PR_MAPPING_KEY
 
 
@@ -319,6 +327,101 @@ async def test_connect_repo_runs_preflight_in_worker_thread(
     assert result["success"] is True
     assert calls
     assert calls[0] == (gh_client.run_preflight_checks, ("/tmp/repo",))
+
+
+@pytest.mark.asyncio()
+async def test_create_pr_for_task_uses_workspace_matching_requested_repo() -> None:
+    repo_a = SimpleNamespace(
+        id="repo-a",
+        path="/tmp/repo-a",
+        scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-a"})},
+    )
+    repo_b = SimpleNamespace(
+        id="repo-b",
+        path="/tmp/repo-b",
+        scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-b"})},
+    )
+    core_gateway = _core_gateway(repo_a)
+    core_gateway.get_project_repos = AsyncMock(return_value=[repo_a, repo_b])
+    core_gateway.get_task = AsyncMock(
+        return_value=SimpleNamespace(id="task-1", title="Task", description="")
+    )
+    core_gateway.list_workspaces = AsyncMock(
+        return_value=[
+            SimpleNamespace(id="ws-a", branch_name="feature/repo-a"),
+            SimpleNamespace(id="ws-b", branch_name="feature/repo-b"),
+        ]
+    )
+
+    async def workspace_repos(workspace_id: str) -> list[dict[str, str]]:
+        if workspace_id == "ws-a":
+            return [{"repo_id": "repo-a"}]
+        if workspace_id == "ws-b":
+            return [{"repo_id": "repo-b"}]
+        return []
+
+    core_gateway.get_workspace_repos = AsyncMock(side_effect=workspace_repos)
+
+    created_pr = GhPullRequest(
+        number=42,
+        title="Task",
+        state="OPEN",
+        url="https://github.com/acme/repo-b/pull/42",
+        head_branch="feature/repo-b",
+        base_branch="main",
+        is_draft=False,
+        mergeable="MERGEABLE",
+    )
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        run_gh_pr_create=MagicMock(return_value=(created_pr, None)),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).create_pr_for_task(
+        CreatePrForTaskInput(project_id="project-1", repo_id="repo-b", task_id="task-1")
+    )
+
+    assert result["success"] is True
+    assert result["code"] == PR_CREATED
+    assert gh_client.run_gh_pr_create.call_args.args[1] == "/tmp/repo-b"
+    assert gh_client.run_gh_pr_create.call_args.kwargs["head_branch"] == "feature/repo-b"
+
+
+@pytest.mark.asyncio()
+async def test_create_pr_for_task_fails_when_no_workspace_matches_repo() -> None:
+    repo_a = SimpleNamespace(
+        id="repo-a",
+        path="/tmp/repo-a",
+        scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-a"})},
+    )
+    repo_b = SimpleNamespace(
+        id="repo-b",
+        path="/tmp/repo-b",
+        scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-b"})},
+    )
+    core_gateway = _core_gateway(repo_a)
+    core_gateway.get_project_repos = AsyncMock(return_value=[repo_a, repo_b])
+    core_gateway.get_task = AsyncMock(
+        return_value=SimpleNamespace(id="task-1", title="Task", description="")
+    )
+    core_gateway.list_workspaces = AsyncMock(
+        return_value=[SimpleNamespace(id="ws-a", branch_name="feature/repo-a")]
+    )
+    core_gateway.get_workspace_repos = AsyncMock(return_value=[{"repo_id": "repo-a"}])
+
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        run_gh_pr_create=MagicMock(),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).create_pr_for_task(
+        CreatePrForTaskInput(project_id="project-1", repo_id="repo-b", task_id="task-1")
+    )
+
+    assert result["success"] is False
+    assert result["code"] == GH_WORKSPACE_REQUIRED
+    assert "repo_id repo-b" in result["message"]
+    gh_client.run_gh_pr_create.assert_not_called()
 
 
 @pytest.mark.asyncio()

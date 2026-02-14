@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from kagan.core.plugins.github.contract import (
     GITHUB_CANONICAL_METHODS,
+    GITHUB_CANONICAL_METHODS_SCOPE,
     GITHUB_CAPABILITY,
     GITHUB_CONTRACT_PROBE_METHOD,
     GITHUB_CONTRACT_VERSION,
@@ -15,6 +16,7 @@ from kagan.core.plugins.github.plugin import GitHubPlugin, register_github_plugi
 
 __all__ = [
     "GITHUB_CANONICAL_METHODS",
+    "GITHUB_CANONICAL_METHODS_SCOPE",
     "GITHUB_CAPABILITY",
     "GITHUB_CONTRACT_PROBE_METHOD",
     "GITHUB_CONTRACT_VERSION",

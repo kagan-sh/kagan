@@ -19,6 +19,11 @@ GITHUB_METHOD_VALIDATE_REVIEW_TRANSITION: Final = "validate_review_transition"
 GITHUB_CONTRACT_VERSION: Final = "1.0.0"
 RESERVED_GITHUB_CAPABILITY: Final = "github"
 
+# Scope marker for canonical method discovery payloads.
+# These methods represent the plugin capability surface, not the MCP V1
+# admin tool subset.
+GITHUB_CANONICAL_METHODS_SCOPE: Final = "plugin_capability"
+
 GITHUB_CANONICAL_METHODS: Final[tuple[str, ...]] = (
     "connect_repo",
     "sync_issues",
@@ -32,6 +37,7 @@ GITHUB_CANONICAL_METHODS: Final[tuple[str, ...]] = (
 
 __all__ = [
     "GITHUB_CANONICAL_METHODS",
+    "GITHUB_CANONICAL_METHODS_SCOPE",
     "GITHUB_CAPABILITY",
     "GITHUB_CONTRACT_PROBE_METHOD",
     "GITHUB_CONTRACT_VERSION",

@@ -1755,8 +1755,7 @@ async def _dispatch_tui_api_call(
             return f.get_running_task_ids()
         case "reconcile_running_tasks":
             task_ids = _parse_jsonable_task_ids(kwargs.get("task_ids", []), field_name="task_ids")
-            await f.reconcile_running_tasks(sorted(task_ids))
-            return None
+            return await f.reconcile_running_tasks(sorted(task_ids))
         case "is_automation_running":
             task_id = _required_non_empty(kwargs, "task_id")
             return f.is_automation_running(task_id)

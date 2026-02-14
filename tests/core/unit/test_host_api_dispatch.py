@@ -160,6 +160,34 @@ class TestApiDispatchIntegration:
             {"project_id": "project-1", "repo_id": "repo-1"},
         )
 
+    async def test_tui_api_call_reconcile_running_tasks_returns_runtime_snapshots(
+        self,
+        handle_host: tuple,
+    ) -> None:
+        host, api = handle_host
+        api.reconcile_running_tasks = AsyncMock(
+            return_value=[{"task_id": "task-1", "runtime": {"is_running": True}}]
+        )
+
+        response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session",
+                capability="tui",
+                method="api_call",
+                params={
+                    "method": "reconcile_running_tasks",
+                    "kwargs": {"task_ids": ["task-1", "task-1"]},
+                },
+            ),
+        )
+
+        assert response.ok
+        assert response.result is not None
+        assert response.result["success"] is True
+        assert response.result["value"] == [{"task_id": "task-1", "runtime": {"is_running": True}}]
+        api.reconcile_running_tasks.assert_awaited_once_with(["task-1"])
+
     async def test_viewer_denied_for_tui_api_dispatch(self, handle_host: tuple) -> None:
         host, _api = handle_host
 
