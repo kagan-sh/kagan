@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from _api_helpers import build_api
 
+from kagan.core.api_tasks import ReviewApprovalContextMissingError
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
 from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY
 from kagan.core.plugins.github.sync import (
@@ -190,12 +191,50 @@ class TestReviewOperations:
         assert reviewed.status == TaskStatus.REVIEW
 
     async def test_approve_task(self, handle_env: tuple) -> None:
-        _repo, api, _ctx = handle_env
+        _repo, api, ctx = handle_env
         task = await api.create_task("Approve Task")
         await api.request_review(task.id)
+        execution = SimpleNamespace(id="exec-1", metadata_={})
+        ctx.execution_service.get_latest_execution_for_task = AsyncMock(return_value=execution)
+        ctx.execution_service.update_execution = AsyncMock(return_value=execution)
         approved = await api.approve_task(task.id)
         assert approved is not None
         assert approved.status == TaskStatus.REVIEW
+
+    async def test_approve_task_fails_without_execution_context(self, handle_env: tuple) -> None:
+        _repo, api, _ctx = handle_env
+        task = await api.create_task("Approve Task Missing Context")
+        await api.request_review(task.id)
+
+        with pytest.raises(ReviewApprovalContextMissingError, match="no execution context exists"):
+            await api.approve_task(task.id)
+
+    async def test_request_review_uses_plugin_guardrail_hooks(self, handle_env: tuple) -> None:
+        """Review guardrails should use plugin method hooks, not hardcoded plugin capability."""
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Plugin hook guardrail")
+
+        async def _guardrail_handler(_ctx, params):
+            assert params["task_id"] == task.id
+            return {
+                "allowed": False,
+                "code": "THIRDPARTY_BLOCKED",
+                "message": "Blocked by external review policy.",
+                "hint": "Resolve external policy requirement and retry.",
+            }
+
+        operation = SimpleNamespace(plugin_id="thirdparty.guardrails", handler=_guardrail_handler)
+        def _operations_for_method(method: str) -> tuple[object, ...]:
+            if method != "validate_review_transition":
+                return ()
+            return (operation,)
+
+        ctx.plugin_registry = SimpleNamespace(
+            operations_for_method=_operations_for_method
+        )
+
+        with pytest.raises(ValueError, match="Blocked by external review policy"):
+            await api.request_review(task.id)
 
     async def test_request_review_uses_owning_repo_guardrails_only(self, handle_env: tuple) -> None:
         """Multi-repo guardrails should not block a task because of an unrelated repo."""

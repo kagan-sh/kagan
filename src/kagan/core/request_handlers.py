@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from kagan.core.api_tasks import ReviewGuardrailBlockedError
+from kagan.core.api_tasks import ReviewApprovalContextMissingError, ReviewGuardrailBlockedError
 from kagan.core.commands.job_action_executor import SUPPORTED_JOB_ACTIONS
 from kagan.core.models.enums import TaskStatus
 from kagan.core.request_handler_support import (
@@ -855,45 +855,9 @@ async def handle_task_wait(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
     # Race-safe guard: from_updated_at
     from_updated_at = _non_empty_str(params.get("from_updated_at"))
 
-    # Get current task state
-    task = await f.get_task(task_id)
-    if task is None:
-        return _task_not_found_response(task_id)
-
-    previous_status = task.status.value
-    previous_updated_at = task.updated_at.isoformat()
-    runtime_service = getattr(f.ctx, "runtime_service", None)
-
-    # Immediate return: task already in target status
-    if wait_for_status is not None and previous_status in wait_for_status:
-        return {
-            "changed": True,
-            "timed_out": False,
-            "task_id": task_id,
-            "previous_status": previous_status,
-            "current_status": previous_status,
-            "changed_at": previous_updated_at,
-            "task": _compact_task_snapshot(task, runtime_service=runtime_service),
-            "code": "ALREADY_AT_STATUS",
-            "message": f"Task already at target status {previous_status}",
-        }
-
-    # Race-safe: detect changes since from_updated_at
-    if from_updated_at is not None and previous_updated_at != from_updated_at:
-        if wait_for_status is None or previous_status in wait_for_status:
-            return {
-                "changed": True,
-                "timed_out": False,
-                "task_id": task_id,
-                "previous_status": None,
-                "current_status": previous_status,
-                "changed_at": previous_updated_at,
-                "task": _compact_task_snapshot(task, runtime_service=runtime_service),
-                "code": "CHANGED_SINCE_CURSOR",
-                "message": "Task changed since from_updated_at cursor",
-            }
-
-    # Event-driven wait using asyncio.Event
+    # Event-driven wait using asyncio.Event.
+    # Subscribe before reading state to avoid missing updates between
+    # baseline read and handler registration.
     wake_event = asyncio.Event()
     change_info: dict[str, Any] = {}
 
@@ -911,7 +875,46 @@ async def handle_task_wait(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
 
     event_bus = f.ctx.event_bus
     event_bus.add_handler(_on_event)
+    runtime_service = getattr(f.ctx, "runtime_service", None)
+    previous_status: str | None = None
     try:
+        # Get current task state after listener registration.
+        task = await f.get_task(task_id)
+        if task is None:
+            return _task_not_found_response(task_id)
+
+        previous_status = task.status.value
+        previous_updated_at = task.updated_at.isoformat()
+
+        # Immediate return: task already in target status.
+        if wait_for_status is not None and previous_status in wait_for_status:
+            return {
+                "changed": True,
+                "timed_out": False,
+                "task_id": task_id,
+                "previous_status": previous_status,
+                "current_status": previous_status,
+                "changed_at": previous_updated_at,
+                "task": _compact_task_snapshot(task, runtime_service=runtime_service),
+                "code": "ALREADY_AT_STATUS",
+                "message": f"Task already at target status {previous_status}",
+            }
+
+        # Race-safe: detect changes since from_updated_at.
+        if from_updated_at is not None and previous_updated_at != from_updated_at:
+            if wait_for_status is None or previous_status in wait_for_status:
+                return {
+                    "changed": True,
+                    "timed_out": False,
+                    "task_id": task_id,
+                    "previous_status": None,
+                    "current_status": previous_status,
+                    "changed_at": previous_updated_at,
+                    "task": _compact_task_snapshot(task, runtime_service=runtime_service),
+                    "code": "CHANGED_SINCE_CURSOR",
+                    "message": "Task changed since from_updated_at cursor",
+                }
+
         try:
             await asyncio.wait_for(wake_event.wait(), timeout=timeout_seconds)
         except TimeoutError:
@@ -1042,7 +1045,18 @@ async def handle_review_approve(api: KaganAPI, params: dict[str, Any]) -> dict[s
             "hint": "Move task to REVIEW before approving.",
         }
 
-    task = await f.approve_task(task_id)
+    try:
+        task = await f.approve_task(task_id)
+    except ReviewApprovalContextMissingError as exc:
+        response: dict[str, Any] = {
+            "success": False,
+            "task_id": task_id,
+            "code": exc.code,
+            "message": exc.message,
+        }
+        if exc.hint is not None and exc.hint.strip():
+            response["hint"] = exc.hint
+        return response
     if task is None:
         return _task_not_found_response(task_id)
     return {

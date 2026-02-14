@@ -7,7 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 from kagan.core.api import KaganAPI
-from kagan.core.api_tasks import ReviewGuardrailBlockedError
+from kagan.core.api_tasks import ReviewApprovalContextMissingError, ReviewGuardrailBlockedError
 from kagan.core.models.enums import TaskStatus, TaskType
 from kagan.core.request_handlers import (
     handle_review_approve,
@@ -121,6 +121,26 @@ async def test_review_approve_rejects_non_review_state() -> None:
     assert result["success"] is False
     assert result["task_id"] == "task-1"
     assert result["code"] == "REVIEW_NOT_READY"
+
+
+async def test_review_approve_returns_structured_error_when_execution_context_missing() -> None:
+    task = SimpleNamespace(id="task-1", status=TaskStatus.REVIEW)
+    f = _api(task_service=SimpleNamespace(get_task=AsyncMock(return_value=task)))
+    f.approve_task = AsyncMock(  # type: ignore[method-assign]
+        side_effect=ReviewApprovalContextMissingError(
+            code="REVIEW_APPROVAL_CONTEXT_MISSING",
+            message="Cannot approve review: no execution context exists for this task.",
+            hint="Create a review execution for this task, then retry approve.",
+        )
+    )
+
+    result = await handle_review_approve(f, {"task_id": "task-1"})
+
+    assert result["success"] is False
+    assert result["task_id"] == "task-1"
+    assert result["code"] == "REVIEW_APPROVAL_CONTEXT_MISSING"
+    assert "no execution context exists" in result["message"]
+    assert "retry approve" in result["hint"]
 
 
 async def test_review_merge_restores_review_status_on_failed_merge_transition() -> None:

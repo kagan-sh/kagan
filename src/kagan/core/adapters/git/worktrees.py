@@ -335,34 +335,6 @@ class GitWorktreeAdapter(GitAdapterBase):
         )
         return returncode == 0
 
-    async def is_branch_merged(
-        self,
-        repo_path: str,
-        branch_name: str,
-        target_branch: str = "main",
-    ) -> bool:
-        """Check if a branch has been merged into the target branch.
-
-        A branch is considered merged if it has no unmerged commits relative
-        to the target branch.
-        """
-        repo_path_obj = Path(repo_path)
-        if not repo_path_obj.exists():
-            return False
-
-        target_ref = await self._resolve_base_ref(repo_path_obj, target_branch)
-
-        stdout, _ = await self._run_git(
-            repo_path_obj,
-            ["rev-list", "--count", f"{target_ref}..{branch_name}"],
-            check=False,
-        )
-        try:
-            unmerged_count = int(stdout.strip())
-            return unmerged_count == 0
-        except ValueError:
-            return False
-
     async def get_worktree_for_branch(self, repo_path: str, branch_name: str) -> str | None:
         """Get the worktree path for a branch, if any.
 

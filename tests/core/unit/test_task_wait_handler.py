@@ -129,6 +129,39 @@ async def test_task_wait_event_driven_wakeup(api_env):
     assert result["task"] is not None
 
 
+async def test_task_wait_does_not_miss_status_change_during_initial_read(api_env, monkeypatch):
+    """tasks.wait should not lose updates that happen during the initial state read."""
+    from kagan.core.models.enums import TaskStatus
+    from kagan.core.request_handlers import handle_task_wait
+
+    _, api, _ctx = api_env
+    task = await api.create_task("Race-safe wait", "desc")
+    original_get_task = api.get_task
+    first_read = True
+
+    async def _delayed_get_task(task_id: str):
+        nonlocal first_read
+        if first_read:
+            first_read = False
+            await asyncio.sleep(0.08)
+        return await original_get_task(task_id)
+
+    monkeypatch.setattr(api, "get_task", _delayed_get_task)
+
+    async def _change_status_during_read_window():
+        await asyncio.sleep(0.02)
+        await api.move_task(task.id, TaskStatus.IN_PROGRESS)
+
+    change_task = asyncio.create_task(_change_status_during_read_window())
+    result = await handle_task_wait(api, {"task_id": task.id, "timeout_seconds": 0.4})
+    await change_task
+
+    assert result["changed"] is True
+    assert result["timed_out"] is False
+    assert result["code"] == "TASK_CHANGED"
+    assert result["current_status"] == "IN_PROGRESS"
+
+
 async def test_task_wait_status_filter_waits_for_target(api_env):
     """tasks.wait with status filter ignores non-matching transitions."""
     from kagan.core.models.enums import TaskStatus

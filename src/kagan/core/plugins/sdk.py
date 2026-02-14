@@ -238,6 +238,14 @@ class PluginRegistry(PluginRegistrationApi):
         """Resolve a plugin operation by capability/method."""
         return self._operations.get((capability, method))
 
+    def operations_for_method(self, method: str) -> tuple[PluginOperation, ...]:
+        """Return plugin operations that implement the given method name."""
+        return tuple(
+            operation
+            for (_, registered_method), operation in self._operations.items()
+            if registered_method == method
+        )
+
     def evaluate_policy(
         self,
         *,

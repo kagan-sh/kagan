@@ -55,6 +55,9 @@ class KanbanReviewController:
         except ValueError as exc:
             self.screen.notify(str(exc), severity="error")
             return None
+        except RuntimeError as exc:
+            self.screen.notify(str(exc), severity="error")
+            return None
 
     def get_review_task(self, card: TaskCard | None) -> Task | None:
         if not card or not card.task_model:

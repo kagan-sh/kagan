@@ -334,6 +334,16 @@ def test_when_registering_github_plugin_then_contract_probe_operation_is_exposed
     assert operation.mutating is False
 
 
+def test_when_querying_operations_by_method_then_matching_operations_are_returned() -> None:
+    registry = PluginRegistry()
+    register_github_plugin(registry)
+
+    operations = registry.operations_for_method("validate_review_transition")
+
+    assert len(operations) == 1
+    assert operations[0].plugin_id == GITHUB_PLUGIN_ID
+
+
 def test_when_registering_conflicting_github_probe_then_registry_rejects_collision() -> None:
     registry = PluginRegistry()
     register_github_plugin(registry)

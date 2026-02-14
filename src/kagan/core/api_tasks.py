@@ -38,6 +38,16 @@ class ReviewGuardrailBlockedError(ValueError):
         self.hint = hint
 
 
+class ReviewApprovalContextMissingError(ValueError):
+    """Raised when approval cannot be persisted due to missing review execution context."""
+
+    def __init__(self, *, code: str, message: str, hint: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.hint = hint
+
+
 class TaskApiMixin:
     """Mixin providing task-related API methods.
 
@@ -410,62 +420,65 @@ class TaskApiMixin:
         return task
 
     async def _check_review_guardrails(self, task: Task) -> dict[str, Any]:
-        """Check REVIEW transition guardrails via the GitHub plugin boundary."""
-        from kagan.core.plugins.github.contract import (
-            GITHUB_CAPABILITY,
-            GITHUB_METHOD_VALIDATE_REVIEW_TRANSITION,
-        )
-
+        """Check REVIEW transition guardrails via plugin hook operations."""
+        guardrail_method = "validate_review_transition"
         plugin_registry = getattr(self._ctx, "plugin_registry", None)
         if plugin_registry is None:
             return {"allowed": True}
-
-        operation = plugin_registry.resolve_operation(
-            GITHUB_CAPABILITY,
-            GITHUB_METHOD_VALIDATE_REVIEW_TRANSITION,
-        )
-        if operation is None:
+        operations_for_method = getattr(plugin_registry, "operations_for_method", None)
+        if not callable(operations_for_method):
+            return {"allowed": True}
+        operations = tuple(operations_for_method(guardrail_method))
+        if not operations:
             return {"allowed": True}
 
-        try:
-            result = await operation.handler(
-                self._ctx,
-                {
-                    "task_id": task.id,
-                    "project_id": task.project_id,
-                },
-            )
-        except Exception as exc:
-            return {
-                "allowed": False,
-                "code": "REVIEW_GUARDRAIL_CHECK_FAILED",
-                "message": "REVIEW transition blocked: failed to verify GitHub guardrails.",
-                "hint": f"Resolve GitHub plugin health and retry. Details: {exc}",
-            }
+        for operation in operations:
+            plugin_id = getattr(operation, "plugin_id", "<unknown-plugin>")
+            try:
+                result = await operation.handler(
+                    self._ctx,
+                    {
+                        "task_id": task.id,
+                        "project_id": task.project_id,
+                    },
+                )
+            except Exception as exc:
+                return {
+                    "allowed": False,
+                    "code": "REVIEW_GUARDRAIL_CHECK_FAILED",
+                    "message": "REVIEW transition blocked: failed to verify review guardrails.",
+                    "hint": (
+                        "Resolve plugin health and retry. Details: "
+                        f"{plugin_id}.{guardrail_method} failed: {exc}"
+                    ),
+                }
 
-        if not isinstance(result, dict):
-            return {
-                "allowed": False,
-                "code": "REVIEW_GUARDRAIL_CHECK_FAILED",
-                "message": "REVIEW transition blocked: failed to verify GitHub guardrails.",
-                "hint": (
-                    "Resolve GitHub plugin health and retry. "
-                    "Details: invalid guardrail response."
-                ),
-            }
+            if not isinstance(result, dict):
+                return {
+                    "allowed": False,
+                    "code": "REVIEW_GUARDRAIL_CHECK_FAILED",
+                    "message": "REVIEW transition blocked: failed to verify review guardrails.",
+                    "hint": (
+                        "Resolve plugin health and retry. Details: "
+                        f"{plugin_id}.{guardrail_method} returned non-dict response."
+                    ),
+                }
 
-        if isinstance(result.get("allowed"), bool):
-            return result
+            if not isinstance(result.get("allowed"), bool):
+                return {
+                    "allowed": False,
+                    "code": "REVIEW_GUARDRAIL_CHECK_FAILED",
+                    "message": "REVIEW transition blocked: failed to verify review guardrails.",
+                    "hint": (
+                        "Resolve plugin health and retry. Details: "
+                        f"{plugin_id}.{guardrail_method} response missing boolean 'allowed'."
+                    ),
+                }
 
-        return {
-            "allowed": False,
-            "code": "REVIEW_GUARDRAIL_CHECK_FAILED",
-            "message": "REVIEW transition blocked: failed to verify GitHub guardrails.",
-            "hint": (
-                "Resolve GitHub plugin health and retry. Details: "
-                "guardrail response missing 'allowed'."
-            ),
-        }
+            if not bool(result["allowed"]):
+                return result
+
+        return {"allowed": True}
 
     @expose(
         "review",
@@ -481,12 +494,21 @@ class TaskApiMixin:
             return None
         if task.status is not TaskStatus.REVIEW:
             return task
-        await self._set_latest_review_result(
+        persisted = await self._set_latest_review_result(
             task_id,
             status="approved",
             summary="",
             approved=True,
         )
+        if not persisted:
+            raise ReviewApprovalContextMissingError(
+                code="REVIEW_APPROVAL_CONTEXT_MISSING",
+                message=(
+                    "Cannot approve review: no execution context exists for this task. "
+                    "Run or attach review execution before approving."
+                ),
+                hint="Create a review execution for this task, then retry approve.",
+            )
         return task
 
     @expose(
@@ -651,14 +673,14 @@ class TaskApiMixin:
         status: str,
         summary: str,
         approved: bool,
-    ) -> None:
+    ) -> bool:
         """Persist review result metadata on latest task execution when available."""
         execution_service = getattr(self._ctx, "execution_service", None)
         if execution_service is None:
-            return
+            return False
         execution = await execution_service.get_latest_execution_for_task(task_id)
         if execution is None:
-            return
+            return False
 
         review_result: dict[str, object] = {
             "status": status,
@@ -674,6 +696,7 @@ class TaskApiMixin:
         metadata = dict(execution.metadata_ or {})
         metadata["review_result"] = review_result
         await execution_service.update_execution(execution.id, metadata=metadata)
+        return True
 
     # ── Private helpers ────────────────────────────────────────────────
 
