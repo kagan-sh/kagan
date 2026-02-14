@@ -135,25 +135,25 @@ or indicates more pages are available.
 
 ### Parameters
 
-| Parameter         | Type              | Default               | Description             |
-| ----------------- | ----------------- | --------------------- | ----------------------- |
-| `task_id`         | `string`          | required              | Task to watch           |
-| `timeout_seconds` | `float \| string` | server default (1800s) | Maximum wait duration  |
-| `wait_for_status` | `list \| string`  | `null`                | Optional status filter  |
-| `from_updated_at` | `string`          | `null`                | Race-safe resume cursor |
+| Parameter         | Type              | Default                | Description             |
+| ----------------- | ----------------- | ---------------------- | ----------------------- |
+| `task_id`         | `string`          | required               | Task to watch           |
+| `timeout_seconds` | `float \| string` | server default (1800s) | Maximum wait duration   |
+| `wait_for_status` | `list \| string`  | `null`                 | Optional status filter  |
+| `from_updated_at` | `string`          | `null`                 | Race-safe resume cursor |
 
 ### Response codes
 
-| Code                   | Meaning                            |
-| ---------------------- | ---------------------------------- |
-| `TASK_CHANGED`         | Task status changed                |
-| `ALREADY_AT_STATUS`    | Task already matches filter        |
-| `CHANGED_SINCE_CURSOR` | Task changed after supplied cursor |
+| Code                   | Meaning                               |
+| ---------------------- | ------------------------------------- |
+| `TASK_CHANGED`         | Task status changed                   |
+| `ALREADY_AT_STATUS`    | Task already matches filter           |
+| `CHANGED_SINCE_CURSOR` | Task changed after supplied cursor    |
 | `WAIT_TIMEOUT`         | Timeout reached without status change |
-| `WAIT_INTERRUPTED`     | Wait cancelled/interrupted         |
-| `TASK_DELETED`         | Task deleted while waiting         |
-| `INVALID_TIMEOUT`      | Invalid timeout value              |
-| `INVALID_PARAMS`       | Invalid parameter payload          |
+| `WAIT_INTERRUPTED`     | Wait cancelled/interrupted            |
+| `TASK_DELETED`         | Task deleted while waiting            |
+| `INVALID_TIMEOUT`      | Invalid timeout value                 |
+| `INVALID_PARAMS`       | Invalid parameter payload             |
 
 ## `job_poll` API
 
@@ -210,13 +210,13 @@ Default and max timeouts are server-side configurable via settings:
 
 ## Common recovery codes
 
-| Code               | Meaning                                   | Typical action                      |
-| ------------------ | ----------------------------------------- | ----------------------------------- |
-| `START_PENDING`    | Job accepted, pending scheduler admission | Poll with `job_poll(wait=true)`     |
-| `DISCONNECTED`     | Core unavailable                          | Start/restart core, retry           |
-| `AUTH_STALE_TOKEN` | MCP token is stale after core restart     | Reconnect MCP client                |
+| Code               | Meaning                                     | Typical action                      |
+| ------------------ | ------------------------------------------- | ----------------------------------- |
+| `START_PENDING`    | Job accepted, pending scheduler admission   | Poll with `job_poll(wait=true)`     |
+| `DISCONNECTED`     | Core unavailable                            | Start/restart core, retry           |
+| `AUTH_STALE_TOKEN` | MCP token is stale after core restart       | Reconnect MCP client                |
 | `WAIT_TIMEOUT`     | `task_wait` timed out without status change | Retry with same or adjusted timeout |
-| `WAIT_INTERRUPTED` | `task_wait` was interrupted/cancelled     | Retry with `from_updated_at` cursor |
+| `WAIT_INTERRUPTED` | `task_wait` was interrupted/cancelled       | Retry with `from_updated_at` cursor |
 
 ## Capability profiles
 

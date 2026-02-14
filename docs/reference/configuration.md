@@ -38,28 +38,28 @@ max_concurrent_agents = 3
 
 ## `[general]`
 
-| Key                             | Type           | Default                          | Notes                                                                          |
-| ------------------------------- | -------------- | -------------------------------- | ------------------------------------------------------------------------------ |
-| `max_concurrent_agents`         | integer        | `3`                              | Concurrent AUTO execution cap                                                  |
-| `mcp_server_name`               | string         | `"kagan"`                        | MCP server registration name                                                   |
-| `worktree_base_ref_strategy`    | string         | `"remote"`                       | Base ref preference for worktree add/diff: `remote`, `local_if_ahead`, `local` |
-| `auto_review`                   | boolean        | `true`                           | Run AI review on completion                                                    |
-| `auto_approve`                  | boolean        | `false`                          | Skip planner permission prompts                                                |
-| `require_review_approval`       | boolean        | `false`                          | Require review approval before merge                                           |
-| `serialize_merges`              | boolean        | `true`                           | Queue merge actions                                                            |
-| `default_worker_agent`          | string         | `"claude"`                       | Default worker agent                                                           |
-| `default_pair_terminal_backend` | string         | `"tmux"` (`"vscode"` on Windows) | Allowed: `tmux`, `vscode`, `cursor`                                            |
-| `default_model_claude`          | string or null | `null`                           | Optional default model                                                         |
-| `default_model_opencode`        | string or null | `null`                           | Optional default model                                                         |
-| `default_model_codex`           | string or null | `null`                           | Optional default model                                                         |
-| `default_model_gemini`          | string or null | `null`                           | Optional default model                                                         |
-| `default_model_kimi`            | string or null | `null`                           | Optional default model                                                         |
-| `default_model_copilot`         | string or null | `null`                           | Optional display preference                                                    |
-| `core_idle_timeout_seconds`     | integer        | `180`                            | Core auto-stop timeout after idle                                              |
-| `core_autostart`                | boolean        | `true`                           | Start core automatically when client connects                                  |
-| `core_transport_preference`     | string         | `"auto"`                         | Allowed: `auto`, `socket`, `tcp`                                               |
-| `tasks_wait_default_timeout_seconds` | integer   | `1800`                           | Default timeout for `task_wait` (30 minutes)                                   |
-| `tasks_wait_max_timeout_seconds`     | integer   | `3600`                           | Max allowed timeout for `task_wait` (60 minutes)                               |
+| Key                                  | Type           | Default                          | Notes                                                                          |
+| ------------------------------------ | -------------- | -------------------------------- | ------------------------------------------------------------------------------ |
+| `max_concurrent_agents`              | integer        | `3`                              | Concurrent AUTO execution cap                                                  |
+| `mcp_server_name`                    | string         | `"kagan"`                        | MCP server registration name                                                   |
+| `worktree_base_ref_strategy`         | string         | `"remote"`                       | Base ref preference for worktree add/diff: `remote`, `local_if_ahead`, `local` |
+| `auto_review`                        | boolean        | `true`                           | Run AI review on completion                                                    |
+| `auto_approve`                       | boolean        | `false`                          | Skip planner permission prompts                                                |
+| `require_review_approval`            | boolean        | `false`                          | Require review approval before merge                                           |
+| `serialize_merges`                   | boolean        | `true`                           | Queue merge actions                                                            |
+| `default_worker_agent`               | string         | `"claude"`                       | Default worker agent                                                           |
+| `default_pair_terminal_backend`      | string         | `"tmux"` (`"vscode"` on Windows) | Allowed: `tmux`, `vscode`, `cursor`                                            |
+| `default_model_claude`               | string or null | `null`                           | Optional default model                                                         |
+| `default_model_opencode`             | string or null | `null`                           | Optional default model                                                         |
+| `default_model_codex`                | string or null | `null`                           | Optional default model                                                         |
+| `default_model_gemini`               | string or null | `null`                           | Optional default model                                                         |
+| `default_model_kimi`                 | string or null | `null`                           | Optional default model                                                         |
+| `default_model_copilot`              | string or null | `null`                           | Optional display preference                                                    |
+| `core_idle_timeout_seconds`          | integer        | `180`                            | Core auto-stop timeout after idle                                              |
+| `core_autostart`                     | boolean        | `true`                           | Start core automatically when client connects                                  |
+| `core_transport_preference`          | string         | `"auto"`                         | Allowed: `auto`, `socket`, `tcp`                                               |
+| `tasks_wait_default_timeout_seconds` | integer        | `1800`                           | Default timeout for `task_wait` (30 minutes)                                   |
+| `tasks_wait_max_timeout_seconds`     | integer        | `3600`                           | Max allowed timeout for `task_wait` (60 minutes)                               |
 
 ## `[agents.<name>]`
 

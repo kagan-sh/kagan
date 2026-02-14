@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from tests.helpers.journey_runner import bundle_snapshots, execute_test_actions, parse_actions
+from tests.helpers.wait import wait_for_screen
 from tests.tui.snapshot.conftest import _normalize_svg
 
 from kagan.core.adapters.db.repositories import TaskRepository
@@ -143,9 +144,8 @@ class TestKanbanFlow:
 
             cols, rows = snapshot_terminal_size
             async with kanban_app.run_test(headless=True, size=(cols, rows)) as pilot:
-                await pilot.pause()
-                assert isinstance(pilot.app.screen, KanbanScreen)
-                pilot.app.screen.focus_first_card()
+                screen = await wait_for_screen(pilot, KanbanScreen, timeout=10.0)
+                screen.focus_first_card()
                 snapshots = await execute_test_actions(
                     pilot,
                     parse_actions("shot(board) slash (backlog) shot(search) escape"),

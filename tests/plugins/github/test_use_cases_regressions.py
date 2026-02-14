@@ -104,7 +104,7 @@ async def test_sync_issues_preserves_successful_mappings_across_partial_failures
                         "state": "OPEN",
                         "labels": [],
                         "updatedAt": "2025-01-10T00:00:00Z",
-                    }
+                    },
                 ],
                 None,
             )
@@ -124,16 +124,14 @@ async def test_sync_issues_preserves_successful_mappings_across_partial_failures
                     state="OPEN",
                     labels=[],
                     updated_at="2025-01-10T00:00:00Z",
-                )
+                ),
             ]
         ),
     )
 
     use_cases = GitHubPluginUseCases(core_gateway, gh_client)
 
-    first = await use_cases.sync_issues(
-        SyncIssuesInput(project_id="project-1")
-    )
+    first = await use_cases.sync_issues(SyncIssuesInput(project_id="project-1"))
 
     assert first["success"] is False
     assert first["code"] == GH_SYNC_FAILED
@@ -143,9 +141,7 @@ async def test_sync_issues_preserves_successful_mappings_across_partial_failures
     second = await use_cases.sync_issues(SyncIssuesInput(project_id="project-1"))
 
     assert second["success"] is True
-    create_titles = [
-        call.kwargs["title"] for call in core_gateway.create_task.await_args_list
-    ]
+    create_titles = [call.kwargs["title"] for call in core_gateway.create_task.await_args_list]
     assert create_titles.count("[GH-17] Persist mapping") == 1
     assert create_titles.count("[GH-18] Retry me") == 2
 

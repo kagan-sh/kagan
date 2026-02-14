@@ -673,9 +673,7 @@ class GitHubPluginUseCases:
                     "REVIEW transition blocked: no linked PR for repo(s): "
                     f"{repo_list}. Create or link PRs before requesting review."
                 ),
-                "hint": (
-                    "Use create_pr_for_task or link_pr_to_task with repo_id for each repo."
-                ),
+                "hint": ("Use create_pr_for_task or link_pr_to_task with repo_id for each repo."),
             }
 
         if lease_conflicts:

@@ -224,14 +224,13 @@ class TestReviewOperations:
             }
 
         operation = SimpleNamespace(plugin_id="thirdparty.guardrails", handler=_guardrail_handler)
+
         def _operations_for_method(method: str) -> tuple[object, ...]:
             if method != "validate_review_transition":
                 return ()
             return (operation,)
 
-        ctx.plugin_registry = SimpleNamespace(
-            operations_for_method=_operations_for_method
-        )
+        ctx.plugin_registry = SimpleNamespace(operations_for_method=_operations_for_method)
 
         with pytest.raises(ValueError, match="Blocked by external review policy"):
             await api.request_review(task.id)
