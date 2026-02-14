@@ -108,6 +108,13 @@ class TestTaskOperations:
         assert moved is not None
         assert moved.status == TaskStatus.IN_PROGRESS
 
+    async def test_move_task_to_done_is_rejected(self, handle_env: tuple) -> None:
+        _repo, api, _ctx = handle_env
+        task = await api.create_task("No Direct Done")
+        await api.move_task(task.id, TaskStatus.REVIEW)
+        with pytest.raises(ValueError, match="Direct move/update to DONE is not allowed"):
+            await api.move_task(task.id, TaskStatus.DONE)
+
     async def test_delete_task(self, handle_env: tuple) -> None:
         _repo, api, _ctx = handle_env
         task = await api.create_task("Delete Me")
@@ -180,7 +187,7 @@ class TestReviewOperations:
         await api.request_review(task.id)
         approved = await api.approve_task(task.id)
         assert approved is not None
-        assert approved.status == TaskStatus.DONE
+        assert approved.status == TaskStatus.REVIEW
 
     async def test_reject_task(self, handle_env: tuple) -> None:
         _repo, api, ctx = handle_env

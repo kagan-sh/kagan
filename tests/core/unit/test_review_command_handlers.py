@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock
 
 from kagan.core.api import KaganAPI
 from kagan.core.models.enums import TaskStatus, TaskType
-from kagan.core.request_handlers import handle_review_merge, handle_review_rebase
+from kagan.core.request_handlers import (
+    handle_review_approve,
+    handle_review_merge,
+    handle_review_rebase,
+)
 
 
 def _api(**services: object) -> KaganAPI:
@@ -44,10 +48,12 @@ async def test_review_merge_requires_approval_when_enabled() -> None:
 
 
 async def test_review_merge_allows_approved_task_when_gate_enabled() -> None:
-    task = SimpleNamespace(id="task-1", status=TaskStatus.DONE)
+    task = SimpleNamespace(id="task-1", status=TaskStatus.REVIEW)
+    execution = SimpleNamespace(id="exec-1", metadata_={"review_result": {"status": "approved"}})
     merge_service = SimpleNamespace(merge_task=AsyncMock(return_value=(True, "Merged all repos")))
     f = _api(
         task_service=SimpleNamespace(get_task=AsyncMock(return_value=task)),
+        execution_service=SimpleNamespace(get_latest_execution_for_task=AsyncMock(return_value=execution)),
         merge_service=merge_service,
         config=SimpleNamespace(general=SimpleNamespace(require_review_approval=True)),
     )
@@ -57,6 +63,41 @@ async def test_review_merge_allows_approved_task_when_gate_enabled() -> None:
     assert result["message"] == "Merged all repos"
     assert result["code"] == "MERGED"
     merge_service.merge_task.assert_awaited_once_with(task)
+
+
+async def test_review_approve_keeps_task_in_review() -> None:
+    task = SimpleNamespace(id="task-1", status=TaskStatus.REVIEW)
+    task_service = SimpleNamespace(
+        get_task=AsyncMock(return_value=task),
+    )
+    execution = SimpleNamespace(id="exec-1", metadata_={})
+    execution_service = SimpleNamespace(
+        get_latest_execution_for_task=AsyncMock(return_value=execution),
+        update_execution=AsyncMock(return_value=execution),
+    )
+    f = _api(
+        task_service=task_service,
+        execution_service=execution_service,
+    )
+
+    result = await handle_review_approve(f, {"task_id": "task-1"})
+
+    assert result["success"] is True
+    assert result["code"] == "APPROVED"
+    assert result["status"] == "approved"
+    assert result["task_status"] == TaskStatus.REVIEW.value
+    execution_service.update_execution.assert_awaited_once()
+
+
+async def test_review_approve_rejects_non_review_state() -> None:
+    task = SimpleNamespace(id="task-1", status=TaskStatus.IN_PROGRESS)
+    f = _api(task_service=SimpleNamespace(get_task=AsyncMock(return_value=task)))
+
+    result = await handle_review_approve(f, {"task_id": "task-1"})
+
+    assert result["success"] is False
+    assert result["task_id"] == "task-1"
+    assert result["code"] == "REVIEW_NOT_READY"
 
 
 async def test_review_merge_restores_review_status_on_failed_merge_transition() -> None:

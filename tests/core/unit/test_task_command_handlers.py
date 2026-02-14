@@ -16,6 +16,7 @@ from kagan.core.request_handlers import (
     handle_task_context,
     handle_task_delete,
     handle_task_logs,
+    handle_task_move,
     handle_task_scratchpad,
 )
 
@@ -96,6 +97,22 @@ async def test_delete_task_fallback_cleans_runtime_resources() -> None:
     workspace_service.get_path.assert_awaited_once_with("task-1")
     workspace_service.delete.assert_awaited_once_with("task-1", delete_branch=True)
     task_service.delete_task.assert_awaited_once_with("task-1")
+
+
+async def test_task_move_rejects_direct_done_transition() -> None:
+    task = _task("task-1", status=TaskStatus.REVIEW)
+    task_service = SimpleNamespace(
+        get_task=AsyncMock(return_value=task),
+        move=AsyncMock(return_value=task),
+    )
+    f = _api(task_service=task_service)
+
+    result = await handle_task_move(f, {"task_id": "task-1", "status": "DONE"})
+
+    assert result["success"] is False
+    assert result["task_id"] == "task-1"
+    assert result["code"] == "INVALID_STATUS_TRANSITION"
+    task_service.move.assert_not_awaited()
 
 
 async def test_task_context_falls_back_to_project_repos_on_workspace_failure() -> None:

@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from kagan.core.commands.job_action_executor import SUPPORTED_JOB_ACTIONS
+from kagan.core.models.enums import TaskStatus
 from kagan.core.request_handler_support import (
     SESSION_PROMPT_PATH,
     build_handoff_payload,
@@ -33,7 +34,7 @@ from kagan.core.request_handler_support import (
 if TYPE_CHECKING:
     from kagan.core.adapters.db.schema import Task
     from kagan.core.api import KaganAPI
-    from kagan.core.models.enums import PairTerminalBackend, TaskPriority, TaskStatus, TaskType
+    from kagan.core.models.enums import PairTerminalBackend, TaskPriority, TaskType
 
 logger = logging.getLogger(__name__)
 _DEFAULT_TASK_SCRATCHPAD_CHAR_LIMIT = 16_000
@@ -471,7 +472,19 @@ async def handle_task_update(api: KaganAPI, params: dict[str, Any]) -> dict[str,
     f = _assert_api(api)
     task_id = params["task_id"]
     fields = _build_update_fields(params)
-    task = await f.update_task(task_id, **fields)
+    requested_done = fields.get("status") is TaskStatus.DONE
+    try:
+        task = await f.update_task(task_id, **fields)
+    except ValueError as exc:
+        if not requested_done:
+            raise
+        return {
+            "success": False,
+            "task_id": task_id,
+            "message": str(exc),
+            "code": "INVALID_STATUS_TRANSITION",
+            "hint": "Use review merge (or close no-change flow) from REVIEW to reach DONE.",
+        }
     if task is None:
         return _task_not_found_response(task_id)
     return {"success": True, "task_id": task.id, "code": "UPDATED"}
@@ -481,7 +494,18 @@ async def handle_task_move(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
     f = _assert_api(api)
     task_id = params["task_id"]
     new_status = _parse_task_status(params["status"])
-    task = await f.move_task(task_id, new_status)
+    try:
+        task = await f.move_task(task_id, new_status)
+    except ValueError as exc:
+        if new_status is not TaskStatus.DONE:
+            raise
+        return {
+            "success": False,
+            "task_id": task_id,
+            "message": str(exc),
+            "code": "INVALID_STATUS_TRANSITION",
+            "hint": "Use review merge (or close no-change flow) from REVIEW to reach DONE.",
+        }
     if task is None:
         return _task_not_found_response(task_id)
     return {"success": True, "task_id": task.id, "new_status": task.status.value, "code": "MOVED"}
@@ -700,10 +724,28 @@ async def handle_review_request(api: KaganAPI, params: dict[str, Any]) -> dict[s
 async def handle_review_approve(api: KaganAPI, params: dict[str, Any]) -> dict[str, Any]:
     f = _assert_api(api)
     task_id = params["task_id"]
+    current_task = await f.get_task(task_id)
+    if current_task is None:
+        return _task_not_found_response(task_id)
+    if current_task.status is not TaskStatus.REVIEW:
+        return {
+            "success": False,
+            "task_id": task_id,
+            "message": "Task is not in REVIEW",
+            "code": "REVIEW_NOT_READY",
+            "hint": "Move task to REVIEW before approving.",
+        }
+
     task = await f.approve_task(task_id)
     if task is None:
         return _task_not_found_response(task_id)
-    return {"success": True, "task_id": task.id, "status": task.status.value, "code": "APPROVED"}
+    return {
+        "success": True,
+        "task_id": task.id,
+        "status": "approved",
+        "task_status": task.status.value,
+        "code": "APPROVED",
+    }
 
 
 async def handle_review_reject(api: KaganAPI, params: dict[str, Any]) -> dict[str, Any]:

@@ -388,6 +388,8 @@ def _build_server_instructions(readonly: bool) -> str:
                 "   timeout_seconds=900) to long-poll until the agent completes.",
                 "7. Use job_cancel only to stop in-flight work.",
                 "8. Call task_patch(transition='request_review') when implementation is complete",
+                "9. Use review_apply(action='merge') (or no-change close flow) to complete task.",
+                "   review_apply(action='approve') records approval but does not set DONE.",
             ]
         )
     return "\n".join(base)

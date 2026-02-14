@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from kagan.core.expose import expose
 from kagan.core.models.enums import TaskStatus, TaskType
+from kagan.core.time import utc_now
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -20,6 +21,11 @@ if TYPE_CHECKING:
     from kagan.core.models.enums import PairTerminalBackend, TaskPriority
 
 logger = logging.getLogger(__name__)
+
+_DONE_TRANSITION_ERROR = (
+    "Direct move/update to DONE is not allowed. "
+    "Use review merge (or close no-change flow) from REVIEW."
+)
 
 
 class TaskApiMixin:
@@ -113,6 +119,12 @@ class TaskApiMixin:
         if current is None:
             return None
 
+        status_value = fields.get("status")
+        if status_value == TaskStatus.DONE or (
+            isinstance(status_value, str) and status_value.strip().upper() == TaskStatus.DONE.value
+        ):
+            raise ValueError(_DONE_TRANSITION_ERROR)
+
         new_task_type = fields.get("task_type")
         if isinstance(new_task_type, TaskType) and new_task_type != current.task_type:
             await self._handle_task_type_transition(
@@ -133,6 +145,8 @@ class TaskApiMixin:
     )
     async def move_task(self, task_id: str, status: TaskStatus) -> Task | None:
         """Move a task to a new status column."""
+        if status is TaskStatus.DONE:
+            raise ValueError(_DONE_TRANSITION_ERROR)
         return await self._ctx.task_service.move(task_id, status)
 
     @expose(
@@ -351,9 +365,17 @@ class TaskApiMixin:
     )
     async def request_review(self, task_id: str, summary: str = "") -> Task | None:
         """Move task to REVIEW status."""
-        return await self._ctx.task_service.set_status(
+        task = await self._ctx.task_service.set_status(
             task_id, TaskStatus.REVIEW, reason="Review requested"
         )
+        if task is not None:
+            await self._set_latest_review_result(
+                task_id,
+                status="pending",
+                summary=summary,
+                approved=False,
+            )
+        return task
 
     @expose(
         "review",
@@ -363,8 +385,19 @@ class TaskApiMixin:
         description="Approve a task review.",
     )
     async def approve_task(self, task_id: str) -> Task | None:
-        """Approve a task review."""
-        return await self._ctx.task_service.sync_status_from_review_pass(task_id)
+        """Approve a task review without moving it to DONE."""
+        task = await self._ctx.task_service.get_task(task_id)
+        if task is None:
+            return None
+        if task.status is not TaskStatus.REVIEW:
+            return task
+        await self._set_latest_review_result(
+            task_id,
+            status="approved",
+            summary="",
+            approved=True,
+        )
+        return task
 
     @expose(
         "review",
@@ -396,7 +429,8 @@ class TaskApiMixin:
             return False, f"Task {task_id} not found"
 
         if self._ctx.config.general.require_review_approval and task.status == TaskStatus.REVIEW:
-            return False, "Task review must be approved before merge"
+            if not await self._is_latest_review_approved(task_id):
+                return False, "Task review must be approved before merge"
 
         success, message = await self._ctx.merge_service.merge_task(task)
         if not success:
@@ -502,6 +536,54 @@ class TaskApiMixin:
 
         repo_label = repo.display_name or repo.name
         raise ValueError(f"Repository {repo_label} has no default branch configured")
+
+    async def _is_latest_review_approved(self, task_id: str) -> bool:
+        """Check whether latest execution metadata marks review as approved."""
+        execution_service = getattr(self._ctx, "execution_service", None)
+        if execution_service is None:
+            return False
+        execution = await execution_service.get_latest_execution_for_task(task_id)
+        if execution is None:
+            return False
+        review_result = (execution.metadata_ or {}).get("review_result")
+        if not isinstance(review_result, dict):
+            return False
+        approved = review_result.get("approved")
+        if isinstance(approved, bool):
+            return approved
+        status = str(review_result.get("status") or "").strip().lower()
+        return status == "approved"
+
+    async def _set_latest_review_result(
+        self,
+        task_id: str,
+        *,
+        status: str,
+        summary: str,
+        approved: bool,
+    ) -> None:
+        """Persist review result metadata on latest task execution when available."""
+        execution_service = getattr(self._ctx, "execution_service", None)
+        if execution_service is None:
+            return
+        execution = await execution_service.get_latest_execution_for_task(task_id)
+        if execution is None:
+            return
+
+        review_result: dict[str, object] = {
+            "status": status,
+            "summary": summary,
+            "approved": approved,
+        }
+        timestamp = utc_now().isoformat()
+        if status == "approved":
+            review_result["completed_at"] = timestamp
+        else:
+            review_result["requested_at"] = timestamp
+
+        metadata = dict(execution.metadata_ or {})
+        metadata["review_result"] = review_result
+        await execution_service.update_execution(execution.id, metadata=metadata)
 
     # ── Private helpers ────────────────────────────────────────────────
 

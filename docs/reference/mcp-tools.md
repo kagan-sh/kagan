@@ -59,6 +59,11 @@ It is a breaking, non-backward-compatible contract.
 | `settings_set(...)` | `mutating`    | Update allowlisted settings                                  |
 | `plan_submit(...)`  | `mutating`    | Submit planner proposal payload (planner profile)            |
 
+Review semantics:
+
+- `review_apply(action="approve")` records approval state but does **not** move task to `DONE`.
+- `DONE` is reached by completion flows (for example `review_apply(action="merge")` or no-change close flow).
+
 ## `task_get` API
 
 `task_get` supports three modes:
@@ -197,6 +202,8 @@ Default and max timeouts are server-side configurable via settings:
 ## Task field semantics
 
 - `status` is Kanban state: `BACKLOG`, `IN_PROGRESS`, `REVIEW`, `DONE`.
+- Do not set `status=DONE` via generic task patch/move workflows.
+  Use review completion flows to reach `DONE`.
 - `task_type` is execution mode: `AUTO`, `PAIR`.
 - `acceptance_criteria` accepts either a single string or a list of strings.
 

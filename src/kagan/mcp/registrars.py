@@ -636,7 +636,11 @@ def register_task_tools(
             append_note: str | None = None,
             ctx: MCPContext | None = None,
         ) -> dict[str, object]:
-            """Apply partial task changes, transitions, and scratchpad notes."""
+            """Apply partial task changes, transitions, and scratchpad notes.
+
+            Note: direct move/update to DONE is rejected. Use review completion
+            flows (for example review_apply(action="merge") or close no-change flow).
+            """
             bridge = _require_bridge(ctx)
             if set is None and transition is None and append_note is None:
                 return {
@@ -1499,6 +1503,7 @@ def register_admin_tools(
             Args:
                 task_id: The task to act on.
                 action: One of "approve", "reject", "merge", "rebase".
+                    "approve" records approval state only; it is non-terminal.
                 feedback: Rejection feedback (only used when action is "reject").
                 rejection_action: What to do after rejection
                     (only used when action is "reject").
