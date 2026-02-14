@@ -19,6 +19,12 @@ if TYPE_CHECKING:
 
     from kagan.core.config import KaganConfig
 
+
+# GitHub sync status display constants
+GITHUB_ICON_CONNECTED = "⬡"  # Hexagon indicates GitHub connected
+GITHUB_ICON_SYNCED = "◉"  # Filled circle indicates sync complete
+GITHUB_ICON_PENDING = "○"  # Empty circle indicates sync available
+
 _AGENT_MODEL_CONFIG_KEY: dict[str, str] = {
     "claude": "default_model_claude",
     "opencode": "default_model_opencode",
@@ -37,6 +43,8 @@ class _HeaderLabels:
     logo: Label
     project: Label
     repo: Label
+    github_status: Label
+    sep_github: Label
     branch: Label
     sep_branch: Label
     sessions: Label
@@ -68,6 +76,8 @@ class KaganHeader(Widget):
     repo_name: reactive[str] = reactive("")
     agent_display: reactive[str] = reactive("")
     core_status: reactive[str] = reactive("DISCONNECTED")
+    github_connected: reactive[bool] = reactive(False)
+    github_synced: reactive[bool] = reactive(False)
 
     def __init__(self, task_count: int = 0, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -81,6 +91,8 @@ class KaganHeader(Widget):
 
         yield Label("", classes="header-spacer")
 
+        yield Label("", id="header-github-status", classes="header-github-status")
+        yield Label(HEADER_SEPARATOR, id="sep-github", classes="header-branch")
         yield Label("", id="header-branch", classes="header-branch")
         yield Label(HEADER_SEPARATOR, id="sep-branch", classes="header-branch")
         yield Label("", id="header-sessions", classes="header-sessions")
@@ -96,6 +108,7 @@ class KaganHeader(Widget):
         self._cache_labels()
         self._update_project_display()
         self._update_repo_display()
+        self._update_github_status_display()
         self._update_branch_display()
         self._update_sessions_display()
         self._update_agent_display()
@@ -109,6 +122,8 @@ class KaganHeader(Widget):
         logo_label = safe_query_one(self, "#header-logo", Label)
         project_label = safe_query_one(self, "#header-project", Label)
         repo_label = safe_query_one(self, "#header-repo", Label)
+        github_status_label = safe_query_one(self, "#header-github-status", Label)
+        sep_github = safe_query_one(self, "#sep-github", Label)
         branch_label = safe_query_one(self, "#header-branch", Label)
         sep_branch = safe_query_one(self, "#sep-branch", Label)
         sessions_label = safe_query_one(self, "#header-sessions", Label)
@@ -121,6 +136,8 @@ class KaganHeader(Widget):
             logo_label,
             project_label,
             repo_label,
+            github_status_label,
+            sep_github,
             branch_label,
             sep_branch,
             sessions_label,
@@ -135,6 +152,8 @@ class KaganHeader(Widget):
         assert logo_label is not None
         assert project_label is not None
         assert repo_label is not None
+        assert github_status_label is not None
+        assert sep_github is not None
         assert branch_label is not None
         assert sep_branch is not None
         assert sessions_label is not None
@@ -147,6 +166,8 @@ class KaganHeader(Widget):
             logo=logo_label,
             project=project_label,
             repo=repo_label,
+            github_status=github_status_label,
+            sep_github=sep_github,
             branch=branch_label,
             sep_branch=sep_branch,
             sessions=sessions_label,
@@ -190,6 +211,29 @@ class KaganHeader(Widget):
             return
         labels.repo.update("")
         labels.repo.display = False
+
+    def _update_github_status_display(self) -> None:
+        """Update GitHub sync status label and separator visibility."""
+        labels = self._cache_labels()
+        if labels is None:
+            return
+        if not self.github_connected:
+            labels.github_status.update("")
+            labels.github_status.display = False
+            labels.sep_github.display = False
+            return
+
+        # Show GitHub status with appropriate icon
+        if self.github_synced:
+            labels.github_status.update(f"{GITHUB_ICON_SYNCED} GitHub")
+            labels.github_status.set_class(True, "github-synced")
+            labels.github_status.set_class(False, "github-pending")
+        else:
+            labels.github_status.update(f"{GITHUB_ICON_PENDING} GitHub")
+            labels.github_status.set_class(False, "github-synced")
+            labels.github_status.set_class(True, "github-pending")
+        labels.github_status.display = True
+        labels.sep_github.display = True
 
     def _update_sessions_display(self) -> None:
         """Update active sessions label and separator visibility."""
@@ -259,6 +303,12 @@ class KaganHeader(Widget):
     def watch_core_status(self, value: str) -> None:
         self._update_core_status_display()
 
+    def watch_github_connected(self, value: bool) -> None:
+        self._update_github_status_display()
+
+    def watch_github_synced(self, value: bool) -> None:
+        self._update_github_status_display()
+
     def update_count(self, count: int) -> None:
         self.task_count = count
 
@@ -283,6 +333,16 @@ class KaganHeader(Widget):
     def update_core_status(self, status: str) -> None:
         """Update the core connection status display."""
         self.core_status = status
+
+    def update_github_status(self, *, connected: bool, synced: bool = False) -> None:
+        """Update the GitHub connection and sync status display.
+
+        Args:
+            connected: Whether the repo is connected to GitHub.
+            synced: Whether issues have been synced (only relevant if connected).
+        """
+        self.github_connected = connected
+        self.github_synced = synced if connected else False
 
     def update_agent_from_config(self, config: KaganConfig) -> None:
         """Build and update the global agent label from config."""

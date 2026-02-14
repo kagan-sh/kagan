@@ -606,6 +606,7 @@ class KanbanScreen(KaganScreen):
             KanbanActionId.SWITCH_GLOBAL_AGENT: self._switch_global_agent_flow,
             KanbanActionId.OPEN_SETTINGS: self._open_settings_flow,
             KanbanActionId.OPEN_PLANNER: self._open_planner_flow,
+            KanbanActionId.GITHUB_SYNC: self._github_sync_flow,
         }
         operation_factory = global_operations.get(action)
         if operation_factory is None:
@@ -774,6 +775,76 @@ class KanbanScreen(KaganScreen):
 
     def action_set_task_branch(self) -> None:
         self._dispatch_kanban_action(KanbanActionId.SET_TASK_BRANCH)
+
+    def action_github_sync(self) -> None:
+        self._dispatch_kanban_action(KanbanActionId.GITHUB_SYNC)
+
+    async def _github_sync_flow(self) -> None:
+        """Sync GitHub issues to Kagan tasks for the active repo."""
+        project_id = self.ctx.active_project_id
+        repo_id = self.ctx.active_repo_id
+
+        if not project_id:
+            self.notify("No active project", severity="warning")
+            return
+
+        # Get repo to check GitHub connection
+        repos = await self.ctx.api.get_project_repos(project_id)
+        if not repos:
+            self.notify("No repositories in project", severity="warning")
+            return
+
+        # Find the active repo
+        repo = next((r for r in repos if r.id == repo_id), repos[0]) if repo_id else repos[0]
+
+        # Check if connected to GitHub
+        from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY
+
+        scripts = repo.scripts or {}
+        if not scripts.get(GITHUB_CONNECTION_KEY):
+            self.notify(
+                "Repository not connected to GitHub. Use MCP tools to connect first.",
+                severity="warning",
+            )
+            return
+
+        # Call sync via plugin operation
+        self.notify("Syncing GitHub issues...", severity="information")
+        try:
+            from kagan.core.plugins.github.contract import (
+                GITHUB_CAPABILITY,
+                GITHUB_METHOD_SYNC_ISSUES,
+            )
+
+            result = await self.ctx.api._call_core(
+                "invoke_plugin_operation",
+                kwargs={
+                    "capability": GITHUB_CAPABILITY,
+                    "method": GITHUB_METHOD_SYNC_ISSUES,
+                    "params": {"project_id": project_id, "repo_id": repo.id},
+                },
+            )
+
+            if isinstance(result, dict):
+                if result.get("success"):
+                    stats = result.get("stats", {})
+                    inserted = stats.get("inserted", 0)
+                    updated = stats.get("updated", 0)
+                    self.notify(
+                        f"Sync complete: {inserted} new, {updated} updated",
+                        severity="information",
+                    )
+                    # Refresh the board to show new tasks
+                    await self._board.refresh_board()
+                    # Update header to show synced status
+                    self.header.update_github_status(connected=True, synced=True)
+                else:
+                    msg = result.get("message", "Sync failed")
+                    self.notify(msg, severity="error")
+            else:
+                self.notify("Unexpected sync response", severity="error")
+        except Exception as e:
+            self.notify(f"Sync failed: {e}", severity="error")
 
     async def _set_task_branch_flow(self, task: Task) -> None:
         await self._task_controller.set_task_branch_flow(task)

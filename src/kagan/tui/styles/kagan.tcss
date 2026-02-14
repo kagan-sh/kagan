@@ -149,6 +149,20 @@ KaganHeader .header-sessions {
     color: $text-muted;
 }
 
+KaganHeader .header-github-status {
+    width: auto;
+    padding-right: 2;
+    color: $text-muted;
+}
+
+KaganHeader .header-github-status.github-synced {
+    color: $success;
+}
+
+KaganHeader .header-github-status.github-pending {
+    color: $warning;
+}
+
 KaganHeader .header-agent {
     width: auto;
     color: $secondary;

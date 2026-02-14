@@ -34,6 +34,7 @@ class KanbanActionId(StrEnum):
     OPEN_SETTINGS = "open_settings"
     SET_TASK_BRANCH = "set_task_branch"
     MERGE = "merge"
+    GITHUB_SYNC = "github_sync"
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +191,14 @@ KANBAN_ACTIONS: tuple[KanbanAction, ...] = (
         KanbanActionId.SET_TASK_BRANCH,
         requires_task=True,
         worker_group="set-task-branch",
+        exclusive=True,
+        exit_on_error=False,
+    ),
+    KanbanAction(
+        "github sync",
+        "Sync issues from connected GitHub repo",
+        KanbanActionId.GITHUB_SYNC,
+        worker_group="github-sync",
         exclusive=True,
         exit_on_error=False,
     ),

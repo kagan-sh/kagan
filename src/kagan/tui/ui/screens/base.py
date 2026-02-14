@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from textual.screen import Screen
 
 from kagan.core.git_utils import get_current_branch
+from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY
+from kagan.core.plugins.github.sync import GITHUB_SYNC_CHECKPOINT_KEY
 
 if TYPE_CHECKING:
     from kagan.core.adapters.db.schema import Project, Repo
@@ -51,10 +54,12 @@ class KaganScreen(Screen):
         if project is None:
             header.update_project(Path(self.kagan_app.project_root).name)
             header.update_repo("")
+            header.update_github_status(connected=False)
         else:
             header.update_project(project.name)
-            repo_name = await self._get_active_repo_name(project)
+            repo_name, github_status = await self._get_active_repo_info(project)
             header.update_repo(repo_name or "")
+            header.update_github_status(**github_status)
 
         tasks = await self.ctx.api.list_tasks(project_id=self.ctx.active_project_id)
         header.update_count(len(tasks))
@@ -78,6 +83,72 @@ class KaganScreen(Screen):
         if repo is None:
             repo = repos[0]
         return repo.display_name or repo.name
+
+    async def _get_active_repo_info(
+        self, project: Project
+    ) -> tuple[str | None, dict[str, bool]]:
+        """Get active repo name and GitHub connection status.
+
+        Returns:
+            Tuple of (repo_name, github_status_dict) where github_status_dict
+            has keys 'connected' and 'synced'.
+        """
+        repos = await self.ctx.api.get_project_repos(project.id)
+        if not repos:
+            return None, {"connected": False, "synced": False}
+
+        repo = self._match_repo(repos, self.ctx.active_repo_id, self.kagan_app.project_root)
+        if repo is None:
+            repo = repos[0]
+
+        repo_name = repo.display_name or repo.name
+        github_status = self._extract_github_status(repo)
+        return repo_name, github_status
+
+    @staticmethod
+    def _extract_github_status(repo: Repo) -> dict[str, bool]:
+        """Extract GitHub connection and sync status from repo scripts.
+
+        Args:
+            repo: The repo to check.
+
+        Returns:
+            Dict with 'connected' and 'synced' boolean keys.
+        """
+        scripts = repo.scripts or {}
+
+        # Check for GitHub connection
+        connection_raw = scripts.get(GITHUB_CONNECTION_KEY)
+        if not connection_raw:
+            return {"connected": False, "synced": False}
+
+        # Parse connection to verify it's valid
+        try:
+            connection = (
+                json.loads(connection_raw)
+                if isinstance(connection_raw, str)
+                else connection_raw
+            )
+            if not isinstance(connection, dict) or not connection.get("full_name"):
+                return {"connected": False, "synced": False}
+        except (json.JSONDecodeError, TypeError):
+            return {"connected": False, "synced": False}
+
+        # Check for sync checkpoint (indicates at least one sync has occurred)
+        checkpoint_raw = scripts.get(GITHUB_SYNC_CHECKPOINT_KEY)
+        synced = False
+        if checkpoint_raw:
+            try:
+                checkpoint = (
+                    json.loads(checkpoint_raw)
+                    if isinstance(checkpoint_raw, str)
+                    else checkpoint_raw
+                )
+                synced = bool(checkpoint.get("last_sync_at"))
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return {"connected": True, "synced": synced}
 
     async def auto_sync_branch(self, header: KaganHeader) -> None:
         """If git branch changed, update Repo.default_branch."""

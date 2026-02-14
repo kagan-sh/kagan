@@ -15,6 +15,7 @@ class KanbanHints:
     navigation: list[tuple[str, str]] = field(default_factory=list)
     actions: list[tuple[str, str]] = field(default_factory=list)
     global_hints: list[tuple[str, str]] = field(default_factory=list)
+    github_connected: bool = False
 
 
 def _key_for(action: str) -> str:
@@ -31,30 +32,43 @@ def _hint(action: str, label: str) -> tuple[str, str]:
 def build_keybinding_hints(
     status: TaskStatus | None,
     task_type: TaskType | None,
+    *,
+    github_connected: bool = False,
 ) -> list[tuple[str, str]]:
     """Build context-sensitive keybinding hints based on task state.
 
     Legacy interface for non-Kanban screens. Returns a flat list.
     """
-    return build_kanban_hints(status, task_type).actions
+    return build_kanban_hints(status, task_type, github_connected=github_connected).actions
 
 
 def build_kanban_hints(
     status: TaskStatus | None,
     task_type: TaskType | None,
+    *,
+    github_connected: bool = False,
 ) -> KanbanHints:
     """Build two-tier keybinding hints for the Kanban board.
+
+    Args:
+        status: Current task status, or None if no task is selected.
+        task_type: Current task type.
+        github_connected: Whether the repo is connected to GitHub.
 
     Returns:
         KanbanHints with navigation (row 1) and actions (row 2).
     """
-    hints = KanbanHints()
+    hints = KanbanHints(github_connected=github_connected)
 
     hints.global_hints = [
         _hint("switch_global_agent", "agent"),
         _hint("show_help", "help"),
         _hint("command_palette", "actions"),
     ]
+
+    # Add GitHub sync hint if connected
+    if github_connected:
+        hints.global_hints.insert(0, _hint("github_sync", "sync"))
 
     if status is None:
         hints.navigation = []

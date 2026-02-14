@@ -55,6 +55,8 @@ KANBAN_BINDINGS: list[BindingType] = [
     Binding("b", "set_task_branch", "Set Task Branch", show=False),
     Binding("A", "switch_global_agent", "Switch Agent", key_display="Shift+A", show=False),
     Binding("comma", "open_settings", "Settings", key_display=",", show=False),
+    # GitHub sync actions
+    Binding("G", "github_sync", "GitHub Sync", key_display="Shift+G", show=False),
     Binding("h", "focus_left", "Left", show=False),
     Binding("j", "focus_down", "Down", show=False),
     Binding("k", "focus_up", "Up", show=False),

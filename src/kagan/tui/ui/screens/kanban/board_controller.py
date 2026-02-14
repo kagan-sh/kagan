@@ -591,10 +591,17 @@ class KanbanBoardController:
         except NoMatches:
             return
 
+        # Check GitHub connection status from header
+        github_connected = self.screen.header.github_connected
+
         card = self.screen.get_focused_card()
         if not card or not card.task_model:
-            hints = build_kanban_hints(None, None)
+            hints = build_kanban_hints(None, None, github_connected=github_connected)
         else:
-            hints = build_kanban_hints(card.task_model.status, card.task_model.task_type)
+            hints = build_kanban_hints(
+                card.task_model.status,
+                card.task_model.task_type,
+                github_connected=github_connected,
+            )
 
         hint_bar.show_kanban_hints(hints.navigation, hints.actions, hints.global_hints)
