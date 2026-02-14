@@ -34,6 +34,7 @@ from kagan.core.plugins.github.sync import (
     compute_issue_changes,
     load_checkpoint,
     load_mapping,
+    load_repo_default_mode,
 )
 
 if TYPE_CHECKING:
@@ -265,6 +266,7 @@ async def handle_sync_issues(ctx: AppContext, params: dict[str, Any]) -> dict[st
     # Load existing mapping (checkpoint loaded for future incremental sync)
     _ = load_checkpoint(repo.scripts)  # Reserved for incremental sync
     mapping = load_mapping(repo.scripts)
+    repo_default_mode = load_repo_default_mode(repo.scripts)
 
     # Build existing tasks lookup for issues we have mappings for
     existing_tasks = await _load_mapped_tasks(ctx, mapping, project_id)
@@ -277,7 +279,7 @@ async def handle_sync_issues(ctx: AppContext, params: dict[str, Any]) -> dict[st
     )
 
     for issue in issues:
-        action, changes = compute_issue_changes(issue, mapping, existing_tasks)
+        action, changes = compute_issue_changes(issue, mapping, existing_tasks, repo_default_mode)
 
         if action == "no_change" or changes is None:
             result.add_outcome(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
@@ -11,13 +12,19 @@ from kagan.core.models.enums import TaskStatus, TaskType
 if TYPE_CHECKING:
     from kagan.core.plugins.github.gh_adapter import GhIssue
 
+log = logging.getLogger(__name__)
+
 # Storage keys in Repo.scripts
 GITHUB_SYNC_CHECKPOINT_KEY: Final = "kagan.github.sync_checkpoint"
 GITHUB_ISSUE_MAPPING_KEY: Final = "kagan.github.issue_mapping"
+GITHUB_DEFAULT_MODE_KEY: Final = "kagan.github.default_mode"
 
 # Mode labels for deterministic task type resolution
 MODE_LABEL_AUTO: Final = "kagan:mode:auto"
 MODE_LABEL_PAIR: Final = "kagan:mode:pair"
+
+# V1 default fallback when no labels and no repo default configured
+V1_DEFAULT_MODE: Final = TaskType.PAIR
 
 
 @dataclass
@@ -82,17 +89,67 @@ class IssueMapping:
         return cls(issue_to_task=issue_to_task, task_to_issue=task_to_issue)
 
 
-def resolve_task_type_from_labels(labels: list[str], default: TaskType = TaskType.PAIR) -> TaskType:
+@dataclass(frozen=True, slots=True)
+class ModeResolution:
+    """Result of task type resolution from labels.
+
+    Attributes:
+        task_type: The resolved TaskType.
+        source: Where the mode came from: "label", "repo_default", or "v1_default".
+        conflict: True if conflicting labels were present.
+    """
+
+    task_type: TaskType
+    source: str
+    conflict: bool = False
+
+
+def resolve_task_type_from_labels(
+    labels: list[str],
+    repo_default: TaskType | None = None,
+) -> ModeResolution:
     """Resolve TaskType from issue labels with deterministic precedence.
 
-    Priority: kagan:mode:auto > kagan:mode:pair > default.
+    Resolution order:
+    1. Issue labels (if present)
+    2. Repo default (if configured)
+    3. V1 default (PAIR)
+
+    Conflict handling: If both kagan:mode:auto and kagan:mode:pair labels
+    are present, PAIR wins deterministically and a warning is logged.
+
+    Args:
+        labels: List of issue label names.
+        repo_default: Optional repo-configured default mode.
+
+    Returns:
+        ModeResolution with resolved type, source, and conflict flag.
     """
-    labels_lower = [label.lower() for label in labels]
-    if MODE_LABEL_AUTO.lower() in labels_lower:
-        return TaskType.AUTO
-    if MODE_LABEL_PAIR.lower() in labels_lower:
-        return TaskType.PAIR
-    return default
+    labels_lower = {label.lower() for label in labels}
+    has_auto = MODE_LABEL_AUTO.lower() in labels_lower
+    has_pair = MODE_LABEL_PAIR.lower() in labels_lower
+
+    # Check for conflicting labels
+    if has_auto and has_pair:
+        log.warning(
+            "Conflicting mode labels detected: both %s and %s present. "
+            "Resolving to PAIR (deterministic conflict resolution).",
+            MODE_LABEL_AUTO,
+            MODE_LABEL_PAIR,
+        )
+        return ModeResolution(task_type=TaskType.PAIR, source="label", conflict=True)
+
+    # Single label present
+    if has_pair:
+        return ModeResolution(task_type=TaskType.PAIR, source="label")
+    if has_auto:
+        return ModeResolution(task_type=TaskType.AUTO, source="label")
+
+    # No mode labels - fall back to repo default or V1 default
+    if repo_default is not None:
+        return ModeResolution(task_type=repo_default, source="repo_default")
+
+    return ModeResolution(task_type=V1_DEFAULT_MODE, source="v1_default")
 
 
 def build_task_title_from_issue(issue_number: int, issue_title: str) -> str:
@@ -179,10 +236,36 @@ def load_mapping(scripts: dict[str, str] | None) -> IssueMapping:
         return IssueMapping()
 
 
+def load_repo_default_mode(scripts: dict[str, str] | None) -> TaskType | None:
+    """Load repo default mode from Repo.scripts.
+
+    Args:
+        scripts: The repo scripts dict (Repo.scripts).
+
+    Returns:
+        TaskType if configured, None otherwise.
+    """
+    if not scripts:
+        return None
+    raw = scripts.get(GITHUB_DEFAULT_MODE_KEY)
+    if not raw:
+        return None
+    try:
+        value = raw.strip().upper() if isinstance(raw, str) else str(raw).strip().upper()
+        if value == TaskType.AUTO.value:
+            return TaskType.AUTO
+        if value == TaskType.PAIR.value:
+            return TaskType.PAIR
+        return None
+    except (AttributeError, TypeError):
+        return None
+
+
 def compute_issue_changes(
     issue: GhIssue,
     mapping: IssueMapping,
     existing_tasks: dict[str, Any],
+    repo_default: TaskType | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """Compute what action is needed for an issue and what fields to change.
 
@@ -190,6 +273,7 @@ def compute_issue_changes(
         issue: The GitHub issue to sync.
         mapping: Current issue-to-task mapping.
         existing_tasks: Dict of task_id -> task data for tasks in mapping.
+        repo_default: Optional repo-configured default mode.
 
     Returns:
         Tuple of (action, changes_dict or None).
@@ -199,7 +283,8 @@ def compute_issue_changes(
     task_id = mapping.get_task_id(issue.number)
     target_status = resolve_task_status_from_issue_state(issue.state)
     target_title = build_task_title_from_issue(issue.number, issue.title)
-    target_type = resolve_task_type_from_labels(issue.labels)
+    mode_resolution = resolve_task_type_from_labels(issue.labels, repo_default)
+    target_type = mode_resolution.task_type
 
     if task_id is None:
         # No existing mapping - need to insert
@@ -253,11 +338,14 @@ def compute_issue_changes(
 
 
 __all__ = [
+    "GITHUB_DEFAULT_MODE_KEY",
     "GITHUB_ISSUE_MAPPING_KEY",
     "GITHUB_SYNC_CHECKPOINT_KEY",
     "MODE_LABEL_AUTO",
     "MODE_LABEL_PAIR",
+    "V1_DEFAULT_MODE",
     "IssueMapping",
+    "ModeResolution",
     "SyncCheckpoint",
     "SyncOutcome",
     "SyncResult",
@@ -265,6 +353,7 @@ __all__ = [
     "compute_issue_changes",
     "load_checkpoint",
     "load_mapping",
+    "load_repo_default_mode",
     "resolve_task_status_from_issue_state",
     "resolve_task_type_from_labels",
 ]

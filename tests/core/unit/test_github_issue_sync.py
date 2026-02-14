@@ -20,6 +20,7 @@ from kagan.core.plugins.github.gh_adapter import (
 )
 from kagan.core.plugins.github.runtime import GH_NOT_CONNECTED
 from kagan.core.plugins.github.sync import (
+    GITHUB_DEFAULT_MODE_KEY,
     GITHUB_ISSUE_MAPPING_KEY,
     IssueMapping,
     SyncCheckpoint,
@@ -27,6 +28,7 @@ from kagan.core.plugins.github.sync import (
     compute_issue_changes,
     load_checkpoint,
     load_mapping,
+    load_repo_default_mode,
     resolve_task_status_from_issue_state,
     resolve_task_type_from_labels,
 )
@@ -39,32 +41,54 @@ class TestModeResolution:
     def test_auto_label_resolves_to_auto_type(self) -> None:
         labels = ["bug", "kagan:mode:auto", "enhancement"]
         result = resolve_task_type_from_labels(labels)
-        assert result == TaskType.AUTO
+        assert result.task_type == TaskType.AUTO
+        assert result.source == "label"
+        assert result.conflict is False
 
     def test_pair_label_resolves_to_pair_type(self) -> None:
         labels = ["feature", "kagan:mode:pair"]
         result = resolve_task_type_from_labels(labels)
-        assert result == TaskType.PAIR
+        assert result.task_type == TaskType.PAIR
+        assert result.source == "label"
+        assert result.conflict is False
 
-    def test_auto_takes_precedence_over_pair(self) -> None:
+    def test_conflicting_labels_resolve_to_pair_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """When both mode labels are present, PAIR wins deterministically with warning."""
         labels = ["kagan:mode:pair", "kagan:mode:auto"]
         result = resolve_task_type_from_labels(labels)
-        assert result == TaskType.AUTO
+        assert result.task_type == TaskType.PAIR
+        assert result.source == "label"
+        assert result.conflict is True
+        assert "Conflicting mode labels" in caplog.text
 
-    def test_no_mode_label_uses_default(self) -> None:
+    def test_no_mode_label_uses_v1_default(self) -> None:
         labels = ["bug", "high-priority"]
         result = resolve_task_type_from_labels(labels)
-        assert result == TaskType.PAIR  # default
+        assert result.task_type == TaskType.PAIR  # V1 default
+        assert result.source == "v1_default"
+        assert result.conflict is False
 
-    def test_custom_default_is_respected(self) -> None:
+    def test_no_mode_label_uses_repo_default_when_configured(self) -> None:
         labels = ["bug"]
-        result = resolve_task_type_from_labels(labels, default=TaskType.AUTO)
-        assert result == TaskType.AUTO
+        result = resolve_task_type_from_labels(labels, repo_default=TaskType.AUTO)
+        assert result.task_type == TaskType.AUTO
+        assert result.source == "repo_default"
+        assert result.conflict is False
+
+    def test_label_takes_precedence_over_repo_default(self) -> None:
+        labels = ["kagan:mode:pair"]
+        result = resolve_task_type_from_labels(labels, repo_default=TaskType.AUTO)
+        assert result.task_type == TaskType.PAIR
+        assert result.source == "label"
+        assert result.conflict is False
 
     def test_case_insensitive_label_matching(self) -> None:
         labels = ["KAGAN:MODE:AUTO"]
         result = resolve_task_type_from_labels(labels)
-        assert result == TaskType.AUTO
+        assert result.task_type == TaskType.AUTO
+        assert result.source == "label"
 
 
 class TestTaskStatusResolution:
@@ -179,6 +203,34 @@ class TestLoadHelpers:
         }
         mapping = load_mapping(scripts)
         assert mapping.get_task_id(1) == "task-a"
+
+    def test_load_repo_default_mode_returns_auto(self) -> None:
+        scripts = {GITHUB_DEFAULT_MODE_KEY: "AUTO"}
+        result = load_repo_default_mode(scripts)
+        assert result == TaskType.AUTO
+
+    def test_load_repo_default_mode_returns_pair(self) -> None:
+        scripts = {GITHUB_DEFAULT_MODE_KEY: "PAIR"}
+        result = load_repo_default_mode(scripts)
+        assert result == TaskType.PAIR
+
+    def test_load_repo_default_mode_case_insensitive(self) -> None:
+        scripts = {GITHUB_DEFAULT_MODE_KEY: "auto"}
+        result = load_repo_default_mode(scripts)
+        assert result == TaskType.AUTO
+
+    def test_load_repo_default_mode_returns_none_when_missing(self) -> None:
+        result = load_repo_default_mode({})
+        assert result is None
+
+    def test_load_repo_default_mode_returns_none_for_invalid_value(self) -> None:
+        scripts = {GITHUB_DEFAULT_MODE_KEY: "invalid"}
+        result = load_repo_default_mode(scripts)
+        assert result is None
+
+    def test_load_repo_default_mode_returns_none_for_none_scripts(self) -> None:
+        result = load_repo_default_mode(None)
+        assert result is None
 
 
 class TestComputeIssueChanges:
