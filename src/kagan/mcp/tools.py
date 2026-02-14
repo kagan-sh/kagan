@@ -929,6 +929,62 @@ class CoreClientBridge:
         """Update allowlisted settings fields."""
         return await self._command("settings", "update", {"fields": fields})
 
+    # -------------------------------------------------------------------------
+    # GitHub Plugin Operations (V1 Contract)
+    # -------------------------------------------------------------------------
+
+    async def github_contract_probe(self, echo: str | None = None) -> dict:
+        """Probe the GitHub plugin contract for verification.
+
+        Args:
+            echo: Optional value to echo back for round-trip verification.
+
+        Returns:
+            Plugin metadata including contract version and canonical methods.
+        """
+        params: dict[str, Any] = {}
+        if echo is not None:
+            params["echo"] = echo
+        return await self._command("kagan_github", "contract_probe", params)
+
+    async def github_connect_repo(
+        self,
+        project_id: str,
+        repo_id: str | None = None,
+    ) -> dict:
+        """Connect a repository to GitHub with preflight checks.
+
+        Args:
+            project_id: Required project ID.
+            repo_id: Optional repo ID (required for multi-repo projects).
+
+        Returns:
+            Connection metadata on success or error with remediation hint.
+        """
+        params: dict[str, Any] = {"project_id": project_id}
+        if repo_id is not None:
+            params["repo_id"] = repo_id
+        return await self._command("kagan_github", "connect_repo", params)
+
+    async def github_sync_issues(
+        self,
+        project_id: str,
+        repo_id: str | None = None,
+    ) -> dict:
+        """Sync GitHub issues to Kagan task projections.
+
+        Args:
+            project_id: Required project ID.
+            repo_id: Optional repo ID (required for multi-repo projects).
+
+        Returns:
+            Sync statistics on success or error with details.
+        """
+        params: dict[str, Any] = {"project_id": project_id}
+        if repo_id is not None:
+            params["repo_id"] = repo_id
+        return await self._command("kagan_github", "sync_issues", params)
+
 
 def _format_review_feedback(review_result: object) -> str | None:
     """Format review result dict into a human-readable string."""

@@ -40,6 +40,10 @@ FULL_TOOLS = {
     "project_open",
     "review_apply",
     "settings_set",
+    # GitHub plugin admin tools (V1 contract, MAINTAINER only)
+    "kagan_github_contract_probe",
+    "kagan_github_connect_repo",
+    "kagan_github_sync_issues",
 }
 
 

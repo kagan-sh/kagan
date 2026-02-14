@@ -42,6 +42,10 @@ _ANNOTATION_MATRIX: dict[str, tuple[bool, bool, bool]] = {
     "project_open": (False, False, False),
     "settings_set": (False, False, False),
     "review_apply": (False, True, False),
+    # GitHub plugin admin tools (V1 contract)
+    "kagan_github_contract_probe": (True, False, True),
+    "kagan_github_connect_repo": (False, False, False),
+    "kagan_github_sync_issues": (False, False, False),
 }
 
 _FULL_MODE_ANNOTATION_MATRIX: dict[str, tuple[bool, bool, bool]] = {
