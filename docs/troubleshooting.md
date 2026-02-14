@@ -165,6 +165,70 @@ Fix:
 1. Use a modern terminal with truecolor support.
 1. Open debug log from TUI with `F12` for extra diagnostics.
 
+## GitHub Plugin Issues
+
+### `GH_CLI_NOT_AVAILABLE`
+
+Cause:
+
+- GitHub CLI (`gh`) is not installed or not in PATH.
+
+Fix:
+
+```bash
+brew install gh            # macOS
+sudo apt install gh        # Debian/Ubuntu
+sudo dnf install gh        # Fedora/RHEL
+```
+
+### `GH_AUTH_REQUIRED`
+
+Cause:
+
+- Not authenticated with GitHub CLI.
+
+Fix:
+
+```bash
+gh auth login
+gh auth status
+```
+
+### `GH_NOT_CONNECTED`
+
+Cause:
+
+- Repository is not connected to GitHub in Kagan.
+
+Fix:
+
+1. Run `kagan_github_connect_repo` via MCP.
+2. Or use TUI action palette: `.` → "Connect GitHub".
+
+### `LEASE_HELD_BY_OTHER`
+
+Cause:
+
+- Another Kagan instance is working on this GitHub issue.
+
+Fix:
+
+1. Check holder info in error response.
+2. If holder instance is gone, use `force_takeover: true`.
+3. If lease is over 2 hours old, takeover is automatic.
+
+### Sync shows zero issues but GitHub has issues
+
+Cause:
+
+- gh CLI may not have access to the repository.
+
+Fix:
+
+1. Verify: `gh issue list --repo owner/repo`
+2. Check GitHub App permissions if using automation.
+3. Re-authenticate: `gh auth login`
+
 ## Nuclear cleanup
 
 Use only when standard recovery fails.
