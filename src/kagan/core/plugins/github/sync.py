@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Final
 
 from kagan.core.models.enums import TaskStatus, TaskType
@@ -283,7 +283,6 @@ class SyncResult:
     closed: int = 0
     no_change: int = 0
     errors: int = 0
-    error_message: str | None = None
 
     def add_outcome(self, outcome: SyncOutcome) -> None:
         self.outcomes.append(outcome)
@@ -323,9 +322,12 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
     if normalized.endswith("Z"):
         normalized = f"{normalized[:-1]}+00:00"
     try:
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def filter_issues_since_checkpoint(
@@ -385,10 +387,14 @@ def load_repo_default_mode(scripts: dict[str, str] | None) -> TaskType | None:
         return None
 
 
-def load_lease_enforcement(scripts: dict[str, str] | None) -> bool:
+def load_lease_enforcement(scripts: dict[str, object] | None) -> bool:
     """Load repo-level lease enforcement policy from Repo.scripts.
 
-    Backward-compatible default is enabled when unset or invalid.
+    Lease enforcement defaults to enabled when unset or invalid.
+
+    Accepted values are explicit booleans only:
+    - bool instances (`True` or `False`)
+    - string values `true` / `false` (case-insensitive, surrounding whitespace ignored)
     """
     if not scripts:
         return True
@@ -399,13 +405,19 @@ def load_lease_enforcement(scripts: dict[str, str] | None) -> bool:
     if isinstance(raw, bool):
         return raw
 
-    if isinstance(raw, int):
-        return raw != 0
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
 
-    normalized = str(raw).strip().lower()
-    if normalized in {"true", "1", "yes", "on", "enabled", "enforced"}:
-        return True
-    return normalized not in {"false", "0", "no", "off", "disabled", "unenforced"}
+    log.warning(
+        "Invalid %s value %r; expected true/false. Defaulting to true.",
+        GITHUB_LEASE_ENFORCEMENT_KEY,
+        raw,
+    )
+    return True
 
 
 def load_task_pr_mapping(scripts: dict[str, str] | None) -> TaskPRMapping:

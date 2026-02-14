@@ -28,7 +28,6 @@ from kagan.core.plugins.github.domain.repo_state import (
 from kagan.core.plugins.github.gh_adapter import (
     ALREADY_CONNECTED,
     GH_PR_CREATE_FAILED,
-    GH_PR_LINK_FAILED,
     GH_PR_NOT_FOUND,
     GH_PROJECT_REQUIRED,
     GH_REPO_METADATA_INVALID,
@@ -63,10 +62,18 @@ if TYPE_CHECKING:
 GH_NOT_CONNECTED: Final = "GH_NOT_CONNECTED"
 GH_SYNC_FAILED: Final = "GH_SYNC_FAILED"
 GH_ISSUE_REQUIRED: Final = "GH_ISSUE_REQUIRED"
+GH_ISSUE_NUMBER_INVALID: Final = "GH_ISSUE_NUMBER_INVALID"
 GH_TASK_REQUIRED: Final = "GH_TASK_REQUIRED"
 GH_WORKSPACE_REQUIRED: Final = "GH_WORKSPACE_REQUIRED"
 GH_PR_NUMBER_REQUIRED: Final = "GH_PR_NUMBER_REQUIRED"
+GH_PR_NUMBER_INVALID: Final = "GH_PR_NUMBER_INVALID"
 GH_NO_LINKED_PR: Final = "GH_NO_LINKED_PR"
+CONNECTED: Final = "CONNECTED"
+SYNCED: Final = "SYNCED"
+LEASE_STATE_OK: Final = "LEASE_STATE_OK"
+LEASE_STATE_ERROR: Final = "LEASE_STATE_ERROR"
+PR_CREATED: Final = "PR_CREATED"
+PR_LINKED: Final = "PR_LINKED"
 PR_STATUS_RECONCILED: Final = "PR_STATUS_RECONCILED"
 LEASE_ENFORCEMENT_DISABLED: Final = "LEASE_ENFORCEMENT_DISABLED"
 
@@ -140,7 +147,7 @@ class GitHubPluginUseCases:
 
         return {
             "success": True,
-            "code": "CONNECTED",
+            "code": CONNECTED,
             "message": f"Connected to {repo_view.full_name}",
             "connection": connection_metadata,
         }
@@ -245,15 +252,6 @@ class GitHubPluginUseCases:
                     SyncOutcome(issue_number=issue.number, action=action, error=str(exc))
                 )
 
-        new_checkpoint = SyncCheckpoint(
-            last_sync_at=utc_now().isoformat(),
-            issue_count=len(issues),
-        )
-        await self._core.update_repo_scripts(
-            repo.id,
-            encode_sync_state_update(new_checkpoint, new_mapping),
-        )
-
         stats = {
             "total": len(issues),
             "inserted": result.inserted,
@@ -276,9 +274,18 @@ class GitHubPluginUseCases:
                 "stats": stats,
             }
 
+        new_checkpoint = SyncCheckpoint(
+            last_sync_at=utc_now().isoformat(),
+            issue_count=len(issues),
+        )
+        await self._core.update_repo_scripts(
+            repo.id,
+            encode_sync_state_update(new_checkpoint, new_mapping),
+        )
+
         return {
             "success": True,
-            "code": "SYNCED",
+            "code": SYNCED,
             "message": f"Synced {len(issues)} issues",
             "stats": stats,
         }
@@ -291,6 +298,14 @@ class GitHubPluginUseCases:
                 "issue_number is required",
                 "Provide the GitHub issue number to acquire lease for",
             )
+        issue_number, issue_error = self._coerce_positive_int(
+            value=request.issue_number,
+            field_name="issue_number",
+            invalid_code=GH_ISSUE_NUMBER_INVALID,
+        )
+        if issue_error is not None:
+            return issue_error
+        assert issue_number is not None
 
         repo, resolve_error = await self._resolve_connect_target(
             request.project_id,
@@ -336,7 +351,7 @@ class GitHubPluginUseCases:
             repo.path,
             str(repo_context["owner"]),
             str(repo_context["repo_name"]),
-            int(request.issue_number),
+            issue_number,
             github_user=github_user,
             force_takeover=bool(request.force_takeover),
         )
@@ -354,12 +369,18 @@ class GitHubPluginUseCases:
             "code": result.code,
             "message": result.message,
         }
-        if result.code == LEASE_HELD_BY_OTHER and result.holder is not None:
-            response["holder"] = result.holder.to_dict()
-            response["hint"] = (
-                f"Issue #{request.issue_number} is locked by another instance. "
-                "Use force_takeover=true to take over the lease."
-            )
+        if result.code == LEASE_HELD_BY_OTHER:
+            if result.holder is not None:
+                response["holder"] = result.holder.to_dict()
+                response["hint"] = (
+                    f"Issue #{issue_number} is locked by another instance. "
+                    "Use force_takeover=true to take over the lease."
+                )
+            else:
+                response["hint"] = (
+                    "Lease holder metadata could not be verified. "
+                    "Retry, or use force_takeover=true to proceed."
+                )
         return response
 
     async def release_lease(self, request: ReleaseLeaseInput) -> dict[str, Any]:
@@ -370,6 +391,14 @@ class GitHubPluginUseCases:
                 "issue_number is required",
                 "Provide the GitHub issue number to release lease for",
             )
+        issue_number, issue_error = self._coerce_positive_int(
+            value=request.issue_number,
+            field_name="issue_number",
+            invalid_code=GH_ISSUE_NUMBER_INVALID,
+        )
+        if issue_error is not None:
+            return issue_error
+        assert issue_number is not None
 
         repo, resolve_error = await self._resolve_connect_target(
             request.project_id,
@@ -409,7 +438,7 @@ class GitHubPluginUseCases:
             repo.path,
             str(repo_context["owner"]),
             str(repo_context["repo_name"]),
-            int(request.issue_number),
+            issue_number,
         )
         return {
             "success": result.success,
@@ -425,6 +454,14 @@ class GitHubPluginUseCases:
                 "issue_number is required",
                 "Provide the GitHub issue number to check lease state for",
             )
+        issue_number, issue_error = self._coerce_positive_int(
+            value=request.issue_number,
+            field_name="issue_number",
+            invalid_code=GH_ISSUE_NUMBER_INVALID,
+        )
+        if issue_error is not None:
+            return issue_error
+        assert issue_number is not None
 
         repo, resolve_error = await self._resolve_connect_target(
             request.project_id,
@@ -442,7 +479,7 @@ class GitHubPluginUseCases:
         if not load_lease_enforcement_state(repo.scripts):
             return {
                 "success": True,
-                "code": "LEASE_STATE_OK",
+                "code": LEASE_STATE_OK,
                 "state": {
                     "is_locked": False,
                     "is_held_by_current_instance": False,
@@ -471,26 +508,26 @@ class GitHubPluginUseCases:
             repo.path,
             str(repo_context["owner"]),
             str(repo_context["repo_name"]),
-            int(request.issue_number),
+            issue_number,
         )
 
         if error:
             return {
                 "success": False,
-                "code": "LEASE_STATE_ERROR",
+                "code": LEASE_STATE_ERROR,
                 "message": f"Failed to get lease state: {error}",
             }
 
         if state is None:
             return {
                 "success": False,
-                "code": "LEASE_STATE_ERROR",
+                "code": LEASE_STATE_ERROR,
                 "message": "Failed to get lease state",
             }
 
         return {
             "success": True,
-            "code": "LEASE_STATE_OK",
+            "code": LEASE_STATE_OK,
             "state": {
                 "is_locked": state.is_locked,
                 "is_held_by_current_instance": state.is_held_by_current_instance,
@@ -577,22 +614,12 @@ class GitHubPluginUseCases:
                 "message": "Failed to create PR: no data returned",
             }
 
-        pr_mapping = load_pr_mapping_state(repo.scripts)
-        pr_mapping.link_pr(
-            task_id=request.task_id,
-            pr_number=pr_data.number,
-            pr_url=pr_data.url,
-            pr_state=pr_data.state,
-            head_branch=pr_data.head_branch,
-            base_branch=pr_data.base_branch,
-            linked_at=utc_now().isoformat(),
-        )
-
-        await self._core.update_repo_scripts(repo.id, encode_pr_mapping_update(pr_mapping))
+        assert request.task_id is not None
+        await self._persist_pr_link(repo, request.task_id, pr_data)
 
         return {
             "success": True,
-            "code": "PR_CREATED",
+            "code": PR_CREATED,
             "message": f"Created PR #{pr_data.number}",
             "pr": {
                 "number": pr_data.number,
@@ -619,6 +646,14 @@ class GitHubPluginUseCases:
                 "pr_number is required",
                 "Provide the PR number to link",
             )
+        pr_number, pr_number_error = self._coerce_positive_int(
+            value=request.pr_number,
+            field_name="pr_number",
+            invalid_code=GH_PR_NUMBER_INVALID,
+        )
+        if pr_number_error is not None:
+            return pr_number_error
+        assert pr_number is not None
 
         repo, resolve_error = await self._resolve_connect_target(
             request.project_id,
@@ -648,13 +683,13 @@ class GitHubPluginUseCases:
         pr_data, error = self._gh.run_gh_pr_view(
             gh_path,
             repo.path,
-            int(request.pr_number),
+            pr_number,
         )
         if error:
             return {
                 "success": False,
                 "code": GH_PR_NOT_FOUND,
-                "message": f"Failed to find PR #{request.pr_number}: {error}",
+                "message": f"Failed to find PR #{pr_number}: {error}",
                 "hint": "Verify the PR exists and you have access to it",
             }
 
@@ -662,25 +697,15 @@ class GitHubPluginUseCases:
             return {
                 "success": False,
                 "code": GH_PR_NOT_FOUND,
-                "message": f"PR #{request.pr_number} not found",
+                "message": f"PR #{pr_number} not found",
             }
 
-        pr_mapping = load_pr_mapping_state(repo.scripts)
-        pr_mapping.link_pr(
-            task_id=request.task_id,
-            pr_number=pr_data.number,
-            pr_url=pr_data.url,
-            pr_state=pr_data.state,
-            head_branch=pr_data.head_branch,
-            base_branch=pr_data.base_branch,
-            linked_at=utc_now().isoformat(),
-        )
-
-        await self._core.update_repo_scripts(repo.id, encode_pr_mapping_update(pr_mapping))
+        assert request.task_id is not None
+        await self._persist_pr_link(repo, request.task_id, pr_data)
 
         return {
             "success": True,
-            "code": "PR_LINKED",
+            "code": PR_LINKED,
             "message": f"Linked PR #{pr_data.number} to task {request.task_id}",
             "pr": {
                 "number": pr_data.number,
@@ -908,17 +933,59 @@ class GitHubPluginUseCases:
         return tasks
 
     @staticmethod
+    def _coerce_positive_int(
+        *,
+        value: object,
+        field_name: str,
+        invalid_code: str,
+    ) -> tuple[int | None, dict[str, Any] | None]:
+        parsed_value: int | None = None
+        if isinstance(value, bool):
+            parsed_value = None
+        elif isinstance(value, int):
+            parsed_value = value
+        elif isinstance(value, str):
+            raw_value = value.strip()
+            if raw_value:
+                try:
+                    parsed_value = int(raw_value)
+                except ValueError:
+                    parsed_value = None
+
+        if parsed_value is None or parsed_value <= 0:
+            return None, GitHubPluginUseCases._error(
+                invalid_code,
+                f"{field_name} must be a positive integer",
+                f"Provide a numeric {field_name} value like 123",
+            )
+        return parsed_value, None
+
+    async def _persist_pr_link(self, repo: Any, task_id: str, pr_data: Any) -> None:
+        pr_mapping = load_pr_mapping_state(repo.scripts)
+        pr_mapping.link_pr(
+            task_id=task_id,
+            pr_number=pr_data.number,
+            pr_url=pr_data.url,
+            pr_state=pr_data.state,
+            head_branch=pr_data.head_branch,
+            base_branch=pr_data.base_branch,
+            linked_at=utc_now().isoformat(),
+        )
+        await self._core.update_repo_scripts(repo.id, encode_pr_mapping_update(pr_mapping))
+
+    @staticmethod
     def _error(code: str, message: str, hint: str) -> dict[str, Any]:
         return {"success": False, "code": code, "message": message, "hint": hint}
 
 
 __all__ = [
+    "GH_ISSUE_NUMBER_INVALID",
     "GH_ISSUE_REQUIRED",
     "GH_NOT_CONNECTED",
     "GH_NO_LINKED_PR",
     "GH_PR_CREATE_FAILED",
-    "GH_PR_LINK_FAILED",
     "GH_PR_NOT_FOUND",
+    "GH_PR_NUMBER_INVALID",
     "GH_PR_NUMBER_REQUIRED",
     "GH_SYNC_FAILED",
     "GH_TASK_REQUIRED",

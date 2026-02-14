@@ -11,7 +11,6 @@ from kagan.core.plugins.github.application.use_cases import (
     GH_NO_LINKED_PR,
     GH_NOT_CONNECTED,
     GH_PR_CREATE_FAILED,
-    GH_PR_LINK_FAILED,
     GH_PR_NOT_FOUND,
     GH_PR_NUMBER_REQUIRED,
     GH_SYNC_FAILED,
@@ -129,17 +128,11 @@ async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) ->
     return await _build_use_cases(ctx).reconcile_pr_status(request)
 
 
-def build_reconcile_message(pr_number: int, pr_state: str, task_changed: bool) -> str:
-    """Compatibility helper for tests/documentation references."""
-    return GitHubPluginUseCases.build_reconcile_message(pr_number, pr_state, task_changed)
-
-
 __all__ = [
     "GH_ISSUE_REQUIRED",
     "GH_NOT_CONNECTED",
     "GH_NO_LINKED_PR",
     "GH_PR_CREATE_FAILED",
-    "GH_PR_LINK_FAILED",
     "GH_PR_NOT_FOUND",
     "GH_PR_NUMBER_REQUIRED",
     "GH_SYNC_FAILED",
@@ -147,7 +140,6 @@ __all__ = [
     "GH_WORKSPACE_REQUIRED",
     "PR_STATUS_RECONCILED",
     "build_contract_probe_payload",
-    "build_reconcile_message",
     "handle_acquire_lease",
     "handle_connect_repo",
     "handle_create_pr_for_task",

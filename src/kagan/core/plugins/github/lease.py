@@ -56,17 +56,26 @@ class LeaseHolder:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> LeaseHolder:
         """Parse LeaseHolder from lease comment JSON."""
-        instance_id = data.get("instance_id", "")
+        instance_id = str(data.get("instance_id", ""))
         parts = instance_id.split(":", 1)
         hostname = parts[0] if parts else "unknown"
-        pid = int(parts[1]) if len(parts) > 1 else 0
+        pid = 0
+        if len(parts) > 1:
+            try:
+                pid = int(parts[1])
+            except (TypeError, ValueError):
+                pid = 0
         return cls(
             instance_id=instance_id,
             owner_hostname=hostname,
             owner_pid=pid,
-            acquired_at=data.get("acquired_at", ""),
-            expires_at=data.get("expires_at", ""),
-            github_user=data.get("github_user"),
+            acquired_at=str(data.get("acquired_at", "")),
+            expires_at=str(data.get("expires_at", "")),
+            github_user=(
+                str(data["github_user"])
+                if isinstance(data.get("github_user"), str) and data.get("github_user")
+                else None
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -115,6 +124,7 @@ class LeaseState:
     has_label: bool
     holder: LeaseHolder | None
     comment_id: int | None = None
+    metadata_complete: bool = True
 
     @property
     def is_locked(self) -> bool:
@@ -140,6 +150,8 @@ class LeaseState:
         """True if the current instance can acquire (or already holds) the lease."""
         if not self.has_label:
             return True
+        if not self.metadata_complete:
+            return False
         if self.holder is None:
             # Orphan label - allow takeover
             return True
@@ -152,6 +164,8 @@ class LeaseState:
         """True if acquisition requires explicit takeover."""
         if not self.has_label:
             return False
+        if not self.metadata_complete:
+            return True
         if self.holder is None:
             return False
         if self.holder.is_same_instance():
@@ -197,6 +211,14 @@ class LeaseAcquireResult:
             code=LEASE_HELD_BY_OTHER,
             message=f"Lease held by {holder.instance_id} (acquired {holder.acquired_at})",
             holder=holder,
+        )
+
+    @classmethod
+    def takeover_required(cls, message: str) -> LeaseAcquireResult:
+        return cls(
+            success=False,
+            code=LEASE_HELD_BY_OTHER,
+            message=message,
         )
 
     @classmethod
@@ -252,7 +274,7 @@ def parse_lease_comment(body: str) -> LeaseHolder | None:
     try:
         data = json.loads(match.group(1))
         return LeaseHolder.from_dict(data)
-    except (json.JSONDecodeError, TypeError, KeyError):
+    except (json.JSONDecodeError, TypeError, ValueError, KeyError):
         return None
 
 
@@ -320,8 +342,13 @@ def get_lease_state(
     # Fetch comments via API to get IDs
     comments_raw, error = run_gh_api_issue_comments(gh_path, repo_path, owner, repo, issue_number)
     if error:
-        # If we can't fetch comments, report label-only state
-        return LeaseState(has_label=True, holder=None, comment_id=None), None
+        # Fail closed when holder metadata cannot be inspected.
+        return LeaseState(
+            has_label=True,
+            holder=None,
+            comment_id=None,
+            metadata_complete=False,
+        ), None
 
     # Find lease comment
     holder: LeaseHolder | None = None
@@ -394,8 +421,12 @@ def acquire_lease(
 
     if state.requires_takeover and not force_takeover:
         # Another instance holds the lease
-        assert state.holder is not None
-        return LeaseAcquireResult.blocked(state.holder)
+        if state.holder is not None:
+            return LeaseAcquireResult.blocked(state.holder)
+        return LeaseAcquireResult.takeover_required(
+            "Lease label is present but holder metadata could not be verified. "
+            "Retry, or use force_takeover=true to proceed."
+        )
 
     # Can acquire (either free, stale, or force takeover)
     new_holder = create_lease_holder(github_user=github_user)
@@ -452,6 +483,12 @@ def release_lease(
 
     if state is None:
         return LeaseReleaseResult.failed("Failed to get lease state")
+
+    if state.has_label and not state.metadata_complete:
+        return LeaseReleaseResult.failed(
+            "Cannot release lease because holder metadata could not be verified. "
+            "Retry when GitHub comments are accessible."
+        )
 
     # Check if we hold the lease
     if not state.is_held_by_current_instance:

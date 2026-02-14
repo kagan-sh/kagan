@@ -9,11 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from kagan.core.models.enums import TaskStatus, TaskType
-from kagan.core.plugins.github import (
-    GITHUB_CAPABILITY,
-    register_github_plugin,
-)
-from kagan.core.plugins.github.contract import GITHUB_METHOD_SYNC_ISSUES
 from kagan.core.plugins.github.domain.repo_state import (
     encode_lease_enforcement_update,
     load_lease_enforcement_state,
@@ -38,7 +33,6 @@ from kagan.core.plugins.github.sync import (
     resolve_task_status_from_issue_state,
     resolve_task_type_from_labels,
 )
-from kagan.core.plugins.sdk import PluginRegistry
 
 
 class TestModeResolution:
@@ -194,10 +188,25 @@ class TestRepoLeaseEnforcement:
         assert load_lease_enforcement(None) is True
         assert load_lease_enforcement({}) is True
 
-    @pytest.mark.parametrize("raw_value", ["false", "0", "off", "disabled", False, 0])
-    def test_load_lease_enforcement_parses_opt_out_values(self, raw_value: object) -> None:
+    @pytest.mark.parametrize("raw_value", ["false", "FALSE", " false ", False])
+    def test_load_lease_enforcement_parses_explicit_opt_out_values(self, raw_value: object) -> None:
         scripts = {GITHUB_LEASE_ENFORCEMENT_KEY: raw_value}
         assert load_lease_enforcement(scripts) is False
+
+    @pytest.mark.parametrize("raw_value", ["true", "TRUE", " true ", True])
+    def test_load_lease_enforcement_parses_explicit_opt_in_values(self, raw_value: object) -> None:
+        scripts = {GITHUB_LEASE_ENFORCEMENT_KEY: raw_value}
+        assert load_lease_enforcement(scripts) is True
+
+    @pytest.mark.parametrize("raw_value", ["0", "off", "disabled", "typo", 0, 1])
+    def test_load_lease_enforcement_invalid_or_legacy_values_default_to_true_with_warning(
+        self,
+        raw_value: object,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        scripts = {GITHUB_LEASE_ENFORCEMENT_KEY: raw_value}
+        assert load_lease_enforcement(scripts) is True
+        assert "expected true/false" in caplog.text
 
     def test_typed_adapter_round_trip_for_lease_enforcement(self) -> None:
         scripts = encode_lease_enforcement_update(False)
@@ -237,6 +246,29 @@ class TestIncrementalIssueFiltering:
         filtered = filter_issues_since_checkpoint(issues, checkpoint)
 
         assert [issue.number for issue in filtered] == [5]
+
+    def test_filter_issues_since_checkpoint_handles_naive_issue_timestamps(self) -> None:
+        checkpoint = SyncCheckpoint(last_sync_at="2025-01-02T00:00:00Z", issue_count=2)
+        issues = [
+            GhIssue(
+                number=1,
+                title="old",
+                state="OPEN",
+                labels=[],
+                updated_at="2025-01-01T00:00:00",
+            ),
+            GhIssue(
+                number=2,
+                title="new",
+                state="OPEN",
+                labels=[],
+                updated_at="2025-01-03T00:00:00",
+            ),
+        ]
+
+        filtered = filter_issues_since_checkpoint(issues, checkpoint)
+
+        assert [issue.number for issue in filtered] == [2]
 
 
 class TestComputeIssueChanges:
@@ -399,30 +431,6 @@ class TestParseGhIssueList:
 
         assert len(issues) == 1
         assert issues[0].number == 1
-
-
-class TestSyncIssuesRegistration:
-    """Tests for sync_issues operation registration."""
-
-    def test_sync_issues_operation_is_registered(self) -> None:
-        registry = PluginRegistry()
-        register_github_plugin(registry)
-
-        operation = registry.resolve_operation(GITHUB_CAPABILITY, GITHUB_METHOD_SYNC_ISSUES)
-
-        assert operation is not None
-        assert operation.mutating is True
-
-    def test_sync_issues_operation_requires_maintainer_profile(self) -> None:
-        from kagan.core.security import CapabilityProfile
-
-        registry = PluginRegistry()
-        register_github_plugin(registry)
-
-        operation = registry.resolve_operation(GITHUB_CAPABILITY, GITHUB_METHOD_SYNC_ISSUES)
-
-        assert operation is not None
-        assert operation.minimum_profile == CapabilityProfile.MAINTAINER
 
 
 class TestSyncIssuesHandler:

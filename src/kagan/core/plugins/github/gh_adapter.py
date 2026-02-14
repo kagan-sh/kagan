@@ -29,7 +29,6 @@ GH_REPO_VIEW_FIELDS: Final = "name,owner,url,visibility,defaultBranchRef,sshUrl,
 GH_ISSUE_LIST_FIELDS: Final = "number,title,state,labels,updatedAt"
 GH_PR_FIELDS: Final = "number,title,state,url,headRefName,baseRefName,isDraft,mergeable"
 GH_ISSUE_LIST_LIMIT: Final = 1000
-GH_PR_LIST_LIMIT: Final = 10
 
 # Timeout configuration (seconds)
 GH_TIMEOUT_VERSION: Final = 10
@@ -415,16 +414,6 @@ def parse_gh_issue_list(raw_issues: list[dict[str, Any]]) -> list[GhIssue]:
 # --- Lease-related gh CLI operations ---
 
 
-@dataclass(frozen=True, slots=True)
-class GhComment:
-    """Normalized GitHub issue comment from gh issue view."""
-
-    id: int
-    body: str
-    author: str
-    created_at: str
-
-
 def run_gh_issue_view(
     gh_path: str,
     repo_path: str,
@@ -458,32 +447,6 @@ def run_gh_issue_view(
         return json.loads(output), None
     except json.JSONDecodeError as exc:
         return None, f"Invalid JSON response: {exc}"
-
-
-def parse_gh_issue_comments(raw_comments: list[dict[str, Any]]) -> list[GhComment]:
-    """Parse raw gh issue comments JSON into normalized GhComment list."""
-    comments = []
-    for raw in raw_comments:
-        # gh CLI returns comment IDs as strings or integers
-        comment_id = raw.get("id")
-        if comment_id is None:
-            # Try databaseId as fallback
-            comment_id = raw.get("databaseId")
-        if comment_id is None:
-            continue
-        body = raw.get("body", "")
-        author_data = raw.get("author", {})
-        author = author_data.get("login", "") if isinstance(author_data, dict) else ""
-        created_at = raw.get("createdAt", "")
-        comments.append(
-            GhComment(
-                id=int(comment_id) if isinstance(comment_id, (int, str)) else 0,
-                body=body,
-                author=author,
-                created_at=created_at,
-            )
-        )
-    return comments
 
 
 def run_gh_issue_label_add(
@@ -667,7 +630,6 @@ def run_gh_api_comment_delete(
 # Error codes for PR operations
 GH_PR_CREATE_FAILED: Final = "GH_PR_CREATE_FAILED"
 GH_PR_NOT_FOUND: Final = "GH_PR_NOT_FOUND"
-GH_PR_LINK_FAILED: Final = "GH_PR_LINK_FAILED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -821,51 +783,6 @@ def run_gh_pr_view_by_url(
     return run_gh_pr_view(gh_path, repo_path, pr_number)
 
 
-def run_gh_pr_list_for_branch(
-    gh_path: str,
-    repo_path: str,
-    head_branch: str,
-    *,
-    state: str = "open",
-) -> tuple[list[GhPullRequest] | None, str | None]:
-    """List pull requests for a specific head branch.
-
-    Args:
-        gh_path: Path to gh CLI.
-        repo_path: Path to repository directory.
-        head_branch: Branch name to filter by.
-        state: PR state filter: "open", "closed", "merged", or "all".
-
-    Returns:
-        Tuple of (list of GhPullRequest, None) on success or (None, error_message) on failure.
-    """
-    output, error = _run_gh_command(
-        gh_path,
-        "pr",
-        "list",
-        "--head",
-        head_branch,
-        "--state",
-        state,
-        "--json",
-        GH_PR_FIELDS,
-        "--limit",
-        str(GH_PR_LIST_LIMIT),
-        repo_path=repo_path,
-        timeout_seconds=GH_TIMEOUT_DEFAULT,
-        timeout_error="PR list timed out",
-        default_error="Failed to list PRs",
-    )
-    if error:
-        return None, error
-    try:
-        data = json.loads(output)
-    except json.JSONDecodeError as exc:
-        return None, f"Invalid JSON response: {exc}"
-    prs = [_parse_gh_pr_view(pr) for pr in data]
-    return prs, None
-
-
 def _parse_gh_pr_view(data: dict[str, Any]) -> GhPullRequest:
     """Parse gh pr view JSON into GhPullRequest."""
     return GhPullRequest(
@@ -880,36 +797,12 @@ def _parse_gh_pr_view(data: dict[str, Any]) -> GhPullRequest:
     )
 
 
-def run_gh_pr_status(
-    gh_path: str,
-    repo_path: str,
-    pr_number: int,
-) -> tuple[str | None, str | None]:
-    """Get the merge status of a PR.
-
-    Args:
-        gh_path: Path to gh CLI.
-        repo_path: Path to repository directory.
-        pr_number: The PR number.
-
-    Returns:
-        Tuple of (state, error_message). State is "OPEN", "CLOSED", or "MERGED".
-    """
-    pr_data, error = run_gh_pr_view(gh_path, repo_path, pr_number)
-    if error:
-        return None, error
-    if pr_data is None:
-        return None, "No PR data returned"
-    return pr_data.state, None
-
-
 __all__ = [
     "ALREADY_CONNECTED",
     "GH_AUTH_REQUIRED",
     "GH_CLI_NOT_AVAILABLE",
     "GH_PROJECT_REQUIRED",
     "GH_PR_CREATE_FAILED",
-    "GH_PR_LINK_FAILED",
     "GH_PR_NOT_FOUND",
     "GH_REPO_ACCESS_DENIED",
     "GH_REPO_METADATA_INVALID",
@@ -917,13 +810,11 @@ __all__ = [
     "GITHUB_CONNECTION_KEY",
     "GhAuthStatus",
     "GhCliAdapterInfo",
-    "GhComment",
     "GhIssue",
     "GhPullRequest",
     "GhRepoView",
     "PreflightError",
     "build_connection_metadata",
-    "parse_gh_issue_comments",
     "parse_gh_issue_list",
     "parse_gh_repo_view",
     "resolve_gh_cli",
@@ -936,8 +827,6 @@ __all__ = [
     "run_gh_issue_list",
     "run_gh_issue_view",
     "run_gh_pr_create",
-    "run_gh_pr_list_for_branch",
-    "run_gh_pr_status",
     "run_gh_pr_view",
     "run_gh_pr_view_by_url",
     "run_gh_repo_view",

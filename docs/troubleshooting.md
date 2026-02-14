@@ -215,6 +215,7 @@ Fix:
 
 1. Check holder info in error response.
 1. If holder instance is gone, use `force_takeover: true`.
+1. If holder info is unavailable, retry once, then use `force_takeover: true`.
 1. If lease is over 2 hours old, takeover is automatic.
 
 ### Sync shows zero issues but GitHub has issues

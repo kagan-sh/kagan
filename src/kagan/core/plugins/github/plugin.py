@@ -32,6 +32,33 @@ def _plugin_handlers_module() -> Any:
     return import_module("kagan.core.plugins.github.entrypoints.plugin_handlers")
 
 
+def _make_handler_dispatch(
+    handler_name: str,
+    *,
+    include_ctx: bool,
+) -> Any:
+    async def _dispatch(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+        handlers_module = _plugin_handlers_module()
+        handler = getattr(handlers_module, handler_name)
+        if not include_ctx:
+            del ctx
+            return handler(params)
+        return await handler(ctx, params)
+
+    return _dispatch
+
+
+_contract_probe = _make_handler_dispatch("build_contract_probe_payload", include_ctx=False)
+_connect_repo = _make_handler_dispatch("handle_connect_repo", include_ctx=True)
+_sync_issues = _make_handler_dispatch("handle_sync_issues", include_ctx=True)
+_acquire_lease = _make_handler_dispatch("handle_acquire_lease", include_ctx=True)
+_release_lease = _make_handler_dispatch("handle_release_lease", include_ctx=True)
+_get_lease_state = _make_handler_dispatch("handle_get_lease_state", include_ctx=True)
+_create_pr_for_task = _make_handler_dispatch("handle_create_pr_for_task", include_ctx=True)
+_link_pr_to_task = _make_handler_dispatch("handle_link_pr_to_task", include_ctx=True)
+_reconcile_pr_status = _make_handler_dispatch("handle_reconcile_pr_status", include_ctx=True)
+
+
 class GitHubPlugin:
     """Official bundled GitHub plugin scaffold with a stable contract probe."""
 
@@ -143,52 +170,6 @@ class GitHubPlugin:
                 description="Reconcile the PR status for a task from GitHub.",
             )
         )
-
-
-async def _contract_probe(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    del ctx
-    handlers_module = _plugin_handlers_module()
-    return handlers_module.build_contract_probe_payload(params)
-
-
-async def _connect_repo(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_connect_repo(ctx, params)
-
-
-async def _sync_issues(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_sync_issues(ctx, params)
-
-
-async def _acquire_lease(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_acquire_lease(ctx, params)
-
-
-async def _release_lease(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_release_lease(ctx, params)
-
-
-async def _get_lease_state(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_get_lease_state(ctx, params)
-
-
-async def _create_pr_for_task(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_create_pr_for_task(ctx, params)
-
-
-async def _link_pr_to_task(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_link_pr_to_task(ctx, params)
-
-
-async def _reconcile_pr_status(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
-    handlers_module = _plugin_handlers_module()
-    return await handlers_module.handle_reconcile_pr_status(ctx, params)
 
 
 def register_github_plugin(registry: PluginRegistry) -> None:
