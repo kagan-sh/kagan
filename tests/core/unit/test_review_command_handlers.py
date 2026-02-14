@@ -53,7 +53,9 @@ async def test_review_merge_allows_approved_task_when_gate_enabled() -> None:
     merge_service = SimpleNamespace(merge_task=AsyncMock(return_value=(True, "Merged all repos")))
     f = _api(
         task_service=SimpleNamespace(get_task=AsyncMock(return_value=task)),
-        execution_service=SimpleNamespace(get_latest_execution_for_task=AsyncMock(return_value=execution)),
+        execution_service=SimpleNamespace(
+            get_latest_execution_for_task=AsyncMock(return_value=execution)
+        ),
         merge_service=merge_service,
         config=SimpleNamespace(general=SimpleNamespace(require_review_approval=True)),
     )

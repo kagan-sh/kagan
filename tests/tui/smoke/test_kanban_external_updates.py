@@ -947,3 +947,40 @@ async def test_external_launcher_attach_does_not_prompt_session_complete(
         notify.assert_called_once()
         assert "Workspace opened externally." in notify.call_args.args[0]
         assert "start_prompt.md" in notify.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_merge_exception_shows_error_notification(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+
+        tasks = await app.ctx.api.list_tasks(project_id=app.ctx.active_project_id)
+        task = next(t for t in tasks if t.status == TaskStatus.REVIEW)
+
+        monkeypatch.setattr(
+            kanban.ctx.api,
+            "merge_task_direct",
+            AsyncMock(side_effect=RuntimeError("push rejected")),
+        )
+
+        notify_calls: list[tuple[str, str]] = []
+        original_notify = kanban.notify
+
+        def _capture_notify(message: str, *, severity: str = "information", **kw: object) -> None:
+            notify_calls.append((message, severity))
+            original_notify(message, severity=severity, **kw)
+
+        monkeypatch.setattr(kanban, "notify", _capture_notify)
+
+        result = await kanban._review.execute_merge(task, success_msg="ok", track_failures=True)
+
+        assert result is False
+        assert task.id in kanban._merge_failed_tasks
+        assert any("Merge error" in msg and sev == "error" for msg, sev in notify_calls)

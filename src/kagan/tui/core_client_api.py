@@ -105,9 +105,7 @@ def _merge_result_from_payload(payload: dict[str, Any]) -> MergeResult:
     )
     conflict_files_raw = payload.get("conflict_files")
     conflict_files = (
-        [str(item) for item in conflict_files_raw]
-        if isinstance(conflict_files_raw, list)
-        else None
+        [str(item) for item in conflict_files_raw] if isinstance(conflict_files_raw, list) else None
     )
     return MergeResult(
         repo_id=str(payload.get("repo_id", "")),
@@ -948,6 +946,7 @@ class CoreBackedApi:
 
     def get_agent_status_message(self) -> str | None:
         return None
+
 
 @dataclass
 class CoreBackedContext:

@@ -428,7 +428,7 @@ class MergeServiceImpl:
             )
             log.info(f"Auto-committed changes before merge for repo {repo.name}")
 
-        await self._git.push(workspace_repo.worktree_path, workspace.branch_name)
+        await self._git.push(workspace_repo.worktree_path, workspace.branch_name, force=True)
 
         if merge_result is None and strategy == MergeStrategy.PULL_REQUEST:
             pr_url = await self._create_pr(

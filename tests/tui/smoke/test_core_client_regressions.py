@@ -39,10 +39,9 @@ async def _wait_chat_contains(
 
     async def _has_expected_text() -> bool:
         nonlocal rendered
-        rendered = (
-            review.query_one("#review-agent-output-chat", ChatPanel)
-            .output.get_text_content()
-        )
+        rendered = review.query_one(
+            "#review-agent-output-chat", ChatPanel
+        ).output.get_text_content()
         return expected_text in rendered
 
     await wait_until_async(

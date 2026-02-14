@@ -347,13 +347,11 @@ def test_when_registering_conflicting_github_probe_then_registry_rejects_collisi
         registry.register_plugin(conflicting)
 
 
-
 def test_when_registering_github_plugin_then_probe_has_no_builtin_dispatch_collision() -> None:
     dispatch_map = build_request_dispatch_map()
 
     assert GITHUB_CAPABILITY != RESERVED_GITHUB_CAPABILITY
     assert (GITHUB_CAPABILITY, GITHUB_CONTRACT_PROBE_METHOD) not in dispatch_map
-
 
 
 def test_when_registering_github_plugin_then_runtime_module_is_not_eagerly_imported() -> None:

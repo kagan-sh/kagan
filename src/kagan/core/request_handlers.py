@@ -1685,9 +1685,7 @@ def _jsonable(value: object, *, api: KaganAPI | None = None) -> Any:
             "can_open_output": bool(getattr(value, "can_open_output", False)),
             "execution_id": _non_empty_str(getattr(value, "execution_id", None)),
             "is_running": bool(getattr(value, "is_running", False)),
-            "recovered_stale_execution": bool(
-                getattr(value, "recovered_stale_execution", False)
-            ),
+            "recovered_stale_execution": bool(getattr(value, "recovered_stale_execution", False)),
             "message": _non_empty_str(getattr(value, "message", None)),
             "output_mode": _enum_value(getattr(value, "output_mode", None)),
             # Live agent handles are intentionally not exposed over IPC.

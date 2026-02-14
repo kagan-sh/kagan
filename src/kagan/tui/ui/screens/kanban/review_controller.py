@@ -547,7 +547,14 @@ class KanbanReviewController:
         track_failures: bool = False,
     ) -> bool:
         self.screen.notify("Merging... (this may take a few seconds)", severity="information")
-        success, message = await self.screen.ctx.api.merge_task_direct(task)
+        try:
+            success, message = await self.screen.ctx.api.merge_task_direct(task)
+        except Exception as exc:
+            if track_failures:
+                self.screen._merge_failed_tasks.add(task.id)
+                self.screen._board.sync_agent_states()
+            self.screen.notify(f"Merge error: {exc}", severity="error")
+            return False
         if success:
             if track_failures:
                 self.screen._merge_failed_tasks.discard(task.id)
