@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from kagan.core.models.enums import TaskStatus, TaskType
 from kagan.core.plugins.github.application.use_cases import (
+    CONNECTED,
     GH_ISSUE_NUMBER_INVALID,
     GH_PR_NUMBER_INVALID,
     GH_SYNC_FAILED,
@@ -50,10 +52,39 @@ def _core_gateway(repo: SimpleNamespace) -> SimpleNamespace:
 
 
 @pytest.mark.asyncio()
-async def test_sync_issues_does_not_persist_checkpoint_or_mapping_when_any_issue_fails() -> None:
+async def test_sync_issues_preserves_successful_mappings_across_partial_failures() -> None:
     repo = _connected_repo()
     core_gateway = _core_gateway(repo)
-    core_gateway.create_task.side_effect = RuntimeError("simulated projection failure")
+    stored_tasks: dict[str, SimpleNamespace] = {}
+    failed_issue_once = False
+
+    async def create_task(*, title: str, description: str, project_id: str) -> SimpleNamespace:
+        del description, project_id
+        nonlocal failed_issue_once
+        if title.startswith("[GH-18]") and not failed_issue_once:
+            failed_issue_once = True
+            raise RuntimeError("simulated projection failure")
+
+        issue_number = int(title.split("]")[0].removeprefix("[GH-"))
+        task_id = f"task-{issue_number}"
+        stored_tasks[task_id] = SimpleNamespace(
+            id=task_id,
+            title=title,
+            status=TaskStatus.BACKLOG,
+            task_type=TaskType.PAIR,
+        )
+        return SimpleNamespace(id=task_id)
+
+    async def get_task(task_id: str) -> SimpleNamespace | None:
+        return stored_tasks.get(task_id)
+
+    async def update_repo_scripts(repo_id: str, values: dict[str, str]) -> None:
+        assert repo_id == repo.id
+        repo.scripts.update(values)
+
+    core_gateway.create_task = AsyncMock(side_effect=create_task)
+    core_gateway.get_task = AsyncMock(side_effect=get_task)
+    core_gateway.update_repo_scripts = AsyncMock(side_effect=update_repo_scripts)
 
     gh_client = SimpleNamespace(
         resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
@@ -62,7 +93,14 @@ async def test_sync_issues_does_not_persist_checkpoint_or_mapping_when_any_issue
                 [
                     {
                         "number": 17,
-                        "title": "Projection error",
+                        "title": "Persist mapping",
+                        "state": "OPEN",
+                        "labels": [],
+                        "updatedAt": "2025-01-10T00:00:00Z",
+                    },
+                    {
+                        "number": 18,
+                        "title": "Retry me",
                         "state": "OPEN",
                         "labels": [],
                         "updatedAt": "2025-01-10T00:00:00Z",
@@ -75,7 +113,14 @@ async def test_sync_issues_does_not_persist_checkpoint_or_mapping_when_any_issue
             return_value=[
                 GhIssue(
                     number=17,
-                    title="Projection error",
+                    title="Persist mapping",
+                    state="OPEN",
+                    labels=[],
+                    updated_at="2025-01-10T00:00:00Z",
+                ),
+                GhIssue(
+                    number=18,
+                    title="Retry me",
                     state="OPEN",
                     labels=[],
                     updated_at="2025-01-10T00:00:00Z",
@@ -84,14 +129,70 @@ async def test_sync_issues_does_not_persist_checkpoint_or_mapping_when_any_issue
         ),
     )
 
-    result = await GitHubPluginUseCases(core_gateway, gh_client).sync_issues(
+    use_cases = GitHubPluginUseCases(core_gateway, gh_client)
+
+    first = await use_cases.sync_issues(
         SyncIssuesInput(project_id="project-1")
     )
 
-    assert result["success"] is False
-    assert result["code"] == GH_SYNC_FAILED
-    assert result["stats"]["errors"] == 1
-    core_gateway.update_repo_scripts.assert_not_awaited()
+    assert first["success"] is False
+    assert first["code"] == GH_SYNC_FAILED
+    assert first["stats"]["errors"] == 1
+    assert "17" in json.loads(repo.scripts[GITHUB_ISSUE_MAPPING_KEY])["issue_to_task"]
+
+    second = await use_cases.sync_issues(SyncIssuesInput(project_id="project-1"))
+
+    assert second["success"] is True
+    create_titles = [
+        call.kwargs["title"] for call in core_gateway.create_task.await_args_list
+    ]
+    assert create_titles.count("[GH-17] Persist mapping") == 1
+    assert create_titles.count("[GH-18] Retry me") == 2
+
+
+@pytest.mark.asyncio()
+async def test_connect_repo_repairs_invalid_stored_metadata() -> None:
+    repo = SimpleNamespace(
+        id="repo-1",
+        path="/tmp/repo",
+        scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme"})},
+    )
+    core_gateway = _core_gateway(repo)
+
+    async def update_repo_scripts(repo_id: str, values: dict[str, str]) -> None:
+        assert repo_id == repo.id
+        repo.scripts.update(values)
+
+    core_gateway.update_repo_scripts = AsyncMock(side_effect=update_repo_scripts)
+
+    gh_client = SimpleNamespace(
+        run_preflight_checks=MagicMock(
+            return_value=(
+                GhRepoView(
+                    host="github.com",
+                    owner="acme",
+                    name="widgets",
+                    full_name="acme/widgets",
+                    visibility="PUBLIC",
+                    default_branch="main",
+                    clone_url="git@github.com:acme/widgets.git",
+                ),
+                None,
+            )
+        ),
+        build_connection_metadata=MagicMock(
+            return_value={"host": "github.com", "owner": "acme", "repo": "widgets"}
+        ),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).connect_repo(
+        ConnectRepoInput(project_id="project-1")
+    )
+
+    assert result["success"] is True
+    assert result["code"] == CONNECTED
+    assert "Repaired invalid" in result["message"]
+    assert json.loads(repo.scripts[GITHUB_CONNECTION_KEY])["repo"] == "widgets"
 
 
 @pytest.mark.asyncio()

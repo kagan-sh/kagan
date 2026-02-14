@@ -116,27 +116,24 @@ class GitHubPluginUseCases:
         assert repo is not None
 
         connection_state = load_connection_state(repo.scripts)
+        repairing_invalid_connection = False
         if connection_state.raw_value:
             connection_data = connection_state.normalized
             if connection_data is None:
-                return self._error(
-                    GH_REPO_METADATA_INVALID,
-                    "Stored GitHub connection metadata is invalid",
-                    "Reconnect the repository using connect_repo to refresh metadata.",
-                )
+                repairing_invalid_connection = True
+            else:
+                if connection_state.needs_rewrite:
+                    await self._core.update_repo_scripts(
+                        repo.id,
+                        encode_connection_update(connection_data),
+                    )
 
-            if connection_state.needs_rewrite:
-                await self._core.update_repo_scripts(
-                    repo.id,
-                    encode_connection_update(connection_data),
-                )
-
-            return {
-                "success": True,
-                "code": ALREADY_CONNECTED,
-                "message": "Repository is already connected to GitHub",
-                "connection": connection_data,
-            }
+                return {
+                    "success": True,
+                    "code": ALREADY_CONNECTED,
+                    "message": "Repository is already connected to GitHub",
+                    "connection": connection_data,
+                }
 
         repo_view, error = await asyncio.to_thread(self._gh.run_preflight_checks, repo.path)
         if error is not None:
@@ -150,6 +147,17 @@ class GitHubPluginUseCases:
         assert repo_view is not None
         connection_metadata = self._gh.build_connection_metadata(repo_view)
         await self._core.update_repo_scripts(repo.id, encode_connection_update(connection_metadata))
+
+        if repairing_invalid_connection:
+            return {
+                "success": True,
+                "code": CONNECTED,
+                "message": (
+                    "Repaired invalid GitHub connection metadata and connected "
+                    f"to {repo_view.full_name}"
+                ),
+                "connection": connection_metadata,
+            }
 
         return {
             "success": True,
@@ -269,7 +277,13 @@ class GitHubPluginUseCases:
             "errors": result.errors,
         }
 
+        mapping_changed = new_mapping.to_dict() != mapping.to_dict()
         if result.errors > 0:
+            if mapping_changed:
+                await self._core.update_repo_scripts(
+                    repo.id,
+                    encode_sync_state_update(checkpoint, new_mapping),
+                )
             return {
                 "success": False,
                 "code": GH_SYNC_FAILED,

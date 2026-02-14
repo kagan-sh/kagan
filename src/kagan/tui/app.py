@@ -157,6 +157,7 @@ class KaganApp(App):
             self.log("Local AppContext initialized (core bypass enabled)")
 
             await self._reconcile_worktrees()
+            await self._reconcile_sessions()
             await self._run_janitor()
             await self._startup_screen_decision()
             return
@@ -195,6 +196,7 @@ class KaganApp(App):
         self.log("Core-backed context initialized", session_id=session_id)
 
         await self._reconcile_worktrees()
+        await self._reconcile_sessions()
         await self._run_janitor()
 
         await self._startup_screen_decision()
