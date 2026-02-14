@@ -266,6 +266,79 @@ def build_connection_metadata(repo_view: GhRepoView, username: str | None = None
     }
 
 
+@dataclass(frozen=True, slots=True)
+class GhIssue:
+    """Normalized GitHub issue metadata from gh issue list."""
+
+    number: int
+    title: str
+    state: str  # "OPEN" or "CLOSED"
+    labels: list[str]
+    updated_at: str
+
+
+def run_gh_issue_list(
+    gh_path: str, repo_path: str, *, state: str = "all"
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Run gh issue list --json and return raw JSON list or error message.
+
+    Args:
+        gh_path: Path to gh CLI.
+        repo_path: Path to repository directory.
+        state: Issue state filter: "open", "closed", or "all".
+
+    Returns:
+        Tuple of (issues_list, error_message).
+    """
+    import subprocess
+
+    fields = "number,title,state,labels,updatedAt"
+    try:
+        result = subprocess.run(
+            [gh_path, "issue", "list", "--state", state, "--json", fields, "--limit", "1000"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=repo_path,
+        )
+        if result.returncode == 0:
+            try:
+                return json.loads(result.stdout), None
+            except json.JSONDecodeError as e:
+                return None, f"Invalid JSON response: {e}"
+        return None, result.stderr.strip() or "Failed to list issues"
+    except subprocess.TimeoutExpired:
+        return None, "Issue list timed out"
+    except (subprocess.SubprocessError, OSError) as e:
+        return None, str(e)
+
+
+def parse_gh_issue_list(raw_issues: list[dict[str, Any]]) -> list[GhIssue]:
+    """Parse raw gh issue list JSON into normalized GhIssue list."""
+    issues = []
+    for raw in raw_issues:
+        number = raw.get("number")
+        title = raw.get("title", "")
+        state = raw.get("state", "OPEN").upper()
+        labels_raw = raw.get("labels", [])
+        labels = [
+            label.get("name", "") if isinstance(label, dict) else str(label)
+            for label in labels_raw
+        ]
+        updated_at = raw.get("updatedAt", "")
+        if number is not None:
+            issues.append(
+                GhIssue(
+                    number=int(number),
+                    title=title,
+                    state=state,
+                    labels=labels,
+                    updated_at=updated_at,
+                )
+            )
+    return issues
+
+
 __all__ = [
     "ALREADY_CONNECTED",
     "GH_AUTH_REQUIRED",
@@ -277,12 +350,15 @@ __all__ = [
     "GITHUB_CONNECTION_KEY",
     "GhAuthStatus",
     "GhCliAdapterInfo",
+    "GhIssue",
     "GhRepoView",
     "PreflightError",
     "build_connection_metadata",
+    "parse_gh_issue_list",
     "parse_gh_repo_view",
     "resolve_gh_cli",
     "run_gh_auth_status",
+    "run_gh_issue_list",
     "run_gh_repo_view",
     "run_preflight_checks",
 ]
