@@ -10,7 +10,10 @@ from kagan.core.plugins.github.contract import (
     GITHUB_CONTRACT_PROBE_METHOD,
     GITHUB_METHOD_ACQUIRE_LEASE,
     GITHUB_METHOD_CONNECT_REPO,
+    GITHUB_METHOD_CREATE_PR_FOR_TASK,
     GITHUB_METHOD_GET_LEASE_STATE,
+    GITHUB_METHOD_LINK_PR_TO_TASK,
+    GITHUB_METHOD_RECONCILE_PR_STATUS,
     GITHUB_METHOD_RELEASE_LEASE,
     GITHUB_METHOD_SYNC_ISSUES,
     GITHUB_PLUGIN_ID,
@@ -102,6 +105,39 @@ class GitHubPlugin:
                 description="Get the current lease state for a GitHub issue.",
             )
         )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_CREATE_PR_FOR_TASK,
+                handler=_create_pr_for_task,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=True,
+                description="Create a PR for a task and link it.",
+            )
+        )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_LINK_PR_TO_TASK,
+                handler=_link_pr_to_task,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=True,
+                description="Link an existing PR to a task.",
+            )
+        )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_RECONCILE_PR_STATUS,
+                handler=_reconcile_pr_status,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=True,
+                description="Reconcile the PR status for a task from GitHub.",
+            )
+        )
 
 
 async def _contract_probe(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
@@ -139,6 +175,24 @@ async def _get_lease_state(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
     runtime_module = import_module("kagan.core.plugins.github.runtime")
     handle_get_lease_state = cast("Any", runtime_module).handle_get_lease_state
     return cast("dict[str, Any]", await handle_get_lease_state(ctx, params))
+
+
+async def _create_pr_for_task(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    runtime_module = import_module("kagan.core.plugins.github.runtime")
+    handle_create_pr_for_task = cast("Any", runtime_module).handle_create_pr_for_task
+    return cast("dict[str, Any]", await handle_create_pr_for_task(ctx, params))
+
+
+async def _link_pr_to_task(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    runtime_module = import_module("kagan.core.plugins.github.runtime")
+    handle_link_pr_to_task = cast("Any", runtime_module).handle_link_pr_to_task
+    return cast("dict[str, Any]", await handle_link_pr_to_task(ctx, params))
+
+
+async def _reconcile_pr_status(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    runtime_module = import_module("kagan.core.plugins.github.runtime")
+    handle_reconcile_pr_status = cast("Any", runtime_module).handle_reconcile_pr_status
+    return cast("dict[str, Any]", await handle_reconcile_pr_status(ctx, params))
 
 
 def register_github_plugin(registry: PluginRegistry) -> None:

@@ -670,11 +670,422 @@ async def handle_get_lease_state(ctx: AppContext, params: dict[str, Any]) -> dic
     }
 
 
+# --- PR Operations ---
+
+GH_TASK_REQUIRED = "GH_TASK_REQUIRED"
+GH_PR_CREATE_FAILED = "GH_PR_CREATE_FAILED"
+GH_PR_LINK_FAILED = "GH_PR_LINK_FAILED"
+GH_PR_NOT_FOUND = "GH_PR_NOT_FOUND"
+GH_WORKSPACE_REQUIRED = "GH_WORKSPACE_REQUIRED"
+
+
+async def handle_create_pr_for_task(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
+    """Create a PR for a task and link it.
+
+    Params:
+        project_id: Required project ID
+        repo_id: Optional repo ID (required for multi-repo projects)
+        task_id: Required task ID
+        title: Optional PR title (defaults to task title)
+        body: Optional PR body (defaults to task description)
+        draft: Optional bool to create as draft PR
+
+    Returns success with PR info or error with details.
+    """
+    from kagan.core.plugins.github.gh_adapter import run_gh_pr_create
+    from kagan.core.plugins.github.sync import (
+        load_task_pr_mapping,
+    )
+    from kagan.core.time import utc_now
+
+    project_id = params.get("project_id")
+    repo_id = params.get("repo_id")
+    task_id = params.get("task_id")
+    title = params.get("title")
+    body = params.get("body")
+    draft = params.get("draft", False)
+
+    if not task_id:
+        return {
+            "success": False,
+            "code": GH_TASK_REQUIRED,
+            "message": "task_id is required",
+            "hint": "Provide the task ID to create a PR for",
+        }
+
+    # Resolve project and repo
+    resolved = await _resolve_connect_target(ctx, project_id, repo_id)
+    if not resolved["success"]:
+        return resolved
+
+    repo = resolved["repo"]
+
+    # Verify GitHub connection exists
+    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+    if not connection_raw:
+        return {
+            "success": False,
+            "code": GH_NOT_CONNECTED,
+            "message": "Repository is not connected to GitHub",
+            "hint": "Run connect_repo first to establish GitHub connection",
+        }
+
+    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
+    base_branch = connection.get("default_branch", "main")
+
+    # Get task details
+    task = await ctx.task_service.get_task(task_id)
+    if task is None:
+        return {
+            "success": False,
+            "code": GH_TASK_REQUIRED,
+            "message": f"Task not found: {task_id}",
+            "hint": "Verify the task_id exists",
+        }
+
+    # Get workspace to find the branch
+    workspaces = await ctx.workspace_service.list_workspaces(task_id=task_id)
+    if not workspaces:
+        return {
+            "success": False,
+            "code": GH_WORKSPACE_REQUIRED,
+            "message": "Task has no workspace",
+            "hint": "Create a workspace for the task first",
+        }
+
+    workspace = workspaces[0]
+    head_branch = workspace.branch_name
+
+    # Use task title/description as defaults
+    pr_title = title or task.title
+    pr_body = body or task.description or ""
+
+    # Resolve gh CLI
+    cli_info = resolve_gh_cli()
+    if not cli_info.available or not cli_info.path:
+        return {
+            "success": False,
+            "code": "GH_CLI_NOT_AVAILABLE",
+            "message": "GitHub CLI (gh) is not available",
+            "hint": "Install gh CLI: https://cli.github.com/",
+        }
+
+    # Create PR
+    pr_data, error = run_gh_pr_create(
+        cli_info.path,
+        repo.path,
+        head_branch=head_branch,
+        base_branch=base_branch,
+        title=pr_title,
+        body=pr_body,
+        draft=bool(draft),
+    )
+
+    if error:
+        return {
+            "success": False,
+            "code": GH_PR_CREATE_FAILED,
+            "message": f"Failed to create PR: {error}",
+            "hint": "Check that changes are pushed and the branch exists on GitHub",
+        }
+
+    if pr_data is None:
+        return {
+            "success": False,
+            "code": GH_PR_CREATE_FAILED,
+            "message": "Failed to create PR: no data returned",
+        }
+
+    # Link PR to task
+    pr_mapping = load_task_pr_mapping(repo.scripts)
+    pr_mapping.link_pr(
+        task_id=task_id,
+        pr_number=pr_data.number,
+        pr_url=pr_data.url,
+        pr_state=pr_data.state,
+        head_branch=pr_data.head_branch,
+        base_branch=pr_data.base_branch,
+        linked_at=utc_now().isoformat(),
+    )
+
+    # Persist mapping
+    await _upsert_repo_pr_mapping(ctx, repo.id, pr_mapping)
+
+    return {
+        "success": True,
+        "code": "PR_CREATED",
+        "message": f"Created PR #{pr_data.number}",
+        "pr": {
+            "number": pr_data.number,
+            "url": pr_data.url,
+            "state": pr_data.state,
+            "head_branch": pr_data.head_branch,
+            "base_branch": pr_data.base_branch,
+            "is_draft": pr_data.is_draft,
+        },
+    }
+
+
+async def handle_link_pr_to_task(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
+    """Link an existing PR to a task.
+
+    Params:
+        project_id: Required project ID
+        repo_id: Optional repo ID (required for multi-repo projects)
+        task_id: Required task ID
+        pr_number: Required PR number
+
+    Returns success with PR info or error with details.
+    """
+    from kagan.core.plugins.github.gh_adapter import run_gh_pr_view
+    from kagan.core.plugins.github.sync import (
+        load_task_pr_mapping,
+    )
+    from kagan.core.time import utc_now
+
+    project_id = params.get("project_id")
+    repo_id = params.get("repo_id")
+    task_id = params.get("task_id")
+    pr_number = params.get("pr_number")
+
+    if not task_id:
+        return {
+            "success": False,
+            "code": GH_TASK_REQUIRED,
+            "message": "task_id is required",
+            "hint": "Provide the task ID to link the PR to",
+        }
+
+    if pr_number is None:
+        return {
+            "success": False,
+            "code": "GH_PR_NUMBER_REQUIRED",
+            "message": "pr_number is required",
+            "hint": "Provide the PR number to link",
+        }
+
+    # Resolve project and repo
+    resolved = await _resolve_connect_target(ctx, project_id, repo_id)
+    if not resolved["success"]:
+        return resolved
+
+    repo = resolved["repo"]
+
+    # Verify GitHub connection exists
+    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+    if not connection_raw:
+        return {
+            "success": False,
+            "code": GH_NOT_CONNECTED,
+            "message": "Repository is not connected to GitHub",
+            "hint": "Run connect_repo first to establish GitHub connection",
+        }
+
+    # Verify task exists
+    task = await ctx.task_service.get_task(task_id)
+    if task is None:
+        return {
+            "success": False,
+            "code": GH_TASK_REQUIRED,
+            "message": f"Task not found: {task_id}",
+            "hint": "Verify the task_id exists",
+        }
+
+    # Resolve gh CLI
+    cli_info = resolve_gh_cli()
+    if not cli_info.available or not cli_info.path:
+        return {
+            "success": False,
+            "code": "GH_CLI_NOT_AVAILABLE",
+            "message": "GitHub CLI (gh) is not available",
+            "hint": "Install gh CLI: https://cli.github.com/",
+        }
+
+    # Get PR details
+    pr_data, error = run_gh_pr_view(cli_info.path, repo.path, int(pr_number))
+    if error:
+        return {
+            "success": False,
+            "code": GH_PR_NOT_FOUND,
+            "message": f"Failed to find PR #{pr_number}: {error}",
+            "hint": "Verify the PR exists and you have access to it",
+        }
+
+    if pr_data is None:
+        return {
+            "success": False,
+            "code": GH_PR_NOT_FOUND,
+            "message": f"PR #{pr_number} not found",
+        }
+
+    # Link PR to task
+    pr_mapping = load_task_pr_mapping(repo.scripts)
+    pr_mapping.link_pr(
+        task_id=task_id,
+        pr_number=pr_data.number,
+        pr_url=pr_data.url,
+        pr_state=pr_data.state,
+        head_branch=pr_data.head_branch,
+        base_branch=pr_data.base_branch,
+        linked_at=utc_now().isoformat(),
+    )
+
+    # Persist mapping
+    await _upsert_repo_pr_mapping(ctx, repo.id, pr_mapping)
+
+    return {
+        "success": True,
+        "code": "PR_LINKED",
+        "message": f"Linked PR #{pr_data.number} to task {task_id}",
+        "pr": {
+            "number": pr_data.number,
+            "url": pr_data.url,
+            "state": pr_data.state,
+            "head_branch": pr_data.head_branch,
+            "base_branch": pr_data.base_branch,
+            "is_draft": pr_data.is_draft,
+        },
+    }
+
+
+async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
+    """Reconcile the PR status for a task from GitHub.
+
+    Params:
+        project_id: Required project ID
+        repo_id: Optional repo ID (required for multi-repo projects)
+        task_id: Required task ID
+
+    Returns success with updated PR info or error with details.
+    """
+    from kagan.core.plugins.github.gh_adapter import run_gh_pr_view
+    from kagan.core.plugins.github.sync import load_task_pr_mapping
+
+    project_id = params.get("project_id")
+    repo_id = params.get("repo_id")
+    task_id = params.get("task_id")
+
+    if not task_id:
+        return {
+            "success": False,
+            "code": GH_TASK_REQUIRED,
+            "message": "task_id is required",
+            "hint": "Provide the task ID to reconcile PR status for",
+        }
+
+    # Resolve project and repo
+    resolved = await _resolve_connect_target(ctx, project_id, repo_id)
+    if not resolved["success"]:
+        return resolved
+
+    repo = resolved["repo"]
+
+    # Verify GitHub connection exists
+    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+    if not connection_raw:
+        return {
+            "success": False,
+            "code": GH_NOT_CONNECTED,
+            "message": "Repository is not connected to GitHub",
+            "hint": "Run connect_repo first to establish GitHub connection",
+        }
+
+    # Check if task has a linked PR
+    pr_mapping = load_task_pr_mapping(repo.scripts)
+    pr_link = pr_mapping.get_pr(task_id)
+
+    if pr_link is None:
+        return {
+            "success": False,
+            "code": "GH_NO_LINKED_PR",
+            "message": f"Task {task_id} has no linked PR",
+            "hint": "Use create_pr_for_task or link_pr_to_task first",
+        }
+
+    # Resolve gh CLI
+    cli_info = resolve_gh_cli()
+    if not cli_info.available or not cli_info.path:
+        return {
+            "success": False,
+            "code": "GH_CLI_NOT_AVAILABLE",
+            "message": "GitHub CLI (gh) is not available",
+            "hint": "Install gh CLI: https://cli.github.com/",
+        }
+
+    # Get current PR status
+    pr_data, error = run_gh_pr_view(cli_info.path, repo.path, pr_link.pr_number)
+    if error:
+        return {
+            "success": False,
+            "code": GH_PR_NOT_FOUND,
+            "message": f"Failed to find PR #{pr_link.pr_number}: {error}",
+        }
+
+    if pr_data is None:
+        return {
+            "success": False,
+            "code": GH_PR_NOT_FOUND,
+            "message": f"PR #{pr_link.pr_number} not found",
+        }
+
+    # Update status if changed
+    if pr_data.state != pr_link.pr_state:
+        pr_mapping.update_pr_state(task_id, pr_data.state)
+        await _upsert_repo_pr_mapping(ctx, repo.id, pr_mapping)
+
+    return {
+        "success": True,
+        "code": "PR_STATUS_RECONCILED",
+        "message": f"PR #{pr_data.number} status: {pr_data.state}",
+        "pr": {
+            "number": pr_data.number,
+            "url": pr_data.url,
+            "state": pr_data.state,
+            "previous_state": pr_link.pr_state,
+            "changed": pr_data.state != pr_link.pr_state,
+        },
+    }
+
+
+async def _upsert_repo_pr_mapping(
+    ctx: AppContext,
+    repo_id: str,
+    pr_mapping: Any,
+) -> None:
+    """Persist task-to-PR mapping to Repo.scripts."""
+    from kagan.core.adapters.db.schema import Repo
+    from kagan.core.adapters.db.session import get_session
+    from kagan.core.plugins.github.sync import GITHUB_TASK_PR_MAPPING_KEY
+
+    task_repo = ctx._task_repo
+    if task_repo is None:
+        msg = "Task repository not initialized"
+        raise RuntimeError(msg)
+
+    session_factory = task_repo._session_factory
+
+    async with get_session(session_factory) as session:
+        repo = await session.get(Repo, repo_id)
+        if repo is None:
+            msg = f"Repo not found: {repo_id}"
+            raise ValueError(msg)
+
+        next_scripts = dict(repo.scripts) if repo.scripts else {}
+        next_scripts[GITHUB_TASK_PR_MAPPING_KEY] = json.dumps(pr_mapping.to_dict())
+        repo.scripts = next_scripts
+
+        session.add(repo)
+        await session.commit()
+
+
 __all__ = [
     "build_contract_probe_payload",
     "handle_acquire_lease",
     "handle_connect_repo",
+    "handle_create_pr_for_task",
     "handle_get_lease_state",
+    "handle_link_pr_to_task",
+    "handle_reconcile_pr_status",
     "handle_release_lease",
     "handle_sync_issues",
 ]

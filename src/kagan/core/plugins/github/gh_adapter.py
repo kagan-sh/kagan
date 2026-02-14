@@ -642,11 +642,274 @@ def run_gh_api_comment_delete(
         return False, str(e)
 
 
+# --- PR-related gh CLI operations ---
+
+# Error codes for PR operations
+GH_PR_CREATE_FAILED: Final = "GH_PR_CREATE_FAILED"
+GH_PR_NOT_FOUND: Final = "GH_PR_NOT_FOUND"
+GH_PR_LINK_FAILED: Final = "GH_PR_LINK_FAILED"
+
+
+@dataclass(frozen=True, slots=True)
+class GhPullRequest:
+    """Normalized GitHub pull request metadata from gh pr view."""
+
+    number: int
+    title: str
+    state: str  # "OPEN", "CLOSED", "MERGED"
+    url: str
+    head_branch: str
+    base_branch: str
+    is_draft: bool
+    mergeable: str | None  # "MERGEABLE", "CONFLICTING", "UNKNOWN", None
+
+
+def run_gh_pr_create(
+    gh_path: str,
+    repo_path: str,
+    *,
+    head_branch: str,
+    base_branch: str,
+    title: str,
+    body: str = "",
+    draft: bool = False,
+) -> tuple[GhPullRequest | None, str | None]:
+    """Create a new pull request using gh pr create.
+
+    Args:
+        gh_path: Path to gh CLI.
+        repo_path: Path to repository directory.
+        head_branch: Branch to create PR from.
+        base_branch: Branch to merge into.
+        title: PR title.
+        body: PR body/description.
+        draft: Create as draft PR.
+
+    Returns:
+        Tuple of (GhPullRequest, None) on success or (None, error_message) on failure.
+    """
+    import subprocess
+
+    cmd = [
+        gh_path,
+        "pr",
+        "create",
+        "--head",
+        head_branch,
+        "--base",
+        base_branch,
+        "--title",
+        title,
+        "--body",
+        body,
+    ]
+    if draft:
+        cmd.append("--draft")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=repo_path,
+        )
+        if result.returncode == 0:
+            # gh pr create outputs the PR URL on success
+            pr_url = result.stdout.strip()
+            # Fetch PR details to return normalized data
+            pr_data, _error = run_gh_pr_view_by_url(gh_path, repo_path, pr_url)
+            if pr_data is not None:
+                return pr_data, None
+            # Fallback: construct minimal PR data from URL
+            pr_number = _extract_pr_number_from_url(pr_url)
+            if pr_number is not None:
+                return GhPullRequest(
+                    number=pr_number,
+                    title=title,
+                    state="OPEN",
+                    url=pr_url,
+                    head_branch=head_branch,
+                    base_branch=base_branch,
+                    is_draft=draft,
+                    mergeable=None,
+                ), None
+            return None, f"Created PR but could not parse URL: {pr_url}"
+        return None, result.stderr.strip() or "Failed to create PR"
+    except subprocess.TimeoutExpired:
+        return None, "PR create timed out"
+    except (subprocess.SubprocessError, OSError) as e:
+        return None, str(e)
+
+
+def _extract_pr_number_from_url(url: str) -> int | None:
+    """Extract PR number from a GitHub PR URL."""
+    import re
+
+    match = re.search(r"/pull/(\d+)", url)
+    return int(match.group(1)) if match else None
+
+
+def run_gh_pr_view(
+    gh_path: str,
+    repo_path: str,
+    pr_number: int,
+) -> tuple[GhPullRequest | None, str | None]:
+    """Get pull request details by number.
+
+    Args:
+        gh_path: Path to gh CLI.
+        repo_path: Path to repository directory.
+        pr_number: The PR number.
+
+    Returns:
+        Tuple of (GhPullRequest, None) on success or (None, error_message) on failure.
+    """
+    import subprocess
+
+    fields = "number,title,state,url,headRefName,baseRefName,isDraft,mergeable"
+    try:
+        result = subprocess.run(
+            [gh_path, "pr", "view", str(pr_number), "--json", fields],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=repo_path,
+        )
+        if result.returncode == 0:
+            try:
+                data = json.loads(result.stdout)
+                return _parse_gh_pr_view(data), None
+            except json.JSONDecodeError as e:
+                return None, f"Invalid JSON response: {e}"
+        return None, result.stderr.strip() or f"Failed to view PR #{pr_number}"
+    except subprocess.TimeoutExpired:
+        return None, "PR view timed out"
+    except (subprocess.SubprocessError, OSError) as e:
+        return None, str(e)
+
+
+def run_gh_pr_view_by_url(
+    gh_path: str,
+    repo_path: str,
+    pr_url: str,
+) -> tuple[GhPullRequest | None, str | None]:
+    """Get pull request details by URL.
+
+    Args:
+        gh_path: Path to gh CLI.
+        repo_path: Path to repository directory.
+        pr_url: The PR URL.
+
+    Returns:
+        Tuple of (GhPullRequest, None) on success or (None, error_message) on failure.
+    """
+    pr_number = _extract_pr_number_from_url(pr_url)
+    if pr_number is None:
+        return None, f"Could not extract PR number from URL: {pr_url}"
+    return run_gh_pr_view(gh_path, repo_path, pr_number)
+
+
+def run_gh_pr_list_for_branch(
+    gh_path: str,
+    repo_path: str,
+    head_branch: str,
+    *,
+    state: str = "open",
+) -> tuple[list[GhPullRequest] | None, str | None]:
+    """List pull requests for a specific head branch.
+
+    Args:
+        gh_path: Path to gh CLI.
+        repo_path: Path to repository directory.
+        head_branch: Branch name to filter by.
+        state: PR state filter: "open", "closed", "merged", or "all".
+
+    Returns:
+        Tuple of (list of GhPullRequest, None) on success or (None, error_message) on failure.
+    """
+    import subprocess
+
+    fields = "number,title,state,url,headRefName,baseRefName,isDraft,mergeable"
+    try:
+        result = subprocess.run(
+            [
+                gh_path,
+                "pr",
+                "list",
+                "--head",
+                head_branch,
+                "--state",
+                state,
+                "--json",
+                fields,
+                "--limit",
+                "10",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=repo_path,
+        )
+        if result.returncode == 0:
+            try:
+                data = json.loads(result.stdout)
+                prs = [_parse_gh_pr_view(pr) for pr in data]
+                return prs, None
+            except json.JSONDecodeError as e:
+                return None, f"Invalid JSON response: {e}"
+        return None, result.stderr.strip() or "Failed to list PRs"
+    except subprocess.TimeoutExpired:
+        return None, "PR list timed out"
+    except (subprocess.SubprocessError, OSError) as e:
+        return None, str(e)
+
+
+def _parse_gh_pr_view(data: dict[str, Any]) -> GhPullRequest:
+    """Parse gh pr view JSON into GhPullRequest."""
+    return GhPullRequest(
+        number=int(data.get("number", 0)),
+        title=data.get("title", ""),
+        state=data.get("state", "OPEN").upper(),
+        url=data.get("url", ""),
+        head_branch=data.get("headRefName", ""),
+        base_branch=data.get("baseRefName", ""),
+        is_draft=bool(data.get("isDraft", False)),
+        mergeable=data.get("mergeable"),
+    )
+
+
+def run_gh_pr_status(
+    gh_path: str,
+    repo_path: str,
+    pr_number: int,
+) -> tuple[str | None, str | None]:
+    """Get the merge status of a PR.
+
+    Args:
+        gh_path: Path to gh CLI.
+        repo_path: Path to repository directory.
+        pr_number: The PR number.
+
+    Returns:
+        Tuple of (state, error_message). State is "OPEN", "CLOSED", or "MERGED".
+    """
+    pr_data, error = run_gh_pr_view(gh_path, repo_path, pr_number)
+    if error:
+        return None, error
+    if pr_data is None:
+        return None, "No PR data returned"
+    return pr_data.state, None
+
+
 __all__ = [
     "ALREADY_CONNECTED",
     "GH_AUTH_REQUIRED",
     "GH_CLI_NOT_AVAILABLE",
     "GH_PROJECT_REQUIRED",
+    "GH_PR_CREATE_FAILED",
+    "GH_PR_LINK_FAILED",
+    "GH_PR_NOT_FOUND",
     "GH_REPO_ACCESS_DENIED",
     "GH_REPO_METADATA_INVALID",
     "GH_REPO_REQUIRED",
@@ -655,6 +918,7 @@ __all__ = [
     "GhCliAdapterInfo",
     "GhComment",
     "GhIssue",
+    "GhPullRequest",
     "GhRepoView",
     "PreflightError",
     "build_connection_metadata",
@@ -671,6 +935,11 @@ __all__ = [
     "run_gh_issue_label_remove",
     "run_gh_issue_list",
     "run_gh_issue_view",
+    "run_gh_pr_create",
+    "run_gh_pr_list_for_branch",
+    "run_gh_pr_status",
+    "run_gh_pr_view",
+    "run_gh_pr_view_by_url",
     "run_gh_repo_view",
     "run_preflight_checks",
 ]
