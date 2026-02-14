@@ -10,7 +10,7 @@ import pytest
 
 from kagan.core.models.enums import TaskStatus
 from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, GhPullRequest
-from kagan.core.plugins.github.service import GitHubPluginService
+from kagan.core.plugins.github.operations.pr import handle_reconcile_pr_status
 from kagan.core.plugins.github.sync import (
     GITHUB_TASK_PR_MAPPING_KEY,
     TaskPRMapping,
@@ -70,7 +70,6 @@ def _build_ctx(
 async def test_reconcile_pr_status_moves_task_to_done_on_merge() -> None:
     repo = _connected_repo_with_pr("task-1", pr_state="OPEN")
     ctx = _build_ctx(repo)
-    service = GitHubPluginService(ctx)
     merged_pr = GhPullRequest(
         number=42,
         title="Ship feature",
@@ -84,13 +83,20 @@ async def test_reconcile_pr_status_moves_task_to_done_on_merge() -> None:
 
     with (
         patch(
-            "kagan.core.plugins.github.service.resolve_gh_cli",
-            return_value=SimpleNamespace(available=True, path="/usr/bin/gh"),
+            "kagan.core.plugins.github.operations.pr.resolve_gh_cli_path",
+            return_value=("/usr/bin/gh", None),
         ),
-        patch("kagan.core.plugins.github.service.run_gh_pr_view", return_value=(merged_pr, None)),
-        patch.object(service, "_upsert_repo_pr_mapping", AsyncMock(return_value=None)),
+        patch(
+            "kagan.core.plugins.github.operations.pr.run_gh_pr_view", return_value=(merged_pr, None)
+        ),
+        patch(
+            "kagan.core.plugins.github.operations.pr.upsert_repo_pr_mapping",
+            AsyncMock(return_value=None),
+        ),
     ):
-        result = await service.reconcile_pr_status({"project_id": "project-1", "task_id": "task-1"})
+        result = await handle_reconcile_pr_status(
+            ctx, {"project_id": "project-1", "task_id": "task-1"}
+        )
 
     assert result["success"] is True
     assert result["code"] == "PR_STATUS_RECONCILED"
@@ -103,7 +109,6 @@ async def test_reconcile_pr_status_moves_task_to_done_on_merge() -> None:
 async def test_reconcile_pr_status_moves_task_to_in_progress_when_closed_without_merge() -> None:
     repo = _connected_repo_with_pr("task-1", pr_state="OPEN")
     ctx = _build_ctx(repo, task_status=TaskStatus.REVIEW)
-    service = GitHubPluginService(ctx)
     closed_pr = GhPullRequest(
         number=42,
         title="Ship feature",
@@ -117,13 +122,20 @@ async def test_reconcile_pr_status_moves_task_to_in_progress_when_closed_without
 
     with (
         patch(
-            "kagan.core.plugins.github.service.resolve_gh_cli",
-            return_value=SimpleNamespace(available=True, path="/usr/bin/gh"),
+            "kagan.core.plugins.github.operations.pr.resolve_gh_cli_path",
+            return_value=("/usr/bin/gh", None),
         ),
-        patch("kagan.core.plugins.github.service.run_gh_pr_view", return_value=(closed_pr, None)),
-        patch.object(service, "_upsert_repo_pr_mapping", AsyncMock(return_value=None)),
+        patch(
+            "kagan.core.plugins.github.operations.pr.run_gh_pr_view", return_value=(closed_pr, None)
+        ),
+        patch(
+            "kagan.core.plugins.github.operations.pr.upsert_repo_pr_mapping",
+            AsyncMock(return_value=None),
+        ),
     ):
-        result = await service.reconcile_pr_status({"project_id": "project-1", "task_id": "task-1"})
+        result = await handle_reconcile_pr_status(
+            ctx, {"project_id": "project-1", "task_id": "task-1"}
+        )
 
     assert result["success"] is True
     assert result["pr"]["state"] == "CLOSED"
@@ -139,9 +151,8 @@ async def test_reconcile_pr_status_moves_task_to_in_progress_when_closed_without
 async def test_reconcile_pr_status_returns_error_when_no_linked_pr() -> None:
     repo = _connected_repo_without_pr()
     ctx = _build_ctx(repo)
-    service = GitHubPluginService(ctx)
 
-    result = await service.reconcile_pr_status({"project_id": "project-1", "task_id": "task-1"})
+    result = await handle_reconcile_pr_status(ctx, {"project_id": "project-1", "task_id": "task-1"})
 
     assert result["success"] is False
     assert result["code"] == "GH_NO_LINKED_PR"

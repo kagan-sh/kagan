@@ -354,22 +354,20 @@ def test_when_registering_github_plugin_then_probe_has_no_builtin_dispatch_colli
     assert (GITHUB_CAPABILITY, GITHUB_CONTRACT_PROBE_METHOD) not in dispatch_map
 
 
-def test_when_registering_github_plugin_then_runtime_module_is_not_eagerly_imported() -> None:
-    runtime_module_name = "kagan.core.plugins.github.runtime"
-    sys.modules.pop(runtime_module_name, None)
+def test_when_registering_github_plugin_then_operations_module_is_not_eagerly_imported() -> None:
+    operations_module_name = "kagan.core.plugins.github.operations"
+    sys.modules.pop(operations_module_name, None)
 
     registry = PluginRegistry()
     register_github_plugin(registry)
 
-    assert runtime_module_name not in sys.modules
+    assert operations_module_name not in sys.modules
 
 
 @pytest.mark.asyncio()
-async def test_when_core_host_handles_github_probe_then_runtime_loads_and_contract_is_stable() -> (
-    None
-):
-    runtime_module_name = "kagan.core.plugins.github.runtime"
-    sys.modules.pop(runtime_module_name, None)
+async def test_core_host_github_probe_loads_operations_and_contract_stable() -> None:
+    operations_module_name = "kagan.core.plugins.github.operations"
+    sys.modules.pop(operations_module_name, None)
 
     registry = PluginRegistry()
     register_github_plugin(registry)
@@ -398,15 +396,15 @@ async def test_when_core_host_handles_github_probe_then_runtime_loads_and_contra
         "reserved_official_capability": RESERVED_GITHUB_CAPABILITY,
         "echo": "hello",
     }
-    assert runtime_module_name in sys.modules
+    assert operations_module_name in sys.modules
 
 
 @pytest.mark.asyncio()
-async def test_create_app_context_registers_github_probe_without_eager_runtime_import(
+async def test_create_app_context_registers_github_probe_without_eager_operations_import(
     tmp_path: Path,
 ) -> None:
-    runtime_module_name = "kagan.core.plugins.github.runtime"
-    sys.modules.pop(runtime_module_name, None)
+    operations_module_name = "kagan.core.plugins.github.operations"
+    sys.modules.pop(operations_module_name, None)
 
     config_path = tmp_path / "config.toml"
     db_path = tmp_path / "test.db"
@@ -419,6 +417,6 @@ async def test_create_app_context_registers_github_probe_without_eager_runtime_i
         )
         assert operation is not None
         assert operation.plugin_id == GITHUB_PLUGIN_ID
-        assert runtime_module_name not in sys.modules
+        assert operations_module_name not in sys.modules
     finally:
         await ctx.close()

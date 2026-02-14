@@ -217,7 +217,7 @@ class TestConnectRepoHandler:
 
     @pytest.mark.asyncio()
     async def test_connect_repo_returns_error_when_project_id_missing(self) -> None:
-        from kagan.core.plugins.github.runtime import handle_connect_repo
+        from kagan.core.plugins.github.operations.connect import handle_connect_repo
 
         ctx = MagicMock()
         params: dict[str, Any] = {}
@@ -229,7 +229,7 @@ class TestConnectRepoHandler:
 
     @pytest.mark.asyncio()
     async def test_connect_repo_returns_error_when_project_not_found(self) -> None:
-        from kagan.core.plugins.github.runtime import handle_connect_repo
+        from kagan.core.plugins.github.operations.connect import handle_connect_repo
 
         ctx = MagicMock()
         ctx.project_service.get_project = MagicMock(return_value=None)
@@ -248,7 +248,7 @@ class TestConnectRepoHandler:
 
     @pytest.mark.asyncio()
     async def test_connect_repo_returns_error_when_project_has_no_repos(self) -> None:
-        from kagan.core.plugins.github.runtime import handle_connect_repo
+        from kagan.core.plugins.github.operations.connect import handle_connect_repo
 
         ctx = MagicMock()
 
@@ -269,7 +269,7 @@ class TestConnectRepoHandler:
 
     @pytest.mark.asyncio()
     async def test_connect_repo_requires_repo_id_for_multi_repo_project(self) -> None:
-        from kagan.core.plugins.github.runtime import handle_connect_repo
+        from kagan.core.plugins.github.operations.connect import handle_connect_repo
 
         ctx = MagicMock()
 
@@ -294,7 +294,7 @@ class TestConnectRepoHandler:
 
     @pytest.mark.asyncio()
     async def test_connect_repo_returns_already_connected_when_metadata_exists(self) -> None:
-        from kagan.core.plugins.github.runtime import handle_connect_repo
+        from kagan.core.plugins.github.operations.connect import handle_connect_repo
 
         ctx = MagicMock()
         existing_connection = {"host": "github.com", "owner": "test", "repo": "repo"}
@@ -320,7 +320,7 @@ class TestConnectRepoHandler:
 
     @pytest.mark.asyncio()
     async def test_connect_repo_returns_error_when_preflight_fails(self) -> None:
-        from kagan.core.plugins.github.runtime import handle_connect_repo
+        from kagan.core.plugins.github.operations.connect import handle_connect_repo
 
         ctx = MagicMock()
 
@@ -339,7 +339,7 @@ class TestConnectRepoHandler:
         params = {"project_id": "project-1"}
 
         with patch(
-            "kagan.core.plugins.github.service.run_preflight_checks",
+            "kagan.core.plugins.github.operations.connect.run_preflight_checks",
             return_value=(
                 None,
                 PreflightError(

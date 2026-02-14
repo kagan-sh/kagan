@@ -45,22 +45,28 @@ TUI path:
 1. `handle_tui_api_call` allowlisted dispatch
 1. `KaganAPI.github_*` (`GitHubApiMixin`)
 1. `PluginRegistry.resolve_operation("kagan_github", method)`
-1. Plugin runtime handler (`runtime.py`) delegates to `GitHubPluginService`
-1. `GitHubPluginService` uses core services + `gh_adapter` + sync/lease helpers
+1. Plugin handler (`plugin.py`) lazy-loads `operations` and dispatches by method
+1. Operation module (`operations/*.py`) orchestrates resolver + state helpers + adapters
 
 MCP path:
 
 1. `kagan_github_*` MCP tool
 1. Core bridge call
 1. `KaganAPI.github_*` typed method
-1. Same plugin/service path as TUI
+1. Same plugin/operations path as TUI
 
 ## Current Module Layout
 
 - `src/kagan/core/plugins/github/contract.py`
 - `src/kagan/core/plugins/github/plugin.py`
-- `src/kagan/core/plugins/github/runtime.py`
-- `src/kagan/core/plugins/github/service.py`
+- `src/kagan/core/plugins/github/operations/__init__.py`
+- `src/kagan/core/plugins/github/operations/common.py`
+- `src/kagan/core/plugins/github/operations/resolver.py`
+- `src/kagan/core/plugins/github/operations/state.py`
+- `src/kagan/core/plugins/github/operations/connect.py`
+- `src/kagan/core/plugins/github/operations/sync.py`
+- `src/kagan/core/plugins/github/operations/lease.py`
+- `src/kagan/core/plugins/github/operations/pr.py`
 - `src/kagan/core/plugins/github/gh_adapter.py`
 - `src/kagan/core/plugins/github/sync.py`
 - `src/kagan/core/plugins/github/lease.py`
@@ -86,35 +92,36 @@ Connection metadata policy:
                                         |
                                         v
                               +---------+----------+
-                              | runtime.py         |
-                              | (thin delegation)  |
+                              | plugin.py          |
+                              | (lazy dispatch)    |
                               +---------+----------+
                                         |
                                         v
                               +---------+----------+
-                              | GitHubPluginService|
+                              | operations/*.py    |
+                              | (connect/sync/     |
+                              |  lease/pr)         |
                               +----+----------+----+
                                    |          |
                     +--------------+          +----------------+
                     v                                   v
          +----------+---------+                 +-------+------+
-         | Core services      |                 | gh_adapter   |
-         | (tasks/projects/   |                 | (gh CLI via  |
-         |  workspaces)       |                 | process adapter)
+         | resolver/state     |                 | gh_adapter   |
+         | helpers            |                 | + sync/lease |
          +----------+---------+                 +-------+------+
                     |                                   |
                     v                                   v
               +-----+------+                     +------+------+
-              | SQLite DB  |                     | GitHub API  |
+              | Core/SQLite |                     | GitHub API |
               +------------+                     +-------------+
 ```
 
 ## Coupling Still Present
 
-- `GitHubPluginService` directly depends on `AppContext` service internals.
-- Repo script keys are manipulated as raw JSON dicts.
+- Operation handlers still depend on `AppContext` concrete services.
+- Repo script keys are still JSON payloads stored in `Repo.scripts`.
 - Operation handlers still pass untyped `dict[str, Any]` payloads.
-- Lease/sync/PR policy is split across helpers and service, not explicit domain ports.
+- Lease/sync/PR policies are split across helper modules, not explicit domain ports.
 
 ## Target Decoupled Layout
 
@@ -172,7 +179,7 @@ Design rules:
 ## Migration Plan (Breaking-Change Friendly)
 
 1. Introduce typed DTOs and port interfaces for repo/task/gh operations.
-1. Move orchestration from `service.py` into use-case objects.
-1. Keep `runtime.py` and `api_github.py` as thin entrypoint adapters.
+1. Replace `operations/*.py` direct `AppContext` usage with gateway interfaces.
+1. Keep `plugin.py` and `api_github.py` as thin entrypoint adapters.
 1. Replace raw repo-script JSON handling with typed repository state adapter.
 1. Remove obsolete helper aliases and doc references in the same change set.
