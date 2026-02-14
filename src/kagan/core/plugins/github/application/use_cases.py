@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Final
 
 from kagan.core.models.enums import TaskStatus
@@ -76,6 +77,7 @@ PR_CREATED: Final = "PR_CREATED"
 PR_LINKED: Final = "PR_LINKED"
 PR_STATUS_RECONCILED: Final = "PR_STATUS_RECONCILED"
 LEASE_ENFORCEMENT_DISABLED: Final = "LEASE_ENFORCEMENT_DISABLED"
+_SYNC_TASK_WRITE_ERRORS: Final = (ValueError, RuntimeError, LookupError)
 
 
 class GitHubPluginUseCases:
@@ -132,7 +134,7 @@ class GitHubPluginUseCases:
                 "connection": connection_data,
             }
 
-        repo_view, error = self._gh.run_preflight_checks(repo.path)
+        repo_view, error = await asyncio.to_thread(self._gh.run_preflight_checks, repo.path)
         if error is not None:
             return {
                 "success": False,
@@ -171,7 +173,7 @@ class GitHubPluginUseCases:
             return gh_error
         assert gh_path is not None
 
-        raw_issues, error = self._gh.run_gh_issue_list(gh_path, repo.path)
+        raw_issues, error = await asyncio.to_thread(self._gh.run_gh_issue_list, gh_path, repo.path)
         if error:
             return {
                 "success": False,
@@ -214,11 +216,12 @@ class GitHubPluginUseCases:
 
             if action == "insert":
                 try:
-                    assert request.project_id is not None
+                    normalized_project_id = self._non_empty_str(request.project_id)
+                    assert normalized_project_id is not None
                     task = await self._core.create_task(
                         title=changes["title"],
                         description=changes["description"],
-                        project_id=request.project_id,
+                        project_id=normalized_project_id,
                     )
                     update_fields: dict[str, Any] = {}
                     if changes.get("task_type"):
@@ -232,7 +235,7 @@ class GitHubPluginUseCases:
                     result.add_outcome(
                         SyncOutcome(issue_number=issue.number, action="insert", task_id=task.id)
                     )
-                except Exception as exc:
+                except _SYNC_TASK_WRITE_ERRORS as exc:
                     result.add_outcome(
                         SyncOutcome(issue_number=issue.number, action="insert", error=str(exc))
                     )
@@ -247,7 +250,7 @@ class GitHubPluginUseCases:
                 result.add_outcome(
                     SyncOutcome(issue_number=issue.number, action=action, task_id=task_id)
                 )
-            except Exception as exc:
+            except _SYNC_TASK_WRITE_ERRORS as exc:
                 result.add_outcome(
                     SyncOutcome(issue_number=issue.number, action=action, error=str(exc))
                 )
@@ -341,8 +344,9 @@ class GitHubPluginUseCases:
             return gh_error
         assert gh_path is not None
 
-        github_user = self._gh.run_gh_auth_username(gh_path)
-        result = self._gh.acquire_lease(
+        github_user = await asyncio.to_thread(self._gh.run_gh_auth_username, gh_path)
+        result = await asyncio.to_thread(
+            self._gh.acquire_lease,
             gh_path,
             repo.path,
             str(repo_context["owner"]),
@@ -425,7 +429,8 @@ class GitHubPluginUseCases:
             return gh_error
         assert gh_path is not None
 
-        result = self._gh.release_lease(
+        result = await asyncio.to_thread(
+            self._gh.release_lease,
             gh_path,
             repo.path,
             str(repo_context["owner"]),
@@ -491,7 +496,8 @@ class GitHubPluginUseCases:
             return gh_error
         assert gh_path is not None
 
-        state, error = self._gh.get_lease_state(
+        state, error = await asyncio.to_thread(
+            self._gh.get_lease_state,
             gh_path,
             repo.path,
             str(repo_context["owner"]),
@@ -577,7 +583,8 @@ class GitHubPluginUseCases:
             return gh_error
         assert gh_path is not None
 
-        pr_data, error = self._gh.run_gh_pr_create(
+        pr_data, error = await asyncio.to_thread(
+            self._gh.run_gh_pr_create,
             gh_path,
             repo.path,
             head_branch=head_branch,
@@ -668,7 +675,8 @@ class GitHubPluginUseCases:
             return gh_error
         assert gh_path is not None
 
-        pr_data, error = self._gh.run_gh_pr_view(
+        pr_data, error = await asyncio.to_thread(
+            self._gh.run_gh_pr_view,
             gh_path,
             repo.path,
             pr_number,
@@ -748,7 +756,12 @@ class GitHubPluginUseCases:
             return gh_error
         assert gh_path is not None
 
-        pr_data, error = self._gh.run_gh_pr_view(gh_path, repo.path, pr_link.pr_number)
+        pr_data, error = await asyncio.to_thread(
+            self._gh.run_gh_pr_view,
+            gh_path,
+            repo.path,
+            pr_link.pr_number,
+        )
         if error:
             return {
                 "success": False,
@@ -828,6 +841,8 @@ class GitHubPluginUseCases:
         project_id: str | None,
         repo_id: str | None,
     ) -> tuple[Any | None, dict[str, Any] | None]:
+        project_id = self._non_empty_str(project_id)
+        repo_id = self._non_empty_str(repo_id)
         if not project_id:
             return None, self._error(
                 GH_PROJECT_REQUIRED,
@@ -947,6 +962,13 @@ class GitHubPluginUseCases:
                 f"Provide a numeric {field_name} value like 123",
             )
         return parsed_value, None
+
+    @staticmethod
+    def _non_empty_str(value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized if normalized else None
 
     async def _persist_pr_link(self, repo: Any, task_id: str, pr_data: Any) -> None:
         pr_mapping = load_pr_mapping_state(repo.scripts)

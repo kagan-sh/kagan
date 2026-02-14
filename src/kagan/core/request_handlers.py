@@ -35,7 +35,7 @@ from kagan.core.request_handler_support import (
     session_create_error_response,
     task_to_dict,
 )
-from kagan.core.runtime_helpers import empty_runtime_snapshot, runtime_snapshot_for_task
+from kagan.core.runtime_helpers import runtime_snapshot_for_task
 
 if TYPE_CHECKING:
     from kagan.core.adapters.db.schema import Task
@@ -202,29 +202,6 @@ def _enum_value(value: object) -> str | None:
     return None
 
 
-def _runtime_snapshot(f: KaganAPI, task_id: str) -> dict[str, Any]:
-    runtime_service = getattr(f.ctx, "runtime_service", None)
-    snapshot = runtime_snapshot_for_task(task_id=task_id, runtime_service=runtime_service)
-    return dict(snapshot)
-
-
-def _normalize_runtime_snapshot(value: object) -> dict[str, Any] | None:
-    if not isinstance(value, dict):
-        return None
-    snapshot = dict(empty_runtime_snapshot())
-    for key in ("is_running", "is_reviewing", "is_blocked", "is_pending"):
-        if key in value:
-            snapshot[key] = bool(value[key])
-    for key in ("blocked_reason", "blocked_at", "pending_reason", "pending_at"):
-        if key in value:
-            snapshot[key] = _non_empty_str(value.get(key))
-    for key in ("blocked_by_task_ids", "overlap_hints"):
-        raw = value.get(key)
-        if isinstance(raw, list):
-            snapshot[key] = [str(item).strip() for item in raw if str(item).strip()]
-    return snapshot
-
-
 def _workspace_to_dict(workspace: object) -> dict[str, Any]:
     return {
         "id": str(getattr(workspace, "id", "")),
@@ -322,64 +299,6 @@ def _runtime_view_to_dict(
         "has_running_agent": getattr(view, "running_agent", None) is not None,
         "has_review_agent": getattr(view, "review_agent", None) is not None,
         "runtime": dict(snapshot),
-    }
-
-
-def _workspace_repo_to_dict(repo: object) -> dict[str, Any]:
-    if isinstance(repo, dict):
-        payload = {str(key): value for key, value in repo.items()}
-        for key in ("repo_path", "worktree_path"):
-            if payload.get(key) is not None:
-                payload[key] = str(payload[key])
-        diff_stats = payload.get("diff_stats")
-        if isinstance(diff_stats, dict):
-            payload["diff_stats"] = {str(key): value for key, value in diff_stats.items()}
-        return payload
-
-    return {
-        "repo_id": _non_empty_str(getattr(repo, "repo_id", None)),
-        "repo_name": _non_empty_str(getattr(repo, "repo_name", None)),
-        "repo_path": _non_empty_str(getattr(repo, "repo_path", None)),
-        "worktree_path": _non_empty_str(getattr(repo, "worktree_path", None)),
-        "target_branch": _non_empty_str(getattr(repo, "target_branch", None)),
-        "has_changes": bool(getattr(repo, "has_changes", False)),
-        "diff_stats": _str_object_dict(getattr(repo, "diff_stats", None)),
-    }
-
-
-def _queued_message_to_dict(message: object) -> dict[str, Any]:
-    metadata = getattr(message, "metadata", None)
-    return {
-        "content": str(getattr(message, "content", "")),
-        "author": _non_empty_str(getattr(message, "author", None)),
-        "metadata": _str_object_dict(metadata),
-        "queued_at": _isoformat(getattr(message, "queued_at", None)),
-    }
-
-
-def _queue_status_to_dict(status: object) -> dict[str, Any]:
-    return {
-        "has_queued": bool(getattr(status, "has_queued", False)),
-        "queued_at": _isoformat(getattr(status, "queued_at", None)),
-        "content_preview": _non_empty_str(getattr(status, "content_preview", None)),
-        "author": _non_empty_str(getattr(status, "author", None)),
-    }
-
-
-def _planner_proposal_to_dict(proposal: object) -> dict[str, Any]:
-    tasks_json_raw = getattr(proposal, "tasks_json", [])
-    todos_json_raw = getattr(proposal, "todos_json", [])
-    tasks_json = list(tasks_json_raw) if isinstance(tasks_json_raw, list) else []
-    todos_json = list(todos_json_raw) if isinstance(todos_json_raw, list) else []
-    return {
-        "id": str(getattr(proposal, "id", "")),
-        "project_id": _non_empty_str(getattr(proposal, "project_id", None)),
-        "repo_id": _non_empty_str(getattr(proposal, "repo_id", None)),
-        "tasks_json": tasks_json,
-        "todos_json": todos_json,
-        "status": _enum_value(getattr(proposal, "status", None)),
-        "created_at": _isoformat(getattr(proposal, "created_at", None)),
-        "updated_at": _isoformat(getattr(proposal, "updated_at", None)),
     }
 
 

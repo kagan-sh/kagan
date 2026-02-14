@@ -16,10 +16,11 @@ from kagan.core.plugins.github.application.use_cases import (
 )
 from kagan.core.plugins.github.domain.models import (
     AcquireLeaseInput,
+    ConnectRepoInput,
     LinkPrToTaskInput,
     SyncIssuesInput,
 )
-from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, GhIssue
+from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, GhIssue, GhRepoView
 
 
 def _connected_repo() -> SimpleNamespace:
@@ -125,3 +126,95 @@ async def test_link_pr_to_task_returns_structured_error_for_non_numeric_pr_numbe
     assert "pr_number" in result["hint"]
     core_gateway.get_project.assert_not_awaited()
     gh_client.run_gh_pr_view.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_sync_issues_uses_normalized_project_id_for_task_creation() -> None:
+    repo = _connected_repo()
+    core_gateway = _core_gateway(repo)
+    core_gateway.create_task = AsyncMock(return_value=SimpleNamespace(id="task-1"))
+
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        run_gh_issue_list=MagicMock(
+            return_value=(
+                [
+                    {
+                        "number": 11,
+                        "title": "Trim IDs",
+                        "state": "OPEN",
+                        "labels": [],
+                        "updatedAt": "2025-01-10T00:00:00Z",
+                    }
+                ],
+                None,
+            )
+        ),
+        parse_issue_list=MagicMock(
+            return_value=[
+                GhIssue(
+                    number=11,
+                    title="Trim IDs",
+                    state="OPEN",
+                    labels=[],
+                    updated_at="2025-01-10T00:00:00Z",
+                )
+            ]
+        ),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).sync_issues(
+        SyncIssuesInput(project_id="  project-1  ")
+    )
+
+    assert result["success"] is True
+    assert core_gateway.create_task.await_count == 1
+    assert core_gateway.create_task.await_args.kwargs["project_id"] == "project-1"
+
+
+@pytest.mark.asyncio()
+async def test_connect_repo_runs_preflight_in_worker_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = SimpleNamespace(id="repo-1", path="/tmp/repo", scripts={})
+    core_gateway = _core_gateway(repo)
+
+    gh_client = SimpleNamespace(
+        run_preflight_checks=MagicMock(
+            return_value=(
+                GhRepoView(
+                    host="github.com",
+                    owner="acme",
+                    name="widgets",
+                    full_name="acme/widgets",
+                    visibility="PUBLIC",
+                    default_branch="main",
+                    clone_url="git@github.com:acme/widgets.git",
+                ),
+                None,
+            )
+        ),
+        build_connection_metadata=MagicMock(
+            return_value={"host": "github.com", "owner": "acme", "repo": "widgets"}
+        ),
+    )
+
+    calls: list[tuple[object, tuple[object, ...]]] = []
+
+    async def fake_to_thread(func, /, *args, **kwargs):
+        assert not kwargs
+        calls.append((func, args))
+        return func(*args)
+
+    monkeypatch.setattr(
+        "kagan.core.plugins.github.application.use_cases.asyncio.to_thread",
+        fake_to_thread,
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).connect_repo(
+        ConnectRepoInput(project_id="project-1")
+    )
+
+    assert result["success"] is True
+    assert calls
+    assert calls[0] == (gh_client.run_preflight_checks, ("/tmp/repo",))

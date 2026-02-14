@@ -354,3 +354,37 @@ class TestConnectRepoHandler:
         assert result["success"] is False
         assert result["code"] == GH_CLI_NOT_AVAILABLE
         assert "hint" in result
+
+    @pytest.mark.asyncio()
+    async def test_connect_repo_normalizes_project_and_repo_ids(self) -> None:
+        from kagan.core.plugins.github.entrypoints.plugin_handlers import handle_connect_repo
+
+        ctx = MagicMock()
+        observed_project_ids: list[str] = []
+        existing_connection = {"host": "github.com", "owner": "test", "repo": "repo-2"}
+
+        async def get_project_async(project_id: str) -> MagicMock:
+            observed_project_ids.append(project_id)
+            return MagicMock(id=project_id)
+
+        async def get_repos_async(project_id: str) -> list:
+            observed_project_ids.append(project_id)
+            repo_1 = MagicMock(id="repo-1", path="/tmp/repo1", scripts={})
+            repo_2 = MagicMock(
+                id="repo-2",
+                path="/tmp/repo2",
+                scripts={GITHUB_CONNECTION_KEY: existing_connection},
+            )
+            return [repo_1, repo_2]
+
+        ctx.project_service.get_project = get_project_async
+        ctx.project_service.get_project_repos = get_repos_async
+
+        result = await handle_connect_repo(
+            ctx,
+            {"project_id": "  project-1  ", "repo_id": "  repo-2  "},
+        )
+
+        assert result["success"] is True
+        assert result["code"] == ALREADY_CONNECTED
+        assert observed_project_ids == ["project-1", "project-1"]

@@ -117,45 +117,6 @@ class TestTaskTitleFormat:
         assert result == "[GH-1] Complex: title with [brackets]"
 
 
-class TestIssueMapping:
-    """Tests for bidirectional issue-to-task mapping."""
-
-    def test_add_mapping_creates_bidirectional_link(self) -> None:
-        mapping = IssueMapping()
-        mapping.add_mapping(42, "task-abc")
-
-        assert mapping.get_task_id(42) == "task-abc"
-        assert mapping.get_issue_number("task-abc") == 42
-
-    def test_remove_by_issue_clears_both_directions(self) -> None:
-        mapping = IssueMapping()
-        mapping.add_mapping(42, "task-abc")
-        mapping.remove_by_issue(42)
-
-        assert mapping.get_task_id(42) is None
-        assert mapping.get_issue_number("task-abc") is None
-
-    def test_remove_by_task_clears_both_directions(self) -> None:
-        mapping = IssueMapping()
-        mapping.add_mapping(42, "task-abc")
-        mapping.remove_by_task("task-abc")
-
-        assert mapping.get_task_id(42) is None
-        assert mapping.get_issue_number("task-abc") is None
-
-    def test_serialization_round_trip(self) -> None:
-        mapping = IssueMapping()
-        mapping.add_mapping(1, "task-a")
-        mapping.add_mapping(2, "task-b")
-
-        data = mapping.to_dict()
-        restored = IssueMapping.from_dict(data)
-
-        assert restored.get_task_id(1) == "task-a"
-        assert restored.get_task_id(2) == "task-b"
-        assert restored.get_issue_number("task-a") == 1
-
-
 class TestRepoDefaultMode:
     """Tests for repo default mode behavior used by sync outcome policy."""
 
