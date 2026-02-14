@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
@@ -9,6 +11,8 @@ import pytest
 from _api_helpers import build_api
 
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
+from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY
+from kagan.core.plugins.github.sync import GITHUB_TASK_PR_MAPPING_KEY
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -188,6 +192,56 @@ class TestReviewOperations:
         approved = await api.approve_task(task.id)
         assert approved is not None
         assert approved.status == TaskStatus.REVIEW
+
+    async def test_request_review_uses_owning_repo_guardrails_only(self, handle_env: tuple) -> None:
+        """Multi-repo guardrails should not block a task because of an unrelated repo."""
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Scoped Guardrail Task")
+        pr_mapping = {
+            "task_to_pr": {
+                task.id: {
+                    "pr_number": 7,
+                    "pr_url": "https://github.com/acme/repo-a/pull/7",
+                    "pr_state": "OPEN",
+                    "head_branch": "feature/scoped-guardrail",
+                    "base_branch": "main",
+                    "linked_at": "2026-01-01T00:00:00+00:00",
+                }
+            }
+        }
+        repo_a = SimpleNamespace(
+            id="repo-a",
+            path="/tmp/repo-a",
+            scripts={
+                GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-a"}),
+                GITHUB_TASK_PR_MAPPING_KEY: json.dumps(pr_mapping),
+            },
+        )
+        repo_b = SimpleNamespace(
+            id="repo-b",
+            path="/tmp/repo-b",
+            scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-b"})},
+        )
+        ctx.project_service.get_project_repos = AsyncMock(return_value=[repo_a, repo_b])
+
+        reviewed = await api.request_review(task.id)
+
+        assert reviewed is not None
+        assert reviewed.status == TaskStatus.REVIEW
+
+    async def test_request_review_fails_closed_when_guardrails_cannot_be_checked(
+        self,
+        handle_env: tuple,
+    ) -> None:
+        """Guardrail backend failures should block REVIEW transition with explicit error."""
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Guardrail Failure Task")
+        ctx.project_service.get_project_repos = AsyncMock(
+            side_effect=RuntimeError("db unavailable")
+        )
+
+        with pytest.raises(ValueError, match="failed to verify GitHub guardrails"):
+            await api.request_review(task.id)
 
     async def test_reject_task(self, handle_env: tuple) -> None:
         _repo, api, ctx = handle_env

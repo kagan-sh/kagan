@@ -5,7 +5,12 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+from kagan.core.adapters.process import run_exec_capture_sync
 
 # Error codes for machine-readable responses
 GH_CLI_NOT_AVAILABLE: Final = "GH_CLI_NOT_AVAILABLE"
@@ -18,6 +23,19 @@ ALREADY_CONNECTED: Final = "ALREADY_CONNECTED"
 
 # Connection metadata key stored in Repo.scripts
 GITHUB_CONNECTION_KEY: Final = "kagan.github.connection"
+
+# gh CLI command fields and limits
+GH_REPO_VIEW_FIELDS: Final = "name,owner,url,visibility,defaultBranchRef,sshUrl,isPrivate"
+GH_ISSUE_LIST_FIELDS: Final = "number,title,state,labels,updatedAt"
+GH_PR_FIELDS: Final = "number,title,state,url,headRefName,baseRefName,isDraft,mergeable"
+GH_ISSUE_LIST_LIMIT: Final = 1000
+GH_PR_LIST_LIMIT: Final = 10
+
+# Timeout configuration (seconds)
+GH_TIMEOUT_VERSION: Final = 10
+GH_TIMEOUT_DEFAULT: Final = 30
+GH_TIMEOUT_ISSUE_LIST: Final = 60
+GH_TIMEOUT_PR_CREATE: Final = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,86 +78,131 @@ class PreflightError:
     hint: str
 
 
+def _run_gh_command(
+    gh_path: str,
+    *args: str,
+    repo_path: str | None = None,
+    timeout_seconds: float = GH_TIMEOUT_DEFAULT,
+    timeout_error: str,
+    default_error: str,
+) -> tuple[str | None, str | None]:
+    """Run a gh command and return stdout text or a normalized error message."""
+    try:
+        result = run_exec_capture_sync(
+            gh_path,
+            *args,
+            cwd=repo_path,
+            timeout=timeout_seconds,
+        )
+    except TimeoutError:
+        return None, timeout_error
+    except OSError as exc:
+        return None, str(exc)
+
+    if result.returncode != 0:
+        return None, result.stderr_text().strip() or default_error
+    return result.stdout_text(), None
+
+
+def resolve_connection_repo_name(connection: Mapping[str, Any]) -> str:
+    """Return repository name from metadata (`repo` preferred, legacy `name` fallback)."""
+    repo_name = connection.get("repo")
+    if isinstance(repo_name, str) and repo_name.strip():
+        return repo_name.strip()
+    legacy_name = connection.get("name")
+    if isinstance(legacy_name, str):
+        return legacy_name.strip()
+    return ""
+
+
+def normalize_connection_metadata(connection: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize connection metadata to canonical V1 keys."""
+    normalized = dict(connection)
+    repo_name = resolve_connection_repo_name(normalized)
+    if repo_name:
+        normalized["repo"] = repo_name
+    normalized.pop("name", None)
+    return normalized
+
+
+def load_connection_metadata(connection_raw: object) -> dict[str, Any] | None:
+    """Load and normalize connection metadata from Repo.scripts value."""
+    data: object = connection_raw
+    if isinstance(connection_raw, str):
+        try:
+            data = json.loads(connection_raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(data, dict):
+        return None
+    return normalize_connection_metadata(data)
+
+
 def resolve_gh_cli() -> GhCliAdapterInfo:
     """Check if gh CLI is available and return adapter info."""
     gh_path = shutil.which("gh")
     if gh_path is None:
         return GhCliAdapterInfo(available=False, path=None, version=None)
 
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            [gh_path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        version_line = result.stdout.strip().split("\n")[0] if result.stdout else None
-        version = version_line.split()[-1] if version_line else None
-        return GhCliAdapterInfo(available=True, path=gh_path, version=version)
-    except (subprocess.SubprocessError, OSError):
+    output, error = _run_gh_command(
+        gh_path,
+        "--version",
+        timeout_seconds=GH_TIMEOUT_VERSION,
+        timeout_error="gh version check timed out",
+        default_error="gh version check failed",
+    )
+    if error:
         return GhCliAdapterInfo(available=False, path=gh_path, version=None)
+    version_line = output.strip().split("\n")[0] if output else None
+    version = version_line.split()[-1] if version_line else None
+    return GhCliAdapterInfo(available=True, path=gh_path, version=version)
 
 
 def run_gh_auth_status(gh_path: str) -> GhAuthStatus:
     """Run gh auth status and return authentication status."""
-    import subprocess
+    output, error = _run_gh_command(
+        gh_path,
+        "auth",
+        "status",
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="Auth check timed out",
+        default_error="Authentication required",
+    )
+    if error:
+        return GhAuthStatus(authenticated=False, username=None, error=error)
 
-    try:
-        result = subprocess.run(
-            [gh_path, "auth", "status"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            # Parse username from output
-            # Output format: "✓ Logged in to github.com account username (..."
-            output = result.stdout + result.stderr
-            username = None
-            for line in output.split("\n"):
-                if "Logged in to" in line and "account" in line:
-                    parts = line.split("account")
-                    if len(parts) > 1:
-                        username_part = parts[1].strip().split()[0]
-                        username = username_part.rstrip("(").strip()
-                        break
-            return GhAuthStatus(authenticated=True, username=username, error=None)
-        return GhAuthStatus(
-            authenticated=False,
-            username=None,
-            error=result.stderr.strip() or "Authentication required",
-        )
-    except subprocess.TimeoutExpired:
-        return GhAuthStatus(authenticated=False, username=None, error="Auth check timed out")
-    except (subprocess.SubprocessError, OSError) as e:
-        return GhAuthStatus(authenticated=False, username=None, error=str(e))
+    # Parse username from output
+    # Output format: "✓ Logged in to github.com account username (..."
+    username = None
+    for line in output.split("\n"):
+        if "Logged in to" in line and "account" in line:
+            parts = line.split("account")
+            if len(parts) > 1:
+                username_part = parts[1].strip().split()[0]
+                username = username_part.rstrip("(").strip()
+                break
+    return GhAuthStatus(authenticated=True, username=username, error=None)
 
 
 def run_gh_repo_view(gh_path: str, repo_path: str) -> tuple[dict[str, Any] | None, str | None]:
     """Run gh repo view --json and return raw JSON or error message."""
-    import subprocess
-
-    fields = "name,owner,url,visibility,defaultBranchRef,sshUrl,isPrivate"
+    output, error = _run_gh_command(
+        gh_path,
+        "repo",
+        "view",
+        "--json",
+        GH_REPO_VIEW_FIELDS,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="Repo view timed out",
+        default_error="Failed to get repo info",
+    )
+    if error:
+        return None, error
     try:
-        result = subprocess.run(
-            [gh_path, "repo", "view", "--json", fields],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            try:
-                return json.loads(result.stdout), None
-            except json.JSONDecodeError as e:
-                return None, f"Invalid JSON response: {e}"
-        return None, result.stderr.strip() or "Failed to get repo info"
-    except subprocess.TimeoutExpired:
-        return None, "Repo view timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
+        return json.loads(output), None
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON response: {exc}"
 
 
 def parse_gh_repo_view(raw: dict[str, Any]) -> GhRepoView | PreflightError:
@@ -191,7 +254,7 @@ def parse_gh_repo_view(raw: dict[str, Any]) -> GhRepoView | PreflightError:
             default_branch=default_branch,
             clone_url=clone_url,
         )
-    except Exception as e:
+    except (TypeError, ValueError) as e:
         return PreflightError(
             code=GH_REPO_METADATA_INVALID,
             message=f"Failed to parse repo metadata: {e}",
@@ -253,17 +316,19 @@ def build_connection_metadata(repo_view: GhRepoView, username: str | None = None
     """Build the connection metadata dict to store in Repo.scripts."""
     from kagan.core.time import utc_now
 
-    return {
-        "host": repo_view.host,
-        "owner": repo_view.owner,
-        "name": repo_view.name,
-        "full_name": repo_view.full_name,
-        "visibility": repo_view.visibility,
-        "default_branch": repo_view.default_branch,
-        "clone_url": repo_view.clone_url,
-        "connected_at": utc_now().isoformat(),
-        "connected_by": username,
-    }
+    return normalize_connection_metadata(
+        {
+            "host": repo_view.host,
+            "owner": repo_view.owner,
+            "repo": repo_view.name,
+            "full_name": repo_view.full_name,
+            "visibility": repo_view.visibility,
+            "default_branch": repo_view.default_branch,
+            "clone_url": repo_view.clone_url,
+            "connected_at": utc_now().isoformat(),
+            "connected_by": username,
+        }
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,27 +355,27 @@ def run_gh_issue_list(
     Returns:
         Tuple of (issues_list, error_message).
     """
-    import subprocess
-
-    fields = "number,title,state,labels,updatedAt"
+    output, error = _run_gh_command(
+        gh_path,
+        "issue",
+        "list",
+        "--state",
+        state,
+        "--json",
+        GH_ISSUE_LIST_FIELDS,
+        "--limit",
+        str(GH_ISSUE_LIST_LIMIT),
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_ISSUE_LIST,
+        timeout_error="Issue list timed out",
+        default_error="Failed to list issues",
+    )
+    if error:
+        return None, error
     try:
-        result = subprocess.run(
-            [gh_path, "issue", "list", "--state", state, "--json", fields, "--limit", "1000"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            try:
-                return json.loads(result.stdout), None
-            except json.JSONDecodeError as e:
-                return None, f"Invalid JSON response: {e}"
-        return None, result.stderr.strip() or "Failed to list issues"
-    except subprocess.TimeoutExpired:
-        return None, "Issue list timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
+        return json.loads(output), None
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON response: {exc}"
 
 
 def parse_gh_issue_list(raw_issues: list[dict[str, Any]]) -> list[GhIssue]:
@@ -366,27 +431,24 @@ def run_gh_issue_view(
     Returns:
         Tuple of (issue_data, error_message).
     """
-    import subprocess
-
-    fields = "number,title,state,labels,comments"
+    output, error = _run_gh_command(
+        gh_path,
+        "issue",
+        "view",
+        str(issue_number),
+        "--json",
+        "number,title,state,labels,comments",
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="Issue view timed out",
+        default_error=f"Failed to view issue #{issue_number}",
+    )
+    if error:
+        return None, error
     try:
-        result = subprocess.run(
-            [gh_path, "issue", "view", str(issue_number), "--json", fields],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            try:
-                return json.loads(result.stdout), None
-            except json.JSONDecodeError as e:
-                return None, f"Invalid JSON response: {e}"
-        return None, result.stderr.strip() or f"Failed to view issue #{issue_number}"
-    except subprocess.TimeoutExpired:
-        return None, "Issue view timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
+        return json.loads(output), None
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON response: {exc}"
 
 
 def parse_gh_issue_comments(raw_comments: list[dict[str, Any]]) -> list[GhComment]:
@@ -432,23 +494,21 @@ def run_gh_issue_label_add(
     Returns:
         Tuple of (success, error_message).
     """
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            [gh_path, "issue", "edit", str(issue_number), "--add-label", label],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            return True, None
-        return False, result.stderr.strip() or f"Failed to add label to issue #{issue_number}"
-    except subprocess.TimeoutExpired:
-        return False, "Label add timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return False, str(e)
+    _output, error = _run_gh_command(
+        gh_path,
+        "issue",
+        "edit",
+        str(issue_number),
+        "--add-label",
+        label,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="Label add timed out",
+        default_error=f"Failed to add label to issue #{issue_number}",
+    )
+    if error:
+        return False, error
+    return True, None
 
 
 def run_gh_issue_label_remove(
@@ -468,23 +528,21 @@ def run_gh_issue_label_remove(
     Returns:
         Tuple of (success, error_message).
     """
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            [gh_path, "issue", "edit", str(issue_number), "--remove-label", label],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            return True, None
-        return False, result.stderr.strip() or f"Failed to remove label from issue #{issue_number}"
-    except subprocess.TimeoutExpired:
-        return False, "Label remove timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return False, str(e)
+    _output, error = _run_gh_command(
+        gh_path,
+        "issue",
+        "edit",
+        str(issue_number),
+        "--remove-label",
+        label,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="Label remove timed out",
+        default_error=f"Failed to remove label from issue #{issue_number}",
+    )
+    if error:
+        return False, error
+    return True, None
 
 
 def run_gh_issue_comment_create(
@@ -504,61 +562,22 @@ def run_gh_issue_comment_create(
     Returns:
         Tuple of (comment_id, error_message). comment_id is None on failure.
     """
-    import subprocess
-
-    try:
-        # Create comment and get the URL back
-        result = subprocess.run(
-            [gh_path, "issue", "comment", str(issue_number), "--body", body],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            # gh issue comment outputs the comment URL on success
-            # We'll return a placeholder ID since we can't easily get the real ID
-            # The comment can be identified by its body content marker
-            return 0, None
-        return None, result.stderr.strip() or f"Failed to create comment on issue #{issue_number}"
-    except subprocess.TimeoutExpired:
-        return None, "Comment create timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
-
-
-def run_gh_issue_comment_delete(
-    gh_path: str,
-    repo_path: str,
-    comment_url: str,
-) -> tuple[bool, str | None]:
-    """Delete a comment by URL.
-
-    Args:
-        gh_path: Path to gh CLI.
-        repo_path: Path to repository directory.
-        comment_url: The comment URL (from gh api).
-
-    Returns:
-        Tuple of (success, error_message).
-    """
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            [gh_path, "api", "-X", "DELETE", comment_url],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            return True, None
-        return False, result.stderr.strip() or "Failed to delete comment"
-    except subprocess.TimeoutExpired:
-        return False, "Comment delete timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return False, str(e)
+    _output, error = _run_gh_command(
+        gh_path,
+        "issue",
+        "comment",
+        str(issue_number),
+        "--body",
+        body,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="Comment create timed out",
+        default_error=f"Failed to create comment on issue #{issue_number}",
+    )
+    if error:
+        return None, error
+    # gh issue comment prints a URL, but this API only needs success/failure.
+    return 0, None
 
 
 def run_gh_api_issue_comments(
@@ -580,27 +599,22 @@ def run_gh_api_issue_comments(
     Returns:
         Tuple of (comments_list, error_message).
     """
-    import subprocess
-
     endpoint = f"/repos/{owner}/{repo}/issues/{issue_number}/comments"
+    output, error = _run_gh_command(
+        gh_path,
+        "api",
+        endpoint,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="API call timed out",
+        default_error="Failed to fetch comments",
+    )
+    if error:
+        return None, error
     try:
-        result = subprocess.run(
-            [gh_path, "api", endpoint],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            try:
-                return json.loads(result.stdout), None
-            except json.JSONDecodeError as e:
-                return None, f"Invalid JSON response: {e}"
-        return None, result.stderr.strip() or "Failed to fetch comments"
-    except subprocess.TimeoutExpired:
-        return None, "API call timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
+        return json.loads(output), None
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON response: {exc}"
 
 
 def run_gh_api_comment_delete(
@@ -622,24 +636,21 @@ def run_gh_api_comment_delete(
     Returns:
         Tuple of (success, error_message).
     """
-    import subprocess
-
     endpoint = f"/repos/{owner}/{repo}/issues/comments/{comment_id}"
-    try:
-        result = subprocess.run(
-            [gh_path, "api", "-X", "DELETE", endpoint],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            return True, None
-        return False, result.stderr.strip() or "Failed to delete comment"
-    except subprocess.TimeoutExpired:
-        return False, "API call timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return False, str(e)
+    _output, error = _run_gh_command(
+        gh_path,
+        "api",
+        "-X",
+        "DELETE",
+        endpoint,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="API call timed out",
+        default_error="Failed to delete comment",
+    )
+    if error:
+        return False, error
+    return True, None
 
 
 # --- PR-related gh CLI operations ---
@@ -688,10 +699,7 @@ def run_gh_pr_create(
     Returns:
         Tuple of (GhPullRequest, None) on success or (None, error_message) on failure.
     """
-    import subprocess
-
-    cmd = [
-        gh_path,
+    cmd_args = [
         "pr",
         "create",
         "--head",
@@ -704,42 +712,39 @@ def run_gh_pr_create(
         body,
     ]
     if draft:
-        cmd.append("--draft")
+        cmd_args.append("--draft")
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            # gh pr create outputs the PR URL on success
-            pr_url = result.stdout.strip()
-            # Fetch PR details to return normalized data
-            pr_data, _error = run_gh_pr_view_by_url(gh_path, repo_path, pr_url)
-            if pr_data is not None:
-                return pr_data, None
-            # Fallback: construct minimal PR data from URL
-            pr_number = _extract_pr_number_from_url(pr_url)
-            if pr_number is not None:
-                return GhPullRequest(
-                    number=pr_number,
-                    title=title,
-                    state="OPEN",
-                    url=pr_url,
-                    head_branch=head_branch,
-                    base_branch=base_branch,
-                    is_draft=draft,
-                    mergeable=None,
-                ), None
-            return None, f"Created PR but could not parse URL: {pr_url}"
-        return None, result.stderr.strip() or "Failed to create PR"
-    except subprocess.TimeoutExpired:
-        return None, "PR create timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
+    output, error = _run_gh_command(
+        gh_path,
+        *cmd_args,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_PR_CREATE,
+        timeout_error="PR create timed out",
+        default_error="Failed to create PR",
+    )
+    if error:
+        return None, error
+
+    # gh pr create outputs the PR URL on success
+    pr_url = output.strip()
+    # Fetch PR details to return normalized data
+    pr_data, _error = run_gh_pr_view_by_url(gh_path, repo_path, pr_url)
+    if pr_data is not None:
+        return pr_data, None
+    # Fallback: construct minimal PR data from URL
+    pr_number = _extract_pr_number_from_url(pr_url)
+    if pr_number is not None:
+        return GhPullRequest(
+            number=pr_number,
+            title=title,
+            state="OPEN",
+            url=pr_url,
+            head_branch=head_branch,
+            base_branch=base_branch,
+            is_draft=draft,
+            mergeable=None,
+        ), None
+    return None, f"Created PR but could not parse URL: {pr_url}"
 
 
 def _extract_pr_number_from_url(url: str) -> int | None:
@@ -765,28 +770,25 @@ def run_gh_pr_view(
     Returns:
         Tuple of (GhPullRequest, None) on success or (None, error_message) on failure.
     """
-    import subprocess
-
-    fields = "number,title,state,url,headRefName,baseRefName,isDraft,mergeable"
+    output, error = _run_gh_command(
+        gh_path,
+        "pr",
+        "view",
+        str(pr_number),
+        "--json",
+        GH_PR_FIELDS,
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="PR view timed out",
+        default_error=f"Failed to view PR #{pr_number}",
+    )
+    if error:
+        return None, error
     try:
-        result = subprocess.run(
-            [gh_path, "pr", "view", str(pr_number), "--json", fields],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                return _parse_gh_pr_view(data), None
-            except json.JSONDecodeError as e:
-                return None, f"Invalid JSON response: {e}"
-        return None, result.stderr.strip() or f"Failed to view PR #{pr_number}"
-    except subprocess.TimeoutExpired:
-        return None, "PR view timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
+        data = json.loads(output)
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON response: {exc}"
+    return _parse_gh_pr_view(data), None
 
 
 def run_gh_pr_view_by_url(
@@ -828,41 +830,31 @@ def run_gh_pr_list_for_branch(
     Returns:
         Tuple of (list of GhPullRequest, None) on success or (None, error_message) on failure.
     """
-    import subprocess
-
-    fields = "number,title,state,url,headRefName,baseRefName,isDraft,mergeable"
+    output, error = _run_gh_command(
+        gh_path,
+        "pr",
+        "list",
+        "--head",
+        head_branch,
+        "--state",
+        state,
+        "--json",
+        GH_PR_FIELDS,
+        "--limit",
+        str(GH_PR_LIST_LIMIT),
+        repo_path=repo_path,
+        timeout_seconds=GH_TIMEOUT_DEFAULT,
+        timeout_error="PR list timed out",
+        default_error="Failed to list PRs",
+    )
+    if error:
+        return None, error
     try:
-        result = subprocess.run(
-            [
-                gh_path,
-                "pr",
-                "list",
-                "--head",
-                head_branch,
-                "--state",
-                state,
-                "--json",
-                fields,
-                "--limit",
-                "10",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=repo_path,
-        )
-        if result.returncode == 0:
-            try:
-                data = json.loads(result.stdout)
-                prs = [_parse_gh_pr_view(pr) for pr in data]
-                return prs, None
-            except json.JSONDecodeError as e:
-                return None, f"Invalid JSON response: {e}"
-        return None, result.stderr.strip() or "Failed to list PRs"
-    except subprocess.TimeoutExpired:
-        return None, "PR list timed out"
-    except (subprocess.SubprocessError, OSError) as e:
-        return None, str(e)
+        data = json.loads(output)
+    except json.JSONDecodeError as exc:
+        return None, f"Invalid JSON response: {exc}"
+    prs = [_parse_gh_pr_view(pr) for pr in data]
+    return prs, None
 
 
 def _parse_gh_pr_view(data: dict[str, Any]) -> GhPullRequest:
@@ -930,7 +922,6 @@ __all__ = [
     "run_gh_api_issue_comments",
     "run_gh_auth_status",
     "run_gh_issue_comment_create",
-    "run_gh_issue_comment_delete",
     "run_gh_issue_label_add",
     "run_gh_issue_label_remove",
     "run_gh_issue_list",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final
 
 from kagan.core.models.enums import TaskStatus, TaskType
@@ -314,6 +315,37 @@ def load_checkpoint(scripts: dict[str, str] | None) -> SyncCheckpoint:
         return SyncCheckpoint()
 
 
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    """Parse an ISO timestamp with tolerant handling for trailing Z."""
+    if not value or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+def filter_issues_since_checkpoint(
+    issues: list[GhIssue],
+    checkpoint: SyncCheckpoint,
+) -> list[GhIssue]:
+    """Return issues changed since the checkpoint, or all issues when checkpoint is unavailable."""
+    checkpoint_time = _parse_iso_datetime(checkpoint.last_sync_at)
+    if checkpoint_time is None:
+        return issues
+
+    filtered: list[GhIssue] = []
+    for issue in issues:
+        issue_time = _parse_iso_datetime(issue.updated_at)
+        # If GitHub omits/invalidates updatedAt, process defensively.
+        if issue_time is None or issue_time > checkpoint_time:
+            filtered.append(issue)
+    return filtered
+
+
 def load_mapping(scripts: dict[str, str] | None) -> IssueMapping:
     """Load issue mapping from Repo.scripts."""
     if not scripts:
@@ -467,6 +499,7 @@ __all__ = [
     "TaskPRMapping",
     "build_task_title_from_issue",
     "compute_issue_changes",
+    "filter_issues_since_checkpoint",
     "load_checkpoint",
     "load_mapping",
     "load_repo_default_mode",

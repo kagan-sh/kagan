@@ -21,7 +21,7 @@ Operational procedures for GitHub-connected Kagan deployments.
 
 - [ ] Run `kagan_github_connect_repo` for each managed repo
 - [ ] Verify response: `code: "CONNECTED"` or `code: "ALREADY_CONNECTED"`
-- [ ] Confirm `connection` metadata includes correct `owner`, `name`, `default_branch`
+- [ ] Confirm `connection` metadata includes correct `owner`, `repo`, `default_branch`
 
 ### Initial Sync
 
@@ -36,7 +36,6 @@ Run periodically to keep board consistent with GitHub issues.
 ### Pre-Sync Checks
 
 - [ ] Confirm `gh auth status` shows active session
-- [ ] Verify no ongoing PR reconciliations for critical tasks
 
 ### Sync Execution
 
@@ -55,66 +54,13 @@ Run periodically to keep board consistent with GitHub issues.
 - [ ] Compare `stats.total` with GitHub issue count
 - [ ] Review `inserted`, `updated`, `reopened`, `closed` counts for expected changes
 
-## Operator Checklist: PR Reconciliation
+## Contract Scope
 
-Run to sync PR status to task board state.
+The frozen MCP V1 contract for the GitHub plugin currently exposes only:
 
-### For Each Task in REVIEW
-
-```json
-{
-  "tool": "kagan_github_reconcile_pr_status",
-  "arguments": {
-    "project_id": "<project_id>",
-    "task_id": "<task_id>"
-  }
-}
-```
-
-### Expected Transitions
-
-| Observed PR State | Expected Task Status |
-| ----------------- | -------------------- |
-| `MERGED`          | `DONE`               |
-| `CLOSED`          | `IN_PROGRESS`        |
-| `OPEN`            | No change            |
-
-### Post-Reconcile Checks
-
-- [ ] Verify merged PRs moved tasks to DONE
-- [ ] Verify closed PRs (unmerged) returned tasks to IN_PROGRESS
-- [ ] Check for error responses indicating stale PR links
-
-## Lease Troubleshooting
-
-### Symptom: `LEASE_HELD_BY_OTHER`
-
-1. Check holder info in response:
-   - `holder.instance_id`: hostname:pid of holder
-   - `holder.expires_at`: lease expiry timestamp
-   - `holder.github_user`: authenticated user if known
-
-2. If holder instance is no longer running:
-   ```json
-   {
-     "tool": "kagan_github_acquire_lease",
-     "arguments": {
-       "project_id": "<project_id>",
-       "issue_number": 123,
-       "force_takeover": true
-     }
-   }
-   ```
-
-3. If lease expired more than 2 hours ago, takeover is automatic.
-
-### Symptom: Orphan `kagan:locked` Label
-
-If issue has `kagan:locked` label but no lease comment:
-
-1. This is an orphan state from incomplete cleanup.
-2. `acquire_lease` will allow takeover.
-3. Alternatively, manually remove the label in GitHub.
+- `kagan_github_contract_probe`
+- `kagan_github_connect_repo`
+- `kagan_github_sync_issues`
 
 ## Recovery Procedures
 
@@ -124,14 +70,6 @@ If tasks and issues become desynchronized:
 
 1. Re-run `kagan_github_sync_issues`
 2. Sync will reconcile mappings based on issue numbers
-
-### Stale PR Links
-
-If task has a linked PR that was deleted:
-
-1. Run `kagan_github_reconcile_pr_status` (will return error)
-2. Unlink stale PR via database or future `unlink_pr` tool
-3. Create or link new PR
 
 ### Connection Reset
 
@@ -151,7 +89,6 @@ GitHub API rate limits (authenticated):
 ### Mitigation
 
 - Batch sync operations (sync once, not per-issue)
-- Space reconcile calls for large task sets
 - Monitor `gh api rate_limit` output
 
 ## Scheduled Operations Template
@@ -161,11 +98,6 @@ For cron/scheduler integration:
 ```bash
 # Sync issues every 15 minutes
 */15 * * * * kagan mcp --call kagan_github_sync_issues --args '{"project_id":"<id>"}'
-
-# Reconcile PRs hourly
-0 * * * * for task in $(kagan task list --status REVIEW --format ids); do
-    kagan mcp --call kagan_github_reconcile_pr_status --args "{\"project_id\":\"<id>\",\"task_id\":\"$task\"}"
-done
 ```
 
 ## Monitoring Checklist
@@ -173,8 +105,6 @@ done
 ### Daily Checks
 
 - [ ] `stats.errors` from sync is 0
-- [ ] No stale tasks in REVIEW (PRs merged but not reconciled)
-- [ ] No orphan leases (issues locked with no active work)
 
 ### Weekly Checks
 

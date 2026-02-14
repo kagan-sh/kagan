@@ -451,6 +451,43 @@ async def run_shell_checked(
     return result
 
 
+def run_exec_capture_sync(
+    executable: str,
+    *args: str,
+    cwd: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    timeout: float | None = None,
+) -> ProcessResult:
+    """Run an exec subprocess synchronously and capture stdout/stderr."""
+    fields = _command_fields(mode="exec_sync", executable=executable)
+    increment_counter("core.process.exec.calls", fields=fields)
+    with timed_operation("core.process.exec.duration_ms", fields=fields):
+        try:
+            completed = subprocess.run(
+                [executable, *args],
+                cwd=_normalize_cwd(cwd),
+                env=_normalize_env(env),
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            increment_counter("core.process.exec.timeouts", fields=fields)
+            raise TimeoutError from exc
+
+    result = ProcessResult(
+        returncode=completed.returncode,
+        stdout=completed.stdout or b"",
+        stderr=completed.stderr or b"",
+    )
+    if result.returncode != 0:
+        error_fields = dict(fields)
+        error_fields["returncode"] = result.returncode
+        increment_counter("core.process.exec.nonzero_returncode", fields=error_fields)
+    return result
+
+
 def spawn_detached(
     command: Sequence[str],
     *,
@@ -487,6 +524,7 @@ __all__ = [
     "ProcessResult",
     "ProcessRetryPolicy",
     "run_exec_capture",
+    "run_exec_capture_sync",
     "run_exec_checked",
     "run_shell_capture",
     "run_shell_checked",

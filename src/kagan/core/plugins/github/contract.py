@@ -27,7 +27,6 @@ GITHUB_CANONICAL_METHODS: Final[tuple[str, ...]] = (
     "create_pr_for_task",
     "link_pr_to_task",
     "reconcile_pr_status",
-    "repair_task_issue_mapping",
 )
 
 __all__ = [

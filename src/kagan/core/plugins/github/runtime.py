@@ -16,10 +16,13 @@ from kagan.core.plugins.github.contract import (
 from kagan.core.plugins.github.gh_adapter import (
     ALREADY_CONNECTED,
     GH_PROJECT_REQUIRED,
+    GH_REPO_METADATA_INVALID,
     GH_REPO_REQUIRED,
     GITHUB_CONNECTION_KEY,
     build_connection_metadata,
+    load_connection_metadata,
     parse_gh_issue_list,
+    resolve_connection_repo_name,
     resolve_gh_cli,
     run_gh_issue_list,
     run_preflight_checks,
@@ -32,6 +35,7 @@ from kagan.core.plugins.github.sync import (
     SyncOutcome,
     SyncResult,
     compute_issue_changes,
+    filter_issues_since_checkpoint,
     load_checkpoint,
     load_mapping,
     load_repo_default_mode,
@@ -78,12 +82,25 @@ async def handle_connect_repo(ctx: AppContext, params: dict[str, Any]) -> dict[s
     # Check if already connected (idempotent)
     existing_connection = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
     if existing_connection:
-        # Already connected - return success with existing metadata
-        connection_data = (
-            json.loads(existing_connection)
-            if isinstance(existing_connection, str)
-            else existing_connection
-        )
+        raw_connection_data: object = existing_connection
+        if isinstance(existing_connection, str):
+            try:
+                raw_connection_data = json.loads(existing_connection)
+            except json.JSONDecodeError:
+                raw_connection_data = None
+
+        connection_data = load_connection_metadata(raw_connection_data)
+        if connection_data is None:
+            return {
+                "success": False,
+                "code": "GH_REPO_METADATA_INVALID",
+                "message": "Stored GitHub connection metadata is invalid",
+                "hint": "Reconnect the repository using connect_repo to refresh metadata.",
+            }
+
+        if isinstance(raw_connection_data, dict) and raw_connection_data != connection_data:
+            await _upsert_repo_github_connection(ctx, repo.id, connection_data)
+
         return {
             "success": True,
             "code": ALREADY_CONNECTED,
@@ -212,6 +229,60 @@ GH_NOT_CONNECTED = "GH_NOT_CONNECTED"
 GH_SYNC_FAILED = "GH_SYNC_FAILED"
 
 
+def _resolve_connected_repo_context(
+    repo: Any,
+    *,
+    require_owner_repo: bool = False,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Load and validate GitHub connection metadata for a project repo."""
+    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+    if not connection_raw:
+        return None, {
+            "success": False,
+            "code": GH_NOT_CONNECTED,
+            "message": "Repository is not connected to GitHub",
+            "hint": "Run connect_repo first to establish GitHub connection",
+        }
+
+    connection = load_connection_metadata(connection_raw)
+    if connection is None:
+        return None, {
+            "success": False,
+            "code": GH_REPO_METADATA_INVALID,
+            "message": "Stored GitHub connection metadata is invalid",
+            "hint": "Reconnect the repository using connect_repo.",
+        }
+
+    context: dict[str, Any] = {"connection": connection}
+    if require_owner_repo:
+        owner = str(connection.get("owner") or "").strip()
+        repo_name = resolve_connection_repo_name(connection)
+        if not owner or not repo_name:
+            return None, {
+                "success": False,
+                "code": GH_REPO_METADATA_INVALID,
+                "message": "Stored GitHub connection metadata is incomplete",
+                "hint": "Reconnect the repository to refresh owner/repo metadata.",
+            }
+        context["owner"] = owner
+        context["repo_name"] = repo_name
+
+    return context, None
+
+
+def _resolve_gh_cli_path() -> tuple[str | None, dict[str, Any] | None]:
+    """Resolve a usable gh executable path or return a structured error payload."""
+    cli_info = resolve_gh_cli()
+    if not cli_info.available or not cli_info.path:
+        return None, {
+            "success": False,
+            "code": "GH_CLI_NOT_AVAILABLE",
+            "message": "GitHub CLI (gh) is not available",
+            "hint": "Install gh CLI: https://cli.github.com/",
+        }
+    return cli_info.path, None
+
+
 async def handle_sync_issues(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
     """Sync GitHub issues to Kagan task projections.
 
@@ -231,28 +302,16 @@ async def handle_sync_issues(ctx: AppContext, params: dict[str, Any]) -> dict[st
 
     repo = resolved["repo"]
 
-    # Verify GitHub connection exists
-    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
-    if not connection_raw:
-        return {
-            "success": False,
-            "code": GH_NOT_CONNECTED,
-            "message": "Repository is not connected to GitHub",
-            "hint": "Run connect_repo first to establish GitHub connection",
-        }
+    _, connection_error = _resolve_connected_repo_context(repo)
+    if connection_error is not None:
+        return connection_error
 
-    # Resolve gh CLI
-    cli_info = resolve_gh_cli()
-    if not cli_info.available or not cli_info.path:
-        return {
-            "success": False,
-            "code": "GH_CLI_NOT_AVAILABLE",
-            "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/",
-        }
+    gh_path, gh_error = _resolve_gh_cli_path()
+    if gh_error is not None:
+        return gh_error
 
     # Fetch issues from GitHub
-    raw_issues, error = run_gh_issue_list(cli_info.path, repo.path, state="all")
+    raw_issues, error = run_gh_issue_list(gh_path, repo.path, state="all")
     if error:
         return {
             "success": False,
@@ -261,10 +320,11 @@ async def handle_sync_issues(ctx: AppContext, params: dict[str, Any]) -> dict[st
             "hint": "Check gh CLI authentication and repository access",
         }
 
-    issues = parse_gh_issue_list(raw_issues or [])
+    all_issues = parse_gh_issue_list(raw_issues or [])
+    checkpoint = load_checkpoint(repo.scripts)
+    issues = filter_issues_since_checkpoint(all_issues, checkpoint)
 
-    # Load existing mapping (checkpoint loaded for future incremental sync)
-    _ = load_checkpoint(repo.scripts)  # Reserved for incremental sync
+    # Load existing mapping and mode configuration
     mapping = load_mapping(repo.scripts)
     repo_default_mode = load_repo_default_mode(repo.scripts)
 
@@ -307,6 +367,8 @@ async def handle_sync_issues(ctx: AppContext, params: dict[str, Any]) -> dict[st
                     update_fields["status"] = changes["status"]
                 if update_fields:
                     await ctx.task_service.update_fields(task.id, **update_fields)
+                # Remove stale reverse mapping before adding a replacement mapping.
+                new_mapping.remove_by_issue(issue.number)
                 new_mapping.add_mapping(issue.number, task.id)
                 result.add_outcome(
                     SyncOutcome(issue_number=issue.number, action="insert", task_id=task.id)
@@ -444,37 +506,23 @@ async def handle_acquire_lease(ctx: AppContext, params: dict[str, Any]) -> dict[
 
     repo = resolved["repo"]
 
-    # Verify GitHub connection exists
-    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
-    if not connection_raw:
-        return {
-            "success": False,
-            "code": GH_NOT_CONNECTED,
-            "message": "Repository is not connected to GitHub",
-            "hint": "Run connect_repo first to establish GitHub connection",
-        }
+    repo_context, connection_error = _resolve_connected_repo_context(repo, require_owner_repo=True)
+    if connection_error is not None:
+        return connection_error
+    owner = str(repo_context["owner"])
+    repo_name = str(repo_context["repo_name"])
 
-    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
-    owner = connection.get("owner", "")
-    repo_name = connection.get("name", "")
-
-    # Resolve gh CLI
-    cli_info = resolve_gh_cli()
-    if not cli_info.available or not cli_info.path:
-        return {
-            "success": False,
-            "code": "GH_CLI_NOT_AVAILABLE",
-            "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/",
-        }
+    gh_path, gh_error = _resolve_gh_cli_path()
+    if gh_error is not None:
+        return gh_error
 
     # Get authenticated user for attribution
-    auth_status = run_gh_auth_status(cli_info.path)
+    auth_status = run_gh_auth_status(gh_path)
     github_user = auth_status.username if auth_status.authenticated else None
 
     # Attempt to acquire lease
     result = acquire_lease(
-        cli_info.path,
+        gh_path,
         repo.path,
         owner,
         repo_name,
@@ -539,33 +587,19 @@ async def handle_release_lease(ctx: AppContext, params: dict[str, Any]) -> dict[
 
     repo = resolved["repo"]
 
-    # Verify GitHub connection exists
-    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
-    if not connection_raw:
-        return {
-            "success": False,
-            "code": GH_NOT_CONNECTED,
-            "message": "Repository is not connected to GitHub",
-            "hint": "Run connect_repo first to establish GitHub connection",
-        }
+    repo_context, connection_error = _resolve_connected_repo_context(repo, require_owner_repo=True)
+    if connection_error is not None:
+        return connection_error
+    owner = str(repo_context["owner"])
+    repo_name = str(repo_context["repo_name"])
 
-    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
-    owner = connection.get("owner", "")
-    repo_name = connection.get("name", "")
-
-    # Resolve gh CLI
-    cli_info = resolve_gh_cli()
-    if not cli_info.available or not cli_info.path:
-        return {
-            "success": False,
-            "code": "GH_CLI_NOT_AVAILABLE",
-            "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/",
-        }
+    gh_path, gh_error = _resolve_gh_cli_path()
+    if gh_error is not None:
+        return gh_error
 
     # Attempt to release lease
     result = release_lease(
-        cli_info.path,
+        gh_path,
         repo.path,
         owner,
         repo_name,
@@ -610,33 +644,19 @@ async def handle_get_lease_state(ctx: AppContext, params: dict[str, Any]) -> dic
 
     repo = resolved["repo"]
 
-    # Verify GitHub connection exists
-    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
-    if not connection_raw:
-        return {
-            "success": False,
-            "code": GH_NOT_CONNECTED,
-            "message": "Repository is not connected to GitHub",
-            "hint": "Run connect_repo first to establish GitHub connection",
-        }
+    repo_context, connection_error = _resolve_connected_repo_context(repo, require_owner_repo=True)
+    if connection_error is not None:
+        return connection_error
+    owner = str(repo_context["owner"])
+    repo_name = str(repo_context["repo_name"])
 
-    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
-    owner = connection.get("owner", "")
-    repo_name = connection.get("name", "")
-
-    # Resolve gh CLI
-    cli_info = resolve_gh_cli()
-    if not cli_info.available or not cli_info.path:
-        return {
-            "success": False,
-            "code": "GH_CLI_NOT_AVAILABLE",
-            "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/",
-        }
+    gh_path, gh_error = _resolve_gh_cli_path()
+    if gh_error is not None:
+        return gh_error
 
     # Get lease state
     state, error = get_lease_state(
-        cli_info.path,
+        gh_path,
         repo.path,
         owner,
         repo_name,
@@ -720,17 +740,10 @@ async def handle_create_pr_for_task(ctx: AppContext, params: dict[str, Any]) -> 
 
     repo = resolved["repo"]
 
-    # Verify GitHub connection exists
-    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
-    if not connection_raw:
-        return {
-            "success": False,
-            "code": GH_NOT_CONNECTED,
-            "message": "Repository is not connected to GitHub",
-            "hint": "Run connect_repo first to establish GitHub connection",
-        }
-
-    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
+    repo_context, connection_error = _resolve_connected_repo_context(repo)
+    if connection_error is not None:
+        return connection_error
+    connection = repo_context["connection"]
     base_branch = connection.get("default_branch", "main")
 
     # Get task details
@@ -760,19 +773,13 @@ async def handle_create_pr_for_task(ctx: AppContext, params: dict[str, Any]) -> 
     pr_title = title or task.title
     pr_body = body or task.description or ""
 
-    # Resolve gh CLI
-    cli_info = resolve_gh_cli()
-    if not cli_info.available or not cli_info.path:
-        return {
-            "success": False,
-            "code": "GH_CLI_NOT_AVAILABLE",
-            "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/",
-        }
+    gh_path, gh_error = _resolve_gh_cli_path()
+    if gh_error is not None:
+        return gh_error
 
     # Create PR
     pr_data, error = run_gh_pr_create(
-        cli_info.path,
+        gh_path,
         repo.path,
         head_branch=head_branch,
         base_branch=base_branch,
@@ -871,15 +878,9 @@ async def handle_link_pr_to_task(ctx: AppContext, params: dict[str, Any]) -> dic
 
     repo = resolved["repo"]
 
-    # Verify GitHub connection exists
-    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
-    if not connection_raw:
-        return {
-            "success": False,
-            "code": GH_NOT_CONNECTED,
-            "message": "Repository is not connected to GitHub",
-            "hint": "Run connect_repo first to establish GitHub connection",
-        }
+    _, connection_error = _resolve_connected_repo_context(repo)
+    if connection_error is not None:
+        return connection_error
 
     # Verify task exists
     task = await ctx.task_service.get_task(task_id)
@@ -891,18 +892,12 @@ async def handle_link_pr_to_task(ctx: AppContext, params: dict[str, Any]) -> dic
             "hint": "Verify the task_id exists",
         }
 
-    # Resolve gh CLI
-    cli_info = resolve_gh_cli()
-    if not cli_info.available or not cli_info.path:
-        return {
-            "success": False,
-            "code": "GH_CLI_NOT_AVAILABLE",
-            "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/",
-        }
+    gh_path, gh_error = _resolve_gh_cli_path()
+    if gh_error is not None:
+        return gh_error
 
     # Get PR details
-    pr_data, error = run_gh_pr_view(cli_info.path, repo.path, int(pr_number))
+    pr_data, error = run_gh_pr_view(gh_path, repo.path, int(pr_number))
     if error:
         return {
             "success": False,
@@ -987,15 +982,9 @@ async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) ->
 
     repo = resolved["repo"]
 
-    # Verify GitHub connection exists
-    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
-    if not connection_raw:
-        return {
-            "success": False,
-            "code": GH_NOT_CONNECTED,
-            "message": "Repository is not connected to GitHub",
-            "hint": "Run connect_repo first to establish GitHub connection",
-        }
+    _, connection_error = _resolve_connected_repo_context(repo)
+    if connection_error is not None:
+        return connection_error
 
     # Check if task has a linked PR
     pr_mapping = load_task_pr_mapping(repo.scripts)
@@ -1019,18 +1008,12 @@ async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) ->
             "hint": "Verify the task_id exists",
         }
 
-    # Resolve gh CLI
-    cli_info = resolve_gh_cli()
-    if not cli_info.available or not cli_info.path:
-        return {
-            "success": False,
-            "code": "GH_CLI_NOT_AVAILABLE",
-            "message": "GitHub CLI (gh) is not available",
-            "hint": "Install gh CLI: https://cli.github.com/. Retry after installing.",
-        }
+    gh_path, gh_error = _resolve_gh_cli_path()
+    if gh_error is not None:
+        return gh_error
 
     # Get current PR status from GitHub
-    pr_data, error = run_gh_pr_view(cli_info.path, repo.path, pr_link.pr_number)
+    pr_data, error = run_gh_pr_view(gh_path, repo.path, pr_link.pr_number)
     if error:
         return {
             "success": False,

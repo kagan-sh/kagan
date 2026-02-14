@@ -45,9 +45,13 @@ class TestGhAdapter:
     def test_resolve_gh_cli_returns_available_when_gh_in_path(self) -> None:
         with (
             patch("shutil.which", return_value="/usr/local/bin/gh"),
-            patch("subprocess.run") as mock_run,
+            patch("kagan.core.plugins.github.gh_adapter.run_exec_capture_sync") as mock_run_exec,
         ):
-            mock_run.return_value = MagicMock(stdout="gh version 2.40.0", returncode=0)
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout_text.return_value = "gh version 2.40.0\n"
+            mock_result.stderr_text.return_value = ""
+            mock_run_exec.return_value = mock_result
             result = resolve_gh_cli()
 
         assert result.available is True
@@ -293,7 +297,7 @@ class TestConnectRepoHandler:
         from kagan.core.plugins.github.runtime import handle_connect_repo
 
         ctx = MagicMock()
-        existing_connection = {"host": "github.com", "owner": "test", "name": "repo"}
+        existing_connection = {"host": "github.com", "owner": "test", "repo": "repo"}
 
         async def get_project_async(project_id: str) -> MagicMock:
             return MagicMock(id=project_id)

@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 
 # GitHub sync status display constants
-GITHUB_ICON_CONNECTED = "⬡"  # Hexagon indicates GitHub connected
 GITHUB_ICON_SYNCED = "◉"  # Filled circle indicates sync complete
 GITHUB_ICON_PENDING = "○"  # Empty circle indicates sync available
 

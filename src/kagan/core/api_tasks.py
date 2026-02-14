@@ -400,78 +400,154 @@ class TaskApiMixin:
 
         Returns dict with 'allowed' bool and optional 'message'/'code'/'hint'.
         """
-        import json
-
-        from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, resolve_gh_cli
+        from kagan.core.plugins.github.gh_adapter import (
+            GITHUB_CONNECTION_KEY,
+            load_connection_metadata,
+            resolve_connection_repo_name,
+            resolve_gh_cli,
+        )
         from kagan.core.plugins.github.lease import get_lease_state
         from kagan.core.plugins.github.sync import (
             load_mapping,
             load_task_pr_mapping,
         )
 
+        def _guardrail_check_failed(detail: str) -> dict[str, Any]:
+            return {
+                "allowed": False,
+                "code": "REVIEW_GUARDRAIL_CHECK_FAILED",
+                "message": "REVIEW transition blocked: failed to verify GitHub guardrails.",
+                "hint": f"Resolve GitHub plugin health and retry. Details: {detail}",
+            }
+
         # Get project repos to check for GitHub connections
         try:
             repos = await self._ctx.project_service.get_project_repos(task.project_id)
-        except Exception:
-            # If we can't get repos, allow the transition (non-blocking)
-            return {"allowed": True}
+        except Exception as exc:
+            # Explicit resilience boundary: guardrail verification must fail closed.
+            return _guardrail_check_failed(str(exc))
 
         if not repos:
             return {"allowed": True}
 
-        # Check each repo for GitHub connection
+        connected_repos: list[dict[str, Any]] = []
+
+        # Collect connected repos with parsed connection and mappings.
         for repo in repos:
             connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
             if not connection_raw:
-                # Repo not connected to GitHub - skip guardrails for this repo
                 continue
 
-            # Repo is GitHub-connected - check PR linkage
-            pr_mapping = load_task_pr_mapping(repo.scripts)
-            if not pr_mapping.has_pr(task.id):
+            connection = load_connection_metadata(connection_raw)
+            if connection is None:
+                return _guardrail_check_failed("invalid GitHub connection metadata")
+
+            connected_repos.append(
+                {
+                    "repo": repo,
+                    "connection": connection,
+                    "pr_mapping": load_task_pr_mapping(repo.scripts),
+                    "issue_mapping": load_mapping(repo.scripts),
+                }
+            )
+
+        if not connected_repos:
+            return {"allowed": True}
+
+        # Resolve owning connected repo for this task to avoid cross-repo false blocks.
+        owner_candidates = [
+            repo_ctx
+            for repo_ctx in connected_repos
+            if repo_ctx["pr_mapping"].has_pr(task.id)
+            or repo_ctx["issue_mapping"].get_issue_number(task.id) is not None
+        ]
+
+        if not owner_candidates:
+            try:
+                workspaces = await self._ctx.workspace_service.list_workspaces(task_id=task.id)
+                workspace_repo_ids: set[str] = set()
+                for workspace in workspaces:
+                    workspace_repos = await self._ctx.workspace_service.get_workspace_repos(
+                        workspace.id
+                    )
+                    for workspace_repo in workspace_repos:
+                        if not isinstance(workspace_repo, dict):
+                            continue
+                        repo_id = workspace_repo.get("repo_id")
+                        if isinstance(repo_id, str) and repo_id:
+                            workspace_repo_ids.add(repo_id)
+
+                if workspace_repo_ids:
+                    owner_candidates = []
+                    for repo_ctx in connected_repos:
+                        repo_obj = repo_ctx["repo"]
+                        repo_id = repo_obj.id if hasattr(repo_obj, "id") else None
+                        if isinstance(repo_id, str) and repo_id in workspace_repo_ids:
+                            owner_candidates.append(repo_ctx)
+            except Exception as exc:
+                return _guardrail_check_failed(str(exc))
+
+        if not owner_candidates:
+            # Task is not scoped to a GitHub-connected repo; skip GitHub guardrails.
+            return {"allowed": True}
+
+        if len(owner_candidates) > 1:
+            return _guardrail_check_failed("task maps to multiple GitHub-connected repos")
+
+        owner_repo_ctx = owner_candidates[0]
+        owner_repo = owner_repo_ctx["repo"]
+        owner_connection = owner_repo_ctx["connection"]
+        owner_pr_mapping = owner_repo_ctx["pr_mapping"]
+        owner_issue_mapping = owner_repo_ctx["issue_mapping"]
+
+        # Enforce PR linkage for the owning connected repo.
+        if not owner_pr_mapping.has_pr(task.id):
+            return {
+                "allowed": False,
+                "code": "REVIEW_BLOCKED_NO_PR",
+                "message": (
+                    "REVIEW transition blocked: no linked PR. "
+                    "Create or link a PR before requesting review."
+                ),
+                "hint": "Use create_pr_for_task or link_pr_to_task first.",
+            }
+
+        # Enforce lease ownership if the task is mapped to a GitHub issue.
+        issue_number = owner_issue_mapping.get_issue_number(task.id)
+        if issue_number is not None:
+            owner = str(owner_connection.get("owner") or "").strip()
+            repo_name = resolve_connection_repo_name(owner_connection)
+            if not owner or not repo_name:
+                return _guardrail_check_failed("GitHub connection metadata missing owner/repo")
+
+            cli_info = resolve_gh_cli()
+            if not cli_info.available or not cli_info.path:
+                return _guardrail_check_failed("GitHub CLI (gh) is unavailable")
+
+            state, error = get_lease_state(
+                cli_info.path,
+                owner_repo.path,
+                owner,
+                repo_name,
+                issue_number,
+            )
+            if error:
+                return _guardrail_check_failed(error)
+            if state is None:
+                return _guardrail_check_failed("lease state could not be determined")
+            if state.is_locked and not state.is_held_by_current_instance:
+                holder_info = ""
+                if state.holder:
+                    holder_info = f" (held by {state.holder.instance_id})"
                 return {
                     "allowed": False,
-                    "code": "REVIEW_BLOCKED_NO_PR",
+                    "code": "REVIEW_BLOCKED_LEASE",
                     "message": (
-                        "REVIEW transition blocked: no linked PR. "
-                        "Create or link a PR before requesting review."
+                        f"REVIEW transition blocked: lease held by another instance{holder_info}. "
+                        "Wait for the other instance to release the lease."
                     ),
-                    "hint": "Use create_pr_for_task or link_pr_to_task first.",
+                    "hint": "The issue is being worked on by another Kagan instance.",
                 }
-
-            # Check lease state if task is linked to an issue
-            issue_mapping = load_mapping(repo.scripts)
-            issue_number = issue_mapping.get_issue_number(task.id)
-            if issue_number is not None:
-                # Task is linked to a GitHub issue - check lease
-                connection = (
-                    json.loads(connection_raw)
-                    if isinstance(connection_raw, str)
-                    else connection_raw
-                )
-                owner = connection.get("owner", "")
-                repo_name = connection.get("name", "")
-
-                cli_info = resolve_gh_cli()
-                if cli_info.available and cli_info.path:
-                    state, _error = get_lease_state(
-                        cli_info.path, repo.path, owner, repo_name, issue_number
-                    )
-                    if state is not None and state.is_locked:
-                        if not state.is_held_by_current_instance:
-                            holder_info = ""
-                            if state.holder:
-                                holder_info = f" (held by {state.holder.instance_id})"
-                            return {
-                                "allowed": False,
-                                "code": "REVIEW_BLOCKED_LEASE",
-                                "message": (
-                                    f"REVIEW transition blocked: lease held by another instance"
-                                    f"{holder_info}. "
-                                    "Wait for the other instance to release the lease."
-                                ),
-                                "hint": "The issue is being worked on by another Kagan instance.",
-                            }
 
         return {"allowed": True}
 

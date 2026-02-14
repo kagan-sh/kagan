@@ -111,119 +111,10 @@ By default, only one Kagan instance can work a GitHub issue at a time.
 - Lease duration: 1 hour (renewable)
 - Stale threshold: 2 hours (takeover allowed after)
 
-### Lease operations (MCP)
+### MCP exposure
 
-**Acquire lease:**
-
-```json
-{
-  "tool": "kagan_github_acquire_lease",
-  "arguments": {
-    "project_id": "<project_id>",
-    "issue_number": 123
-  }
-}
-```
-
-**Check lease state:**
-
-```json
-{
-  "tool": "kagan_github_get_lease_state",
-  "arguments": {
-    "project_id": "<project_id>",
-    "issue_number": 123
-  }
-}
-```
-
-**Force takeover:**
-
-```json
-{
-  "tool": "kagan_github_acquire_lease",
-  "arguments": {
-    "project_id": "<project_id>",
-    "issue_number": 123,
-    "force_takeover": true
-  }
-}
-```
-
-**Release lease:**
-
-```json
-{
-  "tool": "kagan_github_release_lease",
-  "arguments": {
-    "project_id": "<project_id>",
-    "issue_number": 123
-  }
-}
-```
-
-### Blocked by another instance
-
-If lease acquisition fails:
-
-- Response includes `holder` with instance info and expiry
-- Use `force_takeover: true` only when certain the other instance is gone
-
-## PR Workflows
-
-### Create PR for task
-
-```json
-{
-  "tool": "kagan_github_create_pr_for_task",
-  "arguments": {
-    "project_id": "<project_id>",
-    "task_id": "<task_id>",
-    "title": "Optional custom title",
-    "draft": false
-  }
-}
-```
-
-Requirements:
-
-- Task must have an active workspace with a branch
-- Branch must be pushed to GitHub
-
-### Link existing PR
-
-```json
-{
-  "tool": "kagan_github_link_pr_to_task",
-  "arguments": {
-    "project_id": "<project_id>",
-    "task_id": "<task_id>",
-    "pr_number": 456
-  }
-}
-```
-
-### Reconcile PR status
-
-```json
-{
-  "tool": "kagan_github_reconcile_pr_status",
-  "arguments": {
-    "project_id": "<project_id>",
-    "task_id": "<task_id>"
-  }
-}
-```
-
-PR state → task status transitions:
-
-| PR State | Task Transition     |
-| -------- | ------------------- |
-| `MERGED` | → `DONE`            |
-| `CLOSED` | → `IN_PROGRESS`     |
-| `OPEN`   | No status change    |
-
-Reconcile is idempotent; re-run produces the same result.
+Lease and PR operations are implemented in the bundled GitHub plugin runtime,
+but they are **not** exposed as MCP tools in the frozen V1 contract.
 
 ## Known Limits
 
@@ -243,35 +134,25 @@ Reconcile is idempotent; re-run produces the same result.
 
 ## Error Codes
 
-| Code                      | Meaning                               | Fix                                    |
-| ------------------------- | ------------------------------------- | -------------------------------------- |
-| `GH_CLI_NOT_AVAILABLE`    | gh CLI not installed                  | `brew install gh`                      |
-| `GH_AUTH_REQUIRED`        | Not authenticated                     | `gh auth login`                        |
-| `GH_REPO_ACCESS_DENIED`   | Cannot access repository              | Check repo permissions                 |
-| `GH_PROJECT_REQUIRED`     | Missing project_id                    | Provide valid project_id               |
-| `GH_REPO_REQUIRED`        | Multi-repo needs repo_id              | Specify repo_id for multi-repo project |
-| `GH_NOT_CONNECTED`        | Repo not connected to GitHub          | Run connect_repo first                 |
-| `GH_SYNC_FAILED`          | Issue fetch failed                    | Check gh CLI auth and repo access      |
-| `LEASE_HELD_BY_OTHER`     | Another instance holds lease          | Wait or use force_takeover             |
-| `LEASE_NOT_HELD`          | Cannot release unowned lease          | Only holder can release                |
-| `GH_NO_LINKED_PR`         | Task has no linked PR                 | Create or link a PR first              |
-| `GH_PR_CREATE_FAILED`     | PR creation failed                    | Push branch, check permissions         |
-| `GH_WORKSPACE_REQUIRED`   | Task has no workspace                 | Create workspace before PR             |
+| Code                    | Meaning                               | Fix                                    |
+| ----------------------- | ------------------------------------- | -------------------------------------- |
+| `GH_CLI_NOT_AVAILABLE`  | gh CLI not installed                  | `brew install gh`                      |
+| `GH_AUTH_REQUIRED`      | Not authenticated                     | `gh auth login`                        |
+| `GH_REPO_ACCESS_DENIED` | Cannot access repository              | Check repo permissions                 |
+| `GH_REPO_METADATA_INVALID` | Stored/fetched metadata is invalid | Reconnect repo and retry               |
+| `GH_PROJECT_REQUIRED`   | Missing project_id                    | Provide valid project_id               |
+| `GH_REPO_REQUIRED`      | Multi-repo needs repo_id              | Specify repo_id for multi-repo project |
+| `GH_NOT_CONNECTED`      | Repo not connected to GitHub          | Run connect_repo first                 |
+| `GH_SYNC_FAILED`        | Issue fetch failed                    | Check gh CLI auth and repo access      |
 
 ## MCP Tool Reference
 
 ### V1 Contract (Frozen)
 
-| Tool Name                          | Type     | Profile    |
-| ---------------------------------- | -------- | ---------- |
-| `kagan_github_contract_probe`      | read     | MAINTAINER |
-| `kagan_github_connect_repo`        | mutating | MAINTAINER |
-| `kagan_github_sync_issues`         | mutating | MAINTAINER |
-| `kagan_github_acquire_lease`       | mutating | MAINTAINER |
-| `kagan_github_release_lease`       | mutating | MAINTAINER |
-| `kagan_github_get_lease_state`     | read     | MAINTAINER |
-| `kagan_github_create_pr_for_task`  | mutating | MAINTAINER |
-| `kagan_github_link_pr_to_task`     | mutating | MAINTAINER |
-| `kagan_github_reconcile_pr_status` | mutating | MAINTAINER |
+| Tool Name                     | Type     | Profile    |
+| ----------------------------- | -------- | ---------- |
+| `kagan_github_contract_probe` | read     | MAINTAINER |
+| `kagan_github_connect_repo`   | mutating | MAINTAINER |
+| `kagan_github_sync_issues`    | mutating | MAINTAINER |
 
 All tools require `MAINTAINER` capability profile.

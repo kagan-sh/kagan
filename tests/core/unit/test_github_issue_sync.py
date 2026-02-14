@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -26,6 +27,7 @@ from kagan.core.plugins.github.sync import (
     SyncCheckpoint,
     build_task_title_from_issue,
     compute_issue_changes,
+    filter_issues_since_checkpoint,
     load_checkpoint,
     load_mapping,
     load_repo_default_mode,
@@ -176,17 +178,15 @@ class TestSyncCheckpoint:
 class TestLoadHelpers:
     """Tests for loading checkpoint and mapping from scripts."""
 
-    def test_load_checkpoint_from_json_string(self) -> None:
-        import json
-
+    def test_load_checkpoint_parses_json_and_defaults(self) -> None:
         scripts = {
             "kagan.github.sync_checkpoint": json.dumps(
-                {"last_sync_at": "2025-01-01T00:00:00Z", "issue_count": 5}
+                {"last_sync_at": "2025-01-01T00:00:00Z"}
             )
         }
         checkpoint = load_checkpoint(scripts)
         assert checkpoint.last_sync_at == "2025-01-01T00:00:00Z"
-        assert checkpoint.issue_count == 5
+        assert checkpoint.issue_count == 0
 
     def test_load_checkpoint_returns_empty_when_missing(self) -> None:
         checkpoint = load_checkpoint({})
@@ -194,8 +194,6 @@ class TestLoadHelpers:
         assert checkpoint.issue_count == 0
 
     def test_load_mapping_from_json_string(self) -> None:
-        import json
-
         scripts = {
             "kagan.github.issue_mapping": json.dumps(
                 {"issue_to_task": {"1": "task-a"}, "task_to_issue": {"task-a": 1}}
@@ -204,33 +202,61 @@ class TestLoadHelpers:
         mapping = load_mapping(scripts)
         assert mapping.get_task_id(1) == "task-a"
 
-    def test_load_repo_default_mode_returns_auto(self) -> None:
-        scripts = {GITHUB_DEFAULT_MODE_KEY: "AUTO"}
-        result = load_repo_default_mode(scripts)
-        assert result == TaskType.AUTO
+    @pytest.mark.parametrize(
+        ("raw_mode", "expected"),
+        [
+            ("AUTO", TaskType.AUTO),
+            ("auto", TaskType.AUTO),
+            ("PAIR", TaskType.PAIR),
+            ("invalid", None),
+            (None, None),
+        ],
+    )
+    def test_load_repo_default_mode_normalization(
+        self,
+        raw_mode: str | None,
+        expected: TaskType | None,
+    ) -> None:
+        scripts = {GITHUB_DEFAULT_MODE_KEY: raw_mode} if raw_mode is not None else {}
+        assert load_repo_default_mode(scripts) == expected
 
-    def test_load_repo_default_mode_returns_pair(self) -> None:
-        scripts = {GITHUB_DEFAULT_MODE_KEY: "PAIR"}
-        result = load_repo_default_mode(scripts)
-        assert result == TaskType.PAIR
+    def test_load_repo_default_mode_none_scripts(self) -> None:
+        assert load_repo_default_mode(None) is None
 
-    def test_load_repo_default_mode_case_insensitive(self) -> None:
-        scripts = {GITHUB_DEFAULT_MODE_KEY: "auto"}
-        result = load_repo_default_mode(scripts)
-        assert result == TaskType.AUTO
 
-    def test_load_repo_default_mode_returns_none_when_missing(self) -> None:
-        result = load_repo_default_mode({})
-        assert result is None
+class TestIncrementalIssueFiltering:
+    """Tests for checkpoint-aware incremental issue filtering."""
 
-    def test_load_repo_default_mode_returns_none_for_invalid_value(self) -> None:
-        scripts = {GITHUB_DEFAULT_MODE_KEY: "invalid"}
-        result = load_repo_default_mode(scripts)
-        assert result is None
+    def test_filter_issues_since_checkpoint_uses_updated_at(self) -> None:
+        checkpoint = SyncCheckpoint(last_sync_at="2025-01-02T00:00:00Z", issue_count=2)
+        issues = [
+            GhIssue(
+                number=1,
+                title="old",
+                state="OPEN",
+                labels=[],
+                updated_at="2025-01-01T00:00:00Z",
+            ),
+            GhIssue(
+                number=2,
+                title="new",
+                state="OPEN",
+                labels=[],
+                updated_at="2025-01-03T00:00:00Z",
+            ),
+        ]
 
-    def test_load_repo_default_mode_returns_none_for_none_scripts(self) -> None:
-        result = load_repo_default_mode(None)
-        assert result is None
+        filtered = filter_issues_since_checkpoint(issues, checkpoint)
+
+        assert [issue.number for issue in filtered] == [2]
+
+    def test_filter_issues_since_checkpoint_keeps_entries_with_invalid_timestamps(self) -> None:
+        checkpoint = SyncCheckpoint(last_sync_at="2025-01-02T00:00:00Z", issue_count=1)
+        issues = [GhIssue(number=5, title="missing-ts", state="OPEN", labels=[], updated_at="")]
+
+        filtered = filter_issues_since_checkpoint(issues, checkpoint)
+
+        assert [issue.number for issue in filtered] == [5]
 
 
 class TestComputeIssueChanges:
@@ -453,7 +479,6 @@ class TestSyncIssuesHandler:
         from kagan.core.plugins.github.runtime import handle_sync_issues
 
         ctx = MagicMock()
-        import json
 
         # Setup: repo is connected, has existing mapping
         existing_mapping = {"issue_to_task": {"1": "task-a"}, "task_to_issue": {"task-a": 1}}
@@ -517,3 +542,71 @@ class TestSyncIssuesHandler:
         assert result["stats"]["no_change"] == 1
         assert result["stats"]["inserted"] == 0
         assert result["stats"]["updated"] == 0
+
+    @pytest.mark.asyncio()
+    async def test_sync_recreates_mapping_without_stale_reverse_entry(self) -> None:
+        """Drift recovery should replace stale task_to_issue entries for recreated tasks."""
+        from kagan.core.plugins.github.runtime import handle_sync_issues
+
+        ctx = MagicMock()
+        existing_mapping = {
+            "issue_to_task": {"1": "task-deleted"},
+            "task_to_issue": {"task-deleted": 1},
+        }
+
+        async def get_project_async(project_id: str) -> MagicMock:
+            return MagicMock(id=project_id)
+
+        async def get_repos_async(project_id: str) -> list:
+            repo = MagicMock()
+            repo.id = "repo-1"
+            repo.path = "/tmp/repo"
+            repo.scripts = {
+                GITHUB_CONNECTION_KEY: json.dumps({"host": "github.com"}),
+                GITHUB_ISSUE_MAPPING_KEY: json.dumps(existing_mapping),
+            }
+            return [repo]
+
+        async def get_task_async(task_id: str) -> None:
+            return None
+
+        async def create_task_async(*_args: Any, **_kwargs: Any) -> MagicMock:
+            task = MagicMock()
+            task.id = "task-new"
+            return task
+
+        ctx.project_service.get_project = get_project_async
+        ctx.project_service.get_project_repos = get_repos_async
+        ctx.task_service.get_task = get_task_async
+        ctx.task_service.create_task = create_task_async
+        ctx.task_service.update_fields = AsyncMock(return_value=None)
+        ctx._task_repo = MagicMock()
+        ctx._task_repo._session_factory = MagicMock()
+
+        mock_issues = [
+            {
+                "number": 1,
+                "title": "Recreated feature",
+                "state": "OPEN",
+                "labels": [],
+                "updatedAt": "2025-01-05T00:00:00Z",
+            }
+        ]
+
+        with (
+            patch(
+                "kagan.core.plugins.github.runtime.resolve_gh_cli",
+                return_value=MagicMock(available=True, path="/usr/bin/gh"),
+            ),
+            patch(
+                "kagan.core.plugins.github.runtime.run_gh_issue_list",
+                return_value=(mock_issues, None),
+            ),
+            patch("kagan.core.plugins.github.runtime._upsert_repo_sync_state") as upsert_state,
+        ):
+            result = await handle_sync_issues(ctx, {"project_id": "project-1"})
+
+        assert result["success"] is True
+        mapping = upsert_state.await_args.args[3]
+        assert mapping.issue_to_task[1] == "task-new"
+        assert mapping.task_to_issue == {"task-new": 1}

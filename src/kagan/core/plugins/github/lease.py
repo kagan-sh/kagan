@@ -35,7 +35,6 @@ LEASE_HELD_BY_OTHER: Final = "LEASE_HELD_BY_OTHER"
 LEASE_ACQUIRE_FAILED: Final = "LEASE_ACQUIRE_FAILED"
 LEASE_RELEASE_FAILED: Final = "LEASE_RELEASE_FAILED"
 LEASE_NOT_HELD: Final = "LEASE_NOT_HELD"
-LEASE_TAKEOVER_REQUIRED: Final = "LEASE_TAKEOVER_REQUIRED"
 
 
 def _generate_instance_id() -> str:
@@ -480,7 +479,6 @@ __all__ = [
     "LEASE_NOT_HELD",
     "LEASE_RELEASE_FAILED",
     "LEASE_STALE_THRESHOLD_SECONDS",
-    "LEASE_TAKEOVER_REQUIRED",
     "LeaseAcquireResult",
     "LeaseHolder",
     "LeaseReleaseResult",
