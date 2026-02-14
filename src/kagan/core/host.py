@@ -47,6 +47,7 @@ from kagan.core.security import AuthorizationError, CapabilityProfile
 from kagan.core.session_binding import (
     SessionBinding,
     SessionBindingError,
+    SessionOrigin,
     enforce_task_scope,
 )
 from kagan.core.session_binding import (
@@ -58,6 +59,7 @@ from kagan.core.session_binding import (
 from kagan.core.session_binding import (
     unregister_session as unregister_session_binding,
 )
+from kagan.version import get_kagan_version
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -125,6 +127,7 @@ class CoreHost:
         self._session_bindings: dict[str, SessionBinding] = {}
         self._idempotency_records: OrderedDict[tuple[str, str], IdempotencyRecord] = OrderedDict()
         self._idempotency_lock = asyncio.Lock()
+        self._runtime_version = get_kagan_version()
         self._instance_lock = CoreInstanceLock(
             get_core_instance_lock_path(),
             lease_path=_core_lease_path(),
@@ -360,9 +363,43 @@ class CoreHost:
             await self._record_audit_event(request, response)
             return response
 
+        incompatibility = self._validate_mcp_client_version(request, binding=binding)
+        if incompatibility is not None:
+            await self._record_audit_event(request, incompatibility)
+            return incompatibility
+
         response = await self._dispatch_with_idempotency(request)
         await self._record_audit_event(request, response)
         return response
+
+    def _validate_mcp_client_version(
+        self,
+        request: CoreRequest,
+        *,
+        binding: SessionBinding,
+    ) -> CoreResponse | None:
+        if binding.origin not in (SessionOrigin.KAGAN, SessionOrigin.KAGAN_ADMIN):
+            return None
+        client_version = request.client_version.strip() if request.client_version else ""
+        if not client_version:
+            return CoreResponse.failure(
+                request.request_id,
+                code="MCP_OUTDATED",
+                message=(
+                    "MCP client did not report its version. Restart the MCP client/session "
+                    "to load the latest kagan package."
+                ),
+            )
+        if client_version != self._runtime_version:
+            return CoreResponse.failure(
+                request.request_id,
+                code="MCP_OUTDATED",
+                message=(
+                    f"MCP client version '{client_version}' does not match core version "
+                    f"'{self._runtime_version}'. Restart the MCP client/session."
+                ),
+            )
+        return None
 
     @staticmethod
     def _idempotency_cache_key(request: CoreRequest) -> tuple[str, str] | None:

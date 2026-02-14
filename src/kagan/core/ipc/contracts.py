@@ -40,6 +40,10 @@ class CoreRequest(BaseModel):
             "Used for server-side capability ceilings and namespace constraints."
         ),
     )
+    client_version: str | None = Field(
+        default=None,
+        description="Client-reported kagan package version for compatibility checks",
+    )
     capability: str = Field(
         description="Logical service group (e.g. 'tasks', 'agents', 'config')",
     )

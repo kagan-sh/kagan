@@ -9,6 +9,7 @@ import pytest
 from kagan.core.ipc.discovery import CoreEndpoint
 from kagan.mcp import server as mcp_server
 from kagan.mcp.server import MCPRuntimeConfig, MCPStartupError, _create_mcp_server, _mcp_lifespan
+from kagan.version import get_kagan_version
 
 
 def _tool_names(mcp: object) -> set[str]:
@@ -209,6 +210,9 @@ async def test_lifespan_uses_runtime_config_for_bridge_metadata() -> None:
                 ctx.bridge._capability_profile == "pair_worker"  # type: ignore[attr-defined]  # quality-allow-private
             )
             assert ctx.bridge._session_origin == "kagan"  # type: ignore[attr-defined]  # quality-allow-private
+            assert (
+                ctx.bridge._client_version == get_kagan_version()  # type: ignore[attr-defined]  # quality-allow-private
+            )
 
 
 def test_main_exits_with_structured_startup_error_message() -> None:

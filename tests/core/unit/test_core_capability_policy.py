@@ -315,11 +315,13 @@ class TestCoreHostAuthorization:
 
         _set_request_handler(monkeypatch, "tasks", "create", mock_handler)
         host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
 
         request = CoreRequest(
             session_id="task:TASK-401",
             session_profile="maintainer",
             session_origin="kagan",
+            client_version="test-version",
             capability="tasks",
             method="create",
         )
@@ -334,11 +336,13 @@ class TestCoreHostAuthorization:
     async def test_kagan_admin_origin_requires_ext_namespace(self, host):
         """The admin lane must use ext:* session namespace."""
         host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
 
         request = CoreRequest(
             session_id="task:TASK-402",
             session_profile="maintainer",
             session_origin="kagan_admin",
+            client_version="test-version",
             capability="tasks",
             method="list",
         )
@@ -360,11 +364,13 @@ class TestCoreHostAuthorization:
 
         _set_request_handler(monkeypatch, "tasks", "update_scratchpad", mock_handler)
         host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
 
         request = CoreRequest(
             session_id="task:TASK-403",
             session_profile="pair_worker",
             session_origin="kagan",
+            client_version="test-version",
             capability="tasks",
             method="update_scratchpad",
             params={"task_id": "TASK-404", "content": "notes"},
@@ -388,11 +394,13 @@ class TestCoreHostAuthorization:
 
         _set_request_handler(monkeypatch, "jobs", "submit", mock_handler)
         host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
 
         request = CoreRequest(
             session_id="task:TASK-500",
             session_profile="pair_worker",
             session_origin="kagan",
+            client_version="test-version",
             capability="jobs",
             method="submit",
             params={"task_id": "TASK-501", "action": "start_agent"},
@@ -416,11 +424,13 @@ class TestCoreHostAuthorization:
 
         _set_request_handler(monkeypatch, "jobs", "wait", mock_handler)
         host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
 
         request = CoreRequest(
             session_id="task:TASK-600",
             session_profile="pair_worker",
             session_origin="kagan",
+            client_version="test-version",
             capability="jobs",
             method="wait",
             params={"job_id": "job-1", "task_id": "TASK-601"},
@@ -448,11 +458,13 @@ class TestCoreHostAuthorization:
 
         _set_request_handler(monkeypatch, "jobs", "events", mock_handler)
         host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
 
         request = CoreRequest(
             session_id="task:TASK-700",
             session_profile="pair_worker",
             session_origin="kagan",
+            client_version="test-version",
             capability="jobs",
             method="events",
             params={"job_id": "job-1", "task_id": "TASK-701"},
@@ -476,11 +488,13 @@ class TestCoreHostAuthorization:
 
         _set_request_handler(monkeypatch, "tasks", "delete", mock_handler)
         host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
 
         request = CoreRequest(
             session_id="ext:orchestrator",
             session_profile="maintainer",
             session_origin="kagan_admin",
+            client_version="test-version",
             capability="tasks",
             method="delete",
             params={"task_id": "TASK-405"},
@@ -489,3 +503,60 @@ class TestCoreHostAuthorization:
 
         assert response.ok
         assert call_log == ["TASK-405"]
+
+    @pytest.mark.asyncio()
+    async def test_kagan_origin_rejects_missing_client_version(self, host, monkeypatch):
+        """Kagan-origin requests must include a client version for compatibility checks."""
+        call_log = []
+
+        async def mock_handler(api, params):
+            del api, params
+            call_log.append(True)
+            return {"ok": True}
+
+        _set_request_handler(monkeypatch, "tasks", "list", mock_handler)
+        host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
+
+        request = CoreRequest(
+            session_id="task:TASK-800",
+            session_profile="pair_worker",
+            session_origin="kagan",
+            capability="tasks",
+            method="list",
+        )
+        response = await _dispatch_request(host, request)
+
+        assert not response.ok
+        assert response.error is not None
+        assert response.error.code == "MCP_OUTDATED"
+        assert len(call_log) == 0
+
+    @pytest.mark.asyncio()
+    async def test_kagan_origin_rejects_mismatched_client_version(self, host, monkeypatch):
+        """Kagan-origin requests are rejected when MCP/client and core versions differ."""
+        call_log = []
+
+        async def mock_handler(api, params):
+            del api, params
+            call_log.append(True)
+            return {"ok": True}
+
+        _set_request_handler(monkeypatch, "tasks", "list", mock_handler)
+        host._ctx = SimpleNamespace(api=object())
+        host._runtime_version = "test-version"
+
+        request = CoreRequest(
+            session_id="task:TASK-801",
+            session_profile="pair_worker",
+            session_origin="kagan",
+            client_version="old-version",
+            capability="tasks",
+            method="list",
+        )
+        response = await _dispatch_request(host, request)
+
+        assert not response.ok
+        assert response.error is not None
+        assert response.error.code == "MCP_OUTDATED"
+        assert len(call_log) == 0

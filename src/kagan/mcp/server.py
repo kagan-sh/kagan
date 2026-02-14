@@ -64,6 +64,7 @@ from kagan.mcp.registrars import (
     register_shared_tools,
 )
 from kagan.mcp.tools import CoreClientBridge
+from kagan.version import get_kagan_version
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -322,6 +323,7 @@ async def _mcp_lifespan(
         session_id,
         capability_profile=capability_profile,
         session_origin=session_origin,
+        client_version=get_kagan_version(),
     )
     try:
         yield MCPLifespanContext(bridge=bridge, client=client)

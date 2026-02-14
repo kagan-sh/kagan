@@ -26,6 +26,7 @@ def _bridge_for_routes(
         method: str,
         params: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
+        request_timeout_seconds: float | None = None,
     ) -> CoreResponse:
         del session_id, session_profile, session_origin, idempotency_key
         if captured_calls is not None:
@@ -34,6 +35,7 @@ def _bridge_for_routes(
                     "capability": capability,
                     "method": method,
                     "params": params or {},
+                    "request_timeout_seconds": request_timeout_seconds,
                 }
             )
         payload = routes[(capability, method)]
@@ -87,6 +89,7 @@ async def test_wait_task_sends_correct_params() -> None:
                 "wait_for_status": ["IN_PROGRESS", "REVIEW"],
                 "from_updated_at": "2026-02-13T09:00:00+00:00",
             },
+            "request_timeout_seconds": 35.0,
         }
     ]
 
@@ -116,6 +119,7 @@ async def test_wait_task_minimal_params() -> None:
             "capability": "tasks",
             "method": "wait",
             "params": {"task_id": "T-200"},
+            "request_timeout_seconds": 905.0,
         }
     ]
 
@@ -249,5 +253,6 @@ async def test_wait_task_accepts_string_timeout_and_status_filter() -> None:
                 "timeout_seconds": 30.0,
                 "wait_for_status": "REVIEW,DONE",
             },
+            "request_timeout_seconds": 35.0,
         }
     ]

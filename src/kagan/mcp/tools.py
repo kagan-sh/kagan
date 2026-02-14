@@ -39,6 +39,8 @@ _FULL_LOG_FETCH_ENTRY_LIMIT = 6_000
 _SUMMARY_LOG_FETCH_BUDGET = 6_000
 _FULL_LOG_FETCH_BUDGET = 18_000
 _QUERY_UNAVAILABLE_CODES = {"UNKNOWN_METHOD", "UNAUTHORIZED"}
+_TASK_WAIT_IPC_DEFAULT_TIMEOUT_SECONDS = 900.0
+_TASK_WAIT_IPC_TIMEOUT_BUFFER_SECONDS = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,11 +106,13 @@ class CoreClientBridge:
         session_id: str,
         capability_profile: str | None = None,
         session_origin: str | None = None,
+        client_version: str | None = None,
     ) -> None:
         self._client = client
         self._session_id = session_id
         self._capability_profile = capability_profile
         self._session_origin = session_origin
+        self._client_version = client_version
         self._recover_lock = asyncio.Lock()
 
     @staticmethod
@@ -372,10 +376,21 @@ class CoreClientBridge:
             return bool(self._client.is_connected)
 
     async def _query(
-        self, capability: str, method: str, params: dict[str, Any] | None = None
+        self,
+        capability: str,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        request_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """Send a query (read-only) request to the core."""
-        return await self._send_request("query", capability, method, params=params)
+        return await self._send_request(
+            "query",
+            capability,
+            method,
+            params=params,
+            request_timeout_seconds=request_timeout_seconds,
+        )
 
     async def _command(
         self, capability: str, method: str, params: dict[str, Any] | None = None
@@ -390,18 +405,24 @@ class CoreClientBridge:
         method: str,
         *,
         params: dict[str, Any] | None,
+        request_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                resp = await self._client.request(
-                    session_id=self._session_id,
-                    session_profile=self._capability_profile,
-                    session_origin=self._session_origin,
-                    capability=capability,
-                    method=method,
-                    params=params,
-                )
+                request_kwargs: dict[str, Any] = {
+                    "session_id": self._session_id,
+                    "session_profile": self._capability_profile,
+                    "session_origin": self._session_origin,
+                    "capability": capability,
+                    "method": method,
+                    "params": params,
+                }
+                if self._client_version is not None:
+                    request_kwargs["client_version"] = self._client_version
+                if request_timeout_seconds is not None:
+                    request_kwargs["request_timeout_seconds"] = request_timeout_seconds
+                resp = await self._client.request(**request_kwargs)
             except ConnectionError as exc:
                 if attempt < max_attempts - 1 and await self._recover_client(
                     refresh_endpoint=False
@@ -437,6 +458,7 @@ class CoreClientBridge:
             message = str(raw_message).strip() if raw_message is not None else ""
             if not message:
                 message = f"{capability}.{method} request failed"
+            hint: str | None = None
             if code == _AUTH_FAILED_CODE and attempt < max_attempts - 1:
                 if await self._recover_client(refresh_endpoint=True):
                     continue
@@ -445,12 +467,18 @@ class CoreClientBridge:
                     "MCP session token became stale after core restart; "
                     "restart MCP or reconnect client."
                 )
+            elif code == "MCP_OUTDATED":
+                hint = (
+                    "Restart the MCP client/session so it reloads the currently installed "
+                    "kagan build."
+                )
             raise MCPBridgeError.core_failure(
                 kind=kind,
                 capability=capability,
                 method=method,
                 code=code,
                 message=message,
+                hint=hint,
             )
 
         raise MCPBridgeError.core_failure(
@@ -766,21 +794,32 @@ class CoreClientBridge:
     ) -> dict:
         """Block until target task changes or timeout elapses."""
         params: dict[str, Any] = {"task_id": task_id}
+        effective_wait_timeout = _TASK_WAIT_IPC_DEFAULT_TIMEOUT_SECONDS
         if timeout_seconds is not None:
             if isinstance(timeout_seconds, str):
                 normalized_timeout = timeout_seconds.strip()
                 if normalized_timeout:
                     with suppress(ValueError):
-                        params["timeout_seconds"] = float(normalized_timeout)
+                        parsed_timeout = float(normalized_timeout)
+                        params["timeout_seconds"] = parsed_timeout
+                        if parsed_timeout > 0:
+                            effective_wait_timeout = parsed_timeout
                 if "timeout_seconds" not in params:
                     params["timeout_seconds"] = timeout_seconds
             else:
                 params["timeout_seconds"] = timeout_seconds
+                if timeout_seconds > 0:
+                    effective_wait_timeout = timeout_seconds
         if wait_for_status is not None:
             params["wait_for_status"] = wait_for_status
         if from_updated_at is not None:
             params["from_updated_at"] = from_updated_at
-        return await self._query("tasks", "wait", params)
+        return await self._query(
+            "tasks",
+            "wait",
+            params,
+            request_timeout_seconds=effective_wait_timeout + _TASK_WAIT_IPC_TIMEOUT_BUFFER_SECONDS,
+        )
 
     async def submit_job(
         self,

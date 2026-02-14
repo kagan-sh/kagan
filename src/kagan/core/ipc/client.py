@@ -117,10 +117,12 @@ class IPCClient:
         session_id: str,
         session_profile: str | None = None,
         session_origin: str | None = None,
+        client_version: str | None = None,
         capability: str,
         method: str,
         params: dict[str, Any] | None = None,
         idempotency_key: str | None = None,
+        request_timeout_seconds: float | None = None,
     ) -> CoreResponse:
         """Send a request to the core and return the response.
 
@@ -128,10 +130,12 @@ class IPCClient:
 
         Args:
             session_id: Identifier of the originating client session.
+            client_version: Optional client-reported kagan package version.
             capability: Logical service group (e.g. ``tasks``).
             method: Method name within the capability.
             params: Method-specific parameters.
             idempotency_key: Optional de-duplication key.
+            request_timeout_seconds: Optional per-request read timeout override.
 
         Returns:
             The ``CoreResponse`` from the core.
@@ -148,6 +152,7 @@ class IPCClient:
             session_id=session_id,
             session_profile=session_profile,
             session_origin=session_origin,
+            client_version=client_version,
             capability=capability,
             method=method,
             params=params or {},
@@ -158,6 +163,9 @@ class IPCClient:
         payload["bearer_token"] = self._endpoint.token
 
         line = json.dumps(payload, separators=(",", ":")) + "\n"
+        effective_timeout = (
+            self._timeout if request_timeout_seconds is None else request_timeout_seconds
+        )
 
         async with self._lock:
             self._writer.write(line.encode("utf-8"))
@@ -166,7 +174,7 @@ class IPCClient:
             try:
                 raw = await asyncio.wait_for(
                     self._reader.readline(),
-                    timeout=self._timeout,
+                    timeout=effective_timeout,
                 )
             except TimeoutError:
                 await self.close()
