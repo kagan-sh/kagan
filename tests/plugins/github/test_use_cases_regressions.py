@@ -12,6 +12,7 @@ from kagan.core.plugins.github.application.use_cases import (
     GH_ISSUE_NUMBER_INVALID,
     GH_PR_NUMBER_INVALID,
     GH_SYNC_FAILED,
+    REVIEW_BLOCKED_NO_PR,
     GitHubPluginUseCases,
 )
 from kagan.core.plugins.github.domain.models import (
@@ -19,8 +20,10 @@ from kagan.core.plugins.github.domain.models import (
     ConnectRepoInput,
     LinkPrToTaskInput,
     SyncIssuesInput,
+    ValidateReviewTransitionInput,
 )
 from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, GhIssue, GhRepoView
+from kagan.core.plugins.github.sync import GITHUB_ISSUE_MAPPING_KEY, GITHUB_TASK_PR_MAPPING_KEY
 
 
 def _connected_repo() -> SimpleNamespace:
@@ -41,6 +44,7 @@ def _core_gateway(repo: SimpleNamespace) -> SimpleNamespace:
         create_task=AsyncMock(),
         update_task_fields=AsyncMock(),
         list_workspaces=AsyncMock(return_value=[]),
+        get_workspace_repos=AsyncMock(return_value=[]),
         update_repo_scripts=AsyncMock(),
     )
 
@@ -218,3 +222,161 @@ async def test_connect_repo_runs_preflight_in_worker_thread(
     assert result["success"] is True
     assert calls
     assert calls[0] == (gh_client.run_preflight_checks, ("/tmp/repo",))
+
+
+@pytest.mark.asyncio()
+async def test_validate_review_transition_allows_multi_repo_tasks_with_linked_prs() -> None:
+    task_id = "task-123"
+    repo_a = SimpleNamespace(
+        id="repo-a",
+        path="/tmp/repo-a",
+        scripts={
+            GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-a"}),
+            GITHUB_TASK_PR_MAPPING_KEY: json.dumps(
+                {
+                    "task_to_pr": {
+                        task_id: {
+                            "pr_number": 10,
+                            "pr_url": "https://github.com/acme/repo-a/pull/10",
+                            "pr_state": "OPEN",
+                            "head_branch": "feature/task-123",
+                            "base_branch": "main",
+                            "linked_at": "2026-01-01T00:00:00+00:00",
+                        }
+                    }
+                }
+            ),
+        },
+    )
+    repo_b = SimpleNamespace(
+        id="repo-b",
+        path="/tmp/repo-b",
+        scripts={
+            GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-b"}),
+            GITHUB_TASK_PR_MAPPING_KEY: json.dumps(
+                {
+                    "task_to_pr": {
+                        task_id: {
+                            "pr_number": 11,
+                            "pr_url": "https://github.com/acme/repo-b/pull/11",
+                            "pr_state": "OPEN",
+                            "head_branch": "feature/task-123",
+                            "base_branch": "main",
+                            "linked_at": "2026-01-01T00:00:00+00:00",
+                        }
+                    }
+                }
+            ),
+        },
+    )
+    core_gateway = _core_gateway(repo_a)
+    core_gateway.get_project_repos = AsyncMock(return_value=[repo_a, repo_b])
+    gh_client = SimpleNamespace()
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).validate_review_transition(
+        ValidateReviewTransitionInput(task_id=task_id, project_id="project-1")
+    )
+
+    assert result == {"allowed": True}
+
+
+@pytest.mark.asyncio()
+async def test_validate_review_transition_reports_hint_for_missing_multi_repo_prs() -> None:
+    task_id = "task-456"
+    repo_a = SimpleNamespace(
+        id="repo-a",
+        path="/tmp/repo-a",
+        scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-a"})},
+    )
+    repo_b = SimpleNamespace(
+        id="repo-b",
+        path="/tmp/repo-b",
+        scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-b"})},
+    )
+    core_gateway = _core_gateway(repo_a)
+    core_gateway.get_project_repos = AsyncMock(return_value=[repo_a, repo_b])
+    core_gateway.list_workspaces = AsyncMock(return_value=[SimpleNamespace(id="ws-1")])
+    core_gateway.get_workspace_repos = AsyncMock(
+        return_value=[{"repo_id": "repo-a"}, {"repo_id": "repo-b"}]
+    )
+    gh_client = SimpleNamespace()
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).validate_review_transition(
+        ValidateReviewTransitionInput(task_id=task_id, project_id="project-1")
+    )
+
+    assert result["allowed"] is False
+    assert result["code"] == REVIEW_BLOCKED_NO_PR
+    assert "repo-a" in result["message"]
+    assert "repo-b" in result["message"]
+    assert "repo_id" in result["hint"]
+
+
+@pytest.mark.asyncio()
+async def test_validate_review_transition_runs_lease_checks_in_worker_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_id = "task-789"
+    repo = SimpleNamespace(
+        id="repo-1",
+        path="/tmp/repo",
+        scripts={
+            GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "widgets"}),
+            GITHUB_TASK_PR_MAPPING_KEY: json.dumps(
+                {
+                    "task_to_pr": {
+                        task_id: {
+                            "pr_number": 12,
+                            "pr_url": "https://github.com/acme/widgets/pull/12",
+                            "pr_state": "OPEN",
+                            "head_branch": "feature/task-789",
+                            "base_branch": "main",
+                            "linked_at": "2026-01-01T00:00:00+00:00",
+                        }
+                    }
+                }
+            ),
+            GITHUB_ISSUE_MAPPING_KEY: json.dumps(
+                {
+                    "issue_to_task": {"42": task_id},
+                    "task_to_issue": {task_id: 42},
+                }
+            ),
+        },
+    )
+    core_gateway = _core_gateway(repo)
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        get_lease_state=MagicMock(
+            return_value=(
+                SimpleNamespace(
+                    is_locked=False,
+                    is_held_by_current_instance=False,
+                    can_acquire=True,
+                    requires_takeover=False,
+                    holder=None,
+                ),
+                None,
+            )
+        ),
+    )
+
+    calls: list[tuple[object, tuple[object, ...]]] = []
+
+    async def fake_to_thread(func, /, *args, **kwargs):
+        assert not kwargs
+        calls.append((func, args))
+        return func(*args)
+
+    monkeypatch.setattr(
+        "kagan.core.plugins.github.application.use_cases.asyncio.to_thread",
+        fake_to_thread,
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).validate_review_transition(
+        ValidateReviewTransitionInput(task_id=task_id, project_id="project-1")
+    )
+
+    assert result == {"allowed": True}
+    assert calls
+    assert calls[0][0] == gh_client.get_lease_state

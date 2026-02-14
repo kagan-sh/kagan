@@ -119,7 +119,7 @@ async def test_wait_task_minimal_params() -> None:
             "capability": "tasks",
             "method": "wait",
             "params": {"task_id": "T-200"},
-            "request_timeout_seconds": 905.0,
+            "request_timeout_seconds": 3605.0,
         }
     ]
 

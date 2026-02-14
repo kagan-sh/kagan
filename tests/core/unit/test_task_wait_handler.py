@@ -160,6 +160,34 @@ async def test_task_wait_status_filter_waits_for_target(api_env):
     assert result["current_status"] == "REVIEW"
 
 
+async def test_task_wait_ignores_non_status_updates(api_env):
+    """tasks.wait should not wake on TaskUpdated when status is unchanged."""
+    from kagan.core.events import TaskUpdated
+    from kagan.core.request_handlers import handle_task_wait
+    from kagan.core.time import utc_now
+
+    _, api, ctx = api_env
+    task = await api.create_task("Wait test", "desc")
+
+    async def _emit_update_after_delay():
+        await asyncio.sleep(0.05)
+        await ctx.event_bus.publish(
+            TaskUpdated(
+                task_id=task.id,
+                fields_changed=["description"],
+                updated_at=utc_now(),
+            )
+        )
+
+    emit_task = asyncio.create_task(_emit_update_after_delay())
+    result = await handle_task_wait(api, {"task_id": task.id, "timeout_seconds": 0.12})
+    await emit_task
+
+    assert result["changed"] is False
+    assert result["timed_out"] is True
+    assert result["code"] == "WAIT_TIMEOUT"
+
+
 async def test_task_wait_handler_cleanup_on_timeout(api_env):
     """Handler removes event listener after timeout."""
     from kagan.core.request_handlers import handle_task_wait

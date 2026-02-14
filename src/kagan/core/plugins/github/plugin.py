@@ -16,6 +16,7 @@ from kagan.core.plugins.github.contract import (
     GITHUB_METHOD_RECONCILE_PR_STATUS,
     GITHUB_METHOD_RELEASE_LEASE,
     GITHUB_METHOD_SYNC_ISSUES,
+    GITHUB_METHOD_VALIDATE_REVIEW_TRANSITION,
     GITHUB_PLUGIN_ID,
 )
 from kagan.core.plugins.sdk import (
@@ -57,6 +58,10 @@ _get_lease_state = _make_handler_dispatch("handle_get_lease_state", include_ctx=
 _create_pr_for_task = _make_handler_dispatch("handle_create_pr_for_task", include_ctx=True)
 _link_pr_to_task = _make_handler_dispatch("handle_link_pr_to_task", include_ctx=True)
 _reconcile_pr_status = _make_handler_dispatch("handle_reconcile_pr_status", include_ctx=True)
+_validate_review_transition = _make_handler_dispatch(
+    "handle_validate_review_transition",
+    include_ctx=True,
+)
 
 
 class GitHubPlugin:
@@ -168,6 +173,17 @@ class GitHubPlugin:
                 minimum_profile=CapabilityProfile.MAINTAINER,
                 mutating=True,
                 description="Reconcile the PR status for a task from GitHub.",
+            )
+        )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_VALIDATE_REVIEW_TRANSITION,
+                handler=_validate_review_transition,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=False,
+                description="Validate REVIEW transition guardrails for GitHub-connected repos.",
             )
         )
 

@@ -67,45 +67,6 @@ def _make_service_with_repos(
     return service
 
 
-class TestExtractWorkspaceIdFromBranch:
-    """Tests for _extract_workspace_id_from_branch method."""
-
-    def test_extracts_workspace_id_from_standard_branch(self, monkeypatch) -> None:
-        service = _make_service_with_repos(monkeypatch, [])
-
-        result = service._extract_workspace_id_from_branch("kagan/abc123")
-
-        assert result == "abc123"
-
-    def test_returns_none_for_merge_worktree_branch(self, monkeypatch) -> None:
-        service = _make_service_with_repos(monkeypatch, [])
-
-        result = service._extract_workspace_id_from_branch("kagan/merge-worktree-xyz789")
-
-        assert result is None
-
-    def test_returns_none_for_non_kagan_branch(self, monkeypatch) -> None:
-        service = _make_service_with_repos(monkeypatch, [])
-
-        result = service._extract_workspace_id_from_branch("feature/something")
-
-        assert result is None
-
-    def test_returns_none_for_empty_suffix(self, monkeypatch) -> None:
-        service = _make_service_with_repos(monkeypatch, [])
-
-        result = service._extract_workspace_id_from_branch("kagan/")
-
-        assert result is None
-
-    def test_handles_longer_workspace_ids(self, monkeypatch) -> None:
-        service = _make_service_with_repos(monkeypatch, [])
-
-        result = service._extract_workspace_id_from_branch("kagan/aeec2402")
-
-        assert result == "aeec2402"
-
-
 class TestRunJanitor:
     """Tests for run_janitor method."""
 

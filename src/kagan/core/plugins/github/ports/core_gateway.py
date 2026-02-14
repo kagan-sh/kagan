@@ -35,6 +35,10 @@ class GitHubCoreGateway(Protocol):
         """List workspaces for a task."""
         ...
 
+    async def get_workspace_repos(self, workspace_id: str) -> list[dict[str, Any]]:
+        """List workspace repo rows for a workspace."""
+        ...
+
     async def update_repo_scripts(self, repo_id: str, updates: dict[str, str]) -> None:
         """Merge script key/value updates into repo state."""
         ...

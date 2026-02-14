@@ -388,3 +388,31 @@ class TestConnectRepoHandler:
         assert result["success"] is True
         assert result["code"] == ALREADY_CONNECTED
         assert observed_project_ids == ["project-1", "project-1"]
+
+    @pytest.mark.asyncio()
+    async def test_connect_repo_rejects_mismatched_repo_id_for_single_repo_project(self) -> None:
+        from kagan.core.plugins.github.entrypoints.plugin_handlers import handle_connect_repo
+
+        ctx = MagicMock()
+
+        async def get_project_async(project_id: str) -> MagicMock:
+            return MagicMock(id=project_id)
+
+        async def get_repos_async(project_id: str) -> list:
+            repo = MagicMock()
+            repo.id = "repo-1"
+            repo.path = "/tmp/repo"
+            repo.scripts = {}
+            return [repo]
+
+        ctx.project_service.get_project = get_project_async
+        ctx.project_service.get_project_repos = get_repos_async
+
+        result = await handle_connect_repo(
+            ctx,
+            {"project_id": "project-1", "repo_id": "repo-2"},
+        )
+
+        assert result["success"] is False
+        assert result["code"] == GH_REPO_REQUIRED
+        assert "single repo" in result["hint"]

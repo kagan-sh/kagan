@@ -29,6 +29,7 @@ from kagan.core.plugins.github.domain.models import (
     ReconcilePrStatusInput,
     ReleaseLeaseInput,
     SyncIssuesInput,
+    ValidateReviewTransitionInput,
 )
 
 if TYPE_CHECKING:
@@ -138,6 +139,18 @@ async def handle_reconcile_pr_status(ctx: AppContext, params: dict[str, Any]) ->
     return await _build_use_cases(ctx).reconcile_pr_status(request)
 
 
+async def handle_validate_review_transition(
+    ctx: AppContext,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate REVIEW transition guardrails for GitHub-connected repos."""
+    request = ValidateReviewTransitionInput(
+        task_id=_non_empty_str(params.get("task_id")),
+        project_id=_non_empty_str(params.get("project_id")),
+    )
+    return await _build_use_cases(ctx).validate_review_transition(request)
+
+
 __all__ = [
     "GH_ISSUE_REQUIRED",
     "GH_NOT_CONNECTED",
@@ -158,4 +171,5 @@ __all__ = [
     "handle_reconcile_pr_status",
     "handle_release_lease",
     "handle_sync_issues",
+    "handle_validate_review_transition",
 ]

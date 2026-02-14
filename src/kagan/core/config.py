@@ -141,12 +141,12 @@ class GeneralConfig(BaseModel):
         description="IPC transport preference: auto|socket|tcp",
     )
     tasks_wait_default_timeout_seconds: int = Field(
-        default=900,
-        description="Default timeout in seconds for tasks_wait long-poll (15 minutes)",
+        default=1800,
+        description="Default timeout in seconds for tasks_wait long-poll (30 minutes)",
     )
     tasks_wait_max_timeout_seconds: int = Field(
-        default=900,
-        description="Maximum allowed timeout in seconds for tasks_wait long-poll",
+        default=3600,
+        description="Maximum allowed timeout in seconds for tasks_wait long-poll (60 minutes)",
     )
 
     @field_validator("worktree_base_ref_strategy", mode="before")
@@ -182,6 +182,23 @@ class GeneralConfig(BaseModel):
             case _:
                 pass
         return "auto"
+
+    @model_validator(mode="after")
+    def validate_tasks_wait_bounds(self) -> GeneralConfig:
+        """Ensure task wait timeouts are positive and ordered."""
+        if self.tasks_wait_default_timeout_seconds <= 0:
+            msg = "general.tasks_wait_default_timeout_seconds must be > 0"
+            raise ValueError(msg)
+        if self.tasks_wait_max_timeout_seconds <= 0:
+            msg = "general.tasks_wait_max_timeout_seconds must be > 0"
+            raise ValueError(msg)
+        if self.tasks_wait_max_timeout_seconds < self.tasks_wait_default_timeout_seconds:
+            msg = (
+                "general.tasks_wait_max_timeout_seconds must be >= "
+                "general.tasks_wait_default_timeout_seconds"
+            )
+            raise ValueError(msg)
+        return self
 
 
 class UIConfig(BaseModel):

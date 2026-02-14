@@ -58,6 +58,8 @@ max_concurrent_agents = 3
 | `core_idle_timeout_seconds`     | integer        | `180`                            | Core auto-stop timeout after idle                                              |
 | `core_autostart`                | boolean        | `true`                           | Start core automatically when client connects                                  |
 | `core_transport_preference`     | string         | `"auto"`                         | Allowed: `auto`, `socket`, `tcp`                                               |
+| `tasks_wait_default_timeout_seconds` | integer   | `1800`                           | Default timeout for `task_wait` (30 minutes)                                   |
+| `tasks_wait_max_timeout_seconds`     | integer   | `3600`                           | Max allowed timeout for `task_wait` (60 minutes)                               |
 
 ## `[agents.<name>]`
 

@@ -37,6 +37,9 @@ class AppContextCoreGateway:
     async def list_workspaces(self, *, task_id: str) -> list[Workspace]:
         return await self._ctx.workspace_service.list_workspaces(task_id=task_id)
 
+    async def get_workspace_repos(self, workspace_id: str) -> list[dict[str, Any]]:
+        return await self._ctx.workspace_service.get_workspace_repos(workspace_id)
+
     async def update_repo_scripts(self, repo_id: str, updates: dict[str, str]) -> None:
         await self._ctx.project_service.update_repo_script_values(repo_id, updates)
 

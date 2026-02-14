@@ -815,7 +815,7 @@ async def handle_task_wait(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
     """Wait for a task status change using event-driven wakeup."""
     import asyncio
 
-    from kagan.core.events import TaskDeleted, TaskStatusChanged, TaskUpdated
+    from kagan.core.events import TaskDeleted, TaskStatusChanged
 
     f = _assert_api(api)
     task_id = params["task_id"]
@@ -905,11 +905,6 @@ async def handle_task_wait(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
             change_info["to_status"] = event.to_status.value
             change_info["changed_at"] = event.updated_at.isoformat()
             wake_event.set()
-        elif isinstance(event, TaskUpdated) and event.task_id == task_id:
-            if wait_for_status is not None:
-                return
-            change_info["changed_at"] = event.updated_at.isoformat()
-            wake_event.set()
         elif isinstance(event, TaskDeleted) and event.task_id == task_id:
             change_info["deleted"] = True
             wake_event.set()
@@ -929,7 +924,7 @@ async def handle_task_wait(api: KaganAPI, params: dict[str, Any]) -> dict[str, A
                 "changed_at": None,
                 "task": None,
                 "code": "WAIT_TIMEOUT",
-                "message": f"No change detected within {timeout_seconds}s",
+                "message": f"No status change detected within {timeout_seconds}s",
             }
     except asyncio.CancelledError:
         return {

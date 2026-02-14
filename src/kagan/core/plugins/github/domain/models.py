@@ -87,6 +87,14 @@ class ReconcilePrStatusInput:
     task_id: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ValidateReviewTransitionInput:
+    """Input payload for validate_review_transition."""
+
+    task_id: str | None
+    project_id: str | None
+
+
 __all__ = [
     "AcquireLeaseInput",
     "ConnectRepoInput",
@@ -97,4 +105,5 @@ __all__ = [
     "ReconcilePrStatusInput",
     "ReleaseLeaseInput",
     "SyncIssuesInput",
+    "ValidateReviewTransitionInput",
 ]

@@ -15,6 +15,8 @@ from kagan.core.adapters.db.repositories.auxiliary import ScratchRepository
 from kagan.core.api import KaganAPI
 from kagan.core.bootstrap import AppContext, InMemoryEventBus
 from kagan.core.config import KaganConfig
+from kagan.core.plugins.github import register_github_plugin
+from kagan.core.plugins.sdk import PluginRegistry
 from kagan.core.services.projects import ProjectServiceImpl
 from kagan.core.services.tasks import TaskServiceImpl
 
@@ -137,6 +139,8 @@ async def build_api(
     ctx.merge_service = mock_merge_service()
     ctx.job_service = mock_job_service()
     ctx.active_project_id = project_id
+    ctx.plugin_registry = PluginRegistry()
+    register_github_plugin(ctx.plugin_registry)
 
     api = KaganAPI(ctx)
     return task_repo, api, ctx

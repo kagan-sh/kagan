@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         ReconcilePrStatusInput,
         ReleaseLeaseInput,
         SyncIssuesInput,
+        ValidateReviewTransitionInput,
     )
     from kagan.core.plugins.github.ports.core_gateway import GitHubCoreGateway
     from kagan.core.plugins.github.ports.gh_client import GitHubClient
@@ -77,6 +78,9 @@ PR_CREATED: Final = "PR_CREATED"
 PR_LINKED: Final = "PR_LINKED"
 PR_STATUS_RECONCILED: Final = "PR_STATUS_RECONCILED"
 LEASE_ENFORCEMENT_DISABLED: Final = "LEASE_ENFORCEMENT_DISABLED"
+REVIEW_BLOCKED_NO_PR: Final = "REVIEW_BLOCKED_NO_PR"
+REVIEW_BLOCKED_LEASE: Final = "REVIEW_BLOCKED_LEASE"
+REVIEW_GUARDRAIL_CHECK_FAILED: Final = "REVIEW_GUARDRAIL_CHECK_FAILED"
 _SYNC_TASK_WRITE_ERRORS: Final = (ValueError, RuntimeError, LookupError)
 
 
@@ -531,6 +535,149 @@ class GitHubPluginUseCases:
             },
         }
 
+    async def validate_review_transition(
+        self,
+        request: ValidateReviewTransitionInput,
+    ) -> dict[str, Any]:
+        """Validate REVIEW transition guardrails for GitHub-connected repos."""
+        task_id = self._non_empty_str(request.task_id)
+        project_id = self._non_empty_str(request.project_id)
+        if not task_id or not project_id:
+            return {"allowed": True}
+
+        try:
+            repos = await self._core.get_project_repos(project_id)
+        except Exception as exc:
+            # Explicit resilience boundary: guardrail verification must fail closed.
+            return self._review_guardrail_check_failed(str(exc))
+
+        if not repos:
+            return {"allowed": True}
+
+        connected_repos: list[dict[str, Any]] = []
+        for repo in repos:
+            connection_state = load_connection_state(repo.scripts)
+            if not connection_state.raw_value:
+                continue
+
+            connection = connection_state.normalized
+            if connection is None:
+                return self._review_guardrail_check_failed("invalid GitHub connection metadata")
+
+            connected_repos.append(
+                {
+                    "repo": repo,
+                    "connection": connection,
+                    "pr_mapping": load_pr_mapping_state(repo.scripts),
+                    "issue_mapping": load_issue_mapping_state(repo.scripts),
+                    "lease_enforced": load_lease_enforcement_state(repo.scripts),
+                }
+            )
+
+        if not connected_repos:
+            return {"allowed": True}
+
+        owner_candidates = [
+            repo_ctx
+            for repo_ctx in connected_repos
+            if repo_ctx["pr_mapping"].has_pr(task_id)
+            or repo_ctx["issue_mapping"].get_issue_number(task_id) is not None
+        ]
+
+        if not owner_candidates:
+            try:
+                owner_candidates = await self._resolve_workspace_owner_candidates(
+                    task_id=task_id,
+                    connected_repos=connected_repos,
+                )
+            except Exception as exc:
+                return self._review_guardrail_check_failed(str(exc))
+
+        if not owner_candidates:
+            # Task is not scoped to a GitHub-connected repo; skip GitHub guardrails.
+            return {"allowed": True}
+
+        missing_pr_repos: list[str] = []
+        lease_conflicts: list[str] = []
+        gh_path: str | None = None
+
+        for repo_ctx in owner_candidates:
+            repo = repo_ctx["repo"]
+            repo_label = self._repo_identifier(repo)
+            if not repo_ctx["pr_mapping"].has_pr(task_id):
+                missing_pr_repos.append(repo_label)
+                continue
+
+            issue_number = repo_ctx["issue_mapping"].get_issue_number(task_id)
+            if issue_number is None or not bool(repo_ctx.get("lease_enforced", True)):
+                continue
+
+            owner_repo = resolve_owner_repo(repo_ctx["connection"])
+            if owner_repo is None:
+                return self._review_guardrail_check_failed(
+                    f"{repo_label}: GitHub connection metadata missing owner/repo"
+                )
+            owner, repo_name = owner_repo
+
+            if gh_path is None:
+                gh_path, gh_error = self._gh.resolve_gh_cli_path()
+                if gh_error is not None:
+                    detail = (
+                        str(gh_error.get("message"))
+                        if isinstance(gh_error.get("message"), str)
+                        else "GitHub CLI (gh) is unavailable"
+                    )
+                    return self._review_guardrail_check_failed(f"{repo_label}: {detail}")
+            assert gh_path is not None
+
+            state, error = await asyncio.to_thread(
+                self._gh.get_lease_state,
+                gh_path,
+                repo.path,
+                owner,
+                repo_name,
+                issue_number,
+            )
+            if error:
+                return self._review_guardrail_check_failed(f"{repo_label}: {error}")
+            if state is None:
+                return self._review_guardrail_check_failed(
+                    f"{repo_label}: lease state could not be determined"
+                )
+            if state.is_locked and not state.is_held_by_current_instance:
+                holder_info = ""
+                if state.holder:
+                    holder_info = f" (held by {state.holder.instance_id})"
+                lease_conflicts.append(f"{repo_label}{holder_info}")
+
+        if missing_pr_repos:
+            repo_list = ", ".join(sorted(set(missing_pr_repos)))
+            return {
+                "allowed": False,
+                "code": REVIEW_BLOCKED_NO_PR,
+                "message": (
+                    "REVIEW transition blocked: no linked PR for repo(s): "
+                    f"{repo_list}. Create or link PRs before requesting review."
+                ),
+                "hint": (
+                    "Use create_pr_for_task or link_pr_to_task with repo_id for each repo."
+                ),
+            }
+
+        if lease_conflicts:
+            conflict_details = ", ".join(sorted(set(lease_conflicts)))
+            return {
+                "allowed": False,
+                "code": REVIEW_BLOCKED_LEASE,
+                "message": (
+                    "REVIEW transition blocked: lease held by another instance for repo(s): "
+                    f"{conflict_details}. Wait for lease release before requesting review."
+                ),
+                "hint": "The issue is being worked on by another Kagan instance.",
+            }
+
+        return {"allowed": True}
+
     async def create_pr_for_task(self, request: CreatePrForTaskInput) -> dict[str, Any]:
         """Create a PR for a task and link it."""
         if not request.task_id:
@@ -836,6 +983,53 @@ class GitHubPluginUseCases:
             return f"PR #{pr_number} closed without merge. Task status unchanged."
         return f"PR #{pr_number} is open. No task status change."
 
+    @staticmethod
+    def _review_guardrail_check_failed(detail: str) -> dict[str, Any]:
+        return {
+            "allowed": False,
+            "code": REVIEW_GUARDRAIL_CHECK_FAILED,
+            "message": "REVIEW transition blocked: failed to verify GitHub guardrails.",
+            "hint": f"Resolve GitHub plugin health and retry. Details: {detail}",
+        }
+
+    async def _resolve_workspace_owner_candidates(
+        self,
+        *,
+        task_id: str,
+        connected_repos: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        workspaces = await self._core.list_workspaces(task_id=task_id)
+        workspace_repo_ids: set[str] = set()
+        for workspace in workspaces:
+            workspace_repos = await self._core.get_workspace_repos(workspace.id)
+            for workspace_repo in workspace_repos:
+                if not isinstance(workspace_repo, dict):
+                    continue
+                repo_id = workspace_repo.get("repo_id")
+                if isinstance(repo_id, str) and repo_id:
+                    workspace_repo_ids.add(repo_id)
+
+        if not workspace_repo_ids:
+            return []
+
+        owner_candidates: list[dict[str, Any]] = []
+        for repo_ctx in connected_repos:
+            repo = repo_ctx["repo"]
+            repo_id = repo.id if hasattr(repo, "id") else None
+            if isinstance(repo_id, str) and repo_id in workspace_repo_ids:
+                owner_candidates.append(repo_ctx)
+        return owner_candidates
+
+    @staticmethod
+    def _repo_identifier(repo: Any) -> str:
+        repo_id = repo.id if hasattr(repo, "id") else None
+        if isinstance(repo_id, str) and repo_id:
+            return repo_id
+        repo_name = repo.name if hasattr(repo, "name") else None
+        if isinstance(repo_name, str) and repo_name:
+            return repo_name
+        return "<unknown-repo>"
+
     async def _resolve_connect_target(
         self,
         project_id: str | None,
@@ -867,7 +1061,16 @@ class GitHubPluginUseCases:
             )
 
         if len(repos) == 1:
-            return repos[0], None
+            target_repo = repos[0]
+            target_repo_id = target_repo.id if hasattr(target_repo, "id") else None
+            if repo_id and repo_id != target_repo_id:
+                expected = target_repo_id if isinstance(target_repo_id, str) else "<unknown>"
+                return None, self._error(
+                    GH_REPO_REQUIRED,
+                    f"Repo not found in project: {repo_id}",
+                    f"Project has a single repo ({expected}). Use that repo_id or omit repo_id.",
+                )
+            return target_repo, None
 
         if not repo_id:
             return None, self._error(

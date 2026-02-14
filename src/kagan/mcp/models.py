@@ -174,8 +174,8 @@ class TaskDetails(BaseModel):
 class TaskWaitResponse(BaseModel):
     """Response from task_wait long-poll tool."""
 
-    changed: bool = Field(description="Whether the task changed before timeout")
-    timed_out: bool = Field(description="Whether the wait timed out without a change")
+    changed: bool = Field(description="Whether task status changed before timeout")
+    timed_out: bool = Field(description="Whether the wait timed out without status change")
     task_id: str = Field(description="ID of the watched task")
     previous_status: str | None = Field(
         default=None, description="Task status at the start of the wait"
@@ -191,12 +191,6 @@ class TaskWaitResponse(BaseModel):
     )
     code: str | None = Field(default=None, description="Machine-readable status code")
     message: str | None = Field(default=None, description="Human-readable status message")
-
-
-class ReviewResponse(MutatingResponse):
-    """Response from task_patch(transition="request_review") tool."""
-
-    status: str = Field(description="'review' for success, 'error' for failure")
 
 
 class PlanProposalResponse(MutatingResponse):
@@ -247,25 +241,6 @@ class TaskCreateResponse(TaskScopedMutatingResponse):
     status: str = Field(description="Initial status (usually 'backlog')")
 
 
-class TaskUpdateResponse(TaskScopedMutatingResponse):
-    """Response from task_patch tool."""
-
-    current_task_type: str | None = Field(
-        default=None,
-        description="Current task execution mode when relevant (AUTO or PAIR)",
-    )
-
-
-class ScratchpadUpdateResponse(TaskScopedMutatingResponse):
-    """Response from task_patch(append_note) tool."""
-
-
-class TaskMoveResponse(TaskScopedMutatingResponse):
-    """Response from task_patch(set_status) tool."""
-
-    new_status: str | None = Field(default=None, description="The new status after the move")
-
-
 class JobResponse(JobScopedResponse):
     """Response from job_start, job_poll, and job_cancel tools."""
 
@@ -292,15 +267,6 @@ class JobResponse(JobScopedResponse):
     current_task_type: str | None = Field(
         default=None,
         description="Current task execution mode when relevant (AUTO or PAIR)",
-    )
-
-
-class JobActionsResponse(BaseModel):
-    """Response from job_start action validation tool."""
-
-    actions: list[str] = Field(
-        default_factory=list,
-        description="Valid action names accepted by job_start",
     )
 
 
@@ -333,48 +299,6 @@ class JobEventsResponse(JobScopedResponse):
     next_offset: int | None = Field(default=None, description="Offset for the next page")
 
 
-class SessionCreateResponse(TaskScopedMutatingResponse):
-    """Response from session_manage(open) tool with human handoff details."""
-
-    session_name: str = Field(description="Session identifier (e.g., tmux session name)")
-    backend: str = Field(description="PAIR backend (tmux, vscode, cursor)")
-    already_exists: bool = Field(description="Whether an existing session was reused")
-    worktree_path: str = Field(description="Workspace/worktree directory for the task")
-    prompt_path: str = Field(description="Path to generated startup prompt file")
-    primary_command: str = Field(description="Primary command to open or attach the session")
-    commands: list[str] = Field(
-        default_factory=list,
-        description="Copy/paste-friendly command checklist for human handoff",
-    )
-    links: dict[str, str] = Field(
-        default_factory=dict,
-        description="Convenience links/deep links (file URLs and IDE protocol URLs)",
-    )
-    instructions: str = Field(description="Short human-facing handoff instructions")
-    next_step: str = Field(description="What human/agent should do next after handoff")
-    current_task_type: str | None = Field(
-        default=None,
-        description="Current task execution mode when relevant (AUTO or PAIR)",
-    )
-
-
-class SessionExistsResponse(BaseModel):
-    """Response from session_manage(read) tool."""
-
-    task_id: str = Field(description="ID of the task")
-    exists: bool = Field(description="Whether a PAIR session currently exists")
-    session_name: str = Field(description="Expected session identifier")
-    backend: str | None = Field(default=None, description="PAIR backend for this task")
-    worktree_path: str | None = Field(default=None, description="Task worktree path if available")
-    prompt_path: str | None = Field(
-        default=None, description="Task startup prompt path if available"
-    )
-
-
-class SessionKillResponse(TaskScopedMutatingResponse):
-    """Response from session_manage(close) tool."""
-
-
 class TaskDeleteResponse(TaskScopedMutatingResponse):
     """Response from task_delete tool."""
 
@@ -399,15 +323,6 @@ class ProjectOpenResponse(MutatingResponse):
 
     project_id: str = Field(description="ID of the opened project")
     name: str = Field(description="Project name")
-
-
-class ProjectCreateResponse(MutatingResponse):
-    """Response from project_create tool."""
-
-    project_id: str = Field(description="ID of the created project")
-    name: str = Field(description="Project name")
-    description: str = Field(description="Project description")
-    repo_count: int = Field(description="Number of repositories linked to the project")
 
 
 class RepoListItem(BaseModel):
