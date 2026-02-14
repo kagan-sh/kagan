@@ -8,7 +8,10 @@ from typing import Any, cast
 from kagan.core.plugins.github.contract import (
     GITHUB_CAPABILITY,
     GITHUB_CONTRACT_PROBE_METHOD,
+    GITHUB_METHOD_ACQUIRE_LEASE,
     GITHUB_METHOD_CONNECT_REPO,
+    GITHUB_METHOD_GET_LEASE_STATE,
+    GITHUB_METHOD_RELEASE_LEASE,
     GITHUB_METHOD_SYNC_ISSUES,
     GITHUB_PLUGIN_ID,
 )
@@ -66,6 +69,39 @@ class GitHubPlugin:
                 description="Sync GitHub issues to Kagan task projections.",
             )
         )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_ACQUIRE_LEASE,
+                handler=_acquire_lease,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=True,
+                description="Acquire a lease on a GitHub issue for the current instance.",
+            )
+        )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_RELEASE_LEASE,
+                handler=_release_lease,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=True,
+                description="Release a lease on a GitHub issue.",
+            )
+        )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_GET_LEASE_STATE,
+                handler=_get_lease_state,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=False,
+                description="Get the current lease state for a GitHub issue.",
+            )
+        )
 
 
 async def _contract_probe(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
@@ -85,6 +121,24 @@ async def _sync_issues(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
     runtime_module = import_module("kagan.core.plugins.github.runtime")
     handle_sync_issues = cast("Any", runtime_module).handle_sync_issues
     return cast("dict[str, Any]", await handle_sync_issues(ctx, params))
+
+
+async def _acquire_lease(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    runtime_module = import_module("kagan.core.plugins.github.runtime")
+    handle_acquire_lease = cast("Any", runtime_module).handle_acquire_lease
+    return cast("dict[str, Any]", await handle_acquire_lease(ctx, params))
+
+
+async def _release_lease(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    runtime_module = import_module("kagan.core.plugins.github.runtime")
+    handle_release_lease = cast("Any", runtime_module).handle_release_lease
+    return cast("dict[str, Any]", await handle_release_lease(ctx, params))
+
+
+async def _get_lease_state(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    runtime_module = import_module("kagan.core.plugins.github.runtime")
+    handle_get_lease_state = cast("Any", runtime_module).handle_get_lease_state
+    return cast("dict[str, Any]", await handle_get_lease_state(ctx, params))
 
 
 def register_github_plugin(registry: PluginRegistry) -> None:

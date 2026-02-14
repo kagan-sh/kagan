@@ -402,4 +402,277 @@ async def _upsert_repo_sync_state(
         await session.commit()
 
 
-__all__ = ["build_contract_probe_payload", "handle_connect_repo", "handle_sync_issues"]
+GH_ISSUE_REQUIRED = "GH_ISSUE_REQUIRED"
+
+
+async def handle_acquire_lease(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
+    """Acquire a lease on a GitHub issue for the current Kagan instance.
+
+    Params:
+        project_id: Required project ID
+        repo_id: Optional repo ID (required for multi-repo projects)
+        issue_number: Required issue number
+        force_takeover: Optional bool to force takeover of existing lease
+
+    Returns success with lease holder info or error with current holder info.
+    """
+    from kagan.core.plugins.github.gh_adapter import run_gh_auth_status
+    from kagan.core.plugins.github.lease import (
+        LEASE_HELD_BY_OTHER,
+        acquire_lease,
+    )
+
+    project_id = params.get("project_id")
+    repo_id = params.get("repo_id")
+    issue_number = params.get("issue_number")
+    force_takeover = params.get("force_takeover", False)
+
+    if issue_number is None:
+        return {
+            "success": False,
+            "code": GH_ISSUE_REQUIRED,
+            "message": "issue_number is required",
+            "hint": "Provide the GitHub issue number to acquire lease for",
+        }
+
+    # Resolve project and repo
+    resolved = await _resolve_connect_target(ctx, project_id, repo_id)
+    if not resolved["success"]:
+        return resolved
+
+    repo = resolved["repo"]
+
+    # Verify GitHub connection exists
+    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+    if not connection_raw:
+        return {
+            "success": False,
+            "code": GH_NOT_CONNECTED,
+            "message": "Repository is not connected to GitHub",
+            "hint": "Run connect_repo first to establish GitHub connection",
+        }
+
+    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
+    owner = connection.get("owner", "")
+    repo_name = connection.get("name", "")
+
+    # Resolve gh CLI
+    cli_info = resolve_gh_cli()
+    if not cli_info.available or not cli_info.path:
+        return {
+            "success": False,
+            "code": "GH_CLI_NOT_AVAILABLE",
+            "message": "GitHub CLI (gh) is not available",
+            "hint": "Install gh CLI: https://cli.github.com/",
+        }
+
+    # Get authenticated user for attribution
+    auth_status = run_gh_auth_status(cli_info.path)
+    github_user = auth_status.username if auth_status.authenticated else None
+
+    # Attempt to acquire lease
+    result = acquire_lease(
+        cli_info.path,
+        repo.path,
+        owner,
+        repo_name,
+        int(issue_number),
+        github_user=github_user,
+        force_takeover=bool(force_takeover),
+    )
+
+    if result.success:
+        return {
+            "success": True,
+            "code": result.code,
+            "message": result.message,
+            "holder": result.holder.to_dict() if result.holder else None,
+        }
+
+    # Failed - include holder info for blocked case
+    response: dict[str, Any] = {
+        "success": False,
+        "code": result.code,
+        "message": result.message,
+    }
+    if result.code == LEASE_HELD_BY_OTHER and result.holder:
+        response["holder"] = result.holder.to_dict()
+        response["hint"] = (
+            f"Issue #{issue_number} is locked by another instance. "
+            "Use force_takeover=true to take over the lease."
+        )
+    return response
+
+
+async def handle_release_lease(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
+    """Release a lease on a GitHub issue.
+
+    Only succeeds if the current instance holds the lease.
+
+    Params:
+        project_id: Required project ID
+        repo_id: Optional repo ID (required for multi-repo projects)
+        issue_number: Required issue number
+
+    Returns success or error with details.
+    """
+    from kagan.core.plugins.github.lease import release_lease
+
+    project_id = params.get("project_id")
+    repo_id = params.get("repo_id")
+    issue_number = params.get("issue_number")
+
+    if issue_number is None:
+        return {
+            "success": False,
+            "code": GH_ISSUE_REQUIRED,
+            "message": "issue_number is required",
+            "hint": "Provide the GitHub issue number to release lease for",
+        }
+
+    # Resolve project and repo
+    resolved = await _resolve_connect_target(ctx, project_id, repo_id)
+    if not resolved["success"]:
+        return resolved
+
+    repo = resolved["repo"]
+
+    # Verify GitHub connection exists
+    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+    if not connection_raw:
+        return {
+            "success": False,
+            "code": GH_NOT_CONNECTED,
+            "message": "Repository is not connected to GitHub",
+            "hint": "Run connect_repo first to establish GitHub connection",
+        }
+
+    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
+    owner = connection.get("owner", "")
+    repo_name = connection.get("name", "")
+
+    # Resolve gh CLI
+    cli_info = resolve_gh_cli()
+    if not cli_info.available or not cli_info.path:
+        return {
+            "success": False,
+            "code": "GH_CLI_NOT_AVAILABLE",
+            "message": "GitHub CLI (gh) is not available",
+            "hint": "Install gh CLI: https://cli.github.com/",
+        }
+
+    # Attempt to release lease
+    result = release_lease(
+        cli_info.path,
+        repo.path,
+        owner,
+        repo_name,
+        int(issue_number),
+    )
+
+    return {
+        "success": result.success,
+        "code": result.code,
+        "message": result.message,
+    }
+
+
+async def handle_get_lease_state(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
+    """Get the current lease state for a GitHub issue.
+
+    Params:
+        project_id: Required project ID
+        repo_id: Optional repo ID (required for multi-repo projects)
+        issue_number: Required issue number
+
+    Returns lease state with holder info if locked.
+    """
+    from kagan.core.plugins.github.lease import get_lease_state
+
+    project_id = params.get("project_id")
+    repo_id = params.get("repo_id")
+    issue_number = params.get("issue_number")
+
+    if issue_number is None:
+        return {
+            "success": False,
+            "code": GH_ISSUE_REQUIRED,
+            "message": "issue_number is required",
+            "hint": "Provide the GitHub issue number to check lease state for",
+        }
+
+    # Resolve project and repo
+    resolved = await _resolve_connect_target(ctx, project_id, repo_id)
+    if not resolved["success"]:
+        return resolved
+
+    repo = resolved["repo"]
+
+    # Verify GitHub connection exists
+    connection_raw = repo.scripts.get(GITHUB_CONNECTION_KEY) if repo.scripts else None
+    if not connection_raw:
+        return {
+            "success": False,
+            "code": GH_NOT_CONNECTED,
+            "message": "Repository is not connected to GitHub",
+            "hint": "Run connect_repo first to establish GitHub connection",
+        }
+
+    connection = json.loads(connection_raw) if isinstance(connection_raw, str) else connection_raw
+    owner = connection.get("owner", "")
+    repo_name = connection.get("name", "")
+
+    # Resolve gh CLI
+    cli_info = resolve_gh_cli()
+    if not cli_info.available or not cli_info.path:
+        return {
+            "success": False,
+            "code": "GH_CLI_NOT_AVAILABLE",
+            "message": "GitHub CLI (gh) is not available",
+            "hint": "Install gh CLI: https://cli.github.com/",
+        }
+
+    # Get lease state
+    state, error = get_lease_state(
+        cli_info.path,
+        repo.path,
+        owner,
+        repo_name,
+        int(issue_number),
+    )
+
+    if error:
+        return {
+            "success": False,
+            "code": "LEASE_STATE_ERROR",
+            "message": f"Failed to get lease state: {error}",
+        }
+
+    if state is None:
+        return {
+            "success": False,
+            "code": "LEASE_STATE_ERROR",
+            "message": "Failed to get lease state",
+        }
+
+    return {
+        "success": True,
+        "code": "LEASE_STATE_OK",
+        "state": {
+            "is_locked": state.is_locked,
+            "is_held_by_current_instance": state.is_held_by_current_instance,
+            "can_acquire": state.can_acquire,
+            "requires_takeover": state.requires_takeover,
+            "holder": state.holder.to_dict() if state.holder else None,
+        },
+    }
+
+
+__all__ = [
+    "build_contract_probe_payload",
+    "handle_acquire_lease",
+    "handle_connect_repo",
+    "handle_get_lease_state",
+    "handle_release_lease",
+    "handle_sync_issues",
+]
