@@ -8,6 +8,7 @@ from typing import Any, cast
 from kagan.core.plugins.github.contract import (
     GITHUB_CAPABILITY,
     GITHUB_CONTRACT_PROBE_METHOD,
+    GITHUB_METHOD_CONNECT_REPO,
     GITHUB_PLUGIN_ID,
 )
 from kagan.core.plugins.sdk import (
@@ -42,6 +43,17 @@ class GitHubPlugin:
                 description="Return the canonical GitHub plugin operation contract.",
             )
         )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=GITHUB_METHOD_CONNECT_REPO,
+                handler=_connect_repo,
+                minimum_profile=CapabilityProfile.MAINTAINER,
+                mutating=True,
+                description="Connect a repo to GitHub with preflight checks.",
+            )
+        )
 
 
 async def _contract_probe(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
@@ -49,6 +61,12 @@ async def _contract_probe(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
     runtime_module = import_module("kagan.core.plugins.github.runtime")
     build_contract_probe_payload = cast("Any", runtime_module).build_contract_probe_payload
     return cast("dict[str, Any]", build_contract_probe_payload(params))
+
+
+async def _connect_repo(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
+    runtime_module = import_module("kagan.core.plugins.github.runtime")
+    handle_connect_repo = cast("Any", runtime_module).handle_connect_repo
+    return cast("dict[str, Any]", await handle_connect_repo(ctx, params))
 
 
 def register_github_plugin(registry: PluginRegistry) -> None:
