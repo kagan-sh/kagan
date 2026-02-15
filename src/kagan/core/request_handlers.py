@@ -97,6 +97,8 @@ _TUI_ALLOWED_API_METHODS: frozenset[str] = frozenset(
         "merge_task_direct",
         "move_task",
         "open_project",
+        "plugin_ui_catalog",
+        "plugin_ui_invoke",
         "prepare_auto_output",
         "provision_workspace",
         "queue_message",
@@ -1899,6 +1901,28 @@ async def _dispatch_tui_api_call(
             project_id = _required_non_empty(kwargs, "project_id")
             repo_id = _non_empty_str(kwargs.get("repo_id"))
             return await f.github_sync_issues(project_id=project_id, repo_id=repo_id)
+        case "plugin_ui_catalog":
+            project_id = _required_non_empty(kwargs, "project_id")
+            repo_id = _non_empty_str(kwargs.get("repo_id"))
+            return await f.plugin_ui_catalog(project_id=project_id, repo_id=repo_id)
+        case "plugin_ui_invoke":
+            project_id = _required_non_empty(kwargs, "project_id")
+            plugin_id = _required_non_empty(kwargs, "plugin_id")
+            action_id = _required_non_empty(kwargs, "action_id")
+            repo_id = _non_empty_str(kwargs.get("repo_id"))
+            inputs_raw = kwargs.get("inputs")
+            if inputs_raw is not None and not isinstance(inputs_raw, dict):
+                raise ValueError("inputs must be an object when provided")
+            inputs: dict[str, Any] | None = (
+                dict(inputs_raw) if isinstance(inputs_raw, dict) else None
+            )
+            return await f.plugin_ui_invoke(
+                project_id=project_id,
+                plugin_id=plugin_id,
+                action_id=action_id,
+                repo_id=repo_id,
+                inputs=inputs,
+            )
         case _:
             method = getattr(f, method_name, None)
             if method is None or not callable(method):

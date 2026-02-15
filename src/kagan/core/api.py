@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from kagan.core.api_automation import AutomationApiMixin
 from kagan.core.api_github import GitHubApiMixin
+from kagan.core.api_plugin_ui import PluginUiApiMixin
 from kagan.core.api_projects import ProjectApiMixin
 from kagan.core.api_tasks import TaskApiMixin
 from kagan.core.expose import expose
@@ -107,7 +108,7 @@ class SessionCreateResult:
 # ── API ─────────────────────────────────────────────────────────────
 
 
-class KaganAPI(TaskApiMixin, ProjectApiMixin, AutomationApiMixin, GitHubApiMixin):
+class KaganAPI(TaskApiMixin, ProjectApiMixin, AutomationApiMixin, GitHubApiMixin, PluginUiApiMixin):
     """Typed orchestration API for all Kagan operations.
 
     Wraps the existing AppContext and provides direct method calls

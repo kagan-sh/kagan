@@ -544,6 +544,54 @@ class CoreBackedApi:
             raise RuntimeError("Core returned invalid GitHub sync payload")
         return dict(raw)
 
+    async def plugin_ui_catalog(
+        self,
+        *,
+        project_id: str,
+        repo_id: str | None = None,
+    ) -> dict[str, Any]:
+        cleaned_project_id, cleaned_repo_id = _clean_project_repo_args(project_id, repo_id)
+        kwargs: dict[str, Any] = {"project_id": cleaned_project_id}
+        if cleaned_repo_id is not None:
+            kwargs["repo_id"] = cleaned_repo_id
+
+        raw = await self._call_core("plugin_ui_catalog", kwargs=kwargs)
+        if not isinstance(raw, dict):
+            raise RuntimeError("Core returned invalid plugin UI catalog payload")
+        return dict(raw)
+
+    async def plugin_ui_invoke(
+        self,
+        *,
+        project_id: str,
+        plugin_id: str,
+        action_id: str,
+        repo_id: str | None = None,
+        inputs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        cleaned_project_id, cleaned_repo_id = _clean_project_repo_args(project_id, repo_id)
+        cleaned_plugin_id = plugin_id.strip()
+        if not cleaned_plugin_id:
+            raise ValueError("plugin_id is required")
+        cleaned_action_id = action_id.strip()
+        if not cleaned_action_id:
+            raise ValueError("action_id is required")
+
+        kwargs: dict[str, Any] = {
+            "project_id": cleaned_project_id,
+            "plugin_id": cleaned_plugin_id,
+            "action_id": cleaned_action_id,
+        }
+        if cleaned_repo_id is not None:
+            kwargs["repo_id"] = cleaned_repo_id
+        if inputs is not None:
+            kwargs["inputs"] = dict(inputs)
+
+        raw = await self._call_core("plugin_ui_invoke", kwargs=kwargs)
+        if not isinstance(raw, dict):
+            raise RuntimeError("Core returned invalid plugin UI invoke payload")
+        return dict(raw)
+
     async def submit_job(
         self,
         task_id: str,

@@ -13,6 +13,8 @@ from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY
 from kagan.core.plugins.github.sync import GITHUB_SYNC_CHECKPOINT_KEY
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from kagan.core.adapters.db.schema import Project, Repo
     from kagan.core.bootstrap import AppContext
     from kagan.core.ipc.client import IPCClient
@@ -55,16 +57,43 @@ class KaganScreen(Screen):
             header.update_project(Path(self.kagan_app.project_root).name)
             header.update_repo("")
             header.update_github_status(connected=False)
+            header.update_plugin_badges(None)
         else:
             header.update_project(project.name)
             repo_name, github_status = await self._get_active_repo_info(project)
             header.update_repo(repo_name or "")
             header.update_github_status(**github_status)
+            header.update_plugin_badges(await self._get_plugin_header_badges(project_id=project.id))
 
         tasks = await self.ctx.api.list_tasks(project_id=self.ctx.active_project_id)
         header.update_count(len(tasks))
         header.update_agent_from_config(self.kagan_app.config)
         header.update_core_status(self.kagan_app._core_status)
+
+    async def _get_plugin_header_badges(self, *, project_id: str) -> list[dict]:
+        api = self.ctx.api
+        plugin_ui_catalog = getattr(api, "plugin_ui_catalog", None)
+        if not callable(plugin_ui_catalog):
+            return []
+        plugin_ui_catalog_fn = cast("Callable[..., Awaitable[object]]", plugin_ui_catalog)
+        try:
+            catalog = await plugin_ui_catalog_fn(
+                project_id=project_id,
+                repo_id=self.ctx.active_repo_id,
+            )
+        except Exception:
+            return []
+
+        if not isinstance(catalog, dict):
+            return []
+        badges = catalog.get("badges", [])
+        if not isinstance(badges, list):
+            return []
+        return [
+            badge
+            for badge in badges
+            if isinstance(badge, dict) and badge.get("surface") == "header.badges"
+        ]
 
     async def _get_active_project(self) -> Project | None:
         api = self.ctx.api

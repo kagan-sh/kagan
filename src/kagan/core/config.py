@@ -208,6 +208,12 @@ class UIConfig(BaseModel):
         default=False,
         description="Skip pair mode instructions popup when opening PAIR sessions",
     )
+    tui_plugin_ui_allowlist: list[str] = Field(
+        default_factory=lambda: ["github"],
+        description=(
+            "Allowlisted plugin IDs that may contribute declarative UI definitions to the TUI."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod

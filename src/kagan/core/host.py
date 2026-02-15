@@ -35,6 +35,7 @@ from kagan.core.paths import (
     get_core_token_path,
     get_database_path,
 )
+from kagan.core.request_context import RequestContext, request_context
 from kagan.core.request_dispatch_map import build_request_dispatch_map
 from kagan.core.runtime_helpers import (
     IDEMPOTENCY_CACHE_LIMIT,
@@ -368,7 +369,8 @@ class CoreHost:
             await self._record_audit_event(request, incompatibility)
             return incompatibility
 
-        response = await self._dispatch_with_idempotency(request)
+        with request_context(RequestContext(request=request, binding=binding)):
+            response = await self._dispatch_with_idempotency(request)
         await self._record_audit_event(request, response)
         return response
 

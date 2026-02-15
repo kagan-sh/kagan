@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 
 from textual import getters, on
@@ -135,6 +136,9 @@ class KanbanScreen(KaganScreen):
         self._review = KanbanReviewController(self)
         self._session = KanbanSessionController(self)
         self._task_controller = KanbanTaskController(self)
+        self._plugin_ui_catalog: dict[str, Any] | None = None
+        self._plugin_ui_catalog_fetched_at: float = 0.0
+        self._plugin_ui_catalog_lock = asyncio.Lock()
 
     _TASK_REQUIRED_ACTIONS = frozenset(item.action for item in KANBAN_ACTIONS if item.requires_task)
     _AGENT_REQUIRED_ACTIONS = frozenset(
@@ -316,6 +320,7 @@ class KanbanScreen(KaganScreen):
     async def on_screen_resume(self) -> None:
         self._start_branch_sync()
         self._board.start_background_sync()
+        await self._refresh_plugin_ui_catalog(force=True)
         await self._board.refresh_board()
         self._board.sync_agent_states()
 
@@ -602,7 +607,6 @@ class KanbanScreen(KaganScreen):
             KanbanActionId.SWITCH_GLOBAL_AGENT: self._switch_global_agent_flow,
             KanbanActionId.OPEN_SETTINGS: self._open_settings_flow,
             KanbanActionId.OPEN_PLANNER: self._open_planner_flow,
-            KanbanActionId.GITHUB_SYNC: self._github_sync_flow,
         }
         operation_factory = global_operations.get(action)
         if operation_factory is None:
@@ -773,59 +777,160 @@ class KanbanScreen(KaganScreen):
         self._dispatch_kanban_action(KanbanActionId.SET_TASK_BRANCH)
 
     def action_github_sync(self) -> None:
-        self._dispatch_kanban_action(KanbanActionId.GITHUB_SYNC)
+        self.run_worker(self.invoke_plugin_ui_action("github", "sync_issues"))
 
-    async def _github_sync_flow(self) -> None:
-        """Sync GitHub issues to Kagan tasks for the active repo."""
-        project_id = self.ctx.active_project_id
-        repo_id = self.ctx.active_repo_id
+    async def _refresh_plugin_ui_catalog(self, *, force: bool = False) -> dict[str, Any]:
+        if not force and self._plugin_ui_catalog is not None:
+            if monotonic() - self._plugin_ui_catalog_fetched_at < 2.0:
+                return dict(self._plugin_ui_catalog)
 
-        if not project_id:
+        async with self._plugin_ui_catalog_lock:
+            if not force and self._plugin_ui_catalog is not None:
+                if monotonic() - self._plugin_ui_catalog_fetched_at < 2.0:
+                    return dict(self._plugin_ui_catalog)
+
+            project = await self._get_active_project()
+            if project is None:
+                self._plugin_ui_catalog = {
+                    "schema_version": "1",
+                    "actions": [],
+                    "forms": [],
+                    "badges": [],
+                }
+                self._plugin_ui_catalog_fetched_at = monotonic()
+                return dict(self._plugin_ui_catalog)
+
+            try:
+                catalog = await self.ctx.api.plugin_ui_catalog(
+                    project_id=project.id,
+                    repo_id=self.ctx.active_repo_id,
+                )
+            except Exception:
+                catalog = {"schema_version": "1", "actions": [], "forms": [], "badges": []}
+
+            if not isinstance(catalog, dict):
+                catalog = {"schema_version": "1", "actions": [], "forms": [], "badges": []}
+
+            self._plugin_ui_catalog = dict(catalog)
+            self._plugin_ui_catalog_fetched_at = monotonic()
+            return dict(self._plugin_ui_catalog)
+
+    async def get_plugin_ui_actions(self, *, surface: str) -> list[dict[str, Any]]:
+        catalog = await self._refresh_plugin_ui_catalog()
+        actions = catalog.get("actions", [])
+        if not isinstance(actions, list):
+            return []
+        return [
+            action
+            for action in actions
+            if isinstance(action, dict) and action.get("surface") == surface
+        ]
+
+    async def invoke_plugin_ui_action(self, plugin_id: str, action_id: str) -> None:
+        project = await self._get_active_project()
+        if project is None:
             self.notify("No active project", severity="warning")
             return
+        project_id = project.id
 
-        # Get repo to check GitHub connection
-        repos = await self.ctx.api.get_project_repos(project_id)
-        if not repos:
-            self.notify("No repositories in project", severity="warning")
+        catalog = await self._refresh_plugin_ui_catalog()
+        actions = catalog.get("actions", [])
+        forms = catalog.get("forms", [])
+        if not isinstance(actions, list) or not isinstance(forms, list):
+            self.notify("Plugin actions unavailable", severity="warning")
             return
 
-        # Find the active repo
-        repo = next((r for r in repos if r.id == repo_id), repos[0]) if repo_id else repos[0]
+        action = next(
+            (
+                item
+                for item in actions
+                if isinstance(item, dict)
+                and item.get("plugin_id") == plugin_id
+                and item.get("action_id") == action_id
+            ),
+            None,
+        )
+        if action is None:
+            self.notify("Plugin action not available", severity="warning")
+            return
 
-        # Call sync through typed TUI API boundary.
-        self.notify("Syncing GitHub issues...", severity="information")
+        repo_id = self.ctx.active_repo_id
+        inputs: dict[str, Any] = {}
+
+        form_id = action.get("form_id")
+        if isinstance(form_id, str) and form_id.strip():
+            form = next(
+                (
+                    item
+                    for item in forms
+                    if isinstance(item, dict)
+                    and item.get("plugin_id") == plugin_id
+                    and item.get("form_id") == form_id
+                ),
+                None,
+            )
+            if form is not None:
+                from kagan.tui.ui.modals import PluginFormModal
+
+                initial_values: dict[str, Any] = {}
+                if repo_id:
+                    initial_values["repo_id"] = repo_id
+                payload = await await_screen_result(
+                    self.app,
+                    PluginFormModal(form=form, initial_values=initial_values),
+                )
+                if payload is None:
+                    return
+                if isinstance(payload, dict):
+                    inputs = payload
+                    selected_repo_id = payload.get("repo_id")
+                    if isinstance(selected_repo_id, str) and selected_repo_id.strip():
+                        repo_id = selected_repo_id.strip()
+                        inputs.pop("repo_id", None)
+
+        label = str(action.get("label") or "").strip()
+        if label:
+            self.notify(f"{label}...", severity="information")
+
         try:
-            result = await self.ctx.api.github_sync_issues(project_id=project_id, repo_id=repo.id)
+            result = await self.ctx.api.plugin_ui_invoke(
+                project_id=project_id,
+                repo_id=repo_id,
+                plugin_id=plugin_id,
+                action_id=action_id,
+                inputs=inputs or None,
+            )
+        except Exception as exc:
+            self.notify(str(exc), severity="error")
+            return
 
-            if isinstance(result, dict):
-                if result.get("success"):
-                    stats = result.get("stats", {})
-                    inserted = stats.get("inserted", 0)
-                    updated = stats.get("updated", 0)
-                    self.notify(
-                        f"Sync complete: {inserted} new, {updated} updated",
-                        severity="information",
-                    )
-                    # Refresh the board to show new tasks
-                    await self._board.refresh_board()
-                    # Update header to show synced status
-                    self.header.update_github_status(connected=True, synced=True)
-                else:
-                    message = str(result.get("message") or "Sync failed")
-                    hint = result.get("hint")
-                    if isinstance(hint, str) and hint.strip():
-                        message = f"{message} ({hint.strip()})"
-                    severity = (
-                        "warning"
-                        if str(result.get("code") or "") == "GH_NOT_CONNECTED"
-                        else "error"
-                    )
-                    self.notify(message, severity=severity)
-            else:
-                self.notify("Unexpected sync response", severity="error")
-        except Exception as e:
-            self.notify(f"Sync failed: {e}", severity="error")
+        if not isinstance(result, dict):
+            self.notify("Unexpected plugin action response", severity="error")
+            return
+
+        ok = bool(result.get("ok", False))
+        message = str(result.get("message") or ("OK" if ok else "Action failed"))
+        code = str(result.get("code") or "")
+        hint: str | None = None
+        data = result.get("data")
+        if isinstance(data, dict):
+            hint_value = data.get("hint")
+            if isinstance(hint_value, str) and hint_value.strip():
+                hint = hint_value.strip()
+        if not hint:
+            hint_value = result.get("hint")
+            if isinstance(hint_value, str) and hint_value.strip():
+                hint = hint_value.strip()
+        if hint and hint not in message:
+            message = f"{message} ({hint})"
+        severity = "information" if ok else ("warning" if "NOT_CONNECTED" in code else "error")
+        self.notify(message, severity=severity)
+
+        refresh = result.get("refresh") if isinstance(result.get("refresh"), dict) else {}
+        if isinstance(refresh, dict) and refresh.get("tasks") is True:
+            await self._board.refresh_board()
+        if isinstance(refresh, dict) and refresh.get("repo") is True:
+            await self.sync_header_context(self.header)
 
     async def _set_task_branch_flow(self, task: Task) -> None:
         await self._task_controller.set_task_branch_flow(task)

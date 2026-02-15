@@ -20,6 +20,7 @@ from kagan.core.plugins.github.contract import (
     GITHUB_PLUGIN_ID,
 )
 from kagan.core.plugins.sdk import (
+    PLUGIN_UI_DESCRIBE_METHOD,
     PluginManifest,
     PluginOperation,
     PluginRegistrationApi,
@@ -62,6 +63,7 @@ _validate_review_transition = _make_handler_dispatch(
     "handle_validate_review_transition",
     include_ctx=True,
 )
+_ui_describe = _make_handler_dispatch("handle_ui_describe", include_ctx=True)
 
 
 class GitHubPlugin:
@@ -184,6 +186,19 @@ class GitHubPlugin:
                 minimum_profile=CapabilityProfile.MAINTAINER,
                 mutating=False,
                 description="Validate REVIEW transition guardrails for GitHub-connected repos.",
+            )
+        )
+        api.register_operation(
+            PluginOperation(
+                plugin_id=self.manifest.id,
+                capability=GITHUB_CAPABILITY,
+                method=PLUGIN_UI_DESCRIBE_METHOD,
+                handler=_ui_describe,
+                minimum_profile=CapabilityProfile.VIEWER,
+                mutating=False,
+                description=(
+                    "Provide declarative TUI UI schema contributions for GitHub operations."
+                ),
             )
         )
 

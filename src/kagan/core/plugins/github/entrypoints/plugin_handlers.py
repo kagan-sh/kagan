@@ -19,6 +19,12 @@ from kagan.core.plugins.github.application.use_cases import (
     PR_STATUS_RECONCILED,
     GitHubPluginUseCases,
 )
+from kagan.core.plugins.github.contract import (
+    GITHUB_CAPABILITY,
+    GITHUB_METHOD_CONNECT_REPO,
+    GITHUB_METHOD_SYNC_ISSUES,
+    GITHUB_PLUGIN_ID,
+)
 from kagan.core.plugins.github.domain.models import (
     AcquireLeaseInput,
     ConnectRepoInput,
@@ -31,6 +37,8 @@ from kagan.core.plugins.github.domain.models import (
     SyncIssuesInput,
     ValidateReviewTransitionInput,
 )
+from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY
+from kagan.core.plugins.github.sync import GITHUB_SYNC_CHECKPOINT_KEY
 
 if TYPE_CHECKING:
     from kagan.core.bootstrap import AppContext
@@ -48,6 +56,134 @@ def _non_empty_str(value: object) -> str | None:
 
 def _build_use_cases(ctx: AppContext) -> GitHubPluginUseCases:
     return GitHubPluginUseCases(AppContextCoreGateway(ctx), _GH_CLIENT)
+
+
+def _parse_json_object(raw: object) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        import json
+
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return value if isinstance(value, dict) else None
+    return None
+
+
+def _extract_github_status(repo: object) -> tuple[str, str]:
+    scripts = getattr(repo, "scripts", None) or {}
+    if not isinstance(scripts, dict):
+        return ("warn", "Not connected")
+
+    connection = _parse_json_object(scripts.get(GITHUB_CONNECTION_KEY))
+    if connection is None:
+        raw = scripts.get(GITHUB_CONNECTION_KEY)
+        if raw:
+            return ("error", "Invalid metadata")
+        return ("warn", "Not connected")
+    if not connection.get("full_name"):
+        return ("error", "Invalid metadata")
+
+    checkpoint = _parse_json_object(scripts.get(GITHUB_SYNC_CHECKPOINT_KEY))
+    if checkpoint is not None and checkpoint.get("last_sync_at"):
+        return ("ok", "Connected")
+    return ("info", "Sync stale")
+
+
+async def handle_ui_describe(ctx: AppContext, params: dict[str, Any]) -> dict[str, Any]:
+    """Return declarative UI schema for GitHub operations.
+
+    This must be non-mutating and safe to call frequently.
+    """
+    project_id = _non_empty_str(params.get("project_id"))
+    repo_id = _non_empty_str(params.get("repo_id"))
+    if not project_id:
+        return {
+            "schema_version": "1",
+            "actions": [],
+            "forms": [],
+            "badges": [],
+        }
+
+    repos = await ctx.api.get_project_repos(project_id)
+    options = [
+        {
+            "label": str(getattr(repo, "display_name", None) or getattr(repo, "name", "")),
+            "value": str(getattr(repo, "id", "")),
+        }
+        for repo in repos
+        if getattr(repo, "id", None)
+    ]
+    repo_required = len(options) > 1
+
+    badge_state, badge_text = ("warn", "Not connected")
+    if repos:
+        target = None
+        if repo_id:
+            target = next((repo for repo in repos if str(getattr(repo, "id", "")) == repo_id), None)
+        if target is None and len(repos) == 1:
+            target = repos[0]
+        if target is not None:
+            badge_state, badge_text = _extract_github_status(target)
+
+    form = {
+        "form_id": "github_repo_picker",
+        "title": "GitHub Repo",
+        "fields": [
+            {
+                "name": "repo_id",
+                "kind": "select",
+                "required": repo_required,
+                "options": options,
+            }
+        ],
+    }
+
+    return {
+        "schema_version": "1",
+        "actions": [
+            {
+                "plugin_id": GITHUB_PLUGIN_ID,
+                "action_id": "connect_repo",
+                "surface": "kanban.repo_actions",
+                "label": "Connect GitHub Repo",
+                "command": "github connect",
+                "help": "Connect the selected repo to GitHub (gh CLI required).",
+                "operation": {
+                    "capability": GITHUB_CAPABILITY,
+                    "method": GITHUB_METHOD_CONNECT_REPO,
+                },
+                "form_id": form["form_id"],
+                "confirm": False,
+            },
+            {
+                "plugin_id": GITHUB_PLUGIN_ID,
+                "action_id": "sync_issues",
+                "surface": "kanban.repo_actions",
+                "label": "Sync GitHub Issues",
+                "command": "github sync",
+                "help": "Sync issues into Kagan tasks for the selected repo.",
+                "operation": {"capability": GITHUB_CAPABILITY, "method": GITHUB_METHOD_SYNC_ISSUES},
+                "form_id": form["form_id"],
+                "confirm": False,
+            },
+        ],
+        "forms": [form],
+        "badges": [
+            {
+                "plugin_id": GITHUB_PLUGIN_ID,
+                "badge_id": "connection",
+                "surface": "header.badges",
+                "label": "GitHub",
+                "state": badge_state,
+                "text": badge_text,
+            }
+        ],
+    }
 
 
 def build_contract_probe_payload(params: dict[str, Any]) -> dict[str, Any]:
@@ -171,5 +307,6 @@ __all__ = [
     "handle_reconcile_pr_status",
     "handle_release_lease",
     "handle_sync_issues",
+    "handle_ui_describe",
     "handle_validate_review_transition",
 ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from kagan.core.builtin_agents import BUILTIN_AGENTS
@@ -31,6 +32,7 @@ EXPOSED_SETTINGS: tuple[str, ...] = (
     "general.tasks_wait_default_timeout_seconds",
     "general.tasks_wait_max_timeout_seconds",
     "ui.skip_pair_instructions",
+    "ui.tui_plugin_ui_allowlist",
 )
 
 _BOOL_FIELDS: set[str] = {
@@ -40,6 +42,7 @@ _BOOL_FIELDS: set[str] = {
     "general.serialize_merges",
     "ui.skip_pair_instructions",
 }
+_PLUGIN_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{2,63}$")
 _TIMEOUT_SECONDS_FIELDS: set[str] = {
     "general.tasks_wait_default_timeout_seconds",
     "general.tasks_wait_max_timeout_seconds",
@@ -77,6 +80,7 @@ def exposed_settings_snapshot(config: KaganConfig) -> dict[str, object]:
         ),
         "general.tasks_wait_max_timeout_seconds": (config.general.tasks_wait_max_timeout_seconds),
         "ui.skip_pair_instructions": config.ui.skip_pair_instructions,
+        "ui.tui_plugin_ui_allowlist": list(config.ui.tui_plugin_ui_allowlist),
     }
 
 
@@ -141,6 +145,24 @@ def _normalize_value(key: str, value: object) -> object:
             cleaned = value.strip()
             return cleaned or None
         raise ValueError(f"{key} must be a string or null")
+
+    if key == "ui.tui_plugin_ui_allowlist":
+        if not isinstance(value, list):
+            raise ValueError("ui.tui_plugin_ui_allowlist must be a list of plugin IDs")
+        normalized: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("ui.tui_plugin_ui_allowlist must contain only strings")
+            cleaned = item.strip()
+            if not cleaned:
+                continue
+            if not _PLUGIN_ID_PATTERN.fullmatch(cleaned):
+                raise ValueError(
+                    f"ui.tui_plugin_ui_allowlist items must match: {_PLUGIN_ID_PATTERN.pattern}"
+                )
+            if cleaned not in normalized:
+                normalized.append(cleaned)
+        return normalized
 
     raise ValueError(f"Unsupported settings field: {key}")
 

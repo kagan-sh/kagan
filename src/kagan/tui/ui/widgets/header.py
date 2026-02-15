@@ -77,6 +77,7 @@ class KaganHeader(Widget):
     core_status: reactive[str] = reactive("DISCONNECTED")
     github_connected: reactive[bool] = reactive(False)
     github_synced: reactive[bool] = reactive(False)
+    plugin_badges_text: reactive[str] = reactive("")
 
     def __init__(self, task_count: int = 0, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -216,6 +217,13 @@ class KaganHeader(Widget):
         labels = self._cache_labels()
         if labels is None:
             return
+        if self.plugin_badges_text:
+            labels.github_status.update(self.plugin_badges_text)
+            labels.github_status.set_class(False, "github-synced")
+            labels.github_status.set_class(False, "github-pending")
+            labels.github_status.display = True
+            labels.sep_github.display = True
+            return
         if not self.github_connected:
             labels.github_status.update("")
             labels.github_status.display = False
@@ -308,6 +316,9 @@ class KaganHeader(Widget):
     def watch_github_synced(self, value: bool) -> None:
         self._update_github_status_display()
 
+    def watch_plugin_badges_text(self, value: str) -> None:
+        self._update_github_status_display()
+
     def update_count(self, count: int) -> None:
         self.task_count = count
 
@@ -342,6 +353,33 @@ class KaganHeader(Widget):
         """
         self.github_connected = connected
         self.github_synced = synced if connected else False
+
+    def update_plugin_badges(self, badges: list[dict] | None) -> None:
+        """Update the declarative plugin badge display (schema-driven UI)."""
+        if not badges:
+            self.plugin_badges_text = ""
+            return
+
+        parts: list[str] = []
+        for badge in badges:
+            if not isinstance(badge, dict):
+                continue
+            label = badge.get("label")
+            text = badge.get("text")
+            state = badge.get("state")
+            if not isinstance(label, str) or not label.strip():
+                continue
+            label = label.strip()
+            text = text.strip() if isinstance(text, str) else ""
+            icon = "○"
+            if state == "ok":
+                icon = "◉"
+            elif state == "error":
+                icon = "⊗"
+            part = f"{icon} {label}" if not text else f"{icon} {label} {text}"
+            parts.append(part)
+
+        self.plugin_badges_text = "  ".join(parts)
 
     def update_agent_from_config(self, config: KaganConfig) -> None:
         """Build and update the global agent label from config."""

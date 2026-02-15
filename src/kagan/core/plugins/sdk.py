@@ -29,6 +29,8 @@ _PROFILE_RANK: dict[CapabilityProfile, int] = {
     CapabilityProfile.MAINTAINER: 4,
 }
 
+PLUGIN_UI_DESCRIBE_METHOD = "ui_describe"
+
 
 class PluginManifest(BaseModel):
     """Schema contract for plugin metadata."""
@@ -313,6 +315,7 @@ class PluginRegistry(PluginRegistrationApi):
 
 
 __all__ = [
+    "PLUGIN_UI_DESCRIBE_METHOD",
     "JsonPluginManifestLoader",
     "Plugin",
     "PluginManifest",
