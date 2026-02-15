@@ -486,14 +486,24 @@ class KanbanBoardController:
         # Reconcile BEFORE list_tasks so runtime snapshots are fresh
         prev_auto_ids = [t.id for t in self.screen._tasks if t.task_type == TaskType.AUTO]
         if prev_auto_ids:
-            with suppress(ConnectionError, RepositoryClosing, OperationalError):
-                await self.screen.ctx.api.reconcile_running_tasks(prev_auto_ids)
+            try:
+                with suppress(ConnectionError, RepositoryClosing, OperationalError):
+                    await self.screen.ctx.api.reconcile_running_tasks(prev_auto_ids)
+            except ValueError as exc:
+                # aiosqlite can raise ValueError("Connection closed") during shutdown/cancellation.
+                if str(exc) != "Connection closed":
+                    raise
 
         try:
             new_tasks = await self.screen.ctx.api.list_tasks(
                 project_id=self.screen.ctx.active_project_id
             )
         except (ConnectionError, RepositoryClosing, OperationalError):
+            return
+        except ValueError as exc:
+            # aiosqlite can raise ValueError("Connection closed") during shutdown/cancellation.
+            if str(exc) != "Connection closed":
+                raise
             return
 
         model = self._build_refresh_model(new_tasks)
@@ -559,6 +569,7 @@ class KanbanBoardController:
             self.refresh_and_sync(),
             group="kanban-refresh",
             exclusive=True,
+            exit_on_error=False,
         )
 
     def update_review_queue_hint(self) -> None:
