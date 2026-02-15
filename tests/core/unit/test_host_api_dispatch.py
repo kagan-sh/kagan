@@ -11,7 +11,10 @@ from _api_helpers import build_api
 
 from kagan.core.host import CoreHost
 from kagan.core.ipc.contracts import CoreRequest
+from kagan.core.models.enums import TaskStatus
 from kagan.core.plugins.github.contract import GITHUB_CAPABILITY, GITHUB_METHOD_SYNC_ISSUES
+from kagan.core.plugins.sdk import PluginManifest, PluginOperation
+from kagan.core.security import CapabilityProfile
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -131,6 +134,213 @@ class TestApiDispatchIntegration:
         payload = read_response.result["value"]
         assert payload["id"] == task_id
         assert payload["status"] == "IN_PROGRESS"
+
+    async def test_plugin_ui_invoke_mutation_visible_across_clients_via_subsequent_read(
+        self,
+        handle_host: tuple,
+    ) -> None:
+        host, _api = handle_host
+        host.register_session("maintainer-session-2", "maintainer")
+
+        create_response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session",
+                capability="tasks",
+                method="create",
+                params={"title": "Plugin UI mutation"},
+            ),
+        )
+        assert create_response.ok
+        assert create_response.result is not None
+        task_id = str(create_response.result["task_id"])
+
+        async def _describe(ctx, params):
+            del ctx, params
+            return {
+                "schema_version": "1",
+                "actions": [
+                    {
+                        "plugin_id": "uitest",
+                        "action_id": "touch",
+                        "surface": "kanban.task_actions",
+                        "label": "Touch task",
+                        "operation": {"capability": "uitest", "method": "touch_task"},
+                    }
+                ],
+            }
+
+        async def _touch(ctx, params):
+            target_task_id = str(params.get("task_id", "")).strip()
+            await ctx.task_service.move(target_task_id, TaskStatus.IN_PROGRESS)
+            return {"success": True, "code": "OK", "message": "Task moved"}
+
+        plugin_registry = host._ctx.plugin_registry
+
+        class _UiTestPlugin:
+            manifest = PluginManifest(
+                id="uitest",
+                name="UI Test Plugin",
+                version="0.0.0",
+                entrypoint="tests",
+            )
+
+            def register(self, api) -> None:
+                api.register_operation(
+                    PluginOperation(
+                        plugin_id="uitest",
+                        capability="uitest",
+                        method="ui_describe",
+                        handler=_describe,
+                        minimum_profile=CapabilityProfile.MAINTAINER,
+                        mutating=False,
+                    )
+                )
+                api.register_operation(
+                    PluginOperation(
+                        plugin_id="uitest",
+                        capability="uitest",
+                        method="touch_task",
+                        handler=_touch,
+                        minimum_profile=CapabilityProfile.MAINTAINER,
+                        mutating=True,
+                    )
+                )
+
+        plugin_registry.register_plugin(_UiTestPlugin())
+        host._ctx.config.ui.tui_plugin_ui_allowlist = ["uitest"]
+
+        invoke_response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session",
+                capability="tui",
+                method="api_call",
+                params={
+                    "method": "plugin_ui_invoke",
+                    "kwargs": {
+                        "project_id": host._ctx.active_project_id,
+                        "plugin_id": "uitest",
+                        "action_id": "touch",
+                        "inputs": {"task_id": task_id},
+                    },
+                },
+            ),
+        )
+        assert invoke_response.ok
+        assert invoke_response.result is not None
+        assert invoke_response.result["success"] is True
+        assert invoke_response.result["value"]["ok"] is True
+
+        read_response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session-2",
+                capability="tui",
+                method="api_call",
+                params={
+                    "method": "get_task",
+                    "kwargs": {"task_id": task_id},
+                },
+            ),
+        )
+        assert read_response.ok
+        assert read_response.result is not None
+        payload = read_response.result["value"]
+        assert payload["id"] == task_id
+        assert payload["status"] == "IN_PROGRESS"
+
+    async def test_plugin_ui_invoke_enforces_plugin_policy_hook(
+        self,
+        handle_host: tuple,
+    ) -> None:
+        host, _api = handle_host
+
+        async def _describe(ctx, params):
+            del ctx, params
+            return {
+                "schema_version": "1",
+                "actions": [
+                    {
+                        "plugin_id": "uitest2",
+                        "action_id": "blocked",
+                        "surface": "kanban.repo_actions",
+                        "label": "Blocked",
+                        "operation": {"capability": "uitest2", "method": "blocked_op"},
+                    }
+                ],
+            }
+
+        async def _blocked(ctx, params):
+            del ctx, params
+            return {"success": True, "code": "OK", "message": "Should not run"}
+
+        plugin_registry = host._ctx.plugin_registry
+
+        class _UiTestPlugin2:
+            manifest = PluginManifest(
+                id="uitest2",
+                name="UI Test Plugin 2",
+                version="0.0.0",
+                entrypoint="tests",
+            )
+
+            def register(self, api) -> None:
+                api.register_operation(
+                    PluginOperation(
+                        plugin_id="uitest2",
+                        capability="uitest2",
+                        method="ui_describe",
+                        handler=_describe,
+                        minimum_profile=CapabilityProfile.MAINTAINER,
+                        mutating=False,
+                    )
+                )
+                api.register_operation(
+                    PluginOperation(
+                        plugin_id="uitest2",
+                        capability="uitest2",
+                        method="blocked_op",
+                        handler=_blocked,
+                        minimum_profile=CapabilityProfile.MAINTAINER,
+                        mutating=True,
+                    )
+                )
+
+        plugin_registry.register_plugin(_UiTestPlugin2())
+        plugin_registry.register_policy_hook(
+            plugin_id="uitest2",
+            capability="uitest2",
+            method="blocked_op",
+            hook=lambda _ctx: SimpleNamespace(
+                allowed=False, code="BLOCKED", message="Blocked by policy"
+            ),
+        )
+        host._ctx.config.ui.tui_plugin_ui_allowlist = ["uitest2"]
+
+        response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session",
+                capability="tui",
+                method="api_call",
+                params={
+                    "method": "plugin_ui_invoke",
+                    "kwargs": {
+                        "project_id": host._ctx.active_project_id,
+                        "plugin_id": "uitest2",
+                        "action_id": "blocked",
+                    },
+                },
+            ),
+        )
+
+        assert response.ok
+        assert response.result is not None
+        payload = response.result["value"]
+        assert payload["ok"] is False
+        assert payload["code"] == "BLOCKED"
+        assert payload["message"] == "Blocked by policy"
 
     async def test_viewer_denied_before_api_dispatch(self, handle_host: tuple) -> None:
         host, _api = handle_host

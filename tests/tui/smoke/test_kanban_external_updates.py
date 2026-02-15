@@ -701,21 +701,34 @@ async def test_kanban_github_sync_flow_surfaces_error_without_state_corruption(
         await pilot.pause()
 
         refresh_board = AsyncMock()
-        sync_issues = AsyncMock(
+        plugin_ui_catalog = AsyncMock(
             return_value={
-                "success": False,
-                "code": "GH_NOT_CONNECTED",
-                "message": "GitHub not connected",
-                "hint": "Run connect repo first",
+                "schema_version": "1",
+                "actions": [
+                    {
+                        "plugin_id": "github",
+                        "action_id": "sync_issues",
+                        "surface": "kanban.repo_actions",
+                        "label": "Sync GitHub Issues",
+                        "operation": {"capability": "github", "method": "github_sync_issues"},
+                    }
+                ],
+                "forms": [],
+                "badges": [],
             }
         )
         monkeypatch.setattr(kanban._board, "refresh_board", refresh_board)
-        monkeypatch.setattr(
-            kanban.ctx.api,
-            "get_project_repos",
-            AsyncMock(return_value=[SimpleNamespace(id=repo_id)]),
+        monkeypatch.setattr(kanban.ctx.api, "plugin_ui_catalog", plugin_ui_catalog)
+        plugin_ui_invoke = AsyncMock(
+            return_value={
+                "ok": False,
+                "code": "GH_NOT_CONNECTED",
+                "message": "GitHub not connected",
+                "data": {"hint": "Run connect repo first"},
+                "refresh": {"repo": False, "tasks": False, "sessions": False},
+            }
         )
-        monkeypatch.setattr(kanban.ctx.api, "github_sync_issues", sync_issues)
+        monkeypatch.setattr(kanban.ctx.api, "plugin_ui_invoke", plugin_ui_invoke)
 
         notify_calls: list[tuple[str, str]] = []
         original_notify = kanban.notify
@@ -727,9 +740,21 @@ async def test_kanban_github_sync_flow_surfaces_error_without_state_corruption(
             original_notify(message, severity=severity, **kwargs)
 
         monkeypatch.setattr(kanban, "notify", _capture_notify)
-        await kanban._github_sync_flow()
+        await kanban._refresh_plugin_ui_catalog(force=True)
+        kanban.action_github_sync()
+        await wait_until(
+            lambda: any(message for message, _severity in notify_calls),
+            timeout=5.0,
+            description="GitHub sync not-connected notification",
+        )
 
-        sync_issues.assert_awaited_once_with(project_id=project_id, repo_id=repo_id)
+        plugin_ui_invoke.assert_awaited_once_with(
+            project_id=project_id,
+            repo_id=repo_id,
+            plugin_id="github",
+            action_id="sync_issues",
+            inputs=None,
+        )
         refresh_board.assert_not_awaited()
         focused = kanban.get_focused_card()
         assert focused is not None and focused.task_model is not None

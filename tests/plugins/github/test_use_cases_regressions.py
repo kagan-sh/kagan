@@ -22,6 +22,12 @@ from kagan.core.plugins.github.application.use_cases import (
     REVIEW_BLOCKED_NO_PR,
     GitHubPluginUseCases,
 )
+from kagan.core.plugins.github.contract import (
+    GITHUB_CAPABILITY,
+    GITHUB_METHOD_CONNECT_REPO,
+    GITHUB_METHOD_SYNC_ISSUES,
+    GITHUB_PLUGIN_ID,
+)
 from kagan.core.plugins.github.domain.models import (
     AcquireLeaseInput,
     ConnectRepoInput,
@@ -797,3 +803,60 @@ async def test_link_pr_to_task_rejects_repo_mismatch_with_actionable_code() -> N
     assert "Repo not found in project: repo-mismatch" in result["message"]
     assert "single repo" in result["hint"]
     gh_client.run_gh_pr_view.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_ui_describe_exposes_connect_and_sync_actions() -> None:
+    from kagan.core.plugins.github.entrypoints.plugin_handlers import handle_ui_describe
+
+    repo_1 = SimpleNamespace(id="repo-1", name="Repo 1", display_name="Repo 1", scripts={})
+    repo_2 = SimpleNamespace(id="repo-2", name="Repo 2", display_name="Repo 2", scripts={})
+    ctx = SimpleNamespace(
+        api=SimpleNamespace(get_project_repos=AsyncMock(return_value=[repo_1, repo_2]))
+    )
+
+    payload = await handle_ui_describe(ctx, {"project_id": "project-1", "repo_id": "repo-1"})
+    assert payload["schema_version"] == "1"
+
+    actions = payload["actions"]
+    assert isinstance(actions, list)
+    action_map = {item.get("action_id"): item for item in actions if isinstance(item, dict)}
+    assert {"connect_repo", "sync_issues"} <= set(action_map)
+
+    connect = action_map["connect_repo"]
+    sync = action_map["sync_issues"]
+    for action in (connect, sync):
+        assert action["plugin_id"] == GITHUB_PLUGIN_ID
+        assert action["surface"] == "kanban.repo_actions"
+        assert action["form_id"] == "github_repo_picker"
+        assert action["operation"]["capability"] == GITHUB_CAPABILITY
+
+    assert connect["operation"]["method"] == GITHUB_METHOD_CONNECT_REPO
+    assert sync["operation"]["method"] == GITHUB_METHOD_SYNC_ISSUES
+
+    forms = payload["forms"]
+    assert isinstance(forms, list)
+    form = next(
+        item
+        for item in forms
+        if isinstance(item, dict) and item.get("form_id") == "github_repo_picker"
+    )
+    fields = form["fields"]
+    assert isinstance(fields, list)
+    repo_field = next(
+        item for item in fields if isinstance(item, dict) and item.get("name") == "repo_id"
+    )
+    assert repo_field["kind"] == "select"
+    assert repo_field["required"] is True
+    options = repo_field["options"]
+    assert isinstance(options, list)
+    assert {opt["value"] for opt in options} == {"repo-1", "repo-2"}
+
+    badges = payload["badges"]
+    assert isinstance(badges, list)
+    badge = next(
+        item for item in badges if isinstance(item, dict) and item.get("badge_id") == "connection"
+    )
+    assert badge["plugin_id"] == GITHUB_PLUGIN_ID
+    assert badge["surface"] == "header.badges"
+    assert badge["label"] == "GitHub"

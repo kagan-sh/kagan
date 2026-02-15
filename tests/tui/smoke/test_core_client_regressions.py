@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock
 
 import pytest
 from tests.helpers.wait import wait_for_screen, wait_for_widget, wait_until_async
-from textual.widgets import Button, Switch
+from textual.widgets import Button, Label, Switch
 
 from kagan.core.adapters.db.repositories import (
     ExecutionRepository,
@@ -19,6 +20,7 @@ from kagan.core.models.enums import (
     TaskType,
 )
 from kagan.core.services.workspaces import RepoWorkspaceInput
+from kagan.tui.ui.modals.plugin_form import PluginFormModal
 from kagan.tui.ui.modals.review import ReviewModal
 from kagan.tui.ui.modals.settings import SettingsModal
 from kagan.tui.ui.screens.kanban import KanbanScreen
@@ -168,3 +170,236 @@ async def test_task_output_streams_incremental_logs_for_external_running_executi
             assert "external log line two" in rendered
     finally:
         await repo.close()
+
+
+@pytest.mark.asyncio
+async def test_github_connect_action_succeeds_and_status_is_refreshed(
+    e2e_app_with_tasks,
+    monkeypatch,
+) -> None:
+    app = cast("KaganApp", e2e_app_with_tasks)
+    connected = False
+    repo_option_value: str | None = None
+
+    async def _plugin_ui_catalog(
+        *,
+        project_id: str,
+        repo_id: str | None = None,
+    ) -> dict[str, object]:
+        del project_id, repo_id
+        state = "ok" if connected else "warn"
+        text = "Connected" if connected else "Not connected"
+        option_value = repo_option_value or "repo-1"
+        return {
+            "schema_version": "1",
+            "actions": [
+                {
+                    "plugin_id": "github",
+                    "action_id": "connect_repo",
+                    "surface": "kanban.repo_actions",
+                    "label": "Connect GitHub Repo",
+                    "command": "github connect",
+                    "operation": {"capability": "github", "method": "github_connect_repo"},
+                    "form_id": "connect_repo_form",
+                    "confirm": False,
+                }
+            ],
+            "forms": [
+                {
+                    "plugin_id": "github",
+                    "form_id": "connect_repo_form",
+                    "title": "Connect GitHub Repo",
+                    "fields": [
+                        {
+                            "name": "repo_id",
+                            "kind": "select",
+                            "required": False,
+                            "options": [{"label": "repo-1", "value": option_value}],
+                        }
+                    ],
+                }
+            ],
+            "badges": [
+                {
+                    "plugin_id": "github",
+                    "badge_id": "connection",
+                    "surface": "header.badges",
+                    "label": "GitHub",
+                    "state": state,
+                    "text": text,
+                }
+            ],
+        }
+
+    async def _plugin_ui_invoke(
+        *,
+        project_id: str,
+        repo_id: str | None = None,
+        plugin_id: str,
+        action_id: str,
+        inputs: dict | None = None,
+    ) -> dict[str, object]:
+        del project_id, repo_id, plugin_id, action_id, inputs
+        nonlocal connected
+        connected = True
+        return {
+            "ok": True,
+            "code": "CONNECTED",
+            "message": "Connected",
+            "data": {},
+            "refresh": {"repo": True, "tasks": False, "sessions": False},
+        }
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        repo_option_value = app.ctx.active_repo_id or "repo-1"
+        monkeypatch.setattr(app.ctx.api, "plugin_ui_catalog", _plugin_ui_catalog)
+        monkeypatch.setattr(app.ctx.api, "plugin_ui_invoke", _plugin_ui_invoke)
+        await kanban.sync_header_context(kanban.header)
+        await pilot.pause()
+        status = kanban.header.query_one("#header-github-status", Label)
+        assert "Not connected" in str(status.content)
+
+        await kanban._refresh_plugin_ui_catalog(force=True)
+        kanban.run_worker(
+            kanban.invoke_plugin_ui_action("github", "connect_repo"),
+            group="test-plugin-ui-connect",
+            exclusive=True,
+            exit_on_error=False,
+        )
+        form = cast("PluginFormModal", await wait_for_screen(pilot, PluginFormModal, timeout=5.0))
+        form.query_one("#btn-submit", Button).press()
+        await pilot.pause()
+
+        async def _is_connected() -> bool:
+            return connected
+
+        await wait_until_async(
+            _is_connected,
+            timeout=5.0,
+            check_interval=0.05,
+            description="plugin connect invoke to set connected flag",
+        )
+        await wait_for_screen(pilot, KanbanScreen, timeout=10.0)
+        await pilot.pause()
+        status = kanban.header.query_one("#header-github-status", Label)
+        assert "Connected" in str(status.content)
+
+
+@pytest.mark.asyncio
+async def test_plugin_form_validation_error_does_not_mutate_state(
+    e2e_app_with_tasks,
+    monkeypatch,
+) -> None:
+    app = cast("KaganApp", e2e_app_with_tasks)
+    plugin_ui_invoke = AsyncMock()
+
+    async def _plugin_ui_catalog(
+        *,
+        project_id: str,
+        repo_id: str | None = None,
+    ) -> dict[str, object]:
+        del project_id, repo_id
+        return {
+            "schema_version": "1",
+            "actions": [
+                {
+                    "plugin_id": "github",
+                    "action_id": "needs_input",
+                    "surface": "kanban.repo_actions",
+                    "label": "Needs Input",
+                    "command": "github needs-input",
+                    "operation": {"capability": "github", "method": "noop"},
+                    "form_id": "needs_input_form",
+                    "confirm": False,
+                }
+            ],
+            "forms": [
+                {
+                    "plugin_id": "github",
+                    "form_id": "needs_input_form",
+                    "title": "Needs Input",
+                    "fields": [
+                        {
+                            "name": "token",
+                            "kind": "text",
+                            "required": True,
+                            "placeholder": "Required",
+                        }
+                    ],
+                }
+            ],
+            "badges": [],
+        }
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        monkeypatch.setattr(app.ctx.api, "plugin_ui_catalog", _plugin_ui_catalog)
+        monkeypatch.setattr(app.ctx.api, "plugin_ui_invoke", plugin_ui_invoke)
+        await kanban._refresh_plugin_ui_catalog(force=True)
+        kanban.run_worker(
+            kanban.invoke_plugin_ui_action("github", "needs_input"),
+            group="test-plugin-ui-validation",
+            exclusive=True,
+            exit_on_error=False,
+        )
+
+        form = cast("PluginFormModal", await wait_for_screen(pilot, PluginFormModal, timeout=5.0))
+        form.query_one("#btn-submit", Button).press()
+        await pilot.pause()
+        assert isinstance(pilot.app.screen, PluginFormModal)
+
+        form.query_one("#btn-cancel", Button).press()
+        await pilot.pause()
+
+        await wait_for_screen(pilot, KanbanScreen, timeout=10.0)
+        plugin_ui_invoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_plugin_badges_render_from_catalog_and_update_after_invoke(
+    e2e_app_with_tasks,
+    monkeypatch,
+) -> None:
+    app = cast("KaganApp", e2e_app_with_tasks)
+    badge_text = "Not connected"
+    badge_state = "warn"
+
+    async def _plugin_ui_catalog(
+        *,
+        project_id: str,
+        repo_id: str | None = None,
+    ) -> dict[str, object]:
+        del project_id, repo_id
+        return {
+            "schema_version": "1",
+            "actions": [],
+            "forms": [],
+            "badges": [
+                {
+                    "plugin_id": "github",
+                    "badge_id": "connection",
+                    "surface": "header.badges",
+                    "label": "GitHub",
+                    "state": badge_state,
+                    "text": badge_text,
+                }
+            ],
+        }
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        monkeypatch.setattr(app.ctx.api, "plugin_ui_catalog", _plugin_ui_catalog)
+
+        await kanban.sync_header_context(kanban.header)
+        await pilot.pause()
+        status = kanban.header.query_one("#header-github-status", Label)
+        assert "Not connected" in str(status.content)
+
+        badge_text = "Connected"
+        badge_state = "ok"
+
+        await kanban.sync_header_context(kanban.header)
+        await pilot.pause()
+        status = kanban.header.query_one("#header-github-status", Label)
+        assert "Connected" in str(status.content)
