@@ -160,10 +160,11 @@ def auto_mock_terminals_for_app_tests(request, monkeypatch):
         monkeypatch.setenv("KAGAN_TUI_USE_LOCAL_CONTEXT", "1")
 
     app_fixture_patterns = ("e2e_app", "app", "welcome_app", "_fresh_app")
-    if not any(
+    uses_app_fixture = any(
         n.startswith(app_fixture_patterns) or n in app_fixture_patterns
         for n in request.fixturenames
-    ):
+    )
+    if not (uses_app_fixture or force_local_context):
         return
 
     install_fake_tmux(monkeypatch)
@@ -176,6 +177,10 @@ def auto_mock_terminals_for_app_tests(request, monkeypatch):
     monkeypatch.setattr(
         "kagan.core.services.sessions.SessionServiceImpl._launch_external_launcher",
         AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "kagan.tui.ui.screens.kanban.session_controller.KanbanSessionController._attach_tmux_session_local",
+        AsyncMock(return_value=False),
     )
 
     # Assume terminals are available in app tests unless a test overrides this explicitly.
