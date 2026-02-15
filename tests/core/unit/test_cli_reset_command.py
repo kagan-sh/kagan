@@ -246,7 +246,9 @@ def test_reset_all_reports_partial_delete_errors_without_false_success(
     def flaky_rmtree(path, *args, **kwargs):
         if Path(path) == failing_path:
             raise OSError("simulated delete failure")
-        return original_rmtree(path, *args, **kwargs)
+        # Keep signature permissive, but call rmtree without forwarding kwargs to avoid
+        # selecting deprecated overloads in typecheckers.
+        return original_rmtree(path)
 
     monkeypatch.setattr("kagan.cli.commands.reset.shutil.rmtree", flaky_rmtree)
 

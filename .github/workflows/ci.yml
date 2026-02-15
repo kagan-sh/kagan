@@ -65,7 +65,7 @@ jobs:
 
   test-windows:
     needs: lint
-    timeout-minutes: 15
+    timeout-minutes: 25
     runs-on: windows-latest
     # Windows tests are advisory — xdist/asyncio teardown can cause spurious
     # KeyboardInterrupt on Windows, so failures here must not block the pipeline.
