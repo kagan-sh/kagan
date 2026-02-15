@@ -170,6 +170,11 @@ async def test_planner_without_active_repo_shows_offline_banner_and_disables_inp
         app.ctx.active_repo_id = None
         kanban.action_open_planner()
         planner = cast("PlannerScreen", await wait_for_screen(pilot, PlannerScreen, timeout=10.0))
+        await wait_until(
+            lambda: _has_offline_banner(planner),
+            timeout=8.0,
+            description="planner offline banner appears when repo is missing",
+        )
 
         banner = planner.query_one(OfflineBanner)
         message = banner.query_one("#offline-message", Label)
@@ -197,12 +202,25 @@ async def test_planner_agent_unavailable_shows_status_banner_and_blocks_input(
         )
         kanban.action_open_planner()
         planner = cast("PlannerScreen", await wait_for_screen(pilot, PlannerScreen, timeout=10.0))
+        await wait_until(
+            lambda: _has_offline_banner(planner),
+            timeout=8.0,
+            description="planner offline banner appears when agent is unavailable",
+        )
 
         banner = planner.query_one(OfflineBanner)
         message = banner.query_one("#offline-message", Label)
         assert "Agent unavailable in test" in str(message.content)
         assert planner.query_one("#planner-input", PlannerInput).has_class("-disabled")
         assert planner.planner_status == "offline"
+
+
+def _has_offline_banner(planner: PlannerScreen) -> bool:
+    try:
+        planner.query_one(OfflineBanner)
+    except NoMatches:
+        return False
+    return True
 
 
 @pytest.mark.asyncio
@@ -305,6 +323,80 @@ async def test_planner_load_pending_proposal_restores_latest_valid_draft(
         assert planner._state.pending_plan is not None
         assert planner._state.pending_plan[0].title == "Persisted draft task"
         assert _has_plan_approval_widget(planner)
+
+
+@pytest.mark.asyncio
+async def test_planner_load_pending_proposal_accepts_proposal_id_alias(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        kanban.action_open_planner()
+        planner = cast("PlannerScreen", await wait_for_screen(pilot, PlannerScreen, timeout=10.0))
+        await wait_for_planner_ready(pilot, timeout=10.0)
+
+        proposal = SimpleNamespace(
+            proposal_id="proposal-alias-1",
+            project_id=app.ctx.active_project_id or "project-1",
+            tasks_json=[
+                {
+                    "title": "Draft from aliased identifier",
+                    "description": "proposal_id should be accepted",
+                    "priority": "MED",
+                    "task_type": "PAIR",
+                    "acceptance_criteria": ["Alias payload is restored without errors"],
+                }
+            ],
+        )
+        monkeypatch.setattr(
+            app.ctx.api,
+            "list_pending_planner_drafts",
+            AsyncMock(return_value=[proposal]),
+        )
+
+        planner._state.pending_plan = None
+        planner._state.has_pending_plan = False
+        planner._pending_proposal_id = None
+        await planner._load_pending_proposals()
+
+        assert planner._pending_proposal_id == "proposal-alias-1"
+        assert planner._state.has_pending_plan
+        assert planner._state.pending_plan is not None
+        assert planner._state.pending_plan[0].title == "Draft from aliased identifier"
+
+
+@pytest.mark.asyncio
+async def test_planner_persist_draft_accepts_proposal_id_alias(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        kanban.action_open_planner()
+        planner = cast("PlannerScreen", await wait_for_screen(pilot, PlannerScreen, timeout=10.0))
+        await wait_for_planner_ready(pilot, timeout=10.0)
+
+        project_id = app.ctx.active_project_id
+        assert project_id is not None
+        existing_task = (await app.ctx.api.list_tasks(project_id=project_id))[0]
+
+        save_mock = AsyncMock(return_value=SimpleNamespace(proposal_id="proposal-alias-2"))
+        monkeypatch.setattr(app.ctx.api, "save_planner_draft", save_mock)
+
+        planner._pending_proposal_id = None
+        await planner._persist_proposal_draft([existing_task], todos=None)
+
+        assert save_mock.await_count == 1
+        assert planner._pending_proposal_id == "proposal-alias-2"
 
 
 @pytest.mark.asyncio

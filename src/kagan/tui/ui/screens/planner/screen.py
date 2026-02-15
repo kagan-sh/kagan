@@ -639,7 +639,9 @@ class PlannerScreen(KaganScreen):
             todos_json=todos_json,
         )
         if proposal is not None:
-            self._pending_proposal_id = proposal.id
+            proposal_id = self._proposal_identifier(proposal)
+            if proposal_id is not None:
+                self._pending_proposal_id = proposal_id
 
     async def _update_proposal_status(self, status: ProposalStatus) -> None:
         """Update the persisted proposal status (approved / rejected)."""
@@ -647,6 +649,19 @@ class PlannerScreen(KaganScreen):
             return
         await self.ctx.api.update_planner_draft_status(self._pending_proposal_id, status)
         self._pending_proposal_id = None
+
+    def _proposal_identifier(self, proposal: object) -> str | None:
+        """Return a normalized planner proposal ID across payload variants."""
+        raw_id: object | None = None
+        if isinstance(proposal, dict):
+            raw_id = proposal.get("id") or proposal.get("proposal_id")
+        else:
+            raw_id = getattr(proposal, "id", None) or getattr(proposal, "proposal_id", None)
+
+        if raw_id is None:
+            return None
+        proposal_id = str(raw_id).strip()
+        return proposal_id or None
 
     async def _load_pending_proposals(self) -> None:
         """Load draft proposals from DB and display the most recent one."""
@@ -663,7 +678,7 @@ class PlannerScreen(KaganScreen):
         tasks = self._proposal_to_tasks(latest)
         if not tasks:
             return
-        self._pending_proposal_id = latest.id
+        self._pending_proposal_id = self._proposal_identifier(latest)
         self._state = self._state.with_pending_plan(tasks)
         self._show_output()
         await self._get_output().post_plan_approval(tasks)
