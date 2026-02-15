@@ -208,6 +208,41 @@ class TestLeaseCoordination:
         delete_comment.assert_called_once_with("/usr/bin/gh", "/tmp/repo", "owner", "repo", 92)
         create_comment.assert_called_once()
 
+    def test_current_holder_does_not_delete_old_comment_when_renewal_comment_fails(self) -> None:
+        same_instance_holder = create_lease_holder(github_user="old-user")
+
+        with (
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_issue_view",
+                return_value=({"labels": [{"name": LEASE_LABEL}]}, None),
+            ),
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_api_issue_comments",
+                return_value=([_lease_comment(same_instance_holder, comment_id=92)], None),
+            ),
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_api_comment_delete"
+            ) as delete_comment,
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_issue_comment_create",
+                return_value=(None, "comment create failed"),
+            ) as create_comment,
+        ):
+            result = acquire_lease(
+                "/usr/bin/gh",
+                "/tmp/repo",
+                "owner",
+                "repo",
+                42,
+                github_user="new-user",
+            )
+
+        assert result.success is False
+        assert result.code == "LEASE_ACQUIRE_FAILED"
+        assert "Failed to create lease comment" in result.message
+        create_comment.assert_called_once()
+        delete_comment.assert_not_called()
+
     def test_acquire_free_issue_adds_label_and_comment(self) -> None:
         with (
             patch(
@@ -242,6 +277,44 @@ class TestLeaseCoordination:
         create_comment.assert_called_once()
         created_comment_body = create_comment.call_args.args[3]
         assert LEASE_COMMENT_MARKER in created_comment_body
+
+    def test_acquire_free_issue_rolls_back_label_when_comment_create_fails(self) -> None:
+        with (
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_issue_view",
+                return_value=({"labels": []}, None),
+            ),
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_api_issue_comments"
+            ) as list_comments,
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_issue_label_add",
+                return_value=(True, None),
+            ) as add_label,
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_issue_label_remove",
+                return_value=(True, None),
+            ) as remove_label,
+            patch(
+                "kagan.core.plugins.github.gh_adapter.run_gh_issue_comment_create",
+                return_value=(None, "comment create failed"),
+            ) as create_comment,
+        ):
+            result = acquire_lease(
+                "/usr/bin/gh",
+                "/tmp/repo",
+                "owner",
+                "repo",
+                42,
+                github_user="owner1",
+            )
+
+        assert result.success is False
+        assert result.code == "LEASE_ACQUIRE_FAILED"
+        list_comments.assert_not_called()
+        add_label.assert_called_once_with("/usr/bin/gh", "/tmp/repo", 42, LEASE_LABEL)
+        create_comment.assert_called_once()
+        remove_label.assert_called_once_with("/usr/bin/gh", "/tmp/repo", 42, LEASE_LABEL)
 
 
 class TestLeaseMetadataRecovery:

@@ -315,6 +315,8 @@ class AutomationReviewer:
         review_note = ""
         review_attempted = False
         execution_id = None
+        execution_metadata: dict[str, object] | None = None
+        review_log_start_index: int | None = None
         runtime_view = self._runtime_service.get(task.id)
         if runtime_view is not None:
             execution_id = runtime_view.execution_id
@@ -322,10 +324,11 @@ class AutomationReviewer:
         if wt_path is not None and execution_id is not None:
             if self._executions is not None:
                 entries = await self._executions.get_execution_log_entries(execution_id)
-                await self._executions.update_execution(
-                    execution_id,
-                    metadata={"review_log_start_index": len(entries)},
-                )
+                review_log_start_index = len(entries)
+                existing = await self._executions.get_execution(execution_id)
+                execution_metadata = dict(existing.metadata_ or {}) if existing else {}
+                execution_metadata["review_log_start_index"] = review_log_start_index
+                await self._executions.update_execution(execution_id, metadata=execution_metadata)
 
             review_passed, review_note = await self.run_review(task, wt_path, execution_id)
             review_attempted = True
@@ -358,13 +361,11 @@ class AutomationReviewer:
                 "summary": review_note,
                 "completed_at": utc_now().isoformat(),
             }
-            existing = await self._executions.get_execution(execution_id)
-            merged_meta = dict(existing.metadata_ or {}) if existing else {}
+            merged_meta = dict(execution_metadata or {})
+            if review_log_start_index is not None:
+                merged_meta["review_log_start_index"] = review_log_start_index
             merged_meta["review_result"] = review_result
-            await self._executions.update_execution(
-                execution_id,
-                metadata=merged_meta,
-            )
+            await self._executions.update_execution(execution_id, metadata=merged_meta)
 
     async def _handle_blocked(self, task: TaskLike, reason: str) -> None:
         """Handle blocked task by moving it back to backlog with context."""

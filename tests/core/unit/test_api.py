@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -233,6 +234,29 @@ class TestReviewOperations:
         ctx.plugin_registry = SimpleNamespace(operations_for_method=_operations_for_method)
 
         with pytest.raises(ValueError, match="Blocked by external review policy"):
+            await api.request_review(task.id)
+
+    async def test_request_review_fails_when_guardrail_hook_times_out(
+        self, handle_env: tuple, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Timeout guardrail")
+
+        async def _guardrail_handler(_ctx, _params):
+            await asyncio.sleep(10)
+            return {"allowed": True}
+
+        operation = SimpleNamespace(plugin_id="thirdparty.guardrails", handler=_guardrail_handler)
+
+        def _operations_for_method(method: str) -> tuple[object, ...]:
+            if method != "validate_review_transition":
+                return ()
+            return (operation,)
+
+        ctx.plugin_registry = SimpleNamespace(operations_for_method=_operations_for_method)
+        monkeypatch.setattr("kagan.core.api_tasks._REVIEW_GUARDRAIL_TIMEOUT_SECONDS", 0.01)
+
+        with pytest.raises(ValueError, match="timed out"):
             await api.request_review(task.id)
 
     async def test_request_review_uses_owning_repo_guardrails_only(self, handle_env: tuple) -> None:

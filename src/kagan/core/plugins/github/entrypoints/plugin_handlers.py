@@ -58,6 +58,15 @@ def _non_empty_str(value: object) -> str | None:
     return normalized if normalized else None
 
 
+def _optional_str(value: object, *, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string")
+    normalized = value.strip()
+    return normalized if normalized else None
+
+
 def _build_use_cases(ctx: AppContext) -> GitHubPluginUseCases:
     return GitHubPluginUseCases(AppContextCoreGateway(ctx), _GH_CLIENT)
 
@@ -251,8 +260,8 @@ async def handle_create_pr_for_task(ctx: AppContext, params: dict[str, Any]) -> 
         project_id=_non_empty_str(params.get("project_id")),
         repo_id=_non_empty_str(params.get("repo_id")),
         task_id=_non_empty_str(params.get("task_id")),
-        title=params.get("title"),
-        body=params.get("body"),
+        title=_optional_str(params.get("title"), field="title"),
+        body=_optional_str(params.get("body"), field="body"),
         draft=bool(params.get("draft", False)),
     )
     return await _build_use_cases(ctx).create_pr_for_task(request)

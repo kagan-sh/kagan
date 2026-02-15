@@ -5,6 +5,7 @@ Contains all task CRUD, scratchpad, context, logs, search, and review methods.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
@@ -26,6 +27,8 @@ _DONE_TRANSITION_ERROR = (
     "Direct move/update to DONE is not allowed. "
     "Use review merge (or close no-change flow) from REVIEW."
 )
+
+_REVIEW_GUARDRAIL_TIMEOUT_SECONDS: float = 30.0
 
 
 class ReviewGuardrailBlockedError(ValueError):
@@ -435,13 +438,27 @@ class TaskApiMixin:
         for operation in operations:
             plugin_id = getattr(operation, "plugin_id", "<unknown-plugin>")
             try:
-                result = await operation.handler(
-                    self._ctx,
-                    {
-                        "task_id": task.id,
-                        "project_id": task.project_id,
-                    },
+                result = await asyncio.wait_for(
+                    operation.handler(
+                        self._ctx,
+                        {
+                            "task_id": task.id,
+                            "project_id": task.project_id,
+                        },
+                    ),
+                    timeout=_REVIEW_GUARDRAIL_TIMEOUT_SECONDS,
                 )
+            except TimeoutError as exc:
+                return {
+                    "allowed": False,
+                    "code": "REVIEW_GUARDRAIL_TIMEOUT",
+                    "message": "REVIEW transition blocked: review guardrail check timed out.",
+                    "hint": (
+                        "Retry, or investigate plugin health. Details: "
+                        f"{plugin_id}.{guardrail_method} timed out after "
+                        f"{_REVIEW_GUARDRAIL_TIMEOUT_SECONDS:.0f}s: {exc}"
+                    ),
+                }
             except Exception as exc:
                 return {
                     "allowed": False,

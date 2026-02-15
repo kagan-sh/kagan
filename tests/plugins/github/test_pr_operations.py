@@ -9,7 +9,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from kagan.core.models.enums import TaskStatus
-from kagan.core.plugins.github.entrypoints.plugin_handlers import handle_reconcile_pr_status
+from kagan.core.plugins.github.entrypoints.plugin_handlers import (
+    handle_create_pr_for_task,
+    handle_reconcile_pr_status,
+)
 from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY, GhPullRequest
 from kagan.core.plugins.github.sync import (
     GITHUB_TASK_PR_MAPPING_KEY,
@@ -164,3 +167,17 @@ async def test_reconcile_pr_status_returns_error_when_no_linked_pr() -> None:
 def test_load_task_pr_mapping_ignores_invalid_payload() -> None:
     mapping = load_task_pr_mapping({GITHUB_TASK_PR_MAPPING_KEY: "invalid-json"})
     assert mapping.get_pr("task-1") is None
+
+
+@pytest.mark.asyncio()
+async def test_create_pr_for_task_rejects_non_string_title() -> None:
+    with pytest.raises(ValueError, match="title must be a string"):
+        await handle_create_pr_for_task(
+            SimpleNamespace(),
+            {
+                "project_id": "project-1",
+                "repo_id": "repo-1",
+                "task_id": "task-1",
+                "title": 123,
+            },
+        )

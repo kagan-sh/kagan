@@ -359,7 +359,8 @@ def get_lease_state(
         if parsed is not None:
             holder = parsed
             comment_id = comment.get("id")
-            break
+            # Prefer the most recent lease comment when multiple exist.
+            continue
 
     return LeaseState(has_label=has_label, holder=holder, comment_id=comment_id), None
 
@@ -392,6 +393,7 @@ def acquire_lease(
         run_gh_api_comment_delete,
         run_gh_issue_comment_create,
         run_gh_issue_label_add,
+        run_gh_issue_label_remove,
     )
 
     # Check current state
@@ -407,15 +409,15 @@ def acquire_lease(
         # We already hold the lease - renew it
         new_holder = create_lease_holder(github_user=github_user)
 
-        # Delete old comment if exists
-        if state.comment_id:
-            run_gh_api_comment_delete(gh_path, repo_path, owner, repo, state.comment_id)
-
         # Create new lease comment
         comment_body = build_lease_comment_body(new_holder)
         _, error = run_gh_issue_comment_create(gh_path, repo_path, issue_number, comment_body)
         if error:
             return LeaseAcquireResult.failed(f"Failed to create lease comment: {error}")
+
+        # Best-effort cleanup after renewal succeeds.
+        if state.comment_id:
+            run_gh_api_comment_delete(gh_path, repo_path, owner, repo, state.comment_id)
 
         return LeaseAcquireResult.renewed(new_holder)
 
@@ -431,21 +433,25 @@ def acquire_lease(
     # Can acquire (either free, stale, or force takeover)
     new_holder = create_lease_holder(github_user=github_user)
 
-    # Clean up old lease comment if exists
-    if state.comment_id:
-        run_gh_api_comment_delete(gh_path, repo_path, owner, repo, state.comment_id)
-
     # Add label if not present
+    label_added = False
     if not state.has_label:
         success, error = run_gh_issue_label_add(gh_path, repo_path, issue_number, LEASE_LABEL)
         if not success:
             return LeaseAcquireResult.failed(f"Failed to add lease label: {error}")
+        label_added = True
 
     # Create lease comment
     comment_body = build_lease_comment_body(new_holder)
     _, error = run_gh_issue_comment_create(gh_path, repo_path, issue_number, comment_body)
     if error:
+        if label_added:
+            run_gh_issue_label_remove(gh_path, repo_path, issue_number, LEASE_LABEL)
         return LeaseAcquireResult.failed(f"Failed to create lease comment: {error}")
+
+    # Best-effort cleanup once we have fresh metadata.
+    if state.comment_id:
+        run_gh_api_comment_delete(gh_path, repo_path, owner, repo, state.comment_id)
 
     return LeaseAcquireResult.acquired(new_holder)
 
