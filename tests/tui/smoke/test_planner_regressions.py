@@ -52,7 +52,7 @@ async def test_planner_restore_state_recovers_draft_and_pending_proposal_after_r
 
         expected_draft = "draft text that must survive screen reopen"
         persistent = planner._persistent_state(expected_draft)
-        assert planner._state.has_pending_plan is True
+        assert planner._state.has_pending_plan
 
         await planner.action_to_board()
         await wait_for_screen(pilot, KanbanScreen, timeout=10.0)
@@ -71,7 +71,7 @@ async def test_planner_restore_state_recovers_draft_and_pending_proposal_after_r
         planner.query_one(PlanApprovalWidget)
         restored_input = planner.query_one("#planner-input", PlannerInput)
         assert restored_input.text == expected_draft
-        assert planner._state.has_pending_plan is True
+        assert planner._state.has_pending_plan
         assert planner._state.pending_plan
 
 
@@ -174,7 +174,7 @@ async def test_planner_without_active_repo_shows_offline_banner_and_disables_inp
         banner = planner.query_one(OfflineBanner)
         message = banner.query_one("#offline-message", Label)
         assert "Select a repository to start planning" in str(message.content)
-        assert planner.query_one("#planner-input", PlannerInput).has_class("-disabled") is True
+        assert planner.query_one("#planner-input", PlannerInput).has_class("-disabled")
         assert planner.planner_status == "offline"
 
 
@@ -201,7 +201,7 @@ async def test_planner_agent_unavailable_shows_status_banner_and_blocks_input(
         banner = planner.query_one(OfflineBanner)
         message = banner.query_one("#offline-message", Label)
         assert "Agent unavailable in test" in str(message.content)
-        assert planner.query_one("#planner-input", PlannerInput).has_class("-disabled") is True
+        assert planner.query_one("#planner-input", PlannerInput).has_class("-disabled")
         assert planner.planner_status == "offline"
 
 
@@ -301,7 +301,7 @@ async def test_planner_load_pending_proposal_restores_latest_valid_draft(
         await planner._load_pending_proposals()
 
         assert planner._pending_proposal_id == "proposal-1"
-        assert planner._state.has_pending_plan is True
+        assert planner._state.has_pending_plan
         assert planner._state.pending_plan is not None
         assert planner._state.pending_plan[0].title == "Persisted draft task"
         assert _has_plan_approval_widget(planner)
@@ -353,9 +353,9 @@ async def test_planner_dismissed_plan_with_active_agent_prompts_for_clarificatio
             description="planner schedules clarification follow-up after dismissal",
         )
 
-        assert planner._state.has_pending_plan is False
+        assert not planner._state.has_pending_plan
         assert planner._state.phase == PlannerPhase.PROCESSING
         assert planner.planner_status == "thinking"
         assert "Plan dismissed" in planner.query_one(StreamingOutput).get_text_content()
         assert run_worker_calls[0].get("group") == "planner-send-to-agent"
-        assert run_worker_calls[0].get("exclusive") is True
+        assert run_worker_calls[0].get("exclusive")

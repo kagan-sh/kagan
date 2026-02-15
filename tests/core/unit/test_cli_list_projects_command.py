@@ -94,6 +94,8 @@ def test_list_projects_renders_status_counts_and_primary_repo_marker(
 ) -> None:
     db_path = tmp_path / "kagan.db"
     seeded = asyncio.run(_seed_project_for_list_output(db_path))
+    primary_repo_path = str(seeded["primary_repo_path"])
+    secondary_repo_path = str(seeded["secondary_repo_path"])
     monkeypatch.setattr("kagan.cli.commands.list_projects.DEFAULT_DB_PATH", str(db_path))
 
     runner = CliRunner()
@@ -103,5 +105,5 @@ def test_list_projects_renders_status_counts_and_primary_repo_marker(
     assert "Projects:" in result.output
     assert "Demo Project" in result.output
     assert "1 backlog, 1 in progress, 1 review, 1 done" in result.output
-    assert f"{seeded['primary_repo_path']} (primary)" in result.output
-    assert seeded["secondary_repo_path"] in result.output
+    assert f"{primary_repo_path} (primary)" in result.output
+    assert secondary_repo_path in result.output

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 import pytest
 
 from kagan.core.request_handlers import handle_tui_api_call
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 async def test_tui_api_call_rejects_method_not_allowlisted(api_env) -> None:

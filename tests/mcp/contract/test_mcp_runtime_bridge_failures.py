@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -14,9 +14,7 @@ def _tool(mcp: object, name: str):
 
 
 @pytest.mark.asyncio
-async def test_server_resolve_endpoint_returns_actionable_error_when_autostart_disabled_and_missing() -> (
-    None
-):
+async def test_server_resolve_endpoint_errors_when_autostart_disabled_and_missing() -> None:
     mcp = _create_mcp_server(readonly=True)
 
     with (

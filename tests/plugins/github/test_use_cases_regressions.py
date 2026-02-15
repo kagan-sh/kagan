@@ -37,8 +37,8 @@ from kagan.core.plugins.github.gh_adapter import (
     GhPullRequest,
     GhRepoView,
 )
-from kagan.core.plugins.github.sync import GITHUB_ISSUE_MAPPING_KEY, GITHUB_TASK_PR_MAPPING_KEY
 from kagan.core.plugins.github.lease import LEASE_HELD_BY_OTHER
+from kagan.core.plugins.github.sync import GITHUB_ISSUE_MAPPING_KEY, GITHUB_TASK_PR_MAPPING_KEY
 
 
 def _connected_repo() -> SimpleNamespace:
@@ -533,9 +533,7 @@ async def test_validate_review_transition_allows_multi_repo_tasks_with_linked_pr
 
 
 @pytest.mark.asyncio()
-async def test_validate_review_transition_blocks_when_pr_link_missing_for_multi_repo_task_with_hint() -> (
-    None
-):
+async def test_validate_review_transition_blocks_when_pr_link_missing_for_multi_repo_task() -> None:
     task_id = "task-456"
     repo_a = SimpleNamespace(
         id="repo-a",
@@ -695,7 +693,7 @@ async def test_validate_review_transition_blocks_when_lease_held_by_other_instan
 
 
 @pytest.mark.asyncio()
-async def test_validate_review_transition_blocks_when_lease_metadata_incomplete_and_takeover_not_forced() -> (
+async def test_validate_review_transition_blocks_when_lease_metadata_missing_without_takeover() -> (
     None
 ):
     task_id = "task-lease-metadata-missing"
@@ -763,7 +761,9 @@ async def test_release_lease_returns_safe_error_when_not_lease_holder() -> None:
             return_value=SimpleNamespace(
                 success=False,
                 code=LEASE_HELD_BY_OTHER,
-                message="Issue #42 is locked by another instance. Use force_takeover=true to proceed.",
+                message=(
+                    "Issue #42 is locked by another instance. Use force_takeover=true to proceed."
+                ),
             )
         ),
     )

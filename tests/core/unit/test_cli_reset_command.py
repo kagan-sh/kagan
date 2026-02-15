@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
-from pathlib import Path
 import shutil
 import signal
-from typing import TYPE_CHECKING
-from unittest.mock import call
+from pathlib import Path
+from typing import TypedDict
 
 from click.testing import CliRunner
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -21,7 +19,23 @@ from kagan.core.adapters.db.schema import Project, Task, Workspace
 from kagan.core.models.enums import TaskStatus, TaskType, WorkspaceStatus
 
 
-async def _seed_two_projects(db_path: Path, worktree_root: Path) -> dict[str, object]:
+class _SeededProjects(TypedDict):
+    alpha_id: str
+    alpha_name: str
+    beta_id: str
+    beta_name: str
+    alpha_workspace: Path
+    beta_workspace: Path
+
+
+class _DbState(TypedDict):
+    projects: dict[str, str]
+    task_project_ids: list[str]
+    workspace_projects: list[str]
+    workspace_paths: list[str]
+
+
+async def _seed_two_projects(db_path: Path, worktree_root: Path) -> _SeededProjects:
     engine = await create_db_engine(db_path)
     await create_db_tables(engine)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -76,7 +90,7 @@ async def _seed_two_projects(db_path: Path, worktree_root: Path) -> dict[str, ob
         )
         await session.commit()
 
-        payload = {
+        payload: _SeededProjects = {
             "alpha_id": alpha.id,
             "alpha_name": alpha.name,
             "beta_id": beta.id,
@@ -89,7 +103,7 @@ async def _seed_two_projects(db_path: Path, worktree_root: Path) -> dict[str, ob
     return payload
 
 
-async def _read_state(db_path: Path) -> dict[str, object]:
+async def _read_state(db_path: Path) -> _DbState:
     engine = await create_db_engine(db_path)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
@@ -258,10 +272,10 @@ def test_reset_stops_core_and_escalates_to_sigkill_after_timeout(
     monkeypatch.setattr(reset_module, "_read_lease_owner_pid", lambda _path: 2222)
     monkeypatch.setattr(reset_module, "_pid_exists", lambda _pid: True)
 
-    kills: list[call] = []
+    kills: list[tuple[int, int]] = []
 
     def fake_kill(pid: int, sig: int) -> None:
-        kills.append(call(pid, sig))
+        kills.append((pid, sig))
 
     times = iter([100.0, 100.0, 100.5, 101.5, 102.5, 103.1])
     monkeypatch.setattr(reset_module.time, "time", lambda: next(times))
@@ -270,11 +284,7 @@ def test_reset_stops_core_and_escalates_to_sigkill_after_timeout(
 
     reset_module._stop_core_before_reset()
 
-    sigterm_calls = {
-        (item.args[0], item.args[1]) for item in kills if item.args[1] == signal.SIGTERM
-    }
-    sigkill_calls = {
-        (item.args[0], item.args[1]) for item in kills if item.args[1] == signal.SIGKILL
-    }
+    sigterm_calls = {item for item in kills if item[1] == signal.SIGTERM}
+    sigkill_calls = {item for item in kills if item[1] == signal.SIGKILL}
     assert sigterm_calls == {(1111, signal.SIGTERM), (2222, signal.SIGTERM)}
     assert sigkill_calls == {(1111, signal.SIGKILL), (2222, signal.SIGKILL)}
