@@ -28,7 +28,7 @@ tui_plugin_ui_allowlist = ["github"]
 
 If a plugin is not on the allowlist, core will exclude it from the TUI catalog and reject invokes.
 
-## Core <-> TUI Flow
+## Core \<-> TUI Flow
 
 1. TUI requests a catalog with `plugin_ui_catalog(project_id, repo_id?)`.
 1. Core gathers `ui_describe` from allowlisted plugins, validates/sanitizes, and returns a merged catalog.
@@ -135,4 +135,3 @@ Badge states:
 ```
 
 The TUI uses `refresh` hints to call existing refresh flows (no client-side fallback mutation).
-
