@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from kagan.core.expose import expose
 from kagan.core.models.enums import TaskStatus, TaskType
+from kagan.core.plugins.sdk import PLUGIN_HOOK_VALIDATE_REVIEW
 from kagan.core.time import utc_now
 
 if TYPE_CHECKING:
@@ -424,7 +425,7 @@ class TaskApiMixin:
 
     async def _check_review_guardrails(self, task: Task) -> dict[str, Any]:
         """Check REVIEW transition guardrails via plugin hook operations."""
-        guardrail_method = "validate_review_transition"
+        guardrail_method = PLUGIN_HOOK_VALIDATE_REVIEW
         plugin_registry = getattr(self._ctx, "plugin_registry", None)
         if plugin_registry is None:
             return {"allowed": True}

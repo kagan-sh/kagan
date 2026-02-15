@@ -401,86 +401,13 @@ class SettingsUpdateResponse(MutatingResponse):
     )
 
 
-# ---------------------------------------------------------------------------
-# GitHub Plugin MCP Models (V1 contract)
-# ---------------------------------------------------------------------------
+class PluginToolResponse(MutatingResponse):
+    """Generic response envelope for plugin-contributed MCP tools."""
 
-
-class GitHubContractProbeResponse(MutatingResponse):
-    """Response from kagan_github_contract_probe tool (V1 contract).
-
-    This is a read-only scaffold verification probe that returns plugin
-    metadata and echoes back any provided echo parameter.
-    """
-
-    plugin_id: str = Field(description="Plugin identifier (official.github)")
-    contract_version: str = Field(description="Semantic version of the plugin contract")
-    capability: str = Field(description="Capability name (kagan_github)")
-    method: str = Field(description="Method name (contract_probe)")
-    canonical_methods: list[str] = Field(
-        default_factory=list,
-        description="Canonical plugin capability methods (not limited to MCP V1 tools)",
-    )
-    canonical_scope: str = Field(
-        default="plugin_capability",
-        description=(
-            "Scope of canonical_methods; plugin_capability indicates non-MCP operations may appear"
-        ),
-    )
-    mcp_v1_tools: list[str] = Field(
-        default_factory=list,
-        description="MCP V1 tool names exposed by this server profile",
-    )
-    echo: str | None = Field(
-        default=None,
-        description="Echoed value from request for round-trip verification",
-    )
-
-
-class GitHubConnectionMetadata(BaseModel):
-    """Connection metadata for a GitHub-connected repository."""
-
-    full_name: str = Field(description="GitHub repository full name (owner/repo)")
-    owner: str = Field(description="Repository owner")
-    repo: str = Field(description="Repository name")
-    default_branch: str | None = Field(default=None, description="Default branch name")
-    visibility: str | None = Field(default=None, description="Repository visibility")
-    connected_at: str | None = Field(default=None, description="ISO timestamp of connection")
-
-
-class GitHubConnectRepoResponse(MutatingResponse):
-    """Response from kagan_github_connect_repo tool (V1 contract).
-
-    Connects a project repository to GitHub with preflight verification.
-    Returns connection metadata on success or error with remediation hint.
-    """
-
-    connection: GitHubConnectionMetadata | None = Field(
-        default=None,
-        description="Connection metadata when successful",
-    )
-
-
-class GitHubSyncStats(BaseModel):
-    """Statistics from a GitHub issue sync operation."""
-
-    total: int = Field(default=0, description="Total issues processed")
-    inserted: int = Field(default=0, description="New tasks created from issues")
-    updated: int = Field(default=0, description="Existing tasks updated")
-    reopened: int = Field(default=0, description="Tasks reopened from closed state")
-    closed: int = Field(default=0, description="Tasks closed from open state")
-    no_change: int = Field(default=0, description="Issues with no changes needed")
-    errors: int = Field(default=0, description="Issues that failed to sync")
-
-
-class GitHubSyncIssuesResponse(MutatingResponse):
-    """Response from kagan_github_sync_issues tool (V1 contract).
-
-    Synchronizes GitHub issues to Kagan task projections with incremental
-    checkpoint support.
-    """
-
-    stats: GitHubSyncStats | None = Field(
-        default=None,
-        description="Sync statistics when successful",
+    plugin_id: str = Field(default="", description="Plugin that handled the operation")
+    capability: str = Field(default="", description="Plugin capability namespace")
+    method: str = Field(default="", description="Operation method name")
+    data: dict[str, object] = Field(
+        default_factory=dict,
+        description="Plugin-specific response payload",
     )

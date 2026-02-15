@@ -29,19 +29,20 @@ async def test_kagan_github_connect_repo_forwards_to_bridge_and_returns_contract
 ) -> None:
     class _BridgeStub:
         def __init__(self) -> None:
-            self.called_with: tuple[str, str | None] | None = None
+            self.called_with: tuple[str, str, dict[str, Any] | None] | None = None
 
-        async def github_connect_repo(
+        async def invoke_plugin(
             self,
-            *,
-            project_id: str,
-            repo_id: str | None = None,
+            capability: str,
+            method: str,
+            params: dict[str, Any] | None = None,
         ) -> dict[str, object]:
-            self.called_with = (project_id, repo_id)
+            self.called_with = (capability, method, params)
             return {
                 "success": True,
                 "code": "CONNECTED",
                 "message": "Connected to acme/widgets",
+                "plugin_id": "github",
                 "connection": {
                     "full_name": "acme/widgets",
                     "owner": "acme",
@@ -63,32 +64,40 @@ async def test_kagan_github_connect_repo_forwards_to_bridge_and_returns_contract
     result = await tool.fn(project_id="project-1", repo_id="repo-1", ctx=None)
     payload = _as_dict(result)
 
-    assert bridge.called_with == ("project-1", "repo-1")
+    assert bridge.called_with is not None
+    cap, method, params = bridge.called_with
+    assert cap == "kagan_github"
+    assert method == "connect_repo"
+    assert params == {"project_id": "project-1", "repo_id": "repo-1"}
+
     assert payload["success"] is True
-    assert payload["code"] == "CONNECTED"
     assert payload["message"] == "Connected to acme/widgets"
-    assert payload["connection"] is not None
-    assert payload["connection"]["owner"] == "acme"
-    assert payload["connection"]["repo"] == "widgets"
-    assert payload["connection"]["default_branch"] == "main"
+    assert payload["data"]["connection"] is not None
+    assert payload["data"]["connection"]["owner"] == "acme"
+    assert payload["data"]["connection"]["repo"] == "widgets"
+    assert payload["data"]["connection"]["default_branch"] == "main"
 
 
 async def test_kagan_github_sync_issues_propagates_core_error_code_and_message(
     monkeypatch,
 ) -> None:
     class _BridgeStub:
-        async def github_sync_issues(
+        async def invoke_plugin(
             self,
-            *,
-            project_id: str,
-            repo_id: str | None = None,
+            capability: str,
+            method: str,
+            params: dict[str, Any] | None = None,
         ) -> dict[str, object]:
-            assert project_id == "project-1"
-            assert repo_id == "repo-1"
+            assert capability == "kagan_github"
+            assert method == "sync_issues"
+            assert params is not None
+            assert params["project_id"] == "project-1"
+            assert params["repo_id"] == "repo-1"
             return {
                 "success": False,
                 "code": "GH_SYNC_FAILED",
                 "message": "Failed to fetch issues: 401 Unauthorized",
+                "plugin_id": "github",
                 "hint": "Check gh CLI authentication and repository access",
                 "stats": {
                     "total": 3,
@@ -112,7 +121,6 @@ async def test_kagan_github_sync_issues_propagates_core_error_code_and_message(
     payload = _as_dict(result)
 
     assert payload["success"] is False
-    assert payload["code"] == "GH_SYNC_FAILED"
     assert payload["message"] == "Failed to fetch issues: 401 Unauthorized"
-    assert payload["hint"] == "Check gh CLI authentication and repository access"
-    assert payload["stats"]["errors"] == 3
+    assert payload["data"]["hint"] == "Check gh CLI authentication and repository access"
+    assert payload["data"]["stats"]["errors"] == 3

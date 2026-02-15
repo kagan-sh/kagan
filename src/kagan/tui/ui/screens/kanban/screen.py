@@ -21,7 +21,6 @@ from kagan.core.constants import (
 )
 from kagan.core.git_utils import get_current_branch
 from kagan.core.models.enums import TaskStatus, TaskType
-from kagan.core.plugins.github.contract import GITHUB_PLUGIN_ID
 from kagan.tui.keybindings import KANBAN_BINDINGS
 from kagan.tui.ui.modals.description_editor import DescriptionEditorModal
 from kagan.tui.ui.screen_result import await_screen_result
@@ -778,7 +777,32 @@ class KanbanScreen(KaganScreen):
         self._dispatch_kanban_action(KanbanActionId.SET_TASK_BRANCH)
 
     def action_github_sync(self) -> None:
-        self.run_worker(self.invoke_plugin_ui_action(GITHUB_PLUGIN_ID, "sync_issues"))
+        """Invoke the sync_issues plugin action from the catalog."""
+        self.run_worker(self._invoke_catalog_action("sync_issues"))
+
+    async def _invoke_catalog_action(self, action_id: str) -> None:
+        """Look up a plugin action by action_id in the catalog and invoke it."""
+        catalog = await self._refresh_plugin_ui_catalog()
+        actions = catalog.get("actions", [])
+        if not isinstance(actions, list):
+            self.notify("Plugin actions unavailable", severity="warning")
+            return
+        action = next(
+            (
+                item
+                for item in actions
+                if isinstance(item, dict) and item.get("action_id") == action_id
+            ),
+            None,
+        )
+        if action is None:
+            self.notify(f"Action '{action_id}' not available", severity="warning")
+            return
+        plugin_id = action.get("plugin_id", "")
+        if not plugin_id:
+            self.notify("Action has no plugin_id", severity="warning")
+            return
+        await self.invoke_plugin_ui_action(plugin_id, action_id)
 
     async def _refresh_plugin_ui_catalog(self, *, force: bool = False) -> dict[str, Any]:
         if not force and self._plugin_ui_catalog is not None:

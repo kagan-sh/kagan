@@ -1,4 +1,4 @@
-"""TUI GitHub status visibility tests."""
+"""TUI plugin badge visibility tests (formerly GitHub-specific)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Label
 
 from kagan.tui.ui.screens.kanban.hints import build_kanban_hints
-from kagan.tui.ui.widgets.header import GITHUB_ICON_PENDING, GITHUB_ICON_SYNCED, KaganHeader
+from kagan.tui.ui.widgets.header import KaganHeader
 
 
 class _HeaderHostApp(App[None]):
@@ -17,18 +17,18 @@ class _HeaderHostApp(App[None]):
         yield KaganHeader()
 
 
-class TestGitHubStatusHeader:
-    """Tests for rendered GitHub status behavior in the header widget."""
+class TestPluginBadgeHeader:
+    """Tests for rendered plugin badge behavior in the header widget."""
 
     @pytest.mark.asyncio
-    async def test_header_hides_github_status_when_not_connected(self) -> None:
+    async def test_header_hides_badge_when_no_badges(self) -> None:
         app = _HeaderHostApp()
         async with app.run_test(size=(120, 40)) as pilot:
             header = pilot.app.query_one(KaganHeader)
             status = header.query_one("#header-github-status", Label)
             separator = header.query_one("#sep-github", Label)
 
-            header.update_github_status(connected=False)
+            header.update_plugin_badges(None)
             await pilot.pause()
 
             assert status.display is False
@@ -36,43 +36,38 @@ class TestGitHubStatusHeader:
             assert str(status.content) == ""
 
     @pytest.mark.asyncio
-    async def test_header_shows_pending_icon_when_connected_not_synced(self) -> None:
+    async def test_header_shows_badge_with_ok_state(self) -> None:
         app = _HeaderHostApp()
         async with app.run_test(size=(120, 40)) as pilot:
             header = pilot.app.query_one(KaganHeader)
             status = header.query_one("#header-github-status", Label)
             separator = header.query_one("#sep-github", Label)
 
-            header.update_github_status(connected=True, synced=False)
+            header.update_plugin_badges([{"label": "GitHub", "state": "ok"}])
             await pilot.pause()
 
             assert status.display is True
             assert separator.display is True
-            assert str(status.content) == f"{GITHUB_ICON_PENDING} GitHub"
+            assert str(status.content) == "◉ GitHub"
 
     @pytest.mark.asyncio
-    async def test_header_shows_synced_icon_when_connected_and_synced(self) -> None:
+    async def test_header_shows_badge_with_text_and_pending_state(self) -> None:
         app = _HeaderHostApp()
         async with app.run_test(size=(120, 40)) as pilot:
             header = pilot.app.query_one(KaganHeader)
             status = header.query_one("#header-github-status", Label)
 
-            header.update_github_status(connected=True, synced=True)
+            header.update_plugin_badges([{"label": "GitHub", "text": "synced", "state": "ok"}])
             await pilot.pause()
 
             assert status.display is True
-            assert str(status.content) == f"{GITHUB_ICON_SYNCED} GitHub"
+            assert str(status.content) == "◉ GitHub synced"
 
 
-class TestGitHubHintsVisibility:
-    """Tests for GitHub sync hint visibility in keybinding hints."""
+class TestPluginHintsVisibility:
+    """Tests for plugin-related hint visibility in keybinding hints."""
 
-    def test_hints_show_sync_when_github_connected(self) -> None:
-        hints = build_kanban_hints(None, None, github_connected=True)
-        hint_actions = [label for _, label in hints.global_hints]
-        assert "sync" in hint_actions
-
-    def test_hints_hide_sync_when_not_connected(self) -> None:
-        hints = build_kanban_hints(None, None, github_connected=False)
+    def test_hints_do_not_contain_sync(self) -> None:
+        hints = build_kanban_hints(None, None)
         hint_actions = [label for _, label in hints.global_hints]
         assert "sync" not in hint_actions

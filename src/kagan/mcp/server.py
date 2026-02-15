@@ -67,6 +67,8 @@ from kagan.version import get_kagan_version
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
+    from kagan.core.plugins.sdk import PluginRegistry
+
 logger = logging.getLogger(__name__)
 
 NO_SESSION_MESSAGE = (
@@ -715,6 +717,7 @@ def _register_full_mode_tools(
     enable_internal_instrumentation: bool,
 ) -> None:
     """Register mutating/full-mode-only MCP tools."""
+    plugin_registry = _build_plugin_registry()
     register_full_mode_tools(
         mcp,
         allows_all=allows_all,
@@ -734,11 +737,22 @@ def _register_full_mode_tools(
             str_or_none=_str_or_none,
             dict_or_none=_dict_or_none,
             is_allowed=_is_allowed,
+            plugin_registry=plugin_registry,
         ),
         read_only_annotation=_READ_ONLY,
         mutating_annotation=_MUTATING,
         destructive_annotation=_DESTRUCTIVE,
     )
+
+
+def _build_plugin_registry() -> PluginRegistry:
+    """Build a PluginRegistry with plugins discovered from config."""
+    from kagan.core.plugins.sdk import PluginRegistry
+
+    config = KaganConfig.load(get_config_path())
+    registry = PluginRegistry()
+    registry.discover_and_register(config.plugins.discovery)
+    return registry
 
 
 def list_registered_tool_names(mcp: FastMCP) -> set[str]:

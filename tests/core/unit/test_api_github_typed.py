@@ -1,4 +1,4 @@
-"""Focused tests for typed GitHub API methods."""
+"""Focused tests for generic plugin API dispatch (formerly typed GitHub API methods)."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ async def github_api_env(
     await repo.close()
 
 
-async def test_github_sync_issues_normalizes_params_before_handler_call(
+async def test_invoke_plugin_forwards_params_to_handler(
     github_api_env: tuple[KaganAPI, AppContext],
 ) -> None:
     api, ctx = github_api_env
@@ -35,7 +35,9 @@ async def test_github_sync_issues_normalizes_params_before_handler_call(
     registry.resolve_operation.return_value = SimpleNamespace(handler=handler)
     ctx.plugin_registry = registry
 
-    result = await api.github_sync_issues(project_id=" project-1 ", repo_id=" repo-1 ")
+    result = await api.invoke_plugin(
+        "kagan_github", "sync_issues", {"project_id": "project-1", "repo_id": "repo-1"}
+    )
 
     assert result["success"] is True
     assert result["stats"]["inserted"] == 3
@@ -48,10 +50,12 @@ async def test_github_sync_issues_normalizes_params_before_handler_call(
     )
 
 
-async def test_github_connect_repo_rejects_empty_project_id(
+async def test_invoke_plugin_raises_when_registry_missing(
     github_api_env: tuple[KaganAPI, AppContext],
 ) -> None:
-    api, _ctx = github_api_env
+    api, ctx = github_api_env
+    # Ensure no registry
+    ctx.plugin_registry = None  # type: ignore[attr-defined]
 
-    with pytest.raises(ValueError, match="project_id cannot be empty"):
-        await api.github_connect_repo(project_id="   ")
+    with pytest.raises(RuntimeError, match="Plugin registry is not initialized"):
+        await api.invoke_plugin("kagan_github", "connect_repo", {"project_id": "p1"})

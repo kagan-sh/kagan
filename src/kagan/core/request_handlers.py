@@ -87,6 +87,7 @@ _TUI_ALLOWED_API_METHODS: frozenset[str] = frozenset(
         "get_workspace_repos",
         "get_repo_diff",
         "has_no_changes",
+        "invoke_plugin",
         "is_automation_running",
         "kill_session",
         "list_pending_planner_drafts",
@@ -1890,17 +1891,37 @@ async def _dispatch_tui_api_call(
                 branch,
                 mark_configured=mark_configured,
             )
+        case "invoke_plugin":
+            capability = _required_non_empty(kwargs, "capability")
+            method = _required_non_empty(kwargs, "method")
+            plugin_params = kwargs.get("params")
+            if plugin_params is not None and not isinstance(plugin_params, dict):
+                raise ValueError("params must be an object when provided")
+            return await f.invoke_plugin(
+                capability,
+                method,
+                dict(plugin_params) if isinstance(plugin_params, dict) else None,
+            )
         case "github_contract_probe":
             echo = _non_empty_str(kwargs.get("echo"))
-            return await f.github_contract_probe(echo=echo)
+            params: dict[str, Any] = {}
+            if echo is not None:
+                params["echo"] = echo
+            return await f.invoke_plugin("kagan_github", "contract_probe", params or None)
         case "github_connect_repo":
             project_id = _required_non_empty(kwargs, "project_id")
             repo_id = _non_empty_str(kwargs.get("repo_id"))
-            return await f.github_connect_repo(project_id=project_id, repo_id=repo_id)
+            gh_params: dict[str, Any] = {"project_id": project_id}
+            if repo_id is not None:
+                gh_params["repo_id"] = repo_id
+            return await f.invoke_plugin("kagan_github", "connect_repo", gh_params)
         case "github_sync_issues":
             project_id = _required_non_empty(kwargs, "project_id")
             repo_id = _non_empty_str(kwargs.get("repo_id"))
-            return await f.github_sync_issues(project_id=project_id, repo_id=repo_id)
+            sync_params: dict[str, Any] = {"project_id": project_id}
+            if repo_id is not None:
+                sync_params["repo_id"] = repo_id
+            return await f.invoke_plugin("kagan_github", "sync_issues", sync_params)
         case "plugin_ui_catalog":
             project_id = _required_non_empty(kwargs, "project_id")
             repo_id = _non_empty_str(kwargs.get("repo_id"))

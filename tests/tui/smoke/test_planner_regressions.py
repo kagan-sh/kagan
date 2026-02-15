@@ -95,8 +95,10 @@ async def test_planner_refine_action_updates_plan_and_preserves_user_context(
         await type_text(pilot, "Create a minimal task")
         await pilot.press("enter")
         await wait_until(
-            lambda: planner._state.phase == PlannerPhase.IDLE
-            and len(planner._state.conversation_history) >= 2,
+            lambda: (
+                planner._state.phase == PlannerPhase.IDLE
+                and len(planner._state.conversation_history) >= 2
+            ),
             timeout=8.0,
             description="planner finishes first prompt before refine action",
         )

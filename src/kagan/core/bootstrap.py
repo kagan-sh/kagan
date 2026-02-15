@@ -38,8 +38,6 @@ from kagan.core.events import (
     TaskStatusChanged,
     TaskUpdated,
 )
-from kagan.core.plugins.examples import register_example_plugins
-from kagan.core.plugins.github import register_github_plugin
 from kagan.core.plugins.sdk import PluginRegistry
 
 if TYPE_CHECKING:
@@ -389,8 +387,7 @@ async def create_app_context(
         event_bus=event_bus,
     )
     ctx.plugin_registry = PluginRegistry()
-    register_github_plugin(ctx.plugin_registry)
-    register_example_plugins(ctx.plugin_registry)
+    ctx.plugin_registry.discover_and_register(config.plugins.discovery)
 
     from kagan.core.adapters.db.repositories import (
         AuditRepository,

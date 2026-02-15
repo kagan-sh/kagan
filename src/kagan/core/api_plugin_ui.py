@@ -105,11 +105,16 @@ class PluginUiApiMixin:
             raise RuntimeError("Plugin registry is not initialized")
         return plugin_registry
 
-    def _plugin_ui_allowlist(self) -> set[str]:
+    def _plugin_ui_allowlist(self) -> set[str] | None:
+        """Return the plugin UI allowlist, or ``None`` if all plugins are allowed.
+
+        An empty configured list means "allow everything" (no restriction).
+        """
         allowlist = getattr(self._ctx.config.ui, "tui_plugin_ui_allowlist", None)
         if not isinstance(allowlist, list):
-            return set()
-        return {item for item in allowlist if isinstance(item, str) and item.strip()}
+            return None
+        entries = {item for item in allowlist if isinstance(item, str) and item.strip()}
+        return entries if entries else None
 
     def _evaluate_policy(
         self,
@@ -137,8 +142,6 @@ class PluginUiApiMixin:
         cleaned_project_id, cleaned_repo_id = self._clean_project_repo_args(project_id, repo_id)
 
         allowlist = self._plugin_ui_allowlist()
-        if not allowlist:
-            return {"schema_version": "1", "actions": [], "forms": [], "badges": []}
 
         registry = self._plugin_registry()
         catalog = UiCatalog(schema_version="1", actions=[], forms=[], badges=[], diagnostics=[])
@@ -147,7 +150,7 @@ class PluginUiApiMixin:
             params["repo_id"] = cleaned_repo_id
 
         for operation in registry.operations_for_method(PLUGIN_UI_DESCRIBE_METHOD):
-            if operation.plugin_id not in allowlist:
+            if allowlist is not None and operation.plugin_id not in allowlist:
                 continue
             if operation.mutating:
                 catalog = _merge_catalogs(
@@ -219,7 +222,7 @@ class PluginUiApiMixin:
             raise ValueError("action_id is required")
 
         allowlist = self._plugin_ui_allowlist()
-        if cleaned_plugin_id not in allowlist:
+        if allowlist is not None and cleaned_plugin_id not in allowlist:
             raise ValueError(f"Plugin '{cleaned_plugin_id}' is not allowlisted for TUI UI")
 
         if inputs is not None and not isinstance(inputs, dict):

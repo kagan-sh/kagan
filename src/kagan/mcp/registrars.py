@@ -30,16 +30,12 @@ from kagan.mcp.models import (
     AgentLogEntry,
     AuditEvent,
     AuditTailResponse,
-    GitHubConnectionMetadata,
-    GitHubConnectRepoResponse,
-    GitHubContractProbeResponse,
-    GitHubSyncIssuesResponse,
-    GitHubSyncStats,
     InstrumentationSnapshotResponse,
     JobEvent,
     JobEventsResponse,
     JobResponse,
     PlanProposalResponse,
+    PluginToolResponse,
     ProjectInfo,
     ProjectListResponse,
     ProjectOpenResponse,
@@ -63,6 +59,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
     from mcp.types import ToolAnnotations
 
+    from kagan.core.plugins.sdk import PluginRegistry
     from kagan.mcp.tools import CoreClientBridge
 
 # ---------------------------------------------------------------------------
@@ -207,6 +204,7 @@ class ToolRegistrationContext:
     str_or_none: Callable[[object], str | None]
     dict_or_none: Callable[[object], dict[str, object] | None]
     is_allowed: Callable[[str, str, str], bool]
+    plugin_registry: PluginRegistry | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1540,21 +1538,88 @@ def register_admin_tools(
 
 
 # ---------------------------------------------------------------------------
-# GitHub Plugin MCP Tools (V1 Contract)
+# Plugin tool registration (generic dispatch)
 # ---------------------------------------------------------------------------
 
-# V1 contract tool names - frozen as stable interface
-GITHUB_TOOL_CONTRACT_PROBE = "kagan_github_contract_probe"
-GITHUB_TOOL_CONNECT_REPO = "kagan_github_connect_repo"
-GITHUB_TOOL_SYNC_ISSUES = "kagan_github_sync_issues"
-GITHUB_MCP_V1_TOOLS = (
-    GITHUB_TOOL_CONTRACT_PROBE,
-    GITHUB_TOOL_CONNECT_REPO,
-    GITHUB_TOOL_SYNC_ISSUES,
-)
+
+def _make_plugin_handler(
+    *,
+    cap: str,
+    method: str,
+    plugin_id: str,
+    tool_name: str,
+    description: str,
+    parameters: dict[str, Any],
+    require_bridge: Callable[..., Any],
+    envelope_fields: Callable[..., Any],
+    envelope_recovery_fields: Callable[..., dict[str, Any]],
+) -> Callable[..., Any]:
+    """Factory that creates a properly-closed handler for a single plugin operation.
+
+    Uses a factory function instead of default-argument closure capture so that
+    FastMCP's signature introspection never sees ``_``-prefixed parameters.
+    The handler's ``__signature__`` is patched to expose the exact parameter
+    names declared in the plugin's ``McpToolSchema.parameters`` dict so that
+    FastMCP generates the correct JSON-Schema for the MCP tool.
+    """
+    import inspect
+
+    # JSON-Schema type -> Python annotation mapping
+    _JSON_TYPE_TO_PYTHON: dict[str, type] = {
+        "string": str,
+        "integer": int,
+        "number": float,
+        "boolean": bool,
+    }
+
+    async def handler(
+        ctx: MCPContext | None = None,
+        **kwargs: Any,
+    ) -> PluginToolResponse:
+        bridge = require_bridge(ctx)
+        raw = await bridge.invoke_plugin(cap, method, kwargs or None)
+        envelope = envelope_fields(raw, default_success=True, default_message=None)
+        return PluginToolResponse(
+            **envelope_recovery_fields(envelope),
+            plugin_id=raw.get("plugin_id", plugin_id),
+            capability=cap,
+            method=method,
+            data={k: v for k, v in raw.items() if k not in ("success", "message")},
+        )
+
+    # Build an explicit signature from the schema so FastMCP exposes typed params
+    sig_params: list[inspect.Parameter] = [
+        inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None),
+    ]
+    for param_name, param_spec in parameters.items():
+        annotation = _JSON_TYPE_TO_PYTHON.get(param_spec.get("type", ""), str)
+        is_required = param_spec.get("required", False)
+        if is_required:
+            sig_params.append(
+                inspect.Parameter(
+                    param_name,
+                    inspect.Parameter.KEYWORD_ONLY,
+                    annotation=annotation,
+                ),
+            )
+        else:
+            sig_params.append(
+                inspect.Parameter(
+                    param_name,
+                    inspect.Parameter.KEYWORD_ONLY,
+                    default=None,
+                    annotation=annotation | None,
+                ),
+            )
+    handler.__signature__ = inspect.Signature(sig_params, return_annotation=PluginToolResponse)  # type: ignore[attr-defined]
+
+    handler.__name__ = tool_name
+    handler.__qualname__ = tool_name
+    handler.__doc__ = description
+    return handler
 
 
-def register_github_tools(
+def register_plugin_tools(
     mcp: FastMCP,
     *,
     effective_profile: str,
@@ -1562,10 +1627,11 @@ def register_github_tools(
     read_only_annotation: ToolAnnotations,
     mutating_annotation: ToolAnnotations,
 ) -> None:
-    """Register GitHub plugin admin MCP tools (V1 contract).
+    """Register MCP tools contributed by plugins via McpToolSchema descriptors.
 
-    All GitHub admin tools require MAINTAINER profile. The tools delegate
-    to the kagan_github plugin capability via CoreClientBridge.
+    Iterates all registered plugin operations with an ``mcp_tool_schema``
+    attached and dynamically registers each as an MCP tool. The tool body
+    delegates to ``CoreClientBridge.invoke_plugin()``.
     """
     _require_bridge = helpers.require_bridge
     _envelope_fields = helpers.envelope_fields
@@ -1573,110 +1639,35 @@ def register_github_tools(
     _READ_ONLY = read_only_annotation
     _MUTATING = mutating_annotation
 
-    # Only expose GitHub tools to MAINTAINER profile
+    # Only expose plugin tools to MAINTAINER profile
     if effective_profile != str(CapabilityProfile.MAINTAINER):
         return
 
-    @mcp.tool(annotations=_READ_ONLY)
-    async def kagan_github_contract_probe(
-        echo: str | None = None,
-        ctx: MCPContext | None = None,
-    ) -> GitHubContractProbeResponse:
-        """Probe the GitHub plugin contract for verification (V1 contract).
+    registry = helpers.plugin_registry
+    if registry is None:
+        return
 
-        Returns plugin metadata including contract version and canonical methods.
-        This is a read-only operation that does not modify any state.
+    for operation in registry.all_operations():
+        schema = operation.mcp_tool_schema
+        if schema is None:
+            continue
 
-        Args:
-            echo: Optional value to echo back for round-trip verification.
-        """
-        bridge = _require_bridge(ctx)
-        raw = await bridge.github_contract_probe(echo=echo)
-        envelope = _envelope_fields(raw, default_success=True, default_message=None)
-        return GitHubContractProbeResponse(
-            **_envelope_recovery_fields(envelope),
-            plugin_id=raw.get("plugin_id", ""),
-            contract_version=raw.get("contract_version", ""),
-            capability=raw.get("capability", ""),
-            method=raw.get("method", ""),
-            canonical_methods=raw.get("canonical_methods", []),
-            canonical_scope=raw.get("canonical_scope", "plugin_capability"),
-            mcp_v1_tools=list(GITHUB_MCP_V1_TOOLS),
-            echo=raw.get("echo"),
+        tool_name = schema.tool_name
+        annotation = _READ_ONLY if schema.annotations == "read_only" else _MUTATING
+
+        handler = _make_plugin_handler(
+            cap=operation.capability,
+            method=operation.method,
+            plugin_id=operation.plugin_id,
+            tool_name=tool_name,
+            description=schema.description,
+            parameters=schema.parameters,
+            require_bridge=_require_bridge,
+            envelope_fields=_envelope_fields,
+            envelope_recovery_fields=_envelope_recovery_fields,
         )
 
-    @mcp.tool(annotations=_MUTATING)
-    async def kagan_github_connect_repo(
-        project_id: str,
-        repo_id: str | None = None,
-        ctx: MCPContext | None = None,
-    ) -> GitHubConnectRepoResponse:
-        """Connect a repository to GitHub with preflight checks (V1 contract).
-
-        Performs preflight verification (gh CLI auth, repo access) and persists
-        GitHub connection metadata for the target repository.
-
-        Args:
-            project_id: Required project ID.
-            repo_id: Optional repo ID (required for multi-repo projects).
-        """
-        bridge = _require_bridge(ctx)
-        raw = await bridge.github_connect_repo(project_id=project_id, repo_id=repo_id)
-        envelope = _envelope_fields(raw, default_success=False, default_message=None)
-
-        connection: GitHubConnectionMetadata | None = None
-        connection_raw = raw.get("connection")
-        if isinstance(connection_raw, dict):
-            connection = GitHubConnectionMetadata(
-                full_name=connection_raw.get("full_name", ""),
-                owner=connection_raw.get("owner", ""),
-                repo=connection_raw.get("repo", ""),
-                default_branch=connection_raw.get("default_branch"),
-                visibility=connection_raw.get("visibility"),
-                connected_at=connection_raw.get("connected_at"),
-            )
-
-        return GitHubConnectRepoResponse(
-            **_envelope_recovery_fields(envelope),
-            connection=connection,
-        )
-
-    @mcp.tool(annotations=_MUTATING)
-    async def kagan_github_sync_issues(
-        project_id: str,
-        repo_id: str | None = None,
-        ctx: MCPContext | None = None,
-    ) -> GitHubSyncIssuesResponse:
-        """Sync GitHub issues to Kagan task projections (V1 contract).
-
-        Fetches issues from GitHub and creates/updates corresponding Kagan tasks.
-        Supports incremental sync via checkpoint tracking.
-
-        Args:
-            project_id: Required project ID.
-            repo_id: Optional repo ID (required for multi-repo projects).
-        """
-        bridge = _require_bridge(ctx)
-        raw = await bridge.github_sync_issues(project_id=project_id, repo_id=repo_id)
-        envelope = _envelope_fields(raw, default_success=False, default_message=None)
-
-        stats: GitHubSyncStats | None = None
-        stats_raw = raw.get("stats")
-        if isinstance(stats_raw, dict):
-            stats = GitHubSyncStats(
-                total=stats_raw.get("total", 0),
-                inserted=stats_raw.get("inserted", 0),
-                updated=stats_raw.get("updated", 0),
-                reopened=stats_raw.get("reopened", 0),
-                closed=stats_raw.get("closed", 0),
-                no_change=stats_raw.get("no_change", 0),
-                errors=stats_raw.get("errors", 0),
-            )
-
-        return GitHubSyncIssuesResponse(
-            **_envelope_recovery_fields(envelope),
-            stats=stats,
-        )
+        mcp.tool(annotations=annotation)(handler)
 
 
 # ---------------------------------------------------------------------------
@@ -1729,7 +1720,7 @@ def register_full_mode_tools(
         destructive_annotation=destructive_annotation,
     )
 
-    register_github_tools(
+    register_plugin_tools(
         mcp,
         effective_profile=effective_profile,
         helpers=helpers,

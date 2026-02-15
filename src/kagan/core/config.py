@@ -209,9 +209,10 @@ class UIConfig(BaseModel):
         description="Skip pair mode instructions popup when opening PAIR sessions",
     )
     tui_plugin_ui_allowlist: list[str] = Field(
-        default_factory=lambda: ["official.github"],
+        default_factory=list,
         description=(
-            "Allowlisted plugin IDs that may contribute declarative UI definitions to the TUI."
+            "Allowlisted plugin IDs that may contribute declarative UI definitions to the TUI. "
+            "Empty list means all registered plugins are allowed."
         ),
     )
 
@@ -250,6 +251,18 @@ class AgentConfig(BaseModel):
     model_env_var: str = Field(default="", description="Environment variable for model selection")
 
 
+class PluginsConfig(BaseModel):
+    """Plugin discovery configuration."""
+
+    discovery: list[str] = Field(
+        default_factory=lambda: [
+            "kagan.core.plugins.github.plugin:GitHubPlugin",
+            "kagan.core.plugins.examples.noop:NoOpExamplePlugin",
+        ],
+        description="Plugin entrypoints to discover and register (module:Class format).",
+    )
+
+
 class KaganConfig(BaseModel):
     """Root configuration model."""
 
@@ -257,6 +270,7 @@ class KaganConfig(BaseModel):
     agents: dict[str, AgentConfig] = Field(default_factory=dict)
     refinement: RefinementConfig = Field(default_factory=RefinementConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    plugins: PluginsConfig = Field(default_factory=PluginsConfig)
 
     @classmethod
     def load(cls, config_path: Path | None = None) -> KaganConfig:
@@ -315,6 +329,12 @@ class KaganConfig(BaseModel):
             if value is not None:
                 ui_table[key] = value
         doc["ui"] = ui_table
+
+        plugins_table = tomlkit.table()
+        for key, value in self.plugins.model_dump().items():
+            if value is not None:
+                plugins_table[key] = value
+        doc["plugins"] = plugins_table
 
         content = tomlkit.dumps(doc)
         await asyncio.to_thread(atomic_write, path, content)

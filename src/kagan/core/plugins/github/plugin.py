@@ -21,6 +21,7 @@ from kagan.core.plugins.github.contract import (
 )
 from kagan.core.plugins.sdk import (
     PLUGIN_UI_DESCRIBE_METHOD,
+    McpToolSchema,
     PluginManifest,
     PluginOperation,
     PluginRegistrationApi,
@@ -87,6 +88,27 @@ class GitHubPlugin:
                 minimum_profile=CapabilityProfile.MAINTAINER,
                 mutating=False,
                 description="Return the canonical GitHub plugin operation contract.",
+                mcp_tool_schema=McpToolSchema(
+                    tool_name="kagan_github_contract_probe",
+                    description=(
+                        "Probe the GitHub plugin contract for verification (V1 contract). "
+                        "Returns plugin metadata including contract version and "
+                        "canonical methods."
+                    ),
+                    parameters={"echo": {"type": "string", "description": "Optional echo value"}},
+                    response_schema={
+                        "plugin_id": {"type": "string"},
+                        "contract_version": {"type": "string"},
+                        "capability": {"type": "string"},
+                        "method": {"type": "string"},
+                        "canonical_methods": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "echo": {"type": "string"},
+                    },
+                    annotations="read_only",
+                ),
             )
         )
         api.register_operation(
@@ -98,6 +120,39 @@ class GitHubPlugin:
                 minimum_profile=CapabilityProfile.MAINTAINER,
                 mutating=True,
                 description="Connect a repo to GitHub with preflight checks.",
+                mcp_tool_schema=McpToolSchema(
+                    tool_name="kagan_github_connect_repo",
+                    description=(
+                        "Connect a repository to GitHub with preflight checks "
+                        "(V1 contract). Performs preflight verification and "
+                        "persists GitHub connection metadata."
+                    ),
+                    parameters={
+                        "project_id": {
+                            "type": "string",
+                            "description": "Required project ID",
+                            "required": True,
+                        },
+                        "repo_id": {
+                            "type": "string",
+                            "description": "Optional repo ID (required for multi-repo)",
+                        },
+                    },
+                    response_schema={
+                        "connection": {
+                            "type": "object",
+                            "properties": {
+                                "full_name": {"type": "string"},
+                                "owner": {"type": "string"},
+                                "repo": {"type": "string"},
+                                "default_branch": {"type": "string"},
+                                "visibility": {"type": "string"},
+                                "connected_at": {"type": "string"},
+                            },
+                        },
+                    },
+                    annotations="mutating",
+                ),
             )
         )
         api.register_operation(
@@ -109,6 +164,40 @@ class GitHubPlugin:
                 minimum_profile=CapabilityProfile.MAINTAINER,
                 mutating=True,
                 description="Sync GitHub issues to Kagan task projections.",
+                mcp_tool_schema=McpToolSchema(
+                    tool_name="kagan_github_sync_issues",
+                    description=(
+                        "Sync GitHub issues to Kagan task projections (V1 contract). "
+                        "Fetches issues from GitHub and creates/updates "
+                        "corresponding tasks."
+                    ),
+                    parameters={
+                        "project_id": {
+                            "type": "string",
+                            "description": "Required project ID",
+                            "required": True,
+                        },
+                        "repo_id": {
+                            "type": "string",
+                            "description": "Optional repo ID (required for multi-repo)",
+                        },
+                    },
+                    response_schema={
+                        "stats": {
+                            "type": "object",
+                            "properties": {
+                                "total": {"type": "integer"},
+                                "inserted": {"type": "integer"},
+                                "updated": {"type": "integer"},
+                                "reopened": {"type": "integer"},
+                                "closed": {"type": "integer"},
+                                "no_change": {"type": "integer"},
+                                "errors": {"type": "integer"},
+                            },
+                        },
+                    },
+                    annotations="mutating",
+                ),
             )
         )
         api.register_operation(

@@ -20,10 +20,6 @@ if TYPE_CHECKING:
     from kagan.core.config import KaganConfig
 
 
-# GitHub sync status display constants
-GITHUB_ICON_SYNCED = "◉"  # Filled circle indicates sync complete
-GITHUB_ICON_PENDING = "○"  # Empty circle indicates sync available
-
 _AGENT_MODEL_CONFIG_KEY: dict[str, str] = {
     "claude": "default_model_claude",
     "opencode": "default_model_opencode",
@@ -75,8 +71,6 @@ class KaganHeader(Widget):
     repo_name: reactive[str] = reactive("")
     agent_display: reactive[str] = reactive("")
     core_status: reactive[str] = reactive("DISCONNECTED")
-    github_connected: reactive[bool] = reactive(False)
-    github_synced: reactive[bool] = reactive(False)
     plugin_badges_text: reactive[str] = reactive("")
 
     def __init__(self, task_count: int = 0, **kwargs) -> None:
@@ -213,34 +207,18 @@ class KaganHeader(Widget):
         labels.repo.display = False
 
     def _update_github_status_display(self) -> None:
-        """Update GitHub sync status label and separator visibility."""
+        """Update plugin status label and separator visibility."""
         labels = self._cache_labels()
         if labels is None:
             return
         if self.plugin_badges_text:
             labels.github_status.update(self.plugin_badges_text)
-            labels.github_status.set_class(False, "github-synced")
-            labels.github_status.set_class(False, "github-pending")
             labels.github_status.display = True
             labels.sep_github.display = True
             return
-        if not self.github_connected:
-            labels.github_status.update("")
-            labels.github_status.display = False
-            labels.sep_github.display = False
-            return
-
-        # Show GitHub status with appropriate icon
-        if self.github_synced:
-            labels.github_status.update(f"{GITHUB_ICON_SYNCED} GitHub")
-            labels.github_status.set_class(True, "github-synced")
-            labels.github_status.set_class(False, "github-pending")
-        else:
-            labels.github_status.update(f"{GITHUB_ICON_PENDING} GitHub")
-            labels.github_status.set_class(False, "github-synced")
-            labels.github_status.set_class(True, "github-pending")
-        labels.github_status.display = True
-        labels.sep_github.display = True
+        labels.github_status.update("")
+        labels.github_status.display = False
+        labels.sep_github.display = False
 
     def _update_sessions_display(self) -> None:
         """Update active sessions label and separator visibility."""
@@ -310,12 +288,6 @@ class KaganHeader(Widget):
     def watch_core_status(self, value: str) -> None:
         self._update_core_status_display()
 
-    def watch_github_connected(self, value: bool) -> None:
-        self._update_github_status_display()
-
-    def watch_github_synced(self, value: bool) -> None:
-        self._update_github_status_display()
-
     def watch_plugin_badges_text(self, value: str) -> None:
         self._update_github_status_display()
 
@@ -343,16 +315,6 @@ class KaganHeader(Widget):
     def update_core_status(self, status: str) -> None:
         """Update the core connection status display."""
         self.core_status = status
-
-    def update_github_status(self, *, connected: bool, synced: bool = False) -> None:
-        """Update the GitHub connection and sync status display.
-
-        Args:
-            connected: Whether the repo is connected to GitHub.
-            synced: Whether issues have been synced (only relevant if connected).
-        """
-        self.github_connected = connected
-        self.github_synced = synced if connected else False
 
     def update_plugin_badges(self, badges: list[dict] | None) -> None:
         """Update the declarative plugin badge display (schema-driven UI)."""

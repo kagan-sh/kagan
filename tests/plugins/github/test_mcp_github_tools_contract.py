@@ -15,12 +15,6 @@ from __future__ import annotations
 import pytest
 
 from kagan.core.plugins.github.contract import GITHUB_CANONICAL_METHODS
-from kagan.mcp.registrars import (
-    GITHUB_MCP_V1_TOOLS,
-    GITHUB_TOOL_CONNECT_REPO,
-    GITHUB_TOOL_CONTRACT_PROBE,
-    GITHUB_TOOL_SYNC_ISSUES,
-)
 from kagan.mcp.server import MCPRuntimeConfig, _create_mcp_server
 
 # ---------------------------------------------------------------------------
@@ -28,6 +22,15 @@ from kagan.mcp.server import MCPRuntimeConfig, _create_mcp_server
 # ---------------------------------------------------------------------------
 
 # Tool names are part of the V1 contract and must not change
+GITHUB_TOOL_CONTRACT_PROBE = "kagan_github_contract_probe"
+GITHUB_TOOL_CONNECT_REPO = "kagan_github_connect_repo"
+GITHUB_TOOL_SYNC_ISSUES = "kagan_github_sync_issues"
+GITHUB_MCP_V1_TOOLS = (
+    GITHUB_TOOL_CONTRACT_PROBE,
+    GITHUB_TOOL_CONNECT_REPO,
+    GITHUB_TOOL_SYNC_ISSUES,
+)
+
 V1_GITHUB_TOOLS = frozenset(
     {
         GITHUB_TOOL_CONTRACT_PROBE,

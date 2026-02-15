@@ -30,19 +30,34 @@ async def test_core_backed_api_wait_job_returns_none_on_non_dict_payload(
 
 
 @pytest.mark.asyncio
-async def test_core_backed_api_github_connect_repo_rejects_empty_project_id() -> None:
+async def test_core_backed_api_invoke_plugin_rejects_invalid_payload() -> None:
     api = CoreBackedApi(client=SimpleNamespace(), session_id="test-session")
+    call_core = AsyncMock(return_value="invalid")
+    api._call_core = call_core  # type: ignore[attr-defined]
 
-    with pytest.raises(ValueError, match="project_id is required"):
-        await api.github_connect_repo(project_id="   ")
+    with pytest.raises(RuntimeError, match="Core returned invalid plugin payload"):
+        await api.invoke_plugin("kagan_github", "contract_probe")
 
 
 @pytest.mark.asyncio
-async def test_core_backed_api_github_sync_issues_rejects_blank_repo_id_when_provided() -> None:
+async def test_core_backed_api_invoke_plugin_forwards_params() -> None:
     api = CoreBackedApi(client=SimpleNamespace(), session_id="test-session")
+    call_core = AsyncMock(return_value={"success": True, "stats": {"inserted": 3}})
+    api._call_core = call_core  # type: ignore[attr-defined]
 
-    with pytest.raises(ValueError, match="repo_id must be a non-empty string when provided"):
-        await api.github_sync_issues(project_id="project-1", repo_id="  ")
+    result = await api.invoke_plugin(
+        "kagan_github", "sync_issues", {"project_id": "project-1", "repo_id": "repo-1"}
+    )
+
+    assert result["success"] is True
+    call_core.assert_awaited_once_with(
+        "invoke_plugin",
+        kwargs={
+            "capability": "kagan_github",
+            "method": "sync_issues",
+            "params": {"project_id": "project-1", "repo_id": "repo-1"},
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -202,21 +217,18 @@ async def test_core_backed_api_settings_mapping_handles_invalid_shapes(
 
 
 @pytest.mark.asyncio
-async def test_core_backed_api_github_contract_probe_and_sync_validate_payload_shape(
+async def test_core_backed_api_invoke_plugin_rejects_non_dict_for_different_operations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     api = CoreBackedApi(client=SimpleNamespace(), session_id="test-session")
     call_core = AsyncMock(side_effect=["invalid", "invalid"])
     monkeypatch.setattr(api, "_call_core", call_core)
 
-    with pytest.raises(RuntimeError, match="invalid GitHub contract probe payload"):
-        await api.github_contract_probe(echo="   ")
+    with pytest.raises(RuntimeError, match="Core returned invalid plugin payload"):
+        await api.invoke_plugin("kagan_github", "contract_probe")
 
-    with pytest.raises(RuntimeError, match="invalid GitHub sync payload"):
-        await api.github_sync_issues(project_id="project-1")
-
-    # Empty echo is intentionally dropped from forwarded kwargs.
-    assert call_core.await_args_list[0].kwargs == {"kwargs": {}}
+    with pytest.raises(RuntimeError, match="Core returned invalid plugin payload"):
+        await api.invoke_plugin("kagan_github", "sync_issues", {"project_id": "project-1"})
 
 
 @pytest.mark.asyncio
