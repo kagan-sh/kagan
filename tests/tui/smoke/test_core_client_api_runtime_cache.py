@@ -48,3 +48,28 @@ async def test_reconcile_running_tasks_accepts_runtime_payloads_with_id_key(
     await api.reconcile_running_tasks(["task-3"])
 
     assert api.get_runtime_view("task-3") == {"is_running": True}
+
+
+@pytest.mark.asyncio
+async def test_core_backed_api_github_connect_repo_trims_ids_and_forwards_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = CoreBackedApi(client=SimpleNamespace(), session_id="test-session")
+    call_core = AsyncMock(return_value={"success": True, "code": "CONNECTED"})
+    monkeypatch.setattr(api, "_call_core", call_core)
+
+    result = await api.github_connect_repo(project_id=" project-1 ", repo_id=" repo-1 ")
+
+    assert result["success"] is True
+    call_core.assert_awaited_once_with(
+        "github_connect_repo",
+        kwargs={"project_id": "project-1", "repo_id": "repo-1"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_core_backed_api_github_sync_issues_rejects_blank_repo_id() -> None:
+    api = CoreBackedApi(client=SimpleNamespace(), session_id="test-session")
+
+    with pytest.raises(ValueError, match="repo_id must be a non-empty string when provided"):
+        await api.github_sync_issues(project_id="project-1", repo_id="   ")

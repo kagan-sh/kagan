@@ -22,6 +22,7 @@ from kagan.core.plugins.github.lease import (
     build_lease_comment_body,
     create_lease_holder,
     get_lease_state,
+    release_lease,
 )
 
 
@@ -362,3 +363,33 @@ class TestLeaseMetadataRecovery:
         assert state.comment_id is None
         assert state.can_acquire
         assert not state.requires_takeover
+
+
+def test_release_lease_returns_safe_error_when_not_lease_holder() -> None:
+    active_holder = _active_holder("host1:1000")
+
+    with (
+        patch(
+            "kagan.core.plugins.github.gh_adapter.run_gh_issue_view",
+            return_value=({"labels": [{"name": LEASE_LABEL}]}, None),
+        ),
+        patch(
+            "kagan.core.plugins.github.gh_adapter.run_gh_api_issue_comments",
+            return_value=([_lease_comment(active_holder, comment_id=7)], None),
+        ),
+        patch("kagan.core.plugins.github.gh_adapter.run_gh_issue_label_remove") as remove_label,
+        patch("kagan.core.plugins.github.gh_adapter.run_gh_api_comment_delete") as delete_comment,
+    ):
+        result = release_lease(
+            "/usr/bin/gh",
+            "/tmp/repo",
+            "owner",
+            "repo",
+            42,
+        )
+
+    assert result.success is False
+    assert result.code == "LEASE_NOT_HELD"
+    assert "not held by this instance" in result.message
+    remove_label.assert_not_called()
+    delete_comment.assert_not_called()

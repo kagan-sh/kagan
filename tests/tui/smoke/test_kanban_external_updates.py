@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, Mock
 
@@ -37,6 +38,7 @@ from kagan.tui.ui.screens.kanban.board_controller import (
 )
 from kagan.tui.ui.widgets.card import TaskCard
 from kagan.tui.ui.widgets.column import KanbanColumn
+from kagan.tui.ui.widgets.peek_overlay import PeekOverlay
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
@@ -674,6 +676,114 @@ async def test_hiding_search_cancels_inflight_query_and_resets_filter(
         )
 
         release_query.set()
+
+
+@pytest.mark.asyncio
+async def test_kanban_github_sync_flow_surfaces_error_without_state_corruption(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        project_id = app.ctx.active_project_id
+        repo_id = app.ctx.active_repo_id
+        assert project_id is not None
+        assert repo_id is not None
+
+        tasks = await app.ctx.task_service.list_tasks(project_id=project_id)
+        task = next(t for t in tasks if t.status == TaskStatus.BACKLOG)
+        card = kanban.query_one(f"#card-{task.id}", TaskCard)
+        card.focus()
+        await pilot.pause()
+
+        refresh_board = AsyncMock()
+        sync_issues = AsyncMock(
+            return_value={
+                "success": False,
+                "code": "GH_NOT_CONNECTED",
+                "message": "GitHub not connected",
+                "hint": "Run connect repo first",
+            }
+        )
+        monkeypatch.setattr(kanban._board, "refresh_board", refresh_board)
+        monkeypatch.setattr(
+            kanban.ctx.api,
+            "get_project_repos",
+            AsyncMock(return_value=[SimpleNamespace(id=repo_id)]),
+        )
+        monkeypatch.setattr(kanban.ctx.api, "github_sync_issues", sync_issues)
+
+        notify_calls: list[tuple[str, str]] = []
+        original_notify = kanban.notify
+
+        def _capture_notify(
+            message: str, *, severity: str = "information", **kwargs: object
+        ) -> None:
+            notify_calls.append((message, severity))
+            original_notify(message, severity=severity, **kwargs)
+
+        monkeypatch.setattr(kanban, "notify", _capture_notify)
+        await kanban._github_sync_flow()
+
+        sync_issues.assert_awaited_once_with(project_id=project_id, repo_id=repo_id)
+        refresh_board.assert_not_awaited()
+        focused = kanban.get_focused_card()
+        assert focused is not None and focused.task_model is not None
+        assert focused.task_model.id == task.id
+        assert any(
+            "GitHub not connected (Run connect repo first)" in message and severity == "warning"
+            for message, severity in notify_calls
+        )
+
+
+@pytest.mark.asyncio
+async def test_kanban_peek_toggle_preserves_selection_and_focus(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        tasks = await app.ctx.task_service.list_tasks(project_id=app.ctx.active_project_id)
+        task = next(t for t in tasks if t.status == TaskStatus.IN_PROGRESS)
+        await app.ctx.task_service.update_fields(task.id, task_type=TaskType.AUTO)
+        await kanban._board.refresh_board()
+        await wait_for_widget(pilot, f"#card-{task.id}", timeout=6.0)
+
+        card = kanban.query_one(f"#card-{task.id}", TaskCard)
+        card.focus()
+        await pilot.pause()
+        focused_before = pilot.app.focused
+
+        task_model = await app.ctx.task_service.get_task(task.id)
+        assert task_model is not None
+        monkeypatch.setattr(
+            kanban.ctx.api, "get_scratchpad", AsyncMock(return_value="scratchpad text")
+        )
+
+        overlay = kanban.query_one("#peek-overlay", PeekOverlay)
+        assert overlay.has_class("visible") is False
+
+        await kanban._toggle_peek_flow(task_model)
+        assert overlay.has_class("visible") is True
+        focused = kanban.get_focused_card()
+        assert focused is not None and focused.task_model is not None
+        assert focused.task_model.id == task.id
+        assert pilot.app.focused is focused_before
+
+        await kanban._toggle_peek_flow(task_model)
+        assert overlay.has_class("visible") is False
+        focused = kanban.get_focused_card()
+        assert focused is not None and focused.task_model is not None
+        assert focused.task_model.id == task.id
+        assert pilot.app.focused is focused_before
 
 
 @pytest.mark.asyncio

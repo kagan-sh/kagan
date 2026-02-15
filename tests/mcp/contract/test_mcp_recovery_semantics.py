@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -203,6 +204,142 @@ async def test_task_patch_append_note_uses_default_success_message(monkeypatch) 
     assert result["message"] == "Patch applied"
 
 
+async def test_task_patch_rejects_non_object_set(monkeypatch) -> None:
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: object())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(task_id="T1", set="not-a-map", ctx=None)
+
+    assert result["success"] is False
+    assert result["code"] == "INVALID_SET"
+    assert result["message"] == "set must be an object map"
+
+
+async def test_task_patch_rejects_unknown_transition(monkeypatch) -> None:
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: object())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(task_id="T1", transition="not-supported", set={}, ctx=None)
+
+    assert result["success"] is False
+    assert result["code"] == "INVALID_TRANSITION"
+    assert result["message"] == "Unsupported transition 'not-supported'"
+
+
+async def test_task_patch_set_status_requires_non_empty_status(monkeypatch) -> None:
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: object())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(task_id="T1", transition="set_status", set={}, ctx=None)
+
+    assert result["success"] is False
+    assert result["code"] == "INVALID_TRANSITION"
+    assert result["message"] == "set_status requires set.status"
+
+
+async def test_task_patch_set_task_type_requires_value(monkeypatch) -> None:
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: object())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(task_id="T1", transition="set_task_type", set={}, ctx=None)
+
+    assert result["success"] is False
+    assert result["code"] == "INVALID_TRANSITION"
+    assert result["message"] == "set_task_type requires set.task_type"
+
+
+async def test_task_patch_denies_status_patch_when_capability_forbidden(monkeypatch) -> None:
+    allowed = {("tasks", "update_scratchpad")}
+    monkeypatch.setattr(
+        "kagan.mcp.server._is_allowed",
+        lambda _profile, capability, method: (capability, method) in allowed,
+    )
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: object())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(task_id="T1", set={"status": "IN_PROGRESS"}, ctx=None)
+
+    assert result["success"] is False
+    assert result["code"] == "ACTION_NOT_ALLOWED"
+    assert result["message"] == "status patch is not allowed for this capability profile."
+
+
+async def test_task_patch_denies_field_patch_when_capability_forbidden(monkeypatch) -> None:
+    allowed = {("tasks", "update_scratchpad")}
+    monkeypatch.setattr(
+        "kagan.mcp.server._is_allowed",
+        lambda _profile, capability, method: (capability, method) in allowed,
+    )
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: object())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(task_id="T1", set={"title": "Updated"}, ctx=None)
+
+    assert result["success"] is False
+    assert result["code"] == "ACTION_NOT_ALLOWED"
+    assert result["message"] == "field patch is not allowed for this capability profile."
+
+
+async def test_task_patch_denies_request_review_when_capability_forbidden(monkeypatch) -> None:
+    allowed = {("tasks", "update_scratchpad")}
+    monkeypatch.setattr(
+        "kagan.mcp.server._is_allowed",
+        lambda _profile, capability, method: (capability, method) in allowed,
+    )
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: object())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(task_id="T1", transition="request_review", set={}, ctx=None)
+
+    assert result["success"] is False
+    assert result["code"] == "ACTION_NOT_ALLOWED"
+    assert result["message"] == "request_review is not allowed for this capability profile."
+
+
+async def test_task_patch_returns_first_failure_from_note_or_move_or_update_path(
+    monkeypatch,
+) -> None:
+    class _BridgeStub:
+        def __init__(self) -> None:
+            self.move_task = AsyncMock(return_value={"success": True, "task_id": "T1"})
+            self.update_task = AsyncMock(return_value={"success": True, "task_id": "T1"})
+
+        async def update_scratchpad(self, task_id: str, content: str) -> dict[str, object]:
+            assert task_id == "T1"
+            assert content == "note"
+            return {
+                "success": False,
+                "task_id": task_id,
+                "code": "NOTE_FAIL",
+                "message": "scratchpad update failed",
+            }
+
+    bridge = _BridgeStub()
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: bridge)
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "task_patch")
+
+    result = await tool.fn(
+        task_id="T1",
+        append_note="note",
+        set={"status": "IN_PROGRESS", "title": "Updated"},
+        ctx=None,
+    )
+
+    assert result["success"] is False
+    assert result["code"] == "NOTE_FAIL"
+    assert result["message"] == "scratchpad update failed"
+    bridge.move_task.assert_not_awaited()
+    bridge.update_task.assert_not_awaited()
+
+
 async def test_plan_submit_accepts_task_type_alias() -> None:
     mcp = _create_mcp_server(
         readonly=False,
@@ -272,6 +409,54 @@ async def test_job_start_derives_polling_recovery_when_missing(monkeypatch) -> N
         "wait": True,
         "timeout_seconds": 1.5,
     }
+
+
+async def test_job_start_returns_actionable_recovery_when_bridge_returns_error_envelope(
+    monkeypatch,
+) -> None:
+    class _BridgeStub:
+        async def submit_job(
+            self,
+            *,
+            task_id: str,
+            action: str,
+            arguments: dict[str, object] | None = None,
+        ) -> dict[str, object]:
+            assert task_id == "T1"
+            assert action == "start_agent"
+            assert arguments is None
+            return {
+                "success": False,
+                "job_id": "J-err",
+                "task_id": task_id,
+                "action": action,
+                "status": "failed",
+                "code": "TASK_TYPE_MISMATCH",
+                "message": "Task must be AUTO to run start_agent",
+                "hint": "Switch task_type to AUTO and retry",
+                "next_tool": "task_patch",
+                "next_arguments": {
+                    "task_id": task_id,
+                    "transition": "set_task_type",
+                    "set": {"task_type": "AUTO"},
+                },
+            }
+
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: _BridgeStub())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "job_start")
+
+    result = await tool.fn(task_id="T1", action="start_agent", ctx=None)
+
+    assert result.success is False
+    assert result.code == "TASK_TYPE_MISMATCH"
+    assert result.next_tool == "task_patch"
+    assert result.next_arguments == {
+        "task_id": "T1",
+        "transition": "set_task_type",
+        "set": {"task_type": "AUTO"},
+    }
+    assert "AUTO" in (result.hint or "")
 
 
 async def test_job_poll_events_maps_payload_and_pagination(monkeypatch) -> None:
@@ -380,6 +565,41 @@ async def test_job_poll_derives_pending_recovery_when_missing(monkeypatch) -> No
     assert result.next_arguments == {
         "job_id": "J1",
         "task_id": "T1",
+        "wait": True,
+        "timeout_seconds": 1.5,
+    }
+
+
+async def test_job_poll_derives_recovery_fields_when_timeout_payload_partial(monkeypatch) -> None:
+    class _BridgeStub:
+        async def get_job(self, *, job_id: str, task_id: str) -> dict[str, object]:
+            return {
+                "success": False,
+                "job_id": job_id,
+                "task_id": task_id,
+                "status": "running",
+                "timed_out": True,
+                "timeout_requested_seconds": 0.3,
+                "timeout_waited_seconds": 0.3,
+                "message": "Timed out waiting for job completion",
+            }
+
+    monkeypatch.setattr("kagan.mcp.server._require_bridge", lambda _ctx: _BridgeStub())
+    mcp = _create_mcp_server(readonly=False)
+    tool = _tool(mcp, "job_poll")
+
+    result = await tool.fn(job_id="J-timeout", task_id="T-timeout", wait=False, ctx=None)
+
+    assert result.success is False
+    assert result.timed_out is True
+    assert result.timeout_metadata == {
+        "timeout_requested_seconds": 0.3,
+        "timeout_waited_seconds": 0.3,
+    }
+    assert result.next_tool == "job_poll"
+    assert result.next_arguments == {
+        "job_id": "J-timeout",
+        "task_id": "T-timeout",
         "wait": True,
         "timeout_seconds": 1.5,
     }

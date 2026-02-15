@@ -13,9 +13,12 @@ from kagan.core.plugins.github.application.use_cases import (
     CONNECTED,
     GH_ISSUE_NUMBER_INVALID,
     GH_PR_NUMBER_INVALID,
+    GH_REPO_REQUIRED,
     GH_SYNC_FAILED,
     GH_WORKSPACE_REQUIRED,
     PR_CREATED,
+    PR_LINKED,
+    REVIEW_BLOCKED_LEASE,
     REVIEW_BLOCKED_NO_PR,
     GitHubPluginUseCases,
 )
@@ -24,6 +27,7 @@ from kagan.core.plugins.github.domain.models import (
     ConnectRepoInput,
     CreatePrForTaskInput,
     LinkPrToTaskInput,
+    ReleaseLeaseInput,
     SyncIssuesInput,
     ValidateReviewTransitionInput,
 )
@@ -34,6 +38,7 @@ from kagan.core.plugins.github.gh_adapter import (
     GhRepoView,
 )
 from kagan.core.plugins.github.sync import GITHUB_ISSUE_MAPPING_KEY, GITHUB_TASK_PR_MAPPING_KEY
+from kagan.core.plugins.github.lease import LEASE_HELD_BY_OTHER
 
 
 def _connected_repo() -> SimpleNamespace:
@@ -235,6 +240,53 @@ async def test_link_pr_to_task_returns_structured_error_for_non_numeric_pr_numbe
     assert "pr_number" in result["hint"]
     core_gateway.get_project.assert_not_awaited()
     gh_client.run_gh_pr_view.assert_not_called()
+
+
+@pytest.mark.asyncio()
+async def test_link_pr_to_task_success_persists_mapping_and_returns_pr_payload() -> None:
+    repo = _connected_repo()
+    core_gateway = _core_gateway(repo)
+    core_gateway.get_task = AsyncMock(
+        return_value=SimpleNamespace(id="task-1", title="Task", description="")
+    )
+
+    async def update_repo_scripts(repo_id: str, values: dict[str, str]) -> None:
+        assert repo_id == repo.id
+        repo.scripts.update(values)
+
+    core_gateway.update_repo_scripts = AsyncMock(side_effect=update_repo_scripts)
+
+    linked_pr = GhPullRequest(
+        number=77,
+        title="Task PR",
+        state="OPEN",
+        url="https://github.com/acme/widgets/pull/77",
+        head_branch="feature/task-1",
+        base_branch="main",
+        is_draft=False,
+        mergeable="MERGEABLE",
+    )
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        run_gh_pr_view=MagicMock(return_value=(linked_pr, None)),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).link_pr_to_task(
+        LinkPrToTaskInput(project_id="project-1", task_id="task-1", pr_number=77)
+    )
+
+    assert result["success"] is True
+    assert result["code"] == PR_LINKED
+    assert result["pr"]["number"] == 77
+    assert result["pr"]["url"] == linked_pr.url
+
+    raw_mapping = repo.scripts.get(GITHUB_TASK_PR_MAPPING_KEY)
+    assert isinstance(raw_mapping, str)
+    persisted = json.loads(raw_mapping)
+    linked = persisted["task_to_pr"]["task-1"]
+    assert linked["pr_number"] == 77
+    assert linked["pr_url"] == linked_pr.url
+    assert linked["pr_state"] == "OPEN"
 
 
 @pytest.mark.asyncio()
@@ -481,7 +533,9 @@ async def test_validate_review_transition_allows_multi_repo_tasks_with_linked_pr
 
 
 @pytest.mark.asyncio()
-async def test_validate_review_transition_reports_hint_for_missing_multi_repo_prs() -> None:
+async def test_validate_review_transition_blocks_when_pr_link_missing_for_multi_repo_task_with_hint() -> (
+    None
+):
     task_id = "task-456"
     repo_a = SimpleNamespace(
         id="repo-a",
@@ -580,3 +634,166 @@ async def test_validate_review_transition_runs_lease_checks_in_worker_thread(
     assert result == {"allowed": True}
     assert calls
     assert calls[0][0] == gh_client.get_lease_state
+
+
+@pytest.mark.asyncio()
+async def test_validate_review_transition_blocks_when_lease_held_by_other_instance() -> None:
+    task_id = "task-lease-conflict"
+    repo = SimpleNamespace(
+        id="repo-1",
+        path="/tmp/repo",
+        scripts={
+            GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "widgets"}),
+            GITHUB_TASK_PR_MAPPING_KEY: json.dumps(
+                {
+                    "task_to_pr": {
+                        task_id: {
+                            "pr_number": 55,
+                            "pr_url": "https://github.com/acme/widgets/pull/55",
+                            "pr_state": "OPEN",
+                            "head_branch": "feature/task-lease-conflict",
+                            "base_branch": "main",
+                            "linked_at": "2026-01-01T00:00:00+00:00",
+                        }
+                    }
+                }
+            ),
+            GITHUB_ISSUE_MAPPING_KEY: json.dumps(
+                {
+                    "issue_to_task": {"99": task_id},
+                    "task_to_issue": {task_id: 99},
+                }
+            ),
+        },
+    )
+    core_gateway = _core_gateway(repo)
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        get_lease_state=MagicMock(
+            return_value=(
+                SimpleNamespace(
+                    is_locked=True,
+                    is_held_by_current_instance=False,
+                    can_acquire=False,
+                    requires_takeover=True,
+                    holder=SimpleNamespace(instance_id="peer-42"),
+                ),
+                None,
+            )
+        ),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).validate_review_transition(
+        ValidateReviewTransitionInput(task_id=task_id, project_id="project-1")
+    )
+
+    assert result["allowed"] is False
+    assert result["code"] == REVIEW_BLOCKED_LEASE
+    assert "repo-1" in result["message"]
+    assert "peer-42" in result["message"]
+    assert "another Kagan instance" in result["hint"]
+
+
+@pytest.mark.asyncio()
+async def test_validate_review_transition_blocks_when_lease_metadata_incomplete_and_takeover_not_forced() -> (
+    None
+):
+    task_id = "task-lease-metadata-missing"
+    repo = SimpleNamespace(
+        id="repo-1",
+        path="/tmp/repo",
+        scripts={
+            GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "widgets"}),
+            GITHUB_TASK_PR_MAPPING_KEY: json.dumps(
+                {
+                    "task_to_pr": {
+                        task_id: {
+                            "pr_number": 91,
+                            "pr_url": "https://github.com/acme/widgets/pull/91",
+                            "pr_state": "OPEN",
+                            "head_branch": "feature/task-lease-metadata-missing",
+                            "base_branch": "main",
+                            "linked_at": "2026-01-01T00:00:00+00:00",
+                        }
+                    }
+                }
+            ),
+            GITHUB_ISSUE_MAPPING_KEY: json.dumps(
+                {
+                    "issue_to_task": {"301": task_id},
+                    "task_to_issue": {task_id: 301},
+                }
+            ),
+        },
+    )
+    core_gateway = _core_gateway(repo)
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        get_lease_state=MagicMock(
+            return_value=(
+                SimpleNamespace(
+                    is_locked=True,
+                    is_held_by_current_instance=False,
+                    can_acquire=False,
+                    requires_takeover=True,
+                    holder=None,
+                ),
+                None,
+            )
+        ),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).validate_review_transition(
+        ValidateReviewTransitionInput(task_id=task_id, project_id="project-1")
+    )
+
+    assert result["allowed"] is False
+    assert result["code"] == REVIEW_BLOCKED_LEASE
+    assert "repo-1" in result["message"]
+    assert "another Kagan instance" in result["hint"]
+
+
+@pytest.mark.asyncio()
+async def test_release_lease_returns_safe_error_when_not_lease_holder() -> None:
+    repo = _connected_repo()
+    core_gateway = _core_gateway(repo)
+    gh_client = SimpleNamespace(
+        resolve_gh_cli_path=MagicMock(return_value=("/usr/bin/gh", None)),
+        release_lease=MagicMock(
+            return_value=SimpleNamespace(
+                success=False,
+                code=LEASE_HELD_BY_OTHER,
+                message="Issue #42 is locked by another instance. Use force_takeover=true to proceed.",
+            )
+        ),
+    )
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).release_lease(
+        ReleaseLeaseInput(project_id="project-1", issue_number=42)
+    )
+
+    assert result["success"] is False
+    assert result["code"] == LEASE_HELD_BY_OTHER
+    assert "another instance" in result["message"]
+
+
+@pytest.mark.asyncio()
+async def test_link_pr_to_task_rejects_repo_mismatch_with_actionable_code() -> None:
+    repo = _connected_repo()
+    core_gateway = _core_gateway(repo)
+    gh_client = SimpleNamespace(run_gh_pr_view=MagicMock())
+
+    result = await GitHubPluginUseCases(core_gateway, gh_client).link_pr_to_task(
+        LinkPrToTaskInput(
+            project_id="project-1",
+            repo_id="repo-mismatch",
+            task_id="task-1",
+            pr_number=7,
+        )
+    )
+
+    assert result["success"] is False
+    assert result["code"] == GH_REPO_REQUIRED
+    assert "Repo not found in project: repo-mismatch" in result["message"]
+    assert "single repo" in result["hint"]
+    gh_client.run_gh_pr_view.assert_not_called()

@@ -79,6 +79,59 @@ class TestApiDispatchIntegration:
         ids = {item["id"] for item in response.result["tasks"]}
         assert task.id in ids
 
+    async def test_task_status_change_from_tasks_capability_is_visible_via_tui_api_call(
+        self,
+        handle_host: tuple,
+    ) -> None:
+        host, _api = handle_host
+        host.register_session("maintainer-session-2", "maintainer")
+
+        create_response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session",
+                capability="tasks",
+                method="create",
+                params={"title": "Cross-client visibility"},
+            ),
+        )
+        assert create_response.ok
+        assert create_response.result is not None
+        task_id = str(create_response.result["task_id"])
+
+        move_response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session",
+                capability="tasks",
+                method="move",
+                params={"task_id": task_id, "status": "IN_PROGRESS"},
+            ),
+        )
+        assert move_response.ok
+        assert move_response.result is not None
+        assert move_response.result["new_status"] == "IN_PROGRESS"
+
+        read_response = await _dispatch(
+            host,
+            CoreRequest(
+                session_id="maintainer-session-2",
+                capability="tui",
+                method="api_call",
+                params={
+                    "method": "get_task",
+                    "kwargs": {"task_id": task_id},
+                },
+            ),
+        )
+
+        assert read_response.ok
+        assert read_response.result is not None
+        assert read_response.result["success"] is True
+        payload = read_response.result["value"]
+        assert payload["id"] == task_id
+        assert payload["status"] == "IN_PROGRESS"
+
     async def test_viewer_denied_before_api_dispatch(self, handle_host: tuple) -> None:
         host, _api = handle_host
 
