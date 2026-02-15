@@ -917,10 +917,6 @@ class KanbanScreen(KaganScreen):
             hint_value = data.get("hint")
             if isinstance(hint_value, str) and hint_value.strip():
                 hint = hint_value.strip()
-        if not hint:
-            hint_value = result.get("hint")
-            if isinstance(hint_value, str) and hint_value.strip():
-                hint = hint_value.strip()
         if hint and hint not in message:
             message = f"{message} ({hint})"
         severity = "information" if ok else ("warning" if "NOT_CONNECTED" in code else "error")

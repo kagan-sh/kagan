@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
 from kagan.core.adapters.db.schema import Project, Repo, Task, Workspace
 from kagan.core.models.enums import TaskStatus
@@ -168,6 +168,28 @@ class JanitorResultView:
     branches_deleted: list[str]
     repos_processed: list[str]
     total_cleaned: int
+
+
+class PluginUiRefresh(TypedDict, total=False):
+    repo: bool
+    tasks: bool
+    sessions: bool
+
+
+class PluginUiInvokeResult(TypedDict):
+    ok: bool
+    code: str
+    message: str
+    data: dict[str, Any] | None
+    refresh: PluginUiRefresh
+
+
+class PluginUiCatalog(TypedDict):
+    schema_version: str
+    actions: list[dict[str, Any]]
+    forms: list[dict[str, Any]]
+    badges: list[dict[str, Any]]
+    diagnostics: NotRequired[list[str]]
 
 
 class CoreBackedApi:
@@ -549,7 +571,7 @@ class CoreBackedApi:
         *,
         project_id: str,
         repo_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> PluginUiCatalog:
         cleaned_project_id, cleaned_repo_id = _clean_project_repo_args(project_id, repo_id)
         kwargs: dict[str, Any] = {"project_id": cleaned_project_id}
         if cleaned_repo_id is not None:
@@ -558,7 +580,7 @@ class CoreBackedApi:
         raw = await self._call_core("plugin_ui_catalog", kwargs=kwargs)
         if not isinstance(raw, dict):
             raise RuntimeError("Core returned invalid plugin UI catalog payload")
-        return dict(raw)
+        return cast("PluginUiCatalog", dict(raw))
 
     async def plugin_ui_invoke(
         self,
@@ -568,7 +590,7 @@ class CoreBackedApi:
         action_id: str,
         repo_id: str | None = None,
         inputs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> PluginUiInvokeResult:
         cleaned_project_id, cleaned_repo_id = _clean_project_repo_args(project_id, repo_id)
         cleaned_plugin_id = plugin_id.strip()
         if not cleaned_plugin_id:
@@ -590,7 +612,7 @@ class CoreBackedApi:
         raw = await self._call_core("plugin_ui_invoke", kwargs=kwargs)
         if not isinstance(raw, dict):
             raise RuntimeError("Core returned invalid plugin UI invoke payload")
-        return dict(raw)
+        return cast("PluginUiInvokeResult", dict(raw))
 
     async def submit_job(
         self,

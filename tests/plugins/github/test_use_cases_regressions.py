@@ -27,6 +27,10 @@ from kagan.core.plugins.github.contract import (
     GITHUB_METHOD_CONNECT_REPO,
     GITHUB_METHOD_SYNC_ISSUES,
     GITHUB_PLUGIN_ID,
+    GITHUB_UI_ACTION_CONNECT_REPO_ID,
+    GITHUB_UI_ACTION_SYNC_ISSUES_ID,
+    GITHUB_UI_BADGE_CONNECTION_ID,
+    GITHUB_UI_FORM_REPO_PICKER_ID,
 )
 from kagan.core.plugins.github.domain.models import (
     AcquireLeaseInput,
@@ -821,14 +825,14 @@ async def test_ui_describe_exposes_connect_and_sync_actions() -> None:
     actions = payload["actions"]
     assert isinstance(actions, list)
     action_map = {item.get("action_id"): item for item in actions if isinstance(item, dict)}
-    assert {"connect_repo", "sync_issues"} <= set(action_map)
+    assert {GITHUB_UI_ACTION_CONNECT_REPO_ID, GITHUB_UI_ACTION_SYNC_ISSUES_ID} <= set(action_map)
 
-    connect = action_map["connect_repo"]
-    sync = action_map["sync_issues"]
+    connect = action_map[GITHUB_UI_ACTION_CONNECT_REPO_ID]
+    sync = action_map[GITHUB_UI_ACTION_SYNC_ISSUES_ID]
     for action in (connect, sync):
         assert action["plugin_id"] == GITHUB_PLUGIN_ID
         assert action["surface"] == "kanban.repo_actions"
-        assert action["form_id"] == "github_repo_picker"
+        assert action["form_id"] == GITHUB_UI_FORM_REPO_PICKER_ID
         assert action["operation"]["capability"] == GITHUB_CAPABILITY
 
     assert connect["operation"]["method"] == GITHUB_METHOD_CONNECT_REPO
@@ -839,7 +843,7 @@ async def test_ui_describe_exposes_connect_and_sync_actions() -> None:
     form = next(
         item
         for item in forms
-        if isinstance(item, dict) and item.get("form_id") == "github_repo_picker"
+        if isinstance(item, dict) and item.get("form_id") == GITHUB_UI_FORM_REPO_PICKER_ID
     )
     fields = form["fields"]
     assert isinstance(fields, list)
@@ -855,7 +859,9 @@ async def test_ui_describe_exposes_connect_and_sync_actions() -> None:
     badges = payload["badges"]
     assert isinstance(badges, list)
     badge = next(
-        item for item in badges if isinstance(item, dict) and item.get("badge_id") == "connection"
+        item
+        for item in badges
+        if isinstance(item, dict) and item.get("badge_id") == GITHUB_UI_BADGE_CONNECTION_ID
     )
     assert badge["plugin_id"] == GITHUB_PLUGIN_ID
     assert badge["surface"] == "header.badges"

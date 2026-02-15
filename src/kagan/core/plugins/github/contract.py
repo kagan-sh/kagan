@@ -19,6 +19,15 @@ GITHUB_METHOD_VALIDATE_REVIEW_TRANSITION: Final = "validate_review_transition"
 GITHUB_CONTRACT_VERSION: Final = "1.0.0"
 RESERVED_GITHUB_CAPABILITY: Final = "github"
 
+# ── Plugin UI schema IDs (TUI) ────────────────────────────────────────────────
+#
+# These IDs are plugin-defined and appear in the schema-driven UI catalog. They
+# are kept here to avoid scattering string literals across handlers/tests.
+GITHUB_UI_ACTION_CONNECT_REPO_ID: Final = GITHUB_METHOD_CONNECT_REPO
+GITHUB_UI_ACTION_SYNC_ISSUES_ID: Final = GITHUB_METHOD_SYNC_ISSUES
+GITHUB_UI_FORM_REPO_PICKER_ID: Final = "github_repo_picker"
+GITHUB_UI_BADGE_CONNECTION_ID: Final = "connection"
+
 # Scope marker for canonical method discovery payloads.
 # These methods represent the plugin capability surface, not the MCP V1
 # admin tool subset.
@@ -51,5 +60,9 @@ __all__ = [
     "GITHUB_METHOD_SYNC_ISSUES",
     "GITHUB_METHOD_VALIDATE_REVIEW_TRANSITION",
     "GITHUB_PLUGIN_ID",
+    "GITHUB_UI_ACTION_CONNECT_REPO_ID",
+    "GITHUB_UI_ACTION_SYNC_ISSUES_ID",
+    "GITHUB_UI_BADGE_CONNECTION_ID",
+    "GITHUB_UI_FORM_REPO_PICKER_ID",
     "RESERVED_GITHUB_CAPABILITY",
 ]

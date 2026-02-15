@@ -24,6 +24,10 @@ from kagan.core.plugins.github.contract import (
     GITHUB_METHOD_CONNECT_REPO,
     GITHUB_METHOD_SYNC_ISSUES,
     GITHUB_PLUGIN_ID,
+    GITHUB_UI_ACTION_CONNECT_REPO_ID,
+    GITHUB_UI_ACTION_SYNC_ISSUES_ID,
+    GITHUB_UI_BADGE_CONNECTION_ID,
+    GITHUB_UI_FORM_REPO_PICKER_ID,
 )
 from kagan.core.plugins.github.domain.models import (
     AcquireLeaseInput,
@@ -121,17 +125,17 @@ async def handle_ui_describe(ctx: AppContext, params: dict[str, Any]) -> dict[st
     repo_required = len(options) > 1
 
     badge_state, badge_text = ("warn", "Not connected")
+    target = None
     if repos:
-        target = None
         if repo_id:
             target = next((repo for repo in repos if str(getattr(repo, "id", "")) == repo_id), None)
         if target is None and len(repos) == 1:
             target = repos[0]
-        if target is not None:
-            badge_state, badge_text = _extract_github_status(target)
+    if target is not None:
+        badge_state, badge_text = _extract_github_status(target)
 
     form = {
-        "form_id": "github_repo_picker",
+        "form_id": GITHUB_UI_FORM_REPO_PICKER_ID,
         "title": "GitHub Repo",
         "fields": [
             {
@@ -148,7 +152,7 @@ async def handle_ui_describe(ctx: AppContext, params: dict[str, Any]) -> dict[st
         "actions": [
             {
                 "plugin_id": GITHUB_PLUGIN_ID,
-                "action_id": "connect_repo",
+                "action_id": GITHUB_UI_ACTION_CONNECT_REPO_ID,
                 "surface": "kanban.repo_actions",
                 "label": "Connect GitHub Repo",
                 "command": "github connect",
@@ -162,7 +166,7 @@ async def handle_ui_describe(ctx: AppContext, params: dict[str, Any]) -> dict[st
             },
             {
                 "plugin_id": GITHUB_PLUGIN_ID,
-                "action_id": "sync_issues",
+                "action_id": GITHUB_UI_ACTION_SYNC_ISSUES_ID,
                 "surface": "kanban.repo_actions",
                 "label": "Sync GitHub Issues",
                 "command": "github sync",
@@ -176,7 +180,7 @@ async def handle_ui_describe(ctx: AppContext, params: dict[str, Any]) -> dict[st
         "badges": [
             {
                 "plugin_id": GITHUB_PLUGIN_ID,
-                "badge_id": "connection",
+                "badge_id": GITHUB_UI_BADGE_CONNECTION_ID,
                 "surface": "header.badges",
                 "label": "GitHub",
                 "state": badge_state,
