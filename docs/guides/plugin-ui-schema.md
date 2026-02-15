@@ -23,7 +23,7 @@ Configure in `kagan.toml`:
 
 ```toml
 [ui]
-tui_plugin_ui_allowlist = ["github"]
+tui_plugin_ui_allowlist = ["official.github"]
 ```
 
 If a plugin is not on the allowlist, core will exclude it from the TUI catalog and reject invokes.
@@ -81,23 +81,23 @@ Badge states:
   "schema_version": "1",
   "actions": [
     {
-      "plugin_id": "github",
+      "plugin_id": "official.github",
       "action_id": "connect_repo",
       "surface": "kanban.repo_actions",
       "label": "Connect GitHub Repo",
       "command": "github connect",
       "help": "Connect the selected repo to GitHub.",
-      "operation": {"capability": "github", "method": "github_connect_repo"},
-      "form_id": "connect_repo_form",
+      "operation": {"capability": "kagan_github", "method": "connect_repo"},
+      "form_id": "github_repo_picker",
       "confirm": false
     }
   ],
   "forms": [
     {
-      "form_id": "connect_repo_form",
+      "plugin_id": "official.github",
+      "form_id": "github_repo_picker",
       "title": "Connect GitHub Repo",
       "fields": [
-        {"name": "project_id", "kind": "text", "required": true},
         {
           "name": "repo_id",
           "kind": "select",
@@ -109,7 +109,7 @@ Badge states:
   ],
   "badges": [
     {
-      "plugin_id": "github",
+      "plugin_id": "official.github",
       "badge_id": "connection",
       "surface": "header.badges",
       "label": "GitHub",

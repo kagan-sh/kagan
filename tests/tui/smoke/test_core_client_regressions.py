@@ -194,19 +194,19 @@ async def test_github_connect_action_succeeds_and_status_is_refreshed(
             "schema_version": "1",
             "actions": [
                 {
-                    "plugin_id": "github",
+                    "plugin_id": "official.github",
                     "action_id": "connect_repo",
                     "surface": "kanban.repo_actions",
                     "label": "Connect GitHub Repo",
                     "command": "github connect",
-                    "operation": {"capability": "github", "method": "github_connect_repo"},
+                    "operation": {"capability": "kagan_github", "method": "connect_repo"},
                     "form_id": "connect_repo_form",
                     "confirm": False,
                 }
             ],
             "forms": [
                 {
-                    "plugin_id": "github",
+                    "plugin_id": "official.github",
                     "form_id": "connect_repo_form",
                     "title": "Connect GitHub Repo",
                     "fields": [
@@ -221,7 +221,7 @@ async def test_github_connect_action_succeeds_and_status_is_refreshed(
             ],
             "badges": [
                 {
-                    "plugin_id": "github",
+                    "plugin_id": "official.github",
                     "badge_id": "connection",
                     "surface": "header.badges",
                     "label": "GitHub",
@@ -262,7 +262,7 @@ async def test_github_connect_action_succeeds_and_status_is_refreshed(
 
         await kanban._refresh_plugin_ui_catalog(force=True)
         kanban.run_worker(
-            kanban.invoke_plugin_ui_action("github", "connect_repo"),
+            kanban.invoke_plugin_ui_action("official.github", "connect_repo"),
             group="test-plugin-ui-connect",
             exclusive=True,
             exit_on_error=False,
@@ -305,19 +305,19 @@ async def test_plugin_form_validation_error_does_not_mutate_state(
             "schema_version": "1",
             "actions": [
                 {
-                    "plugin_id": "github",
+                    "plugin_id": "official.github",
                     "action_id": "needs_input",
                     "surface": "kanban.repo_actions",
                     "label": "Needs Input",
                     "command": "github needs-input",
-                    "operation": {"capability": "github", "method": "noop"},
+                    "operation": {"capability": "kagan_github", "method": "noop"},
                     "form_id": "needs_input_form",
                     "confirm": False,
                 }
             ],
             "forms": [
                 {
-                    "plugin_id": "github",
+                    "plugin_id": "official.github",
                     "form_id": "needs_input_form",
                     "title": "Needs Input",
                     "fields": [
@@ -339,7 +339,7 @@ async def test_plugin_form_validation_error_does_not_mutate_state(
         monkeypatch.setattr(app.ctx.api, "plugin_ui_invoke", plugin_ui_invoke)
         await kanban._refresh_plugin_ui_catalog(force=True)
         kanban.run_worker(
-            kanban.invoke_plugin_ui_action("github", "needs_input"),
+            kanban.invoke_plugin_ui_action("official.github", "needs_input"),
             group="test-plugin-ui-validation",
             exclusive=True,
             exit_on_error=False,
@@ -380,7 +380,7 @@ async def test_plugin_badges_render_from_catalog_and_update_after_invoke(
             "forms": [],
             "badges": [
                 {
-                    "plugin_id": "github",
+                    "plugin_id": "official.github",
                     "badge_id": "connection",
                     "surface": "header.badges",
                     "label": "GitHub",

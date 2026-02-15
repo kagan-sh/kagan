@@ -705,11 +705,11 @@ async def test_kanban_github_sync_flow_surfaces_error_without_state_corruption(
                 "schema_version": "1",
                 "actions": [
                     {
-                        "plugin_id": "github",
+                        "plugin_id": "official.github",
                         "action_id": "sync_issues",
                         "surface": "kanban.repo_actions",
                         "label": "Sync GitHub Issues",
-                        "operation": {"capability": "github", "method": "github_sync_issues"},
+                        "operation": {"capability": "kagan_github", "method": "sync_issues"},
                     }
                 ],
                 "forms": [],
@@ -750,7 +750,7 @@ async def test_kanban_github_sync_flow_surfaces_error_without_state_corruption(
         plugin_ui_invoke.assert_awaited_once_with(
             project_id=project_id,
             repo_id=repo_id,
-            plugin_id="github",
+            plugin_id="official.github",
             action_id="sync_issues",
             inputs=None,
         )

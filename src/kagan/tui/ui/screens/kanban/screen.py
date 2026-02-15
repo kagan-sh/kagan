@@ -21,6 +21,7 @@ from kagan.core.constants import (
 )
 from kagan.core.git_utils import get_current_branch
 from kagan.core.models.enums import TaskStatus, TaskType
+from kagan.core.plugins.github.contract import GITHUB_PLUGIN_ID
 from kagan.tui.keybindings import KANBAN_BINDINGS
 from kagan.tui.ui.modals.description_editor import DescriptionEditorModal
 from kagan.tui.ui.screen_result import await_screen_result
@@ -777,7 +778,7 @@ class KanbanScreen(KaganScreen):
         self._dispatch_kanban_action(KanbanActionId.SET_TASK_BRANCH)
 
     def action_github_sync(self) -> None:
-        self.run_worker(self.invoke_plugin_ui_action("github", "sync_issues"))
+        self.run_worker(self.invoke_plugin_ui_action(GITHUB_PLUGIN_ID, "sync_issues"))
 
     async def _refresh_plugin_ui_catalog(self, *, force: bool = False) -> dict[str, Any]:
         if not force and self._plugin_ui_catalog is not None:

@@ -107,9 +107,10 @@ OS keys for command tables: `macos`, `linux`, `windows`, `*`.
 
 ## `[ui]`
 
-| Key                      | Type    | Default | Notes                       |
-| ------------------------ | ------- | ------- | --------------------------- |
-| `skip_pair_instructions` | boolean | `false` | Skip PAIR instruction modal |
+| Key                        | Type        | Default                | Notes                                                        |
+| -------------------------- | ----------- | ---------------------- | ------------------------------------------------------------ |
+| `skip_pair_instructions`   | boolean     | `false`                | Skip PAIR instruction modal                                  |
+| `tui_plugin_ui_allowlist`  | string list | `["official.github"]`  | Plugin IDs allowed to contribute declarative UI to the TUI   |
 
 ## Environment variables passed into PAIR sessions
 
