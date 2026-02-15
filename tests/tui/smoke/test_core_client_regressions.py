@@ -268,6 +268,7 @@ async def test_github_connect_action_succeeds_and_status_is_refreshed(
             exit_on_error=False,
         )
         form = cast("PluginFormModal", await wait_for_screen(pilot, PluginFormModal, timeout=5.0))
+        await wait_for_widget(pilot, "#btn-submit", timeout=5.0)
         form.query_one("#btn-submit", Button).press()
         await pilot.pause()
 
@@ -345,10 +346,12 @@ async def test_plugin_form_validation_error_does_not_mutate_state(
         )
 
         form = cast("PluginFormModal", await wait_for_screen(pilot, PluginFormModal, timeout=5.0))
+        await wait_for_widget(pilot, "#btn-submit", timeout=5.0)
         form.query_one("#btn-submit", Button).press()
         await pilot.pause()
         assert isinstance(pilot.app.screen, PluginFormModal)
 
+        await wait_for_widget(pilot, "#btn-cancel", timeout=5.0)
         form.query_one("#btn-cancel", Button).press()
         await pilot.pause()
 

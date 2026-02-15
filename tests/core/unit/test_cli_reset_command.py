@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 import signal
+from collections import Counter
 from pathlib import Path
 from typing import TypedDict
 
@@ -284,7 +285,12 @@ def test_reset_stops_core_and_escalates_to_sigkill_after_timeout(
 
     reset_module._stop_core_before_reset()
 
-    sigterm_calls = {item for item in kills if item[1] == signal.SIGTERM}
-    sigkill_calls = {item for item in kills if item[1] == signal.SIGKILL}
-    assert sigterm_calls == {(1111, signal.SIGTERM), (2222, signal.SIGTERM)}
-    assert sigkill_calls == {(1111, signal.SIGKILL), (2222, signal.SIGKILL)}
+    sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
+    assert Counter(kills) == Counter(
+        {
+            (1111, signal.SIGTERM): 1,
+            (2222, signal.SIGTERM): 1,
+            (1111, sigkill): 1,
+            (2222, sigkill): 1,
+        }
+    )

@@ -214,9 +214,10 @@ def _stop_core_before_reset() -> None:
             return
         time.sleep(0.1)
 
+    sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
     for pid in pids:
         with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.kill(pid, signal.SIGKILL)
+            os.kill(pid, sigkill)
 
 
 def _reset_all(existing_dirs: list[tuple[str, Path]], force: bool) -> None:

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kagan.core.adapters.git.worktrees import GitWorktreeAdapter
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from pathlib import Path
 
     from kagan.core.config import WorktreeBaseRefStrategyLiteral
+
+
+REPO_DIR = str(Path("/tmp/repo"))
+WORKTREE_DIR = str(Path("/tmp/worktree"))
 
 
 def _make_adapter(
@@ -44,7 +48,7 @@ def _resolved_start_point(
     calls: list[tuple[tuple[str, ...], bool]],
     *,
     branch_name: str = "feat-1",
-    worktree_path: str = "/tmp/worktree",
+    worktree_path: str = WORKTREE_DIR,
 ) -> str:
     for command, _check in calls:
         if (
@@ -67,11 +71,11 @@ async def test_create_worktree_uses_remote_when_strategy_remote() -> None:
                 "def\n",
                 "",
             ),
-            (("worktree", "add", "-b", "feat-1", "/tmp/worktree", "origin/main"), True): ("", ""),
+            (("worktree", "add", "-b", "feat-1", WORKTREE_DIR, "origin/main"), True): ("", ""),
         },
     )
 
-    await adapter.create_worktree("/tmp/repo", "/tmp/worktree", "feat-1", "main")
+    await adapter.create_worktree(REPO_DIR, WORKTREE_DIR, "feat-1", "main")
 
     assert _resolved_start_point(calls) == "origin/main"
 
@@ -81,11 +85,11 @@ async def test_create_worktree_uses_local_when_strategy_local() -> None:
         strategy="local",
         responses={
             (("rev-parse", "--verify", "--quiet", "refs/heads/main"), False): ("abc\n", ""),
-            (("worktree", "add", "-b", "feat-1", "/tmp/worktree", "main"), True): ("", ""),
+            (("worktree", "add", "-b", "feat-1", WORKTREE_DIR, "main"), True): ("", ""),
         },
     )
 
-    await adapter.create_worktree("/tmp/repo", "/tmp/worktree", "feat-1", "main")
+    await adapter.create_worktree(REPO_DIR, WORKTREE_DIR, "feat-1", "main")
 
     assert _resolved_start_point(calls) == "main"
 
@@ -105,11 +109,11 @@ async def test_create_worktree_prefers_local_when_ahead_under_local_if_ahead() -
                 "2\n",
                 "",
             ),
-            (("worktree", "add", "-b", "feat-1", "/tmp/worktree", "main"), True): ("", ""),
+            (("worktree", "add", "-b", "feat-1", WORKTREE_DIR, "main"), True): ("", ""),
         },
     )
 
-    await adapter.create_worktree("/tmp/repo", "/tmp/worktree", "feat-1", "main")
+    await adapter.create_worktree(REPO_DIR, WORKTREE_DIR, "feat-1", "main")
 
     assert _resolved_start_point(calls) == "main"
 
@@ -129,10 +133,10 @@ async def test_create_worktree_prefers_remote_when_not_ahead_under_local_if_ahea
                 "0\n",
                 "",
             ),
-            (("worktree", "add", "-b", "feat-1", "/tmp/worktree", "origin/main"), True): ("", ""),
+            (("worktree", "add", "-b", "feat-1", WORKTREE_DIR, "origin/main"), True): ("", ""),
         },
     )
 
-    await adapter.create_worktree("/tmp/repo", "/tmp/worktree", "feat-1", "main")
+    await adapter.create_worktree(REPO_DIR, WORKTREE_DIR, "feat-1", "main")
 
     assert _resolved_start_point(calls) == "origin/main"
