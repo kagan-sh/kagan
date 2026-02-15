@@ -559,6 +559,8 @@ class KanbanSessionController:
                 attached = await self.screen.ctx.api.attach_session(task.id)
 
             backend = terminal_backend or self.resolve_pair_terminal_backend(task)
+            if not attached and backend == "tmux":
+                attached = await self._retry_missing_tmux_attach(task, workspace_path)
             if not attached:
                 self.screen.notify("Failed to open PAIR session", severity="warning")
                 return
@@ -593,6 +595,30 @@ class KanbanSessionController:
 
             if isinstance(e, TmuxError):
                 self.screen.notify(f"Tmux error: {e}", severity="error")
+                return
+            self.screen.notify(f"Failed to open PAIR session: {e}", severity="error")
+
+    async def _retry_missing_tmux_attach(
+        self,
+        task: Task,
+        workspace_path: Path | None,
+    ) -> bool:
+        """Recreate and retry attach when tmux session is missing."""
+        if workspace_path is None:
+            return False
+
+        session_exists = await self.screen.ctx.api.session_exists(task.id)
+        if session_exists:
+            return False
+
+        self.screen.notify("PAIR session missing; recreating session...", severity="information")
+        await self.screen.ctx.api.create_session(
+            task.id,
+            worktree_path=workspace_path,
+            reuse_if_exists=False,
+        )
+        with self.screen.app.suspend():
+            return await self.screen.ctx.api.attach_session(task.id)
 
     async def start_agent_flow(self, task: Task) -> None:
         if task.task_type == TaskType.PAIR:

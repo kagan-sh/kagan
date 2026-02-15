@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 from tests.helpers.wait import wait_for_modal, wait_for_screen, wait_for_widget, wait_until
@@ -1057,6 +1057,56 @@ async def test_external_launcher_attach_does_not_prompt_session_complete(
         notify.assert_called_once()
         assert "Workspace opened externally." in notify.call_args.args[0]
         assert "start_prompt.md" in notify.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_tmux_attach_retries_after_missing_session_recreation(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+
+        tasks = await app.ctx.task_service.list_tasks(project_id=app.ctx.active_project_id)
+        task = next(
+            t for t in tasks if t.task_type == TaskType.PAIR and t.status == TaskStatus.BACKLOG
+        )
+        await app.ctx.task_service.update_fields(task.id, status=TaskStatus.IN_PROGRESS)
+        refreshed = await app.ctx.task_service.get_task(task.id)
+        assert refreshed is not None
+        task = refreshed
+
+        attach_session = AsyncMock(side_effect=[False, True])
+        session_exists = AsyncMock(side_effect=[False, True])
+        create_session = AsyncMock(return_value={"session_name": f"kagan-{task.id}"})
+
+        monkeypatch.setattr(screen.ctx.api, "attach_session", attach_session)
+        monkeypatch.setattr(screen.ctx.api, "session_exists", session_exists)
+        monkeypatch.setattr(screen.ctx.api, "create_session", create_session)
+        monkeypatch.setattr(screen.app, "suspend", lambda: nullcontext())
+
+        notify = Mock()
+        monkeypatch.setattr(screen, "notify", notify)
+
+        await screen._session.do_open_pair_session(task, tmp_path, "tmux")
+
+        assert attach_session.await_count == 2
+        session_exists.assert_has_awaits([call(task.id), call(task.id)])
+        create_session.assert_awaited_once_with(
+            task.id,
+            worktree_path=tmp_path,
+            reuse_if_exists=False,
+        )
+        notify_messages = [str(item.args[0]) for item in notify.call_args_list if item.args]
+        assert any(
+            "PAIR session missing; recreating session..." in message for message in notify_messages
+        )
+        assert not any("Failed to open PAIR session" in message for message in notify_messages)
 
 
 @pytest.mark.asyncio
