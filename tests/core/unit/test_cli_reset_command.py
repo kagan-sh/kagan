@@ -286,11 +286,10 @@ def test_reset_stops_core_and_escalates_to_sigkill_after_timeout(
     reset_module._stop_core_before_reset()
 
     sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
-    assert Counter(kills) == Counter(
-        {
-            (1111, signal.SIGTERM): 1,
-            (2222, signal.SIGTERM): 1,
-            (1111, sigkill): 1,
-            (2222, sigkill): 1,
-        }
-    )
+    expected = [
+        (1111, signal.SIGTERM),
+        (2222, signal.SIGTERM),
+        (1111, sigkill),
+        (2222, sigkill),
+    ]
+    assert Counter(kills) == Counter(expected)

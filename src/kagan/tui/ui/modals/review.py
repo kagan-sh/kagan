@@ -78,6 +78,7 @@ class ReviewModal(KaganModalScreen[str | None]):
     STOP_JOB_PENDING_MESSAGE = "Agent stop requested; waiting for scheduler."
 
     _LIVE_ATTACH_TIMEOUT_SECONDS = 1.5
+    _SHOW_SHELL_MAX_RETRIES = 3
 
     _agent: Agent | None
     _live_output_agent: object | None
@@ -147,6 +148,7 @@ class ReviewModal(KaganModalScreen[str | None]):
         self._implementation_queue_pending = False
         self._hydrated = False
         self._runtime_poll_timer = None
+        self._show_shell_retry_count = 0
         self._agent_stream = AgentStreamRouter(
             get_output=self._stream_target_output,
             on_update=self._stream_on_update,
@@ -309,12 +311,28 @@ class ReviewModal(KaganModalScreen[str | None]):
 
     def _show_shell(self) -> None:
         """Make modal interactive before loading expensive data."""
+        self._show_shell_retry_count += 1
         with contextlib.suppress(NoMatches):
             self.query_one("#review-loading", LoadingIndicator).remove()
-        self.query_one("#review-tabs").remove_class("hidden")
+
+        try:
+            tabs = self.query_one("#review-tabs")
+        except NoMatches as exc:
+            # Textual can briefly report NoMatches during mount on slower platforms.
+            if self._show_shell_retry_count <= self._SHOW_SHELL_MAX_RETRIES:
+                self.call_after_refresh(self._show_shell)
+            else:
+                from kagan.core.debug_log import log
+
+                log(f"ReviewModal shell render failed: {exc}")
+            return
+
+        tabs.remove_class("hidden")
         if not self._read_only:
-            self.query_one(".button-row").remove_class("hidden")
-        self._actions_set_active_tab(self._initial_tab)
+            with contextlib.suppress(NoMatches):
+                self.query_one(".button-row").remove_class("hidden")
+        with contextlib.suppress(NoMatches):
+            self._actions_set_active_tab(self._initial_tab)
         self._queue_sync_agent_output_visibility()
         self._queue_sync_review_visibility()
         self._state_refresh_task_output_labels()
