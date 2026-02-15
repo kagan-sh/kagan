@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from kagan.core.adapters.process import spawn_exec
 from kagan.core.git_utils import has_git_repo
 from kagan.core.models.enums import CardIndicator, TaskStatus, TaskType
 from kagan.core.services.jobs import JobRecord, JobStatus
@@ -554,11 +555,15 @@ class KanbanSessionController:
                 await self.screen.ctx.api.update_task(task.id, status=TaskStatus.IN_PROGRESS)
                 await self.screen._board.refresh_board()
 
+            backend = terminal_backend or self.resolve_pair_terminal_backend(task)
+
             # Attach requires terminal access -- this is the only TUI-resident step.
             with self.screen.app.suspend():
-                attached = await self.screen.ctx.api.attach_session(task.id)
+                if backend == "tmux":
+                    attached = await self._attach_tmux_session_local(task.id)
+                else:
+                    attached = await self.screen.ctx.api.attach_session(task.id)
 
-            backend = terminal_backend or self.resolve_pair_terminal_backend(task)
             if not attached and backend == "tmux":
                 attached = await self._retry_missing_tmux_attach(task, workspace_path)
             if not attached:
@@ -598,6 +603,16 @@ class KanbanSessionController:
                 return
             self.screen.notify(f"Failed to open PAIR session: {e}", severity="error")
 
+    async def _attach_tmux_session_local(self, task_id: str) -> bool:
+        """Attach to tmux from the TUI process so terminal IO stays interactive."""
+        session_name = f"kagan-{task_id}"
+        try:
+            proc = await spawn_exec("tmux", "attach-session", "-t", session_name)
+        except OSError:
+            return False
+        returncode = await proc.wait()
+        return returncode == 0
+
     async def _retry_missing_tmux_attach(
         self,
         task: Task,
@@ -618,7 +633,7 @@ class KanbanSessionController:
             reuse_if_exists=False,
         )
         with self.screen.app.suspend():
-            return await self.screen.ctx.api.attach_session(task.id)
+            return await self._attach_tmux_session_local(task.id)
 
     async def start_agent_flow(self, task: Task) -> None:
         if task.task_type == TaskType.PAIR:

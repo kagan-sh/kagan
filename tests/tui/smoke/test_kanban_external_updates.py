@@ -1081,11 +1081,13 @@ async def test_tmux_attach_retries_after_missing_session_recreation(
         assert refreshed is not None
         task = refreshed
 
-        attach_session = AsyncMock(side_effect=[False, True])
+        local_tmux_attach = AsyncMock(side_effect=[False, True])
+        core_attach = AsyncMock(return_value=False)
         session_exists = AsyncMock(side_effect=[False, True])
         create_session = AsyncMock(return_value={"session_name": f"kagan-{task.id}"})
 
-        monkeypatch.setattr(screen.ctx.api, "attach_session", attach_session)
+        monkeypatch.setattr(screen._session, "_attach_tmux_session_local", local_tmux_attach)
+        monkeypatch.setattr(screen.ctx.api, "attach_session", core_attach)
         monkeypatch.setattr(screen.ctx.api, "session_exists", session_exists)
         monkeypatch.setattr(screen.ctx.api, "create_session", create_session)
         monkeypatch.setattr(screen.app, "suspend", lambda: nullcontext())
@@ -1095,7 +1097,8 @@ async def test_tmux_attach_retries_after_missing_session_recreation(
 
         await screen._session.do_open_pair_session(task, tmp_path, "tmux")
 
-        assert attach_session.await_count == 2
+        assert local_tmux_attach.await_count == 2
+        core_attach.assert_not_awaited()
         session_exists.assert_has_awaits([call(task.id), call(task.id)])
         create_session.assert_awaited_once_with(
             task.id,
