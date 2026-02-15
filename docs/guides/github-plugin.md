@@ -26,18 +26,21 @@ Expected output shows authenticated user and active scopes.
 
 ### Runtime Call Flow (TUI)
 
-GitHub actions in TUI use the typed core boundary:
+GitHub actions in TUI are schema-driven and routed through core:
 
-1. `CoreBackedApi.github_*` typed methods
-1. Core request `("tui", "api_call")`
-1. `handle_tui_api_call` allowlisted dispatch
-1. `KaganAPI.github_*` (`GitHubApiMixin`)
-1. `PluginRegistry` operation resolution (`kagan_github.*`)
-1. GitHub plugin runtime handler execution
+1. TUI calls `plugin_ui_catalog` to fetch declarative actions/forms/badges
+1. User selects an action in the command palette
+1. TUI calls `plugin_ui_invoke` with `(plugin_id, action_id, inputs)`
+1. Core resolves `(action_id -> capability.method)` server-side via the plugin's `ui_describe`
+1. Core enforces policy and invokes the target plugin operation via `PluginRegistry`
+
+See [Plugin UI Schema (TUI)](plugin-ui-schema.md) for the full contract.
 
 ### 2. Connect a repository
 
-From TUI: `Ctrl+G` (or action palette `.` → "Connect GitHub")
+From TUI: open the command palette (`.`) and run:
+
+- `github connect`
 
 Via MCP:
 
@@ -60,7 +63,10 @@ Preflight checks:
 
 ### 3. Sync issues to board
 
-From TUI: `Ctrl+S` (or action palette `.` → "Sync GitHub Issues")
+From TUI:
+
+- Press `Shift+G` (GitHub sync), or
+- Open the command palette (`.`) and run `github sync`
 
 Via MCP:
 

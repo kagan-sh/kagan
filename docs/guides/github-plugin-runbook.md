@@ -94,11 +94,25 @@ GitHub API rate limits (authenticated):
 
 ## Scheduled Operations Template
 
-For cron/scheduler integration:
+Kagan does not currently provide a CLI subcommand to invoke MCP tools directly.
+`kagan mcp` starts an MCP server; it does not support `--call`.
 
-```bash
-# Sync issues every 15 minutes
-*/15 * * * * kagan mcp --call kagan_github_sync_issues --args '{"project_id":"<id>"}'
+To schedule GitHub sync:
+
+1. Trigger sync from TUI (`github sync`) as part of your workflow, or
+1. Use any MCP client (editor integration or standalone client) to call `kagan_github_sync_issues`
+   against a running Kagan MCP server.
+
+Example MCP call payload:
+
+```json
+{
+  "tool": "kagan_github_sync_issues",
+  "arguments": {
+    "project_id": "<id>",
+    "repo_id": "<optional>"
+  }
+}
 ```
 
 ## Monitoring Checklist

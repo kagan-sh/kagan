@@ -124,6 +124,7 @@ nav:
       - MCP setup: guides/mcp-setup.md
       - Editor MCP setup: guides/editor-mcp-setup.md
       - Multi-repo: guides/multi-repo.md
+      - Plugin UI schema: guides/plugin-ui-schema.md
       - GitHub plugin: guides/github-plugin.md
       - GitHub plugin runbook: guides/github-plugin-runbook.md
       - Upgrades and reset: guides/upgrades-and-reset.md
