@@ -11,7 +11,7 @@ from tests.helpers.mock_responses.projects import (
     PLAN_PROPOSAL_RESPONSE,
     PLAN_PROPOSAL_TOOL_CALLS,
     SIMPLE_PLAN_TEXT,
-    make_propose_plan_tool_call,
+    make_plan_submit_tool_call,
 )
 from tests.helpers.mock_responses.tasks import (
     REVIEW_APPROVE_RESPONSE,
@@ -45,6 +45,6 @@ __all__ = [
     "make_blocked_response",
     "make_clarification_response",
     "make_complete_response",
-    "make_propose_plan_tool_call",
+    "make_plan_submit_tool_call",
     "make_reject_response",
 ]

@@ -38,7 +38,6 @@ from kagan.core.events import (
     TaskStatusChanged,
     TaskUpdated,
 )
-from kagan.core.plugins.examples import register_example_plugins
 from kagan.core.plugins.sdk import PluginRegistry
 
 if TYPE_CHECKING:
@@ -388,7 +387,7 @@ async def create_app_context(
         event_bus=event_bus,
     )
     ctx.plugin_registry = PluginRegistry()
-    register_example_plugins(ctx.plugin_registry)
+    ctx.plugin_registry.discover_and_register(config.plugins.discovery)
 
     from kagan.core.adapters.db.repositories import (
         AuditRepository,
@@ -421,7 +420,6 @@ async def create_app_context(
     task_repo = TaskRepository(
         db_path,
         project_root=project_root,
-        default_branch=config.general.default_base_branch,
     )
     await task_repo.initialize()
 
@@ -454,7 +452,7 @@ async def create_app_context(
         event_bus,
         repo_repository,
     )
-    git_adapter = GitWorktreeAdapter()
+    git_adapter = GitWorktreeAdapter(base_ref_strategy=config.general.worktree_base_ref_strategy)
     git_ops_adapter = GitOperationsAdapter()
     ctx.workspace_service = WorkspaceServiceImpl(
         session_factory,

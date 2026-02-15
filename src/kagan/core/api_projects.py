@@ -138,6 +138,18 @@ class ProjectApiMixin:
         """Find a project containing the given repository path."""
         return await self._ctx.project_service.find_project_by_repo_path(repo_path)
 
+    async def update_repo_default_branch(
+        self,
+        repo_id: str,
+        branch: str,
+        *,
+        mark_configured: bool = False,
+    ) -> Repo | None:
+        """Update Repo.default_branch, optionally marking branch as configured."""
+        return await self._ctx.project_service.update_repo_default_branch(
+            repo_id, branch, mark_configured=mark_configured
+        )
+
     # ── Settings & Audit ───────────────────────────────────────────────
 
     @expose("settings", "get", profile="maintainer", description="Get admin-exposed settings.")

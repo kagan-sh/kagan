@@ -40,7 +40,6 @@ async def e2e_project(tmp_path: Path):
     config_content = """# Kagan Test Configuration
 [general]
 auto_review = false
-default_base_branch = "main"
 default_worker_agent = "claude"
 
 [agents.claude]
@@ -76,6 +75,7 @@ async def _create_e2e_app_with_tasks(e2e_project, tasks: list[dict]) -> KaganApp
     repo_repo = RepoRepository(manager._session_factory)
     repo, _ = await repo_repo.get_or_create(e2e_project.root, default_branch="main")
     if repo.id:
+        await repo_repo.update_default_branch(repo.id, "main", mark_configured=True)
         await repo_repo.add_to_project(project_id, repo.id, is_primary=True)
 
     for task_kwargs in tasks:
@@ -140,11 +140,31 @@ def auto_mock_terminals_for_app_tests(request, monkeypatch):
     """Auto-mock terminal backends for app-driven tests (external system boundary)."""
     from tests.helpers.mocks import install_fake_tmux
 
+    nodeid = request.node.nodeid
+    local_context_smoke_files = (
+        "test_branch_popup.py",
+        "test_enter_flow_streaming.py",
+        "test_e2e_full_flow.py",
+        "test_kanban_external_updates.py",
+        "test_multi_project_journey_cases.py",
+        "test_planner_board_refresh.py",
+        "test_welcome_recent_projects.py",
+    )
+    force_local_context = "tests/tui/snapshot/" in nodeid or any(
+        filename in nodeid for filename in local_context_smoke_files
+    )
+    prefer_core_backed = "tests/tui/smoke/" in nodeid and not force_local_context
+    if prefer_core_backed:
+        monkeypatch.delenv("KAGAN_TUI_USE_LOCAL_CONTEXT", raising=False)
+    else:
+        monkeypatch.setenv("KAGAN_TUI_USE_LOCAL_CONTEXT", "1")
+
     app_fixture_patterns = ("e2e_app", "app", "welcome_app", "_fresh_app")
-    if not any(
+    uses_app_fixture = any(
         n.startswith(app_fixture_patterns) or n in app_fixture_patterns
         for n in request.fixturenames
-    ):
+    )
+    if not (uses_app_fixture or force_local_context):
         return
 
     install_fake_tmux(monkeypatch)
@@ -157,6 +177,10 @@ def auto_mock_terminals_for_app_tests(request, monkeypatch):
     monkeypatch.setattr(
         "kagan.core.services.sessions.SessionServiceImpl._launch_external_launcher",
         AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "kagan.tui.ui.screens.kanban.session_controller.KanbanSessionController._attach_tmux_session_local",
+        AsyncMock(return_value=False),
     )
 
     # Assume terminals are available in app tests unless a test overrides this explicitly.

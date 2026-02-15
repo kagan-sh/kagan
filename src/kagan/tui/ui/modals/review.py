@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from acp import RequestError
 from sqlalchemy.exc import OperationalError
@@ -47,6 +47,9 @@ from kagan.tui.ui.utils.helpers import (
     colorize_diff_line,
     copy_with_notification,
     parse_agent_exit_code,
+    state_attr,
+    state_bool,
+    state_tuple,
 )
 from kagan.tui.ui.widgets import ChatPanel, StreamingOutput
 
@@ -58,12 +61,9 @@ if TYPE_CHECKING:
     from textual.worker import Worker
 
     from kagan.core.acp import Agent
-    from kagan.core.adapters.db.repositories import ExecutionRepository
     from kagan.core.adapters.db.schema import Task
     from kagan.core.config import AgentConfig
     from kagan.core.services.diffs import FileDiff, RepoDiff
-    from kagan.core.services.queued_messages import QueuedMessageService
-    from kagan.core.services.workspaces import WorkspaceService
 
 DiffModalResult = Literal["approve", "reject"]
 DIFF_MODAL_APPROVE_RESULT: Final = "approve"
@@ -78,10 +78,11 @@ class ReviewModal(KaganModalScreen[str | None]):
     STOP_JOB_PENDING_MESSAGE = "Agent stop requested; waiting for scheduler."
 
     _LIVE_ATTACH_TIMEOUT_SECONDS = 1.5
+    _SHOW_SHELL_MAX_RETRIES = 3
 
     _agent: Agent | None
-    _live_output_agent: Agent | None
-    _live_review_agent: Agent | None
+    _live_output_agent: object | None
+    _live_review_agent: object | None
     _live_output_attached: bool
     _live_output_wait_noted: bool
     _live_review_attached: bool
@@ -91,15 +92,13 @@ class ReviewModal(KaganModalScreen[str | None]):
     def __init__(
         self,
         task: Task,
-        worktree_manager: WorkspaceService,
         agent_config: AgentConfig,
         base_branch: str = "main",
         agent_factory: AgentFactory = create_agent,
-        execution_service: ExecutionRepository | None = None,
         execution_id: str | None = None,
         run_count: int = 0,
-        running_agent: Agent | None = None,
-        review_agent: Agent | None = None,
+        running_agent: object | None = None,
+        review_agent: object | None = None,
         is_reviewing: bool = False,
         is_running: bool = False,
         is_blocked: bool = False,
@@ -114,16 +113,14 @@ class ReviewModal(KaganModalScreen[str | None]):
     ) -> None:
         super().__init__(**kwargs)
         self._task_model = task
-        self._worktree = worktree_manager
         self._agent_config = agent_config
         self._base_branch = base_branch
         self._agent_factory = agent_factory
-        self._execution_service = execution_service
         self._agent: Agent | None = None
         self._execution_id = execution_id
         self._run_count = run_count
-        self._live_output_agent = running_agent
-        self._live_review_agent = review_agent
+        self._live_output_agent = self._stream_resolve_live_handle(running_agent)
+        self._live_review_agent = self._stream_resolve_live_handle(review_agent)
         self._is_reviewing = is_reviewing
         self._is_running = is_running
         self._is_blocked = is_blocked
@@ -151,12 +148,54 @@ class ReviewModal(KaganModalScreen[str | None]):
         self._implementation_queue_pending = False
         self._hydrated = False
         self._runtime_poll_timer = None
+        self._show_shell_retry_count = 0
         self._agent_stream = AgentStreamRouter(
             get_output=self._stream_target_output,
             on_update=self._stream_on_update,
             on_complete=self._stream_on_complete,
             on_fail=self._stream_on_fail,
         )
+
+    @staticmethod
+    def _state_attr(state: object | None, name: str, default: Any = None) -> Any:
+        return state_attr(state, name, default)
+
+    @staticmethod
+    def _state_bool(state: object | None, name: str) -> bool:
+        return state_bool(state, name)
+
+    @staticmethod
+    def _state_tuple(state: object | None, name: str) -> tuple[str, ...]:
+        return state_tuple(state, name)
+
+    @classmethod
+    def _execution_metadata(cls, execution: object | None) -> dict[str, Any]:
+        metadata = cls._state_attr(execution, "metadata_", None)
+        if isinstance(metadata, dict):
+            return metadata
+        metadata = cls._state_attr(execution, "metadata", None)
+        if isinstance(metadata, dict):
+            return metadata
+        return {}
+
+    @classmethod
+    def _stream_resolve_live_handle(
+        cls,
+        source: object | None,
+        attr: str | None = None,
+    ) -> object | None:
+        candidate = source if attr is None else cls._state_attr(source, attr)
+        if callable(getattr(candidate, "set_message_target", None)):
+            return candidate
+        return None
+
+    @staticmethod
+    def _stream_set_target(handle: object | None, target: object | None) -> bool:
+        setter = getattr(handle, "set_message_target", None)
+        if not callable(setter):
+            return False
+        setter(target)
+        return True
 
     # ------------------------------------------------------------------
     # Compose & lifecycle
@@ -272,12 +311,28 @@ class ReviewModal(KaganModalScreen[str | None]):
 
     def _show_shell(self) -> None:
         """Make modal interactive before loading expensive data."""
+        self._show_shell_retry_count += 1
         with contextlib.suppress(NoMatches):
             self.query_one("#review-loading", LoadingIndicator).remove()
-        self.query_one("#review-tabs").remove_class("hidden")
+
+        try:
+            tabs = self.query_one("#review-tabs")
+        except NoMatches as exc:
+            # Textual can briefly report NoMatches during mount on slower platforms.
+            if self._show_shell_retry_count <= self._SHOW_SHELL_MAX_RETRIES:
+                self.call_after_refresh(self._show_shell)
+            else:
+                from kagan.core.debug_log import log
+
+                log(f"ReviewModal shell render failed: {exc}")
+            return
+
+        tabs.remove_class("hidden")
         if not self._read_only:
-            self.query_one(".button-row").remove_class("hidden")
-        self._actions_set_active_tab(self._initial_tab)
+            with contextlib.suppress(NoMatches):
+                self.query_one(".button-row").remove_class("hidden")
+        with contextlib.suppress(NoMatches):
+            self._actions_set_active_tab(self._initial_tab)
         self._queue_sync_agent_output_visibility()
         self._queue_sync_review_visibility()
         self._state_refresh_task_output_labels()
@@ -291,15 +346,24 @@ class ReviewModal(KaganModalScreen[str | None]):
 
         workspaces = []
         try:
-            workspaces = await self._worktree.list_workspaces(task_id=self._task_model.id)
+            workspaces = await self.ctx.api.list_workspaces(task_id=self._task_model.id)
             if workspaces:
                 actual_branch = workspaces[0].branch_name
                 branch_info = self.query_one("#branch-info", Label)
                 branch_info.update(f"Branch: {actual_branch} → {self._base_branch}")
 
-            commits_task = self._worktree.get_commit_log(self._task_model.id, self._base_branch)
-            diff_stats_task = self._worktree.get_diff_stats(self._task_model.id, self._base_branch)
-            diff_task = self._worktree.get_diff(self._task_model.id, self._base_branch)
+            commits_task = self.ctx.api.get_workspace_commit_log(
+                self._task_model.id,
+                base_branch=self._base_branch,
+            )
+            diff_stats_task = self.ctx.api.get_workspace_diff_stats(
+                self._task_model.id,
+                base_branch=self._base_branch,
+            )
+            diff_task = self.ctx.api.get_workspace_diff(
+                self._task_model.id,
+                base_branch=self._base_branch,
+            )
             commits, diff_stats, self._diff_text = await asyncio.gather(
                 commits_task,
                 diff_stats_task,
@@ -359,9 +423,8 @@ class ReviewModal(KaganModalScreen[str | None]):
             self.query_one("#generate-btn", Button).add_class("hidden")
             self.query_one("#cancel-btn", Button).add_class("hidden")
 
-        if self._execution_service is not None:
-            with contextlib.suppress(Exception):
-                await self._stream_load_prior_review()
+        with contextlib.suppress(Exception):
+            await self._stream_load_prior_review()
         with contextlib.suppress(Exception):
             await self._stream_attach_live_output_if_available()
         with contextlib.suppress(Exception):
@@ -489,25 +552,41 @@ class ReviewModal(KaganModalScreen[str | None]):
 
         runtime_view = self.ctx.api.get_runtime_view(self._task_model.id)
         previous_execution_id = self._execution_id
-        self._is_running = runtime_view.is_running if runtime_view is not None else False
-        self._is_reviewing = runtime_view.is_reviewing if runtime_view is not None else False
-        self._is_blocked = runtime_view.is_blocked if runtime_view is not None else False
-        self._blocked_reason = runtime_view.blocked_reason if self._is_blocked else None
-        self._blocked_by_task_ids = runtime_view.blocked_by_task_ids if self._is_blocked else ()
-        self._overlap_hints = runtime_view.overlap_hints if self._is_blocked else ()
-        self._is_pending = runtime_view.is_pending if runtime_view is not None else False
-        self._pending_reason = runtime_view.pending_reason if self._is_pending else None
-        if runtime_view is not None and runtime_view.execution_id is not None:
-            self._execution_id = runtime_view.execution_id
+        self._is_running = self._state_bool(runtime_view, "is_running")
+        self._is_reviewing = self._state_bool(runtime_view, "is_reviewing")
+        self._is_blocked = self._state_bool(runtime_view, "is_blocked")
+        self._blocked_reason = (
+            self._state_attr(runtime_view, "blocked_reason") if self._is_blocked else None
+        )
+        self._blocked_by_task_ids = (
+            self._state_tuple(runtime_view, "blocked_by_task_ids") if self._is_blocked else ()
+        )
+        self._overlap_hints = (
+            self._state_tuple(runtime_view, "overlap_hints") if self._is_blocked else ()
+        )
+        self._is_pending = self._state_bool(runtime_view, "is_pending")
+        self._pending_reason = (
+            self._state_attr(runtime_view, "pending_reason") if self._is_pending else None
+        )
+        runtime_execution_id = self._state_attr(runtime_view, "execution_id")
+        if runtime_execution_id is not None:
+            self._execution_id = runtime_execution_id
         if self._execution_id != previous_execution_id:
             self._loaded_agent_output_entry_ids.clear()
-        self._live_output_agent = runtime_view.running_agent if runtime_view is not None else None
-        self._live_review_agent = runtime_view.review_agent if runtime_view is not None else None
+        self._live_output_agent = self._stream_resolve_live_handle(runtime_view, "running_agent")
+        self._live_review_agent = self._stream_resolve_live_handle(runtime_view, "review_agent")
+        if self._live_output_agent is None:
+            self._live_output_attached = False
+        if self._live_review_agent is None:
+            self._live_review_attached = False
 
         await self._stream_attach_live_output_if_available(wait_for_agent=wait_for_live_agent)
         await self._stream_attach_live_review_if_available()
         try:
-            if self._is_running and not self._live_output_attached:
+            should_poll = (self._is_running and not self._live_output_attached) or (
+                self._is_reviewing and not self._live_review_attached
+            )
+            if should_poll:
                 await self._stream_load_agent_output_history()
             await asyncio.gather(
                 self._queue_refresh_review_state(),
@@ -531,10 +610,10 @@ class ReviewModal(KaganModalScreen[str | None]):
             self._prompt_worker.cancel()
         if self._agent:
             await self._agent.stop()
-        if self._live_output_agent:
-            self._live_output_agent.set_message_target(None)
-        if self._live_review_agent:
-            self._live_review_agent.set_message_target(None)
+        if self._live_output_agent is not None:
+            self._stream_set_target(self._live_output_agent, None)
+        if self._live_review_agent is not None:
+            self._stream_set_target(self._live_review_agent, None)
 
     # ------------------------------------------------------------------
     # State management
@@ -701,9 +780,7 @@ class ReviewModal(KaganModalScreen[str | None]):
     async def _stream_resolve_execution_id(self) -> str | None:
         if self._execution_id is not None:
             return self._execution_id
-        if self._execution_service is None:
-            return None
-        execution = await self._execution_service.get_latest_execution_for_task(self._task_model.id)
+        execution = await self.ctx.api.get_latest_execution_for_task(self._task_model.id)
         if execution is None:
             return None
         if self._execution_id != execution.id:
@@ -739,30 +816,35 @@ class ReviewModal(KaganModalScreen[str | None]):
             return
 
         indexed_entries = [
-            (str(getattr(entry, "id", f"idx-{index}")), entry)
+            (str(getattr(entry, "id", f"idx-{index}")), index, entry)
             for index, entry in enumerate(entries)
         ]
         new_entries = [
-            (entry_id, entry)
-            for entry_id, entry in indexed_entries
+            (entry_id, index, entry)
+            for entry_id, index, entry in indexed_entries
             if entry_id not in self._loaded_agent_output_entry_ids
         ]
         if not new_entries:
             return
 
-        has_review_result = False
         execution = await self.ctx.api.get_execution(execution_id)
-        if execution and execution.metadata_:
-            has_review_result = "review_result" in execution.metadata_
+        metadata = self._execution_metadata(execution)
+        has_review_result = "review_result" in metadata
+        review_log_start_index = metadata.get("review_log_start_index")
 
-        review_entry_id = (
-            indexed_entries[-1][0] if has_review_result and len(indexed_entries) > 1 else None
-        )
+        # Determine which entries are review vs implementation
+        review_indices: set[int] = set()
+        if review_log_start_index is not None:
+            # Use the boundary marker stored before review began
+            review_indices = {i for i in range(review_log_start_index, len(indexed_entries))}
+
         rendered_impl_output = False
         has_impl_entries = False
-        for entry_id, entry in new_entries:
+        review_new_entries = []
+        for entry_id, index, entry in new_entries:
             self._loaded_agent_output_entry_ids.add(entry_id)
-            if review_entry_id is not None and entry_id == review_entry_id:
+            if index in review_indices:
+                review_new_entries.append(entry)
                 continue
             has_impl_entries = True
             if not entry.logs:
@@ -777,33 +859,33 @@ class ReviewModal(KaganModalScreen[str | None]):
                 classes="warning",
             )
 
-        if review_entry_id is not None:
-            review_entries = [
-                entry for entry_id, entry in new_entries if entry_id == review_entry_id
-            ]
-        else:
-            review_entries = []
-        if review_entries:
+        if review_new_entries:
             chat_panel = self._stream_review_output_panel()
             chat_panel.remove_class("hidden")
-            for entry in review_entries:
+            for entry in review_new_entries:
                 if not entry.logs:
                     continue
                 for line in entry.logs.splitlines():
                     await chat_panel._render_log_line(line)
             self._review_log_loaded = True
-            self._state_sync_decision_from_output()
-            self._state_set_phase(StreamPhase.COMPLETE)
+            if has_review_result:
+                self._state_sync_decision_from_output()
+                self._state_set_phase(StreamPhase.COMPLETE)
 
     async def _stream_attach_live_review_if_available(self) -> None:
         if self._live_review_attached:
             return
-        if not self._is_reviewing or self._live_review_agent is None:
+        if not self._is_reviewing:
+            return
+        if self._live_review_agent is None:
+            runtime_view = self.ctx.api.get_runtime_view(self._task_model.id)
+            self._live_review_agent = self._stream_resolve_live_handle(runtime_view, "review_agent")
+        if self._live_review_agent is None:
             return
         chat_panel = self._stream_review_output_panel()
         chat_panel.remove_class("hidden")
         self._live_review_attached = True
-        self._live_review_agent.set_message_target(self)
+        self._stream_set_target(self._live_review_agent, self)
         await chat_panel.output.post_note("Connected to live review stream", classes="info")
         self._state_set_phase(StreamPhase.STREAMING)
 
@@ -819,11 +901,27 @@ class ReviewModal(KaganModalScreen[str | None]):
         if self._live_output_agent is None:
             if not wait_for_agent:
                 return
-            agent = await self.ctx.api.wait_for_running_agent(
-                self._task_model.id,
-                timeout=self._LIVE_ATTACH_TIMEOUT_SECONDS,
-            )
-            if agent is None:
+            automation_service = getattr(self.ctx, "automation_service", None)
+            wait_for_running_agent = getattr(automation_service, "wait_for_running_agent", None)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self._LIVE_ATTACH_TIMEOUT_SECONDS
+            while loop.time() < deadline and self._live_output_agent is None:
+                with contextlib.suppress(*_SHUTDOWN_ERRORS):
+                    await self.ctx.api.reconcile_running_tasks([self._task_model.id])
+                runtime_view = self.ctx.api.get_runtime_view(self._task_model.id)
+                self._live_output_agent = self._stream_resolve_live_handle(
+                    runtime_view, "running_agent"
+                )
+                if self._live_output_agent is None and callable(wait_for_running_agent):
+                    wait_for_running = cast("Any", wait_for_running_agent)
+                    with contextlib.suppress(*_SHUTDOWN_ERRORS, TimeoutError):
+                        self._live_output_agent = await wait_for_running(
+                            self._task_model.id,
+                            timeout=0.1,
+                        )
+                if self._live_output_agent is None:
+                    await asyncio.sleep(0.1)
+            if self._live_output_agent is None:
                 if not self._live_output_wait_noted:
                     await self._stream_agent_output_panel().output.post_note(
                         "Waiting for live agent stream...",
@@ -831,10 +929,9 @@ class ReviewModal(KaganModalScreen[str | None]):
                     )
                     self._live_output_wait_noted = True
                 return
-            self._live_output_agent = agent
         panel = self._stream_agent_output_panel()
         self._live_output_attached = True
-        self._live_output_agent.set_message_target(self)
+        self._stream_set_target(self._live_output_agent, self)
         self._live_output_wait_noted = False
         await panel.output.post_note("Connected to live agent stream", classes="info")
 
@@ -854,17 +951,16 @@ class ReviewModal(KaganModalScreen[str | None]):
 
     async def _stream_load_prior_review(self) -> None:
         """Load auto-review results from execution metadata if available."""
-        if self._execution_service is None:
-            return
         if self._review_log_loaded:
             return
         execution_id = await self._stream_resolve_execution_id()
         if execution_id is None:
             return
-        execution = await self._execution_service.get_execution(execution_id)
-        if execution is None or not execution.metadata_:
+        execution = await self.ctx.api.get_execution(execution_id)
+        metadata = self._execution_metadata(execution)
+        if not metadata:
             return
-        review_result = execution.metadata_.get("review_result")
+        review_result = metadata.get("review_result")
         if review_result is None:
             return
 
@@ -903,14 +999,15 @@ class ReviewModal(KaganModalScreen[str | None]):
         """Spawn agent to generate code review."""
         from kagan.core.debug_log import log
 
-        wt_path = await self._worktree.get_path(self._task_model.id)
+        wt_path = await self.ctx.api.get_workspace_path(self._task_model.id)
         if not wt_path:
             await output.post_note("Error: Worktree not found", classes="error")
             self._state_set_phase(StreamPhase.IDLE)
             return
 
-        diff = self._diff_text or await self._worktree.get_diff(
-            self._task_model.id, self._base_branch
+        diff = self._diff_text or await self.ctx.api.get_workspace_diff(
+            self._task_model.id,
+            base_branch=self._base_branch,
         )
         if not diff:
             await output.post_note("No diff to review", classes="info")
@@ -1040,12 +1137,12 @@ class ReviewModal(KaganModalScreen[str | None]):
             self._review_queue_pending = False
             self._state_sync_review_actions()
             return
-        service = self._queue_service()
-        if service is None:
+        try:
+            status = await self.ctx.api.get_queue_status(self._task_model.id, lane="review")
+        except RuntimeError:
             self._review_queue_pending = False
             self._state_sync_review_actions()
             return
-        status = await service.get_status(self._task_model.id, lane="review")
         self._review_queue_pending = status.has_queued
         self._state_sync_review_actions()
 
@@ -1057,47 +1154,41 @@ class ReviewModal(KaganModalScreen[str | None]):
         if self._task_model.status != TaskStatus.IN_PROGRESS:
             self._implementation_queue_pending = False
             return
-        service = self._queue_service()
-        if service is None:
+        try:
+            status = await self.ctx.api.get_queue_status(self._task_model.id, lane="implementation")
+        except RuntimeError:
             self._implementation_queue_pending = False
             return
-        status = await service.get_status(self._task_model.id, lane="implementation")
         self._implementation_queue_pending = status.has_queued
-
-    def _queue_service(self) -> QueuedMessageService | None:
-        service = self.ctx.api.ctx.automation_service
-        return service
 
     async def _queue_send_review_follow_up(self, content: str) -> None:
         if self._task_model.status != TaskStatus.REVIEW:
             raise RuntimeError("Review queue only available in REVIEW status")
-        service = self._queue_service()
-        if service is None:
-            raise RuntimeError("Follow-up queue unavailable")
-        await service.queue_message(self._task_model.id, content, lane="review")
+        await self.ctx.api.queue_message(self._task_model.id, content, lane="review")
         await self._queue_refresh_review_state()
         if self._phase == StreamPhase.IDLE and not self._live_review_attached:
             await self._queue_start_review_follow_up_if_needed()
 
     async def _queue_get_review_messages(self) -> list:
-        service = self._queue_service()
-        if service is None:
+        try:
+            return await self.ctx.api.get_queued_messages(self._task_model.id, lane="review")
+        except RuntimeError:
             return []
-        return await service.get_queued(self._task_model.id, lane="review")
 
     async def _queue_remove_review_message(self, index: int) -> bool:
-        service = self._queue_service()
-        if service is None:
-            return False
-        removed = await service.remove_message(self._task_model.id, index, lane="review")
+        removed = await self.ctx.api.remove_queued_message(
+            self._task_model.id,
+            index,
+            lane="review",
+        )
         await self._queue_refresh_review_state()
         return removed
 
     async def _queue_take_review_follow_up(self) -> str | None:
-        service = self._queue_service()
-        if service is None:
+        try:
+            queued = await self.ctx.api.take_queued_message(self._task_model.id, lane="review")
+        except RuntimeError:
             return None
-        queued = await service.take_queued(self._task_model.id, lane="review")
         await self._queue_refresh_review_state()
         if queued is None:
             return None
@@ -1106,10 +1197,7 @@ class ReviewModal(KaganModalScreen[str | None]):
     async def _queue_send_implementation_follow_up(self, content: str) -> None:
         if self._task_model.status != TaskStatus.IN_PROGRESS:
             raise RuntimeError("Implementation queue only available in IN_PROGRESS")
-        service = self._queue_service()
-        if service is None:
-            raise RuntimeError("Implementation queue unavailable")
-        await service.queue_message(self._task_model.id, content, lane="implementation")
+        await self.ctx.api.queue_message(self._task_model.id, content, lane="implementation")
         await self._queue_refresh_implementation_state()
 
         submitted = await self.ctx.api.submit_job(self._task_model.id, "start_agent")
@@ -1130,26 +1218,30 @@ class ReviewModal(KaganModalScreen[str | None]):
         await self._refresh_runtime_state()
 
     async def _queue_get_implementation_messages(self) -> list:
-        service = self._queue_service()
-        if service is None:
+        try:
+            return await self.ctx.api.get_queued_messages(
+                self._task_model.id,
+                lane="implementation",
+            )
+        except RuntimeError:
             return []
-        return await service.get_queued(self._task_model.id, lane="implementation")
 
     async def _queue_remove_implementation_message(self, index: int) -> bool:
-        service = self._queue_service()
-        if service is None:
-            return False
-        removed = await service.remove_message(self._task_model.id, index, lane="implementation")
+        removed = await self.ctx.api.remove_queued_message(
+            self._task_model.id,
+            index,
+            lane="implementation",
+        )
         await self._queue_refresh_implementation_state()
         return removed
 
     async def _queue_start_review_follow_up_if_needed(self) -> None:
         if self._phase not in (StreamPhase.IDLE, StreamPhase.COMPLETE):
             return
-        service = self._queue_service()
-        if service is None:
+        try:
+            status = await self.ctx.api.get_queue_status(self._task_model.id, lane="review")
+        except RuntimeError:
             return
-        status = await service.get_status(self._task_model.id, lane="review")
         if not status.has_queued:
             return
         chat_panel = self._stream_review_output_panel()
@@ -1277,16 +1369,18 @@ class ReviewModal(KaganModalScreen[str | None]):
             table.add_row(repo or "—", sha or "—", message or "—")
 
     async def _diff_populate_pane(self, workspaces: list) -> None:
-        diff_service = getattr(self.ctx, "diff_service", None)
-
-        if workspaces and diff_service is not None:
-            diffs = await diff_service.get_all_diffs(workspaces[0].id)
-            self._diff_populate_file_table(diffs)
-            total_additions = sum(diff.total_additions for diff in diffs)
-            total_deletions = sum(diff.total_deletions for diff in diffs)
-            total_files = sum(len(diff.files) for diff in diffs)
-            self._diff_set_stats(total_additions, total_deletions, total_files)
-            return
+        if workspaces:
+            try:
+                diffs = await self.ctx.api.get_all_diffs(workspaces[0].id)
+            except RuntimeError:
+                diffs = None
+            if diffs is not None:
+                self._diff_populate_file_table(diffs)
+                total_additions = sum(diff.total_additions for diff in diffs)
+                total_deletions = sum(diff.total_deletions for diff in diffs)
+                total_files = sum(len(diff.files) for diff in diffs)
+                self._diff_set_stats(total_additions, total_deletions, total_files)
+                return
 
         total_additions, total_deletions, total_files = self._diff_parse_totals(self._diff_stats)
         self._diff_set_stats(total_additions, total_deletions, total_files)
@@ -1380,24 +1474,34 @@ class ReviewModal(KaganModalScreen[str | None]):
     async def _diff_open_modal(self) -> None:
         from kagan.tui.ui.modals import DiffModal
 
-        workspaces = await self._worktree.list_workspaces(task_id=self._task_model.id)
+        workspaces = await self.ctx.api.list_workspaces(task_id=self._task_model.id)
         title = (
             f"Diff: {self._task_model.short_id} {self._task_model.title[:MODAL_TITLE_MAX_LENGTH]}"
         )
-        diff_service = getattr(self.ctx, "diff_service", None)
 
-        if not workspaces or diff_service is None:
-            diff_text = self._diff_text or await self._worktree.get_diff(
-                self._task_model.id, self._base_branch
+        if not workspaces:
+            diff_text = self._diff_text or await self.ctx.api.get_workspace_diff(
+                self._task_model.id,
+                base_branch=self._base_branch,
             )
             result = await self.app.push_screen(
                 DiffModal(title=title, diff_text=diff_text, task=self._task_model)
             )
         else:
-            diffs = await diff_service.get_all_diffs(workspaces[0].id)
-            result = await self.app.push_screen(
-                DiffModal(title=title, diffs=diffs, task=self._task_model)
-            )
+            try:
+                diffs = await self.ctx.api.get_all_diffs(workspaces[0].id)
+            except RuntimeError:
+                diff_text = self._diff_text or await self.ctx.api.get_workspace_diff(
+                    self._task_model.id,
+                    base_branch=self._base_branch,
+                )
+                result = await self.app.push_screen(
+                    DiffModal(title=title, diff_text=diff_text, task=self._task_model)
+                )
+            else:
+                result = await self.app.push_screen(
+                    DiffModal(title=title, diffs=diffs, task=self._task_model)
+                )
 
         modal_result = self._actions_parse_diff_modal_result(result)
         if modal_result == DIFF_MODAL_APPROVE_RESULT:
@@ -1536,13 +1640,19 @@ class ReviewModal(KaganModalScreen[str | None]):
             self.notify("Read-only history view", severity="warning")
             return
         self.notify("Rebasing...", severity="information")
-        success, message, conflict_files = await self._worktree.rebase_onto_base(
+        success, message, conflict_files = await self.ctx.api.rebase_workspace(
             self._task_model.id, self._base_branch
         )
         if success:
-            self._diff_text = await self._worktree.get_diff(self._task_model.id, self._base_branch)
+            self._diff_text = await self.ctx.api.get_workspace_diff(
+                self._task_model.id,
+                base_branch=self._base_branch,
+            )
             self._diff_render_text(self._diff_text)
-            diff_stats = await self._worktree.get_diff_stats(self._task_model.id, self._base_branch)
+            diff_stats = await self.ctx.api.get_workspace_diff_stats(
+                self._task_model.id,
+                base_branch=self._base_branch,
+            )
             self.query_one("#diff-stats", Static).update(diff_stats or "[dim](No changes)[/dim]")
             self.notify("Rebase successful", severity="information")
         elif conflict_files:

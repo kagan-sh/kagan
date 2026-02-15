@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, Mock
 
 from kagan.core.adapters.db.schema import Repo
+from kagan.core.constants import KAGAN_BRANCH_CONFIGURED_KEY
 from kagan.core.instance_lock import LockInfo
 from kagan.core.services.runtime import RuntimeSessionEvent, StartupSessionDecision
 from kagan.tui.app import KaganApp
@@ -125,11 +126,111 @@ async def test_startup_shows_welcome_when_no_project_decision(tmp_path: Path) ->
     assert isinstance(screen, WelcomeScreen)
 
 
-async def test_apply_active_repo_bootstraps_session_service_when_core_connected(
+async def test_initialize_app_reconciles_sessions_before_janitor_in_local_mode(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    app = KaganApp(
+        db_path=":memory:",
+        config_path=tmp_path / "config.toml",
+        project_root=tmp_path,
+    )
+    monkeypatch.setenv("KAGAN_TUI_USE_LOCAL_CONTEXT", "1")
+    monkeypatch.setattr("kagan.tui.app.KaganConfig.load", lambda _path: app.config)
+
+    app_context = SimpleNamespace(event_bus=SimpleNamespace(), signal_bridge=None)
+    monkeypatch.setattr(
+        "kagan.core.bootstrap.create_app_context",
+        AsyncMock(return_value=app_context),
+    )
+    monkeypatch.setattr(
+        "kagan.core.bootstrap.create_signal_bridge",
+        lambda _event_bus: SimpleNamespace(),
+    )
+    monkeypatch.setattr("kagan.core.bootstrap.wire_default_signals", lambda *_args: None)
+
+    call_order: list[str] = []
+    app._reconcile_worktrees = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("worktrees")),
+    )
+    app._reconcile_sessions = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("sessions")),
+    )
+    app._run_janitor = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("janitor")),
+    )
+    app._startup_screen_decision = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("startup")),
+    )
+
+    await app._initialize_app()
+
+    assert call_order == ["worktrees", "sessions", "janitor", "startup"]
+
+
+async def test_initialize_app_reconciles_sessions_before_janitor_in_core_mode(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    app = KaganApp(
+        db_path=":memory:",
+        config_path=tmp_path / "config.toml",
+        project_root=tmp_path,
+    )
+    monkeypatch.delenv("KAGAN_TUI_USE_LOCAL_CONTEXT", raising=False)
+    monkeypatch.setattr("kagan.tui.app.KaganConfig.load", lambda _path: app.config)
+
+    endpoint = SimpleNamespace(transport="socket", address="/tmp/core.sock")
+    monkeypatch.setattr(
+        "kagan.core.launcher.ensure_core_running",
+        AsyncMock(return_value=endpoint),
+    )
+
+    class _FakeIPCClient:
+        def __init__(self, _endpoint: object) -> None:
+            self._endpoint = _endpoint
+            self.is_connected = False
+
+        async def connect(self) -> None:
+            self.is_connected = True
+
+        async def close(self) -> None:
+            self.is_connected = False
+
+    monkeypatch.setattr("kagan.core.ipc.client.IPCClient", _FakeIPCClient)
+
+    call_order: list[str] = []
+    app._reconcile_worktrees = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("worktrees")),
+    )
+    app._reconcile_sessions = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("sessions")),
+    )
+    app._run_janitor = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("janitor")),
+    )
+    app._startup_screen_decision = cast(
+        "Any",
+        AsyncMock(side_effect=lambda: call_order.append("startup")),
+    )
+
+    await app._initialize_app()
+
+    assert call_order == ["worktrees", "sessions", "janitor", "startup"]
+
+
+async def test_apply_active_repo_sets_runtime_selection_when_core_connected(
     tmp_path: Path,
 ) -> None:
     app = KaganApp(db_path=":memory:", project_root=tmp_path)
-    api = SimpleNamespace(bootstrap_session_service=MagicMock())
+    api = SimpleNamespace()
     ctx = SimpleNamespace(active_project_id="proj-1", api=api)
     app._ctx = cast("Any", ctx)
     app._instance_lock = None
@@ -139,7 +240,7 @@ async def test_apply_active_repo_bootstraps_session_service_when_core_connected(
     app._dispatch_runtime_session = cast("Any", dispatch_runtime)
 
     repo_path = tmp_path / "new-repo"
-    repo = Repo(name="new-repo", path=str(repo_path))
+    repo = Repo(name="new-repo", path=str(repo_path), scripts={KAGAN_BRANCH_CONFIGURED_KEY: "true"})
 
     opened = await app._apply_active_repo(repo, project_id="proj-1")
 
@@ -150,4 +251,3 @@ async def test_apply_active_repo_bootstraps_session_service_when_core_connected(
         project_id="proj-1",
         repo_id=repo.id,
     )
-    api.bootstrap_session_service.assert_called_once_with(repo_path, app.config)

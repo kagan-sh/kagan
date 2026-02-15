@@ -451,8 +451,8 @@ async def test_session_create_rejects_mismatched_worktree_path(tmp_path: Path) -
 
     assert result["success"] is False
     assert result["code"] == "INVALID_WORKTREE_PATH"
-    assert result["next_tool"] == "sessions_exists"
-    assert result["next_arguments"] == {"task_id": "task-1"}
+    assert result["next_tool"] == "session_manage"
+    assert result["next_arguments"] == {"action": "read", "task_id": "task-1"}
 
 
 async def test_session_create_returns_structured_error_when_backend_fails(

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kagan.core.adapters.process import spawn_detached
@@ -17,13 +19,12 @@ from kagan.core.ipc.discovery import CoreEndpoint, discover_core_endpoint
 from kagan.core.paths import (
     get_config_path,
     get_core_runtime_dir,
+    get_data_dir,
     get_database_path,
 )
 from kagan.core.process_liveness import pid_exists
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from kagan.core.config import KaganConfig
 
 logger = logging.getLogger(__name__)
@@ -46,22 +47,29 @@ def _build_daemon_command(config_path: Path, db_path: Path) -> list[str]:
     ]
 
 
-def _spawn_core_detached(*, config_path: Path, db_path: Path) -> subprocess.Popen[bytes]:
+def _spawn_core_detached(
+    *,
+    config_path: Path,
+    db_path: Path,
+    runtime_dir: Path,
+) -> subprocess.Popen[bytes]:
     """Start the core daemon in a detached subprocess and return the process handle."""
     cmd = _build_daemon_command(config_path, db_path)
+    env = dict(os.environ)
+    env["KAGAN_CORE_RUNTIME_DIR"] = str(runtime_dir)
 
     if os.name == "nt":
         # Keep the core alive independently from the launching terminal process.
         creationflags = 0
         creationflags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         creationflags |= getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        return spawn_detached(cmd, windows_creationflags=creationflags)
+        return spawn_detached(cmd, env=env, windows_creationflags=creationflags)
 
-    return spawn_detached(cmd)
+    return spawn_detached(cmd, env=env)
 
 
-def _core_start_lock_path() -> Path:
-    return get_core_runtime_dir() / _CORE_START_LOCK_NAME
+def _core_start_lock_path(runtime_dir: Path) -> Path:
+    return runtime_dir / _CORE_START_LOCK_NAME
 
 
 def _try_acquire_start_lock(lock_path: Path) -> bool:
@@ -108,9 +116,9 @@ def _pid_exists(pid: int) -> bool:
     return pid_exists(pid)
 
 
-def _has_live_core_instance_lock() -> bool:
+def _has_live_core_instance_lock(runtime_dir: Path) -> bool:
     pid: int | None = None
-    lease_path = get_core_runtime_dir() / "core.lease.json"
+    lease_path = runtime_dir / "core.lease.json"
     try:
         lease_data = json.loads(lease_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
@@ -123,8 +131,28 @@ def _has_live_core_instance_lock() -> bool:
             with contextlib.suppress(ValueError):
                 pid = int(raw_owner_pid)
     if pid is None:
-        pid = _read_pid(get_core_runtime_dir() / "core.instance.lock")
+        pid = _read_pid(runtime_dir / "core.instance.lock")
     return pid is not None and _pid_exists(pid)
+
+
+def _resolve_runtime_dir(config_path: Path, db_path: Path) -> Path:
+    override = os.environ.get("KAGAN_CORE_RUNTIME_DIR")
+    if override:
+        return Path(override).expanduser().resolve(strict=False)
+
+    resolved_config = config_path.expanduser().resolve(strict=False)
+    resolved_db = db_path.expanduser().resolve(strict=False)
+    default_config = get_config_path().expanduser().resolve(strict=False)
+    default_db = get_database_path().expanduser().resolve(strict=False)
+
+    if resolved_config == default_config and resolved_db == default_db:
+        return get_core_runtime_dir()
+
+    key = f"{resolved_config}\n{resolved_db}".encode()
+    suffix = hashlib.sha256(key).hexdigest()[:16]
+    if os.name == "nt":
+        return get_data_dir() / "core" / "scoped" / suffix
+    return Path("/tmp") / "kagan-core" / suffix
 
 
 async def ensure_core_running(
@@ -146,19 +174,20 @@ async def ensure_core_running(
     Raises:
         TimeoutError: If the core does not become available within *timeout*.
     """
-    # Check for existing core
-    endpoint = discover_core_endpoint()
+    del config  # The daemon process loads config from *config_path*.
+    config_path = config_path or get_config_path()
+    db_path = db_path or get_database_path()
+    runtime_dir = _resolve_runtime_dir(config_path, db_path)
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = _core_start_lock_path(runtime_dir)
+
+    # Check for existing core in this runtime scope.
+    endpoint = discover_core_endpoint(runtime_dir=runtime_dir)
     if endpoint is not None:
         logger.info("Found existing core: %s %s", endpoint.transport, endpoint.address)
         return endpoint
 
     logger.info("No running core found, starting one...")
-    del config  # The daemon process loads config from *config_path*.
-    config_path = config_path or get_config_path()
-    db_path = db_path or get_database_path()
-    runtime_dir = get_core_runtime_dir()
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = _core_start_lock_path()
     process: subprocess.Popen[bytes] | None = None
     has_start_lock = False
 
@@ -167,21 +196,25 @@ async def ensure_core_running(
     stale_after = max(_CORE_START_LOCK_STALE_SECONDS, timeout * 2)
     try:
         while asyncio.get_running_loop().time() < deadline:
-            endpoint = discover_core_endpoint()
+            endpoint = discover_core_endpoint(runtime_dir=runtime_dir)
             if endpoint is not None:
                 return endpoint
 
             if not has_start_lock:
                 has_start_lock = _try_acquire_start_lock(lock_path)
                 if has_start_lock:
-                    process = _spawn_core_detached(config_path=config_path, db_path=db_path)
+                    process = _spawn_core_detached(
+                        config_path=config_path,
+                        db_path=db_path,
+                        runtime_dir=runtime_dir,
+                    )
                 else:
                     _maybe_clear_stale_start_lock(lock_path, stale_after_seconds=stale_after)
 
             if process is not None and process.poll() is not None:
                 # A concurrent launcher may already be bringing core up and still
                 # writing runtime discovery files. In that case, keep waiting.
-                if _has_live_core_instance_lock():
+                if _has_live_core_instance_lock(runtime_dir):
                     process = None
                 else:
                     msg = f"Core daemon exited early with code {process.returncode}"

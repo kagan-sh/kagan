@@ -98,7 +98,6 @@ def create_test_config(
             auto_review=auto_review,
             max_concurrent_agents=max_concurrent,
             default_worker_agent="test",
-            default_base_branch="main",
             default_pair_terminal_backend="tmux",
         ),
         agents={

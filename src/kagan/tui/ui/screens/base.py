@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, cast
 
 from textual.screen import Screen
 
+from kagan.core.git_utils import get_current_branch
+
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from kagan.core.adapters.db.schema import Project, Repo
     from kagan.core.bootstrap import AppContext
     from kagan.core.ipc.client import IPCClient
@@ -49,15 +53,42 @@ class KaganScreen(Screen):
         if project is None:
             header.update_project(Path(self.kagan_app.project_root).name)
             header.update_repo("")
+            header.update_plugin_badges(None)
         else:
             header.update_project(project.name)
-            repo_name = await self._get_active_repo_name(project)
+            repo_name, _ = await self._get_active_repo_info(project)
             header.update_repo(repo_name or "")
+            header.update_plugin_badges(await self._get_plugin_header_badges(project_id=project.id))
 
         tasks = await self.ctx.api.list_tasks(project_id=self.ctx.active_project_id)
         header.update_count(len(tasks))
         header.update_agent_from_config(self.kagan_app.config)
         header.update_core_status(self.kagan_app._core_status)
+
+    async def _get_plugin_header_badges(self, *, project_id: str) -> list[dict]:
+        api = self.ctx.api
+        plugin_ui_catalog = getattr(api, "plugin_ui_catalog", None)
+        if not callable(plugin_ui_catalog):
+            return []
+        plugin_ui_catalog_fn = cast("Callable[..., Awaitable[object]]", plugin_ui_catalog)
+        try:
+            catalog = await plugin_ui_catalog_fn(
+                project_id=project_id,
+                repo_id=self.ctx.active_repo_id,
+            )
+        except Exception:
+            return []
+
+        if not isinstance(catalog, dict):
+            return []
+        badges = catalog.get("badges", [])
+        if not isinstance(badges, list):
+            return []
+        return [
+            badge
+            for badge in badges
+            if isinstance(badge, dict) and badge.get("surface") == "header.badges"
+        ]
 
     async def _get_active_project(self) -> Project | None:
         api = self.ctx.api
@@ -76,6 +107,37 @@ class KaganScreen(Screen):
         if repo is None:
             repo = repos[0]
         return repo.display_name or repo.name
+
+    async def _get_active_repo_info(self, project: Project) -> tuple[str | None, dict[str, bool]]:
+        """Get active repo name.
+
+        Returns:
+            Tuple of (repo_name, status_dict). Status is derived from plugin
+            UI badges elsewhere; a default is returned here.
+        """
+        repos = await self.ctx.api.get_project_repos(project.id)
+        if not repos:
+            return None, {"connected": False, "synced": False}
+
+        repo = self._match_repo(repos, self.ctx.active_repo_id, self.kagan_app.project_root)
+        if repo is None:
+            repo = repos[0]
+
+        repo_name = repo.display_name or repo.name
+        return repo_name, {"connected": False, "synced": False}
+
+    async def auto_sync_branch(self, header: KaganHeader) -> None:
+        """If git branch changed, update Repo.default_branch."""
+        repo_id = self.ctx.active_repo_id
+        if repo_id is None:
+            return
+
+        current_branch = await get_current_branch(self.kagan_app.project_root)
+        if not current_branch or current_branch == header.git_branch:
+            return
+
+        header.update_branch(current_branch)
+        await self.ctx.api.update_repo_default_branch(repo_id, current_branch)
 
     @staticmethod
     def _match_repo(

@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from _api_helpers import build_api
 
+from kagan.core.api_tasks import ReviewApprovalContextMissingError
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
+from kagan.core.plugins.github.gh_adapter import GITHUB_CONNECTION_KEY
+from kagan.core.plugins.github.sync import (
+    GITHUB_ISSUE_MAPPING_KEY,
+    GITHUB_LEASE_ENFORCEMENT_KEY,
+    GITHUB_TASK_PR_MAPPING_KEY,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -108,6 +118,13 @@ class TestTaskOperations:
         assert moved is not None
         assert moved.status == TaskStatus.IN_PROGRESS
 
+    async def test_move_task_to_done_is_rejected(self, handle_env: tuple) -> None:
+        _repo, api, _ctx = handle_env
+        task = await api.create_task("No Direct Done")
+        await api.move_task(task.id, TaskStatus.REVIEW)
+        with pytest.raises(ValueError, match="Direct move/update to DONE is not allowed"):
+            await api.move_task(task.id, TaskStatus.DONE)
+
     async def test_delete_task(self, handle_env: tuple) -> None:
         _repo, api, _ctx = handle_env
         task = await api.create_task("Delete Me")
@@ -175,12 +192,166 @@ class TestReviewOperations:
         assert reviewed.status == TaskStatus.REVIEW
 
     async def test_approve_task(self, handle_env: tuple) -> None:
-        _repo, api, _ctx = handle_env
+        _repo, api, ctx = handle_env
         task = await api.create_task("Approve Task")
         await api.request_review(task.id)
+        execution = SimpleNamespace(id="exec-1", metadata_={})
+        ctx.execution_service.get_latest_execution_for_task = AsyncMock(return_value=execution)
+        ctx.execution_service.update_execution = AsyncMock(return_value=execution)
         approved = await api.approve_task(task.id)
         assert approved is not None
-        assert approved.status == TaskStatus.DONE
+        assert approved.status == TaskStatus.REVIEW
+
+    async def test_approve_task_fails_without_execution_context(self, handle_env: tuple) -> None:
+        _repo, api, _ctx = handle_env
+        task = await api.create_task("Approve Task Missing Context")
+        await api.request_review(task.id)
+
+        with pytest.raises(ReviewApprovalContextMissingError, match="no execution context exists"):
+            await api.approve_task(task.id)
+
+    async def test_request_review_uses_plugin_guardrail_hooks(self, handle_env: tuple) -> None:
+        """Review guardrails should use plugin method hooks, not hardcoded plugin capability."""
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Plugin hook guardrail")
+
+        async def _guardrail_handler(_ctx, params):
+            assert params["task_id"] == task.id
+            return {
+                "allowed": False,
+                "code": "THIRDPARTY_BLOCKED",
+                "message": "Blocked by external review policy.",
+                "hint": "Resolve external policy requirement and retry.",
+            }
+
+        operation = SimpleNamespace(plugin_id="thirdparty.guardrails", handler=_guardrail_handler)
+
+        def _operations_for_method(method: str) -> tuple[object, ...]:
+            if method != "validate_review_transition":
+                return ()
+            return (operation,)
+
+        ctx.plugin_registry = SimpleNamespace(operations_for_method=_operations_for_method)
+
+        with pytest.raises(ValueError, match="Blocked by external review policy"):
+            await api.request_review(task.id)
+
+    async def test_request_review_fails_when_guardrail_hook_times_out(
+        self, handle_env: tuple, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Timeout guardrail")
+
+        async def _guardrail_handler(_ctx, _params):
+            await asyncio.sleep(10)
+            return {"allowed": True}
+
+        operation = SimpleNamespace(plugin_id="thirdparty.guardrails", handler=_guardrail_handler)
+
+        def _operations_for_method(method: str) -> tuple[object, ...]:
+            if method != "validate_review_transition":
+                return ()
+            return (operation,)
+
+        ctx.plugin_registry = SimpleNamespace(operations_for_method=_operations_for_method)
+        monkeypatch.setattr("kagan.core.api_tasks._REVIEW_GUARDRAIL_TIMEOUT_SECONDS", 0.01)
+
+        with pytest.raises(ValueError, match="timed out"):
+            await api.request_review(task.id)
+
+    async def test_request_review_uses_owning_repo_guardrails_only(self, handle_env: tuple) -> None:
+        """Multi-repo guardrails should not block a task because of an unrelated repo."""
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Scoped Guardrail Task")
+        pr_mapping = {
+            "task_to_pr": {
+                task.id: {
+                    "pr_number": 7,
+                    "pr_url": "https://github.com/acme/repo-a/pull/7",
+                    "pr_state": "OPEN",
+                    "head_branch": "feature/scoped-guardrail",
+                    "base_branch": "main",
+                    "linked_at": "2026-01-01T00:00:00+00:00",
+                }
+            }
+        }
+        repo_a = SimpleNamespace(
+            id="repo-a",
+            path="/tmp/repo-a",
+            scripts={
+                GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-a"}),
+                GITHUB_TASK_PR_MAPPING_KEY: json.dumps(pr_mapping),
+            },
+        )
+        repo_b = SimpleNamespace(
+            id="repo-b",
+            path="/tmp/repo-b",
+            scripts={GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-b"})},
+        )
+        ctx.project_service.get_project_repos = AsyncMock(return_value=[repo_a, repo_b])
+
+        reviewed = await api.request_review(task.id)
+
+        assert reviewed is not None
+        assert reviewed.status == TaskStatus.REVIEW
+
+    async def test_request_review_fails_closed_when_guardrails_cannot_be_checked(
+        self,
+        handle_env: tuple,
+    ) -> None:
+        """Guardrail backend failures should block REVIEW transition with explicit error."""
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Guardrail Failure Task")
+        ctx.project_service.get_project_repos = AsyncMock(
+            side_effect=RuntimeError("db unavailable")
+        )
+
+        with pytest.raises(ValueError, match="failed to verify GitHub guardrails"):
+            await api.request_review(task.id)
+
+    async def test_request_review_skips_lease_check_when_repo_disables_enforcement(
+        self,
+        handle_env: tuple,
+    ) -> None:
+        """Lease guardrail checks must be skipped when repo opts out explicitly."""
+        _repo, api, ctx = handle_env
+        task = await api.create_task("Lease opt-out")
+        pr_mapping = {
+            "task_to_pr": {
+                task.id: {
+                    "pr_number": 7,
+                    "pr_url": "https://github.com/acme/repo-a/pull/7",
+                    "pr_state": "OPEN",
+                    "head_branch": "feature/lease-opt-out",
+                    "base_branch": "main",
+                    "linked_at": "2026-01-01T00:00:00+00:00",
+                }
+            }
+        }
+        issue_mapping = {
+            "issue_to_task": {"123": task.id},
+            "task_to_issue": {task.id: 123},
+        }
+        repo_a = SimpleNamespace(
+            id="repo-a",
+            path="/tmp/repo-a",
+            scripts={
+                GITHUB_CONNECTION_KEY: json.dumps({"owner": "acme", "repo": "repo-a"}),
+                GITHUB_TASK_PR_MAPPING_KEY: json.dumps(pr_mapping),
+                GITHUB_ISSUE_MAPPING_KEY: json.dumps(issue_mapping),
+                GITHUB_LEASE_ENFORCEMENT_KEY: "false",
+            },
+        )
+        ctx.project_service.get_project_repos = AsyncMock(return_value=[repo_a])
+
+        with patch(
+            "kagan.core.plugins.github.gh_adapter.resolve_gh_cli",
+            side_effect=RuntimeError("should not resolve gh when lease enforcement is disabled"),
+        ):
+            reviewed = await api.request_review(task.id)
+
+        assert reviewed is not None
+        assert reviewed.status == TaskStatus.REVIEW
 
     async def test_reject_task(self, handle_env: tuple) -> None:
         _repo, api, ctx = handle_env
@@ -371,8 +542,8 @@ class TestSettingsAndAudit:
     async def test_get_settings(self, handle_env: tuple) -> None:
         _repo, api, _ctx = handle_env
         settings = await api.get_settings()
-        assert "general.default_base_branch" in settings
-        assert settings["general.default_base_branch"] == "main"
+        assert "general.default_base_branch" not in settings
+        assert settings["general.worktree_base_ref_strategy"] == "remote"
 
     async def test_update_settings(self, handle_env: tuple) -> None:
         _repo, api, _ctx = handle_env
@@ -381,6 +552,27 @@ class TestSettingsAndAudit:
         assert updates["general.auto_review"] is True
         settings = await api.get_settings()
         assert settings["general.auto_review"] is True
+
+    async def test_update_settings_worktree_base_ref_strategy(self, handle_env: tuple) -> None:
+        _repo, api, _ctx = handle_env
+        success, _msg, updates = await api.update_settings(
+            {"general.worktree_base_ref_strategy": "local_if_ahead"}
+        )
+        assert success is True
+        assert updates["general.worktree_base_ref_strategy"] == "local_if_ahead"
+        settings = await api.get_settings()
+        assert settings["general.worktree_base_ref_strategy"] == "local_if_ahead"
+
+    async def test_update_settings_rejects_invalid_worktree_base_ref_strategy(
+        self,
+        handle_env: tuple,
+    ) -> None:
+        _repo, api, _ctx = handle_env
+        success, message, _updates = await api.update_settings(
+            {"general.worktree_base_ref_strategy": "invalid"}
+        )
+        assert success is False
+        assert "must be one of" in message
 
     async def test_update_settings_empty(self, handle_env: tuple) -> None:
         _repo, api, _ctx = handle_env

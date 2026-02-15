@@ -55,7 +55,14 @@ async def test_tui_attaches_to_discovered_core_endpoint(
         address=str(socket_path),
         token=server.token,
     )
-    monkeypatch.setattr("kagan.core.ipc.discovery.discover_core_endpoint", lambda: endpoint)
+    monkeypatch.setattr(
+        "kagan.core.ipc.discovery.discover_core_endpoint",
+        lambda *args, **kwargs: endpoint,
+    )
+    monkeypatch.setattr(
+        "kagan.core.launcher.discover_core_endpoint",
+        lambda *args, **kwargs: endpoint,
+    )
 
     app = KaganApp(
         db_path=e2e_project.db,

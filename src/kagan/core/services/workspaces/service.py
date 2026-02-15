@@ -34,6 +34,20 @@ class RepoWorkspaceInput:
     target_branch: str
 
 
+@dataclass
+class JanitorResult:
+    """Result of janitor cleanup operations."""
+
+    worktrees_pruned: int
+    branches_deleted: list[str]
+    repos_processed: list[str]
+
+    @property
+    def total_cleaned(self) -> int:
+        """Total items cleaned up."""
+        return self.worktrees_pruned + len(self.branches_deleted)
+
+
 class WorkspaceService(Protocol):
     """Protocol boundary for workspace and worktree operations."""
 
@@ -74,7 +88,7 @@ class WorkspaceService(Protocol):
         repo_id: str | None = None,
     ) -> list[DbWorkspace]: ...
 
-    async def create(self, task_id: str, base_branch: str = "main") -> Path: ...
+    async def create(self, task_id: str, base_branch: str | None = None) -> Path: ...
 
     async def delete(self, task_id: str, *, delete_branch: bool = False) -> None: ...
 
@@ -95,6 +109,14 @@ class WorkspaceService(Protocol):
     ) -> tuple[bool, str]: ...
 
     async def cleanup_orphans(self, valid_task_ids: set[str]) -> list[str]: ...
+
+    async def run_janitor(
+        self,
+        valid_workspace_ids: set[str],
+        *,
+        prune_worktrees: bool = True,
+        gc_branches: bool = True,
+    ) -> JanitorResult: ...
 
     async def rebase_onto_base(
         self, task_id: str, base_branch: str = "main"
@@ -357,11 +379,101 @@ class WorkspaceServiceImpl(WorkspaceMergeOpsMixin):
 
         return cleaned
 
+    async def run_janitor(
+        self,
+        valid_workspace_ids: set[str],
+        *,
+        prune_worktrees: bool = True,
+        gc_branches: bool = True,
+    ) -> JanitorResult:
+        """Run janitor cleanup for stale worktrees and orphan kagan/* branches.
+
+        This performs two cleanup operations:
+
+        1. **Worktree pruning**: Runs `git worktree prune` on all project repos
+           to clean up stale worktree administrative files for worktrees that
+           no longer exist on disk.
+
+        2. **Branch GC**: Deletes local `kagan/*` branches that are no longer
+           associated with an active workspace. Only deletes branches that:
+           - Match the `kagan/*` pattern (managed branches)
+           - Are not currently checked out in any worktree
+           - Do not belong to an active workspace in valid_workspace_ids
+
+        Args:
+            valid_workspace_ids: Set of workspace IDs that are still active.
+                Branches matching these IDs will be preserved.
+            prune_worktrees: If True, run git worktree prune on all repos.
+            gc_branches: If True, delete orphaned kagan/* branches.
+
+        Returns:
+            JanitorResult with counts of cleaned items.
+        """
+        from kagan.core.adapters.db.schema import Repo
+
+        async with get_session(self._session_factory) as session:
+            result = await session.execute(select(Repo))
+            repos = list(result.scalars().all())
+
+        total_pruned = 0
+        deleted_branches: list[str] = []
+        processed_repos: list[str] = []
+
+        for repo in repos:
+            if not Path(repo.path).exists():
+                continue
+
+            processed_repos.append(repo.name)
+
+            if prune_worktrees:
+                pruned = await self._git.prune_worktrees(repo.path)
+                total_pruned += pruned
+
+            if gc_branches:
+                branches = await self._git.list_kagan_branches(repo.path)
+                for branch in branches:
+                    workspace_id = self._extract_workspace_id_from_branch(branch)
+                    if workspace_id and workspace_id in valid_workspace_ids:
+                        continue
+
+                    worktree = await self._git.get_worktree_for_branch(repo.path, branch)
+                    if worktree is not None:
+                        continue
+
+                    deleted = await self._git.delete_branch(repo.path, branch, force=False)
+                    if deleted:
+                        deleted_branches.append(f"{repo.name}:{branch}")
+
+        return JanitorResult(
+            worktrees_pruned=total_pruned,
+            branches_deleted=deleted_branches,
+            repos_processed=processed_repos,
+        )
+
+    def _extract_workspace_id_from_branch(self, branch_name: str) -> str | None:
+        """Extract workspace ID from a kagan branch name.
+
+        Branch naming conventions:
+        - kagan/{workspace_id} -> workspace_id
+        - kagan/merge-worktree-{repo_id} -> None (merge worktrees handled separately)
+
+        Returns None if the branch doesn't match the expected pattern.
+        """
+        if not branch_name.startswith("kagan/"):
+            return None
+
+        suffix = branch_name[6:]
+
+        if suffix.startswith("merge-worktree-"):
+            return None
+
+        return suffix if suffix else None
+
     # ------------------------------------------------------------------
     # Git operations
     # ------------------------------------------------------------------
 
-    async def create(self, task_id: str, base_branch: str = "main") -> Path:
+    async def create(self, task_id: str, base_branch: str | None = None) -> Path:
         """Create a workspace for the task and return primary worktree path."""
         task = await self._tasks.get_task(task_id)
         if task is None:
@@ -371,14 +483,19 @@ class WorkspaceServiceImpl(WorkspaceMergeOpsMixin):
         if not repos:
             raise ValueError(f"Project {task.project_id} has no repos")
 
-        repo_inputs = [
-            RepoWorkspaceInput(
-                repo_id=repo.id,
-                repo_path=repo.path,
-                target_branch=repo.default_branch or base_branch,
+        explicit_branch = (base_branch or "").strip()
+        repo_inputs: list[RepoWorkspaceInput] = []
+        for repo in repos:
+            target_branch = explicit_branch or (repo.default_branch or "").strip()
+            if not target_branch:
+                raise ValueError(f"Repository {repo.name} has no default branch configured")
+            repo_inputs.append(
+                RepoWorkspaceInput(
+                    repo_id=repo.id,
+                    repo_path=repo.path,
+                    target_branch=target_branch,
+                )
             )
-            for repo in repos
-        ]
         workspace_id = await self.provision(task_id, repo_inputs)
         return await self.get_agent_working_dir(workspace_id)
 

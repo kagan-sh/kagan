@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import re
 from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any
 
 import pyperclip
 from rich.markup import escape
@@ -17,8 +18,6 @@ from textual.widget import Widget
 
 if TYPE_CHECKING:
     from textual.app import App
-
-T = TypeVar("T", bound=Widget)
 
 # ---------------------------------------------------------------------------
 # Agent exit utilities
@@ -66,7 +65,7 @@ WAVE_INTERVAL_MS = 100
 # ---------------------------------------------------------------------------
 
 
-def safe_query_one(
+def safe_query_one[T: Widget](
     parent: Widget,
     selector: str,
     widget_class: type[T],
@@ -76,6 +75,58 @@ def safe_query_one(
     with suppress(NoMatches):
         return parent.query_one(selector, widget_class)
     return default
+
+
+# ---------------------------------------------------------------------------
+# Runtime/state access helpers
+# ---------------------------------------------------------------------------
+
+
+def state_attr(state: object | None, name: str, default: Any = None) -> Any:
+    """Read an attribute from either dict-backed or object-backed state."""
+    if state is None:
+        return default
+    if isinstance(state, dict):
+        return state.get(name, default)
+    return getattr(state, name, default)
+
+
+def state_bool(state: object | None, name: str) -> bool:
+    """Read a boolean-ish state attribute."""
+    return bool(state_attr(state, name, False))
+
+
+def state_tuple(state: object | None, name: str) -> tuple[str, ...]:
+    """Read a list/tuple state attribute as a normalized tuple of strings."""
+    value = state_attr(state, name, ())
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item) for item in value if str(item).strip())
+    return ()
+
+
+def state_int(state: object | None, name: str, default: int = 0) -> int:
+    """Read a numeric-ish state attribute as int with fallback."""
+    value = state_attr(state, name, default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def state_timestamp(state: object | None, name: str) -> float:
+    """Read a datetime-like state attribute as unix timestamp."""
+    value = state_attr(state, name)
+    if value is None:
+        return 0.0
+    if hasattr(value, "timestamp"):
+        try:
+            return float(value.timestamp())
+        except (TypeError, ValueError):
+            return 0.0
+    if isinstance(value, str):
+        with suppress(ValueError):
+            return datetime.fromisoformat(value).timestamp()
+    return 0.0
 
 
 # ---------------------------------------------------------------------------

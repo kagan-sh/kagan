@@ -84,15 +84,18 @@ async def _execute_start_agent(ctx: AppContext, params: dict[str, Any]) -> dict[
                 "Set task_type to AUTO before calling jobs.submit with "
                 f"action='{JobAction.START_AGENT.value}'."
             ),
-            "next_tool": "tasks_update",
-            "next_arguments": {"task_id": task_id, "task_type": TaskType.AUTO.value},
+            "next_tool": "task_patch",
+            "next_arguments": {
+                "task_id": task_id,
+                "transition": "set_task_type",
+                "set": {"task_type": TaskType.AUTO.value},
+            },
             "current_task_type": task.task_type.value,
         }
 
     started = await ctx.automation_service.spawn_for_task(task)
     runtime = _runtime_snapshot(ctx, task_id)
     runtime_is_running = bool(runtime.get("is_running"))
-    runtime_is_blocked = bool(runtime.get("is_blocked"))
     runtime_is_pending = bool(runtime.get("is_pending"))
 
     if runtime_is_running or ctx.automation_service.is_running(task_id):
@@ -101,17 +104,6 @@ async def _execute_start_agent(ctx: AppContext, params: dict[str, Any]) -> dict[
             "task_id": task_id,
             "message": "Agent running",
             "code": "STARTED",
-            "runtime": runtime,
-        }
-
-    if runtime_is_blocked:
-        return {
-            "success": True,
-            "task_id": task_id,
-            "message": runtime.get("blocked_reason")
-            or "Agent start is conflict-blocked and queued for auto-resume",
-            "code": "START_BLOCKED",
-            "hint": "Task will auto-resume when blocking tasks are no longer active.",
             "runtime": runtime,
         }
 
@@ -188,9 +180,9 @@ async def execute_job_action(
         "success": False,
         "message": f"Unsupported job action '{action}'",
         "code": "UNSUPPORTED_ACTION",
-        "hint": "Call jobs_list_actions to discover valid action names.",
-        "next_tool": "jobs_list_actions",
-        "next_arguments": {},
+        "hint": f"Use one of: {', '.join(sorted(SUPPORTED_JOB_ACTIONS))}",
+        "next_tool": "job_start",
+        "next_arguments": {"task_id": _task_id_from_params(params), "action": "start_agent"},
         "supported_actions": sorted(SUPPORTED_JOB_ACTIONS),
     }
 

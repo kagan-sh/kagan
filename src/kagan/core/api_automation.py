@@ -2,7 +2,7 @@
 
 Contains all automation/agent lifecycle, session management, job operations,
 execution queries, runtime state, workspace operations, merge operations,
-diff, planner, agent health, and service property accessors.
+diff, planner, and agent health.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from kagan.core.models.enums import TaskType
+from kagan.core.runtime_helpers import runtime_snapshot_for_task
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -18,9 +19,9 @@ if TYPE_CHECKING:
 
     from kagan.core.adapters.db.schema import Task
     from kagan.core.bootstrap import AppContext
-    from kagan.core.config import KaganConfig
     from kagan.core.services.jobs import JobEvent, JobRecord
     from kagan.core.services.merges import MergeResult, MergeStrategy
+    from kagan.core.services.queued_messages import QueuedMessage, QueueLane, QueueStatus
     from kagan.core.services.runtime import (
         AutoOutputReadiness,
         RuntimeContextState,
@@ -188,6 +189,61 @@ class AutomationApiMixin:
         """Start the automation service."""
         await self._ctx.automation_service.start()
 
+    async def queue_message(
+        self,
+        session_id: str,
+        content: str,
+        *,
+        lane: QueueLane = "implementation",
+        author: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> QueuedMessage:
+        """Queue a follow-up message for implementation/review/planner lanes."""
+        return await self._ctx.automation_service.queue_message(
+            session_id,
+            content,
+            lane=lane,
+            author=author,
+            metadata=metadata,
+        )
+
+    async def get_queue_status(
+        self,
+        session_id: str,
+        *,
+        lane: QueueLane = "implementation",
+    ) -> QueueStatus:
+        """Get queue status for a specific lane."""
+        return await self._ctx.automation_service.get_status(session_id, lane=lane)
+
+    async def get_queued_messages(
+        self,
+        session_id: str,
+        *,
+        lane: QueueLane = "implementation",
+    ) -> list[QueuedMessage]:
+        """List queued messages without consuming them."""
+        return await self._ctx.automation_service.get_queued(session_id, lane=lane)
+
+    async def take_queued_message(
+        self,
+        session_id: str,
+        *,
+        lane: QueueLane = "implementation",
+    ) -> QueuedMessage | None:
+        """Consume and return the next queued message payload for a lane."""
+        return await self._ctx.automation_service.take_queued(session_id, lane=lane)
+
+    async def remove_queued_message(
+        self,
+        session_id: str,
+        index: int,
+        *,
+        lane: QueueLane = "implementation",
+    ) -> bool:
+        """Remove a queued message by index from a lane."""
+        return await self._ctx.automation_service.remove_message(session_id, index, lane=lane)
+
     # ── Execution Operations ──────────────────────────────────────────
 
     async def get_execution_logs(self, execution_id: str) -> Any:
@@ -220,9 +276,23 @@ class AutomationApiMixin:
         """Return the set of currently running task IDs."""
         return self._ctx.runtime_service.running_tasks()
 
-    async def reconcile_running_tasks(self, task_ids: Sequence[str]) -> None:
-        """Synchronize runtime task projections with database state."""
-        await self._ctx.runtime_service.reconcile_running_tasks(task_ids)
+    async def reconcile_running_tasks(self, task_ids: Sequence[str]) -> list[dict[str, Any]]:
+        """Synchronize runtime task projections and return refreshed runtime snapshots."""
+        unique_task_ids = tuple(dict.fromkeys(task_ids))
+        if not unique_task_ids:
+            return []
+
+        await self._ctx.runtime_service.reconcile_running_tasks(unique_task_ids)
+        return [
+            {
+                "task_id": task_id,
+                "runtime": runtime_snapshot_for_task(
+                    task_id=task_id,
+                    runtime_service=self._ctx.runtime_service,
+                ),
+            }
+            for task_id in unique_task_ids
+        ]
 
     async def decide_startup(self, cwd: Path) -> Any:
         """Determine startup flow based on persisted runtime state and cwd."""
@@ -271,7 +341,10 @@ class AutomationApiMixin:
 
     async def get_all_diffs(self, workspace_id: str) -> Any:
         """Retrieve all diffs for a workspace during task review."""
-        return await self._ctx.diff_service.get_all_diffs(workspace_id)
+        service = getattr(self._ctx, "diff_service", None)
+        if service is None:
+            raise RuntimeError("Diff service unavailable")
+        return await service.get_all_diffs(workspace_id)
 
     # ── Planner ───────────────────────────────────────────────────────
 
@@ -288,6 +361,44 @@ class AutomationApiMixin:
         if repo is None:
             return None
         return await repo.get_latest(task_id)
+
+    async def save_planner_draft(
+        self,
+        *,
+        project_id: str,
+        repo_id: str | None = None,
+        tasks_json: list[dict[str, Any]],
+        todos_json: list[dict[str, Any]] | None = None,
+    ) -> Any | None:
+        """Persist a planner draft proposal."""
+        repo = getattr(self._ctx, "planner_repository", None)
+        if repo is None:
+            return None
+        return await repo.save_proposal(
+            project_id=project_id,
+            repo_id=repo_id,
+            tasks_json=tasks_json,
+            todos_json=todos_json,
+        )
+
+    async def list_pending_planner_drafts(
+        self,
+        project_id: str,
+        *,
+        repo_id: str | None = None,
+    ) -> list[Any]:
+        """List pending planner draft proposals for a project/repo scope."""
+        repo = getattr(self._ctx, "planner_repository", None)
+        if repo is None:
+            return []
+        return await repo.list_pending(project_id, repo_id=repo_id)
+
+    async def update_planner_draft_status(self, proposal_id: str, status: Any) -> Any | None:
+        """Update planner draft status (approved/rejected)."""
+        repo = getattr(self._ctx, "planner_repository", None)
+        if repo is None:
+            return None
+        return await repo.update_status(proposal_id, status)
 
     # ── Merge Operations ────────────────────────────────────────────────
 
@@ -355,13 +466,51 @@ class AutomationApiMixin:
         """List workspaces, optionally filtered by task."""
         return await self._ctx.workspace_service.list_workspaces(task_id=task_id)
 
+    async def get_workspace_repos(self, workspace_id: str) -> list[dict[str, Any]]:
+        """List repository records for a workspace."""
+        return await self._ctx.workspace_service.get_workspace_repos(workspace_id)
+
     async def cleanup_orphan_workspaces(self, valid_task_ids: set[str]) -> list[str]:
         """Clean up workspaces whose tasks no longer exist."""
         return await self._ctx.workspace_service.cleanup_orphans(valid_task_ids)
 
+    async def run_workspace_janitor(
+        self,
+        valid_workspace_ids: set[str],
+        *,
+        prune_worktrees: bool = True,
+        gc_branches: bool = True,
+    ) -> Any:
+        """Run janitor cleanup for stale worktrees and orphan kagan/* branches.
+
+        This performs two cleanup operations:
+        1. Worktree pruning: Runs `git worktree prune` on all project repos.
+        2. Branch GC: Deletes orphaned `kagan/*` branches not in valid_workspace_ids.
+
+        Returns:
+            JanitorResult with worktrees_pruned, branches_deleted, repos_processed.
+        """
+        return await self._ctx.workspace_service.run_janitor(
+            valid_workspace_ids,
+            prune_worktrees=prune_worktrees,
+            gc_branches=gc_branches,
+        )
+
     async def get_workspace_diff(self, task_id: str, *, base_branch: str) -> str:
         """Get the diff for a task's workspace against a base branch."""
         return await self._ctx.workspace_service.get_diff(task_id, base_branch)
+
+    async def get_workspace_commit_log(self, task_id: str, *, base_branch: str) -> list[str]:
+        """Get commit log for a task workspace against a base branch."""
+        return await self._ctx.workspace_service.get_commit_log(task_id, base_branch)
+
+    async def get_workspace_diff_stats(self, task_id: str, *, base_branch: str) -> str:
+        """Get summarized diff stats for a task workspace against a base branch."""
+        return await self._ctx.workspace_service.get_diff_stats(task_id, base_branch)
+
+    async def get_repo_diff(self, workspace_id: str, repo_id: str) -> Any:
+        """Get diff details for one repository in a workspace."""
+        return await self._ctx.diff_service.get_repo_diff(workspace_id, repo_id)
 
     async def rebase_workspace(self, task_id: str, base_branch: str) -> tuple[bool, str, list[str]]:
         """Rebase a task's workspace onto a base branch."""
@@ -370,33 +519,3 @@ class AutomationApiMixin:
     async def abort_workspace_rebase(self, task_id: str) -> None:
         """Abort an in-progress rebase for a task's workspace."""
         await self._ctx.workspace_service.abort_rebase(task_id)
-
-    # ── Special Bootstrap & Accessors ─────────────────────────────────
-
-    def bootstrap_session_service(self, project_root: Path, config: KaganConfig) -> None:
-        """Bootstrap the session service with runtime dependencies."""
-        from kagan.core.services.sessions import SessionServiceImpl
-
-        self._ctx.session_service = SessionServiceImpl(
-            project_root,
-            self._ctx.task_service,
-            self._ctx.workspace_service,
-            config,
-        )
-
-    # ── Service Property Accessors ────────────────────────────────────
-
-    @property
-    def workspace_service(self) -> Any:
-        """Direct access to the workspace service for widget constructors."""
-        return self._ctx.workspace_service
-
-    @property
-    def diff_service(self) -> Any:
-        """Direct access to the diff service, or None if unavailable."""
-        return getattr(self._ctx, "diff_service", None)
-
-    @property
-    def execution_repo(self) -> Any:
-        """Direct access to the execution repository."""
-        return self._ctx.execution_service

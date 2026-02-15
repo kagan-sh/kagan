@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import OperationalError
 from textual.css.query import NoMatches
@@ -19,6 +19,7 @@ from kagan.core.constants import (
 )
 from kagan.core.models.enums import CardIndicator, TaskStatus, TaskType
 from kagan.tui.ui.screens.kanban.hints import build_kanban_hints
+from kagan.tui.ui.utils import state_attr, state_timestamp
 from kagan.tui.ui.widgets.card import TaskCard
 from kagan.tui.ui.widgets.column import KanbanColumn
 from kagan.tui.ui.widgets.keybinding_hint import KanbanHintBar
@@ -177,6 +178,19 @@ class KanbanBoardController:
     def __init__(self, screen: KanbanScreen) -> None:
         self.screen = screen
 
+    @staticmethod
+    def _runtime_attr(runtime_view: object | None, name: str, default: Any = None) -> Any:
+        return state_attr(runtime_view, name, default)
+
+    @classmethod
+    def _runtime_bool(cls, runtime_view: object | None, name: str) -> bool:
+        return bool(cls._runtime_attr(runtime_view, name, False))
+
+    @classmethod
+    def _runtime_timestamp(cls, runtime_view: object | None, name: str) -> float:
+        del cls
+        return state_timestamp(runtime_view, name)
+
     def check_agent_health(self) -> None:
         """Check agent health."""
         if not self.screen.ctx.api.is_agent_available():
@@ -286,14 +300,14 @@ class KanbanBoardController:
             view = api.get_runtime_view(tid)
             indicators[tid] = (
                 CardIndicator.REVIEWING
-                if view is not None and view.is_reviewing
+                if self._runtime_bool(view, "is_reviewing")
                 else CardIndicator.RUNNING
             )
         for task in self.screen._tasks:
             if task.id in indicators:
                 continue
             runtime = api.get_runtime_view(task.id)
-            if runtime is not None and runtime.is_blocked:
+            if self._runtime_bool(runtime, "is_blocked"):
                 indicators[task.id] = CardIndicator.BLOCKED
                 continue
             if task.id in self.screen._merge_failed_tasks:
@@ -334,12 +348,10 @@ class KanbanBoardController:
             if task.status is not TaskStatus.BACKLOG or task.task_type is not TaskType.AUTO:
                 continue
             runtime = self.screen.ctx.api.get_runtime_view(task.id)
-            if runtime is None or not runtime.is_blocked:
+            if not self._runtime_bool(runtime, "is_blocked"):
                 continue
             blocked_ids.add(task.id)
-            blocked_timestamps[task.id] = (
-                runtime.blocked_at.timestamp() if runtime.blocked_at is not None else 0.0
-            )
+            blocked_timestamps[task.id] = self._runtime_timestamp(runtime, "blocked_at")
         return blocked_ids, blocked_timestamps
 
     def _build_refresh_model(self, new_tasks: list[Task]) -> BoardRefreshModel:
@@ -471,15 +483,29 @@ class KanbanBoardController:
         if isinstance(focused, TaskCard) and focused.task_model:
             focused_task_id = focused.task_model.id
 
+        # Reconcile BEFORE list_tasks so runtime snapshots are fresh
+        prev_auto_ids = [t.id for t in self.screen._tasks if t.task_type == TaskType.AUTO]
+        if prev_auto_ids:
+            try:
+                with suppress(ConnectionError, RepositoryClosing, OperationalError):
+                    await self.screen.ctx.api.reconcile_running_tasks(prev_auto_ids)
+            except ValueError as exc:
+                # aiosqlite can raise ValueError("Connection closed") during shutdown/cancellation.
+                if str(exc) != "Connection closed":
+                    raise
+
         try:
             new_tasks = await self.screen.ctx.api.list_tasks(
                 project_id=self.screen.ctx.active_project_id
             )
-        except (RepositoryClosing, OperationalError):
+        except (ConnectionError, RepositoryClosing, OperationalError):
+            return
+        except ValueError as exc:
+            # aiosqlite can raise ValueError("Connection closed") during shutdown/cancellation.
+            if str(exc) != "Connection closed":
+                raise
             return
 
-        auto_task_ids = [task.id for task in new_tasks if task.task_type == TaskType.AUTO]
-        await self.screen.ctx.api.reconcile_running_tasks(auto_task_ids)
         model = self._build_refresh_model(new_tasks)
         self._apply_refresh_model(model, focused_task_id=focused_task_id)
         self.sync_agent_states()
@@ -543,6 +569,7 @@ class KanbanBoardController:
             self.refresh_and_sync(),
             group="kanban-refresh",
             exclusive=True,
+            exit_on_error=False,
         )
 
     def update_review_queue_hint(self) -> None:
@@ -569,6 +596,9 @@ class KanbanBoardController:
         if not card or not card.task_model:
             hints = build_kanban_hints(None, None)
         else:
-            hints = build_kanban_hints(card.task_model.status, card.task_model.task_type)
+            hints = build_kanban_hints(
+                card.task_model.status,
+                card.task_model.task_type,
+            )
 
         hint_bar.show_kanban_hints(hints.navigation, hints.actions, hints.global_hints)

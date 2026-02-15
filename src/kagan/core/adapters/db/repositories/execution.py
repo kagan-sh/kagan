@@ -232,9 +232,10 @@ class ExecutionRepository:
             return result.scalars().first()
 
     async def list_executions_for_task(
-        self, task_id: str, *, limit: int = 5
+        self, task_id: str, *, limit: int = 5, offset: int = 0
     ) -> list[ExecutionProcess]:
         """Return most recent executions for a task."""
+        offset = max(0, offset)
         async with self._get_session() as session:
             result = await session.execute(
                 select(ExecutionProcess)
@@ -242,6 +243,7 @@ class ExecutionRepository:
                 .join(Workspace, col(Session.workspace_id) == col(Workspace.id))
                 .where(Workspace.task_id == task_id)
                 .order_by(col(ExecutionProcess.created_at).desc())
+                .offset(offset)
                 .limit(limit)
             )
             return list(result.scalars().all())

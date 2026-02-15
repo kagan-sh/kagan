@@ -39,10 +39,16 @@ type PairTerminalBackendLiteral = Literal[
     "vscode",
     "cursor",
 ]
+type WorktreeBaseRefStrategyLiteral = Literal[
+    "remote",
+    "local_if_ahead",
+    "local",
+]
 
 _OS_MAP = {"Linux": "linux", "Darwin": "macos", "Windows": "windows"}
 CURRENT_OS: str = _OS_MAP.get(platform.system(), "linux")
 PAIR_TERMINAL_BACKEND_VALUES = frozenset({"tmux", "vscode", "cursor"})
+WORKTREE_BASE_REF_STRATEGY_VALUES = frozenset({"remote", "local_if_ahead", "local"})
 
 
 def _default_pair_terminal_backend() -> PairTerminalBackendLiteral:
@@ -81,7 +87,10 @@ class GeneralConfig(BaseModel):
         default="kagan",
         description="MCP server name for tool registration and config entries",
     )
-    default_base_branch: str = Field(default="main")
+    worktree_base_ref_strategy: WorktreeBaseRefStrategyLiteral = Field(
+        default="remote",
+        description=("Worktree base ref preference: remote (default), local_if_ahead, or local"),
+    )
     auto_review: bool = Field(default=True, description="Run AI review on task completion")
     auto_approve: bool = Field(
         default=False,
@@ -131,6 +140,25 @@ class GeneralConfig(BaseModel):
         default="auto",
         description="IPC transport preference: auto|socket|tcp",
     )
+    tasks_wait_default_timeout_seconds: int = Field(
+        default=1800,
+        description="Default timeout in seconds for tasks_wait long-poll (30 minutes)",
+    )
+    tasks_wait_max_timeout_seconds: int = Field(
+        default=3600,
+        description="Maximum allowed timeout in seconds for tasks_wait long-poll (60 minutes)",
+    )
+
+    @field_validator("worktree_base_ref_strategy", mode="before")
+    @classmethod
+    def validate_worktree_base_ref_strategy(cls, value: object) -> str:
+        """Gracefully coerce invalid base-ref strategy values to remote."""
+        match value:
+            case str() as strategy if strategy in WORKTREE_BASE_REF_STRATEGY_VALUES:
+                return strategy
+            case _:
+                pass
+        return "remote"
 
     @field_validator("default_pair_terminal_backend", mode="before")
     @classmethod
@@ -155,6 +183,23 @@ class GeneralConfig(BaseModel):
                 pass
         return "auto"
 
+    @model_validator(mode="after")
+    def validate_tasks_wait_bounds(self) -> GeneralConfig:
+        """Ensure task wait timeouts are positive and ordered."""
+        if self.tasks_wait_default_timeout_seconds <= 0:
+            msg = "general.tasks_wait_default_timeout_seconds must be > 0"
+            raise ValueError(msg)
+        if self.tasks_wait_max_timeout_seconds <= 0:
+            msg = "general.tasks_wait_max_timeout_seconds must be > 0"
+            raise ValueError(msg)
+        if self.tasks_wait_max_timeout_seconds < self.tasks_wait_default_timeout_seconds:
+            msg = (
+                "general.tasks_wait_max_timeout_seconds must be >= "
+                "general.tasks_wait_default_timeout_seconds"
+            )
+            raise ValueError(msg)
+        return self
+
 
 class UIConfig(BaseModel):
     """UI-related user preferences."""
@@ -162,6 +207,13 @@ class UIConfig(BaseModel):
     skip_pair_instructions: bool = Field(
         default=False,
         description="Skip pair mode instructions popup when opening PAIR sessions",
+    )
+    tui_plugin_ui_allowlist: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Allowlisted plugin IDs that may contribute declarative UI definitions to the TUI. "
+            "Empty list means all registered plugins are allowed."
+        ),
     )
 
     @model_validator(mode="before")
@@ -199,6 +251,18 @@ class AgentConfig(BaseModel):
     model_env_var: str = Field(default="", description="Environment variable for model selection")
 
 
+class PluginsConfig(BaseModel):
+    """Plugin discovery configuration."""
+
+    discovery: list[str] = Field(
+        default_factory=lambda: [
+            "kagan.core.plugins.github.plugin:GitHubPlugin",
+            "kagan.core.plugins.examples.noop:NoOpExamplePlugin",
+        ],
+        description="Plugin entrypoints to discover and register (module:Class format).",
+    )
+
+
 class KaganConfig(BaseModel):
     """Root configuration model."""
 
@@ -206,6 +270,7 @@ class KaganConfig(BaseModel):
     agents: dict[str, AgentConfig] = Field(default_factory=dict)
     refinement: RefinementConfig = Field(default_factory=RefinementConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    plugins: PluginsConfig = Field(default_factory=PluginsConfig)
 
     @classmethod
     def load(cls, config_path: Path | None = None) -> KaganConfig:
@@ -264,6 +329,12 @@ class KaganConfig(BaseModel):
             if value is not None:
                 ui_table[key] = value
         doc["ui"] = ui_table
+
+        plugins_table = tomlkit.table()
+        for key, value in self.plugins.model_dump().items():
+            if value is not None:
+                plugins_table[key] = value
+        doc["plugins"] = plugins_table
 
         content = tomlkit.dumps(doc)
         await asyncio.to_thread(atomic_write, path, content)

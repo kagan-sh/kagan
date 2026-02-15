@@ -235,6 +235,7 @@ async def snapshot_project(tmp_path: Path) -> SimpleNamespace:
     repo_repo = RepoRepository(task_repo._session_factory)
     repo, _ = await repo_repo.get_or_create(project, default_branch="main")
     if repo.id:
+        await repo_repo.update_default_branch(repo.id, "main", mark_configured=True)
         await repo_repo.add_to_project(project_id, repo.id, is_primary=True)
 
     await task_repo.close()

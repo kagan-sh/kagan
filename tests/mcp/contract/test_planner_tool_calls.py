@@ -55,10 +55,10 @@ def _payload_strategy() -> st.SearchStrategy[dict[str, Any]]:
     payload=_payload_strategy(),
     prefix=st.sampled_from(
         [
-            "propose_plan: ",
-            "tool=propose_plan: ",
-            "  propose_plan: ",
-            "PROPOSE_PLAN: ",
+            "plan_submit: ",
+            "tool=plan_submit: ",
+            "  plan_submit: ",
+            "PLAN_SUBMIT: ",
         ]
     ),
     suffix=st.sampled_from(["", " ", "\n", " (approved)"]),
@@ -87,7 +87,7 @@ def test_parse_proposed_plan_from_title_payload(
 
 @settings(max_examples=25)
 @given(
-    prefix=st.sampled_from(["propose_plan: ", "tool=propose_plan: ", "PROPOSE_PLAN: "]),
+    prefix=st.sampled_from(["plan_submit: ", "tool=plan_submit: ", "PLAN_SUBMIT: "]),
     suffix=st.sampled_from(["", " ", " (bad)"]),
     bad_tasks=st.one_of(
         st.just([]),
@@ -124,7 +124,7 @@ def test_parse_proposed_plan_invalid_payload_errors(
 def test_parse_proposed_plan_unwraps_nested_payloads(wrapped: dict[str, object]) -> None:
     tool_calls = {
         "tc-plan-title": {
-            "title": f"propose_plan: {json.dumps(wrapped)}",
+            "title": f"plan_submit: {json.dumps(wrapped)}",
             "status": "completed",
         }
     }
@@ -149,12 +149,12 @@ def test_parse_proposed_plan_prefers_richer_non_title_payload() -> None:
     }
     tool_calls = {
         "tc-preview": {
-            "name": "propose_plan",
-            "title": f"propose_plan: {json.dumps(preview_payload)}",
+            "name": "plan_submit",
+            "title": f"plan_submit: {json.dumps(preview_payload)}",
             "status": "completed",
         },
         "tc-full": {
-            "name": "propose_plan",
+            "name": "plan_submit",
             "status": "in_progress",
             "rawInput": json.dumps({"arguments": full_payload}),
         },

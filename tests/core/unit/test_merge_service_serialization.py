@@ -280,3 +280,54 @@ async def test_merge_task_fails_when_runtime_does_not_quiesce(monkeypatch) -> No
     assert success is False
     assert message.startswith("Merge blocked: Task runtime is still active")
     assert events == ["lock_enter", "stop_task", "lock_exit"]
+
+
+async def test_merge_repo_pushes_worktree_branch_with_force(monkeypatch) -> None:
+    """Verify merge_repo passes force=True to git push (worktree branch after rebase)."""
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace as NS
+    from unittest.mock import MagicMock
+
+    from kagan.core.adapters.git.operations import MergeOperationResult
+    from kagan.core.services.merges import MergeServiceImpl
+
+    git_mock = AsyncMock()
+    git_mock.has_uncommitted_changes = AsyncMock(return_value=False)
+    git_mock.push = AsyncMock()
+    git_mock.merge_squash = AsyncMock(
+        return_value=MergeOperationResult(success=True, message="ok", commit_sha="abc123")
+    )
+    events_mock = AsyncMock()
+    events_mock.publish = AsyncMock()
+
+    workspace_repo = NS(worktree_path="/tmp/wt", repo_id="repo-1", target_branch="main")
+    repo = NS(path="/tmp/repo", name="repo-1", id="repo-1")
+    workspace = NS(branch_name="kagan/task-1", task_id="task-1", id="ws-1")
+
+    mock_row = MagicMock()
+    mock_row.first.return_value = (workspace_repo, repo, workspace)
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_row)
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_session_factory():
+        yield mock_session
+
+    service = MergeServiceImpl(
+        task_service=cast("TaskService", NS(update_fields=AsyncMock())),
+        worktrees=cast("WorkspaceService", NS()),
+        sessions=cast("SessionService", NS()),
+        automation=cast("AutomationService", NS()),
+        config=KaganConfig(),
+        session_factory=fake_session_factory,
+        event_bus=events_mock,
+        git_adapter=git_mock,
+    )
+
+    result = await service.merge_repo("ws-1", "repo-1", commit_message="test merge")
+
+    assert result.success is True
+    git_mock.push.assert_awaited_once_with("/tmp/wt", "kagan/task-1", force=True)

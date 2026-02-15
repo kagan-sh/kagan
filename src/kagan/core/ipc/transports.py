@@ -16,6 +16,7 @@ import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from kagan.core.ipc.constants import STREAM_LIMIT_BYTES
 from kagan.core.paths import get_core_runtime_dir
 
 if TYPE_CHECKING:
@@ -91,7 +92,11 @@ class UnixSocketTransport:
         if parent:
             os.makedirs(parent, exist_ok=True)
 
-        server = await asyncio.start_unix_server(handler, path=self._path)
+        server = await asyncio.start_unix_server(
+            handler,
+            path=self._path,
+            limit=STREAM_LIMIT_BYTES,
+        )
 
         if sys.platform != "win32":
             os.chmod(self._path, 0o600)
@@ -118,7 +123,10 @@ class UnixSocketTransport:
         port: int | None = None,
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         """Open a connection to the Unix socket at *address*."""
-        reader, writer = await asyncio.open_unix_connection(address)
+        reader, writer = await asyncio.open_unix_connection(
+            address,
+            limit=STREAM_LIMIT_BYTES,
+        )
         logger.debug("Connected to Unix socket at %s", address)
         return reader, writer
 
@@ -195,6 +203,7 @@ class TCPLoopbackTransport:
             _handshake_wrapper,
             host=self._host,
             port=0,  # OS picks a free port
+            limit=STREAM_LIMIT_BYTES,
         )
 
         addrs = server.sockets[0].getsockname() if server.sockets else (self._host, 0)
@@ -238,7 +247,11 @@ class TCPLoopbackTransport:
             msg = "TCP transport requires a handshake token"
             raise ValueError(msg)
 
-        reader, writer = await asyncio.open_connection(address, port)
+        reader, writer = await asyncio.open_connection(
+            address,
+            port,
+            limit=STREAM_LIMIT_BYTES,
+        )
         writer.write((handshake_token + "\n").encode("utf-8"))
         await writer.drain()
 

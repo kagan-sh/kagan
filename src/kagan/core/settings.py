@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from kagan.core.builtin_agents import BUILTIN_AGENTS
+from kagan.core.config import WORKTREE_BASE_REF_STRATEGY_VALUES
 from kagan.core.models.enums import VALID_PAIR_BACKENDS
 
 if TYPE_CHECKING:
@@ -17,7 +19,7 @@ EXPOSED_SETTINGS: tuple[str, ...] = (
     "general.auto_approve",
     "general.require_review_approval",
     "general.serialize_merges",
-    "general.default_base_branch",
+    "general.worktree_base_ref_strategy",
     "general.max_concurrent_agents",
     "general.default_worker_agent",
     "general.default_pair_terminal_backend",
@@ -27,7 +29,10 @@ EXPOSED_SETTINGS: tuple[str, ...] = (
     "general.default_model_gemini",
     "general.default_model_kimi",
     "general.default_model_copilot",
+    "general.tasks_wait_default_timeout_seconds",
+    "general.tasks_wait_max_timeout_seconds",
     "ui.skip_pair_instructions",
+    "ui.tui_plugin_ui_allowlist",
 )
 
 _BOOL_FIELDS: set[str] = {
@@ -36,6 +41,11 @@ _BOOL_FIELDS: set[str] = {
     "general.require_review_approval",
     "general.serialize_merges",
     "ui.skip_pair_instructions",
+}
+_PLUGIN_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{2,63}$")
+_TIMEOUT_SECONDS_FIELDS: set[str] = {
+    "general.tasks_wait_default_timeout_seconds",
+    "general.tasks_wait_max_timeout_seconds",
 }
 _OPTIONAL_MODEL_FIELDS: set[str] = {
     "general.default_model_claude",
@@ -55,7 +65,7 @@ def exposed_settings_snapshot(config: KaganConfig) -> dict[str, object]:
         "general.auto_approve": config.general.auto_approve,
         "general.require_review_approval": config.general.require_review_approval,
         "general.serialize_merges": config.general.serialize_merges,
-        "general.default_base_branch": config.general.default_base_branch,
+        "general.worktree_base_ref_strategy": config.general.worktree_base_ref_strategy,
         "general.max_concurrent_agents": config.general.max_concurrent_agents,
         "general.default_worker_agent": config.general.default_worker_agent,
         "general.default_pair_terminal_backend": config.general.default_pair_terminal_backend,
@@ -65,7 +75,12 @@ def exposed_settings_snapshot(config: KaganConfig) -> dict[str, object]:
         "general.default_model_gemini": config.general.default_model_gemini,
         "general.default_model_kimi": config.general.default_model_kimi,
         "general.default_model_copilot": config.general.default_model_copilot,
+        "general.tasks_wait_default_timeout_seconds": (
+            config.general.tasks_wait_default_timeout_seconds
+        ),
+        "general.tasks_wait_max_timeout_seconds": (config.general.tasks_wait_max_timeout_seconds),
         "ui.skip_pair_instructions": config.ui.skip_pair_instructions,
+        "ui.tui_plugin_ui_allowlist": list(config.ui.tui_plugin_ui_allowlist),
     }
 
 
@@ -88,14 +103,25 @@ def _normalize_value(key: str, value: object) -> object:
             return value
         raise ValueError(f"{key} must be a boolean")
 
-    if key == "general.default_base_branch":
-        return _normalize_non_empty_string(key, value)
+    if key == "general.worktree_base_ref_strategy":
+        strategy = _normalize_non_empty_string(key, value)
+        if strategy not in WORKTREE_BASE_REF_STRATEGY_VALUES:
+            options = ", ".join(sorted(WORKTREE_BASE_REF_STRATEGY_VALUES))
+            raise ValueError(f"general.worktree_base_ref_strategy must be one of: {options}")
+        return strategy
 
     if key == "general.max_concurrent_agents":
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError("general.max_concurrent_agents must be an integer")
         if value < 1 or value > 10:
             raise ValueError("general.max_concurrent_agents must be between 1 and 10")
+        return value
+
+    if key in _TIMEOUT_SECONDS_FIELDS:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"{key} must be a positive integer")
+        if value < 1 or value > 3600:
+            raise ValueError(f"{key} must be between 1 and 3600")
         return value
 
     if key == "general.default_worker_agent":
@@ -119,6 +145,24 @@ def _normalize_value(key: str, value: object) -> object:
             cleaned = value.strip()
             return cleaned or None
         raise ValueError(f"{key} must be a string or null")
+
+    if key == "ui.tui_plugin_ui_allowlist":
+        if not isinstance(value, list):
+            raise ValueError("ui.tui_plugin_ui_allowlist must be a list of plugin IDs")
+        normalized: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("ui.tui_plugin_ui_allowlist must contain only strings")
+            cleaned = item.strip()
+            if not cleaned:
+                continue
+            if not _PLUGIN_ID_PATTERN.fullmatch(cleaned):
+                raise ValueError(
+                    f"ui.tui_plugin_ui_allowlist items must match: {_PLUGIN_ID_PATTERN.pattern}"
+                )
+            if cleaned not in normalized:
+                normalized.append(cleaned)
+        return normalized
 
     raise ValueError(f"Unsupported settings field: {key}")
 

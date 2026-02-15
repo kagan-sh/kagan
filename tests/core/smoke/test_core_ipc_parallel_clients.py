@@ -228,3 +228,30 @@ async def test_client_rejects_mismatched_request_id(short_tmp) -> None:
     finally:
         await client.close()
         await server.stop()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix sockets unavailable on Windows")
+async def test_client_handles_large_response_line(short_tmp) -> None:
+    """Client reads large single-line JSON responses without framing errors."""
+    sock = str(short_tmp / "t.sock")
+    transport = UnixSocketTransport(path=sock)
+    large_payload = "x" * (128 * 1024)
+
+    async def large_handler(req: CoreRequest) -> CoreResponse:
+        return CoreResponse.success(req.request_id, result={"payload": large_payload})
+
+    server = IPCServer(handler=large_handler, transport=transport)
+    await server.start()
+
+    ep = _endpoint(sock, server.token)
+    client = IPCClient(ep, transport=UnixSocketTransport(path=sock))
+    await client.connect()
+
+    try:
+        resp = await client.request(session_id="s1", capability="tasks", method="list")
+        assert resp.ok
+        assert resp.result is not None
+        assert resp.result["payload"] == large_payload
+    finally:
+        await client.close()
+        await server.stop()

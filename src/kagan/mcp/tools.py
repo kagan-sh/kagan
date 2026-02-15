@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from contextlib import suppress
 from dataclasses import dataclass
@@ -15,13 +16,46 @@ logger = logging.getLogger(__name__)
 _AUTH_FAILED_CODE = "AUTH_FAILED"
 _SUMMARY_TEXT_LIMIT = 8_000
 _FULL_TEXT_LIMIT = 32_000
+_SUMMARY_DESCRIPTION_LIMIT = 2_000
+_FULL_DESCRIPTION_LIMIT = 8_000
+_SUMMARY_ACCEPTANCE_ITEM_LIMIT = 400
+_FULL_ACCEPTANCE_ITEM_LIMIT = 1_000
+_SUMMARY_ACCEPTANCE_ITEMS = 20
+_FULL_ACCEPTANCE_ITEMS = 50
 _SUMMARY_LOG_ENTRY_LIMIT = 2_500
 _FULL_LOG_ENTRY_LIMIT = 10_000
 _SUMMARY_LOG_ENTRIES = 3
 _FULL_LOG_ENTRIES = 10
 _SUMMARY_LOG_BUDGET = 7_500
 _FULL_LOG_BUDGET = 24_000
+_SUMMARY_RESPONSE_BUDGET = 12_000
+_FULL_RESPONSE_BUDGET = 24_000
+_SUMMARY_TITLE_LIMIT = 400
+_FULL_TITLE_LIMIT = 1_000
+_SUMMARY_SCRATCHPAD_FETCH_LIMIT = 6_000
+_FULL_SCRATCHPAD_FETCH_LIMIT = 14_000
+_SUMMARY_LOG_FETCH_ENTRY_LIMIT = 2_000
+_FULL_LOG_FETCH_ENTRY_LIMIT = 6_000
+_SUMMARY_LOG_FETCH_BUDGET = 6_000
+_FULL_LOG_FETCH_BUDGET = 18_000
 _QUERY_UNAVAILABLE_CODES = {"UNKNOWN_METHOD", "UNAUTHORIZED"}
+_TASK_WAIT_IPC_DEFAULT_TIMEOUT_SECONDS = 3600.0
+_TASK_WAIT_IPC_TIMEOUT_BUFFER_SECONDS = 5.0
+_LOG_ENTRY_OVERHEAD_CHARS = 256
+_COMPACT_ACCEPTANCE_ITEMS_FULL = 20
+_COMPACT_ACCEPTANCE_ITEMS_SUMMARY = 8
+_COMPACT_ACCEPTANCE_ITEM_LIMIT_FULL = 320
+_COMPACT_ACCEPTANCE_ITEM_LIMIT_SUMMARY = 160
+_COMPACT_RUNTIME_REASON_LIMIT_FULL = 600
+_COMPACT_RUNTIME_REASON_LIMIT_SUMMARY = 240
+_COMPACT_RUNTIME_HINT_LIMIT_FULL = 240
+_COMPACT_RUNTIME_HINT_LIMIT_SUMMARY = 120
+_COMPACT_RUNTIME_BLOCKED_IDS_FULL = 16
+_COMPACT_RUNTIME_BLOCKED_IDS_SUMMARY = 8
+_COMPACT_RUNTIME_OVERLAP_HINTS_FULL = 12
+_COMPACT_RUNTIME_OVERLAP_HINTS_SUMMARY = 6
+_MINIMAL_TITLE_LIMIT = 120
+_MINIMAL_TITLE_HARD_LIMIT = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +121,13 @@ class CoreClientBridge:
         session_id: str,
         capability_profile: str | None = None,
         session_origin: str | None = None,
+        client_version: str | None = None,
     ) -> None:
         self._client = client
         self._session_id = session_id
         self._capability_profile = capability_profile
         self._session_origin = session_origin
+        self._client_version = client_version
         self._recover_lock = asyncio.Lock()
 
     @staticmethod
@@ -131,9 +167,8 @@ class CoreClientBridge:
 
         trimmed_newest_first: list[dict[str, Any]] = []
         used = 0
-        per_entry_overhead = 256
         for log in reversed(logs):
-            remaining = budget_chars - used - per_entry_overhead
+            remaining = budget_chars - used - _LOG_ENTRY_OVERHEAD_CHARS
             if remaining <= 0:
                 break
 
@@ -148,7 +183,7 @@ class CoreClientBridge:
                     "created_at": str(log["created_at"]),
                 }
             )
-            used += len(content) + per_entry_overhead
+            used += len(content) + _LOG_ENTRY_OVERHEAD_CHARS
 
         return list(reversed(trimmed_newest_first))
 
@@ -158,6 +193,186 @@ class CoreClientBridge:
             return value
         omitted_chars = len(value) - limit
         return f"{value[:limit]}\n\n[truncated {omitted_chars} chars]"
+
+    @staticmethod
+    def _is_transport_oversize_error(exc: Exception) -> bool:
+        if not isinstance(exc, MCPBridgeError):
+            return False
+        message = f"{exc.code} {exc.message}".lower()
+        markers = (
+            "chunk exceed the limit",
+            "chunk is longer than limit",
+            "separator is not found",
+            "separator is found, but chunk",
+        )
+        return any(marker in message for marker in markers)
+
+    @classmethod
+    def _truncate_acceptance_criteria(cls, value: object, *, mode: str) -> list[str] | None:
+        if not isinstance(value, list):
+            return None
+
+        item_limit = (
+            _FULL_ACCEPTANCE_ITEM_LIMIT if mode == "full" else _SUMMARY_ACCEPTANCE_ITEM_LIMIT
+        )
+        max_items = _FULL_ACCEPTANCE_ITEMS if mode == "full" else _SUMMARY_ACCEPTANCE_ITEMS
+
+        criteria = [cls._truncate_text(str(item), limit=item_limit) or "" for item in value]
+        if len(criteria) <= max_items:
+            return criteria
+
+        omitted_count = len(criteria) - max_items
+        return [*criteria[:max_items], f"[truncated {omitted_count} criteria]"]
+
+    @classmethod
+    def _fit_task_payload_budget(cls, payload: dict[str, Any], *, mode: str) -> dict[str, Any]:
+        budget = _FULL_RESPONSE_BUDGET if mode == "full" else _SUMMARY_RESPONSE_BUDGET
+        if cls._serialized_size(payload) <= budget:
+            return payload
+
+        trimmed = dict(payload)
+        if isinstance(trimmed.get("scratchpad"), str):
+            scratchpad_limit = max(0, budget // 3)
+            trimmed["scratchpad"] = cls._truncate_text(
+                trimmed["scratchpad"],
+                limit=scratchpad_limit,
+            )
+
+        if isinstance(trimmed.get("description"), str):
+            description_limit = max(0, budget // 4)
+            trimmed["description"] = cls._truncate_text(
+                trimmed["description"],
+                limit=description_limit,
+            )
+
+        if cls._serialized_size(trimmed) <= budget:
+            return trimmed
+
+        if isinstance(trimmed.get("logs"), list):
+            logs_budget = max(0, budget // 3)
+            trimmed["logs"] = cls._trim_logs_to_budget(trimmed["logs"], budget_chars=logs_budget)
+
+        if isinstance(trimmed.get("title"), str):
+            title_limit = _FULL_TITLE_LIMIT if mode == "full" else _SUMMARY_TITLE_LIMIT
+            trimmed["title"] = cls._truncate_text(trimmed["title"], limit=title_limit) or ""
+
+        if isinstance(trimmed.get("runtime"), dict):
+            trimmed["runtime"] = cls._compact_runtime(trimmed["runtime"], mode=mode)
+
+        if isinstance(trimmed.get("acceptance_criteria"), list):
+            if mode == "full":
+                max_items = _COMPACT_ACCEPTANCE_ITEMS_FULL
+                item_limit = _COMPACT_ACCEPTANCE_ITEM_LIMIT_FULL
+            else:
+                max_items = _COMPACT_ACCEPTANCE_ITEMS_SUMMARY
+                item_limit = _COMPACT_ACCEPTANCE_ITEM_LIMIT_SUMMARY
+            trimmed["acceptance_criteria"] = cls._compact_string_list(
+                trimmed["acceptance_criteria"],
+                max_items=max_items,
+                item_limit=item_limit,
+                label="criteria",
+            )
+
+        if cls._serialized_size(trimmed) <= budget:
+            return trimmed
+
+        # Last-resort safety valve for transport framing limits.
+        for key in ("logs", "scratchpad", "runtime", "acceptance_criteria"):
+            trimmed.pop(key, None)
+            if cls._serialized_size(trimmed) <= budget:
+                return trimmed
+
+        if isinstance(trimmed.get("description"), str):
+            trimmed["description"] = cls._truncate_text(
+                trimmed["description"],
+                limit=max(0, budget // 10),
+            )
+            if cls._serialized_size(trimmed) <= budget:
+                return trimmed
+
+        title_value = trimmed.get("title")
+        status_value = trimmed.get("status")
+        minimal = {
+            "task_id": str(trimmed.get("task_id", "")),
+            "title": cls._truncate_text(
+                str(title_value) if title_value is not None else "",
+                limit=_MINIMAL_TITLE_LIMIT,
+            )
+            or "",
+            "status": str(status_value) if status_value is not None else "",
+        }
+        if cls._serialized_size(minimal) <= budget:
+            return minimal
+        minimal["title"] = minimal["title"][:_MINIMAL_TITLE_HARD_LIMIT]
+        return minimal
+
+    @staticmethod
+    def _serialized_size(payload: dict[str, Any]) -> int:
+        return len(json.dumps(payload, ensure_ascii=True, default=str))
+
+    @classmethod
+    def _compact_string_list(
+        cls,
+        values: list[object],
+        *,
+        max_items: int,
+        item_limit: int,
+        label: str,
+    ) -> list[str]:
+        normalized = [cls._truncate_text(str(value), limit=item_limit) or "" for value in values]
+        if len(normalized) <= max_items:
+            return normalized
+        omitted = len(normalized) - max_items
+        return [*normalized[:max_items], f"[truncated {omitted} {label}]"]
+
+    @classmethod
+    def _compact_runtime(cls, runtime: dict[str, Any], *, mode: str) -> dict[str, Any]:
+        compact = dict(runtime)
+        reason_limit = (
+            _COMPACT_RUNTIME_REASON_LIMIT_FULL
+            if mode == "full"
+            else _COMPACT_RUNTIME_REASON_LIMIT_SUMMARY
+        )
+        hint_limit = (
+            _COMPACT_RUNTIME_HINT_LIMIT_FULL
+            if mode == "full"
+            else _COMPACT_RUNTIME_HINT_LIMIT_SUMMARY
+        )
+        blocked_ids = (
+            _COMPACT_RUNTIME_BLOCKED_IDS_FULL
+            if mode == "full"
+            else _COMPACT_RUNTIME_BLOCKED_IDS_SUMMARY
+        )
+        overlap_hints = (
+            _COMPACT_RUNTIME_OVERLAP_HINTS_FULL
+            if mode == "full"
+            else _COMPACT_RUNTIME_OVERLAP_HINTS_SUMMARY
+        )
+
+        for key in ("blocked_reason", "pending_reason"):
+            value = compact.get(key)
+            if isinstance(value, str):
+                compact[key] = cls._truncate_text(value, limit=reason_limit)
+
+        blocked = compact.get("blocked_by_task_ids")
+        if isinstance(blocked, list):
+            compact["blocked_by_task_ids"] = cls._compact_string_list(
+                blocked,
+                max_items=blocked_ids,
+                item_limit=hint_limit,
+                label="task IDs",
+            )
+
+        hints = compact.get("overlap_hints")
+        if isinstance(hints, list):
+            compact["overlap_hints"] = cls._compact_string_list(
+                hints,
+                max_items=overlap_hints,
+                item_limit=hint_limit,
+                label="hints",
+            )
+
+        return compact
 
     async def _refresh_client_from_discovery(self) -> bool:
         from kagan.core.ipc.client import IPCClient
@@ -191,10 +406,21 @@ class CoreClientBridge:
             return bool(self._client.is_connected)
 
     async def _query(
-        self, capability: str, method: str, params: dict[str, Any] | None = None
+        self,
+        capability: str,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        request_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         """Send a query (read-only) request to the core."""
-        return await self._send_request("query", capability, method, params=params)
+        return await self._send_request(
+            "query",
+            capability,
+            method,
+            params=params,
+            request_timeout_seconds=request_timeout_seconds,
+        )
 
     async def _command(
         self, capability: str, method: str, params: dict[str, Any] | None = None
@@ -209,19 +435,38 @@ class CoreClientBridge:
         method: str,
         *,
         params: dict[str, Any] | None,
+        request_timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                resp = await self._client.request(
-                    session_id=self._session_id,
-                    session_profile=self._capability_profile,
-                    session_origin=self._session_origin,
+                request_kwargs: dict[str, Any] = {
+                    "session_id": self._session_id,
+                    "session_profile": self._capability_profile,
+                    "session_origin": self._session_origin,
+                    "capability": capability,
+                    "method": method,
+                    "params": params,
+                }
+                if self._client_version is not None:
+                    request_kwargs["client_version"] = self._client_version
+                if request_timeout_seconds is not None:
+                    request_kwargs["request_timeout_seconds"] = request_timeout_seconds
+                resp = await self._client.request(**request_kwargs)
+            except ConnectionError as exc:
+                if attempt < max_attempts - 1 and await self._recover_client(
+                    refresh_endpoint=False
+                ):
+                    continue
+                raise MCPBridgeError.core_failure(
+                    kind=kind,
                     capability=capability,
                     method=method,
-                    params=params,
-                )
-            except ConnectionError as exc:
+                    code="DISCONNECTED",
+                    message=str(exc),
+                    hint="Ensure Kagan core is running and reachable, then retry.",
+                ) from exc
+            except Exception as exc:
                 if attempt < max_attempts - 1 and await self._recover_client(
                     refresh_endpoint=False
                 ):
@@ -239,7 +484,11 @@ class CoreClientBridge:
                 return resp.result or {}
 
             code = resp.error.code if resp.error else "UNKNOWN"
-            message = resp.error.message if resp.error else "Unknown error"
+            raw_message = resp.error.message if resp.error else None
+            message = str(raw_message).strip() if raw_message is not None else ""
+            if not message:
+                message = f"{capability}.{method} request failed"
+            hint: str | None = None
             if code == _AUTH_FAILED_CODE and attempt < max_attempts - 1:
                 if await self._recover_client(refresh_endpoint=True):
                     continue
@@ -248,12 +497,18 @@ class CoreClientBridge:
                     "MCP session token became stale after core restart; "
                     "restart MCP or reconnect client."
                 )
+            elif code == "MCP_OUTDATED":
+                hint = (
+                    "Restart the MCP client/session so it reloads the currently installed "
+                    "kagan build."
+                )
             raise MCPBridgeError.core_failure(
                 kind=kind,
                 capability=capability,
                 method=method,
                 code=code,
                 message=message,
+                hint=hint,
             )
 
         raise MCPBridgeError.core_failure(
@@ -289,33 +544,91 @@ class CoreClientBridge:
             "task_id": task_data["id"],
             "title": task_data["title"],
             "status": task_data["status"],
-            "description": task_data.get("description"),
-            "acceptance_criteria": task_data.get("acceptance_criteria"),
+            "description": self._truncate_text(
+                task_data.get("description"),
+                limit=(
+                    _FULL_DESCRIPTION_LIMIT if mode_name == "full" else _SUMMARY_DESCRIPTION_LIMIT
+                ),
+            ),
+            "acceptance_criteria": self._truncate_acceptance_criteria(
+                task_data.get("acceptance_criteria"),
+                mode=mode_name,
+            ),
             "runtime": task_data.get("runtime"),
         }
 
         if include_scratchpad:
-            scratchpad_result = await self._query("tasks", "scratchpad", {"task_id": task_id})
-            response["scratchpad"] = self._truncate_text(
-                scratchpad_result.get("content"),
-                limit=text_limit,
+            scratchpad_fetch_limit = (
+                _FULL_SCRATCHPAD_FETCH_LIMIT
+                if mode_name == "full"
+                else _SUMMARY_SCRATCHPAD_FETCH_LIMIT
             )
+            try:
+                scratchpad_result = await self._query(
+                    "tasks",
+                    "scratchpad",
+                    {
+                        "task_id": task_id,
+                        "content_char_limit": scratchpad_fetch_limit,
+                    },
+                )
+            except MCPBridgeError as exc:
+                if self._is_transport_oversize_error(exc):
+                    logger.warning(
+                        "tasks.scratchpad response exceeded transport budget for task %s; "
+                        "returning bounded placeholder",
+                        task_id,
+                    )
+                    response["scratchpad"] = "[omitted: scratchpad exceeded transport limits]"
+                    response["scratchpad_truncated"] = True
+                else:
+                    raise
+            else:
+                response["scratchpad"] = self._truncate_text(
+                    scratchpad_result.get("content"),
+                    limit=text_limit,
+                )
+                response["scratchpad_truncated"] = bool(scratchpad_result.get("truncated", False))
 
         if include_logs:
             logs: list[dict[str, Any]] = []
+            max_entries = _FULL_LOG_ENTRIES if mode_name == "full" else _SUMMARY_LOG_ENTRIES
+            entry_limit = _FULL_LOG_ENTRY_LIMIT if mode_name == "full" else _SUMMARY_LOG_ENTRY_LIMIT
+            fetch_entry_limit = (
+                _FULL_LOG_FETCH_ENTRY_LIMIT
+                if mode_name == "full"
+                else _SUMMARY_LOG_FETCH_ENTRY_LIMIT
+            )
+            fetch_budget = (
+                _FULL_LOG_FETCH_BUDGET if mode_name == "full" else _SUMMARY_LOG_FETCH_BUDGET
+            )
             try:
-                logs_result = await self._query("tasks", "logs", {"task_id": task_id})
+                logs_result = await self._query(
+                    "tasks",
+                    "logs",
+                    {
+                        "task_id": task_id,
+                        "limit": max_entries,
+                        "content_char_limit": fetch_entry_limit,
+                        "total_char_limit": fetch_budget,
+                    },
+                )
             except MCPBridgeError as exc:
                 if not self._is_query_unavailable(exc):
-                    raise
-                logger.debug(
-                    "tasks.logs unavailable; returning empty logs list for task %s", task_id
-                )
+                    if self._is_transport_oversize_error(exc):
+                        logger.warning(
+                            "tasks.logs response exceeded transport budget for task %s; "
+                            "returning empty bounded logs",
+                            task_id,
+                        )
+                        response["logs_truncated"] = True
+                    else:
+                        raise
+                else:
+                    logger.debug(
+                        "tasks.logs unavailable; returning empty logs list for task %s", task_id
+                    )
             else:
-                max_entries = _FULL_LOG_ENTRIES if mode_name == "full" else _SUMMARY_LOG_ENTRIES
-                entry_limit = (
-                    _FULL_LOG_ENTRY_LIMIT if mode_name == "full" else _SUMMARY_LOG_ENTRY_LIMIT
-                )
                 logs = [
                     {
                         "run": int(log["run"]),
@@ -333,13 +646,47 @@ class CoreClientBridge:
                     logs = logs[-max_entries:]
                 budget = _FULL_LOG_BUDGET if mode_name == "full" else _SUMMARY_LOG_BUDGET
                 logs = self._trim_logs_to_budget(logs, budget_chars=budget)
+                response["logs_truncated"] = bool(logs_result.get("truncated", False))
+                total_runs = logs_result.get("total_runs")
+                returned_runs = logs_result.get("returned_runs")
+                has_more = logs_result.get("has_more")
+                next_offset = logs_result.get("next_offset")
+                if isinstance(total_runs, int):
+                    response["logs_total_runs"] = total_runs
+                if isinstance(returned_runs, int):
+                    response["logs_returned_runs"] = returned_runs
+                if isinstance(has_more, bool):
+                    response["logs_has_more"] = has_more
+                if isinstance(next_offset, int):
+                    response["logs_next_offset"] = next_offset
             response["logs"] = logs
 
         if include_review:
             # Review feedback not yet available via core; return None
             response["review_feedback"] = None
 
-        return response
+        return self._fit_task_payload_budget(response, mode=mode_name)
+
+    async def list_task_logs(
+        self,
+        task_id: str,
+        *,
+        limit: int = 5,
+        offset: int = 0,
+        content_char_limit: int | None = None,
+        total_char_limit: int | None = None,
+    ) -> dict[str, Any]:
+        """Get paginated task logs with transport-safe bounds."""
+        params: dict[str, Any] = {
+            "task_id": task_id,
+            "limit": limit,
+            "offset": offset,
+        }
+        if content_char_limit is not None:
+            params["content_char_limit"] = content_char_limit
+        if total_char_limit is not None:
+            params["total_char_limit"] = total_char_limit
+        return await self._query("tasks", "logs", params)
 
     async def get_scratchpad(self, task_id: str) -> str:
         """Get a task's scratchpad content."""
@@ -431,7 +778,7 @@ class CoreClientBridge:
         agent_backend: str | None = None,
         parent_id: str | None = None,
         base_branch: str | None = None,
-        acceptance_criteria: list[str] | None = None,
+        acceptance_criteria: list[str] | str | None = None,
         created_by: str | None = None,
     ) -> dict:
         """Create a new task."""
@@ -466,6 +813,43 @@ class CoreClientBridge:
     async def move_task(self, task_id: str, status: str) -> dict:
         """Move task to new status column."""
         return await self._command("tasks", "move", {"task_id": task_id, "status": status})
+
+    async def wait_task(
+        self,
+        task_id: str,
+        *,
+        timeout_seconds: float | str | None = None,
+        wait_for_status: list[str] | str | None = None,
+        from_updated_at: str | None = None,
+    ) -> dict:
+        """Block until target task changes or timeout elapses."""
+        params: dict[str, Any] = {"task_id": task_id}
+        effective_wait_timeout = _TASK_WAIT_IPC_DEFAULT_TIMEOUT_SECONDS
+        if timeout_seconds is not None:
+            if isinstance(timeout_seconds, str):
+                normalized_timeout = timeout_seconds.strip()
+                if normalized_timeout:
+                    with suppress(ValueError):
+                        parsed_timeout = float(normalized_timeout)
+                        params["timeout_seconds"] = parsed_timeout
+                        if parsed_timeout > 0:
+                            effective_wait_timeout = parsed_timeout
+                if "timeout_seconds" not in params:
+                    params["timeout_seconds"] = timeout_seconds
+            else:
+                params["timeout_seconds"] = timeout_seconds
+                if timeout_seconds > 0:
+                    effective_wait_timeout = timeout_seconds
+        if wait_for_status is not None:
+            params["wait_for_status"] = wait_for_status
+        if from_updated_at is not None:
+            params["from_updated_at"] = from_updated_at
+        return await self._query(
+            "tasks",
+            "wait",
+            params,
+            request_timeout_seconds=effective_wait_timeout + _TASK_WAIT_IPC_TIMEOUT_BUFFER_SECONDS,
+        )
 
     async def submit_job(
         self,
@@ -574,6 +958,28 @@ class CoreClientBridge:
     async def update_settings(self, fields: dict[str, Any]) -> dict:
         """Update allowlisted settings fields."""
         return await self._command("settings", "update", {"fields": fields})
+
+    # -------------------------------------------------------------------------
+    # Plugin Operations (Generic Dispatch)
+    # -------------------------------------------------------------------------
+
+    async def invoke_plugin(
+        self,
+        capability: str,
+        method: str,
+        params: dict[str, Any] | None = None,
+    ) -> dict:
+        """Invoke a plugin operation by capability and method.
+
+        Args:
+            capability: Plugin capability namespace.
+            method: Operation method name.
+            params: Optional parameters dict.
+
+        Returns:
+            Plugin operation result dict.
+        """
+        return await self._command(capability, method, params or {})
 
 
 def _format_review_feedback(review_result: object) -> str | None:

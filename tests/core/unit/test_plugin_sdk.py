@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 
@@ -13,6 +14,16 @@ from kagan.core.bootstrap import create_app_context
 from kagan.core.host import CoreHost
 from kagan.core.ipc.contracts import CoreRequest
 from kagan.core.plugins.examples import register_example_plugins
+from kagan.core.plugins.github import (
+    GITHUB_CANONICAL_METHODS,
+    GITHUB_CANONICAL_METHODS_SCOPE,
+    GITHUB_CAPABILITY,
+    GITHUB_CONTRACT_PROBE_METHOD,
+    GITHUB_CONTRACT_VERSION,
+    GITHUB_PLUGIN_ID,
+    RESERVED_GITHUB_CAPABILITY,
+    register_github_plugin,
+)
 from kagan.core.plugins.sdk import (
     JsonPluginManifestLoader,
     PluginManifest,
@@ -20,6 +31,7 @@ from kagan.core.plugins.sdk import (
     PluginRegistrationApi,
     PluginRegistry,
 )
+from kagan.core.request_dispatch_map import build_request_dispatch_map
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -109,7 +121,7 @@ async def _rollback_probe(ctx: Any, params: dict[str, Any]) -> dict[str, Any]:
 
 def _write_minimal_config(config_path: Path) -> None:
     config_path.write_text(
-        '[general]\nauto_review = false\ndefault_base_branch = "main"\n'
+        "[general]\nauto_review = false\n"
         'default_worker_agent = "claude"\n\n'
         "[agents.claude]\n"
         'identity = "claude.ai"\nname = "Claude"\nshort_name = "claude"\n'
@@ -308,5 +320,115 @@ async def test_when_create_app_context_initializes_then_example_plugin_operation
     try:
         operation = ctx.plugin_registry.resolve_operation("plugins", "noop_ping")
         assert operation is not None
+    finally:
+        await ctx.close()
+
+
+def test_when_registering_github_plugin_then_contract_probe_operation_is_exposed() -> None:
+    registry = PluginRegistry()
+
+    register_github_plugin(registry)
+
+    operation = registry.resolve_operation(GITHUB_CAPABILITY, GITHUB_CONTRACT_PROBE_METHOD)
+    assert operation is not None
+    assert operation.plugin_id == GITHUB_PLUGIN_ID
+    assert operation.mutating is False
+
+
+def test_when_querying_operations_by_method_then_matching_operations_are_returned() -> None:
+    registry = PluginRegistry()
+    register_github_plugin(registry)
+
+    operations = registry.operations_for_method("validate_review_transition")
+
+    assert len(operations) == 1
+    assert operations[0].plugin_id == GITHUB_PLUGIN_ID
+
+
+def test_when_registering_conflicting_github_probe_then_registry_rejects_collision() -> None:
+    registry = PluginRegistry()
+    register_github_plugin(registry)
+    conflicting = _SimplePlugin(
+        plugin_id="example.conflict",
+        capability=GITHUB_CAPABILITY,
+        method=GITHUB_CONTRACT_PROBE_METHOD,
+    )
+
+    with pytest.raises(ValueError, match="already registered by plugin"):
+        registry.register_plugin(conflicting)
+
+
+def test_when_registering_github_plugin_then_probe_has_no_builtin_dispatch_collision() -> None:
+    dispatch_map = build_request_dispatch_map()
+
+    assert GITHUB_CAPABILITY != RESERVED_GITHUB_CAPABILITY
+    assert (GITHUB_CAPABILITY, GITHUB_CONTRACT_PROBE_METHOD) not in dispatch_map
+
+
+def test_when_registering_github_plugin_then_handlers_module_is_not_eagerly_imported() -> None:
+    handlers_module_name = "kagan.core.plugins.github.entrypoints.plugin_handlers"
+    sys.modules.pop(handlers_module_name, None)
+
+    registry = PluginRegistry()
+    register_github_plugin(registry)
+
+    assert handlers_module_name not in sys.modules
+
+
+@pytest.mark.asyncio()
+async def test_core_host_github_probe_loads_handlers_and_contract_stable() -> None:
+    handlers_module_name = "kagan.core.plugins.github.entrypoints.plugin_handlers"
+    sys.modules.pop(handlers_module_name, None)
+
+    registry = PluginRegistry()
+    register_github_plugin(registry)
+
+    host = CoreHost()
+    host._ctx = cast("Any", SimpleNamespace(plugin_registry=registry))
+    host.register_session("maintainer-session", "maintainer")
+
+    response = await host.handle_request(
+        CoreRequest(
+            session_id="maintainer-session",
+            capability=GITHUB_CAPABILITY,
+            method=GITHUB_CONTRACT_PROBE_METHOD,
+            params={"echo": "hello"},
+        )
+    )
+
+    assert response.ok
+    assert response.result == {
+        "success": True,
+        "plugin_id": GITHUB_PLUGIN_ID,
+        "contract_version": GITHUB_CONTRACT_VERSION,
+        "capability": GITHUB_CAPABILITY,
+        "method": GITHUB_CONTRACT_PROBE_METHOD,
+        "canonical_methods": list(GITHUB_CANONICAL_METHODS),
+        "canonical_scope": GITHUB_CANONICAL_METHODS_SCOPE,
+        "reserved_official_capability": RESERVED_GITHUB_CAPABILITY,
+        "echo": "hello",
+    }
+    assert handlers_module_name in sys.modules
+
+
+@pytest.mark.asyncio()
+async def test_create_app_context_registers_github_probe_without_eager_handlers_import(
+    tmp_path: Path,
+) -> None:
+    handlers_module_name = "kagan.core.plugins.github.entrypoints.plugin_handlers"
+    sys.modules.pop(handlers_module_name, None)
+
+    config_path = tmp_path / "config.toml"
+    db_path = tmp_path / "test.db"
+    _write_minimal_config(config_path)
+
+    ctx = await create_app_context(config_path=config_path, db_path=db_path)
+    try:
+        operation = ctx.plugin_registry.resolve_operation(
+            GITHUB_CAPABILITY, GITHUB_CONTRACT_PROBE_METHOD
+        )
+        assert operation is not None
+        assert operation.plugin_id == GITHUB_PLUGIN_ID
+        assert handlers_module_name not in sys.modules
     finally:
         await ctx.close()

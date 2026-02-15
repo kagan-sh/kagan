@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from enum import Enum, StrEnum, auto
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy.exc import OperationalError
 from textual import on
@@ -43,6 +43,7 @@ from kagan.tui.ui.widgets.workspace_repos import WorkspaceReposWidget
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+    from textual.timer import Timer
 
     from kagan.core.adapters.db.schema import Task
 
@@ -86,6 +87,7 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
         self._is_done = False
         self._mention_items: list[TaskMentionItem] = []
         self._mention_complete: TaskMentionComplete | None = None
+        self._presence_timer: Timer | None = None
         if task is not None:
             status = task.status
             self._is_done = status == TaskStatus.DONE
@@ -112,6 +114,7 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
                 exclusive=True,
                 exit_on_error=False,
             )
+            self._presence_timer = self.set_interval(1.0, self._poll_task_presence)
         if self.editing:
             self.run_worker(
                 self._load_mention_items,
@@ -121,6 +124,10 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
             )
 
     def on_unmount(self) -> None:
+        if self._presence_timer is not None:
+            with contextlib.suppress(Exception):
+                self._presence_timer.stop()
+            self._presence_timer = None
         task_changed_signal = getattr(self.kagan_app, "task_changed_signal", None)
         if task_changed_signal is None:
             return
@@ -129,6 +136,11 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
 
     async def _on_task_changed(self, task_id: str) -> None:
         if not self.is_mounted or self._task_model is None or task_id != self._task_model.id:
+            return
+        self._poll_task_presence()
+
+    def _poll_task_presence(self) -> None:
+        if not self.is_mounted or self._task_model is None:
             return
         self.run_worker(
             self._refresh_task_presence,
@@ -315,8 +327,7 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
         if not self._task_model:
             return
         try:
-            workspace_service = self.ctx.api.workspace_service
-            workspaces = await workspace_service.list_workspaces(task_id=self._task_model.id)
+            workspaces = await self.ctx.api.list_workspaces(task_id=self._task_model.id)
         except _TASK_DETAILS_LOAD_ERRORS as exc:
             self.log(
                 "Workspace repo lookup failed",
@@ -338,10 +349,16 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
         await container.mount(
             WorkspaceReposWidget(
                 workspaces[0].id,
-                workspace_service=self.ctx.api.workspace_service,
-                diff_service=self.ctx.api.diff_service,
+                load_repos=self._load_workspace_repo_rows,
+                load_repo_diff=self._load_workspace_repo_diff,
             )
         )
+
+    async def _load_workspace_repo_rows(self, workspace_id: str) -> list[dict[str, Any]]:
+        return await self.ctx.api.get_workspace_repos(workspace_id)
+
+    async def _load_workspace_repo_diff(self, workspace_id: str, repo_id: str) -> object | None:
+        return await self.ctx.api.get_repo_diff(workspace_id, repo_id)
 
     def _compose_meta_row(self) -> ComposeResult:
         """Compose the metadata row."""
@@ -582,9 +599,12 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
         return status.value.replace("_", " ")
 
     def _build_agent_options(self) -> list[tuple[str, str]]:
+        from kagan.core.builtin_agents import BUILTIN_AGENTS
+
         kagan_app = self.kagan_app
         default_agent = self._get_default_agent_key()
         options: list[tuple[str, str]] = []
+        seen: set[str] = set()
 
         if hasattr(kagan_app, "config") and kagan_app.config.agents:
             for name, agent in kagan_app.config.agents.items():
@@ -592,14 +612,14 @@ class TaskDetailsModal(KaganModalScreen[ModalAction | TaskUpdateDict | None]):
                     continue
                 label = self._format_agent_label(agent.name, name == default_agent)
                 options.append((label, name))
-            options.sort(key=lambda item: 0 if item[1] == default_agent else 1)
-            return options
-
-        from kagan.core.builtin_agents import BUILTIN_AGENTS
+                seen.add(name)
 
         for name, agent in BUILTIN_AGENTS.items():
+            if name in seen:
+                continue
             label = self._format_agent_label(agent.config.name, name == default_agent)
             options.append((label, name))
+
         options.sort(key=lambda item: 0 if item[1] == default_agent else 1)
         return options
 

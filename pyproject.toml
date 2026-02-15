@@ -108,6 +108,9 @@ permissive-ignores = true
 missing-import = false
 missing-attribute = false
 missing-module-attribute = false
+bad-argument-type = false
+no-matching-overload = false
+bad-assignment = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

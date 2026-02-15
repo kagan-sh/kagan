@@ -455,3 +455,18 @@
 .md-typeset .grid.cards hr {
   border-color: transparent;
 }
+
+/* ===== CONTEXTUAL SIDEBAR COLLAPSE ===== */
+@media screen and (min-width: 76.25em) {
+  body.kagan-sidebar-collapsed .md-sidebar--primary {
+    display: none;
+  }
+
+  body.kagan-sidebar-collapsed .md-main__inner {
+    justify-content: center;
+  }
+
+  body.kagan-sidebar-collapsed .md-content {
+    max-width: 52rem;
+  }
+}

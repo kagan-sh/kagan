@@ -28,7 +28,6 @@ class TaskRepository:
         db_path: str | Path | None = None,
         *,
         project_root: Path | None = None,
-        default_branch: str = "main",
         on_change: Callable[[str], None] | None = None,
     ) -> None:
         self.db_path = Path(db_path) if db_path else get_database_path()
@@ -40,7 +39,6 @@ class TaskRepository:
             Callable[[str, TaskStatus | None, TaskStatus | None], None] | None
         ) = None
         self._project_root = project_root or Path.cwd()
-        self._default_branch = default_branch
         self._default_project_id: str | None = None
 
     async def initialize(self) -> None:
@@ -290,8 +288,3 @@ class TaskRepository:
     def set_default_project_id(self, project_id: str | None) -> None:
         """Set default project ID for task creation."""
         self._default_project_id = project_id
-
-    @property
-    def default_branch(self) -> str:
-        """Return default branch name."""
-        return self._default_branch

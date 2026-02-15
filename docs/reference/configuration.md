@@ -1,64 +1,69 @@
 ---
-title: Configuration
-description: All settings, file locations, and environment variables
+title: Configuration reference
+description: Full schema for config.toml, locations, and environment overrides
 icon: material/cog
 ---
 
-# Configuration
+# Configuration reference
 
-Kagan reads `config.toml` from your XDG config directory.
+Kagan reads configuration from `config.toml` in the Kagan config directory.
 
-## TL;DR
+## Location and path overrides
+
+Default directories are platform-specific (`platformdirs`), with environment-variable overrides.
+
+| Purpose                 | Default location            | Override                 |
+| ----------------------- | --------------------------- | ------------------------ |
+| Config directory        | `user_config_dir("kagan")`  | `KAGAN_CONFIG_DIR`       |
+| Data directory          | `user_data_dir("kagan")`    | `KAGAN_DATA_DIR`         |
+| Cache directory         | `user_cache_dir("kagan")`   | `KAGAN_CACHE_DIR`        |
+| Worktree base directory | system temp base + `/kagan` | `KAGAN_WORKTREE_BASE`    |
+| Core runtime directory  | data dir + `/core`          | `KAGAN_CORE_RUNTIME_DIR` |
+
+Main files:
+
+- `config.toml`
+- `profiles.toml`
+- `kagan.db`
+- core runtime files: `endpoint.json`, `token`, `core.lease.json`, `core.instance.lock`
+
+## Minimal example
 
 ```toml
 [general]
 default_worker_agent = "claude"
 default_pair_terminal_backend = "tmux"
 max_concurrent_agents = 3
-auto_review = true
 ```
 
-## File locations
+## `[general]`
 
-| Path                         | Purpose              |
-| ---------------------------- | -------------------- |
-| XDG config dir `config.toml` | Settings             |
-| XDG data dir `kagan.db`      | Task database        |
-| XDG data dir `kagan.lock`    | Single-instance lock |
-| Temp dir `kagan/worktrees/`  | Git worktrees        |
+| Key                                  | Type           | Default                          | Notes                                                                          |
+| ------------------------------------ | -------------- | -------------------------------- | ------------------------------------------------------------------------------ |
+| `max_concurrent_agents`              | integer        | `3`                              | Concurrent AUTO execution cap                                                  |
+| `mcp_server_name`                    | string         | `"kagan"`                        | MCP server registration name                                                   |
+| `worktree_base_ref_strategy`         | string         | `"remote"`                       | Base ref preference for worktree add/diff: `remote`, `local_if_ahead`, `local` |
+| `auto_review`                        | boolean        | `true`                           | Run AI review on completion                                                    |
+| `auto_approve`                       | boolean        | `false`                          | Skip planner permission prompts                                                |
+| `require_review_approval`            | boolean        | `false`                          | Require review approval before merge                                           |
+| `serialize_merges`                   | boolean        | `true`                           | Queue merge actions                                                            |
+| `default_worker_agent`               | string         | `"claude"`                       | Default worker agent                                                           |
+| `default_pair_terminal_backend`      | string         | `"tmux"` (`"vscode"` on Windows) | Allowed: `tmux`, `vscode`, `cursor`                                            |
+| `default_model_claude`               | string or null | `null`                           | Optional default model                                                         |
+| `default_model_opencode`             | string or null | `null`                           | Optional default model                                                         |
+| `default_model_codex`                | string or null | `null`                           | Optional default model                                                         |
+| `default_model_gemini`               | string or null | `null`                           | Optional default model                                                         |
+| `default_model_kimi`                 | string or null | `null`                           | Optional default model                                                         |
+| `default_model_copilot`              | string or null | `null`                           | Optional display preference                                                    |
+| `core_idle_timeout_seconds`          | integer        | `180`                            | Core auto-stop timeout after idle                                              |
+| `core_autostart`                     | boolean        | `true`                           | Start core automatically when client connects                                  |
+| `core_transport_preference`          | string         | `"auto"`                         | Allowed: `auto`, `socket`, `tcp`                                               |
+| `tasks_wait_default_timeout_seconds` | integer        | `1800`                           | Default timeout for `task_wait` (30 minutes)                                   |
+| `tasks_wait_max_timeout_seconds`     | integer        | `3600`                           | Max allowed timeout for `task_wait` (60 minutes)                               |
 
-## General settings
+## `[agents.<name>]`
 
-```toml
-[general]
-auto_review = true
-auto_approve = false
-require_review_approval = false
-serialize_merges = true
-default_base_branch = "main"
-default_worker_agent = "claude"
-default_pair_terminal_backend = "tmux"
-max_concurrent_agents = 3
-mcp_server_name = "kagan"
-# default_model_claude = "claude-3-5-sonnet"
-# default_model_opencode = "opencode-default"
-```
-
-| Setting                         | Default    | Purpose                                                 |
-| ------------------------------- | ---------- | ------------------------------------------------------- |
-| `auto_review`                   | `true`     | Run AI review on task completion                        |
-| `auto_approve`                  | `false`    | Skip planner permission prompts                         |
-| `require_review_approval`       | `false`    | Require approved review before merge                    |
-| `serialize_merges`              | `true`     | Queue merges sequentially; auto-retry once after rebase |
-| `default_base_branch`           | `"main"`   | Base branch for worktrees and merges                    |
-| `default_worker_agent`          | `"claude"` | Default agent for new tasks                             |
-| `default_pair_terminal_backend` | `"tmux"`   | `tmux`, `vscode`, or `cursor`                           |
-| `max_concurrent_agents`         | `3`        | Max parallel AUTO runs                                  |
-| `mcp_server_name`               | `"kagan"`  | MCP server name exposed to clients                      |
-| `default_model_claude`          | unset      | Optional default model                                  |
-| `default_model_opencode`        | unset      | Optional default model                                  |
-
-## Agent configuration
+Example:
 
 ```toml
 [agents.claude]
@@ -67,6 +72,7 @@ name = "Claude Code"
 short_name = "claude"
 protocol = "acp"
 active = true
+model_env_var = "ANTHROPIC_MODEL"
 
 [agents.claude.run_command]
 "*" = "npx claude-code-acp"
@@ -75,107 +81,44 @@ active = true
 "*" = "claude"
 ```
 
-| Field                 | Purpose                     |
-| --------------------- | --------------------------- |
-| `identity`            | Unique agent identifier     |
-| `name`                | Display name                |
-| `short_name`          | Compact UI label            |
-| `protocol`            | Agent protocol (`acp`)      |
-| `active`              | Enable/disable agent        |
-| `run_command`         | AUTO execution command      |
-| `interactive_command` | PAIR interactive command    |
-| `model_env_var`       | Optional model env variable |
+Fields:
 
-OS-specific commands use platform keys (`macos`, `linux`, `"*"` fallback):
+| Key                   | Type    | Notes                            |
+| --------------------- | ------- | -------------------------------- |
+| `identity`            | string  | Unique provider/agent identity   |
+| `name`                | string  | Display name                     |
+| `short_name`          | string  | Compact label                    |
+| `protocol`            | string  | Currently `acp`                  |
+| `active`              | boolean | Enable/disable this agent        |
+| `model_env_var`       | string  | Env var used for model selection |
+| `run_command`         | table   | OS-keyed commands for AUTO mode  |
+| `interactive_command` | table   | OS-keyed commands for PAIR mode  |
 
-```toml
-[agents.myagent.run_command]
-macos = "my-agent-mac"
-linux = "my-agent-linux"
-"*" = "my-agent"
-```
+OS keys for command tables: `macos`, `linux`, `windows`, `*`.
 
-## UI settings (`[ui]`)
+## `[refinement]`
 
-| Setting                  | Default | Purpose                      |
-| ------------------------ | ------- | ---------------------------- |
-| `skip_pair_instructions` | `false` | Skip PAIR instructions modal |
+| Key                 | Type        | Default           | Notes                        |
+| ------------------- | ----------- | ----------------- | ---------------------------- |
+| `enabled`           | boolean     | `true`            | Enable prompt refinement     |
+| `hotkey`            | string      | `"f2"`            | Hotkey to trigger refinement |
+| `skip_length_under` | integer     | `20`              | Skip short inputs            |
+| `skip_prefixes`     | string list | `['/', '!', '?']` | Skip command-like inputs     |
 
-## Refinement settings (`[refinement]`)
+## `[ui]`
 
-| Setting             | Default           | Purpose                   |
-| ------------------- | ----------------- | ------------------------- |
-| `enabled`           | `true`            | Enable prompt refinement  |
-| `hotkey`            | `"f2"`            | Trigger refinement        |
-| `skip_length_under` | `20`              | Skip very short prompts   |
-| `skip_prefixes`     | `["/", "!", "?"]` | Skip command-like prompts |
+| Key                        | Type        | Default                | Notes                                                        |
+| -------------------------- | ----------- | ---------------------- | ------------------------------------------------------------ |
+| `skip_pair_instructions`   | boolean     | `false`                | Skip PAIR instruction modal                                  |
+| `tui_plugin_ui_allowlist`  | string list | `["official.github"]`  | Plugin IDs allowed to contribute declarative UI to the TUI   |
 
-## Environment variables
+## Environment variables passed into PAIR sessions
 
-### Agent runtime
-
-| Variable                | Description          |
-| ----------------------- | -------------------- |
-| `KAGAN_TASK_ID`         | Current task ID      |
-| `KAGAN_TASK_TITLE`      | Current task title   |
-| `KAGAN_WORKTREE_PATH`   | Task worktree path   |
-| `KAGAN_PROJECT_ROOT`    | Repo root            |
-| `KAGAN_MCP_SERVER_NAME` | Override server name |
-
-### Core instrumentation
-
-Temporary diagnostics for alpha builds.
-
-| Variable                         | Default | Description                                      |
-| -------------------------------- | ------- | ------------------------------------------------ |
-| `KAGAN_CORE_INSTRUMENTATION`     | off     | In-memory counters/timings for selected hotspots |
-| `KAGAN_CORE_INSTRUMENTATION_LOG` | off     | Structured instrumentation events to logs        |
-
-Instrumented hotspots: process adapter, task list queries, git commands.
-
-## Core process
-
-```bash
-kagan core status
-kagan core stop
-```
-
-Core autostarts with `kagan`/`kagan tui`, is a shared singleton, and auto-stops after `general.core_idle_timeout_seconds` once all clients disconnect.
-
-## Merge and scheduling behavior
-
-```mermaid
-flowchart LR
-  M[Manual merge] --> Q{serialize_merges?}
-  Q -- yes --> SQ[Single queue]
-  SQ --> PRE{High-risk?}
-  PRE -- yes --> RB[Pre-rebase]
-  PRE -- no --> MRG[Merge]
-  RB --> MRG
-  MRG --> F{Failed?}
-  F -- base moved --> AR[Auto-rebase + retry once]
-  F -- conflict --> HINT[Return rebase-first hint]
-  Q -- no --> MRG
-```
-
-**AUTO scheduling:** `max_concurrent_agents` is an upper bound. Non-overlapping tasks run in parallel; overlapping tasks enter a blocked state and auto-resume when blockers reach `DONE`.
-
-## MCP server options
-
-| Option                              | Purpose                                |
-| ----------------------------------- | -------------------------------------- |
-| `--readonly`                        | Read-only toolset                      |
-| `--session-id`                      | Bind server to one session lane        |
-| `--capability`                      | Restrict tool access by profile        |
-| `--identity`                        | Select identity lane                   |
-| `--endpoint`                        | Override core endpoint discovery       |
-| `--enable-internal-instrumentation` | Enable internal diagnostics instrument |
-
-## Minimal config
-
-```toml
-[general]
-default_worker_agent = "claude"
-default_pair_terminal_backend = "tmux"
-max_concurrent_agents = 3
-```
+| Variable                | Meaning                   |
+| ----------------------- | ------------------------- |
+| `KAGAN_TASK_ID`         | Current task ID           |
+| `KAGAN_TASK_TITLE`      | Current task title        |
+| `KAGAN_WORKTREE_PATH`   | Worktree path             |
+| `KAGAN_PROJECT_ROOT`    | Project root path         |
+| `KAGAN_CWD`             | Current working directory |
+| `KAGAN_MCP_SERVER_NAME` | MCP server name override  |

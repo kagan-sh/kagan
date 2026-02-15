@@ -8,6 +8,7 @@ import logging
 import secrets
 from typing import TYPE_CHECKING
 
+from kagan.core.ipc.constants import MAX_LINE_BYTES
 from kagan.core.ipc.contracts import CoreRequest, CoreResponse
 from kagan.core.ipc.transports import DefaultTransport, TCPLoopbackTransport, UnixSocketTransport
 
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _TOKEN_BYTES = 32
-_MAX_LINE_BYTES = 4 * 1024 * 1024  # 4 MiB per JSON line
 
 _TRANSPORT_MAP: dict[str, type[TCPLoopbackTransport] | type[UnixSocketTransport]] = {
     "tcp": TCPLoopbackTransport,
@@ -136,7 +136,7 @@ class IPCServer:
                 if not raw:
                     break  # Client disconnected
 
-                if len(raw) > _MAX_LINE_BYTES:
+                if len(raw) > MAX_LINE_BYTES:
                     logger.warning("Oversized message from %s (%d bytes)", peer, len(raw))
                     break
 

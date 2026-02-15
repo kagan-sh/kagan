@@ -7,18 +7,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from kagan.core.adapters.process import spawn_exec
 from kagan.core.git_utils import has_git_repo
 from kagan.core.models.enums import CardIndicator, TaskStatus, TaskType
 from kagan.core.services.jobs import JobRecord, JobStatus
 from kagan.core.services.runtime import AutoOutputMode
 from kagan.core.services.workspaces import RepoWorkspaceInput
 from kagan.tui.ui.screen_result import await_screen_result
+from kagan.tui.ui.utils import state_attr, state_bool
 
 if TYPE_CHECKING:
-    from kagan.core.acp import Agent
     from kagan.core.adapters.db.schema import Task
     from kagan.core.config import AgentConfig
-    from kagan.core.services.runtime import AutoOutputReadiness
     from kagan.tui.ui.screens.kanban.screen import KanbanScreen
 
 
@@ -82,6 +82,22 @@ class KanbanSessionController:
         if record is not None and record.message:
             return record.message
         return default
+
+    @staticmethod
+    def _state_attr(state: object | None, name: str, default: Any = None) -> Any:
+        return state_attr(state, name, default)
+
+    @staticmethod
+    def _state_bool(state: object | None, name: str) -> bool:
+        return state_bool(state, name)
+
+    @staticmethod
+    def _is_waiting_output_mode(mode: object) -> bool:
+        if mode is AutoOutputMode.WAITING:
+            return True
+        if isinstance(mode, str):
+            return mode == AutoOutputMode.WAITING.value
+        return getattr(mode, "value", None) == AutoOutputMode.WAITING.value
 
     async def provision_workspace_for_active_repo(self, task: Task) -> WorkspaceProvisionResult:
         active_repo_id = self.screen.ctx.active_repo_id
@@ -185,21 +201,26 @@ class KanbanSessionController:
     ) -> bool:
         """Open auto output for task."""
         api = self.screen.ctx.api
-        attached_agent: Agent | None = None
 
         # Reconcile persisted runtime state so ENTER works for runs started outside TUI (e.g. MCP).
         await api.reconcile_running_tasks([task.id])
 
+        readiness = await api.prepare_auto_output(task)
         if wait_for_running:
-            attached_agent = await api.wait_for_running_agent(task.id, timeout=6.0)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 6.0
+            while (
+                loop.time() < deadline
+                and not self._state_bool(readiness, "can_open_output")
+                and not self._state_bool(readiness, "is_running")
+            ):
+                await asyncio.sleep(0.2)
+                await api.reconcile_running_tasks([task.id])
+                readiness = await api.prepare_auto_output(task)
 
-        readiness: AutoOutputReadiness = await api.prepare_auto_output(task)
-        if attached_agent is not None and readiness.running_agent is None:
-            readiness.running_agent = attached_agent
-            readiness.is_running = True
-            readiness.can_open_output = True
-            readiness.output_mode = AutoOutputMode.LIVE
-        if readiness.output_mode is AutoOutputMode.WAITING and not readiness.is_running:
+        output_mode = self._state_attr(readiness, "output_mode")
+        is_running = self._state_bool(readiness, "is_running")
+        if self._is_waiting_output_mode(output_mode) and not is_running:
             recovery = await api.recover_stale_auto_output(task)
             if recovery.message:
                 self.screen.notify(
@@ -209,10 +230,12 @@ class KanbanSessionController:
             if recovery.success:
                 readiness = await api.prepare_auto_output(task)
 
-        if readiness.message and not (quiet_unavailable and not readiness.can_open_output):
-            severity = "warning" if not readiness.can_open_output else "information"
-            self.screen.notify(readiness.message, severity=severity)
-        if not readiness.can_open_output:
+        message = self._state_attr(readiness, "message")
+        can_open_output = self._state_bool(readiness, "can_open_output")
+        if isinstance(message, str) and message and not (quiet_unavailable and not can_open_output):
+            severity = "warning" if not can_open_output else "information"
+            self.screen.notify(message, severity=severity)
+        if not can_open_output:
             return False
 
         await self.screen._review.open_task_output_for_task(
@@ -265,7 +288,7 @@ class KanbanSessionController:
     async def _open_blocked_auto_output_if_needed(self, task: Task) -> bool:
         """Open read-only running output for blocked AUTO tasks."""
         runtime_view = self.screen.ctx.api.get_runtime_view(task.id)
-        if runtime_view is None or not runtime_view.is_blocked:
+        if not self._state_bool(runtime_view, "is_blocked"):
             return False
 
         await self.screen._review.open_task_output_for_task(
@@ -294,8 +317,8 @@ class KanbanSessionController:
     async def _resume_or_start_in_progress_auto(self, task: Task) -> None:
         """Open current AUTO output stream or start agent when idle."""
         runtime_view = self.screen.ctx.api.get_runtime_view(task.id)
-        is_running = runtime_view.is_running if runtime_view is not None else False
-        is_pending = runtime_view.is_pending if runtime_view is not None else False
+        is_running = self._state_bool(runtime_view, "is_running")
+        is_pending = self._state_bool(runtime_view, "is_pending")
         opened = await self.open_auto_output_for_task(
             task,
             wait_for_running=is_running,
@@ -532,11 +555,17 @@ class KanbanSessionController:
                 await self.screen.ctx.api.update_task(task.id, status=TaskStatus.IN_PROGRESS)
                 await self.screen._board.refresh_board()
 
+            backend = terminal_backend or self.resolve_pair_terminal_backend(task)
+
             # Attach requires terminal access -- this is the only TUI-resident step.
             with self.screen.app.suspend():
-                attached = await self.screen.ctx.api.attach_session(task.id)
+                if backend == "tmux":
+                    attached = await self._attach_tmux_session_local(task.id)
+                else:
+                    attached = await self.screen.ctx.api.attach_session(task.id)
 
-            backend = terminal_backend or self.resolve_pair_terminal_backend(task)
+            if not attached and backend == "tmux":
+                attached = await self._retry_missing_tmux_attach(task, workspace_path)
             if not attached:
                 self.screen.notify("Failed to open PAIR session", severity="warning")
                 return
@@ -571,6 +600,40 @@ class KanbanSessionController:
 
             if isinstance(e, TmuxError):
                 self.screen.notify(f"Tmux error: {e}", severity="error")
+                return
+            self.screen.notify(f"Failed to open PAIR session: {e}", severity="error")
+
+    async def _attach_tmux_session_local(self, task_id: str) -> bool:
+        """Attach to tmux from the TUI process so terminal IO stays interactive."""
+        session_name = f"kagan-{task_id}"
+        try:
+            proc = await spawn_exec("tmux", "attach-session", "-t", session_name)
+        except OSError:
+            return False
+        returncode = await proc.wait()
+        return returncode == 0
+
+    async def _retry_missing_tmux_attach(
+        self,
+        task: Task,
+        workspace_path: Path | None,
+    ) -> bool:
+        """Recreate and retry attach when tmux session is missing."""
+        if workspace_path is None:
+            return False
+
+        session_exists = await self.screen.ctx.api.session_exists(task.id)
+        if session_exists:
+            return False
+
+        self.screen.notify("PAIR session missing; recreating session...", severity="information")
+        await self.screen.ctx.api.create_session(
+            task.id,
+            worktree_path=workspace_path,
+            reuse_if_exists=False,
+        )
+        with self.screen.app.suspend():
+            return await self._attach_tmux_session_local(task.id)
 
     async def start_agent_flow(self, task: Task) -> None:
         if task.task_type == TaskType.PAIR:
@@ -578,7 +641,7 @@ class KanbanSessionController:
 
         await self.screen.ctx.api.reconcile_running_tasks([task.id])
         runtime_view = self.screen.ctx.api.get_runtime_view(task.id)
-        is_running = runtime_view.is_running if runtime_view is not None else False
+        is_running = self._state_bool(runtime_view, "is_running")
         if is_running:
             self.screen.notify(
                 "Agent already running for this task; opening Task Output.",

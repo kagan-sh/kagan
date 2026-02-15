@@ -5,10 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
+from typing import TYPE_CHECKING, cast
 
 from textual.command import DiscoveryHit, Hit, Hits, Provider
 
 from kagan.tui.ui.screens.command_actions import run_screen_action, screen_allows_action
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 class KanbanActionId(StrEnum):
@@ -33,7 +37,6 @@ class KanbanActionId(StrEnum):
     SWITCH_GLOBAL_AGENT = "switch_global_agent"
     OPEN_SETTINGS = "open_settings"
     SET_TASK_BRANCH = "set_task_branch"
-    SET_DEFAULT_BRANCH = "set_default_branch"
     MERGE = "merge"
 
 
@@ -194,14 +197,6 @@ KANBAN_ACTIONS: tuple[KanbanAction, ...] = (
         exclusive=True,
         exit_on_error=False,
     ),
-    KanbanAction(
-        "board set default branch",
-        "Set global default base branch",
-        KanbanActionId.SET_DEFAULT_BRANCH,
-        worker_group="set-default-branch",
-        exclusive=True,
-        exit_on_error=False,
-    ),
 )
 
 
@@ -240,6 +235,35 @@ class KanbanCommandProvider(Provider):
                 help=item.help,
             )
 
+        plugin_actions = getattr(screen, "get_plugin_ui_actions", None)
+        if callable(plugin_actions):
+            plugin_actions_fn = cast(
+                "Callable[..., Awaitable[list[dict[str, object]]]]",
+                plugin_actions,
+            )
+            for action in await plugin_actions_fn(surface="kanban.repo_actions"):
+                command = str(
+                    action.get("command")
+                    or action.get("label")
+                    or f"{action.get('plugin_id', 'plugin')} {action.get('action_id', '')}"
+                ).strip()
+                if not command:
+                    continue
+                score = matcher.match(command)
+                if score <= 0:
+                    continue
+                plugin_id = str(action.get("plugin_id", "")).strip()
+                action_id = str(action.get("action_id", "")).strip()
+                if not plugin_id or not action_id:
+                    continue
+                help_text = str(action.get("help") or action.get("label") or "").strip()
+                yield Hit(
+                    score,
+                    matcher.highlight(command),
+                    partial(screen.invoke_plugin_ui_action, plugin_id, action_id),
+                    help=help_text,
+                )
+
     async def discover(self) -> Hits:
         screen = self.screen
         for item in KANBAN_ACTIONS:
@@ -259,3 +283,26 @@ class KanbanCommandProvider(Provider):
                 ),
                 help=item.help,
             )
+
+        plugin_actions = getattr(screen, "get_plugin_ui_actions", None)
+        if callable(plugin_actions):
+            plugin_actions_fn = cast(
+                "Callable[..., Awaitable[list[dict[str, object]]]]",
+                plugin_actions,
+            )
+            for action in await plugin_actions_fn(surface="kanban.repo_actions"):
+                command = str(
+                    action.get("command")
+                    or action.get("label")
+                    or f"{action.get('plugin_id', 'plugin')} {action.get('action_id', '')}"
+                ).strip()
+                plugin_id = str(action.get("plugin_id", "")).strip()
+                action_id = str(action.get("action_id", "")).strip()
+                if not command or not plugin_id or not action_id:
+                    continue
+                help_text = str(action.get("help") or action.get("label") or "").strip()
+                yield DiscoveryHit(
+                    command,
+                    partial(screen.invoke_plugin_ui_action, plugin_id, action_id),
+                    help=help_text,
+                )

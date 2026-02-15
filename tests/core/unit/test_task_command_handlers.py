@@ -12,7 +12,13 @@ import pytest
 from kagan.core.api import KaganAPI
 from kagan.core.events import TaskDeleted
 from kagan.core.models.enums import TaskPriority, TaskStatus, TaskType
-from kagan.core.request_handlers import handle_task_context, handle_task_delete, handle_task_logs
+from kagan.core.request_handlers import (
+    handle_task_context,
+    handle_task_delete,
+    handle_task_logs,
+    handle_task_move,
+    handle_task_scratchpad,
+)
 
 
 def _api(**services: object) -> KaganAPI:
@@ -91,6 +97,22 @@ async def test_delete_task_fallback_cleans_runtime_resources() -> None:
     workspace_service.get_path.assert_awaited_once_with("task-1")
     workspace_service.delete.assert_awaited_once_with("task-1", delete_branch=True)
     task_service.delete_task.assert_awaited_once_with("task-1")
+
+
+async def test_task_move_rejects_direct_done_transition() -> None:
+    task = _task("task-1", status=TaskStatus.REVIEW)
+    task_service = SimpleNamespace(
+        get_task=AsyncMock(return_value=task),
+        move=AsyncMock(return_value=task),
+    )
+    f = _api(task_service=task_service)
+
+    result = await handle_task_move(f, {"task_id": "task-1", "status": "DONE"})
+
+    assert result["success"] is False
+    assert result["task_id"] == "task-1"
+    assert result["code"] == "INVALID_STATUS_TRANSITION"
+    task_service.move.assert_not_awaited()
 
 
 async def test_task_context_falls_back_to_project_repos_on_workspace_failure() -> None:
@@ -174,6 +196,89 @@ async def test_task_logs_returns_empty_on_fetch_failures() -> None:
     assert result["task_id"] == "task-1"
     assert result["count"] == 0
     assert result["logs"] == []
+
+
+async def test_task_scratchpad_applies_transport_limit() -> None:
+    task_service = SimpleNamespace(get_scratchpad=AsyncMock(return_value="x" * 1200))
+    f = _api(task_service=task_service)
+
+    result = await handle_task_scratchpad(
+        f,
+        {"task_id": "task-1", "content_char_limit": 256},
+    )
+
+    assert result["task_id"] == "task-1"
+    assert result["truncated"] is True
+    assert "[truncated " in result["content"]
+
+
+async def test_task_logs_applies_transport_limits() -> None:
+    execution = SimpleNamespace(id="exec-1", created_at=datetime.now(tz=UTC))
+    execution_service = SimpleNamespace(
+        list_executions_for_task=AsyncMock(return_value=[execution]),
+        count_executions_for_task=AsyncMock(return_value=1),
+        get_execution_log_entries=AsyncMock(return_value=[SimpleNamespace(logs="x" * 500)]),
+    )
+    f = _api(execution_service=execution_service)
+
+    result = await handle_task_logs(
+        f,
+        {
+            "task_id": "task-1",
+            "limit": 5,
+            "content_char_limit": 64,
+            "total_char_limit": 256,
+        },
+    )
+
+    assert result["task_id"] == "task-1"
+    assert result["count"] == 1
+    assert result["truncated"] is True
+    assert "[truncated " in result["logs"][0]["content"]
+
+
+async def test_task_logs_supports_offset_pagination() -> None:
+    now = datetime.now(tz=UTC)
+    executions_desc = [
+        SimpleNamespace(id="exec-3", created_at=now),
+        SimpleNamespace(id="exec-2", created_at=now),
+        SimpleNamespace(id="exec-1", created_at=now),
+    ]
+
+    async def list_executions_for_task(task_id: str, *, limit: int = 5, offset: int = 0):
+        assert task_id == "task-1"
+        return executions_desc[offset : offset + limit]
+
+    execution_service = SimpleNamespace(
+        list_executions_for_task=AsyncMock(side_effect=list_executions_for_task),
+        count_executions_for_task=AsyncMock(return_value=3),
+        get_execution_log_entries=AsyncMock(
+            side_effect=lambda execution_id: [
+                SimpleNamespace(logs=f"log for {execution_id}"),
+            ]
+        ),
+    )
+    f = _api(execution_service=execution_service)
+
+    first_page = await handle_task_logs(f, {"task_id": "task-1", "limit": 2, "offset": 0})
+    second_page = await handle_task_logs(f, {"task_id": "task-1", "limit": 2, "offset": 2})
+
+    assert [entry["run"] for entry in first_page["logs"]] == [2, 3]
+    assert first_page["total_runs"] == 3
+    assert first_page["has_more"] is True
+    assert first_page["next_offset"] == 2
+    assert [entry["run"] for entry in second_page["logs"]] == [1]
+    assert second_page["has_more"] is False
+    assert second_page["next_offset"] is None
+
+
+async def test_task_logs_rejects_invalid_offset() -> None:
+    f = _api()
+
+    result = await handle_task_logs(f, {"task_id": "task-1", "offset": "bad"})
+
+    assert result["success"] is False
+    assert result["code"] == "INVALID_OFFSET"
 
 
 async def test_delete_task_publishes_task_deleted_event(

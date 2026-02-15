@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 from tests.helpers.config import write_test_config
 from tests.helpers.git import init_git_repo_with_commit
-from tests.helpers.mock_responses import SIMPLE_PLAN_TEXT, make_propose_plan_tool_call
+from tests.helpers.mock_responses import SIMPLE_PLAN_TEXT, make_plan_submit_tool_call
 from tests.helpers.mocks import build_repo_routed_smart_agent_factory
 from tests.helpers.wait import (
     wait_for_planner_ready,
@@ -232,7 +232,7 @@ async def test_multi_project_ui_journey(tmp_path: Path) -> None:
     db_path = xdg_data / "kagan.db"
 
     def build_plan(repo_path: Path) -> dict[str, Any]:
-        return make_propose_plan_tool_call(
+        return make_plan_submit_tool_call(
             tool_call_id=f"tc-plan-{repo_path.name}",
             tasks=[
                 {
@@ -247,9 +247,9 @@ async def test_multi_project_ui_journey(tmp_path: Path) -> None:
         )
 
     routes_by_repo = {
-        str(project_a_repo1): {"propose_plan": (SIMPLE_PLAN_TEXT, build_plan(project_a_repo1))},
-        str(project_a_repo2): {"propose_plan": (SIMPLE_PLAN_TEXT, build_plan(project_a_repo2))},
-        str(project_b_repo1): {"propose_plan": (SIMPLE_PLAN_TEXT, build_plan(project_b_repo1))},
+        str(project_a_repo1): {"plan_submit": (SIMPLE_PLAN_TEXT, build_plan(project_a_repo1))},
+        str(project_a_repo2): {"plan_submit": (SIMPLE_PLAN_TEXT, build_plan(project_a_repo2))},
+        str(project_b_repo1): {"plan_submit": (SIMPLE_PLAN_TEXT, build_plan(project_b_repo1))},
     }
 
     app = KaganApp(

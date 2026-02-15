@@ -1,107 +1,238 @@
 ---
-title: MCP Tools Reference
-description: Tool catalog, annotations, and capability profiles
+title: MCP tools reference
+description: Consolidated tool catalog, contract semantics, and scope rules
 icon: material/tools
 ---
 
-# MCP Tools Reference
+# MCP tools reference
 
-## Tool annotations
+This document defines the consolidated MCP toolset for Kagan.
+It is a breaking, non-backward-compatible contract.
 
-- `read-only`: no state mutation
-- `mutating`: changes state
-- `destructive`: irreversible or high-impact
+## Annotation model
+
+| Annotation    | Meaning                           |
+| ------------- | --------------------------------- |
+| `read-only`   | Reads state only                  |
+| `mutating`    | Modifies state                    |
+| `mixed`       | Action-dependent read/write modes |
+| `destructive` | Irreversible/high-impact action   |
 
 ## Tool catalog
 
-### Context and coordination
+### Core task workflow
 
-| Tool                                  | Annotation  | Purpose                                           |
-| ------------------------------------- | ----------- | ------------------------------------------------- |
-| `get_context(task_id)`                | `read-only` | Task details + workspace context                  |
-| `get_task(task_id, ...)`              | `read-only` | Task details with optional logs/scratchpad/review |
-| `update_scratchpad(task_id, content)` | `mutating`  | Append notes and progress                         |
-| `request_review(task_id, summary)`    | `mutating`  | Move task to `REVIEW`                             |
+| Tool               | Annotation    | Purpose                                                                           |
+| ------------------ | ------------- | --------------------------------------------------------------------------------- |
+| `task_get(...)`    | `read-only`   | Read bounded task snapshot (`summary`/`full`) or bounded context (`mode=context`) |
+| `task_logs(...)`   | `read-only`   | Read paginated task execution logs (newest-first pages)                           |
+| `task_list(...)`   | `read-only`   | List tasks with optional filtering and scratchpad inclusion                       |
+| `task_wait(...)`   | `read-only`   | Long-poll task status changes                                                     |
+| `task_create(...)` | `mutating`    | Create a task                                                                     |
+| `task_patch(...)`  | `mutating`    | Apply partial task updates, transitions, and note append                          |
+| `task_delete(...)` | `destructive` | Delete a task                                                                     |
 
-### Task management
+### Automation jobs
 
-| Tool                        | Annotation    | Purpose              |
-| --------------------------- | ------------- | -------------------- |
-| `tasks_list(...)`           | `read-only`   | List tasks           |
-| `tasks_create(...)`         | `mutating`    | Create task          |
-| `tasks_update(...)`         | `mutating`    | Update task fields   |
-| `tasks_move(...)`           | `mutating`    | Move status column   |
-| `jobs_submit(task_id, ...)` | `mutating`    | Submit AUTO job      |
-| `jobs_get(job_id, task_id)` | `read-only`   | Read job status      |
-| `jobs_wait(job_id, ...)`    | `read-only`   | Wait for job status  |
-| `jobs_cancel(job_id, ...)`  | `mutating`    | Cancel submitted job |
-| `tasks_delete(task_id)`     | `destructive` | Delete task          |
+| Tool              | Annotation  | Purpose                                                  |
+| ----------------- | ----------- | -------------------------------------------------------- |
+| `job_start(...)`  | `mutating`  | Submit async automation action for a task                |
+| `job_poll(...)`   | `read-only` | Read job state; optionally wait and/or page event stream |
+| `job_cancel(...)` | `mutating`  | Cancel a submitted job                                   |
 
-**Key distinctions:**
+### PAIR session lifecycle
 
-- **`status`** = Kanban column (`BACKLOG`/`IN_PROGRESS`/`REVIEW`/`DONE`); **`task_type`** = execution mode (`AUTO`/`PAIR`).
-- **`jobs_submit`**: requires `task_type="AUTO"`; may return `START_PENDING` before admission.
-- **`tasks_create`/`tasks_update`**: auto-normalize `status="AUTO"|"PAIR"` into `task_type` (code: `STATUS_WAS_TASK_TYPE`).
-- **`tasks_move`**: rejects `status="AUTO"|"PAIR"` with remediation (`next_tool="tasks_update"`).
-- **`get_task(include_logs=true)`**: `mode="summary"` limits payload; `mode="full"` includes deeper history within a budget.
-- **Runtime fields** on `tasks_list`/`get_task`/`get_context`: `is_running`, `is_reviewing`, `is_blocked`, `is_pending`, + detail fields.
+| Tool                  | Annotation | Purpose                                       |
+| --------------------- | ---------- | --------------------------------------------- |
+| `session_manage(...)` | `mixed`    | `open`, `read`, or `close` PAIR session state |
 
-### PAIR session control
+### Project, review, and admin
 
-| Tool                   | Annotation  | Purpose                   |
-| ---------------------- | ----------- | ------------------------- |
-| `sessions_create(...)` | `mutating`  | Create/reuse PAIR session |
-| `sessions_exists(...)` | `read-only` | Check session existence   |
-| `sessions_kill(...)`   | `mutating`  | Terminate session         |
+| Tool                | Annotation    | Purpose                                                      |
+| ------------------- | ------------- | ------------------------------------------------------------ |
+| `project_list(...)` | `read-only`   | List recent projects                                         |
+| `project_open(...)` | `mutating`    | Open/switch project                                          |
+| `repo_list(...)`    | `read-only`   | List repos by project                                        |
+| `review_apply(...)` | `destructive` | Apply review action (`approve`, `reject`, `merge`, `rebase`) |
+| `audit_list(...)`   | `read-only`   | List recent audit events                                     |
+| `settings_get()`    | `read-only`   | Read allowlisted settings                                    |
+| `settings_set(...)` | `mutating`    | Update allowlisted settings                                  |
+| `plan_submit(...)`  | `mutating`    | Submit planner proposal payload (planner profile)            |
 
-### Projects and repos
+Review semantics:
 
-| Tool                        | Annotation  | Purpose             |
-| --------------------------- | ----------- | ------------------- |
-| `projects_list(...)`        | `read-only` | List projects       |
-| `projects_create(...)`      | `mutating`  | Create a project    |
-| `projects_open(project_id)` | `mutating`  | Open/switch project |
-| `repos_list(project_id)`    | `read-only` | List repos          |
+- `review_apply(action="approve")` records approval state but does **not** move task to `DONE`.
+- `DONE` is reached by completion flows (for example `review_apply(action="merge")` or no-change close flow).
 
-### Review and planning
+## `task_get` API
 
-| Tool                           | Annotation    | Purpose                                |
-| ------------------------------ | ------------- | -------------------------------------- |
-| `review(task_id, action, ...)` | `destructive` | `approve`, `reject`, `merge`, `rebase` |
-| `propose_plan(tasks, todos)`   | `mutating`    | Submit structured plan (planner only)  |
-| `audit_tail(...)`              | `read-only`   | Read recent audit events               |
+`task_get` supports three modes:
 
-### Settings
+- `summary`: compact task payload
+- `full`: expanded bounded task payload
+- `context`: full bounded context (workspace + linked tasks)
 
-| Tool                   | Annotation  | Purpose                     |
-| ---------------------- | ----------- | --------------------------- |
-| `settings_get()`       | `read-only` | Fetch allowlisted settings  |
-| `settings_update(...)` | `mutating`  | Update allowlisted settings |
+### Parameters
 
-## Recovery-friendly responses
+| Parameter            | Type           | Description                               |
+| -------------------- | -------------- | ----------------------------------------- |
+| `task_id`            | `string`       | Target task                               |
+| `mode`               | `string`       | `summary`, `full`, or `context`           |
+| `include_scratchpad` | `bool \| null` | Include scratchpad (summary/full modes)   |
+| `include_logs`       | `bool \| null` | Include bounded logs (summary/full modes) |
+| `include_review`     | `bool \| null` | Include review payload when available     |
 
-Mutating tools may return `code`, `hint`, `next_tool`, and `next_arguments` for deterministic recovery. Connection failures return `DISCONNECTED` or `AUTH_STALE_TOKEN`. Follow these fields directly instead of guessing a retry.
+### Notes
+
+- Scratchpad/log payloads are transport-bounded by default for reliability.
+- When optional payloads are reduced due transport safety, response may include:
+  - `scratchpad_truncated: true`
+  - `logs_truncated: true`
+- When `include_logs=true`, pagination hints may be included:
+  - `logs_total_runs`, `logs_returned_runs`
+  - `logs_has_more`, `logs_next_offset`
+
+## `task_logs` API
+
+Use this tool to fetch additional log history when `task_get(..., include_logs=true)` is truncated
+or indicates more pages are available.
+
+### Parameters
+
+| Parameter | Type     | Default  | Description         |
+| --------- | -------- | -------- | ------------------- |
+| `task_id` | `string` | required | Target task         |
+| `limit`   | `int`    | `5`      | Runs per page       |
+| `offset`  | `int`    | `0`      | Newest-first offset |
+
+### Response fields
+
+| Field           | Type          | Description                            |
+| --------------- | ------------- | -------------------------------------- |
+| `logs`          | `list`        | Returned run log entries               |
+| `total_runs`    | `int`         | Total runs available                   |
+| `returned_runs` | `int`         | Runs returned in this response         |
+| `has_more`      | `bool`        | Whether another page is available      |
+| `next_offset`   | `int \| null` | Offset to fetch the next older page    |
+| `truncated`     | `bool`        | Whether content was reduced for safety |
+
+## `task_patch` API
+
+`task_patch` is the single task mutation endpoint for incremental updates.
+
+### Parameters
+
+| Parameter     | Type             | Description                                                                   |
+| ------------- | ---------------- | ----------------------------------------------------------------------------- |
+| `task_id`     | `string`         | Target task                                                                   |
+| `set`         | `object \| null` | Partial field updates (`title`, `description`, `priority`, `task_type`, etc.) |
+| `transition`  | `string \| null` | `request_review`, `set_status`, or `set_task_type`                            |
+| `append_note` | `string \| null` | Text appended to task notes/scratchpad                                        |
+
+## `task_wait` long-poll API
+
+`task_wait` blocks until task status changes or timeout is reached.
+
+### Parameters
+
+| Parameter         | Type              | Default                | Description             |
+| ----------------- | ----------------- | ---------------------- | ----------------------- |
+| `task_id`         | `string`          | required               | Task to watch           |
+| `timeout_seconds` | `float \| string` | server default (1800s) | Maximum wait duration   |
+| `wait_for_status` | `list \| string`  | `null`                 | Optional status filter  |
+| `from_updated_at` | `string`          | `null`                 | Race-safe resume cursor |
+
+### Response codes
+
+| Code                   | Meaning                               |
+| ---------------------- | ------------------------------------- |
+| `TASK_CHANGED`         | Task status changed                   |
+| `ALREADY_AT_STATUS`    | Task already matches filter           |
+| `CHANGED_SINCE_CURSOR` | Task changed after supplied cursor    |
+| `WAIT_TIMEOUT`         | Timeout reached without status change |
+| `WAIT_INTERRUPTED`     | Wait cancelled/interrupted            |
+| `TASK_DELETED`         | Task deleted while waiting            |
+| `INVALID_TIMEOUT`      | Invalid timeout value                 |
+| `INVALID_PARAMS`       | Invalid parameter payload             |
+
+## `job_poll` API
+
+`job_poll` consolidates job get/wait/events.
+
+### Parameters
+
+| Parameter         | Type     | Default  | Description                               |
+| ----------------- | -------- | -------- | ----------------------------------------- |
+| `job_id`          | `string` | required | Target job                                |
+| `task_id`         | `string` | required | Parent task                               |
+| `wait`            | `bool`   | `false`  | If true, wait for progress/terminal state |
+| `timeout_seconds` | `float`  | `1.5`    | Wait timeout when `wait=true`             |
+| `events`          | `bool`   | `false`  | If true, return paginated events          |
+| `limit`           | `int`    | `50`     | Event page size when `events=true`        |
+| `offset`          | `int`    | `0`      | Event page offset when `events=true`      |
+
+## `session_manage` API
+
+`session_manage` consolidates PAIR session lifecycle operations.
+
+### Parameters
+
+| Parameter         | Type             | Description                       |
+| ----------------- | ---------------- | --------------------------------- |
+| `action`          | `string`         | `open`, `read`, or `close`        |
+| `task_id`         | `string`         | Target task                       |
+| `reuse_if_exists` | `bool`           | Used by `open`                    |
+| `worktree_path`   | `string \| null` | Optional path override for `open` |
+
+## Scope and isolation
+
+- Task mutations are enforced against task-scoped sessions (`task:<task_id>`).
+- PAIR workers use task-scoped MCP sessions with capability lane `pair_worker`.
+- AUTO workers use task-scoped MCP sessions resolved from runtime permission policy.
+- Scoped task sessions cannot mutate other task IDs.
+- Global MCP access does not override task-scoped worker isolation.
+
+### Timeout configuration
+
+Default and max timeouts are server-side configurable via settings:
+
+- `general.tasks_wait_default_timeout_seconds`
+- `general.tasks_wait_max_timeout_seconds`
+
+## Task field semantics
+
+- `status` is Kanban state: `BACKLOG`, `IN_PROGRESS`, `REVIEW`, `DONE`.
+- `status=AUTO` and `status=PAIR` are rejected with `TASK_TYPE_VALUE_IN_STATUS`.
+- Do not set `status=DONE` via generic task patch/move workflows.
+  Use review completion flows to reach `DONE`.
+- `task_type` is execution mode: `AUTO`, `PAIR`.
+- `acceptance_criteria` accepts either a single string or a list of strings.
+
+## Common recovery codes
+
+| Code               | Meaning                                     | Typical action                      |
+| ------------------ | ------------------------------------------- | ----------------------------------- |
+| `START_PENDING`    | Job accepted, pending scheduler admission   | Poll with `job_poll(wait=true)`     |
+| `DISCONNECTED`     | Core unavailable                            | Start/restart core, retry           |
+| `AUTH_STALE_TOKEN` | MCP token is stale after core restart       | Reconnect MCP client                |
+| `WAIT_TIMEOUT`     | `task_wait` timed out without status change | Retry with same or adjusted timeout |
+| `WAIT_INTERRUPTED` | `task_wait` was interrupted/cancelled       | Retry with `from_updated_at` cursor |
 
 ## Capability profiles
 
-Hierarchical -- higher profiles include lower permissions.
+Higher profiles include lower-level permissions.
 
-| Profile       | Includes                                                   |
-| ------------- | ---------------------------------------------------------- |
-| `viewer`      | Read-only queries                                          |
-| `planner`     | `viewer` + `propose_plan`                                  |
-| `pair_worker` | `planner` + task progress tools                            |
-| `operator`    | `pair_worker` + create/update/move + review approve/reject |
-| `maintainer`  | `operator` + destructive/admin actions                     |
+| Profile       | Scope                                                                 |
+| ------------- | --------------------------------------------------------------------- |
+| `viewer`      | Read-only operations                                                  |
+| `planner`     | `viewer` + `plan_submit`                                              |
+| `pair_worker` | `planner` + `task_patch`, jobs, and `session_manage`                  |
+| `operator`    | `pair_worker` + `task_create`, `project_open`, non-destructive review |
+| `maintainer`  | `operator` + `task_delete`, destructive review/admin operations       |
 
 ## Identity lanes
 
-- `kagan`: safe default lane
-- `kagan_admin`: explicit admin lane for external orchestration
-
-## Security defaults
-
-1. Prefer `viewer` or `pair_worker` for automation
-1. Use `maintainer` only for trusted admin flows
-1. Scope sessions with `--session-id` where possible
-1. Use `--readonly` for reporting/inspection agents
+| Identity      | Notes                                         |
+| ------------- | --------------------------------------------- |
+| `kagan`       | Default safe lane                             |
+| `kagan_admin` | Explicit elevated lane for trusted automation |

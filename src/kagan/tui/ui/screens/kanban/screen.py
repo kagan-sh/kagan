@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from time import monotonic
+from typing import TYPE_CHECKING, Any
 
 from textual import getters, on
 from textual.binding import Binding
@@ -18,6 +19,7 @@ from kagan.core.constants import (
     MIN_SCREEN_HEIGHT,
     MIN_SCREEN_WIDTH,
 )
+from kagan.core.git_utils import get_current_branch
 from kagan.core.models.enums import TaskStatus, TaskType
 from kagan.tui.keybindings import KANBAN_BINDINGS
 from kagan.tui.ui.modals.description_editor import DescriptionEditorModal
@@ -35,7 +37,7 @@ from kagan.tui.ui.screens.kanban.session_controller import KanbanSessionControll
 from kagan.tui.ui.screens.kanban.state import KanbanUiState
 from kagan.tui.ui.screens.kanban.task_controller import KanbanTaskController
 from kagan.tui.ui.screens.planner import PlannerScreen
-from kagan.tui.ui.utils import copy_with_notification
+from kagan.tui.ui.utils import copy_with_notification, state_attr
 from kagan.tui.ui.widgets.column import KanbanColumn
 from kagan.tui.ui.widgets.header import KaganHeader
 from kagan.tui.ui.widgets.keybinding_hint import KanbanHintBar
@@ -115,6 +117,8 @@ class KanbanScreen(KaganScreen):
 
     header = getters.query_one(KaganHeader)
 
+    BRANCH_SYNC_INTERVAL_SECONDS: float = 5.0
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._tasks: list[Task] = []
@@ -127,10 +131,14 @@ class KanbanScreen(KaganScreen):
         self._agent_offline: bool = False
         self._merge_failed_tasks: set[str] = set()
         self._search_request_id: int = 0
+        self._branch_sync_timer: Timer | None = None
         self._board = KanbanBoardController(self)
         self._review = KanbanReviewController(self)
         self._session = KanbanSessionController(self)
         self._task_controller = KanbanTaskController(self)
+        self._plugin_ui_catalog: dict[str, Any] | None = None
+        self._plugin_ui_catalog_fetched_at: float = 0.0
+        self._plugin_ui_catalog_lock = asyncio.Lock()
 
     _TASK_REQUIRED_ACTIONS = frozenset(item.action for item in KANBAN_ACTIONS if item.requires_task)
     _AGENT_REQUIRED_ACTIONS = frozenset(
@@ -180,13 +188,20 @@ class KanbanScreen(KaganScreen):
     def _runtime_view(self, task_id: str):
         return self.ctx.api.get_runtime_view(task_id)
 
+    @staticmethod
+    def _runtime_attr(runtime_view: object | None, name: str, default: Any = None) -> Any:
+        return state_attr(runtime_view, name, default)
+
     def _is_runtime_running(self, task_id: str) -> bool:
         runtime_view = self._runtime_view(task_id)
-        return runtime_view.is_running if runtime_view is not None else False
+        return bool(self._runtime_attr(runtime_view, "is_running", False))
 
     def _runtime_run_count(self, task_id: str) -> int:
         runtime_view = self._runtime_view(task_id)
-        return runtime_view.run_count if runtime_view is not None else 0
+        run_count = self._runtime_attr(runtime_view, "run_count", 0)
+        if isinstance(run_count, int) and not isinstance(run_count, bool):
+            return run_count
+        return 0
 
     def get_columns(self) -> list[KanbanColumn]:
         return [
@@ -272,21 +287,22 @@ class KanbanScreen(KaganScreen):
         self.kagan_app.task_changed_signal.subscribe(self, self._on_task_changed)
         self._board.start_background_sync()
         self._board.sync_agent_states()
-        from kagan.tui.ui.widgets.header import _get_git_branch
-
         if self.ctx.active_repo_id is None:
             self.header.update_branch("")
             return
-        branch = await _get_git_branch(self.kagan_app.project_root)
+        branch = await get_current_branch(self.kagan_app.project_root)
         self.header.update_branch(branch)
+        self._start_branch_sync()
 
     def on_unmount(self) -> None:
+        self._stop_branch_sync()
         with suppress(Exception):
             self.kagan_app.task_changed_signal.unsubscribe(self)
         self.invalidate_search_requests(cancel_workers=True)
         self._board.cleanup_on_unmount()
 
     async def on_screen_suspend(self) -> None:
+        self._stop_branch_sync()
         self._board.stop_background_sync()
 
     async def _on_task_changed(self, _task_id: str) -> None:
@@ -302,7 +318,9 @@ class KanbanScreen(KaganScreen):
         self._board.check_screen_size()
 
     async def on_screen_resume(self) -> None:
+        self._start_branch_sync()
         self._board.start_background_sync()
+        await self._refresh_plugin_ui_catalog(force=True)
         await self._board.refresh_board()
         self._board.sync_agent_states()
 
@@ -588,7 +606,6 @@ class KanbanScreen(KaganScreen):
             KanbanActionId.TOGGLE_SEARCH: self._toggle_search_flow,
             KanbanActionId.SWITCH_GLOBAL_AGENT: self._switch_global_agent_flow,
             KanbanActionId.OPEN_SETTINGS: self._open_settings_flow,
-            KanbanActionId.SET_DEFAULT_BRANCH: self._set_default_branch_flow,
             KanbanActionId.OPEN_PLANNER: self._open_planner_flow,
         }
         operation_factory = global_operations.get(action)
@@ -735,10 +752,9 @@ class KanbanScreen(KaganScreen):
         from kagan.tui.ui.modals import SettingsModal
 
         config = self.kagan_app.config
-        config_path = self.kagan_app.config_path
         result = await await_screen_result(
             self.app,
-            SettingsModal(config, config_path),
+            SettingsModal(config, self.ctx.api),
         )
         self._on_settings_result(result)
 
@@ -747,6 +763,7 @@ class KanbanScreen(KaganScreen):
             return
         config_path = self.kagan_app.config_path
         self.kagan_app.config = self.kagan_app.config.load(config_path)
+        self.ctx.config = self.kagan_app.config
         self.header.update_agent_from_config(self.kagan_app.config)
         self.notify("Settings saved")
 
@@ -759,17 +776,215 @@ class KanbanScreen(KaganScreen):
     def action_set_task_branch(self) -> None:
         self._dispatch_kanban_action(KanbanActionId.SET_TASK_BRANCH)
 
+    def action_github_sync(self) -> None:
+        """Invoke the sync_issues plugin action from the catalog."""
+        self.run_worker(self._invoke_catalog_action("sync_issues"))
+
+    async def _invoke_catalog_action(self, action_id: str) -> None:
+        """Look up a plugin action by action_id in the catalog and invoke it."""
+        catalog = await self._refresh_plugin_ui_catalog()
+        actions = catalog.get("actions", [])
+        if not isinstance(actions, list):
+            self.notify("Plugin actions unavailable", severity="warning")
+            return
+        action = next(
+            (
+                item
+                for item in actions
+                if isinstance(item, dict) and item.get("action_id") == action_id
+            ),
+            None,
+        )
+        if action is None:
+            self.notify(f"Action '{action_id}' not available", severity="warning")
+            return
+        plugin_id = action.get("plugin_id", "")
+        if not plugin_id:
+            self.notify("Action has no plugin_id", severity="warning")
+            return
+        await self.invoke_plugin_ui_action(plugin_id, action_id)
+
+    async def _refresh_plugin_ui_catalog(self, *, force: bool = False) -> dict[str, Any]:
+        if not force and self._plugin_ui_catalog is not None:
+            if monotonic() - self._plugin_ui_catalog_fetched_at < 2.0:
+                return dict(self._plugin_ui_catalog)
+
+        async with self._plugin_ui_catalog_lock:
+            if not force and self._plugin_ui_catalog is not None:
+                if monotonic() - self._plugin_ui_catalog_fetched_at < 2.0:
+                    return dict(self._plugin_ui_catalog)
+
+            project = await self._get_active_project()
+            if project is None:
+                self._plugin_ui_catalog = {
+                    "schema_version": "1",
+                    "actions": [],
+                    "forms": [],
+                    "badges": [],
+                }
+                self._plugin_ui_catalog_fetched_at = monotonic()
+                return dict(self._plugin_ui_catalog)
+
+            try:
+                catalog = await self.ctx.api.plugin_ui_catalog(
+                    project_id=project.id,
+                    repo_id=self.ctx.active_repo_id,
+                )
+            except Exception:
+                catalog = {"schema_version": "1", "actions": [], "forms": [], "badges": []}
+
+            if not isinstance(catalog, dict):
+                catalog = {"schema_version": "1", "actions": [], "forms": [], "badges": []}
+
+            self._plugin_ui_catalog = dict(catalog)
+            self._plugin_ui_catalog_fetched_at = monotonic()
+            return dict(self._plugin_ui_catalog)
+
+    async def get_plugin_ui_actions(self, *, surface: str) -> list[dict[str, Any]]:
+        catalog = await self._refresh_plugin_ui_catalog()
+        actions = catalog.get("actions", [])
+        if not isinstance(actions, list):
+            return []
+        return [
+            action
+            for action in actions
+            if isinstance(action, dict) and action.get("surface") == surface
+        ]
+
+    async def invoke_plugin_ui_action(self, plugin_id: str, action_id: str) -> None:
+        project = await self._get_active_project()
+        if project is None:
+            self.notify("No active project", severity="warning")
+            return
+        project_id = project.id
+
+        catalog = await self._refresh_plugin_ui_catalog()
+        actions = catalog.get("actions", [])
+        forms = catalog.get("forms", [])
+        if not isinstance(actions, list) or not isinstance(forms, list):
+            self.notify("Plugin actions unavailable", severity="warning")
+            return
+
+        action = next(
+            (
+                item
+                for item in actions
+                if isinstance(item, dict)
+                and item.get("plugin_id") == plugin_id
+                and item.get("action_id") == action_id
+            ),
+            None,
+        )
+        if action is None:
+            self.notify("Plugin action not available", severity="warning")
+            return
+
+        repo_id = self.ctx.active_repo_id
+        inputs: dict[str, Any] = {}
+
+        form_id = action.get("form_id")
+        if isinstance(form_id, str) and form_id.strip():
+            form = next(
+                (
+                    item
+                    for item in forms
+                    if isinstance(item, dict)
+                    and item.get("plugin_id") == plugin_id
+                    and item.get("form_id") == form_id
+                ),
+                None,
+            )
+            if form is not None:
+                from kagan.tui.ui.modals import PluginFormModal
+
+                initial_values: dict[str, Any] = {}
+                if repo_id:
+                    initial_values["repo_id"] = repo_id
+                payload = await await_screen_result(
+                    self.app,
+                    PluginFormModal(form=form, initial_values=initial_values),
+                )
+                if payload is None:
+                    return
+                if isinstance(payload, dict):
+                    inputs = payload
+                    selected_repo_id = payload.get("repo_id")
+                    if isinstance(selected_repo_id, str) and selected_repo_id.strip():
+                        repo_id = selected_repo_id.strip()
+                        inputs.pop("repo_id", None)
+
+        label = str(action.get("label") or "").strip()
+        if label:
+            self.notify(f"{label}...", severity="information")
+
+        try:
+            result = await self.ctx.api.plugin_ui_invoke(
+                project_id=project_id,
+                repo_id=repo_id,
+                plugin_id=plugin_id,
+                action_id=action_id,
+                inputs=inputs or None,
+            )
+        except Exception as exc:
+            self.notify(str(exc), severity="error")
+            return
+
+        if not isinstance(result, dict):
+            self.notify("Unexpected plugin action response", severity="error")
+            return
+
+        ok = bool(result.get("ok", False))
+        message = str(result.get("message") or ("OK" if ok else "Action failed"))
+        code = str(result.get("code") or "")
+        hint: str | None = None
+        data = result.get("data")
+        if isinstance(data, dict):
+            hint_value = data.get("hint")
+            if isinstance(hint_value, str) and hint_value.strip():
+                hint = hint_value.strip()
+        if hint and hint not in message:
+            message = f"{message} ({hint})"
+        severity = "information" if ok else ("warning" if "NOT_CONNECTED" in code else "error")
+        self.notify(message, severity=severity)
+
+        refresh = result.get("refresh") if isinstance(result.get("refresh"), dict) else {}
+        if isinstance(refresh, dict) and refresh.get("tasks") is True:
+            await self._board.refresh_board()
+        if isinstance(refresh, dict) and refresh.get("repo") is True:
+            await self.sync_header_context(self.header)
+
     async def _set_task_branch_flow(self, task: Task) -> None:
         await self._task_controller.set_task_branch_flow(task)
 
     async def _update_task_branch(self, task: Task, branch: str) -> None:
         await self._task_controller.update_task_branch(task, branch)
 
-    def action_set_default_branch(self) -> None:
-        self._dispatch_kanban_action(KanbanActionId.SET_DEFAULT_BRANCH)
+    def _start_branch_sync(self) -> None:
+        """Start periodic git branch polling for auto-sync."""
+        if self._branch_sync_timer is not None:
+            return
+        self._branch_sync_timer = self.set_interval(
+            self.BRANCH_SYNC_INTERVAL_SECONDS,
+            self._schedule_branch_sync,
+        )
 
-    async def _set_default_branch_flow(self) -> None:
-        await self._task_controller.set_default_branch_flow()
+    def _stop_branch_sync(self) -> None:
+        """Stop periodic git branch polling."""
+        if self._branch_sync_timer is None:
+            return
+        self._branch_sync_timer.stop()
+        self._branch_sync_timer = None
+
+    def _schedule_branch_sync(self) -> None:
+        """Schedule a background worker for branch sync."""
+        if not self.is_mounted or not self.app.is_running:
+            return
+        self.run_worker(
+            self.auto_sync_branch(self.header),
+            group="kanban-branch-sync",
+            exclusive=True,
+            exit_on_error=False,
+        )
 
     def on_task_card_selected(self, message: TaskCard.Selected) -> None:
         self.action_view_details()

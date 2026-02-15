@@ -8,7 +8,6 @@ from tests.helpers.wait import wait_for_modal, wait_for_screen, wait_for_widget
 
 from kagan.tui.ui.modals.branch_select import BaseBranchModal
 from kagan.tui.ui.screens.kanban import KanbanScreen
-from kagan.tui.ui.screens.planner import PlannerScreen
 from kagan.tui.ui.widgets.card import TaskCard
 
 
@@ -36,26 +35,6 @@ async def test_set_task_branch_modal_opens_and_dismisses(
         await pilot.pause()
 
         await wait_for_screen(pilot, KanbanScreen, timeout=5.0)
-
-
-@pytest.mark.asyncio
-async def test_set_default_branch_modal_opens_and_applies_selection(
-    e2e_app_with_tasks,
-    mock_agent_factory,
-) -> None:
-    app = e2e_app_with_tasks
-    app._agent_factory = mock_agent_factory
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        await wait_for_screen(pilot, KanbanScreen, timeout=10.0)
-
-        await pilot.press("B")
-        modal = cast("BaseBranchModal", await wait_for_modal(pilot, BaseBranchModal, timeout=5.0))
-        modal.dismiss("develop")
-        await pilot.pause()
-
-        await wait_for_screen(pilot, KanbanScreen, timeout=5.0)
-        assert app.config.general.default_base_branch == "develop"
 
 
 @pytest.mark.asyncio
@@ -93,36 +72,3 @@ async def test_set_task_branch_modal_opens_when_branch_lookup_is_slow(
         modal = cast("BaseBranchModal", await wait_for_modal(pilot, BaseBranchModal, timeout=5.0))
         modal.dismiss(None)
         await wait_for_screen(pilot, KanbanScreen, timeout=5.0)
-
-
-@pytest.mark.asyncio
-async def test_planner_set_default_branch_modal_opens_when_branch_lookup_is_slow(
-    e2e_app_with_tasks,
-    mock_agent_factory,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    app = e2e_app_with_tasks
-    app._agent_factory = mock_agent_factory
-
-    async def _slow_branch_lookup(_path) -> list[str]:
-        loop = asyncio.get_running_loop()
-        gate = loop.create_future()
-        loop.call_later(0.2, gate.set_result, None)
-        await gate
-        return ["main", "develop"]
-
-    monkeypatch.setattr(
-        "kagan.tui.ui.screens.branch_candidates.list_local_branches",
-        _slow_branch_lookup,
-    )
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        screen = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
-        screen.action_open_planner()
-        await wait_for_screen(pilot, PlannerScreen, timeout=10.0)
-
-        screen = cast("PlannerScreen", pilot.app.screen)
-        screen.action_set_default_branch()
-        modal = cast("BaseBranchModal", await wait_for_modal(pilot, BaseBranchModal, timeout=6.0))
-        modal.dismiss(None)
-        await wait_for_screen(pilot, PlannerScreen, timeout=5.0)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
@@ -16,11 +15,10 @@ from kagan.core.constants import KAGAN_LOGO_SMALL
 from kagan.tui.ui.utils import safe_query_one
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from textual.app import ComposeResult
 
     from kagan.core.config import KaganConfig
+
 
 _AGENT_MODEL_CONFIG_KEY: dict[str, str] = {
     "claude": "default_model_claude",
@@ -37,16 +35,17 @@ HEADER_SEPARATOR = "│"
 
 @dataclass
 class _HeaderLabels:
+    logo: Label
     project: Label
     repo: Label
+    github_status: Label
+    sep_github: Label
     branch: Label
     sep_branch: Label
     sessions: Label
     sep_sessions: Label
     agent: Label
     sep_agent: Label
-    core_status: Label
-    sep_core_status: Label
     stats: Label
 
 
@@ -56,26 +55,6 @@ def _get_version() -> str:
         return version("kagan")
     except PackageNotFoundError:
         return "dev"
-
-
-async def _get_git_branch(repo_root: Path) -> str:
-    """Get current git branch name."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            "rev-parse",
-            "--abbrev-ref",
-            "HEAD",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=repo_root,
-        )
-        stdout, _ = await proc.communicate()
-        if proc.returncode == 0:
-            return stdout.decode().strip()
-    except (OSError, FileNotFoundError):
-        pass
-    return ""
 
 
 class KaganHeader(Widget):
@@ -92,6 +71,7 @@ class KaganHeader(Widget):
     repo_name: reactive[str] = reactive("")
     agent_display: reactive[str] = reactive("")
     core_status: reactive[str] = reactive("DISCONNECTED")
+    plugin_badges_text: reactive[str] = reactive("")
 
     def __init__(self, task_count: int = 0, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -99,20 +79,20 @@ class KaganHeader(Widget):
         self.task_count = task_count
 
     def compose(self) -> ComposeResult:
-        yield Label(KAGAN_LOGO_SMALL, classes="header-logo")
+        yield Label(KAGAN_LOGO_SMALL, id="header-logo", classes="header-logo")
         yield Label("", id="header-project", classes="header-title")
         yield Label("", id="header-repo", classes="header-repo")
 
         yield Label("", classes="header-spacer")
 
+        yield Label("", id="header-github-status", classes="header-github-status")
+        yield Label(HEADER_SEPARATOR, id="sep-github", classes="header-branch")
         yield Label("", id="header-branch", classes="header-branch")
         yield Label(HEADER_SEPARATOR, id="sep-branch", classes="header-branch")
         yield Label("", id="header-sessions", classes="header-sessions")
         yield Label(HEADER_SEPARATOR, id="sep-sessions", classes="header-branch")
         yield Label("", id="header-agent", classes="header-agent")
         yield Label(HEADER_SEPARATOR, id="sep-agent", classes="header-branch")
-        yield Label("", id="header-core-status", classes="core-status")
-        yield Label(HEADER_SEPARATOR, id="sep-core-status", classes="header-branch")
         yield Label("", id="header-stats", classes="header-stats")
         yield Label(HEADER_SEPARATOR, id="sep-stats", classes="header-branch")
         yield Label("? help", id="header-help", classes="header-branch")
@@ -122,6 +102,7 @@ class KaganHeader(Widget):
         self._cache_labels()
         self._update_project_display()
         self._update_repo_display()
+        self._update_github_status_display()
         self._update_branch_display()
         self._update_sessions_display()
         self._update_agent_display()
@@ -132,57 +113,61 @@ class KaganHeader(Widget):
         if self._labels is not None:
             return self._labels
 
+        logo_label = safe_query_one(self, "#header-logo", Label)
         project_label = safe_query_one(self, "#header-project", Label)
         repo_label = safe_query_one(self, "#header-repo", Label)
+        github_status_label = safe_query_one(self, "#header-github-status", Label)
+        sep_github = safe_query_one(self, "#sep-github", Label)
         branch_label = safe_query_one(self, "#header-branch", Label)
         sep_branch = safe_query_one(self, "#sep-branch", Label)
         sessions_label = safe_query_one(self, "#header-sessions", Label)
         sep_sessions = safe_query_one(self, "#sep-sessions", Label)
         agent_label = safe_query_one(self, "#header-agent", Label)
         sep_agent = safe_query_one(self, "#sep-agent", Label)
-        core_status_label = safe_query_one(self, "#header-core-status", Label)
-        sep_core_status = safe_query_one(self, "#sep-core-status", Label)
         stats_label = safe_query_one(self, "#header-stats", Label)
 
         all_labels = (
+            logo_label,
             project_label,
             repo_label,
+            github_status_label,
+            sep_github,
             branch_label,
             sep_branch,
             sessions_label,
             sep_sessions,
             agent_label,
             sep_agent,
-            core_status_label,
-            sep_core_status,
             stats_label,
         )
         if any(label is None for label in all_labels):
             return None
 
+        assert logo_label is not None
         assert project_label is not None
         assert repo_label is not None
+        assert github_status_label is not None
+        assert sep_github is not None
         assert branch_label is not None
         assert sep_branch is not None
         assert sessions_label is not None
         assert sep_sessions is not None
         assert agent_label is not None
         assert sep_agent is not None
-        assert core_status_label is not None
-        assert sep_core_status is not None
         assert stats_label is not None
 
         self._labels = _HeaderLabels(
+            logo=logo_label,
             project=project_label,
             repo=repo_label,
+            github_status=github_status_label,
+            sep_github=sep_github,
             branch=branch_label,
             sep_branch=sep_branch,
             sessions=sessions_label,
             sep_sessions=sep_sessions,
             agent=agent_label,
             sep_agent=sep_agent,
-            core_status=core_status_label,
-            sep_core_status=sep_core_status,
             stats=stats_label,
         )
         return self._labels
@@ -221,6 +206,20 @@ class KaganHeader(Widget):
         labels.repo.update("")
         labels.repo.display = False
 
+    def _update_github_status_display(self) -> None:
+        """Update plugin status label and separator visibility."""
+        labels = self._cache_labels()
+        if labels is None:
+            return
+        if self.plugin_badges_text:
+            labels.github_status.update(self.plugin_badges_text)
+            labels.github_status.display = True
+            labels.sep_github.display = True
+            return
+        labels.github_status.update("")
+        labels.github_status.display = False
+        labels.sep_github.display = False
+
     def _update_sessions_display(self) -> None:
         """Update active sessions label and separator visibility."""
         labels = self._cache_labels()
@@ -257,13 +256,16 @@ class KaganHeader(Widget):
         labels.sep_agent.display = False
 
     def _update_core_status_display(self) -> None:
-        """Update core connection status label and separator visibility."""
+        """Update logo color based on core connection status."""
         labels = self._cache_labels()
         if labels is None:
             return
-        labels.core_status.update(f"CORE:{self.core_status}")
-        labels.core_status.display = True
-        labels.sep_core_status.display = True
+        if self.core_status == "CONNECTED":
+            labels.logo.set_class(False, "logo-disconnected")
+            labels.logo.set_class(True, "logo-connected")
+        else:
+            labels.logo.set_class(False, "logo-connected")
+            labels.logo.set_class(True, "logo-disconnected")
 
     def watch_task_count(self, count: int) -> None:
         self._update_stats_display()
@@ -285,6 +287,9 @@ class KaganHeader(Widget):
 
     def watch_core_status(self, value: str) -> None:
         self._update_core_status_display()
+
+    def watch_plugin_badges_text(self, value: str) -> None:
+        self._update_github_status_display()
 
     def update_count(self, count: int) -> None:
         self.task_count = count
@@ -310,6 +315,33 @@ class KaganHeader(Widget):
     def update_core_status(self, status: str) -> None:
         """Update the core connection status display."""
         self.core_status = status
+
+    def update_plugin_badges(self, badges: list[dict] | None) -> None:
+        """Update the declarative plugin badge display (schema-driven UI)."""
+        if not badges:
+            self.plugin_badges_text = ""
+            return
+
+        parts: list[str] = []
+        for badge in badges:
+            if not isinstance(badge, dict):
+                continue
+            label = badge.get("label")
+            text = badge.get("text")
+            state = badge.get("state")
+            if not isinstance(label, str) or not label.strip():
+                continue
+            label = label.strip()
+            text = text.strip() if isinstance(text, str) else ""
+            icon = "○"
+            if state == "ok":
+                icon = "◉"
+            elif state == "error":
+                icon = "⊗"
+            part = f"{icon} {label}" if not text else f"{icon} {label} {text}"
+            parts.append(part)
+
+        self.plugin_badges_text = "  ".join(parts)
 
     def update_agent_from_config(self, config: KaganConfig) -> None:
         """Build and update the global agent label from config."""

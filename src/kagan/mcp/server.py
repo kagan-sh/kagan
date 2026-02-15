@@ -44,29 +44,30 @@ from kagan.mcp.models import (
     TaskRuntimeState,
 )
 from kagan.mcp.registrars import (
+    DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS,
     JOB_CODE_JOB_TIMEOUT,
     JOB_CODE_NOT_RUNNING,
-    JOB_CODE_START_BLOCKED,
     JOB_CODE_START_PENDING,
     JOB_CODE_TASK_TYPE_MISMATCH,
     JOB_NON_TERMINAL_STATUSES,
     JOB_TERMINAL_STATUSES,
     TASK_TYPE_AUTO,
     TASK_TYPE_VALUES,
-    TOOL_GET_TASK,
-    TOOL_JOBS_WAIT,
-    TOOL_TASKS_UPDATE,
+    TOOL_JOB_POLL,
+    TOOL_TASK_GET,
+    TOOL_TASK_PATCH,
     SharedToolRegistrationContext,
-    TaskStatusInput,
-    TaskTypeInput,
     ToolRegistrationContext,
     register_full_mode_tools,
     register_shared_tools,
 )
 from kagan.mcp.tools import CoreClientBridge
+from kagan.version import get_kagan_version
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
+
+    from kagan.core.plugins.sdk import PluginRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,7 @@ _SETTINGS_UPDATE_FIELD_MAP: dict[str, str] = {
     "auto_approve": "general.auto_approve",
     "require_review_approval": "general.require_review_approval",
     "serialize_merges": "general.serialize_merges",
-    "default_base_branch": "general.default_base_branch",
+    "worktree_base_ref_strategy": "general.worktree_base_ref_strategy",
     "max_concurrent_agents": "general.max_concurrent_agents",
     "default_worker_agent": "general.default_worker_agent",
     "default_pair_terminal_backend": "general.default_pair_terminal_backend",
@@ -147,6 +148,8 @@ _SETTINGS_UPDATE_FIELD_MAP: dict[str, str] = {
     "default_model_gemini": "general.default_model_gemini",
     "default_model_kimi": "general.default_model_kimi",
     "default_model_copilot": "general.default_model_copilot",
+    "tasks_wait_default_timeout_seconds": "general.tasks_wait_default_timeout_seconds",
+    "tasks_wait_max_timeout_seconds": "general.tasks_wait_max_timeout_seconds",
     "skip_pair_instructions": "ui.skip_pair_instructions",
 }
 
@@ -320,6 +323,7 @@ async def _mcp_lifespan(
         session_id,
         capability_profile=capability_profile,
         session_origin=session_origin,
+        client_version=get_kagan_version(),
     )
     try:
         yield MCPLifespanContext(bridge=bridge, client=client)
@@ -354,10 +358,12 @@ def _build_server_instructions(readonly: bool) -> str:
         "Kagan is a Kanban-style task management system for AI-assisted development.",
         "",
         "The task_id is provided in your system prompt when Kagan assigns you work.",
-        "Use get_task to inspect any task (with include_logs=true for execution history).",
-        "Use tasks_list to coordinate with other agents.",
+        "Use task_get to inspect any task (with include_logs=true for execution history).",
+        "If task_get logs are truncated or logs_has_more=true, use task_logs.",
+        "Use task_list to coordinate with other agents.",
         "Important: status is Kanban column, task_type is execution mode (AUTO/PAIR).",
-        "Use jobs_submit/jobs_wait/jobs_get/jobs_events/jobs_cancel for async automation control.",
+        "Use job_start to spawn agents. job_poll(wait=true) tracks spawn state.",
+        "Use task_wait to long-poll for agent completion (wait_for_status).",
         "If a tool returns next_tool/next_arguments, use them for deterministic recovery.",
     ]
     if readonly:
@@ -373,13 +379,17 @@ def _build_server_instructions(readonly: bool) -> str:
             [
                 "",
                 "When assigned a task, follow this workflow:",
-                "1. Call get_context with your task_id to get requirements and codebase context",
-                "2. Use update_scratchpad to record progress, decisions, and blockers",
-                "3. Call jobs_list_actions to discover valid job actions.",
-                "4. For automation runs: set task_type='AUTO', then call jobs_submit.",
-                "5. Track progress with jobs_wait/jobs_get and inspect timeline with jobs_events.",
-                "6. Use jobs_cancel only to stop in-flight work.",
-                "7. Call request_review when implementation is complete",
+                "1. Call task_get(mode='context') with your task_id for full bounded context",
+                "2. Use task_patch(append_note=...) to record progress and blockers",
+                "3. For automation runs: set task_type='AUTO' using task_patch.",
+                "4. Call job_start to submit work.",
+                "5. Use job_poll(wait=true) to confirm the spawn succeeded (short timeout).",
+                "6. Use task_wait(task_id, wait_for_status=['REVIEW','DONE'])",
+                "   to long-poll until the agent completes (default 1800s, max 3600s).",
+                "7. Use job_cancel only to stop in-flight work.",
+                "8. Call task_patch(transition='request_review') when implementation is complete",
+                "9. Use review_apply(action='merge') (or no-change close flow) to complete task.",
+                "   review_apply(action='approve') records approval but does not set DONE.",
             ]
         )
     return "\n".join(base)
@@ -446,35 +456,6 @@ def _normalized_mode(value: str | None) -> str | None:
     if normalized in TASK_TYPE_VALUES:
         return normalized
     return None
-
-
-def _normalize_status_task_type_inputs(
-    *,
-    status: TaskStatusInput | None,
-    task_type: TaskTypeInput | None,
-) -> tuple[str | None, str | None, str | None]:
-    """Normalize common status-vs-task_type confusion.
-
-    When callers pass status=AUTO/PAIR, interpret that as task_type if possible.
-    Returns: (normalized_status, normalized_task_type, normalization_message).
-    """
-    mode_from_status = _normalized_mode(str(status) if status is not None else None)
-    normalized_task_type = _normalized_mode(str(task_type) if task_type is not None else None)
-    if mode_from_status is None:
-        normalized_status = str(status) if status is not None else None
-        normalized_task_type_str = str(task_type) if task_type is not None else None
-        return normalized_status, normalized_task_type_str, None
-    if normalized_task_type and normalized_task_type != mode_from_status:
-        message = (
-            f"Ignored status={status!r} because task_type={task_type!r} is already set. "
-            "Use status for BACKLOG/IN_PROGRESS/REVIEW/DONE only."
-        )
-        return None, normalized_task_type, message
-    message = (
-        f"Interpreted status={status!r} as task_type={mode_from_status!r}. "
-        "Use status for BACKLOG/IN_PROGRESS/REVIEW/DONE only."
-    )
-    return None, mode_from_status, message
 
 
 def _envelope_fields(
@@ -606,49 +587,50 @@ def _derive_job_get_recovery(
     normalized_status = status.lower() if isinstance(status, str) else None
     if timed_out or code == JOB_CODE_JOB_TIMEOUT:
         return (
-            TOOL_JOBS_WAIT,
-            {"job_id": job_id, "task_id": task_id, "timeout_seconds": 1.5},
-            "Wait timed out before terminal status. Call jobs_wait again.",
+            TOOL_JOB_POLL,
+            {
+                "job_id": job_id,
+                "task_id": task_id,
+                "wait": True,
+                "timeout_seconds": DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS,
+            },
+            "Wait timed out before terminal status. Call job_poll(wait=true) again.",
         )
     if normalized_status in JOB_NON_TERMINAL_STATUSES:
         return (
-            TOOL_JOBS_WAIT,
-            {"job_id": job_id, "task_id": task_id, "timeout_seconds": 1.5},
-            "Job is still in progress. Call jobs_wait until status is terminal.",
+            TOOL_JOB_POLL,
+            {
+                "job_id": job_id,
+                "task_id": task_id,
+                "wait": True,
+                "timeout_seconds": DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS,
+            },
+            "Job is still in progress. Call job_poll(wait=true) until terminal.",
         )
     if code == JOB_CODE_TASK_TYPE_MISMATCH:
         return (
-            TOOL_TASKS_UPDATE,
-            {"task_id": task_id, "task_type": TASK_TYPE_AUTO},
-            "Set task_type to AUTO before resubmitting jobs_submit.",
-        )
-    if code == JOB_CODE_START_BLOCKED:
-        blocked_ids_raw: list[object] = []
-        if runtime is not None:
-            raw_value = runtime.get("blocked_by_task_ids", [])
-            if isinstance(raw_value, list | tuple):
-                blocked_ids_raw = list(raw_value)
-        blocked_ids = [str(value) for value in blocked_ids_raw if str(value).strip()]
-        if blocked_ids:
-            return (
-                TOOL_GET_TASK,
-                {"task_id": blocked_ids[0], "mode": "summary"},
-                "Resolve the blocking task first, then resubmit jobs_submit.",
-            )
-        return (
-            TOOL_GET_TASK,
-            {"task_id": task_id, "mode": "summary"},
-            "Inspect runtime details and retry after the blocking condition clears.",
+            TOOL_TASK_PATCH,
+            {
+                "task_id": task_id,
+                "transition": "set_task_type",
+                "set": {"task_type": TASK_TYPE_AUTO},
+            },
+            "Set task_type to AUTO before resubmitting job_start.",
         )
     if code == JOB_CODE_START_PENDING:
         return (
-            TOOL_JOBS_WAIT,
-            {"job_id": job_id, "task_id": task_id, "timeout_seconds": 1.5},
-            "Start is pending scheduler admission. Keep calling jobs_wait until it resolves.",
+            TOOL_JOB_POLL,
+            {
+                "job_id": job_id,
+                "task_id": task_id,
+                "wait": True,
+                "timeout_seconds": DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS,
+            },
+            "Start is pending scheduler admission. Keep calling job_poll(wait=true).",
         )
     if code == JOB_CODE_NOT_RUNNING:
         return (
-            TOOL_GET_TASK,
+            TOOL_TASK_GET,
             {"task_id": task_id, "include_logs": True, "mode": "summary"},
             "Agent is not running. Inspect latest runtime/logs before retrying.",
         )
@@ -735,6 +717,7 @@ def _register_full_mode_tools(
     enable_internal_instrumentation: bool,
 ) -> None:
     """Register mutating/full-mode-only MCP tools."""
+    plugin_registry = _build_plugin_registry()
     register_full_mode_tools(
         mcp,
         allows_all=allows_all,
@@ -744,7 +727,6 @@ def _register_full_mode_tools(
         helpers=ToolRegistrationContext(
             require_bridge=_require_bridge,
             runtime_state_from_raw=_runtime_state_from_raw,
-            normalize_status_task_type_inputs=_normalize_status_task_type_inputs,
             envelope_fields=_envelope_fields,
             envelope_with_code_override=_envelope_with_code_override,
             envelope_status_fields=_envelope_status_fields,
@@ -755,11 +737,22 @@ def _register_full_mode_tools(
             str_or_none=_str_or_none,
             dict_or_none=_dict_or_none,
             is_allowed=_is_allowed,
+            plugin_registry=plugin_registry,
         ),
         read_only_annotation=_READ_ONLY,
         mutating_annotation=_MUTATING,
         destructive_annotation=_DESTRUCTIVE,
     )
+
+
+def _build_plugin_registry() -> PluginRegistry:
+    """Build a PluginRegistry with plugins discovered from config."""
+    from kagan.core.plugins.sdk import PluginRegistry
+
+    config = KaganConfig.load(get_config_path())
+    registry = PluginRegistry()
+    registry.discover_and_register(config.plugins.discovery)
+    return registry
 
 
 def list_registered_tool_names(mcp: FastMCP) -> set[str]:

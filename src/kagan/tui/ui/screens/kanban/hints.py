@@ -45,6 +45,10 @@ def build_kanban_hints(
 ) -> KanbanHints:
     """Build two-tier keybinding hints for the Kanban board.
 
+    Args:
+        status: Current task status, or None if no task is selected.
+        task_type: Current task type.
+
     Returns:
         KanbanHints with navigation (row 1) and actions (row 2).
     """

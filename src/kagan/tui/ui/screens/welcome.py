@@ -153,7 +153,7 @@ class WelcomeScreen(KaganScreen):
 
             yield Label(
                 "Control Kagan from your editor via Admin MCP"
-                " — docs.kagan.sh/how-to/admin-mcp-editors",
+                " — docs.kagan.sh/guides/editor-mcp-setup/",
                 id="admin-mcp-hint",
             )
 
@@ -393,7 +393,7 @@ class WelcomeScreen(KaganScreen):
         await self.app.push_screen(
             SettingsModal(
                 config=self.ctx.config,
-                config_path=self.ctx.config_path,
+                api=self.ctx.api,
             )
         )
 

@@ -111,7 +111,7 @@ class TaskRuntimeState(BaseModel):
 
 
 class TaskContext(BaseModel):
-    """Full context for working on a task. Returned by get_context."""
+    """Full context for working on a task. Returned by task_get(mode=context)."""
 
     task_id: str = Field(description="Unique task identifier")
     title: str = Field(description="Task title")
@@ -152,7 +152,7 @@ class TaskSummary(BaseModel):
 
 
 class TaskDetails(BaseModel):
-    """Detailed task information. Returned by get_task."""
+    """Detailed task information. Returned by task_get."""
 
     task_id: str = Field(description="Unique task identifier")
     title: str = Field(description="Task title")
@@ -171,14 +171,30 @@ class TaskDetails(BaseModel):
     )
 
 
-class ReviewResponse(MutatingResponse):
-    """Response from request_review tool."""
+class TaskWaitResponse(BaseModel):
+    """Response from task_wait long-poll tool."""
 
-    status: str = Field(description="'review' for success, 'error' for failure")
+    changed: bool = Field(description="Whether task status changed before timeout")
+    timed_out: bool = Field(description="Whether the wait timed out without status change")
+    task_id: str = Field(description="ID of the watched task")
+    previous_status: str | None = Field(
+        default=None, description="Task status at the start of the wait"
+    )
+    current_status: str | None = Field(
+        default=None, description="Task status at the end of the wait"
+    )
+    changed_at: str | None = Field(
+        default=None, description="ISO timestamp of the status change event"
+    )
+    task: dict[str, object] | None = Field(
+        default=None, description="Compact task snapshot (no large logs/scratchpads)"
+    )
+    code: str | None = Field(default=None, description="Machine-readable status code")
+    message: str | None = Field(default=None, description="Human-readable status message")
 
 
 class PlanProposalResponse(MutatingResponse):
-    """Response from propose_plan tool."""
+    """Response from plan_submit tool."""
 
     status: str = Field(description="'received' when plan was accepted")
     task_count: int = Field(description="Number of tasks in the proposal")
@@ -194,46 +210,45 @@ class PlanProposalResponse(MutatingResponse):
 
 
 class TaskListResponse(BaseModel):
-    """Response from tasks_list tool."""
+    """Response from task_list tool."""
 
     tasks: list[TaskSummary] = Field(default_factory=list, description="List of tasks")
     count: int = Field(default=0, description="Total number of tasks returned")
 
 
+class TaskLogsResponse(RecoveryResponse):
+    """Response from task_logs tool."""
+
+    task_id: str = Field(description="ID of the task")
+    logs: list[AgentLogEntry] = Field(default_factory=list, description="Ordered log entries")
+    count: int = Field(default=0, description="Number of logs returned")
+    total_runs: int = Field(default=0, description="Total runs available for this task")
+    returned_runs: int = Field(default=0, description="Number of runs included in this page")
+    offset: int = Field(default=0, description="Page offset used for this response")
+    limit: int = Field(default=0, description="Page limit used for this response")
+    has_more: bool = Field(default=False, description="Whether additional runs are available")
+    next_offset: int | None = Field(default=None, description="Offset for the next page")
+    truncated: bool = Field(
+        default=False,
+        description="Whether log content was reduced for transport safety",
+    )
+
+
 class TaskCreateResponse(TaskScopedMutatingResponse):
-    """Response from tasks_create tool."""
+    """Response from task_create tool."""
 
     title: str = Field(description="Task title")
     status: str = Field(description="Initial status (usually 'backlog')")
 
 
-class TaskUpdateResponse(TaskScopedMutatingResponse):
-    """Response from tasks_update tool."""
-
-    current_task_type: str | None = Field(
-        default=None,
-        description="Current task execution mode when relevant (AUTO or PAIR)",
-    )
-
-
-class ScratchpadUpdateResponse(TaskScopedMutatingResponse):
-    """Response from update_scratchpad tool."""
-
-
-class TaskMoveResponse(TaskScopedMutatingResponse):
-    """Response from tasks_move tool."""
-
-    new_status: str | None = Field(default=None, description="The new status after the move")
-
-
 class JobResponse(JobScopedResponse):
-    """Response from jobs_submit, jobs_get, jobs_wait, and jobs_cancel tools."""
+    """Response from job_start, job_poll, and job_cancel tools."""
 
     action: str | None = Field(default=None, description="Submitted job action")
     status: str | None = Field(default=None, description="Current job status")
     timed_out: bool | None = Field(
         default=None,
-        description="Whether jobs_wait returned before terminal status due to timeout",
+        description="Whether job_poll(wait=true) returned before terminal status due to timeout",
     )
     timeout_metadata: dict[str, object] | None = Field(
         default=None,
@@ -255,15 +270,6 @@ class JobResponse(JobScopedResponse):
     )
 
 
-class JobActionsResponse(BaseModel):
-    """Response from jobs_list_actions tool."""
-
-    actions: list[str] = Field(
-        default_factory=list,
-        description="Valid action names accepted by jobs_submit",
-    )
-
-
 class JobEvent(BaseModel):
     """A single event emitted during asynchronous job execution."""
 
@@ -279,7 +285,7 @@ class JobEvent(BaseModel):
 
 
 class JobEventsResponse(JobScopedResponse):
-    """Response from jobs_events tool."""
+    """Response from job_poll(events=true) tool."""
 
     events: list[JobEvent] = Field(
         default_factory=list,
@@ -293,50 +299,8 @@ class JobEventsResponse(JobScopedResponse):
     next_offset: int | None = Field(default=None, description="Offset for the next page")
 
 
-class SessionCreateResponse(TaskScopedMutatingResponse):
-    """Response from sessions_create tool with human handoff details."""
-
-    session_name: str = Field(description="Session identifier (e.g., tmux session name)")
-    backend: str = Field(description="PAIR backend (tmux, vscode, cursor)")
-    already_exists: bool = Field(description="Whether an existing session was reused")
-    worktree_path: str = Field(description="Workspace/worktree directory for the task")
-    prompt_path: str = Field(description="Path to generated startup prompt file")
-    primary_command: str = Field(description="Primary command to open or attach the session")
-    commands: list[str] = Field(
-        default_factory=list,
-        description="Copy/paste-friendly command checklist for human handoff",
-    )
-    links: dict[str, str] = Field(
-        default_factory=dict,
-        description="Convenience links/deep links (file URLs and IDE protocol URLs)",
-    )
-    instructions: str = Field(description="Short human-facing handoff instructions")
-    next_step: str = Field(description="What human/agent should do next after handoff")
-    current_task_type: str | None = Field(
-        default=None,
-        description="Current task execution mode when relevant (AUTO or PAIR)",
-    )
-
-
-class SessionExistsResponse(BaseModel):
-    """Response from sessions_exists tool."""
-
-    task_id: str = Field(description="ID of the task")
-    exists: bool = Field(description="Whether a PAIR session currently exists")
-    session_name: str = Field(description="Expected session identifier")
-    backend: str | None = Field(default=None, description="PAIR backend for this task")
-    worktree_path: str | None = Field(default=None, description="Task worktree path if available")
-    prompt_path: str | None = Field(
-        default=None, description="Task startup prompt path if available"
-    )
-
-
-class SessionKillResponse(TaskScopedMutatingResponse):
-    """Response from sessions_kill tool."""
-
-
 class TaskDeleteResponse(TaskScopedMutatingResponse):
-    """Response from tasks_delete tool."""
+    """Response from task_delete tool."""
 
 
 class ProjectInfo(BaseModel):
@@ -348,26 +312,17 @@ class ProjectInfo(BaseModel):
 
 
 class ProjectListResponse(BaseModel):
-    """Response from projects_list tool."""
+    """Response from project_list tool."""
 
     projects: list[ProjectInfo] = Field(default_factory=list, description="List of projects")
     count: int = Field(default=0, description="Total number of projects returned")
 
 
 class ProjectOpenResponse(MutatingResponse):
-    """Response from projects_open tool."""
+    """Response from project_open tool."""
 
     project_id: str = Field(description="ID of the opened project")
     name: str = Field(description="Project name")
-
-
-class ProjectCreateResponse(MutatingResponse):
-    """Response from projects_create tool."""
-
-    project_id: str = Field(description="ID of the created project")
-    name: str = Field(description="Project name")
-    description: str = Field(description="Project description")
-    repo_count: int = Field(description="Number of repositories linked to the project")
 
 
 class RepoListItem(BaseModel):
@@ -380,7 +335,7 @@ class RepoListItem(BaseModel):
 
 
 class RepoListResponse(BaseModel):
-    """Response from repos_list tool."""
+    """Response from repo_list tool."""
 
     repos: list[RepoListItem] = Field(default_factory=list, description="List of repositories")
     count: int = Field(default=0, description="Total number of repos returned")
@@ -403,7 +358,7 @@ class AuditEvent(BaseModel):
 
 
 class AuditTailResponse(BaseModel):
-    """Response from audit_tail tool."""
+    """Response from audit_list tool."""
 
     events: list[AuditEvent] = Field(default_factory=list, description="List of audit events")
     count: int = Field(default=0, description="Total number of events returned")
@@ -434,7 +389,7 @@ class SettingsGetResponse(BaseModel):
 
 
 class SettingsUpdateResponse(MutatingResponse):
-    """Response from settings_update tool."""
+    """Response from settings_set tool."""
 
     updated: dict[str, object] = Field(
         default_factory=dict,
@@ -443,4 +398,16 @@ class SettingsUpdateResponse(MutatingResponse):
     settings: dict[str, object] = Field(
         default_factory=dict,
         description="Settings snapshot after update (or current snapshot on failure)",
+    )
+
+
+class PluginToolResponse(MutatingResponse):
+    """Generic response envelope for plugin-contributed MCP tools."""
+
+    plugin_id: str = Field(default="", description="Plugin that handled the operation")
+    capability: str = Field(default="", description="Plugin capability namespace")
+    method: str = Field(default="", description="Operation method name")
+    data: dict[str, object] = Field(
+        default_factory=dict,
+        description="Plugin-specific response payload",
     )

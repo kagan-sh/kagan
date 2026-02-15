@@ -47,6 +47,7 @@ class TasksMethod(StrEnum):
     LIST = "list"
     LOGS = "logs"
     SCRATCHPAD = "scratchpad"
+    WAIT = "wait"
     UPDATE_SCRATCHPAD = "update_scratchpad"
     CREATE = "create"
     UPDATE = "update"
@@ -179,6 +180,7 @@ _VIEWER_METHODS: frozenset[CapabilityMethod] = frozenset(
         protocol_call(ProtocolCapability.TASKS, TasksMethod.LIST),
         protocol_call(ProtocolCapability.TASKS, TasksMethod.LOGS),
         protocol_call(ProtocolCapability.TASKS, TasksMethod.SCRATCHPAD),
+        protocol_call(ProtocolCapability.TASKS, TasksMethod.WAIT),
         protocol_call(ProtocolCapability.PROJECTS, ProjectsMethod.GET),
         protocol_call(ProtocolCapability.PROJECTS, ProjectsMethod.LIST),
         protocol_call(ProtocolCapability.PROJECTS, ProjectsMethod.REPOS),

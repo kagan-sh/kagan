@@ -1,51 +1,31 @@
 ---
 title: Home
-description: AI-powered Kanban TUI for autonomous development workflows
+description: User documentation for Kagan
 icon: material/home
-hide:
-
-  - navigation
 ---
 
-# Kagan Docs
+# Kagan docs
 
-Build faster with a keyboard-first AI Kanban workflow.
+Kagan is a keyboard-first Kanban app for autonomous (`AUTO`) and paired (`PAIR`) development workflows.
 
-## TL;DR
+## Start fast
 
-```bash
-uv tool install kagan
-cd your-project
-kagan
-```
+1. Install and launch Kagan in your repo: [Quickstart](quickstart.md)
+1. Choose your execution mode: [AUTO vs PAIR](guides/modes-auto-vs-pair.md)
+1. Connect your editor/agent via MCP: [MCP setup](guides/mcp-setup.md)
 
-Press ++question++ anytime in the app for context-aware shortcuts.
+## Find the right page
 
-## I Want To...
-
-| Goal                                | Open This                                            | Time      |
-| ----------------------------------- | ---------------------------------------------------- | --------- |
-| Install and run Kagan fast          | [5-Minute Quickstart](getting-started/quickstart.md) | 5 min     |
-| Choose the right working mode       | [AUTO vs PAIR](how-to/task-modes.md)                 | 2 min     |
-| Connect external agents over MCP    | [MCP Setup](how-to/mcp-setup.md)                     | 5 min     |
-| Work across multiple repositories   | [Multi-Repo Guide](how-to/multi-repo.md)             | 4 min     |
-| Fix common issues                   | [Troubleshooting](troubleshooting.md)                | 3 min     |
-| Understand contributor architecture | [Architecture](reference/architecture.md)            | reference |
-| See all shortcuts                   | [Keyboard Shortcuts](reference/keybindings.md)       | reference |
-| Tune behavior and defaults          | [Configuration](reference/configuration.md)          | reference |
-| Browse CLI commands quickly         | [Command Reference](getting-started/commands.md)     | reference |
-
-## Fast paths
-
-**From zero:** [Quickstart](getting-started/quickstart.md) -> create task (`n`) -> pick mode ([AUTO vs PAIR](how-to/task-modes.md))
-
-**Already using Kagan:** [Commands](getting-started/commands.md) -> [MCP Setup](how-to/mcp-setup.md) -> [Configuration](reference/configuration.md)
-
-## Product model
-
-Kagan has one shared core process and two interfaces:
-
-- **TUI**: keyboard-first day-to-day workflow
-- **MCP server**: external AI agents read/update the same task state
-
-Task status, review state, and project context stay consistent regardless of where actions originate. Contributor architecture: [Architecture](reference/architecture.md).
+| Goal                                      | Open this page                                             |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| First run in under 5 minutes              | [Quickstart](quickstart.md)                                |
+| Understand Kagan architecture at a glance | [Architecture overview](concepts/architecture-overview.md) |
+| Configure MCP safely                      | [MCP setup](guides/mcp-setup.md)                           |
+| Configure a specific editor client        | [Editor MCP setup](guides/editor-mcp-setup.md)             |
+| Work in multiple repos in one project     | [Multi-repo](guides/multi-repo.md)                         |
+| Update Kagan or reset local state         | [Upgrades and reset](guides/upgrades-and-reset.md)         |
+| See all CLI commands and flags            | [CLI reference](reference/cli.md)                          |
+| Tune config values and defaults           | [Configuration reference](reference/configuration.md)      |
+| See all keybindings                       | [Keybindings reference](reference/keybindings.md)          |
+| Use MCP tools programmatically            | [MCP tools reference](reference/mcp-tools.md)              |
+| Fix known issues quickly                  | [Troubleshooting](troubleshooting.md)                      |

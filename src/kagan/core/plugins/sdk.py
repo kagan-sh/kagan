@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from kagan.core.security import CapabilityProfile
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from kagan.core.bootstrap import AppContext
@@ -28,6 +28,9 @@ _PROFILE_RANK: dict[CapabilityProfile, int] = {
     CapabilityProfile.OPERATOR: 3,
     CapabilityProfile.MAINTAINER: 4,
 }
+
+PLUGIN_UI_DESCRIBE_METHOD = "ui_describe"
+PLUGIN_HOOK_VALIDATE_REVIEW: Final = "validate_review_transition"
 
 
 class PluginManifest(BaseModel):
@@ -68,6 +71,17 @@ class PluginOperationHandler(Protocol):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class McpToolSchema:
+    """Declarative MCP tool descriptor contributed by a plugin operation."""
+
+    tool_name: str
+    description: str
+    parameters: dict[str, Any]
+    response_schema: dict[str, Any]
+    annotations: str = "mutating"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PluginOperation:
     """Registration descriptor for one plugin capability/method pair."""
 
@@ -78,6 +92,7 @@ class PluginOperation:
     minimum_profile: CapabilityProfile = CapabilityProfile.MAINTAINER
     mutating: bool = False
     description: str = ""
+    mcp_tool_schema: McpToolSchema | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +253,14 @@ class PluginRegistry(PluginRegistrationApi):
         """Resolve a plugin operation by capability/method."""
         return self._operations.get((capability, method))
 
+    def operations_for_method(self, method: str) -> tuple[PluginOperation, ...]:
+        """Return plugin operations that implement the given method name."""
+        return tuple(
+            operation
+            for (_, registered_method), operation in self._operations.items()
+            if registered_method == method
+        )
+
     def evaluate_policy(
         self,
         *,
@@ -303,9 +326,41 @@ class PluginRegistry(PluginRegistrationApi):
     def _registered_operation_count(self, plugin_id: str) -> int:
         return sum(1 for operation in self._operations.values() if operation.plugin_id == plugin_id)
 
+    def all_operations(self) -> tuple[PluginOperation, ...]:
+        """Return all registered operations."""
+        return tuple(self._operations.values())
+
+    def discover_and_register(self, entrypoints: Sequence[str]) -> None:
+        """Discover and register plugins from dotted entrypoint strings.
+
+        Each entrypoint is "module.path:ClassName". The class must implement
+        the Plugin protocol.
+        """
+        import importlib
+
+        for entrypoint in entrypoints:
+            module_path, _, class_name = entrypoint.rpartition(":")
+            if not module_path or not class_name:
+                msg = f"Invalid plugin entrypoint '{entrypoint}': expected 'module:Class'"
+                raise ValueError(msg)
+            try:
+                module = importlib.import_module(module_path)
+            except ImportError as exc:
+                msg = f"Cannot import plugin module '{module_path}'"
+                raise ValueError(msg) from exc
+            cls = getattr(module, class_name, None)
+            if cls is None:
+                msg = f"Plugin class '{class_name}' not found in module '{module_path}'"
+                raise ValueError(msg)
+            plugin = cls()
+            self.register_plugin(plugin)
+
 
 __all__ = [
+    "PLUGIN_HOOK_VALIDATE_REVIEW",
+    "PLUGIN_UI_DESCRIBE_METHOD",
     "JsonPluginManifestLoader",
+    "McpToolSchema",
     "Plugin",
     "PluginManifest",
     "PluginManifestLoader",

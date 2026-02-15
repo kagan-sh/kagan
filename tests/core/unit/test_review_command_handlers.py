@@ -7,8 +7,14 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 from kagan.core.api import KaganAPI
+from kagan.core.api_tasks import ReviewApprovalContextMissingError, ReviewGuardrailBlockedError
 from kagan.core.models.enums import TaskStatus, TaskType
-from kagan.core.request_handlers import handle_review_merge, handle_review_rebase
+from kagan.core.request_handlers import (
+    handle_review_approve,
+    handle_review_merge,
+    handle_review_rebase,
+    handle_review_request,
+)
 
 
 def _api(**services: object) -> KaganAPI:
@@ -25,6 +31,25 @@ async def test_review_merge_returns_not_found_when_task_missing() -> None:
     assert result["task_id"] == "task-1"
     assert "not found" in result["message"]
     assert result["code"] == "MERGE_FAILED"
+
+
+async def test_review_request_returns_structured_guardrail_block() -> None:
+    f = _api(task_service=SimpleNamespace(get_task=AsyncMock(return_value=None)))
+    f.request_review = AsyncMock(  # type: ignore[method-assign]
+        side_effect=ReviewGuardrailBlockedError(
+            code="REVIEW_BLOCKED_NO_PR",
+            message="REVIEW transition blocked: no linked PR.",
+            hint="Use create_pr_for_task first.",
+        )
+    )
+
+    result = await handle_review_request(f, {"task_id": "task-1"})
+
+    assert result["success"] is False
+    assert result["task_id"] == "task-1"
+    assert result["code"] == "REVIEW_BLOCKED_NO_PR"
+    assert result["message"] == "REVIEW transition blocked: no linked PR."
+    assert result["hint"] == "Use create_pr_for_task first."
 
 
 async def test_review_merge_requires_approval_when_enabled() -> None:
@@ -44,10 +69,14 @@ async def test_review_merge_requires_approval_when_enabled() -> None:
 
 
 async def test_review_merge_allows_approved_task_when_gate_enabled() -> None:
-    task = SimpleNamespace(id="task-1", status=TaskStatus.DONE)
+    task = SimpleNamespace(id="task-1", status=TaskStatus.REVIEW)
+    execution = SimpleNamespace(id="exec-1", metadata_={"review_result": {"status": "approved"}})
     merge_service = SimpleNamespace(merge_task=AsyncMock(return_value=(True, "Merged all repos")))
     f = _api(
         task_service=SimpleNamespace(get_task=AsyncMock(return_value=task)),
+        execution_service=SimpleNamespace(
+            get_latest_execution_for_task=AsyncMock(return_value=execution)
+        ),
         merge_service=merge_service,
         config=SimpleNamespace(general=SimpleNamespace(require_review_approval=True)),
     )
@@ -57,6 +86,61 @@ async def test_review_merge_allows_approved_task_when_gate_enabled() -> None:
     assert result["message"] == "Merged all repos"
     assert result["code"] == "MERGED"
     merge_service.merge_task.assert_awaited_once_with(task)
+
+
+async def test_review_approve_keeps_task_in_review() -> None:
+    task = SimpleNamespace(id="task-1", status=TaskStatus.REVIEW)
+    task_service = SimpleNamespace(
+        get_task=AsyncMock(return_value=task),
+    )
+    execution = SimpleNamespace(id="exec-1", metadata_={})
+    execution_service = SimpleNamespace(
+        get_latest_execution_for_task=AsyncMock(return_value=execution),
+        update_execution=AsyncMock(return_value=execution),
+    )
+    f = _api(
+        task_service=task_service,
+        execution_service=execution_service,
+    )
+
+    result = await handle_review_approve(f, {"task_id": "task-1"})
+
+    assert result["success"] is True
+    assert result["code"] == "APPROVED"
+    assert result["status"] == "approved"
+    assert result["task_status"] == TaskStatus.REVIEW.value
+    execution_service.update_execution.assert_awaited_once()
+
+
+async def test_review_approve_rejects_non_review_state() -> None:
+    task = SimpleNamespace(id="task-1", status=TaskStatus.IN_PROGRESS)
+    f = _api(task_service=SimpleNamespace(get_task=AsyncMock(return_value=task)))
+
+    result = await handle_review_approve(f, {"task_id": "task-1"})
+
+    assert result["success"] is False
+    assert result["task_id"] == "task-1"
+    assert result["code"] == "REVIEW_NOT_READY"
+
+
+async def test_review_approve_returns_structured_error_when_execution_context_missing() -> None:
+    task = SimpleNamespace(id="task-1", status=TaskStatus.REVIEW)
+    f = _api(task_service=SimpleNamespace(get_task=AsyncMock(return_value=task)))
+    f.approve_task = AsyncMock(  # type: ignore[method-assign]
+        side_effect=ReviewApprovalContextMissingError(
+            code="REVIEW_APPROVAL_CONTEXT_MISSING",
+            message="Cannot approve review: no execution context exists for this task.",
+            hint="Create a review execution for this task, then retry approve.",
+        )
+    )
+
+    result = await handle_review_approve(f, {"task_id": "task-1"})
+
+    assert result["success"] is False
+    assert result["task_id"] == "task-1"
+    assert result["code"] == "REVIEW_APPROVAL_CONTEXT_MISSING"
+    assert "no execution context exists" in result["message"]
+    assert "retry approve" in result["hint"]
 
 
 async def test_review_merge_restores_review_status_on_failed_merge_transition() -> None:

@@ -50,6 +50,7 @@ def test_discover_core_endpoint_reads_pid_from_lease(monkeypatch, tmp_path: Path
     runtime_dir = tmp_path / "core-runtime"
     _write_runtime_files(runtime_dir, owner_pid=os.getpid())
     monkeypatch.setenv("KAGAN_CORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setattr("kagan.core.ipc.discovery._is_socket_endpoint_reachable", lambda *_: True)
 
     endpoint = discover_core_endpoint()
 
@@ -58,6 +59,19 @@ def test_discover_core_endpoint_reads_pid_from_lease(monkeypatch, tmp_path: Path
     assert endpoint.address == "/tmp/kagan-core.sock"
     assert endpoint.token == "lease-token"
     assert endpoint.pid == os.getpid()
+
+
+def test_discover_core_endpoint_rejects_unreachable_socket_endpoint(
+    monkeypatch, tmp_path: Path
+) -> None:
+    runtime_dir = tmp_path / "core-runtime"
+    _write_runtime_files(runtime_dir, owner_pid=os.getpid())
+    monkeypatch.setenv("KAGAN_CORE_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setattr("kagan.core.ipc.discovery._is_socket_endpoint_reachable", lambda *_: False)
+
+    endpoint = discover_core_endpoint()
+
+    assert endpoint is None
 
 
 def test_discover_core_endpoint_rejects_stale_dead_lease(monkeypatch, tmp_path: Path) -> None:

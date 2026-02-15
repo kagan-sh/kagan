@@ -19,6 +19,7 @@ Purpose: give coding agents the minimum high-signal rules needed to ship safe, t
 - Avoid ambiguity; define assumptions in code/tests.
 - Fail loudly on invalid state unless failure is intentionally suppressed.
 - Keep one obvious way to do routine tasks (build, test, lint, release).
+- Follow Zen of Python as a hard constraint: explicit, simple, readable, and one obvious way.
 
 ## Instruction Maintenance
 
@@ -84,6 +85,18 @@ uv run poe test-snapshot-update
 - Package/type markers are path-assigned in `tests/conftest.py`.
 - Do not manually add: `core`, `mcp`, `tui`, `unit`, `contract`, `snapshot`, `smoke`.
 - `integration` marker is deprecated/disallowed for explicit use.
+- Do not write tautology tests (tests that only restate implementation internals).
+- Prefer tests that validate useful user-facing behavior and observable outcomes.
+
+## Test Value Gate (Mandatory)
+
+- Add tests only for user-visible behavior, API/contract guarantees, or real regressions.
+- Do not add tautology tests or pass-through wiring tests already covered elsewhere.
+- Search first (`rg`) for existing coverage and extend current tests instead of adding near-duplicates.
+- Reuse fixtures/helpers from `tests/**/conftest.py` and `tests/helpers/**`; avoid local fixtures when reusable ones exist.
+- Every new test must fail on the pre-fix path and pass after the fix.
+- If a new fixture is unavoidable, add a one-line comment explaining why shared fixtures are insufficient.
+- Before commit, remove or merge redundant tests introduced during the change.
 
 Path mapping:
 
@@ -149,6 +162,8 @@ uv run poe docs-build
 uv run poe workflows-check
 ```
 
+- Any user-facing behavior change must be documented in user-facing docs in the same change.
+
 ## Commit Conventions
 
 - Allowed tags:
@@ -165,5 +180,6 @@ uv run poe workflows-check
 - Ran the smallest relevant tests first, then broader gates as needed.
 - Do not claim completion without executing verification commands.
 - Updated tests/docs when behavior or contracts changed.
+- Confirmed tests exercise user-facing behavior (not implementation tautologies).
 - Kept changes within existing boundaries unless task explicitly required boundary changes.
 - Left a short summary with changed files and verification commands executed.

@@ -230,6 +230,31 @@ async def test_prepare_auto_output_clears_stale_runtime_execution_reference(tmp_
     await repo.close()
 
 
+async def test_prepare_auto_output_backfill_keeps_running_state_for_incremental_streaming(
+    tmp_path: Path,
+) -> None:
+    task = _Task(id="auto0001", task_type=TaskType.AUTO)
+    runtime_view = RuntimeTaskView(
+        task_id=task.id,
+        phase=RuntimeTaskPhase.RUNNING,
+        execution_id="exec-running",
+    )
+    running_execution = SimpleNamespace(id="exec-running", status=ExecutionStatus.RUNNING)
+    service, _automation, _executions, repo = await _make_service(
+        tmp_path,
+        runtime_view=runtime_view,
+        execution_by_id={"exec-running": running_execution},
+        log_entries=[SimpleNamespace(logs='{"messages":[{"content":"line"}]}')],
+    )
+
+    readiness = await service.prepare_auto_output(cast("TaskLike", task))
+
+    assert readiness.output_mode is AutoOutputMode.BACKFILL
+    assert readiness.is_running is True
+    assert readiness.execution_id == "exec-running"
+    await repo.close()
+
+
 @pytest.mark.parametrize(
     ("status", "logs", "is_running", "should_recover"),
     [

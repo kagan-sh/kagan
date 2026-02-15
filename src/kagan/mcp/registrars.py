@@ -31,36 +31,26 @@ from kagan.mcp.models import (
     AuditEvent,
     AuditTailResponse,
     InstrumentationSnapshotResponse,
-    JobActionsResponse,
     JobEvent,
     JobEventsResponse,
     JobResponse,
-    LinkedTask,
     PlanProposalResponse,
-    ProjectCreateResponse,
+    PluginToolResponse,
     ProjectInfo,
     ProjectListResponse,
     ProjectOpenResponse,
-    RepoInfo,
     RepoListItem,
     RepoListResponse,
     ReviewActionResponse,
-    ReviewResponse,
-    ScratchpadUpdateResponse,
-    SessionCreateResponse,
-    SessionExistsResponse,
-    SessionKillResponse,
     SettingsGetResponse,
     SettingsUpdateResponse,
-    TaskContext,
     TaskCreateResponse,
     TaskDeleteResponse,
-    TaskDetails,
     TaskListResponse,
-    TaskMoveResponse,
+    TaskLogsResponse,
     TaskRuntimeState,
     TaskSummary,
-    TaskUpdateResponse,
+    TaskWaitResponse,
 )
 
 if TYPE_CHECKING:
@@ -69,6 +59,7 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
     from mcp.types import ToolAnnotations
 
+    from kagan.core.plugins.sdk import PluginRegistry
     from kagan.mcp.tools import CoreClientBridge
 
 # ---------------------------------------------------------------------------
@@ -93,14 +84,10 @@ TaskStatusInput: TypeAlias = Literal[
     "IN_PROGRESS",
     "REVIEW",
     "DONE",
-    "AUTO",
-    "PAIR",
     "backlog",
     "in_progress",
     "review",
     "done",
-    "auto",
-    "pair",
 ]
 TaskPriorityInput: TypeAlias = Literal[
     "LOW",
@@ -125,7 +112,6 @@ TASK_TYPE_AUTO: Final[str] = TaskType.AUTO.value
 TASK_TYPE_PAIR: Final[str] = TaskType.PAIR.value
 TASK_TYPE_VALUES: Final[frozenset[str]] = frozenset({TASK_TYPE_AUTO, TASK_TYPE_PAIR})
 
-TASK_CODE_STATUS_WAS_TASK_TYPE: Final[str] = "STATUS_WAS_TASK_TYPE"
 TASK_CODE_TASK_TYPE_VALUE_IN_STATUS: Final[str] = "TASK_TYPE_VALUE_IN_STATUS"
 
 STATUS_ERROR: Final[str] = "error"
@@ -136,14 +122,17 @@ JOB_TERMINAL_STATUSES: Final[frozenset[str]] = frozenset({"succeeded", "failed",
 JOB_CODE_UNSUPPORTED_ACTION: Final[str] = "UNSUPPORTED_ACTION"
 JOB_CODE_JOB_TIMEOUT: Final[str] = "JOB_TIMEOUT"
 JOB_CODE_TASK_TYPE_MISMATCH: Final[str] = "TASK_TYPE_MISMATCH"
-JOB_CODE_START_BLOCKED: Final[str] = "START_BLOCKED"
 JOB_CODE_START_PENDING: Final[str] = "START_PENDING"
 JOB_CODE_NOT_RUNNING: Final[str] = "NOT_RUNNING"
+DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS: Final[float] = 1.5
 
-TOOL_GET_TASK: Final[str] = "get_task"
-TOOL_JOBS_LIST_ACTIONS: Final[str] = "jobs_list_actions"
-TOOL_JOBS_WAIT: Final[str] = "jobs_wait"
-TOOL_TASKS_UPDATE: Final[str] = "tasks_update"
+TOOL_TASK_GET: Final[str] = "task_get"
+TOOL_TASK_WAIT: Final[str] = "task_wait"
+TOOL_TASK_PATCH: Final[str] = "task_patch"
+TOOL_TASK_CREATE: Final[str] = "task_create"
+TOOL_JOB_START: Final[str] = "job_start"
+TOOL_JOB_POLL: Final[str] = "job_poll"
+TOOL_SESSION_MANAGE: Final[str] = "session_manage"
 
 # ---------------------------------------------------------------------------
 # Protocol call constants
@@ -154,11 +143,13 @@ _PLAN_PROPOSE = protocol_call(ProtocolCapability.PLAN, PlanMethod.PROPOSE)
 _TASKS_GET = protocol_call(ProtocolCapability.TASKS, TasksMethod.GET)
 _TASKS_SCRATCHPAD = protocol_call(ProtocolCapability.TASKS, TasksMethod.SCRATCHPAD)
 _TASKS_LIST = protocol_call(ProtocolCapability.TASKS, TasksMethod.LIST)
+_TASKS_LOGS = protocol_call(ProtocolCapability.TASKS, TasksMethod.LOGS)
 _PROJECTS_LIST = protocol_call(ProtocolCapability.PROJECTS, ProjectsMethod.LIST)
 _PROJECTS_REPOS = protocol_call(ProtocolCapability.PROJECTS, ProjectsMethod.REPOS)
 _AUDIT_LIST = protocol_call(ProtocolCapability.AUDIT, AuditMethod.LIST)
 
 # Task CRUD
+_TASKS_WAIT = protocol_call(ProtocolCapability.TASKS, TasksMethod.WAIT)
 _TASKS_UPDATE_SCRATCHPAD = protocol_call(ProtocolCapability.TASKS, TasksMethod.UPDATE_SCRATCHPAD)
 _TASKS_CREATE = protocol_call(ProtocolCapability.TASKS, TasksMethod.CREATE)
 _TASKS_UPDATE = protocol_call(ProtocolCapability.TASKS, TasksMethod.UPDATE)
@@ -200,7 +191,6 @@ class ToolRegistrationContext:
 
     require_bridge: Callable[[MCPContext | None], CoreClientBridge]
     runtime_state_from_raw: Callable[[dict[str, Any] | None], TaskRuntimeState | None]
-    normalize_status_task_type_inputs: Callable[..., tuple[str | None, str | None, str | None]]
     envelope_fields: Callable[..., Any]
     envelope_with_code_override: Callable[..., Any]
     envelope_status_fields: Callable[[Any], Any]
@@ -214,6 +204,7 @@ class ToolRegistrationContext:
     str_or_none: Callable[[object], str | None]
     dict_or_none: Callable[[object], dict[str, object] | None]
     is_allowed: Callable[[str, str, str], bool]
+    plugin_registry: PluginRegistry | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,7 +237,7 @@ def register_shared_tools(
     if allows_all(_PLAN_PROPOSE) and effective_profile == str(CapabilityProfile.PLANNER):
 
         @mcp.tool(annotations=_MUTATING)
-        async def propose_plan(
+        async def plan_submit(
             tasks: list[planner_models.ProposedTask],
             todos: list[planner_models.ProposedTodo] | None = None,
             ctx: MCPContext | None = None,
@@ -281,27 +272,38 @@ def register_shared_tools(
     if allows_all(_TASKS_GET, _TASKS_SCRATCHPAD):
 
         @mcp.tool(annotations=_READ_ONLY)
-        async def get_task(
+        async def task_get(
             task_id: str,
             include_scratchpad: bool | None = None,
             include_logs: bool | None = None,
             include_review: bool | None = None,
             mode: str = "summary",
             ctx: MCPContext | None = None,
-        ) -> TaskDetails:
-            """Get task details with optional extended context.
+        ) -> dict[str, object]:
+            """Get task details (summary/full) or bounded full context.
 
             Args:
                 task_id: The task to retrieve
                 include_scratchpad: Include agent notes
                 include_logs: Include execution logs from previous runs
                 include_review: Include review feedback
-                mode: 'summary' or 'full'
+                mode: 'summary', 'full', or 'context'
             """
             if ctx:
                 await ctx.info(f"Fetching task details for {task_id}")
 
             bridge = _require_bridge(ctx)
+            if mode == "context":
+                raw = await bridge.get_context(task_id)
+                if ctx:
+                    await ctx.debug(
+                        f"Task context loaded: repos={len(raw.get('repos', []))} "
+                        f"linked={len(raw.get('linked_tasks', []))}"
+                    )
+                raw_runtime = raw.get("runtime")
+                if isinstance(raw_runtime, dict):
+                    raw["runtime"] = _runtime_state_from_raw(raw_runtime)
+                return raw
 
             raw = await bridge.get_task(
                 task_id,
@@ -310,38 +312,66 @@ def register_shared_tools(
                 include_review=include_review,
                 mode=mode,
             )
-
-            logs = None
-            if include_logs:
-                raw_logs = raw.get("logs") or []
-                logs = [
-                    AgentLogEntry(
-                        run=log["run"],
-                        content=log["content"],
-                        created_at=log["created_at"],
-                    )
-                    for log in raw_logs
-                ]
-
             if ctx:
-                await ctx.debug(f"Task retrieved: status={raw['status']}")
+                await ctx.debug(f"Task retrieved: status={raw.get('status')}")
+            raw_runtime = raw.get("runtime")
+            if isinstance(raw_runtime, dict):
+                raw["runtime"] = _runtime_state_from_raw(raw_runtime)
+            if include_logs:
+                raw_logs = raw.get("logs")
+                if isinstance(raw_logs, list):
+                    raw["logs"] = _normalize_agent_log_entries(raw_logs)
+            return raw
 
-            return TaskDetails(
-                task_id=raw["task_id"],
-                title=raw["title"],
-                status=raw["status"],
-                description=raw.get("description"),
-                acceptance_criteria=raw.get("acceptance_criteria"),
-                scratchpad=raw.get("scratchpad"),
-                review_feedback=raw.get("review_feedback"),
-                logs=logs,
-                runtime=_runtime_state_from_raw(raw.get("runtime")),
+    if allows_all(_TASKS_LOGS):
+
+        @mcp.tool(annotations=_READ_ONLY)
+        async def task_logs(
+            task_id: str,
+            limit: int = 5,
+            offset: int = 0,
+            ctx: MCPContext | None = None,
+        ) -> TaskLogsResponse:
+            """Get paginated task logs."""
+            bridge = _require_bridge(ctx)
+            raw = await bridge.list_task_logs(task_id=task_id, limit=limit, offset=offset)
+            normalized_logs = _normalize_agent_log_entries(raw.get("logs"))
+
+            total_runs = _int_or_none(raw.get("total_runs"))
+            returned_runs = _int_or_none(raw.get("returned_runs"))
+            page_offset = _int_or_none(raw.get("offset"))
+            page_limit = _int_or_none(raw.get("limit"))
+            next_offset = _int_or_none(raw.get("next_offset"))
+            has_more_raw = raw.get("has_more")
+            has_more = has_more_raw if isinstance(has_more_raw, bool) else next_offset is not None
+            task_id_value = raw.get("task_id")
+            message = raw.get("message")
+            code = raw.get("code")
+            hint = raw.get("hint")
+            next_tool = raw.get("next_tool")
+            next_arguments = raw.get("next_arguments")
+            return TaskLogsResponse(
+                task_id=task_id_value if isinstance(task_id_value, str) else task_id,
+                logs=normalized_logs,
+                count=_int_or_none(raw.get("count")) or len(normalized_logs),
+                total_runs=total_runs if total_runs is not None else len(normalized_logs),
+                returned_runs=returned_runs if returned_runs is not None else len(normalized_logs),
+                offset=page_offset if page_offset is not None else offset,
+                limit=page_limit if page_limit is not None else limit,
+                has_more=has_more,
+                next_offset=next_offset,
+                truncated=bool(raw.get("truncated", False)),
+                message=message if isinstance(message, str) else None,
+                code=code if isinstance(code, str) else None,
+                hint=hint if isinstance(hint, str) else None,
+                next_tool=next_tool if isinstance(next_tool, str) else None,
+                next_arguments=next_arguments if isinstance(next_arguments, dict) else None,
             )
 
     if allows_all(_TASKS_LIST):
 
         @mcp.tool(annotations=_READ_ONLY)
-        async def tasks_list(
+        async def task_list(
             project_id: str | None = None,
             filter: str | None = None,
             exclude_task_ids: list[str] | None = None,
@@ -371,10 +401,52 @@ def register_shared_tools(
             ]
             return TaskListResponse(tasks=tasks, count=raw.get("count", len(tasks)))
 
+    if allows_all(_TASKS_WAIT):
+
+        @mcp.tool(annotations=_READ_ONLY)
+        async def task_wait(
+            task_id: str,
+            timeout_seconds: float | str | None = None,
+            wait_for_status: list[str] | str | None = None,
+            from_updated_at: str | None = None,
+            ctx: MCPContext | None = None,
+        ) -> TaskWaitResponse:
+            """Wait for task status change or timeout (long-poll).
+
+            Blocks until the target task changes status, reaches a specific
+            status from wait_for_status, or the timeout elapses.
+
+            Use from_updated_at for race-safe resumption after reconnect.
+
+            Args:
+                task_id: The task to watch.
+                timeout_seconds: Max wait time (default: server configured, max: server configured).
+                wait_for_status: Target statuses (list, CSV string, or JSON list string).
+                from_updated_at: ISO timestamp cursor for race-safe resume (no lost wakeups).
+            """
+            bridge = _require_bridge(ctx)
+            raw = await bridge.wait_task(
+                task_id,
+                timeout_seconds=timeout_seconds,
+                wait_for_status=wait_for_status,
+                from_updated_at=from_updated_at,
+            )
+            return TaskWaitResponse(
+                changed=bool(raw.get("changed", False)),
+                timed_out=bool(raw.get("timed_out", False)),
+                task_id=raw.get("task_id", task_id),
+                previous_status=raw.get("previous_status"),
+                current_status=raw.get("current_status"),
+                changed_at=raw.get("changed_at"),
+                task=raw.get("task"),
+                code=raw.get("code"),
+                message=raw.get("message"),
+            )
+
     if allows_all(_PROJECTS_LIST):
 
         @mcp.tool(annotations=_READ_ONLY)
-        async def projects_list(
+        async def project_list(
             limit: int = 10,
             ctx: MCPContext | None = None,
         ) -> ProjectListResponse:
@@ -395,7 +467,7 @@ def register_shared_tools(
     if allows_all(_PROJECTS_REPOS):
 
         @mcp.tool(annotations=_READ_ONLY)
-        async def repos_list(
+        async def repo_list(
             project_id: str,
             ctx: MCPContext | None = None,
         ) -> RepoListResponse:
@@ -417,7 +489,7 @@ def register_shared_tools(
     if allows_all(_AUDIT_LIST):
 
         @mcp.tool(annotations=_READ_ONLY)
-        async def audit_tail(
+        async def audit_list(
             capability: str | None = None,
             limit: int = 50,
             ctx: MCPContext | None = None,
@@ -455,132 +527,23 @@ def register_task_tools(
     mutating_annotation: ToolAnnotations,
     destructive_annotation: ToolAnnotations,
 ) -> None:
-    """Register task CRUD MCP tools."""
+    """Register task and project MCP tools."""
     _require_bridge = helpers.require_bridge
-    _runtime_state_from_raw = helpers.runtime_state_from_raw
-    _normalize_status_task_type_inputs = helpers.normalize_status_task_type_inputs
     _envelope_fields = helpers.envelope_fields
-    _envelope_with_code_override = helpers.envelope_with_code_override
     _envelope_recovery_fields = helpers.envelope_recovery_fields
     _normalized_mode = helpers.normalized_mode
-    _READ_ONLY = read_only_annotation
     _MUTATING = mutating_annotation
     _DESTRUCTIVE = destructive_annotation
 
-    if allows_all(_TASKS_GET, _TASKS_SCRATCHPAD):
-
-        @mcp.tool(annotations=_READ_ONLY)
-        async def get_context(
-            task_id: str,
-            ctx: MCPContext | None = None,
-        ) -> TaskContext:
-            """Get task context for AI tools.
-
-            Returns comprehensive context including task details, workspace info,
-            repository state, and linked tasks.
-            """
-            if ctx:
-                await ctx.info(f"Fetching context for task {task_id}")
-                await ctx.report_progress(0.1, 1.0, "Loading task details")
-
-            bridge = _require_bridge(ctx)
-
-            raw = await bridge.get_context(task_id)
-
-            if ctx:
-                await ctx.report_progress(0.5, 1.0, "Processing workspace info")
-
-            # Convert raw repos to RepoInfo models
-            repos = [
-                RepoInfo(
-                    repo_id=r["repo_id"],
-                    name=r["name"],
-                    path=r["path"],
-                    worktree_path=r.get("worktree_path"),
-                    target_branch=r.get("target_branch"),
-                    has_changes=r.get("has_changes"),
-                    diff_stats=r.get("diff_stats"),
-                )
-                for r in raw.get("repos", [])
-            ]
-
-            # Convert linked tasks
-            linked_tasks = [
-                LinkedTask(
-                    task_id=lt["task_id"],
-                    title=lt["title"],
-                    status=lt["status"],
-                    description=lt.get("description"),
-                )
-                for lt in raw.get("linked_tasks", [])
-            ]
-
-            if ctx:
-                await ctx.report_progress(1.0, 1.0, "Context ready")
-                await ctx.debug(
-                    f"Context loaded: {len(repos)} repos, {len(linked_tasks)} linked tasks"
-                )
-
-            return TaskContext(
-                task_id=raw["task_id"],
-                title=raw["title"],
-                description=raw.get("description"),
-                acceptance_criteria=raw.get("acceptance_criteria"),
-                scratchpad=raw.get("scratchpad"),
-                workspace_id=raw.get("workspace_id"),
-                workspace_branch=raw.get("workspace_branch"),
-                workspace_path=raw.get("workspace_path"),
-                working_dir=raw.get("working_dir"),
-                repos=repos,
-                repo_count=raw.get("repo_count", len(repos)),
-                linked_tasks=linked_tasks,
-                runtime=_runtime_state_from_raw(raw.get("runtime")),
-            )
-
-    if allows_all(_TASKS_UPDATE_SCRATCHPAD):
-
-        @mcp.tool(annotations=_MUTATING)
-        async def update_scratchpad(
-            task_id: str,
-            content: str,
-            ctx: MCPContext | None = None,
-        ) -> ScratchpadUpdateResponse:
-            """Append to task scratchpad.
-
-            Use to record progress, decisions, blockers, and notes during implementation.
-            Content is appended to existing scratchpad.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
-            if ctx:
-                await ctx.info(f"Updating scratchpad for task {task_id}")
-                await ctx.debug(f"Content length: {len(content)} chars")
-
-            bridge = _require_bridge(ctx)
-
-            raw = await bridge.update_scratchpad(task_id, content)
-            envelope = _envelope_fields(
-                raw,
-                default_success=True,
-                default_message="Scratchpad updated",
-            )
-
-            if ctx:
-                if raw.get("success"):
-                    await ctx.debug("Scratchpad updated successfully")
-                else:
-                    await ctx.warning(str(raw.get("message", "Scratchpad update failed")))
-
-            return ScratchpadUpdateResponse(
-                task_id=task_id,
-                **_envelope_recovery_fields(envelope),
-            )
+    can_patch_note = allows_all(_TASKS_UPDATE_SCRATCHPAD)
+    can_patch_fields = allows_all(_TASKS_UPDATE)
+    can_patch_status = allows_all(_TASKS_MOVE)
+    can_request_review = allows_all(_REVIEW_REQUEST)
 
     if allows_all(_TASKS_CREATE):
 
         @mcp.tool(annotations=_MUTATING)
-        async def tasks_create(
+        async def task_create(
             title: str,
             description: str = "",
             project_id: str | None = None,
@@ -591,33 +554,48 @@ def register_task_tools(
             agent_backend: str | None = None,
             parent_id: str | None = None,
             base_branch: str | None = None,
-            acceptance_criteria: list[str] | None = None,
+            acceptance_criteria: list[str] | str | None = None,
             created_by: str | None = None,
             ctx: MCPContext | None = None,
         ) -> TaskCreateResponse:
-            """Create a new task.
-
-            Args:
-                status: Kanban workflow state.
-                task_type: Execution mode used by automation/session flows (AUTO or PAIR).
-                priority: Priority lane (LOW/MEDIUM/HIGH).
-
-            Use this for new tasks. Use tasks_update to modify existing tasks.
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
+            """Create a new task."""
             bridge = _require_bridge(ctx)
-            normalized_status, normalized_task_type, normalization_message = (
-                _normalize_status_task_type_inputs(status=status, task_type=task_type)
-            )
+            mode_from_status = _normalized_mode(str(status) if status is not None else None)
+            if mode_from_status is not None:
+                return TaskCreateResponse(
+                    success=False,
+                    message=(
+                        f"Invalid status value {status!r}. "
+                        "AUTO/PAIR are task_type values, not status values."
+                    ),
+                    code=TASK_CODE_TASK_TYPE_VALUE_IN_STATUS,
+                    hint="Pass task_type explicitly and keep status in Kanban states.",
+                    next_tool=TOOL_TASK_CREATE,
+                    next_arguments={
+                        "title": title,
+                        "description": description,
+                        "project_id": project_id,
+                        "task_type": mode_from_status,
+                        "priority": priority,
+                        "terminal_backend": terminal_backend,
+                        "agent_backend": agent_backend,
+                        "parent_id": parent_id,
+                        "base_branch": base_branch,
+                        "acceptance_criteria": acceptance_criteria,
+                        "created_by": created_by,
+                    },
+                    task_id="",
+                    title=title,
+                    status=TaskStatus.BACKLOG.value,
+                )
 
             raw = await bridge.create_task(
                 title=title,
                 description=description,
                 project_id=project_id,
-                status=normalized_status,
+                status=status,
                 priority=priority,
-                task_type=normalized_task_type,
+                task_type=task_type,
                 terminal_backend=terminal_backend,
                 agent_backend=agent_backend,
                 parent_id=parent_id,
@@ -625,12 +603,7 @@ def register_task_tools(
                 acceptance_criteria=acceptance_criteria,
                 created_by=created_by,
             )
-            envelope = _envelope_with_code_override(
-                raw,
-                default_success=True,
-                default_message=normalization_message,
-                fallback_code=TASK_CODE_STATUS_WAS_TASK_TYPE if normalization_message else None,
-            )
+            envelope = _envelope_fields(raw, default_success=True)
             return TaskCreateResponse(
                 task_id=raw["task_id"],
                 title=raw.get("title", title),
@@ -638,134 +611,208 @@ def register_task_tools(
                 **_envelope_recovery_fields(envelope),
             )
 
-    if allows_all(_TASKS_UPDATE):
+    if can_patch_note or can_patch_fields or can_patch_status or can_request_review:
 
         @mcp.tool(annotations=_MUTATING)
-        async def tasks_update(
+        async def task_patch(
             task_id: str,
-            title: str | None = None,
-            description: str | None = None,
-            priority: TaskPriorityInput | None = None,
-            task_type: TaskTypeInput | None = None,
-            status: TaskStatusInput | None = None,
-            terminal_backend: TerminalBackendInput | None = None,
-            agent_backend: str | None = None,
-            parent_id: str | None = None,
-            project_id: str | None = None,
-            base_branch: str | None = None,
-            acceptance_criteria: list[str] | None = None,
+            set: dict[str, object] | None = None,
+            transition: str | None = None,
+            append_note: str | None = None,
             ctx: MCPContext | None = None,
-        ) -> TaskUpdateResponse:
-            """Update task fields.
+        ) -> dict[str, object]:
+            """Apply partial task changes, transitions, and scratchpad notes.
 
-            Args:
-                status: Kanban workflow state.
-                task_type: Execution mode used by automation/session flows (AUTO or PAIR).
-
-            Use this to change execution mode before agent operations.
-            Example recovery: tasks_update(task_id=..., task_type="AUTO").
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
+            Note: direct move/update to DONE is rejected. Use review completion
+            flows (for example review_apply(action="merge") or close no-change flow).
             """
             bridge = _require_bridge(ctx)
-            normalized_status, normalized_task_type, normalization_message = (
-                _normalize_status_task_type_inputs(status=status, task_type=task_type)
-            )
+            if set is None and transition is None and append_note is None:
+                return {
+                    "success": False,
+                    "task_id": task_id,
+                    "message": "At least one of set, transition, or append_note is required.",
+                    "code": "INVALID_PATCH",
+                }
 
-            fields: dict[str, object] = {}
-            if title is not None:
-                fields["title"] = title
-            if description is not None:
-                fields["description"] = description
-            if priority is not None:
-                fields["priority"] = priority
-            if normalized_task_type is not None:
-                fields["task_type"] = normalized_task_type
-            if normalized_status is not None:
-                fields["status"] = normalized_status
-            if terminal_backend is not None:
-                fields["terminal_backend"] = terminal_backend
-            if agent_backend is not None:
-                fields["agent_backend"] = agent_backend
-            if parent_id is not None:
-                fields["parent_id"] = parent_id
-            if project_id is not None:
-                fields["project_id"] = project_id
-            if base_branch is not None:
-                fields["base_branch"] = base_branch
-            if acceptance_criteria is not None:
-                fields["acceptance_criteria"] = acceptance_criteria
+            fields = dict(set) if isinstance(set, dict) else {}
+            if set is not None and not isinstance(set, dict):
+                return {
+                    "success": False,
+                    "task_id": task_id,
+                    "message": "set must be an object map",
+                    "code": "INVALID_SET",
+                }
 
-            raw = await bridge.update_task(task_id, **fields)
-            envelope = _envelope_with_code_override(
-                raw,
-                default_success=True,
-                default_message=normalization_message,
-                fallback_code=TASK_CODE_STATUS_WAS_TASK_TYPE if normalization_message else None,
-            )
-            return TaskUpdateResponse(
-                task_id=raw.get("task_id", task_id),
-                **_envelope_recovery_fields(envelope),
-                current_task_type=raw.get("current_task_type"),
-            )
+            def _as_response(
+                raw: dict[str, object], *, default_success: bool, default_message: str | None = None
+            ) -> dict[str, object]:
+                envelope = _envelope_fields(
+                    raw,
+                    default_success=default_success,
+                    default_message=default_message,
+                )
+                response: dict[str, object] = {"task_id": raw.get("task_id", task_id)}
+                response.update(_envelope_recovery_fields(envelope))
+                if "new_status" in raw:
+                    response["new_status"] = raw.get("new_status")
+                if "status" in raw:
+                    response["status"] = raw.get("status")
+                if "current_task_type" in raw:
+                    response["current_task_type"] = raw.get("current_task_type")
+                return response
 
-    if allows_all(_TASKS_MOVE):
+            if append_note is not None:
+                if not can_patch_note:
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "append_note is not allowed for this capability profile.",
+                        "code": "ACTION_NOT_ALLOWED",
+                    }
+                note_raw = await bridge.update_scratchpad(task_id, append_note)
+                note_response = _as_response(
+                    note_raw,
+                    default_success=True,
+                    default_message="Scratchpad updated",
+                )
+                if not bool(note_response.get("success", False)):
+                    return note_response
 
-        @mcp.tool(annotations=_MUTATING)
-        async def tasks_move(
-            task_id: str,
-            status: WorkflowStatusInput,
-            ctx: MCPContext | None = None,
-        ) -> TaskMoveResponse:
-            """Move task to a specific Kanban column.
+            status_for_move = fields.pop("status", None)
+            task_type_for_update = fields.get("task_type")
 
-            Use this for status transitions only.
-            Do not use this to change execution mode; use tasks_update(task_type=...).
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
-            bridge = _require_bridge(ctx)
-            normalized_mode = _normalized_mode(str(status))
-            if normalized_mode is not None:
-                return TaskMoveResponse(
-                    success=False,
-                    task_id=task_id,
-                    new_status=None,
-                    message=(
-                        f"Invalid status value {status!r}. "
-                        "AUTO/PAIR are task_type values, not status values."
-                    ),
-                    code=TASK_CODE_TASK_TYPE_VALUE_IN_STATUS,
-                    hint=(
-                        "Call tasks_update(task_id=..., task_type='AUTO'|'PAIR') "
-                        "to set execution mode."
-                    ),
-                    next_tool=TOOL_TASKS_UPDATE,
-                    next_arguments={"task_id": task_id, "task_type": normalized_mode},
+            if transition == "set_status":
+                if status_for_move is None:
+                    status_for_move = fields.pop("new_status", None)
+                if not isinstance(status_for_move, str) or not status_for_move.strip():
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "set_status requires set.status",
+                        "code": "INVALID_TRANSITION",
+                    }
+                mode_value = _normalized_mode(status_for_move)
+                if mode_value is not None:
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": (
+                            f"Invalid status value {status_for_move!r}. "
+                            "AUTO/PAIR are task_type values, not status values."
+                        ),
+                        "code": TASK_CODE_TASK_TYPE_VALUE_IN_STATUS,
+                        "hint": "Use transition='set_task_type' with set.task_type.",
+                        "next_tool": TOOL_TASK_PATCH,
+                        "next_arguments": {
+                            "task_id": task_id,
+                            "transition": "set_task_type",
+                            "set": {"task_type": mode_value},
+                        },
+                    }
+                if not can_patch_status:
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "set_status is not allowed for this capability profile.",
+                        "code": "ACTION_NOT_ALLOWED",
+                    }
+                move_raw = await bridge.move_task(task_id, status_for_move)
+                return _as_response(move_raw, default_success=True)
+
+            if transition == "set_task_type":
+                task_type_value = task_type_for_update
+                if not isinstance(task_type_value, str) or not task_type_value.strip():
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "set_task_type requires set.task_type",
+                        "code": "INVALID_TRANSITION",
+                    }
+                if not can_patch_fields:
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "set_task_type is not allowed for this capability profile.",
+                        "code": "ACTION_NOT_ALLOWED",
+                    }
+                update_raw = await bridge.update_task(task_id, task_type=task_type_value)
+                return _as_response(update_raw, default_success=True)
+
+            if transition == "request_review":
+                if not can_request_review:
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "request_review is not allowed for this capability profile.",
+                        "code": "ACTION_NOT_ALLOWED",
+                    }
+                summary_raw = fields.pop("summary", "")
+                summary = summary_raw if isinstance(summary_raw, str) else ""
+                review_raw = await bridge.request_review(task_id, summary)
+                return _as_response(
+                    review_raw,
+                    default_success=bool(review_raw.get("status") != STATUS_ERROR),
+                    default_message=str(review_raw.get("message", "")),
                 )
 
-            raw = await bridge.move_task(task_id, status)
-            envelope = _envelope_fields(raw, default_success=True)
-            return TaskMoveResponse(
-                task_id=raw.get("task_id", task_id),
-                new_status=raw.get("new_status"),
-                **_envelope_recovery_fields(envelope),
-            )
+            if transition is not None:
+                return {
+                    "success": False,
+                    "task_id": task_id,
+                    "message": f"Unsupported transition {transition!r}",
+                    "code": "INVALID_TRANSITION",
+                }
+
+            if status_for_move is not None:
+                if not isinstance(status_for_move, str) or not status_for_move.strip():
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "set.status must be a non-empty string",
+                        "code": "INVALID_STATUS",
+                    }
+                if not can_patch_status:
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "status patch is not allowed for this capability profile.",
+                        "code": "ACTION_NOT_ALLOWED",
+                    }
+                move_raw = await bridge.move_task(task_id, status_for_move)
+                move_response = _as_response(move_raw, default_success=True)
+                if not bool(move_response.get("success", False)):
+                    return move_response
+
+            if fields:
+                if not can_patch_fields:
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "message": "field patch is not allowed for this capability profile.",
+                        "code": "ACTION_NOT_ALLOWED",
+                    }
+                update_raw = await bridge.update_task(task_id, **fields)
+                update_response = _as_response(update_raw, default_success=True)
+                if not bool(update_response.get("success", False)):
+                    return update_response
+                return update_response
+
+            return {
+                "success": True,
+                "task_id": task_id,
+                "message": "Patch applied",
+            }
 
     if allows_all(_TASKS_DELETE):
 
         @mcp.tool(annotations=_DESTRUCTIVE)
-        async def tasks_delete(
+        async def task_delete(
             task_id: str,
             ctx: MCPContext | None = None,
         ) -> TaskDeleteResponse:
-            """Delete a task.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
+            """Delete a task."""
             bridge = _require_bridge(ctx)
-
             raw = await bridge.delete_task(task_id)
             envelope = _envelope_fields(raw, default_success=False)
             return TaskDeleteResponse(
@@ -773,46 +820,15 @@ def register_task_tools(
                 **_envelope_recovery_fields(envelope),
             )
 
-    if allows_all(_PROJECTS_CREATE):
-
-        @mcp.tool(annotations=_MUTATING)
-        async def projects_create(
-            name: str,
-            description: str = "",
-            repo_paths: list[str] | None = None,
-            ctx: MCPContext | None = None,
-        ) -> ProjectCreateResponse:
-            """Create a new project with optional repositories."""
-            bridge = _require_bridge(ctx)
-
-            raw = await bridge.create_project(
-                name=name,
-                description=description,
-                repo_paths=repo_paths,
-            )
-            envelope = _envelope_fields(raw, default_success=True)
-            return ProjectCreateResponse(
-                project_id=raw.get("project_id", ""),
-                name=raw.get("name", name),
-                description=raw.get("description", description),
-                repo_count=raw.get("repo_count", 0),
-                **_envelope_recovery_fields(envelope),
-            )
-
     if allows_all(_PROJECTS_OPEN):
 
         @mcp.tool(annotations=_MUTATING)
-        async def projects_open(
+        async def project_open(
             project_id: str,
             ctx: MCPContext | None = None,
         ) -> ProjectOpenResponse:
-            """Open/switch to a project.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
+            """Open/switch to a project."""
             bridge = _require_bridge(ctx)
-
             raw = await bridge.open_project(project_id)
             envelope = _envelope_fields(raw, default_success=True)
             return ProjectOpenResponse(
@@ -837,6 +853,21 @@ def _job_timed_out(
         if isinstance(val, bool):
             return val
     return None
+
+
+def _normalize_agent_log_entries(raw_logs: object) -> list[AgentLogEntry]:
+    if not isinstance(raw_logs, list):
+        return []
+    normalized_logs: list[AgentLogEntry] = []
+    for log in raw_logs:
+        if not isinstance(log, dict):
+            continue
+        run = log.get("run")
+        content = log.get("content")
+        created_at = log.get("created_at")
+        if isinstance(run, int) and isinstance(content, str) and isinstance(created_at, str):
+            normalized_logs.append(AgentLogEntry(run=run, content=content, created_at=created_at))
+    return normalized_logs
 
 
 def _int_or_none(v: object) -> int | None:
@@ -981,26 +1012,14 @@ def register_job_tools(
 
     if allows_all(_JOBS_SUBMIT):
 
-        @mcp.tool(annotations=_READ_ONLY)
-        async def jobs_list_actions(ctx: MCPContext | None = None) -> JobActionsResponse:
-            """List valid actions accepted by jobs_submit."""
-            if ctx:
-                await ctx.debug("Returning supported jobs_submit actions")
-            return JobActionsResponse(actions=sorted(SUPPORTED_JOB_ACTIONS))
-
         @mcp.tool(annotations=_MUTATING)
-        async def jobs_submit(
+        async def job_start(
             task_id: str,
             action: JobActionInput,
             arguments: dict[str, object] | None = None,
             ctx: MCPContext | None = None,
         ) -> JobResponse:
-            """Submit an asynchronous core job.
-
-            Use jobs_list_actions to discover valid action names.
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
+            """Submit an asynchronous core job."""
             bridge = _require_bridge(ctx)
             raw = await bridge.submit_job(task_id=task_id, action=action, arguments=arguments)
             envelope = _envelope_fields(raw, default_success=False, default_message="")
@@ -1015,19 +1034,24 @@ def register_job_tools(
                 and envelope.code == JOB_CODE_UNSUPPORTED_ACTION
                 and next_tool is None
             ):
-                next_tool = TOOL_JOBS_LIST_ACTIONS
-                next_arguments = {}
+                next_tool = TOOL_JOB_START
+                next_arguments = {"task_id": task_id, "action": sorted(SUPPORTED_JOB_ACTIONS)[0]}
                 if hint is None:
-                    hint = "Call jobs_list_actions and retry jobs_submit with a listed action."
+                    hint = f"Use one of: {', '.join(sorted(SUPPORTED_JOB_ACTIONS))}"
             if envelope.success and next_tool is None and job_id:
-                next_tool = TOOL_JOBS_WAIT
+                next_tool = TOOL_JOB_POLL
                 next_arguments = {
                     "job_id": job_id,
                     "task_id": returned_task_id,
-                    "timeout_seconds": 1.5,
+                    "wait": True,
+                    "timeout_seconds": DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS,
                 }
                 if hint is None:
-                    hint = "Call jobs_wait until the job reaches a terminal status."
+                    hint = (
+                        "Call job_poll(wait=true) to confirm spawn, then use "
+                        "task_wait(task_id, wait_for_status=['REVIEW','DONE']) "
+                        "to long-poll completion."
+                    )
             return _build_job_response(
                 raw=raw,
                 envelope=envelope,
@@ -1042,124 +1066,117 @@ def register_job_tools(
                 current_task_type=current_task_type,
             )
 
-    if allows_all(_JOBS_GET):
+    if allows_all(_JOBS_GET) or allows_all(_JOBS_WAIT) or allows_all(_JOBS_EVENTS):
 
         @mcp.tool(annotations=_READ_ONLY)
-        async def jobs_get(
+        async def job_poll(
             job_id: str,
             task_id: str,
-            ctx: MCPContext | None = None,
-        ) -> JobResponse:
-            """Get job details and latest terminal result when available.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
-            bridge = _require_bridge(ctx)
-            raw = await bridge.get_job(job_id=job_id, task_id=task_id)
-            return _build_job_poll_response(raw=raw, job_id=job_id, task_id=task_id)
-
-    if allows_all(_JOBS_WAIT):
-
-        @mcp.tool(annotations=_READ_ONLY)
-        async def jobs_wait(
-            job_id: str,
-            task_id: str,
-            timeout_seconds: float = 1.5,
-            ctx: MCPContext | None = None,
-        ) -> JobResponse:
-            """Wait for job progress until terminal status or timeout.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
-            bridge = _require_bridge(ctx)
-            raw = await bridge.wait_job(
-                job_id=job_id,
-                task_id=task_id,
-                timeout_seconds=timeout_seconds,
-            )
-            return _build_job_poll_response(raw=raw, job_id=job_id, task_id=task_id)
-
-    if allows_all(_JOBS_EVENTS):
-
-        @mcp.tool(annotations=_READ_ONLY)
-        async def jobs_events(
-            job_id: str,
-            task_id: str,
+            wait: bool = False,
+            timeout_seconds: float = DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS,
+            events: bool = False,
             limit: int = 50,
             offset: int = 0,
             ctx: MCPContext | None = None,
-        ) -> JobEventsResponse:
-            """List paginated events emitted by a submitted core job.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
+        ) -> JobResponse | JobEventsResponse:
+            """Read job state, optionally waiting or paging events."""
             bridge = _require_bridge(ctx)
-            raw = await bridge.list_job_events(
-                job_id=job_id,
-                task_id=task_id,
-                limit=limit,
-                offset=offset,
-            )
-            envelope = _envelope_fields(raw, default_success=False, default_message=None)
-            events: list[JobEvent] = []
-            events_raw = raw.get("events")
-            if isinstance(events_raw, list):
-                for raw_event in events_raw:
-                    if not isinstance(raw_event, dict):
-                        continue
-                    events.append(
-                        JobEvent(
-                            job_id=_str_or_none(raw_event.get("job_id")),
-                            task_id=_str_or_none(raw_event.get("task_id")),
-                            status=_str_or_none(raw_event.get("status")),
-                            timestamp=_str_or_none(raw_event.get("timestamp")),
-                            message=_str_or_none(raw_event.get("message")),
-                            code=_str_or_none(raw_event.get("code")),
-                        )
+            if events:
+                if not allows_all(_JOBS_EVENTS):
+                    return JobResponse(
+                        success=False,
+                        message="events view is not allowed for this capability profile",
+                        code="ACTION_NOT_ALLOWED",
+                        job_id=job_id,
+                        task_id=task_id,
                     )
-            total_events = _int_or_none(raw.get("total_events"))
-            returned_events = _int_or_none(raw.get("returned_events"))
-            page_offset = _int_or_none(raw.get("offset"))
-            page_limit = _int_or_none(raw.get("limit"))
-            next_offset = _int_or_none(raw.get("next_offset"))
-            has_more_value = raw.get("has_more")
-            has_more = (
-                has_more_value if isinstance(has_more_value, bool) else next_offset is not None
-            )
-            return JobEventsResponse(
-                success=envelope.success,
-                message=envelope.message,
-                code=envelope.code,
-                hint=envelope.hint,
-                next_tool=envelope.next_tool,
-                next_arguments=envelope.next_arguments,
-                job_id=_str_or_none(raw.get("job_id")) or job_id,
-                task_id=_str_or_none(raw.get("task_id")) or task_id,
-                events=events,
-                total_events=total_events if total_events is not None else len(events),
-                returned_events=returned_events if returned_events is not None else len(events),
-                offset=page_offset if page_offset is not None else offset,
-                limit=page_limit if page_limit is not None else limit,
-                has_more=has_more,
-                next_offset=next_offset,
-            )
+                raw = await bridge.list_job_events(
+                    job_id=job_id,
+                    task_id=task_id,
+                    limit=limit,
+                    offset=offset,
+                )
+                envelope = _envelope_fields(raw, default_success=False, default_message=None)
+                event_items: list[JobEvent] = []
+                events_raw = raw.get("events")
+                if isinstance(events_raw, list):
+                    for raw_event in events_raw:
+                        if not isinstance(raw_event, dict):
+                            continue
+                        event_items.append(
+                            JobEvent(
+                                job_id=_str_or_none(raw_event.get("job_id")),
+                                task_id=_str_or_none(raw_event.get("task_id")),
+                                status=_str_or_none(raw_event.get("status")),
+                                timestamp=_str_or_none(raw_event.get("timestamp")),
+                                message=_str_or_none(raw_event.get("message")),
+                                code=_str_or_none(raw_event.get("code")),
+                            )
+                        )
+                total_events = _int_or_none(raw.get("total_events"))
+                returned_events = _int_or_none(raw.get("returned_events"))
+                page_offset = _int_or_none(raw.get("offset"))
+                page_limit = _int_or_none(raw.get("limit"))
+                next_offset = _int_or_none(raw.get("next_offset"))
+                has_more_value = raw.get("has_more")
+                has_more = (
+                    has_more_value if isinstance(has_more_value, bool) else next_offset is not None
+                )
+                return JobEventsResponse(
+                    success=envelope.success,
+                    message=envelope.message,
+                    code=envelope.code,
+                    hint=envelope.hint,
+                    next_tool=envelope.next_tool,
+                    next_arguments=envelope.next_arguments,
+                    job_id=_str_or_none(raw.get("job_id")) or job_id,
+                    task_id=_str_or_none(raw.get("task_id")) or task_id,
+                    events=event_items,
+                    total_events=total_events if total_events is not None else len(event_items),
+                    returned_events=(
+                        returned_events if returned_events is not None else len(event_items)
+                    ),
+                    offset=page_offset if page_offset is not None else offset,
+                    limit=page_limit if page_limit is not None else limit,
+                    has_more=has_more,
+                    next_offset=next_offset,
+                )
+
+            if wait:
+                if not allows_all(_JOBS_WAIT):
+                    return JobResponse(
+                        success=False,
+                        message="wait mode is not allowed for this capability profile",
+                        code="ACTION_NOT_ALLOWED",
+                        job_id=job_id,
+                        task_id=task_id,
+                    )
+                raw = await bridge.wait_job(
+                    job_id=job_id,
+                    task_id=task_id,
+                    timeout_seconds=timeout_seconds,
+                )
+            else:
+                if not allows_all(_JOBS_GET):
+                    return JobResponse(
+                        success=False,
+                        message="poll mode is not allowed for this capability profile",
+                        code="ACTION_NOT_ALLOWED",
+                        job_id=job_id,
+                        task_id=task_id,
+                    )
+                raw = await bridge.get_job(job_id=job_id, task_id=task_id)
+            return _build_job_poll_response(raw=raw, job_id=job_id, task_id=task_id)
 
     if allows_all(_JOBS_CANCEL):
 
         @mcp.tool(annotations=_MUTATING)
-        async def jobs_cancel(
+        async def job_cancel(
             job_id: str,
             task_id: str,
             ctx: MCPContext | None = None,
         ) -> JobResponse:
-            """Cancel a submitted job.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
+            """Cancel a submitted job."""
             bridge = _require_bridge(ctx)
             raw = await bridge.cancel_job(job_id=job_id, task_id=task_id)
             envelope = _envelope_fields(raw, default_success=False, default_message="")
@@ -1168,10 +1185,15 @@ def register_job_tools(
             next_arguments: dict[str, object] | None = _dict_or_none(raw.get("next_arguments"))
             hint = _str_or_none(raw.get("hint"))
             if envelope.success and next_tool is None:
-                next_tool = TOOL_JOBS_WAIT
-                next_arguments = {"job_id": job_id, "task_id": task_id, "timeout_seconds": 1.5}
+                next_tool = TOOL_JOB_POLL
+                next_arguments = {
+                    "job_id": job_id,
+                    "task_id": task_id,
+                    "wait": True,
+                    "timeout_seconds": DEFAULT_JOB_POLL_WAIT_TIMEOUT_SECONDS,
+                }
                 if hint is None:
-                    hint = "Use jobs_wait to confirm terminal status."
+                    hint = "Use job_poll(wait=true) to confirm terminal status."
             return _build_job_response(
                 raw=raw,
                 envelope=envelope,
@@ -1200,88 +1222,100 @@ def _register_session_tools(
     read_only_annotation: ToolAnnotations,
     mutating_annotation: ToolAnnotations,
 ) -> None:
-    """Register PAIR session lifecycle MCP tools."""
+    """Register consolidated PAIR session lifecycle MCP tool."""
     _require_bridge = helpers.require_bridge
     _envelope_fields = helpers.envelope_fields
     _envelope_recovery_fields = helpers.envelope_recovery_fields
-    _READ_ONLY = read_only_annotation
     _MUTATING = mutating_annotation
 
-    if allows_all(_SESSIONS_CREATE):
+    if allows_all(_SESSIONS_CREATE) or allows_all(_SESSIONS_EXISTS) or allows_all(_SESSIONS_KILL):
 
         @mcp.tool(annotations=_MUTATING)
-        async def sessions_create(
+        async def session_manage(
+            action: Literal["open", "read", "close"],
             task_id: str,
             reuse_if_exists: bool = True,
             worktree_path: str | None = None,
             ctx: MCPContext | None = None,
-        ) -> SessionCreateResponse:
-            """Create/reuse a PAIR session and return human handoff instructions.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
+        ) -> dict[str, object]:
+            """Manage PAIR sessions with a single action-oriented interface."""
             bridge = _require_bridge(ctx)
-            raw = await bridge.create_session(
-                task_id,
-                reuse_if_exists=reuse_if_exists,
-                worktree_path=worktree_path,
-            )
-            envelope = _envelope_fields(raw, default_success=False)
-            return SessionCreateResponse(
-                task_id=raw.get("task_id", task_id),
-                session_name=raw.get("session_name", ""),
-                backend=raw.get("backend", ""),
-                already_exists=raw.get("already_exists", False),
-                worktree_path=raw.get("worktree_path", ""),
-                prompt_path=raw.get("prompt_path", ""),
-                primary_command=raw.get("primary_command", ""),
-                commands=raw.get("commands", []),
-                links=raw.get("links", {}),
-                instructions=raw.get("instructions", ""),
-                next_step=raw.get("next_step", ""),
-                **_envelope_recovery_fields(envelope),
-                current_task_type=raw.get("current_task_type"),
-            )
+            if action == "open":
+                if not allows_all(_SESSIONS_CREATE):
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "code": "ACTION_NOT_ALLOWED",
+                        "message": "open is not allowed for this capability profile.",
+                    }
+                raw = await bridge.create_session(
+                    task_id,
+                    reuse_if_exists=reuse_if_exists,
+                    worktree_path=worktree_path,
+                )
+                envelope = _envelope_fields(raw, default_success=False)
+                response: dict[str, object] = {
+                    "action": action,
+                    "task_id": raw.get("task_id", task_id),
+                }
+                response.update(_envelope_recovery_fields(envelope))
+                response.update(
+                    {
+                        "session_name": raw.get("session_name", ""),
+                        "backend": raw.get("backend", ""),
+                        "already_exists": raw.get("already_exists", False),
+                        "worktree_path": raw.get("worktree_path", ""),
+                        "prompt_path": raw.get("prompt_path", ""),
+                        "primary_command": raw.get("primary_command", ""),
+                        "commands": raw.get("commands", []),
+                        "links": raw.get("links", {}),
+                        "instructions": raw.get("instructions", ""),
+                        "next_step": raw.get("next_step", ""),
+                        "current_task_type": raw.get("current_task_type"),
+                    }
+                )
+                return response
 
-    if allows_all(_SESSIONS_EXISTS):
+            if action == "read":
+                if not allows_all(_SESSIONS_EXISTS):
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "code": "ACTION_NOT_ALLOWED",
+                        "message": "read is not allowed for this capability profile.",
+                    }
+                raw = await bridge.session_exists(task_id)
+                return {
+                    "success": True,
+                    "action": action,
+                    "task_id": raw.get("task_id", task_id),
+                    "exists": raw.get("exists", False),
+                    "session_name": raw.get("session_name", f"kagan-{task_id}"),
+                    "backend": raw.get("backend"),
+                    "worktree_path": raw.get("worktree_path"),
+                    "prompt_path": raw.get("prompt_path"),
+                }
 
-        @mcp.tool(annotations=_READ_ONLY)
-        async def sessions_exists(
-            task_id: str,
-            ctx: MCPContext | None = None,
-        ) -> SessionExistsResponse:
-            """Check whether a PAIR session exists for a task."""
-            bridge = _require_bridge(ctx)
-            raw = await bridge.session_exists(task_id)
-            return SessionExistsResponse(
-                task_id=raw.get("task_id", task_id),
-                exists=raw.get("exists", False),
-                session_name=raw.get("session_name", f"kagan-{task_id}"),
-                backend=raw.get("backend"),
-                worktree_path=raw.get("worktree_path"),
-                prompt_path=raw.get("prompt_path"),
-            )
+            if action == "close":
+                if not allows_all(_SESSIONS_KILL):
+                    return {
+                        "success": False,
+                        "task_id": task_id,
+                        "code": "ACTION_NOT_ALLOWED",
+                        "message": "close is not allowed for this capability profile.",
+                    }
+                raw = await bridge.kill_session(task_id)
+                envelope = _envelope_fields(raw, default_success=False, default_message="")
+                response = {"action": action, "task_id": raw.get("task_id", task_id)}
+                response.update(_envelope_recovery_fields(envelope))
+                return response
 
-    if allows_all(_SESSIONS_KILL):
-
-        @mcp.tool(annotations=_MUTATING)
-        async def sessions_kill(
-            task_id: str,
-            ctx: MCPContext | None = None,
-        ) -> SessionKillResponse:
-            """Terminate a PAIR session for a task.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
-            bridge = _require_bridge(ctx)
-            raw = await bridge.kill_session(task_id)
-            envelope = _envelope_fields(raw, default_success=False, default_message="")
-            return SessionKillResponse(
-                task_id=raw.get("task_id", task_id),
-                **_envelope_recovery_fields(envelope),
-            )
+            return {
+                "success": False,
+                "task_id": task_id,
+                "code": "INVALID_ACTION",
+                "message": f"Unsupported session action {action!r}.",
+            }
 
 
 def register_automation_tools(
@@ -1339,62 +1373,6 @@ def register_admin_tools(
     _MUTATING = mutating_annotation
     _DESTRUCTIVE = destructive_annotation
 
-    if allows_all(_REVIEW_REQUEST):
-
-        @mcp.tool(annotations=_MUTATING)
-        async def request_review(
-            task_id: str,
-            summary: str,
-            ctx: MCPContext | None = None,
-        ) -> ReviewResponse:
-            """Mark task ready for review.
-
-            Call this when implementation is complete. The task will move to REVIEW status.
-            Include a summary of what was implemented.
-
-            Recovery policy: if response includes next_tool and next_arguments,
-            call that tool exactly once before any retry.
-            """
-            if ctx:
-                await ctx.info(f"Requesting review for task {task_id}")
-                await ctx.report_progress(0.2, 1.0, "Preparing review request")
-
-            bridge = _require_bridge(ctx)
-
-            raw = await bridge.request_review(task_id, summary)
-            next_tool = _str_or_none(raw.get("next_tool"))
-            next_arguments = _dict_or_none(raw.get("next_arguments"))
-            hint = _str_or_none(raw.get("hint"))
-            if raw.get("status") == STATUS_ERROR and next_tool is None:
-                next_tool = TOOL_GET_TASK
-                next_arguments = {
-                    "task_id": task_id,
-                    "include_logs": True,
-                    "mode": "summary",
-                }
-                if hint is None:
-                    hint = "Inspect task runtime/logs before retrying request_review."
-
-            if ctx:
-                await ctx.report_progress(1.0, 1.0, "Review request complete")
-                if raw["status"] == STATUS_ERROR:
-                    await ctx.warning(f"Review request failed: {raw['message']}")
-                else:
-                    await ctx.debug("Task moved to REVIEW status")
-
-            envelope = _envelope_fields(
-                raw,
-                default_success=bool(raw.get("status") != STATUS_ERROR),
-                default_message=str(raw.get("message", "")),
-            )
-            return ReviewResponse(
-                status=raw["status"],
-                **_envelope_status_fields(envelope),
-                hint=hint,
-                next_tool=next_tool,
-                next_arguments=next_arguments,
-            )
-
     if allows_all(_SETTINGS_GET):
 
         @mcp.tool(annotations=_READ_ONLY)
@@ -1449,12 +1427,12 @@ def register_admin_tools(
     if allows_all(_SETTINGS_UPDATE):
 
         @mcp.tool(annotations=_MUTATING)
-        async def settings_update(
+        async def settings_set(
             auto_review: bool | None = None,
             auto_approve: bool | None = None,
             require_review_approval: bool | None = None,
             serialize_merges: bool | None = None,
-            default_base_branch: str | None = None,
+            worktree_base_ref_strategy: str | None = None,
             max_concurrent_agents: int | None = None,
             default_worker_agent: str | None = None,
             default_pair_terminal_backend: str | None = None,
@@ -1464,6 +1442,8 @@ def register_admin_tools(
             default_model_gemini: str | None = None,
             default_model_kimi: str | None = None,
             default_model_copilot: str | None = None,
+            tasks_wait_default_timeout_seconds: int | None = None,
+            tasks_wait_max_timeout_seconds: int | None = None,
             skip_pair_instructions: bool | None = None,
             ctx: MCPContext | None = None,
         ) -> SettingsUpdateResponse:
@@ -1479,7 +1459,7 @@ def register_admin_tools(
                     "auto_approve": auto_approve,
                     "require_review_approval": require_review_approval,
                     "serialize_merges": serialize_merges,
-                    "default_base_branch": default_base_branch,
+                    "worktree_base_ref_strategy": worktree_base_ref_strategy,
                     "max_concurrent_agents": max_concurrent_agents,
                     "default_worker_agent": default_worker_agent,
                     "default_pair_terminal_backend": default_pair_terminal_backend,
@@ -1489,6 +1469,8 @@ def register_admin_tools(
                     "default_model_gemini": default_model_gemini,
                     "default_model_kimi": default_model_kimi,
                     "default_model_copilot": default_model_copilot,
+                    "tasks_wait_default_timeout_seconds": tasks_wait_default_timeout_seconds,
+                    "tasks_wait_max_timeout_seconds": tasks_wait_max_timeout_seconds,
                     "skip_pair_instructions": skip_pair_instructions,
                 }
             )
@@ -1509,7 +1491,7 @@ def register_admin_tools(
     ):
 
         @mcp.tool(annotations=_DESTRUCTIVE)
-        async def review(
+        async def review_apply(
             task_id: str,
             action: ReviewActionInput,
             feedback: str = "",
@@ -1521,6 +1503,7 @@ def register_admin_tools(
             Args:
                 task_id: The task to act on.
                 action: One of "approve", "reject", "merge", "rebase".
+                    "approve" records approval state only; it is non-terminal.
                 feedback: Rejection feedback (only used when action is "reject").
                 rejection_action: What to do after rejection
                     (only used when action is "reject").
@@ -1552,6 +1535,139 @@ def register_admin_tools(
                 task_id=raw.get("task_id", task_id),
                 **_envelope_recovery_fields(envelope),
             )
+
+
+# ---------------------------------------------------------------------------
+# Plugin tool registration (generic dispatch)
+# ---------------------------------------------------------------------------
+
+
+def _make_plugin_handler(
+    *,
+    cap: str,
+    method: str,
+    plugin_id: str,
+    tool_name: str,
+    description: str,
+    parameters: dict[str, Any],
+    require_bridge: Callable[..., Any],
+    envelope_fields: Callable[..., Any],
+    envelope_recovery_fields: Callable[..., dict[str, Any]],
+) -> Callable[..., Any]:
+    """Factory that creates a properly-closed handler for a single plugin operation.
+
+    Uses a factory function instead of default-argument closure capture so that
+    FastMCP's signature introspection never sees ``_``-prefixed parameters.
+    The handler's ``__signature__`` is patched to expose the exact parameter
+    names declared in the plugin's ``McpToolSchema.parameters`` dict so that
+    FastMCP generates the correct JSON-Schema for the MCP tool.
+    """
+    import inspect
+
+    # JSON-Schema type -> Python annotation mapping
+    _JSON_TYPE_TO_PYTHON: dict[str, type] = {
+        "string": str,
+        "integer": int,
+        "number": float,
+        "boolean": bool,
+    }
+
+    async def handler(
+        ctx: MCPContext | None = None,
+        **kwargs: Any,
+    ) -> PluginToolResponse:
+        bridge = require_bridge(ctx)
+        raw = await bridge.invoke_plugin(cap, method, kwargs or None)
+        envelope = envelope_fields(raw, default_success=True, default_message=None)
+        return PluginToolResponse(
+            **envelope_recovery_fields(envelope),
+            plugin_id=raw.get("plugin_id", plugin_id),
+            capability=cap,
+            method=method,
+            data={k: v for k, v in raw.items() if k not in ("success", "message")},
+        )
+
+    # Build an explicit signature from the schema so FastMCP exposes typed params
+    sig_params: list[inspect.Parameter] = [
+        inspect.Parameter("ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None),
+    ]
+    for param_name, param_spec in parameters.items():
+        annotation = _JSON_TYPE_TO_PYTHON.get(param_spec.get("type", ""), str)
+        is_required = param_spec.get("required", False)
+        if is_required:
+            sig_params.append(
+                inspect.Parameter(
+                    param_name,
+                    inspect.Parameter.KEYWORD_ONLY,
+                    annotation=annotation,
+                ),
+            )
+        else:
+            sig_params.append(
+                inspect.Parameter(
+                    param_name,
+                    inspect.Parameter.KEYWORD_ONLY,
+                    default=None,
+                    annotation=annotation | None,
+                ),
+            )
+    handler.__signature__ = inspect.Signature(sig_params, return_annotation=PluginToolResponse)  # type: ignore[attr-defined]
+
+    handler.__name__ = tool_name
+    handler.__qualname__ = tool_name
+    handler.__doc__ = description
+    return handler
+
+
+def register_plugin_tools(
+    mcp: FastMCP,
+    *,
+    effective_profile: str,
+    helpers: ToolRegistrationContext,
+    read_only_annotation: ToolAnnotations,
+    mutating_annotation: ToolAnnotations,
+) -> None:
+    """Register MCP tools contributed by plugins via McpToolSchema descriptors.
+
+    Iterates all registered plugin operations with an ``mcp_tool_schema``
+    attached and dynamically registers each as an MCP tool. The tool body
+    delegates to ``CoreClientBridge.invoke_plugin()``.
+    """
+    _require_bridge = helpers.require_bridge
+    _envelope_fields = helpers.envelope_fields
+    _envelope_recovery_fields = helpers.envelope_recovery_fields
+    _READ_ONLY = read_only_annotation
+    _MUTATING = mutating_annotation
+
+    # Only expose plugin tools to MAINTAINER profile
+    if effective_profile != str(CapabilityProfile.MAINTAINER):
+        return
+
+    registry = helpers.plugin_registry
+    if registry is None:
+        return
+
+    for operation in registry.all_operations():
+        schema = operation.mcp_tool_schema
+        if schema is None:
+            continue
+
+        tool_name = schema.tool_name
+        annotation = _READ_ONLY if schema.annotations == "read_only" else _MUTATING
+
+        handler = _make_plugin_handler(
+            cap=operation.capability,
+            method=operation.method,
+            plugin_id=operation.plugin_id,
+            tool_name=tool_name,
+            description=schema.description,
+            parameters=schema.parameters,
+            require_bridge=_require_bridge,
+            envelope_fields=_envelope_fields,
+            envelope_recovery_fields=_envelope_recovery_fields,
+        )
+
+        mcp.tool(annotations=annotation)(handler)
 
 
 # ---------------------------------------------------------------------------
@@ -1602,6 +1718,14 @@ def register_full_mode_tools(
         read_only_annotation=read_only_annotation,
         mutating_annotation=mutating_annotation,
         destructive_annotation=destructive_annotation,
+    )
+
+    register_plugin_tools(
+        mcp,
+        effective_profile=effective_profile,
+        helpers=helpers,
+        read_only_annotation=read_only_annotation,
+        mutating_annotation=mutating_annotation,
     )
 
 

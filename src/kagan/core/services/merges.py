@@ -82,7 +82,7 @@ class MergeService(Protocol):
         action: str = "backlog",
     ) -> Task: ...
 
-    async def has_no_changes(self, task: TaskLike) -> bool: ...
+    async def has_no_changes(self, task: TaskLike, base_branch: str | None = None) -> bool: ...
 
     async def merge_repo(
         self,
@@ -167,6 +167,26 @@ class MergeServiceImpl:
         workspaces = await self.workspace_service.list_workspaces(task_id=task_id)
         return workspaces[0].id if workspaces else None
 
+    @staticmethod
+    def _normalize_branch(value: object) -> str:
+        return str(value).strip() if isinstance(value, str) else ""
+
+    async def _resolve_base_branch(self, task: TaskLike, *, workspace_id: str) -> str:
+        explicit_branch = self._normalize_branch(getattr(task, "base_branch", None))
+        if explicit_branch:
+            return explicit_branch
+
+        repos = await self.workspace_service.get_workspace_repos(workspace_id)
+        for repo in repos:
+            target_branch = self._normalize_branch(repo.get("target_branch"))
+            if target_branch:
+                return target_branch
+
+        raise ValueError(
+            f"Task {task.id} has no base branch configured. "
+            "Set task branch explicitly or sync repository branch first."
+        )
+
     async def delete_task(self, task: TaskLike) -> tuple[bool, str]:
         """Delete task with rollback-aware error handling.
 
@@ -212,15 +232,16 @@ class MergeServiceImpl:
                 message = f"Workspace not found for task {task.id}"
                 return False, message
 
-            base_branch = (
-                getattr(task, "base_branch", None) or self.config.general.default_base_branch
-            )
+            try:
+                base_branch = await self._resolve_base_branch(task, workspace_id=workspace_id)
+            except ValueError as exc:
+                return False, str(exc)
             short_id = task.id.split("-")[0] if "-" in task.id else task.id[:8]
             commit_msg = f"{task.title} (kagan {short_id})"
             if task.description and task.description.strip():
                 commit_msg += f"\n\n{task.description}"
 
-            skip_unchanged = await self.has_no_changes(task)
+            skip_unchanged = await self.has_no_changes(task, base_branch=base_branch)
             risk = await self._assess_merge_risk(task, workspace_id, base_branch)
             used_premerge_rebase = False
 
@@ -343,7 +364,7 @@ class MergeServiceImpl:
         assert refreshed_task is not None
         return refreshed_task
 
-    async def has_no_changes(self, task: TaskLike) -> bool:
+    async def has_no_changes(self, task: TaskLike, base_branch: str | None = None) -> bool:
         """Return True if the task has no commits and no diff stats."""
         workspace_id = await self._get_latest_workspace_id(task.id)
         if not workspace_id:
@@ -352,8 +373,11 @@ class MergeServiceImpl:
         if any(repo.get("has_changes") for repo in repos):
             return False
 
-        base_branch = task.base_branch or self.config.general.default_base_branch
-        commits = await self.workspace_service.get_commit_log(task.id, base_branch)
+        resolved_base = base_branch or await self._resolve_base_branch(
+            task,
+            workspace_id=workspace_id,
+        )
+        commits = await self.workspace_service.get_commit_log(task.id, resolved_base)
         return not commits
 
     async def merge_repo(
@@ -404,7 +428,7 @@ class MergeServiceImpl:
             )
             log.info(f"Auto-committed changes before merge for repo {repo.name}")
 
-        await self._git.push(workspace_repo.worktree_path, workspace.branch_name)
+        await self._git.push(workspace_repo.worktree_path, workspace.branch_name, force=True)
 
         if merge_result is None and strategy == MergeStrategy.PULL_REQUEST:
             pr_url = await self._create_pr(

@@ -104,7 +104,6 @@ class HelpModal(ModalScreen[None]):
                 ("r", "Task Output (REVIEW)"),
                 ("m", "Merge (REVIEW)"),
                 ("b", "Set task branch"),
-                ("Shift+B", "Set default branch"),
                 (",", "Settings"),
                 ("Ctrl+C", "Quit"),
             ]
@@ -119,7 +118,6 @@ class HelpModal(ModalScreen[None]):
                 ("Ctrl+C", "Stop current run"),
                 ("F2", "Enhance prompt"),
                 ("b", "Set task branch"),
-                ("Shift+B", "Set default branch"),
             ]
         )
         add_subsection("Input")

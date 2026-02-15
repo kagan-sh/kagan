@@ -436,7 +436,7 @@ class SessionServiceImpl:
 
         Note: We no longer create CLAUDE.md, AGENTS.md, or CONTEXT.md because:
         - CLAUDE.md/AGENTS.md: Already present in worktree from git clone
-        - CONTEXT.md: Redundant with MCP get_context tool
+        - CONTEXT.md: Redundant with MCP task_get(mode="context") tool
         """
         ignore_entries: list[str] = [".kagan/"]
 
@@ -674,7 +674,7 @@ class SessionServiceImpl:
             pass  # Best-effort background commit
 
     def _build_startup_prompt(self, task: TaskLike) -> str:
-        """Build startup prompt for pair mode using canonical v2 tool names."""
+        """Build startup prompt for pair mode using consolidated tool names."""
         desc = task.description or "No description provided."
         server_name = get_mcp_server_name()
         tool_format_note = (
@@ -695,7 +695,7 @@ Act as a Senior Developer collaborating with me on this implementation.
 - You are in a git worktree, NOT the main repository
 - Only modify files within this worktree
 - **COMMIT all changes before requesting review** (use semantic commits: feat:, fix:, docs:, etc.)
-- When complete: commit your work, then call `request_review`
+- When complete: commit your work, then call `task_patch(transition='request_review')`
 
 ## MCP Tools Available
 {tool_format_note}
@@ -703,32 +703,34 @@ Act as a Senior Developer collaborating with me on this implementation.
 This session uses capability profile `pair_worker` scoped to task `{task.id}`.
 
 **Context Tools:**
-- `get_context` - Full task details (acceptance criteria, scratchpad, linked tasks)
-- `get_task` - Look up any task's details by ID (useful for @mentioned tasks)
-- `update_scratchpad` - Record progress, decisions, and blockers
+- `task_get(mode="context")` - Full task details (acceptance criteria, scratchpad, linked tasks)
+- `task_get` - Look up any task's details by ID (useful for @mentioned tasks)
+- `task_patch(append_note=...)` - Record progress, decisions, and blockers
 
 **Coordination Tools (USE THESE):**
-- `tasks_list` - Discover concurrent work to avoid merge conflicts
-- `get_task(task_id, include_logs=true)` - Execution logs from prior work
+- `task_list` - Discover concurrent work to avoid merge conflicts
+- `task_get(task_id, include_logs=true)` - Execution logs from prior work
+- `task_logs(task_id, offset, limit)` - Page older run logs when task_get is truncated
 
 **Read-Only Browsing:**
-- `tasks_list` - List tasks with optional filter/project/exclusion controls
-- `projects_list` - List recent projects
-- `repos_list` - List repos for a project
-- `audit_tail` - Recent audit events
+- `task_list` - List tasks with optional filter/project/exclusion controls
+- `project_list` - List recent projects
+- `repo_list` - List repos for a project
+- `audit_list` - Recent audit events
 
 **Completion:**
-- `request_review` - Submit work for review (commit first!)
+- `task_patch(transition="request_review")` - Submit work for review (commit first!)
 
 ## Coordination Workflow
 
 Before implementing, check for parallel work and historical context:
 
 1. **Check parallel work**: Call
-   `tasks_list(filter="IN_PROGRESS", exclude_task_ids=["{task.id}"], include_scratchpad=true)`.
+   `task_list(filter="IN_PROGRESS", exclude_task_ids=["{task.id}"], include_scratchpad=true)`.
    Review concurrent tasks to identify overlapping file modifications or shared dependencies.
 
-2. **Learn from history**: Call `get_task(task_id, include_logs=true)` on related completed tasks.
+2. **Learn from history**: Call `task_get(task_id, include_logs=true)` on related completed tasks.
+   If logs are truncated or indicate more pages, call `task_logs(task_id, offset, limit)`.
    Avoid repeating failed approaches; reuse successful patterns.
 
 3. **Coordinate strategy**: If overlap exists, plan which files to modify first or wait for.
@@ -736,9 +738,9 @@ Before implementing, check for parallel work and historical context:
 ## Setup Verification
 
 Please confirm you have access to the Kagan MCP tools by:
-1. Calling `get_context` with task_id: `{task.id}`
+1. Calling `task_get` with `mode="context"` and task_id: `{task.id}`
 2. Calling
-   `tasks_list(filter="IN_PROGRESS", exclude_task_ids=["{task.id}"], include_scratchpad=true)`
+   `task_list(filter="IN_PROGRESS", exclude_task_ids=["{task.id}"], include_scratchpad=true)`
 
 After confirming MCP access, please:
 1. Summarize your understanding of this task (including acceptance criteria from MCP)

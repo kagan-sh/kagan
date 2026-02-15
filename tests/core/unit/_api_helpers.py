@@ -15,6 +15,8 @@ from kagan.core.adapters.db.repositories.auxiliary import ScratchRepository
 from kagan.core.api import KaganAPI
 from kagan.core.bootstrap import AppContext, InMemoryEventBus
 from kagan.core.config import KaganConfig
+from kagan.core.plugins.github import register_github_plugin
+from kagan.core.plugins.sdk import PluginRegistry
 from kagan.core.services.projects import ProjectServiceImpl
 from kagan.core.services.tasks import TaskServiceImpl
 
@@ -98,7 +100,7 @@ async def build_api(
     db_path = tmp_path / "test.db"
     config_path = tmp_path / "config.toml"
     config_path.write_text(
-        '[general]\nauto_review = false\ndefault_base_branch = "main"\n'
+        "[general]\nauto_review = false\n"
         'default_worker_agent = "claude"\n\n'
         "[agents.claude]\n"
         'identity = "claude.ai"\nname = "Claude"\nshort_name = "claude"\n'
@@ -137,6 +139,8 @@ async def build_api(
     ctx.merge_service = mock_merge_service()
     ctx.job_service = mock_job_service()
     ctx.active_project_id = project_id
+    ctx.plugin_registry = PluginRegistry()
+    register_github_plugin(ctx.plugin_registry)
 
     api = KaganAPI(ctx)
     return task_repo, api, ctx

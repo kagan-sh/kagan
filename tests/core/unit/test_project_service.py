@@ -201,3 +201,53 @@ async def test_create_project_rolls_back_project_and_links_when_second_repo_link
             assert link_count == 0
     finally:
         await repo.close()
+
+
+async def test_update_repo_script_values_merges_updates_and_get_repo_script_value_reads_keys(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "kagan.db"
+    repo, service = await _build_project_service(db_path)
+
+    try:
+        repo_path = tmp_path / "repos" / "scripts"
+        repo_path.mkdir(parents=True)
+
+        project_id = await service.create_project("Scripts Project", [repo_path])
+        project_repos = await service.get_project_repos(project_id)
+        repo_id = project_repos[0].id
+
+        scripts_after_first_update = await service.update_repo_script_values(
+            repo_id,
+            {"z_key": "z", "a_key": "a"},
+        )
+        scripts_after_second_update = await service.update_repo_script_values(
+            repo_id,
+            {"a_key": "a-updated", "m_key": "m"},
+        )
+
+        assert list(scripts_after_first_update.keys()) == ["a_key", "z_key"]
+        assert scripts_after_second_update["a_key"] == "a-updated"
+        assert scripts_after_second_update["m_key"] == "m"
+        assert scripts_after_second_update["z_key"] == "z"
+        assert await service.get_repo_script_value(repo_id, "a_key") == "a-updated"
+        assert await service.get_repo_script_value(repo_id, "missing") is None
+    finally:
+        await repo.close()
+
+
+async def test_repo_script_methods_raise_for_invalid_input_or_missing_repo(tmp_path: Path) -> None:
+    db_path = tmp_path / "kagan.db"
+    repo, service = await _build_project_service(db_path)
+
+    try:
+        with pytest.raises(ValueError, match="script_updates cannot be empty"):
+            await service.update_repo_script_values("repo-1", {})
+
+        with pytest.raises(ValueError, match="script_key cannot be empty"):
+            await service.get_repo_script_value("repo-1", "  ")
+
+        with pytest.raises(ValueError, match="Repo not found: missing-repo"):
+            await service.update_repo_script_values("missing-repo", {"k": "v"})
+    finally:
+        await repo.close()

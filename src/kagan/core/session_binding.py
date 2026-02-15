@@ -25,6 +25,7 @@ class SessionOrigin(StrEnum):
     LEGACY = "legacy"
     KAGAN = "kagan"
     KAGAN_ADMIN = "kagan_admin"
+    TUI = "tui"
 
 
 class SessionNamespace(StrEnum):
@@ -32,10 +33,11 @@ class SessionNamespace(StrEnum):
     TASK = "task"
     PLANNER = "planner"
     EXT = "ext"
+    TUI = "tui"
 
 
 _SCOPED_SESSION_NAMESPACES: frozenset[SessionNamespace] = frozenset(
-    {SessionNamespace.TASK, SessionNamespace.PLANNER, SessionNamespace.EXT}
+    {SessionNamespace.TASK, SessionNamespace.PLANNER, SessionNamespace.EXT, SessionNamespace.TUI}
 )
 
 
@@ -43,6 +45,7 @@ _ORIGIN_PROFILE_CEILING: dict[SessionOrigin, CapabilityProfile] = {
     SessionOrigin.LEGACY: CapabilityProfile.MAINTAINER,
     SessionOrigin.KAGAN: CapabilityProfile.PAIR_WORKER,
     SessionOrigin.KAGAN_ADMIN: CapabilityProfile.MAINTAINER,
+    SessionOrigin.TUI: CapabilityProfile.MAINTAINER,
 }
 
 _ORIGIN_ALLOWED_NAMESPACES: dict[SessionOrigin, set[SessionNamespace]] = {
@@ -58,6 +61,7 @@ _ORIGIN_ALLOWED_NAMESPACES: dict[SessionOrigin, set[SessionNamespace]] = {
         SessionNamespace.PLANNER,
     },
     SessionOrigin.KAGAN_ADMIN: {SessionNamespace.EXT},
+    SessionOrigin.TUI: {SessionNamespace.TUI},
 }
 
 _TASK_MUTATION_METHODS: set[tuple[str, str]] = {

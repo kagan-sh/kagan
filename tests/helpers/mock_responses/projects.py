@@ -1,6 +1,6 @@
 """Canned ACP responses for planner and project scenarios.
 
-Provides the ``make_propose_plan_tool_call`` builder and pre-built
+Provides the ``make_plan_submit_tool_call`` builder and pre-built
 plan proposal / multi-task plan constants used by snapshot and E2E tests.
 """
 
@@ -9,12 +9,12 @@ from __future__ import annotations
 from typing import Any
 
 
-def make_propose_plan_tool_call(
+def make_plan_submit_tool_call(
     tool_call_id: str = "tc-plan-001",
     tasks: list[dict[str, Any]] | None = None,
     todos: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Create a propose_plan tool call structure.
+    """Create a plan_submit tool call structure.
 
     Args:
         tool_call_id: Unique identifier for the tool call
@@ -50,8 +50,8 @@ def make_propose_plan_tool_call(
         tool_call_id: {
             "sessionUpdate": "tool_call",
             "toolCallId": tool_call_id,
-            "name": "propose_plan",
-            "title": "propose_plan",
+            "name": "plan_submit",
+            "title": "plan_submit",
             "status": "completed",
             "arguments": {"tasks": tasks, "todos": todos},
         }
@@ -72,7 +72,7 @@ SIMPLE_PLAN_TEXT = """\
 I've created a plan for this change.
 """
 
-PLAN_PROPOSAL_TOOL_CALLS = make_propose_plan_tool_call(
+PLAN_PROPOSAL_TOOL_CALLS = make_plan_submit_tool_call(
     tool_call_id="tc-plan-001",
     tasks=[
         {
@@ -114,7 +114,7 @@ PLAN_PROPOSAL_TOOL_CALLS = make_propose_plan_tool_call(
 )
 
 
-MULTI_TASK_PLAN_TOOL_CALLS = make_propose_plan_tool_call(
+MULTI_TASK_PLAN_TOOL_CALLS = make_plan_submit_tool_call(
     tool_call_id="tc-multi-001",
     tasks=[
         {

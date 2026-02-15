@@ -19,6 +19,7 @@ from kagan.core.adapters.db.schema import (
     Session,
     WorkspaceRepo,
 )
+from kagan.core.constants import KAGAN_BRANCH_CONFIGURED_KEY
 from kagan.core.limits import SCRATCHPAD_LIMIT
 from kagan.core.models.enums import ProposalStatus, ScratchType, SessionStatus, SessionType
 from kagan.core.time import utc_now
@@ -451,6 +452,28 @@ class RepoRepository:
                 await session.commit()
                 return True
             return False
+
+    async def update_default_branch(
+        self,
+        repo_id: str,
+        branch: str,
+        *,
+        mark_configured: bool = False,
+    ) -> Repo | None:
+        """Update Repo.default_branch, optionally marking branch as configured."""
+        async with self._lock:
+            async with self._get_session() as session:
+                repo = await session.get(Repo, repo_id)
+                if repo is None:
+                    return None
+                repo.default_branch = branch
+                if mark_configured:
+                    next_scripts = dict(repo.scripts) if repo.scripts else {}
+                    next_scripts[KAGAN_BRANCH_CONFIGURED_KEY] = "true"
+                    repo.scripts = next_scripts
+                session.add(repo)
+                await session.commit()
+                return repo
 
     async def remove_from_workspace(self, workspace_id: str, repo_id: str) -> bool:
         """Remove a repo from a workspace. Returns True if removed."""

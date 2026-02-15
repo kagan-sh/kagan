@@ -26,7 +26,6 @@ from kagan.core.agents.signals import Signal, parse_signal
 from kagan.core.bootstrap import InMemoryEventBus
 from kagan.core.events import (
     AutomationAgentAttached,
-    AutomationReviewAgentAttached,
     AutomationTaskEnded,
     AutomationTaskStarted,
 )
@@ -492,7 +491,6 @@ class TestAutomationRuntimeEvents:
 
         assert any(isinstance(event, AutomationTaskStarted) for event in published)
         assert any(isinstance(event, AutomationAgentAttached) for event in published)
-        assert any(isinstance(event, AutomationReviewAgentAttached) for event in published)
         assert any(isinstance(event, AutomationTaskEnded) for event in published)
 
         await scheduler.stop()

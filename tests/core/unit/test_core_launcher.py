@@ -29,7 +29,7 @@ async def test_ensure_core_running_spawns_once_for_concurrent_callers(tmp_path: 
     endpoint = CoreEndpoint(transport="socket", address="/tmp/kagan-core.sock")
     state = {"spawn_count": 0, "started_at": 0.0}
 
-    def _discover() -> CoreEndpoint | None:
+    def _discover(**_kwargs: object) -> CoreEndpoint | None:
         if state["spawn_count"] == 0:
             return None
         if time.monotonic() - state["started_at"] < 0.03:
@@ -66,7 +66,7 @@ async def test_ensure_core_running_waits_when_parallel_launcher_wins(tmp_path: P
     endpoint = CoreEndpoint(transport="socket", address="/tmp/kagan-core.sock")
     state = {"calls": 0}
 
-    def _discover() -> CoreEndpoint | None:
+    def _discover(**_kwargs: object) -> CoreEndpoint | None:
         state["calls"] += 1
         if state["calls"] < 4:
             return None

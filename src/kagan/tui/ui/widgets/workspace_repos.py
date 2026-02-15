@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Label, Static
 
 if TYPE_CHECKING:
-    from textual.app import ComposeResult
+    from collections.abc import Awaitable, Callable
 
-    from kagan.core.services.diffs import DiffService
-    from kagan.core.services.workspaces import WorkspaceService
+    from textual.app import ComposeResult
 
 
 class WorkspaceRepoItem(Static):
@@ -59,14 +58,14 @@ class WorkspaceReposWidget(Static):
         self,
         workspace_id: str,
         *,
-        workspace_service: WorkspaceService,
-        diff_service: DiffService | None,
+        load_repos: Callable[[str], Awaitable[list[dict[str, Any]]]],
+        load_repo_diff: Callable[[str, str], Awaitable[Any | None]] | None,
     ) -> None:
         super().__init__()
         self.workspace_id = workspace_id
-        self._workspace_service = workspace_service
-        self._diff_service = diff_service
-        self.repos: list[dict] = []
+        self._load_repos = load_repos
+        self._load_repo_diff = load_repo_diff
+        self.repos: list[dict[str, Any]] = []
 
     def compose(self) -> ComposeResult:
         yield Label("WORKSPACE REPOS", classes="section-header")
@@ -77,18 +76,29 @@ class WorkspaceReposWidget(Static):
         await self.refresh_repos()
 
     async def refresh_repos(self) -> None:
-        self.repos = await self._workspace_service.get_workspace_repos(self.workspace_id)
+        try:
+            self.repos = await self._load_repos(self.workspace_id)
+        except Exception as exc:
+            self.notify(f"Failed to load workspace repos: {exc}", severity="warning")
+            return
 
         repo_list = self.query_one("#repo-list", Vertical)
         await repo_list.remove_children()
 
         for repo in self.repos:
+            repo_id = str(repo.get("repo_id", "")).strip()
+            if not repo_id:
+                continue
+            repo_name = str(repo.get("repo_name", repo_id))
+            target_branch = str(repo.get("target_branch", "unknown"))
+            has_changes = bool(repo.get("has_changes", False))
+            diff_stats = repo.get("diff_stats")
             item = WorkspaceRepoItem(
-                repo_id=repo["repo_id"],
-                repo_name=repo["repo_name"],
-                target_branch=repo["target_branch"],
-                has_changes=repo["has_changes"],
-                diff_stats=repo.get("diff_stats"),
+                repo_id=repo_id,
+                repo_name=repo_name,
+                target_branch=target_branch,
+                has_changes=has_changes,
+                diff_stats=diff_stats if isinstance(diff_stats, dict) else None,
             )
             await repo_list.mount(item)
 
@@ -105,10 +115,13 @@ class WorkspaceReposWidget(Static):
     async def _open_diff(self, repo_id: str) -> None:
         from kagan.tui.ui.modals import DiffModal
 
-        if self._diff_service is None:
+        if self._load_repo_diff is None:
             self.notify("Diff service unavailable", severity="warning")
             return
-        repo_diff = await self._diff_service.get_repo_diff(self.workspace_id, repo_id)
+        repo_diff = await self._load_repo_diff(self.workspace_id, repo_id)
+        if repo_diff is None:
+            self.notify("No diff available for this repository", severity="warning")
+            return
         await self.app.push_screen(DiffModal(diffs=[repo_diff]))
 
     async def _open_merge_dialog(self) -> None:

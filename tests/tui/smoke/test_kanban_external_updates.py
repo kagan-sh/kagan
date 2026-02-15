@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 from tests.helpers.wait import wait_for_modal, wait_for_screen, wait_for_widget, wait_until
@@ -37,6 +37,7 @@ from kagan.tui.ui.screens.kanban.board_controller import (
 )
 from kagan.tui.ui.widgets.card import TaskCard
 from kagan.tui.ui.widgets.column import KanbanColumn
+from kagan.tui.ui.widgets.peek_overlay import PeekOverlay
 
 if TYPE_CHECKING:
     from pytest import MonkeyPatch
@@ -425,8 +426,10 @@ async def test_external_task_move_refreshes_column_membership(
         await app.ctx.task_service.move(task.id, TaskStatus.IN_PROGRESS)
 
         await wait_until(
-            lambda: _column_has_task(kanban, TaskStatus.IN_PROGRESS, task.id)
-            and not _column_has_task(kanban, TaskStatus.BACKLOG, task.id),
+            lambda: (
+                _column_has_task(kanban, TaskStatus.IN_PROGRESS, task.id)
+                and not _column_has_task(kanban, TaskStatus.BACKLOG, task.id)
+            ),
             timeout=5.0,
             description="task moved to in-progress column",
         )
@@ -672,6 +675,139 @@ async def test_hiding_search_cancels_inflight_query_and_resets_filter(
         )
 
         release_query.set()
+
+
+@pytest.mark.asyncio
+async def test_kanban_github_sync_flow_surfaces_error_without_state_corruption(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        project_id = app.ctx.active_project_id
+        repo_id = app.ctx.active_repo_id
+        assert project_id is not None
+        assert repo_id is not None
+
+        tasks = await app.ctx.task_service.list_tasks(project_id=project_id)
+        task = next(t for t in tasks if t.status == TaskStatus.BACKLOG)
+        card = kanban.query_one(f"#card-{task.id}", TaskCard)
+        card.focus()
+        await pilot.pause()
+
+        refresh_board = AsyncMock()
+        plugin_ui_catalog = AsyncMock(
+            return_value={
+                "schema_version": "1",
+                "actions": [
+                    {
+                        "plugin_id": "official.github",
+                        "action_id": "sync_issues",
+                        "surface": "kanban.repo_actions",
+                        "label": "Sync GitHub Issues",
+                        "operation": {"capability": "kagan_github", "method": "sync_issues"},
+                    }
+                ],
+                "forms": [],
+                "badges": [],
+            }
+        )
+        monkeypatch.setattr(kanban._board, "refresh_board", refresh_board)
+        monkeypatch.setattr(kanban.ctx.api, "plugin_ui_catalog", plugin_ui_catalog)
+        plugin_ui_invoke = AsyncMock(
+            return_value={
+                "ok": False,
+                "code": "GH_NOT_CONNECTED",
+                "message": "GitHub not connected",
+                "data": {"hint": "Run connect repo first"},
+                "refresh": {"repo": False, "tasks": False, "sessions": False},
+            }
+        )
+        monkeypatch.setattr(kanban.ctx.api, "plugin_ui_invoke", plugin_ui_invoke)
+
+        notify_calls: list[tuple[str, str]] = []
+        original_notify = kanban.notify
+
+        def _capture_notify(
+            message: str, *, severity: str = "information", **kwargs: object
+        ) -> None:
+            notify_calls.append((message, severity))
+            original_notify(message, severity=severity, **kwargs)
+
+        monkeypatch.setattr(kanban, "notify", _capture_notify)
+        await kanban._refresh_plugin_ui_catalog(force=True)
+        kanban.action_github_sync()
+        await wait_until(
+            lambda: any(message for message, _severity in notify_calls),
+            timeout=5.0,
+            description="GitHub sync not-connected notification",
+        )
+
+        plugin_ui_invoke.assert_awaited_once_with(
+            project_id=project_id,
+            repo_id=repo_id,
+            plugin_id="official.github",
+            action_id="sync_issues",
+            inputs=None,
+        )
+        refresh_board.assert_not_awaited()
+        focused = kanban.get_focused_card()
+        assert focused is not None and focused.task_model is not None
+        assert focused.task_model.id == task.id
+        assert any(
+            "GitHub not connected (Run connect repo first)" in message and severity == "warning"
+            for message, severity in notify_calls
+        )
+
+
+@pytest.mark.asyncio
+async def test_kanban_peek_toggle_preserves_selection_and_focus(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+        tasks = await app.ctx.task_service.list_tasks(project_id=app.ctx.active_project_id)
+        task = next(t for t in tasks if t.status == TaskStatus.IN_PROGRESS)
+        await app.ctx.task_service.update_fields(task.id, task_type=TaskType.AUTO)
+        await kanban._board.refresh_board()
+        await wait_for_widget(pilot, f"#card-{task.id}", timeout=6.0)
+
+        card = kanban.query_one(f"#card-{task.id}", TaskCard)
+        card.focus()
+        await pilot.pause()
+        focused_before = pilot.app.focused
+
+        task_model = await app.ctx.task_service.get_task(task.id)
+        assert task_model is not None
+        monkeypatch.setattr(
+            kanban.ctx.api, "get_scratchpad", AsyncMock(return_value="scratchpad text")
+        )
+
+        overlay = kanban.query_one("#peek-overlay", PeekOverlay)
+        assert overlay.has_class("visible") is False
+
+        await kanban._toggle_peek_flow(task_model)
+        assert overlay.has_class("visible") is True
+        focused = kanban.get_focused_card()
+        assert focused is not None and focused.task_model is not None
+        assert focused.task_model.id == task.id
+        assert pilot.app.focused is focused_before
+
+        await kanban._toggle_peek_flow(task_model)
+        assert overlay.has_class("visible") is False
+        focused = kanban.get_focused_card()
+        assert focused is not None and focused.task_model is not None
+        assert focused.task_model.id == task.id
+        assert pilot.app.focused is focused_before
 
 
 @pytest.mark.asyncio
@@ -945,3 +1081,93 @@ async def test_external_launcher_attach_does_not_prompt_session_complete(
         notify.assert_called_once()
         assert "Workspace opened externally." in notify.call_args.args[0]
         assert "start_prompt.md" in notify.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_tmux_attach_retries_after_missing_session_recreation(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        screen = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+
+        tasks = await app.ctx.task_service.list_tasks(project_id=app.ctx.active_project_id)
+        task = next(
+            t for t in tasks if t.task_type == TaskType.PAIR and t.status == TaskStatus.BACKLOG
+        )
+        await app.ctx.task_service.update_fields(task.id, status=TaskStatus.IN_PROGRESS)
+        refreshed = await app.ctx.task_service.get_task(task.id)
+        assert refreshed is not None
+        task = refreshed
+
+        local_tmux_attach = AsyncMock(side_effect=[False, True])
+        core_attach = AsyncMock(return_value=False)
+        session_exists = AsyncMock(side_effect=[False, True])
+        create_session = AsyncMock(return_value={"session_name": f"kagan-{task.id}"})
+
+        monkeypatch.setattr(screen._session, "_attach_tmux_session_local", local_tmux_attach)
+        monkeypatch.setattr(screen.ctx.api, "attach_session", core_attach)
+        monkeypatch.setattr(screen.ctx.api, "session_exists", session_exists)
+        monkeypatch.setattr(screen.ctx.api, "create_session", create_session)
+        monkeypatch.setattr(screen.app, "suspend", lambda: nullcontext())
+
+        notify = Mock()
+        monkeypatch.setattr(screen, "notify", notify)
+
+        await screen._session.do_open_pair_session(task, tmp_path, "tmux")
+
+        assert local_tmux_attach.await_count == 2
+        core_attach.assert_not_awaited()
+        session_exists.assert_has_awaits([call(task.id), call(task.id)])
+        create_session.assert_awaited_once_with(
+            task.id,
+            worktree_path=tmp_path,
+            reuse_if_exists=False,
+        )
+        notify_messages = [str(item.args[0]) for item in notify.call_args_list if item.args]
+        assert any(
+            "PAIR session missing; recreating session..." in message for message in notify_messages
+        )
+        assert not any("Failed to open PAIR session" in message for message in notify_messages)
+
+
+@pytest.mark.asyncio
+async def test_merge_exception_shows_error_notification(
+    e2e_app_with_tasks,
+    mock_agent_factory,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    app = e2e_app_with_tasks
+    app._agent_factory = mock_agent_factory
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
+
+        tasks = await app.ctx.api.list_tasks(project_id=app.ctx.active_project_id)
+        task = next(t for t in tasks if t.status == TaskStatus.REVIEW)
+
+        monkeypatch.setattr(
+            kanban.ctx.api,
+            "merge_task_direct",
+            AsyncMock(side_effect=RuntimeError("push rejected")),
+        )
+
+        notify_calls: list[tuple[str, str]] = []
+        original_notify = kanban.notify
+
+        def _capture_notify(message: str, *, severity: str = "information", **kw: object) -> None:
+            notify_calls.append((message, severity))
+            original_notify(message, severity=severity, **kw)
+
+        monkeypatch.setattr(kanban, "notify", _capture_notify)
+
+        result = await kanban._review.execute_merge(task, success_msg="ok", track_failures=True)
+
+        assert result is False
+        assert task.id in kanban._merge_failed_tasks
+        assert any("Merge error" in msg and sev == "error" for msg, sev in notify_calls)

@@ -124,7 +124,12 @@ class StreamingOutput(VerticalScroll):
             self._thinking_indicator = None
 
     async def post_response(self, fragment: str = "") -> StreamingMarkdown:
-        """Get or create agent response widget."""
+        """Get or create agent response widget.
+
+        Uses a local reference to guard against concurrent nullification of
+        ``_agent_response`` by ``post_tool_call`` during the
+        ``await self.mount(...)`` yield point.
+        """
         await self._remove_thinking_indicator()
         self._agent_thought = None
         self._phase = StreamPhase.STREAMING
@@ -133,14 +138,15 @@ class StreamingOutput(VerticalScroll):
             fragment = self._filter_xml_content(fragment)
 
         if self._agent_response is None:
-            self._agent_response = StreamingMarkdown(role=StreamRole.RESPONSE)
-            await self.mount(self._agent_response)
-            if fragment:
-                await self._agent_response.append_content(fragment)
-        elif fragment:
-            await self._agent_response.append_content(fragment)
+            response = StreamingMarkdown(role=StreamRole.RESPONSE)
+            self._agent_response = response
+            await self.mount(response)
+        else:
+            response = self._agent_response
+        if fragment:
+            await response.append_content(fragment)
         self._scroll_to_end()
-        return self._agent_response
+        return response
 
     def _filter_xml_content(self, fragment: str) -> str:
         """Filter XML blocks from fragment, buffering partial tags."""
@@ -179,16 +185,22 @@ class StreamingOutput(VerticalScroll):
         return content
 
     async def post_thought(self, fragment: str) -> StreamingMarkdown:
-        """Get or create agent thought widget."""
+        """Get or create agent thought widget.
+
+        Uses a local reference to guard against concurrent nullification of
+        ``_agent_thought`` by ``post_response`` / ``post_tool_call`` during
+        the ``await self.mount(...)`` yield point.
+        """
         await self._remove_thinking_indicator()
         if self._agent_thought is None:
-            self._agent_thought = StreamingMarkdown(role=StreamRole.THOUGHT)
-            await self.mount(self._agent_thought)
-            await self._agent_thought.append_content(fragment)
+            thought = StreamingMarkdown(role=StreamRole.THOUGHT)
+            self._agent_thought = thought
+            await self.mount(thought)
         else:
-            await self._agent_thought.append_content(fragment)
+            thought = self._agent_thought
+        await thought.append_content(fragment)
         self._scroll_to_end()
-        return self._agent_thought
+        return thought
 
     async def post_tool_call(
         self,

@@ -9,6 +9,7 @@ import pytest
 from kagan.core.ipc.discovery import CoreEndpoint
 from kagan.mcp import server as mcp_server
 from kagan.mcp.server import MCPRuntimeConfig, MCPStartupError, _create_mcp_server, _mcp_lifespan
+from kagan.version import get_kagan_version
 
 
 def _tool_names(mcp: object) -> set[str]:
@@ -143,9 +144,9 @@ def test_create_server_applies_runtime_capability_override() -> None:
     )
     names = _tool_names(mcp)
 
-    assert "tasks_list" in names
-    assert "tasks_update" not in names
-    assert "request_review" not in names
+    assert "task_list" in names
+    assert "task_patch" not in names
+    assert "review_apply" not in names
 
 
 def test_create_server_caps_profile_by_identity_ceiling() -> None:
@@ -156,10 +157,10 @@ def test_create_server_caps_profile_by_identity_ceiling() -> None:
     )
     names = _tool_names(mcp)
 
-    assert "sessions_create" in names
-    assert "request_review" in names
-    assert "settings_update" not in names
-    assert "projects_open" not in names
+    assert "session_manage" in names
+    assert "task_patch" in names
+    assert "settings_set" not in names
+    assert "project_open" not in names
 
 
 def test_create_server_keeps_maintainer_for_admin_identity() -> None:
@@ -169,8 +170,8 @@ def test_create_server_keeps_maintainer_for_admin_identity() -> None:
     )
     names = _tool_names(mcp)
 
-    assert "settings_update" in names
-    assert "projects_open" in names
+    assert "settings_set" in names
+    assert "project_open" in names
 
 
 @pytest.mark.asyncio
@@ -209,6 +210,9 @@ async def test_lifespan_uses_runtime_config_for_bridge_metadata() -> None:
                 ctx.bridge._capability_profile == "pair_worker"  # type: ignore[attr-defined]  # quality-allow-private
             )
             assert ctx.bridge._session_origin == "kagan"  # type: ignore[attr-defined]  # quality-allow-private
+            assert (
+                ctx.bridge._client_version == get_kagan_version()  # type: ignore[attr-defined]  # quality-allow-private
+            )
 
 
 def test_main_exits_with_structured_startup_error_message() -> None:

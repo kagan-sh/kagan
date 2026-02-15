@@ -19,7 +19,7 @@ async def test_escape_closes_automation_managed_live_review_modal(
 
     async with app.run_test(size=(120, 40)) as pilot:
         kanban = cast("KanbanScreen", await wait_for_screen(pilot, KanbanScreen, timeout=10.0))
-        tasks = await app.ctx.task_service.list_tasks(project_id=app.ctx.active_project_id)
+        tasks = await app.ctx.api.list_tasks(project_id=app.ctx.active_project_id)
         task = tasks[0]
         agent_config = task.get_agent_config(app.config)
         review_agent = mock_agent_factory(app.project_root, agent_config, read_only=True)
@@ -27,9 +27,7 @@ async def test_escape_closes_automation_managed_live_review_modal(
         app.push_screen(
             ReviewModal(
                 task=task,
-                worktree_manager=app.ctx.workspace_service,
                 agent_config=agent_config,
-                execution_service=app.ctx.execution_service,
                 review_agent=review_agent,
                 is_reviewing=True,
                 is_running=True,

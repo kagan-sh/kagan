@@ -76,7 +76,7 @@ Mirrors the in-app help (press ++question++).
 | ++m++       | Merge (REVIEW)       |
 | ++p++       | Plan mode            |
 | ++b++       | Set task branch      |
-| ++shift+b++ | Set default branch   |
+| ++shift+g++ | GitHub Sync          |
 | ++comma++   | Settings             |
 | ++ctrl+c++  | Quit                 |
 
@@ -90,7 +90,6 @@ Mirrors the in-app help (press ++question++).
 | ++ctrl+c++  | Stop current run   |
 | ++f2++      | Enhance prompt     |
 | ++b++       | Set task branch    |
-| ++shift+b++ | Set default branch |
 
 ### Input
 

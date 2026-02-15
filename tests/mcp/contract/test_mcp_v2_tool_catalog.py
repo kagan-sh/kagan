@@ -1,4 +1,4 @@
-"""Tests for MCP v2 tool catalog -- all expected tools are registered."""
+"""Tests for consolidated MCP tool catalog registration."""
 
 from __future__ import annotations
 
@@ -11,44 +11,39 @@ def _tool_names(mcp) -> set[str]:
 
 
 READONLY_TOOLS = {
-    "propose_plan",
-    "get_task",
-    "tasks_list",
-    "projects_list",
-    "repos_list",
-    "audit_tail",
+    "plan_submit",
+    "task_get",
+    "task_logs",
+    "task_list",
+    "task_wait",
+    "project_list",
+    "repo_list",
+    "audit_list",
 }
 
 FULL_TOOLS = {
-    # original
-    "get_task",
-    "get_context",
-    "update_scratchpad",
-    "request_review",
-    # v2 read-only
-    "tasks_list",
-    "projects_list",
-    "repos_list",
-    "audit_tail",
+    "task_get",
+    "task_logs",
+    "task_list",
+    "task_wait",
+    "project_list",
+    "repo_list",
+    "audit_list",
     "settings_get",
-    "jobs_get",
-    "jobs_wait",
-    "jobs_events",
-    "jobs_list_actions",
-    # v2 mutating
-    "tasks_create",
-    "tasks_update",
-    "tasks_move",
-    "jobs_submit",
-    "jobs_cancel",
-    "sessions_create",
-    "sessions_exists",
-    "sessions_kill",
-    "tasks_delete",
-    "settings_update",
-    "projects_create",
-    "projects_open",
-    "review",
+    "task_create",
+    "task_patch",
+    "task_delete",
+    "job_start",
+    "job_poll",
+    "job_cancel",
+    "session_manage",
+    "project_open",
+    "review_apply",
+    "settings_set",
+    # GitHub plugin admin tools (V1 contract, MAINTAINER only)
+    "kagan_github_contract_probe",
+    "kagan_github_connect_repo",
+    "kagan_github_sync_issues",
 }
 
 

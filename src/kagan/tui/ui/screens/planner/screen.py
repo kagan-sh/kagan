@@ -24,6 +24,7 @@ from kagan.core.agents.agent_factory import AgentFactory, create_agent
 from kagan.core.agents.planner import build_planner_prompt, parse_proposed_plan
 from kagan.core.config import get_fallback_agent_config
 from kagan.core.constants import BOX_DRAWING, KAGAN_LOGO, PLANNER_TITLE_MAX_LENGTH
+from kagan.core.git_utils import get_current_branch
 from kagan.core.limits import AGENT_TIMEOUT
 from kagan.core.models.enums import ChatRole, ProposalStatus
 from kagan.core.services.permission_policy import AgentPermissionScope, resolve_auto_approve
@@ -59,9 +60,7 @@ if TYPE_CHECKING:
     from textual.timer import Timer
 
     from kagan.core.acp import messages
-    from kagan.core.adapters.db.repositories.auxiliary import PlannerRepository
     from kagan.core.adapters.db.schema import Task
-    from kagan.core.services.queued_messages import QueuedMessageService
     from kagan.tui.ui.utils.slash_registry import SlashCommand
 
 
@@ -309,8 +308,6 @@ class PlannerScreen(KaganScreen):
 
     async def on_mount(self) -> None:
         """Mount planner widgets and initialize agent/session state."""
-        from kagan.tui.ui.widgets.header import _get_git_branch
-
         await self.sync_header_context(self.header)
         self.kagan_app.task_changed_signal.subscribe(self, self._on_task_changed)
         self._start_header_sync()
@@ -326,7 +323,7 @@ class PlannerScreen(KaganScreen):
             await self._discard_persistent_state(self.kagan_app.planner_state)
             return
 
-        branch = await _get_git_branch(self.kagan_app.project_root)
+        branch = await get_current_branch(self.kagan_app.project_root)
         self.header.update_branch(branch)
 
         if not self.ctx.api.is_agent_available():
@@ -429,6 +426,7 @@ class PlannerScreen(KaganScreen):
         """Synchronize planner header counters from the task backend."""
         try:
             await self.sync_header_context(self.header)
+            await self.auto_sync_branch(self.header)
         except (RepositoryClosing, OperationalError):
             return
 
@@ -609,9 +607,6 @@ class PlannerScreen(KaganScreen):
         todos: Sequence[object] | None,
     ) -> None:
         """Save the proposal as a draft in the DB before UI rendering."""
-        repo = self._get_planner_repo()
-        if repo is None:
-            return
         project_id = self.ctx.active_project_id
         if project_id is None:
             return
@@ -637,40 +632,53 @@ class PlannerScreen(KaganScreen):
                     )
                 elif isinstance(entry, dict):
                     todos_json.append(entry)
-        proposal = await repo.save_proposal(
+        proposal = await self.ctx.api.save_planner_draft(
             project_id=project_id,
             repo_id=self.ctx.active_repo_id,
             tasks_json=tasks_json,
             todos_json=todos_json,
         )
-        self._pending_proposal_id = proposal.id
+        if proposal is not None:
+            proposal_id = self._proposal_identifier(proposal)
+            if proposal_id is not None:
+                self._pending_proposal_id = proposal_id
 
     async def _update_proposal_status(self, status: ProposalStatus) -> None:
         """Update the persisted proposal status (approved / rejected)."""
         if self._pending_proposal_id is None:
             return
-        repo = self._get_planner_repo()
-        if repo is None:
-            return
-        await repo.update_status(self._pending_proposal_id, status)
+        await self.ctx.api.update_planner_draft_status(self._pending_proposal_id, status)
         self._pending_proposal_id = None
+
+    def _proposal_identifier(self, proposal: object) -> str | None:
+        """Return a normalized planner proposal ID across payload variants."""
+        raw_id: object | None = None
+        if isinstance(proposal, dict):
+            raw_id = proposal.get("id") or proposal.get("proposal_id")
+        else:
+            raw_id = getattr(proposal, "id", None) or getattr(proposal, "proposal_id", None)
+
+        if raw_id is None:
+            return None
+        proposal_id = str(raw_id).strip()
+        return proposal_id or None
 
     async def _load_pending_proposals(self) -> None:
         """Load draft proposals from DB and display the most recent one."""
-        repo = self._get_planner_repo()
-        if repo is None:
-            return
         project_id = self.ctx.active_project_id
         if project_id is None:
             return
-        proposals = await repo.list_pending(project_id, repo_id=self.ctx.active_repo_id)
+        proposals = await self.ctx.api.list_pending_planner_drafts(
+            project_id,
+            repo_id=self.ctx.active_repo_id,
+        )
         if not proposals:
             return
         latest = proposals[0]
         tasks = self._proposal_to_tasks(latest)
         if not tasks:
             return
-        self._pending_proposal_id = latest.id
+        self._pending_proposal_id = self._proposal_identifier(latest)
         self._state = self._state.with_pending_plan(tasks)
         self._show_output()
         await self._get_output().post_plan_approval(tasks)
@@ -723,21 +731,15 @@ class PlannerScreen(KaganScreen):
     async def _refresh_planner_queue_messages(self) -> None:
         with suppress(NoMatches):
             container = self.query_one("#planner-queued-messages", QueuedMessagesContainer)
-            service = self._get_queue_service()
-            if service is None:
-                container.display = False
-                self._planner_queue_pending = False
-                return
-            queue_messages = await service.get_queued(self._planner_queue_key(), lane="planner")
+            queue_messages = await self.ctx.api.get_queued_messages(
+                self._planner_queue_key(),
+                lane="planner",
+            )
             container.update_messages(queue_messages)
             self._planner_queue_pending = bool(queue_messages)
 
     async def _queue_planner_message(self, content: str) -> None:
-        service = self._get_queue_service()
-        if service is None:
-            self.notify("Planner queue unavailable", severity="error")
-            return
-        await service.queue_message(self._planner_queue_key(), content, lane="planner")
+        await self.ctx.api.queue_message(self._planner_queue_key(), content, lane="planner")
         await self._refresh_planner_queue_messages()
         await self._get_output().post_note("Queued message for next planner turn.", classes="info")
         self._update_status("queued", "Planner follow-up queued")
@@ -747,10 +749,7 @@ class PlannerScreen(KaganScreen):
             return
         if self._state.has_pending_plan:
             return
-        service = self._get_queue_service()
-        if service is None:
-            return
-        queued = await service.take_queued(self._planner_queue_key(), lane="planner")
+        queued = await self.ctx.api.take_queued_message(self._planner_queue_key(), lane="planner")
         await self._refresh_planner_queue_messages()
         if queued is None:
             return
@@ -1125,10 +1124,7 @@ class PlannerScreen(KaganScreen):
     # ------------------------------------------------------------------
 
     async def _handle_queue_remove_requested(self, event: QueuedMessageRow.RemoveRequested) -> None:
-        service = self._get_queue_service()
-        if service is None:
-            return
-        await service.remove_message(
+        await self.ctx.api.remove_queued_message(
             self._planner_queue_key(),
             event.index,
             lane="planner",
@@ -1138,12 +1134,6 @@ class PlannerScreen(KaganScreen):
     def _planner_queue_key(self) -> str:
         repo_id = self.ctx.active_repo_id or "global"
         return f"planner:{repo_id}"
-
-    def _get_queue_service(self) -> QueuedMessageService | None:
-        return self.ctx.api.ctx.automation_service
-
-    def _get_planner_repo(self) -> PlannerRepository | None:
-        return self.ctx.api.ctx.planner_repository
 
     # ------------------------------------------------------------------
     # Control actions
@@ -1259,39 +1249,6 @@ class PlannerScreen(KaganScreen):
             "Select a task on the Kanban board to set its branch",
             severity="warning",
         )
-
-    def action_set_default_branch(self) -> None:
-        """Open default branch selection flow for new tasks."""
-        self.run_worker(
-            self._set_default_branch_flow(),
-            group="planner-set-default-branch",
-            exclusive=True,
-            exit_on_error=False,
-        )
-
-    async def _set_default_branch_flow(self) -> None:
-        """Prompt user for default base branch and persist selection."""
-        from kagan.tui.ui.screens.branch_candidates import (
-            choose_branch_with_modal,
-        )
-
-        config = self.kagan_app.config
-        current = config.general.default_base_branch
-
-        result = await choose_branch_with_modal(
-            self.app,
-            project_root=self.kagan_app.project_root,
-            current_value=current,
-            title="Set Default Base Branch",
-            description="Branch used for new tasks (e.g. main, develop):",
-            timeout_seconds=BRANCH_LOOKUP_TIMEOUT_SECONDS,
-            warn=lambda message: self.notify(message, severity="warning"),
-        )
-
-        if result is not None:
-            config.general.default_base_branch = result
-            await config.save(self.kagan_app.config_path)
-            self.notify(f"Default branch set to: {result}")
 
     async def _execute_clear(self, *, notify: bool = True) -> None:
         """Reset planner session and restart planner agent."""

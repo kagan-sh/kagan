@@ -21,7 +21,7 @@ class SmartMockAgent(MockAgent):
     Usage::
 
         routes = {
-            "propose_plan": (PLAN_RESPONSE, plan_tool_calls),
+            "plan_submit": (PLAN_RESPONSE, plan_tool_calls),
             "Code Review Specialist": (REVIEW_RESPONSE, {}),
         }
         agent = SmartMockAgent(root, config, routes=routes)

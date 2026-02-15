@@ -80,9 +80,9 @@ Finally, verify your changes work, COMMIT them, then signal.
 Detailed steps:
 
 1. **Coordinate first**: Call
-   `tasks_list(filter="IN_PROGRESS", exclude_task_ids=["{task_id}"], include_scratchpad=true)`
+   `task_list(filter="IN_PROGRESS", exclude_task_ids=["{task_id}"], include_scratchpad=true)`
    and check logs via
-   `get_task(task_id, include_logs=true)`
+   `task_get(task_id, include_logs=true)`
 1. Review scratchpad to understand completed and remaining work
 1. Implement incrementally - one coherent change at a time
 1. Run tests or builds to verify changes function correctly
@@ -109,12 +109,13 @@ Commit message guidance:
 
 ## MCP Tool Naming
 
-Tool names vary by client. Use the Kagan MCP server tools such as `get_context`,
-`get_task`, `tasks_list`, `update_scratchpad`, and
-`request_review`. You may see them as `mcp__{mcp_server_name}__get_context` or
-`{mcp_server_name}_get_context` depending on the client.
+Tool names vary by client. Use the Kagan MCP server tools such as
+`task_get`, `task_list`, `task_patch`, and `review_apply`.
+You may see them as `mcp__{mcp_server_name}__task_get` or
+`{mcp_server_name}_task_get` depending on the client.
 
-To get execution logs from previous runs, use `get_task` with `include_logs=true`.
+To get execution logs from previous runs, use `task_get` with `include_logs=true`.
+If logs are truncated or `logs_has_more=true`, call `task_logs(task_id, offset, limit)`.
 
 ## Response Structure (Required)
 
@@ -170,13 +171,13 @@ Before starting implementation, you MUST check for parallel work and linked task
 
 **Step 0: Check Linked Tasks**
 Your task description may contain @task_id references. These are links to related tasks.
-Call `get_task` with each referenced task_id to understand the full context
-of related work. The `get_context` response also includes a `linked_tasks` field
+Call `task_get` with each referenced task_id to understand the full context
+of related work. The `task_get(mode="context")` response also includes a `linked_tasks` field
 with summaries of all referenced tasks.
 
 **Step 1: Discover Concurrent Work**
 Call
-`tasks_list(filter="IN_PROGRESS", exclude_task_ids=["{task_id}"], include_scratchpad=true)`.
+`task_list(filter="IN_PROGRESS", exclude_task_ids=["{task_id}"], include_scratchpad=true)`.
 Review each concurrent task's title, description, and scratchpad to identify:
 
 - Overlapping file modifications (coordinate to avoid merge conflicts)
@@ -187,7 +188,7 @@ Review each concurrent task's title, description, and scratchpad to identify:
 **Controlled Coordination Contract (Required)**
 
 - Coordination is overlap-aware and tool-driven only.
-- Use only MCP task data (`tasks_list`, `get_task`, `get_context`, `update_scratchpad`) for coordination.
+- Use only MCP task data (`task_list`, `task_get`, `task_patch`) for coordination.
 - Do NOT engage in free-form inter-agent chat, side channels, or speculative "message passing."
 - If overlap exists, pick one:
   - Avoid overlapping files for this run.
@@ -196,7 +197,8 @@ Review each concurrent task's title, description, and scratchpad to identify:
 - Document the decision in scratchpad and your Coordination Note.
 
 **Step 2: Learn from History**
-Call `get_task(task_id, include_logs=true)` on completed or in-progress tasks
+Call `task_get(task_id, include_logs=true)` on completed or in-progress tasks
+and page older history with `task_logs(task_id, offset, limit)` when needed.
 that relate to your task. Use insights to:
 
 - Avoid repeating failed approaches documented in prior runs
@@ -228,9 +230,9 @@ Reasoning:
 
 Work Summary:
 
-- Called `tasks_list(filter="IN_PROGRESS", exclude_task_ids=["ABC-101"], include_scratchpad=true)`:
+- Called `task_list(filter="IN_PROGRESS", exclude_task_ids=["ABC-101"], include_scratchpad=true)`:
   Task ABC-102 is modifying `src/components/Profile.tsx`.
-- Called `get_task("ABC-098", include_logs=true)`: multer + UUID filenames, middleware in
+- Called `task_get("ABC-098", include_logs=true)`: multer + UUID filenames, middleware in
   `src/middleware/`.
 - Implemented `POST /api/users/avatar` with image validation, 5MB limit, and avatar storage.
 - Manual test passed; upload works and file is saved.

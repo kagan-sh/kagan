@@ -22,7 +22,6 @@ def _build_test_config_toml(
         [
             "[general]",
             f"auto_review = {str(auto_review).lower()}",
-            'default_base_branch = "main"',
             'default_worker_agent = "claude"',
         ]
     )

@@ -33,9 +33,9 @@ def test_planner_parses_plan_from_echo_back_content() -> None:
     }
     tool_calls = {
         "tc-1": {
-            "name": "propose_plan",
+            "name": "plan_submit",
             "status": "completed",
-            "title": 'propose_plan: {"tasks":[{"title":"Task..."}]}',
+            "title": 'plan_submit: {"tasks":[{"title":"Task..."}]}',
             "content": _echo_back_content(echo),
         }
     }
@@ -62,7 +62,7 @@ def test_planner_prefers_echo_back_over_raw_input() -> None:
     }
     tool_calls = {
         "tc-1": {
-            "name": "propose_plan",
+            "name": "plan_submit",
             "status": "completed",
             "rawInput": json.dumps(raw_input_payload),
             "content": _echo_back_content(echo_payload),
@@ -99,14 +99,14 @@ def test_planner_skips_summary_only_content(
     """Summary-only content falls back to the best non-echo payload source."""
     summary_only = {"status": "received", "task_count": 1, "todo_count": 0}
     tool_call: dict[str, object] = {
-        "name": "propose_plan",
+        "name": "plan_submit",
         "status": "completed",
         "content": _echo_back_content(summary_only),
     }
     if fallback_field == "rawInput":
         tool_call["rawInput"] = json.dumps(fallback_payload)
     else:
-        tool_call["title"] = f"propose_plan: {json.dumps(fallback_payload)}"
+        tool_call["title"] = f"plan_submit: {json.dumps(fallback_payload)}"
 
     tool_calls = {"tc-1": tool_call}
 
