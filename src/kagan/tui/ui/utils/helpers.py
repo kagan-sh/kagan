@@ -9,7 +9,7 @@ import re
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 import pyperclip
 from rich.markup import escape
@@ -18,8 +18,6 @@ from textual.widget import Widget
 
 if TYPE_CHECKING:
     from textual.app import App
-
-T = TypeVar("T", bound=Widget)
 
 # ---------------------------------------------------------------------------
 # Agent exit utilities
@@ -67,7 +65,7 @@ WAVE_INTERVAL_MS = 100
 # ---------------------------------------------------------------------------
 
 
-def safe_query_one(
+def safe_query_one[T: Widget](
     parent: Widget,
     selector: str,
     widget_class: type[T],
