@@ -1,0 +1,13 @@
+[install]
+exact = true
+# Only install newly resolved package versions published at least 3 days ago (needs Bun >= 1.3).
+minimumReleaseAge = 259200
+
+[test]
+include = ["test/**/*.test.ts", "test/**/*.test.tsx"]
+exclude = ["references/**"]
+# Compile test TSX with the real Solid reactive transform. Without it, Bun's plain
+# automatic JSX runtime evaluates every JSX expression exactly once and nothing on
+# the board ever repaints. The opencode host applies this same transform itself when
+# importing raw plugin .tsx; bun test has no host, so tests opt in here.
+preload = ["@opentui/solid/preload"]

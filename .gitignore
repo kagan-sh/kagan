@@ -1,0 +1,11 @@
+node_modules
+dist
+docs/.vitepress/cache
+docs/.vitepress/dist
+.plans
+.DS_Store
+*.log
+.kagan/
+references
+
+.opencode/
