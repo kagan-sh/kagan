@@ -72,7 +72,7 @@ The anti-goals and feature filter derive from six operating principles. Each has
 anchor and a kagan mechanism that embodies it.
 
 1. **Verify with something you trust more than the model, deterministically.** Mechanism:
-   `checkCommand` + citation verification. Evidence: Kamoi 2024.
+   configured check commands + citation verification. Evidence: Kamoi 2024.
 2. **Spend human attention only at the highest-leverage points.** Mechanism: three gates + WIP cap.
 3. **Keep the human generating, not just approving.** Mechanism: fix via send-back instead of
    hand-editing task worktrees. Evidence: Anthropic skill-formation.

@@ -195,7 +195,7 @@ describe("createTask", () => {
     expect("setup" in kagan).toBe(false)
   })
 
-  test("records a setup CheckResult when setupCommand is provided", async () => {
+  test("records a setup CheckResult when setup commands are provided", async () => {
     let createArg: Record<string, unknown> | undefined
     const api = {
       state: { path: { worktree: "/repo" } },

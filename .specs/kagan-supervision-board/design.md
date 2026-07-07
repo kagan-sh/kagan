@@ -96,8 +96,7 @@ the worktree (`git worktree add -b kagan/<slug> <dir> <base>`), then creates the
 opener's closure so opening a filterable dropdown and returning preserves entries. The task scope is
 stored as configured `cwd` values plus optional custom text. Configured setup commands run only when
 their `cwd` is included in the selected scope; custom text is passed to intake as context but does
-not trigger shell commands unless it exactly matches a configured `cwd`. Legacy `setupCommand`
-normalizes to one always-run setup step.
+not trigger shell commands unless it exactly matches a configured `cwd`.
 
 **Intake (R4).** A Backlog board task with `intakeOutcome === undefined` and `intakeSessionID ===
 undefined` spawns the intake child (`role: "intake"`, read-only tools + `kagan_intake`), recording
@@ -138,8 +137,7 @@ single-flight set covers both that induced event and any concurrent duplicate de
 `commands.check` is configured, the server evaluates every check command against the changed-file
 list from `worktreeDiffs`: a command runs when a changed file is under its `cwd`, or when a changed
 file matches one of its repo-relative `scope` regexes; otherwise the command is recorded as skipped.
-Legacy `checkCommand` normalizes to one always-run check step. All matching commands run, even after
-a previous command fails, and the validator receives every ran/skipped step as evidence; a failing,
+All matching commands run, even after a previous command fails, and the validator receives every ran/skipped step as evidence; a failing,
 timing-out, or unspawnable command is recorded honestly and does not block review entry. The
 validator calls `kagan_findings`, which recomputes
 the worktree diff the same way review entry did, runs each finding's `location` through
@@ -210,8 +208,7 @@ commands are ignored.
 
 The canonical option list is [`docs/reference/configuration.md`](../../docs/reference/configuration.md).
 `task.ts` owns option parsing helpers such as `inProgressCap`, `helperRetries`, `squashMerge`,
-`commandPlan`, `configuredScopes`, legacy `setupCommand` / `checkCommand`, and
-`sendBackStopThreshold`; `validator.ts` owns `validatorModels` rotation. The TUI settings route can
+`commandPlan`, `configuredScopes`, and `sendBackStopThreshold`; `validator.ts` owns `validatorModels` rotation. The TUI settings route can
 edit the plugin options and save them back only to project `opencode.json`; it does not hot-reload
 the active plugin instance, so it reports that OpenCode must be restarted or the project reopened.
 

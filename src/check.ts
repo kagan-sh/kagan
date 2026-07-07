@@ -5,7 +5,6 @@ export type CommandSpec = {
   cwd: string
   command: string
   scope?: string[]
-  always?: boolean
 }
 
 export type CommandStepResult = {

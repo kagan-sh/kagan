@@ -658,12 +658,27 @@ describe("createBoardStore", () => {
     expect(createRoot(() => createBoardStore(api, { squashMerge: true })).squashMerge).toBe(true)
   })
 
-  test("checkCommand reflects the plugin option, treating blank as undefined", () => {
+  test("checkCommand reflects configured check commands, treating blank as undefined", () => {
     const api = mockStoreApi({ sessions: [], orders: emptyOrders })
-    expect(createRoot(() => createBoardStore(api).checkCommand)).toBeUndefined()
-    expect(createRoot(() => createBoardStore(api, { checkCommand: "bun test" }).checkCommand)).toBe("bun test")
-    expect(createRoot(() => createBoardStore(api, { checkCommand: "" }).checkCommand)).toBeUndefined()
-    expect(createRoot(() => createBoardStore(api, { checkCommand: "   " }).checkCommand)).toBeUndefined()
+    expect(createRoot(() => createBoardStore(api)).checkCommand).toBeUndefined()
+    expect(
+      createRoot(
+        () =>
+          createBoardStore(api, { commands: { check: [{ name: "check", cwd: ".", command: "bun test" }] } })
+            .checkCommand,
+      ),
+    ).toBe("bun test")
+    expect(
+      createRoot(
+        () => createBoardStore(api, { commands: { check: [{ name: "check", cwd: ".", command: "" }] } }).checkCommand,
+      ),
+    ).toBeUndefined()
+    expect(
+      createRoot(
+        () =>
+          createBoardStore(api, { commands: { check: [{ name: "check", cwd: ".", command: "   " }] } }).checkCommand,
+      ),
+    ).toBeUndefined()
   })
 
   test("moveTo does not update orders when moveSession fails", async () => {

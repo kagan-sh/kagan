@@ -5,7 +5,14 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { commandPlan, helperRetries, inProgressCap, sendBackStopThreshold, squashMerge } from "./task"
+import {
+  commandPlan,
+  helperRetries,
+  inProgressCap,
+  sendBackStopThreshold,
+  squashMerge,
+  validateCommandPlan,
+} from "./task"
 import { SETTINGS_ROUTE, ROUTE } from "./types"
 
 type Section = "General" | "Agents" | "Commands" | "Validator models" | "JSON preview"
@@ -59,7 +66,36 @@ function pluginOptionsJson(draft: Draft): string {
   return JSON.stringify(optionsFromDraft(draft), null, 2)
 }
 
+function validateValidatorModels(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return "validatorModels must be a JSON array"
+  for (let i = 0; i < value.length; i++) {
+    const item = value[i]
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      typeof item.providerID !== "string" ||
+      typeof item.modelID !== "string"
+    ) {
+      return `validatorModels[${i}] must be { providerID: string, modelID: string }`
+    }
+  }
+  return undefined
+}
+
+function validateDraft(draft: Draft): string | undefined {
+  if (draft.inProgressLimit < 1) return "inProgressLimit must be at least 1"
+  if (draft.helperRetries < 0) return "helperRetries must be at least 0"
+  if (draft.sendBackStopThreshold < 1) return "sendBackStopThreshold must be at least 1"
+  const setupError = validateCommandPlan(draft.commands.setup, "setup")
+  if (setupError) return setupError
+  const checkError = validateCommandPlan(draft.commands.check, "check")
+  if (checkError) return checkError
+  return validateValidatorModels(draft.validatorModels)
+}
+
 async function saveOptions(worktree: string, draft: Draft): Promise<string> {
+  const error = validateDraft(draft)
+  if (error) throw new Error(error)
   const path = join(worktree, "opencode.json")
   const raw = await readFile(path, "utf8")
   const config = JSON.parse(raw) as { plugin?: unknown }
@@ -84,7 +120,13 @@ function parseJsonArray(value: string): unknown[] {
   return parsed
 }
 
-function rowsFor(section: Section, draft: Draft, setDraft: (draft: Draft) => void, api: TuiPluginApi): Row[] {
+function rowsFor(
+  section: Section,
+  draft: Draft,
+  setDraft: (draft: Draft) => void,
+  setMessage: (message: string | undefined) => void,
+  api: TuiPluginApi,
+): Row[] {
   const prompt = (title: string, value: string, onConfirm: (value: string) => void) => {
     api.ui.dialog.replace(() => (
       <api.ui.DialogPrompt
@@ -99,6 +141,32 @@ function rowsFor(section: Section, draft: Draft, setDraft: (draft: Draft) => voi
       />
     ))
   }
+
+  const editJsonArray = (
+    title: string,
+    value: string,
+    setter: (parsed: unknown[]) => void,
+    validate?: (parsed: unknown[]) => string | undefined,
+  ) => {
+    prompt(title, value, (next) => {
+      let parsed: unknown[]
+      try {
+        parsed = parseJsonArray(next)
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : String(error))
+        return
+      }
+      if (validate) {
+        const error = validate(parsed)
+        if (error) {
+          setMessage(error)
+          return
+        }
+      }
+      setter(parsed)
+    })
+  }
+
   if (section === "General") {
     const number = (
       key: "inProgressLimit" | "helperRetries" | "sendBackStopThreshold",
@@ -148,16 +216,22 @@ function rowsFor(section: Section, draft: Draft, setDraft: (draft: Draft) => voi
         label: "setup",
         value: `${draft.commands.setup.length} command(s)`,
         edit: () =>
-          prompt("setup commands JSON", JSON.stringify(draft.commands.setup, null, 2), (value) =>
-            setDraft({ ...draft, commands: { ...draft.commands, setup: parseJsonArray(value) } }),
+          editJsonArray(
+            "setup commands JSON",
+            JSON.stringify(draft.commands.setup, null, 2),
+            (parsed) => setDraft({ ...draft, commands: { ...draft.commands, setup: parsed } }),
+            (parsed) => validateCommandPlan(parsed, "setup"),
           ),
       },
       {
         label: "check",
         value: `${draft.commands.check.length} command(s)`,
         edit: () =>
-          prompt("check commands JSON", JSON.stringify(draft.commands.check, null, 2), (value) =>
-            setDraft({ ...draft, commands: { ...draft.commands, check: parseJsonArray(value) } }),
+          editJsonArray(
+            "check commands JSON",
+            JSON.stringify(draft.commands.check, null, 2),
+            (parsed) => setDraft({ ...draft, commands: { ...draft.commands, check: parsed } }),
+            (parsed) => validateCommandPlan(parsed, "check"),
           ),
       },
     ]
@@ -168,8 +242,11 @@ function rowsFor(section: Section, draft: Draft, setDraft: (draft: Draft) => voi
         label: "validatorModels",
         value: `${draft.validatorModels.length} model(s)`,
         edit: () =>
-          prompt("validatorModels JSON", JSON.stringify(draft.validatorModels, null, 2), (value) =>
-            setDraft({ ...draft, validatorModels: parseJsonArray(value) }),
+          editJsonArray(
+            "validatorModels JSON",
+            JSON.stringify(draft.validatorModels, null, 2),
+            (parsed) => setDraft({ ...draft, validatorModels: parsed }),
+            validateValidatorModels,
           ),
       },
     ]
@@ -185,7 +262,7 @@ export function Settings(props: { api: TuiPluginApi; options?: Record<string, un
   const [rowIndex, setRowIndex] = createSignal(0)
   const [message, setMessage] = createSignal<string>()
   const section = () => SECTIONS[sectionIndex()] ?? "General"
-  const rows = createMemo(() => rowsFor(section(), draft(), setDraft, props.api))
+  const rows = createMemo(() => rowsFor(section(), draft(), setDraft, setMessage, props.api))
   const selectedRow = () => rows()[rowIndex()]
 
   useKeyboard((key) => {

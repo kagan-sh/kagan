@@ -22,6 +22,10 @@ type FormState = {
   focusIndex: number
 }
 
+function hasScope(scope: TaskScope): boolean {
+  return scope.values.length > 0 || !!scope.custom
+}
+
 function scopeLabel(scope: TaskScope): string {
   const parts = [...scope.values]
   if (scope.custom) parts.push(scope.custom)
@@ -62,7 +66,7 @@ function CreateTaskForm(props: {
     const description = descriptionRef?.plainText ?? state.description
     props.api.ui.dialog.clear()
     try {
-      const scope = scopeLabel(state.scope) === "Not set" ? undefined : state.scope
+      const scope = hasScope(state.scope) ? state.scope : undefined
       const input = {
         title: trimmed,
         description,

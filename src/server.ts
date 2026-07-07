@@ -270,7 +270,11 @@ async function onEnterReview(input: PluginInput, sessionID: string, options?: Re
       check = await runCommandPlan(checkCommands, worktree, (command) =>
         commandMatchesChangedFile(command, changedFiles),
       )
-      await patchKagan(input.client, sessionID, { check })
+      try {
+        await patchKagan(input.client, sessionID, { check })
+      } catch (error) {
+        console.error(`[kagan] failed to record check evidence for ${sessionID}: ${errorMessage(error)}`)
+      }
     }
     let childID: string | undefined
     try {

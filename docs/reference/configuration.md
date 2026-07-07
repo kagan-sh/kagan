@@ -35,8 +35,6 @@ All options are passed through OpenCode's plugin config — the array form of a 
 | `squashMerge`           | boolean                     | `true`          | Squash the task branch into a single commit on merge. Set `false` for a standard merge that preserves the branch's individual commits.                                                                                                    |
 | `commands.setup`        | command[]                   | unset (inert)   | Setup commands run once in the fresh task worktree when the task scope includes the command `cwd`. Results are recorded as ran/skipped evidence. A failure never blocks task creation.                                                    |
 | `commands.check`        | command[]                   | unset (inert)   | Check commands evaluated when a task enters Review. A command runs when changed files are under its `cwd`, or when changed files match one of its repo-relative `scope` regexes. Never gates approval or column moves.                    |
-| `setupCommand`          | string                      | unset (inert)   | Legacy alias for one always-run setup command.                                                                                                                                                                                            |
-| `checkCommand`          | string                      | unset (inert)   | Legacy alias for one always-run check command.                                                                                                                                                                                            |
 
 Each command has this shape:
 

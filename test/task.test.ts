@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   approveDenyReason,
   canRetryHelper,
-  checkCommand,
   commandInTaskScope,
   commandMatchesChangedFile,
   commandPlan,
@@ -25,7 +24,6 @@ import {
   resolveFinding,
   resolveIntakeDecision,
   sanitizeIntakeDecisions,
-  setupCommand,
   sanitizeTaskScope,
   validMode,
   sortFindingsByConfidence,
@@ -589,20 +587,6 @@ describe("squashMerge", () => {
   })
 })
 
-describe.each([
-  ["setupCommand", setupCommand],
-  ["checkCommand", checkCommand],
-] as const)("%s", (key, reader) => {
-  test("reads a trimmed non-blank string and treats blank or non-string as undefined", () => {
-    expect(reader({ [key]: "bun install" })).toBe("bun install")
-    expect(reader({ [key]: "  bun test  " })).toBe("bun test")
-    expect(reader({ [key]: "" })).toBeUndefined()
-    expect(reader({ [key]: "   " })).toBeUndefined()
-    expect(reader({ [key]: 42 })).toBeUndefined()
-    expect(reader()).toBeUndefined()
-  })
-})
-
 describe("commandPlan", () => {
   test("normalizes configured setup and check commands", () => {
     expect(
@@ -618,13 +602,9 @@ describe("commandPlan", () => {
     ).toEqual([{ name: "member deps", cwd: "member-app", command: "npm ci", scope: ["^package"] }])
   })
 
-  test("keeps legacy setupCommand and checkCommand as one-step plans", () => {
-    expect(commandPlan({ setupCommand: "npm ci" }, "setup")).toEqual([
-      { name: "setup", cwd: ".", command: "npm ci", always: true },
-    ])
-    expect(commandPlan({ checkCommand: "npm test" }, "check")).toEqual([
-      { name: "check", cwd: ".", command: "npm test", always: true },
-    ])
+  test("ignores legacy setupCommand and checkCommand options", () => {
+    expect(commandPlan({ setupCommand: "npm ci" }, "setup")).toEqual([])
+    expect(commandPlan({ checkCommand: "npm test" }, "check")).toEqual([])
   })
 
   test("rejects unsafe cwd and invalid regex scopes", () => {
@@ -641,6 +621,37 @@ describe("commandPlan", () => {
     expect(commandPlan(options, "check")).toEqual([
       { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
     ])
+  })
+
+  test("treats an empty scope array as no scope filter", () => {
+    expect(
+      commandPlan(
+        {
+          commands: {
+            check: [{ name: "ok", cwd: "app", command: "npm test", scope: [] }],
+          },
+        },
+        "check",
+      ),
+    ).toEqual([{ name: "ok", cwd: "app", command: "npm test" }])
+  })
+
+  test("rejects regex patterns with ReDoS risk", () => {
+    expect(
+      commandPlan(
+        {
+          commands: {
+            check: [
+              { name: "dangerous", cwd: "app", command: "npm test", scope: ["(a+)+"] },
+              { name: "lookaround", cwd: "app", command: "npm test", scope: ["(?=foo)"] },
+              { name: "backref", cwd: "app", command: "npm test", scope: ["(\\w+)\\s+\\1"] },
+              { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
+            ],
+          },
+        },
+        "check",
+      ),
+    ).toEqual([{ name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] }])
   })
 
   test("extracts unique configured scopes from command cwd values", () => {

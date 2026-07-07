@@ -22,6 +22,7 @@ function makeInput(
     shellStdout?: string
     gitStdout?: (args: string[]) => string
     promptError?: (id: string) => Error | undefined
+    updateError?: (id: string, kagan: Record<string, unknown>) => Error | undefined
     onUpdate?: (id: string) => Promise<void> | void
   } = {},
 ): { input: PluginInput; captured: Captured } {
@@ -38,6 +39,8 @@ function makeInput(
         update: (async (options: unknown) => {
           const typed = options as { path: { id: string }; body: { metadata: Record<string, unknown> } }
           const kagan = typed.body.metadata.kagan as Record<string, unknown>
+          const failure = config.updateError?.(typed.path.id, kagan)
+          if (failure) throw failure
           captured.updates.push({ id: typed.path.id, kagan })
           const existing = store[typed.path.id] ?? { metadata: {} }
           const existingKagan = (existing.metadata?.kagan as Record<string, unknown>) ?? {}
@@ -515,11 +518,22 @@ describe("kagan server — review entry", () => {
     expect(patch).toBeDefined()
   })
 
-  test("with checkCommand set, patches check evidence and includes it in the validator prompt", async () => {
+  test("with check commands configured, patches check evidence and includes it in the validator prompt", async () => {
     const metadata = { kagan: { ...boardReview.kagan, worktree: "/tmp" } }
     const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
-    const { input, captured } = makeInput({ store, createId: "validator-1" })
-    const hooks = await plugin.server(input, { checkCommand: "echo check-ok" })
+    const { input, captured } = makeInput({
+      store,
+      createId: "validator-1",
+      gitStdout: (args) => {
+        if (args[0] === "merge-base") return "abc123"
+        if (args.includes("--numstat")) return "1\t1\tfile.txt"
+        if (args.includes("--name-status")) return "M\tfile.txt"
+        return ""
+      },
+    })
+    const hooks = await plugin.server(input, {
+      commands: { check: [{ name: "check", cwd: ".", command: "echo check-ok" }] },
+    })
     await hooks.event?.({
       event: { type: "session.updated", properties: { info: { id: "s1", metadata } } },
     } as never)
@@ -539,14 +553,23 @@ describe("kagan server — review entry", () => {
   })
 
   test("scoped check commands run from changed cwd or repo-relative scope matches", async () => {
-    const metadata = { kagan: { ...boardReview.kagan, worktree: "/tmp", baseBranch: "main" } }
+    const metadata = { kagan: { ...boardReview.kagan, worktree: "/", baseBranch: "main" } }
     const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
-    const { input, captured } = makeInput({ store, createId: "validator-1" })
+    const { input, captured } = makeInput({
+      store,
+      createId: "validator-1",
+      gitStdout: (args) => {
+        if (args[0] === "merge-base") return "abc123"
+        if (args.includes("--numstat")) return "1\t1\ttmp/file.txt\n1\t0\t.github/workflows/check.yml"
+        if (args.includes("--name-status")) return "M\ttmp/file.txt\nM\t.github/workflows/check.yml"
+        return ""
+      },
+    })
     const hooks = await plugin.server(input, {
       commands: {
         check: [
-          { name: "member", cwd: "member-app", command: "echo member" },
-          { name: "coach", cwd: "coach-tools", command: "echo coach", scope: ["^\.github/"] },
+          { name: "member", cwd: "tmp", command: "echo member" },
+          { name: "workflow", cwd: "var", command: "echo workflow", scope: ["^\\.github/"] },
         ],
       },
     })
@@ -556,32 +579,25 @@ describe("kagan server — review entry", () => {
 
     const checkPatch = captured.updates.find((u) => u.kagan.check)
     expect((checkPatch?.kagan.check as { steps?: unknown[] }).steps).toEqual([
-      {
-        name: "member",
-        cwd: "member-app",
-        command: "echo member",
-        status: "skipped",
-        exitCode: null,
-        output: "",
-        reason: "no changed files in scope",
-      },
-      {
-        name: "coach",
-        cwd: "coach-tools",
-        command: "echo coach",
-        status: "skipped",
-        exitCode: null,
-        output: "",
-        reason: "no changed files in scope",
-      },
+      { name: "member", cwd: "tmp", command: "echo member", status: "ran", exitCode: 0, output: "member\n" },
+      { name: "workflow", cwd: "var", command: "echo workflow", status: "ran", exitCode: 0, output: "workflow\n" },
     ])
   })
 
   test("with a failing check command, still spawns the validator and records the failure", async () => {
     const metadata = { kagan: { ...boardReview.kagan, worktree: "/tmp" } }
     const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
-    const { input, captured } = makeInput({ store, createId: "validator-1" })
-    const hooks = await plugin.server(input, { checkCommand: "exit 3" })
+    const { input, captured } = makeInput({
+      store,
+      createId: "validator-1",
+      gitStdout: (args) => {
+        if (args[0] === "merge-base") return "abc123"
+        if (args.includes("--numstat")) return "1\t1\tfile.txt"
+        if (args.includes("--name-status")) return "M\tfile.txt"
+        return ""
+      },
+    })
+    const hooks = await plugin.server(input, { commands: { check: [{ name: "check", cwd: ".", command: "exit 3" }] } })
     await hooks.event?.({
       event: { type: "session.updated", properties: { info: { id: "s1", metadata } } },
     } as never)
@@ -595,7 +611,7 @@ describe("kagan server — review entry", () => {
     expect(validatorCreate).toBeDefined()
   })
 
-  test("with checkCommand unset, review entry behaves unchanged", async () => {
+  test("with no check commands configured, review entry behaves unchanged", async () => {
     const store: Record<string, SessionData> = { s1: { title: "Task", metadata: boardReview } }
     const { input, captured } = makeInput({ store, createId: "validator-1" })
     const hooks = await plugin.server(input, {})
@@ -612,8 +628,19 @@ describe("kagan server — review entry", () => {
   test("a check-command error does not abort review entry", async () => {
     const metadata = { kagan: { ...boardReview.kagan, worktree: "/definitely-missing-worktree" } }
     const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
-    const { input, captured } = makeInput({ store, createId: "validator-1" })
-    const hooks = await plugin.server(input, { checkCommand: "echo never-runs" })
+    const { input, captured } = makeInput({
+      store,
+      createId: "validator-1",
+      gitStdout: (args) => {
+        if (args[0] === "merge-base") return "abc123"
+        if (args.includes("--numstat")) return "1\t1\tfile.txt"
+        if (args.includes("--name-status")) return "M\tfile.txt"
+        return ""
+      },
+    })
+    const hooks = await plugin.server(input, {
+      commands: { check: [{ name: "check", cwd: ".", command: "echo never-runs" }] },
+    })
     await hooks.event?.({
       event: { type: "session.updated", properties: { info: { id: "s1", metadata } } },
     } as never)
@@ -627,6 +654,37 @@ describe("kagan server — review entry", () => {
     expect(validatorCreate).toBeDefined()
     const sessionPatch = captured.updates.find((u) => u.kagan.validatorSessionID === "validator-1")
     expect(sessionPatch).toBeDefined()
+  })
+
+  test("a check-evidence patch failure does not abort validator spawn", async () => {
+    const metadata = { kagan: { ...boardReview.kagan, worktree: "/tmp" } }
+    const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
+    const { input, captured } = makeInput({
+      store,
+      createId: "validator-1",
+      gitStdout: (args) => {
+        if (args[0] === "merge-base") return "abc123"
+        if (args.includes("--numstat")) return "1\t1\tfile.txt"
+        if (args.includes("--name-status")) return "M\tfile.txt"
+        return ""
+      },
+      updateError: (_id, kagan) => (kagan.check ? new Error("metadata write failed") : undefined),
+    })
+    const hooks = await plugin.server(input, {
+      commands: { check: [{ name: "check", cwd: ".", command: "echo check-ok" }] },
+    })
+
+    await hooks.event?.({
+      event: { type: "session.updated", properties: { info: { id: "s1", metadata } } },
+    } as never)
+
+    expect(captured.updates.some((update) => update.kagan.check)).toBe(false)
+    expect(
+      captured.creates.some(
+        (create) => (create.metadata as { kagan?: { role?: string } })?.kagan?.role === "validator",
+      ),
+    ).toBe(true)
+    expect(captured.prompts.find((prompt) => prompt.id === "validator-1")).toBeDefined()
   })
 
   test("stamps validatorOutcome failed when the validator spawn returns no id", async () => {
@@ -1511,8 +1569,19 @@ describe("kagan server — duplicate helper spawn regression", () => {
   test("a session.updated induced by the check-result patch racing a duplicate delivery spawns the validator exactly once", async () => {
     const metadata = { kagan: { ...boardReview.kagan, worktree: "/tmp" } }
     const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
-    const { input, captured } = makeInput({ store, createId: "validator-1" })
-    const hooks = await plugin.server(input, { checkCommand: "echo check-ok" })
+    const { input, captured } = makeInput({
+      store,
+      createId: "validator-1",
+      gitStdout: (args) => {
+        if (args[0] === "merge-base") return "abc123"
+        if (args.includes("--numstat")) return "1\t1\tfile.txt"
+        if (args.includes("--name-status")) return "M\tfile.txt"
+        return ""
+      },
+    })
+    const hooks = await plugin.server(input, {
+      commands: { check: [{ name: "check", cwd: ".", command: "echo check-ok" }] },
+    })
 
     await Promise.all([
       hooks.event?.({ event: { type: "session.updated", properties: { info: { id: "s1", metadata } } } } as never),

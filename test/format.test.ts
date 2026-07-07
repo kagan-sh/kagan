@@ -319,7 +319,7 @@ describe("formatModeRationale", () => {
     expect(formatModeRationale(undefined)).toBeUndefined()
   })
 
-  test("returns the rationale without overlay when a checkCommand is set", () => {
+  test("returns the rationale without overlay when a check command is configured", () => {
     expect(
       formatModeRationale(
         {
@@ -336,7 +336,7 @@ describe("formatModeRationale", () => {
     ).toBe("High blast radius and no trusted automatic check.")
   })
 
-  test("appends the no-check overlay when checkCommand is unset", () => {
+  test("appends the no-check overlay when no check command is configured", () => {
     expect(
       formatModeRationale(
         {
@@ -353,7 +353,7 @@ describe("formatModeRationale", () => {
     ).toBe("Novel territory that needs careful human review. (no automatic check configured - lean assisted)")
   })
 
-  test("appends the no-check overlay when checkCommand is blank", () => {
+  test("appends the no-check overlay when a check command summary is blank", () => {
     expect(
       formatModeRationale(
         {

@@ -30,20 +30,62 @@ export function squashMerge(options?: Record<string, unknown>): boolean {
   return typeof value === "boolean" ? value : true
 }
 
-export function setupCommand(options?: Record<string, unknown>): string | undefined {
-  const value = options?.setupCommand
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
-
-export function checkCommand(options?: Record<string, unknown>): string | undefined {
-  const value = options?.checkCommand
-  return typeof value === "string" && value.trim() ? value.trim() : undefined
-}
-
 export type TaskScope = { values: string[]; custom?: string }
 
 function isSafeCwd(cwd: string): boolean {
   return cwd !== "" && !cwd.startsWith("/") && !cwd.split(/[\\/]+/).includes("..")
+}
+
+const MAX_SCOPE_PATTERN_LENGTH = 500
+
+const LOOKAROUND_OR_COMMENT = /\(\?([=!<#]|<[=<])/
+const BACKREFERENCE = /\\[1-9]/
+
+function isSafeRegexPattern(pattern: string): boolean {
+  if (pattern.length > MAX_SCOPE_PATTERN_LENGTH) return false
+  if (LOOKAROUND_OR_COMMENT.test(pattern) || BACKREFERENCE.test(pattern)) return false
+  let depth = 0
+  const groupHasQuantifier: boolean[] = []
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i]
+    if (c === "\\") {
+      i++
+      continue
+    }
+    if (c === "[") {
+      i++
+      while (i < pattern.length && pattern[i] !== "]") {
+        if (pattern[i] === "\\") i++
+        i++
+      }
+      continue
+    }
+    if (c === "(") {
+      depth++
+      groupHasQuantifier[depth] = false
+      continue
+    }
+    if (c === ")") {
+      const hadQuantifier = groupHasQuantifier[depth] ?? false
+      depth--
+      if (hadQuantifier) {
+        const next = pattern[i + 1]
+        if (next && /[+*?]|{/.test(next)) return false
+        groupHasQuantifier[depth] = true
+      }
+      continue
+    }
+    if (c === "{" || c === "+" || c === "*" || c === "?") {
+      groupHasQuantifier[depth] = true
+      if (c === "{") {
+        while (i < pattern.length && pattern[i] !== "}") {
+          if (pattern[i] === "\\") i++
+          i++
+        }
+      }
+    }
+  }
+  return depth === 0
 }
 
 function validScopePatterns(value: unknown): string[] | undefined {
@@ -54,6 +96,7 @@ function validScopePatterns(value: unknown): string[] | undefined {
     if (typeof raw !== "string") return undefined
     const pattern = raw.trim()
     if (!pattern) return undefined
+    if (!isSafeRegexPattern(pattern)) return undefined
     try {
       new RegExp(pattern)
     } catch {
@@ -61,7 +104,7 @@ function validScopePatterns(value: unknown): string[] | undefined {
     }
     patterns.push(pattern)
   }
-  return patterns.length > 0 ? patterns : undefined
+  return patterns
 }
 
 function commandSpec(value: unknown, fallbackName: string): CommandSpec | undefined {
@@ -77,7 +120,17 @@ function commandSpec(value: unknown, fallbackName: string): CommandSpec | undefi
   const scope = validScopePatterns(raw.scope)
   if (!name || !command || !isSafeCwd(cwd)) return undefined
   if (raw.scope !== undefined && scope === undefined) return undefined
-  return scope ? { name, cwd, command, scope } : { name, cwd, command }
+  if (!scope || scope.length === 0) return { name, cwd, command }
+  return { name, cwd, command, scope }
+}
+
+export function validateCommandPlan(value: unknown, kind: "setup" | "check"): string | undefined {
+  if (!Array.isArray(value)) return `${kind} commands must be a JSON array`
+  for (let i = 0; i < value.length; i++) {
+    const spec = commandSpec(value[i], `${kind} ${i + 1}`)
+    if (!spec) return `${kind} command ${i + 1} is invalid`
+  }
+  return undefined
 }
 
 function commandSpecs(value: unknown, fallbackPrefix: string): CommandSpec[] {
@@ -93,12 +146,8 @@ function commandSpecs(value: unknown, fallbackPrefix: string): CommandSpec[] {
 
 export function commandPlan(options: Record<string, unknown> | undefined, kind: "setup" | "check"): CommandSpec[] {
   const commands = options?.commands
-  if (typeof commands === "object" && commands !== null) {
-    const plan = commandSpecs((commands as Record<string, unknown>)[kind], kind)
-    if (plan.length > 0) return plan
-  }
-  const legacy = kind === "setup" ? setupCommand(options) : checkCommand(options)
-  return legacy ? [{ name: kind, cwd: ".", command: legacy, always: true }] : []
+  if (typeof commands !== "object" || commands === null) return []
+  return commandSpecs((commands as Record<string, unknown>)[kind], kind)
 }
 
 export function configuredScopes(options?: Record<string, unknown>): string[] {
@@ -130,7 +179,6 @@ export function commandInTaskScope(command: CommandSpec, scope?: TaskScope): boo
 }
 
 export function commandMatchesChangedFile(command: CommandSpec, changedFiles: readonly string[]): boolean {
-  if (command.always) return true
   const cwdPrefix = command.cwd === "." ? "" : `${command.cwd}/`
   const scope = command.scope?.map((pattern) => new RegExp(pattern)) ?? []
   return changedFiles.some(
