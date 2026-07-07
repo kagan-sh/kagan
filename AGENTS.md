@@ -15,6 +15,10 @@ worktree per task. Before changing lifecycle behavior, read [`.specs/README.md`]
   confusingly without it). If you must focus, anchor the path and pass the flag:
   `bun test ./test/task.test.ts --conditions browser`.
 - `bun run format:fix` before finishing any edit batch.
+- `bun run setup` — one-time after cloning: points git at `.githooks` (pre-commit runs
+  format/lint/typecheck). Not a `prepare`/`postinstall` lifecycle script on purpose: those make
+  npm/pacote treat the repo as a git dep needing a build step, which breaks
+  `opencode plugin https://github.com/kagan-sh/kagan`.
 
 ## Ground truth for external APIs
 

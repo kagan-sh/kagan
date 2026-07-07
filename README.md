@@ -1,13 +1,6 @@
-<p align="center">
-  <a href="https://opensource.org/license/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="License: MIT"></a>
-</p>
+# Kagan
 
-<h3 align="center">
-  <a href="docs/index.md">Docs</a> ·
-  <a href="docs/quickstart.md">Quickstart</a> ·
-  <a href="docs/concepts/task-lifecycle.md">Task lifecycle</a> ·
-  <a href="docs/reference/configuration.md">Configuration</a>
-</h3>
+[Docs](https://docs.kagan.sh/) · [Quickstart](https://docs.kagan.sh/quickstart/)
 
 ---
 
@@ -17,7 +10,15 @@ The agent never touches your checkout. It works on a `kagan/<slug>` branch in it
 
 ## Install
 
-You need [OpenCode](https://opencode.ai/) installed. Add the plugin to your project's `opencode.json`:
+You need [OpenCode](https://opencode.ai/) installed.
+
+From GitHub (until the package is on npm):
+
+```bash
+opencode plugin https://github.com/kagan-sh/kagan
+```
+
+Or add a local clone to your project's `opencode.json`:
 
 ```json
 {
@@ -25,18 +26,16 @@ You need [OpenCode](https://opencode.ai/) installed. Add the plugin to your proj
 }
 ```
 
-Then open the board from the OpenCode command palette by typing `/kagan`.
+Open the board with `/kagan` from the command palette, the `kagan` palette command, or `<leader>k` (the leader key defaults to `ctrl+x`).
+
+Pass options by using the array-of-array form — see the [configuration reference](https://docs.kagan.sh/reference/configuration/).
 
 ## Docs
 
-Full documentation lives in [`docs/`](docs/index.md) — a [VitePress](https://vitepress.dev) site:
-
-```bash
-bun run docs:dev
-```
-
-The authoritative behavior specs live in [`.specs/`](.specs/README.md) — behavior changes must land with matching spec updates.
+Full documentation lives in [`docs/`](https://docs.kagan.sh/).
 
 ## License
 
-MIT
+[MIT](LICENSE)
+
+---

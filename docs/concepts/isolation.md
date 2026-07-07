@@ -21,6 +21,13 @@ git worktree remove ~/.kagan/worktrees/<repo-hash>/<slug>
 git branch -d kagan/<slug>
 ```
 
+## No remote pushes from task sessions
+
+Supervised sessions cannot push their `kagan/<slug>` branch to a remote. If the agent tries to run
+`git push` — in any common shape, including forced pushes, directory flags, chained commands, or an
+explicit remote and ref — Kagan denies the call and tells the agent that merging happens through
+the board's Done dialog after review. Plain OpenCode chat sessions are unaffected.
+
 ## Board tasks vs. plain sessions
 
 Only sessions created through the board's `n` dialog are supervised. A regular OpenCode chat —

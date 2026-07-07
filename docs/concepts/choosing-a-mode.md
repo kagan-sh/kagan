@@ -53,3 +53,8 @@ Use the highest-autonomy mode whose failure is caught by a check you trust more 
 Kagan enforces the **autonomous** mode and the **autonomous↔assisted** boundary. Its reach is the frontier of safe autonomy: tasks with a `checkCommand` you trust, plus a validator whose citations are diff-verified.
 
 If a task cannot be given such a check, kagan is structurally telling you to drop to assisted. That is why `checkCommand` is evidence, never a gate: kagan's job is to inform your judgment about where the boundary is, not to pretend it is elsewhere.
+
+When you select a Backlog card, the intake's mode rationale appears on the card. The same rationale
+is shown in the findings-review header. If `checkCommand` is unset, the rationale appends
+"(no automatic check configured - lean assisted)" as a reminder that without a deterministic
+oracle you are the verifier.
