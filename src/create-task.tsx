@@ -64,6 +64,10 @@ function CreateTaskForm(props: {
       return
     }
     const description = descriptionRef?.plainText ?? state.description
+    if (props.store.configuredScopes.length > 1 && !hasScope(state.scope)) {
+      props.store.notify({ variant: "warning", title: "Kagan", message: "Scope is required" })
+      return
+    }
     props.api.ui.dialog.clear()
     try {
       const scope = hasScope(state.scope) ? state.scope : undefined
@@ -232,7 +236,7 @@ export async function openCreateTaskDialog(api: TuiPluginApi, store: BoardStore)
   const state: FormState = {
     title: "",
     description: "",
-    scope: { values: [] },
+    scope: { values: store.configuredScopes.length === 1 ? [store.configuredScopes[0]!] : [] },
     scopeFilter: "",
     modelIndex: 0,
     branchIndex: Math.max(0, branches.indexOf(api.state.vcs?.branch ?? "")),

@@ -36,58 +36,6 @@ function isSafeCwd(cwd: string): boolean {
   return cwd !== "" && !cwd.startsWith("/") && !cwd.split(/[\\/]+/).includes("..")
 }
 
-const MAX_SCOPE_PATTERN_LENGTH = 500
-
-const LOOKAROUND_OR_COMMENT = /\(\?([=!<#]|<[=<])/
-const BACKREFERENCE = /\\[1-9]/
-
-function isSafeRegexPattern(pattern: string): boolean {
-  if (pattern.length > MAX_SCOPE_PATTERN_LENGTH) return false
-  if (LOOKAROUND_OR_COMMENT.test(pattern) || BACKREFERENCE.test(pattern)) return false
-  let depth = 0
-  const groupHasQuantifier: boolean[] = []
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i]
-    if (c === "\\") {
-      i++
-      continue
-    }
-    if (c === "[") {
-      i++
-      while (i < pattern.length && pattern[i] !== "]") {
-        if (pattern[i] === "\\") i++
-        i++
-      }
-      continue
-    }
-    if (c === "(") {
-      depth++
-      groupHasQuantifier[depth] = false
-      continue
-    }
-    if (c === ")") {
-      const hadQuantifier = groupHasQuantifier[depth] ?? false
-      depth--
-      if (hadQuantifier) {
-        const next = pattern[i + 1]
-        if (next && /[+*?]|{/.test(next)) return false
-        groupHasQuantifier[depth] = true
-      }
-      continue
-    }
-    if (c === "{" || c === "+" || c === "*" || c === "?") {
-      groupHasQuantifier[depth] = true
-      if (c === "{") {
-        while (i < pattern.length && pattern[i] !== "}") {
-          if (pattern[i] === "\\") i++
-          i++
-        }
-      }
-    }
-  }
-  return depth === 0
-}
-
 function validScopePatterns(value: unknown): string[] | undefined {
   if (value === undefined) return undefined
   if (!Array.isArray(value)) return undefined
@@ -96,7 +44,6 @@ function validScopePatterns(value: unknown): string[] | undefined {
     if (typeof raw !== "string") return undefined
     const pattern = raw.trim()
     if (!pattern) return undefined
-    if (!isSafeRegexPattern(pattern)) return undefined
     try {
       new RegExp(pattern)
     } catch {
@@ -107,7 +54,7 @@ function validScopePatterns(value: unknown): string[] | undefined {
   return patterns
 }
 
-function commandSpec(value: unknown, fallbackName: string): CommandSpec | undefined {
+export function commandSpec(value: unknown, fallbackName: string): CommandSpec | undefined {
   if (typeof value === "string") {
     const command = value.trim()
     return command ? { name: fallbackName, cwd: ".", command } : undefined
@@ -115,7 +62,8 @@ function commandSpec(value: unknown, fallbackName: string): CommandSpec | undefi
   if (typeof value !== "object" || value === null) return undefined
   const raw = value as Record<string, unknown>
   const name = typeof raw.name === "string" ? raw.name.trim() : ""
-  const cwd = typeof raw.cwd === "string" ? raw.cwd.trim().replace(/\/+$/, "") || "." : ""
+  const rawCwd = typeof raw.cwd === "string" ? raw.cwd.trim() : ""
+  const cwd = rawCwd.startsWith("/") ? rawCwd : rawCwd.replace(/\/+$/, "").replace(/^\.\/+/, "") || "."
   const command = typeof raw.command === "string" ? raw.command.trim() : ""
   const scope = validScopePatterns(raw.scope)
   if (!name || !command || !isSafeCwd(cwd)) return undefined
@@ -175,7 +123,7 @@ export function sanitizeTaskScope(value: unknown): TaskScope | undefined {
 export function commandInTaskScope(command: CommandSpec, scope?: TaskScope): boolean {
   if (command.cwd === ".") return true
   if (!scope) return false
-  return scope.values.includes(command.cwd) || scope.custom === command.cwd
+  return scope.values.includes(command.cwd)
 }
 
 export function commandMatchesChangedFile(command: CommandSpec, changedFiles: readonly string[]): boolean {

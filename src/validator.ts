@@ -112,12 +112,29 @@ export function resolveValidatorModel(
 
 function formatCheck(check: CheckResult): string {
   if (check.steps && check.steps.length > 0) {
-    const steps = check.steps.map((step) => {
-      if (step.status === "skipped") return `- ${step.name} (${step.cwd}): skipped — ${step.reason ?? "not in scope"}`
-      const exit = step.exitCode === null ? "?" : step.exitCode
-      return `- ${step.name} (${step.cwd}) — \`${step.command}\` exited ${exit}:\n${step.output}`
-    })
-    return `Deterministic check evidence:\n${steps.join("\n\n")}`
+    const ran = check.steps.filter((step) => step.status === "ran")
+    const skipped = check.steps.filter((step) => step.status === "skipped")
+    const sections = ["Deterministic check evidence:"]
+    if (ran.length > 0) {
+      sections.push(
+        [
+          "Ran checks:",
+          ...ran.map((step) => {
+            const exit = step.exitCode === null ? "?" : step.exitCode
+            return `- ${step.name} (${step.cwd}) — \`${step.command}\` exited ${exit}:\n${step.output}`
+          }),
+        ].join("\n\n"),
+      )
+    }
+    if (skipped.length > 0) {
+      sections.push(
+        [
+          "Skipped checks:",
+          ...skipped.map((step) => `- ${step.name} (${step.cwd}): ${step.reason ?? "not in scope"}`),
+        ].join("\n"),
+      )
+    }
+    return sections.join("\n\n")
   }
   if (check.exitCode === null) {
     return `Deterministic check \`${check.command}\` did not complete: ${check.output}`

@@ -355,6 +355,38 @@ describe("spawnValidator", () => {
     expect(text).toContain("corroborating evidence")
   })
 
+  test("separates ran check steps from skipped check steps", async () => {
+    const check: CheckResult = {
+      command: "alpha: npm test && beta: npm test",
+      exitCode: 0,
+      output: "alpha ok",
+      steps: [
+        { name: "alpha", cwd: "project-alpha", command: "npm test", status: "ran", exitCode: 0, output: "ok\n" },
+        {
+          name: "beta",
+          cwd: "project-beta",
+          command: "npm test",
+          status: "skipped",
+          exitCode: null,
+          output: "",
+          reason: "no changed files in scope",
+        },
+      ],
+    }
+    let options: unknown
+    await spawnValidator(
+      mockInput((o) => (options = o)),
+      "parent-1",
+      diffs,
+      { title: "Task", generation: 1, check },
+    )
+    const text = promptText(options)!
+    expect(text).toContain("Ran checks:")
+    expect(text).toContain("- alpha (project-alpha) — `npm test` exited 0:\nok")
+    expect(text).toContain("Skipped checks:\n- beta (project-beta): no changed files in scope")
+    expect(text).not.toContain("beta (project-beta) — `npm test`")
+  })
+
   test("renders an incomplete check without an exit code", async () => {
     const check: CheckResult = { command: "bun test", exitCode: null, output: "check timed out after 300s" }
     let options: unknown

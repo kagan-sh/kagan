@@ -68,25 +68,55 @@ describe("runCommandPlan", () => {
     const worktree = await tempWorktree()
     const result = await runCommandPlan(
       [
-        { name: "member", cwd: ".", command: "echo member" },
-        { name: "coach", cwd: ".", command: "echo coach" },
+        { name: "alpha", cwd: ".", command: "echo alpha" },
+        { name: "beta", cwd: ".", command: "echo beta" },
       ],
       worktree,
-      (command) => command.name === "member",
+      (command) => command.name === "alpha",
     )
     expect(result?.exitCode).toBe(0)
     expect(result?.steps).toEqual([
-      { name: "member", cwd: ".", command: "echo member", status: "ran", exitCode: 0, output: "member\n" },
+      { name: "alpha", cwd: ".", command: "echo alpha", status: "ran", exitCode: 0, output: "alpha\n" },
       {
-        name: "coach",
+        name: "beta",
         cwd: ".",
-        command: "echo coach",
+        command: "echo beta",
         status: "skipped",
         exitCode: null,
         output: "",
         reason: "no changed files in scope",
       },
     ])
+  })
+
+  test("can omit skipped commands from stored evidence", async () => {
+    const worktree = await tempWorktree()
+    const result = await runCommandPlan(
+      [
+        { name: "alpha", cwd: ".", command: "echo alpha" },
+        { name: "beta", cwd: ".", command: "echo beta" },
+      ],
+      worktree,
+      (command) => command.name === "alpha",
+      "out of scope",
+      false,
+    )
+    expect(result?.command).toBe("alpha: echo alpha")
+    expect(result?.steps).toEqual([
+      { name: "alpha", cwd: ".", command: "echo alpha", status: "ran", exitCode: 0, output: "alpha\n" },
+    ])
+  })
+
+  test("returns undefined when every command is skipped and skipped evidence is off", async () => {
+    const worktree = await tempWorktree()
+    const result = await runCommandPlan(
+      [{ name: "alpha", cwd: ".", command: "echo alpha" }],
+      worktree,
+      () => false,
+      "out of scope",
+      false,
+    )
+    expect(result).toBeUndefined()
   })
 
   test("continues after a failing command", async () => {

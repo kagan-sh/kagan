@@ -154,13 +154,13 @@ describe("gateBadges", () => {
       {
         status: "review",
         check: {
-          command: "member: npm test",
+          command: "alpha: npm test",
           exitCode: 0,
-          output: "member: skipped",
+          output: "alpha: skipped",
           steps: [
             {
-              name: "member",
-              cwd: "member-app",
+              name: "alpha",
+              cwd: "project-alpha",
               command: "npm test",
               status: "skipped",
               exitCode: null,
@@ -173,20 +173,42 @@ describe("gateBadges", () => {
       [{ text: "check skipped", tone: "muted" }],
     ],
     [
-      "check partial when some configured checks ran and others skipped",
+      "check ok when some configured checks ran and others skipped",
       {
         status: "review",
         check: {
-          command: "member: npm test && coach: npm test",
+          command: "alpha: npm test && beta: npm test",
           exitCode: 0,
-          output: "member ok",
+          output: "alpha ok",
           steps: [
-            { name: "member", cwd: "member-app", command: "npm test", status: "ran", exitCode: 0, output: "ok" },
-            { name: "coach", cwd: "coach-tools", command: "npm test", status: "skipped", exitCode: null, output: "" },
+            { name: "alpha", cwd: "project-alpha", command: "npm test", status: "ran", exitCode: 0, output: "ok" },
+            { name: "beta", cwd: "project-beta", command: "npm test", status: "skipped", exitCode: null, output: "" },
           ],
         },
       },
-      [{ text: "check partial", tone: "warning" }],
+      [{ text: "check ok", tone: "success" }],
+    ],
+    [
+      "omits a legacy setup result when every step was skipped",
+      {
+        status: "backlog",
+        setup: {
+          command: "alpha: npm ci",
+          exitCode: 0,
+          output: "alpha: skipped",
+          steps: [
+            {
+              name: "alpha",
+              cwd: "project-alpha",
+              command: "npm ci",
+              status: "skipped",
+              exitCode: null,
+              output: "",
+            },
+          ],
+        },
+      },
+      [],
     ],
     [
       "places the check badge before the validator/findings badge",

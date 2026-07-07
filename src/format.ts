@@ -50,15 +50,14 @@ export type Badge = { text: string; tone: "muted" | "success" | "warning" | "err
 function commandBadge(
   label: "setup" | "check",
   result: { exitCode: number | null; steps?: { status: string }[] },
-): Badge {
+): Badge | undefined {
   const steps = result.steps
   if (!steps || steps.length === 0) {
     return result.exitCode === 0 ? { text: `${label} ok`, tone: "success" } : { text: `${label} failed`, tone: "error" }
   }
   const ran = steps.filter((step) => step.status === "ran").length
-  if (ran === 0) return { text: `${label} skipped`, tone: "muted" }
+  if (ran === 0) return label === "check" ? { text: "check skipped", tone: "muted" } : undefined
   if (result.exitCode !== 0) return { text: `${label} failed`, tone: "error" }
-  if (ran < steps.length) return { text: `${label} partial`, tone: "warning" }
   return { text: `${label} ok`, tone: "success" }
 }
 
@@ -78,9 +77,15 @@ export function gateBadges(metadata?: Record<string, unknown>, threshold = sendB
   if (mode)
     badges.push({ text: `mode: ${mode.recommended === "autonomous" ? "auto" : mode.recommended}`, tone: "muted" })
   const setup = view.setup
-  if (setup) badges.push(commandBadge("setup", setup))
+  if (setup) {
+    const badge = commandBadge("setup", setup)
+    if (badge) badges.push(badge)
+  }
   const check = view.check
-  if (check) badges.push(commandBadge("check", check))
+  if (check) {
+    const badge = commandBadge("check", check)
+    if (badge) badges.push(badge)
+  }
   const validatorOutcome = helper(metadata, "validator").outcome
   if (validatorOutcome === "pending") badges.push({ text: "reviewing…", tone: "muted" })
   else if (validatorOutcome === "failed" || hasHelperError(metadata, "validator")) {

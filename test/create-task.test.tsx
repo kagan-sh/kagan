@@ -45,7 +45,7 @@ afterEach(async () => {
   writtenOrder = undefined
 })
 
-function harness() {
+function harness(scopes: string[] = []) {
   const notices: Notice[] = []
   const renders: Array<() => JSX.Element> = []
   let cleared = false
@@ -80,7 +80,7 @@ function harness() {
   } as unknown as Partial<TuiPluginApi>)
   const store = {
     setupCommands: [{ name: "setup", cwd: ".", command: "bun install" }],
-    configuredScopes: ["member-app", "coach-tools"],
+    configuredScopes: scopes,
     refresh: async () => {
       refreshes++
     },
@@ -174,6 +174,32 @@ describe("openCreateTaskDialog", () => {
     await renderSetup.flush()
 
     expect(createInput).toMatchObject({ title: "Ship docs", baseBranch: "feature" })
+  })
+
+  test("preselects the only configured static scope", async () => {
+    const view = harness(["project-alpha"])
+    await openCreateTaskDialog(view.api, view.store as never)
+    await renderLatest(view.renders)
+
+    await renderSetup!.mockInput.typeText("Ship alpha project")
+    renderSetup!.mockInput.pressEnter()
+    await renderSetup!.flush()
+
+    expect(createInput).toMatchObject({ title: "Ship alpha project", scope: { values: ["project-alpha"] } })
+  })
+
+  test("requires a scope when multiple static scopes are configured", async () => {
+    const view = harness(["project-alpha", "project-beta"])
+    await openCreateTaskDialog(view.api, view.store as never)
+    await renderLatest(view.renders)
+
+    await renderSetup!.mockInput.typeText("Ship scoped work")
+    renderSetup!.mockInput.pressEnter()
+    await renderSetup!.flush()
+
+    expect(createInput).toBeUndefined()
+    expect(view.cleared).toBe(false)
+    expect(view.notices).toContainEqual({ variant: "warning", title: "Kagan", message: "Scope is required" })
   })
 
   test("reports create failures", async () => {

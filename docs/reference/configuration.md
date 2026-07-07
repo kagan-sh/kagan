@@ -33,15 +33,15 @@ All options are passed through OpenCode's plugin config — the array form of a 
 | `helperRetries`         | integer ≥ 0                 | `1`             | Automatic respawns of a failed `task prep` / `review` helper before it's marked failed.                                                                                                                                                   |
 | `sendBackStopThreshold` | integer ≥ 1                 | `3`             | After this many iterations, pressing send-back opens a stop dialog with choices to iterate again, take over the session, or leave it in review.                                                                                           |
 | `squashMerge`           | boolean                     | `true`          | Squash the task branch into a single commit on merge. Set `false` for a standard merge that preserves the branch's individual commits.                                                                                                    |
-| `commands.setup`        | command[]                   | unset (inert)   | Setup commands run once in the fresh task worktree when the task scope includes the command `cwd`. Results are recorded as ran/skipped evidence. A failure never blocks task creation.                                                    |
+| `commands.setup`        | command[]                   | unset (inert)   | Setup commands run once in the fresh task worktree when the task scope includes the command `cwd`. Ran commands are recorded as evidence. A failure never blocks task creation.                                                           |
 | `commands.check`        | command[]                   | unset (inert)   | Check commands evaluated when a task enters Review. A command runs when changed files are under its `cwd`, or when changed files match one of its repo-relative `scope` regexes. Never gates approval or column moves.                    |
 
 Each command has this shape:
 
 ```json
 {
-  "name": "member check",
-  "cwd": "member-app",
+  "name": "alpha check",
+  "cwd": "project-alpha",
   "command": "npm run check",
   "scope": ["^\\.github/", "^scripts/"]
 }
@@ -59,19 +59,19 @@ Monorepo example:
       {
         "commands": {
           "setup": [
-            { "name": "member deps", "cwd": "member-app", "command": "npm ci" },
-            { "name": "coach deps", "cwd": "coach-tools", "command": "npm ci" }
+            { "name": "alpha deps", "cwd": "project-alpha", "command": "npm ci" },
+            { "name": "beta deps", "cwd": "project-beta", "command": "npm ci" }
           ],
           "check": [
             {
-              "name": "member check",
-              "cwd": "member-app",
+              "name": "alpha check",
+              "cwd": "project-alpha",
               "command": "npm run check",
               "scope": ["^\\.github/", "^scripts/"]
             },
             {
-              "name": "coach check",
-              "cwd": "coach-tools",
+              "name": "beta check",
+              "cwd": "project-beta",
               "command": "npm run check",
               "scope": ["^\\.github/", "^scripts/"]
             }
@@ -83,7 +83,7 @@ Monorepo example:
 }
 ```
 
-Configured command `cwd` values become task scopes in the create-task dialog. Custom free-form scope text is passed to intake as context, but does not trigger setup commands unless it exactly matches a configured `cwd`.
+Configured command `cwd` values become task scopes in the create-task dialog. If there is one static scope it is preselected; if there are several, choose at least one scope or enter custom scope text. Custom free-form scope text is saved on the task, but it never triggers setup commands.
 
 Configured checks also control a deterministic advisory overlay: when no check command is configured, the intake mode rationale shown on the selected card and in the findings-review header appends "(no automatic check configured - lean assisted)". The mode recommendation itself — `autonomous`, `assisted`, or `manual` — is advisory only and never gates a move or approval.
 

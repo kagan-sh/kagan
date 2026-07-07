@@ -5,17 +5,12 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import {
-  commandPlan,
-  helperRetries,
-  inProgressCap,
-  sendBackStopThreshold,
-  squashMerge,
-  validateCommandPlan,
-} from "./task"
+import { commandSpec, helperRetries, inProgressCap, sendBackStopThreshold, squashMerge, type ModelRef } from "./task"
+import type { CommandSpec } from "./check"
 import { SETTINGS_ROUTE, ROUTE } from "./types"
 
 type Section = "General" | "Agents" | "Commands" | "Validator models" | "JSON preview"
+
 type Draft = {
   inProgressLimit: number
   helperRetries: number
@@ -23,16 +18,33 @@ type Draft = {
   squashMerge: boolean
   intakeAgent: string
   validatorAgent: string
-  validatorModels: unknown[]
+  validatorModels: ModelRef[]
   commands: {
-    setup: unknown[]
-    check: unknown[]
+    setup: CommandSpec[]
+    check: CommandSpec[]
   }
 }
 
 const SECTIONS: Section[] = ["General", "Agents", "Commands", "Validator models", "JSON preview"]
 
+function commandSpecs(value: unknown, kind: "setup" | "check"): CommandSpec[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item, index) => commandSpec(item, `${kind} ${index + 1}`))
+    .filter((spec): spec is CommandSpec => spec !== undefined)
+}
+
+function modelRef(value: unknown): ModelRef | undefined {
+  if (typeof value !== "object" || value === null) return undefined
+  const raw = value as Record<string, unknown>
+  const providerID = typeof raw.providerID === "string" ? raw.providerID.trim() : ""
+  const modelID = typeof raw.modelID === "string" ? raw.modelID.trim() : ""
+  if (!providerID || !modelID) return undefined
+  return { providerID, modelID }
+}
+
 function draftFromOptions(options?: Record<string, unknown>): Draft {
+  const commands = options?.commands
   return {
     inProgressLimit: inProgressCap(options),
     helperRetries: helperRetries(options),
@@ -40,10 +52,18 @@ function draftFromOptions(options?: Record<string, unknown>): Draft {
     squashMerge: squashMerge(options),
     intakeAgent: typeof options?.intakeAgent === "string" ? options.intakeAgent : "",
     validatorAgent: typeof options?.validatorAgent === "string" ? options.validatorAgent : "",
-    validatorModels: Array.isArray(options?.validatorModels) ? options.validatorModels : [],
+    validatorModels: Array.isArray(options?.validatorModels)
+      ? options.validatorModels.map(modelRef).filter((model): model is ModelRef => model !== undefined)
+      : [],
     commands: {
-      setup: commandPlan(options, "setup"),
-      check: commandPlan(options, "check"),
+      setup: commandSpecs(
+        typeof commands === "object" && commands !== null ? (commands as Record<string, unknown>).setup : undefined,
+        "setup",
+      ),
+      check: commandSpecs(
+        typeof commands === "object" && commands !== null ? (commands as Record<string, unknown>).check : undefined,
+        "check",
+      ),
     },
   }
 }
@@ -54,11 +74,13 @@ function optionsFromDraft(draft: Draft): Record<string, unknown> {
     helperRetries: draft.helperRetries,
     sendBackStopThreshold: draft.sendBackStopThreshold,
     squashMerge: draft.squashMerge,
-    commands: draft.commands,
   }
   if (draft.intakeAgent.trim()) options.intakeAgent = draft.intakeAgent.trim()
   if (draft.validatorAgent.trim()) options.validatorAgent = draft.validatorAgent.trim()
   if (draft.validatorModels.length > 0) options.validatorModels = draft.validatorModels
+  if (draft.commands.setup.length > 0 || draft.commands.check.length > 0) {
+    options.commands = draft.commands
+  }
   return options
 }
 
@@ -66,16 +88,11 @@ function pluginOptionsJson(draft: Draft): string {
   return JSON.stringify(optionsFromDraft(draft), null, 2)
 }
 
-function validateValidatorModels(value: unknown): string | undefined {
-  if (!Array.isArray(value)) return "validatorModels must be a JSON array"
+function validateValidatorModels(value: ModelRef[]): string | undefined {
   for (let i = 0; i < value.length; i++) {
     const item = value[i]
-    if (
-      typeof item !== "object" ||
-      item === null ||
-      typeof item.providerID !== "string" ||
-      typeof item.modelID !== "string"
-    ) {
+    if (item === undefined) continue
+    if (!item.providerID.trim() || !item.modelID.trim()) {
       return `validatorModels[${i}] must be { providerID: string, modelID: string }`
     }
   }
@@ -86,10 +103,6 @@ function validateDraft(draft: Draft): string | undefined {
   if (draft.inProgressLimit < 1) return "inProgressLimit must be at least 1"
   if (draft.helperRetries < 0) return "helperRetries must be at least 0"
   if (draft.sendBackStopThreshold < 1) return "sendBackStopThreshold must be at least 1"
-  const setupError = validateCommandPlan(draft.commands.setup, "setup")
-  if (setupError) return setupError
-  const checkError = validateCommandPlan(draft.commands.check, "check")
-  if (checkError) return checkError
   return validateValidatorModels(draft.validatorModels)
 }
 
@@ -97,7 +110,15 @@ async function saveOptions(worktree: string, draft: Draft): Promise<string> {
   const error = validateDraft(draft)
   if (error) throw new Error(error)
   const path = join(worktree, "opencode.json")
-  const raw = await readFile(path, "utf8")
+  let raw: string
+  try {
+    raw = await readFile(path, "utf8")
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "ENOENT") {
+      throw new Error("opencode.json not found in project root")
+    }
+    throw error
+  }
   const config = JSON.parse(raw) as { plugin?: unknown }
   if (!Array.isArray(config.plugin)) throw new Error("opencode.json has no plugin array")
   const index = config.plugin.findIndex((entry) => {
@@ -114,10 +135,511 @@ async function saveOptions(worktree: string, draft: Draft): Promise<string> {
 
 type Row = { label: string; value: string; edit?: () => void }
 
-function parseJsonArray(value: string): unknown[] {
-  const parsed = JSON.parse(value)
-  if (!Array.isArray(parsed)) throw new Error("Value must be a JSON array")
-  return parsed
+const COMMAND_FIELDS = ["name", "cwd", "command", "scope"] as const
+
+type CommandField = (typeof COMMAND_FIELDS)[number]
+
+type CommandListState = {
+  commands: CommandSpec[]
+  row: number
+  field: number
+  message?: string
+}
+
+function openCommandListEditor(
+  api: TuiPluginApi,
+  kind: "setup" | "check",
+  initial: CommandSpec[],
+  onChange: (commands: CommandSpec[]) => void,
+) {
+  const state: CommandListState = { commands: initial, row: 0, field: 0 }
+  const reopen = () => {
+    api.ui.dialog.replace(() => (
+      <CommandListEditor api={api} kind={kind} state={state} onChange={onChange} reopen={reopen} />
+    ))
+  }
+  reopen()
+}
+
+function CommandListEditor(props: {
+  api: TuiPluginApi
+  kind: "setup" | "check"
+  state: CommandListState
+  onChange: (commands: CommandSpec[]) => void
+  reopen: () => void
+}) {
+  const theme = () => props.api.theme.current
+  const [commands, setCommands] = createSignal(props.state.commands)
+  const [rowIndex, setRowIndex] = createSignal(Math.min(props.state.row, Math.max(props.state.commands.length - 1, 0)))
+  const [fieldIndex, setFieldIndex] = createSignal(props.state.field)
+  const [message, setMessage] = createSignal(props.state.message)
+
+  const fieldCount = COMMAND_FIELDS.length
+  const selectedRow = () => Math.min(rowIndex(), Math.max(commands().length - 1, 0))
+  const focusedField = () => COMMAND_FIELDS[fieldIndex() % fieldCount] ?? "name"
+
+  const snapshot = () => ({
+    commands: commands(),
+    row: selectedRow(),
+    field: fieldIndex(),
+    message: message(),
+  })
+
+  const reopenWithSnapshot = () => {
+    Object.assign(props.state, snapshot())
+    props.reopen()
+  }
+
+  const prompt = (title: string, value: string, onConfirm: (value: string) => void) => {
+    Object.assign(props.state, snapshot())
+    props.api.ui.dialog.replace(() => (
+      <props.api.ui.DialogPrompt
+        title={title}
+        value={value}
+        placeholder={title}
+        onConfirm={(next) => {
+          onConfirm(next)
+        }}
+        onCancel={() => props.reopen()}
+      />
+    ))
+  }
+
+  const addCommand = () => {
+    const values: Partial<Record<CommandField, string>> = {}
+
+    const ask = (fields: CommandField[]) => {
+      if (fields.length === 0) {
+        const name = values.name?.trim()
+        const cwd = values.cwd?.trim()
+        const command = values.command?.trim()
+        const scopeText = values.scope?.trim()
+        if (!name || !command || cwd === undefined) {
+          setMessage("Name, cwd, and command are required")
+          reopenWithSnapshot()
+          return
+        }
+        if (!cwd) {
+          setMessage("cwd cannot be empty")
+          reopenWithSnapshot()
+          return
+        }
+        const parsed = commandSpec(
+          {
+            name,
+            cwd,
+            command,
+            scope: scopeText
+              ? scopeText
+                  .split(",")
+                  .map((pattern) => pattern.trim())
+                  .filter(Boolean)
+              : undefined,
+          },
+          `${props.kind} ${commands().length + 1}`,
+        )
+        if (!parsed) {
+          setMessage("Invalid command: unsafe cwd or invalid scope regex")
+          reopenWithSnapshot()
+          return
+        }
+        const next = [...commands(), parsed]
+        setCommands(next)
+        setRowIndex(next.length - 1)
+        setFieldIndex(0)
+        setMessage(undefined)
+        reopenWithSnapshot()
+        return
+      }
+
+      const field = fields[0]!
+      const rest = fields.slice(1)
+      const title = field === "scope" ? "scope (comma-separated regexes)" : field
+      prompt(title, values[field] ?? "", (next) => {
+        values[field] = next
+        ask(rest)
+      })
+    }
+
+    ask(["name", "cwd", "command", "scope"])
+  }
+
+  const editField = () => {
+    const command = commands()[selectedRow()]
+    if (!command) return
+    const field = focusedField()
+    const value = field === "scope" ? (command.scope ?? []).join(", ") : command[field]
+    const title = field === "scope" ? "scope (comma-separated regexes)" : field
+    prompt(title, value, (next) => {
+      const updated = { ...command }
+      if (field === "scope") {
+        updated.scope = next
+          ? next
+              .split(",")
+              .map((pattern) => pattern.trim())
+              .filter(Boolean)
+          : undefined
+      } else {
+        updated[field] = next.trim()
+      }
+      const name = updated.name
+      const cwd = updated.cwd
+      const commandText = updated.command
+      if (!name || !commandText || !cwd) {
+        setMessage("Name, cwd, and command are required")
+        reopenWithSnapshot()
+        return
+      }
+      const parsed = commandSpec(updated, command.name)
+      if (!parsed) {
+        setMessage("Invalid command: unsafe cwd or invalid scope regex")
+        reopenWithSnapshot()
+        return
+      }
+      const nextCommands = [...commands()]
+      nextCommands[selectedRow()] = parsed
+      setCommands(nextCommands)
+      setMessage(undefined)
+      reopenWithSnapshot()
+    })
+  }
+
+  const deleteCommand = () => {
+    const index = selectedRow()
+    const current = commands()
+    if (index < 0 || index >= current.length) return
+    const next = [...current]
+    next.splice(index, 1)
+    setCommands(next)
+    setRowIndex(Math.min(index, Math.max(next.length - 1, 0)))
+  }
+
+  const moveCommand = (delta: number) => {
+    const index = selectedRow()
+    const current = commands()
+    const target = index + delta
+    if (target < 0 || target >= current.length) return
+    const next = [...current]
+    const temp = next[index]
+    next[index] = next[target]!
+    next[target] = temp!
+    setCommands(next)
+    setRowIndex(target)
+  }
+
+  useKeyboard((key) => {
+    if (key.name === "escape") {
+      props.api.ui.dialog.clear()
+      props.onChange(commands())
+      return
+    }
+    if (key.name === "a") {
+      addCommand()
+      return
+    }
+    if (key.name === "d") {
+      deleteCommand()
+      return
+    }
+    if (key.shift && (key.name === "up" || key.name === "k")) {
+      moveCommand(-1)
+      return
+    }
+    if (key.shift && (key.name === "down" || key.name === "j")) {
+      moveCommand(1)
+      return
+    }
+    if (key.name === "up" || key.name === "k") {
+      setRowIndex((i) => Math.max(i - 1, 0))
+      return
+    }
+    if (key.name === "down" || key.name === "j") {
+      setRowIndex((i) => Math.min(i + 1, commands().length - 1))
+      return
+    }
+    if (key.name === "left" || key.name === "h") {
+      setFieldIndex((i) => (i - 1 + fieldCount) % fieldCount)
+      return
+    }
+    if (key.name === "right" || key.name === "l") {
+      setFieldIndex((i) => (i + 1) % fieldCount)
+      return
+    }
+    if (key.name === "return") {
+      editField()
+      return
+    }
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme().text} attributes={TextAttributes.BOLD}>
+          {props.kind} commands
+        </text>
+        <text fg={theme().textMuted}>esc close</text>
+      </box>
+      <box flexDirection="column" gap={1}>
+        <Show
+          when={commands().length > 0}
+          fallback={<text fg={theme().textMuted}>No commands. Press a to add one.</text>}
+        >
+          <For each={commands()}>
+            {(command, i) => {
+              const selected = () => i() === selectedRow()
+              const normalFg = () => (selected() ? theme().selectedListItemText : theme().text)
+              const fieldFg = (field: CommandField) =>
+                selected() && focusedField() === field ? theme().text : normalFg()
+              return (
+                <box flexDirection="row" gap={1} backgroundColor={selected() ? theme().primary : undefined}>
+                  <text width={16} wrapMode="none" fg={fieldFg("name")}>
+                    {command.name}
+                  </text>
+                  <text width={14} wrapMode="none" fg={fieldFg("cwd")}>
+                    {command.cwd}
+                  </text>
+                  <text flexGrow={1} wrapMode="none" fg={fieldFg("command")}>
+                    {command.command}
+                  </text>
+                  <text width={20} wrapMode="none" fg={fieldFg("scope")}>
+                    {(command.scope ?? []).join(", ")}
+                  </text>
+                </box>
+              )
+            }}
+          </For>
+        </Show>
+      </box>
+      <Show when={message()}>
+        <text fg={theme().error}>{message()}</text>
+      </Show>
+      <box paddingTop={1} flexDirection="row" gap={2}>
+        <text fg={theme().text}>
+          enter <span style={{ fg: theme().textMuted }}>edit</span>
+        </text>
+        <text fg={theme().text}>
+          a <span style={{ fg: theme().textMuted }}>add</span>
+        </text>
+        <text fg={theme().text}>
+          d <span style={{ fg: theme().textMuted }}>delete</span>
+        </text>
+        <text fg={theme().text}>
+          shift+↑↓ <span style={{ fg: theme().textMuted }}>reorder</span>
+        </text>
+      </box>
+    </box>
+  )
+}
+
+const VALIDATOR_MODEL_FIELDS = ["providerID", "modelID"] as const
+
+type ValidatorModelField = (typeof VALIDATOR_MODEL_FIELDS)[number]
+
+type ValidatorModelListState = {
+  models: ModelRef[]
+  row: number
+  field: number
+  message?: string
+}
+
+function openValidatorModelListEditor(api: TuiPluginApi, initial: ModelRef[], onChange: (models: ModelRef[]) => void) {
+  const state: ValidatorModelListState = { models: initial, row: 0, field: 0 }
+  const reopen = () => {
+    api.ui.dialog.replace(() => (
+      <ValidatorModelListEditor api={api} state={state} onChange={onChange} reopen={reopen} />
+    ))
+  }
+  reopen()
+}
+
+function ValidatorModelListEditor(props: {
+  api: TuiPluginApi
+  state: ValidatorModelListState
+  onChange: (models: ModelRef[]) => void
+  reopen: () => void
+}) {
+  const theme = () => props.api.theme.current
+  const [models, setModels] = createSignal(props.state.models)
+  const [rowIndex, setRowIndex] = createSignal(Math.min(props.state.row, Math.max(props.state.models.length - 1, 0)))
+  const [fieldIndex, setFieldIndex] = createSignal(props.state.field)
+  const [message, setMessage] = createSignal(props.state.message)
+
+  const fieldCount = VALIDATOR_MODEL_FIELDS.length
+  const selectedRow = () => Math.min(rowIndex(), Math.max(models().length - 1, 0))
+  const focusedField = () => VALIDATOR_MODEL_FIELDS[fieldIndex() % fieldCount] ?? "providerID"
+
+  const snapshot = () => ({
+    models: models(),
+    row: selectedRow(),
+    field: fieldIndex(),
+    message: message(),
+  })
+
+  const reopenWithSnapshot = () => {
+    Object.assign(props.state, snapshot())
+    props.reopen()
+  }
+
+  const prompt = (title: string, value: string, onConfirm: (value: string) => void) => {
+    Object.assign(props.state, snapshot())
+    props.api.ui.dialog.replace(() => (
+      <props.api.ui.DialogPrompt
+        title={title}
+        value={value}
+        placeholder={title}
+        onConfirm={(next) => {
+          onConfirm(next)
+        }}
+        onCancel={() => props.reopen()}
+      />
+    ))
+  }
+
+  const addModel = () => {
+    const values: Partial<Record<ValidatorModelField, string>> = {}
+
+    const ask = (fields: ValidatorModelField[]) => {
+      if (fields.length === 0) {
+        const providerID = values.providerID?.trim()
+        const modelID = values.modelID?.trim()
+        if (!providerID || !modelID) {
+          setMessage("providerID and modelID are required")
+          reopenWithSnapshot()
+          return
+        }
+        const next = [...models(), { providerID, modelID }]
+        setModels(next)
+        setRowIndex(next.length - 1)
+        setFieldIndex(0)
+        setMessage(undefined)
+        reopenWithSnapshot()
+        return
+      }
+
+      const field = fields[0]!
+      const rest = fields.slice(1)
+      prompt(field, values[field] ?? "", (next) => {
+        values[field] = next
+        ask(rest)
+      })
+    }
+
+    ask(["providerID", "modelID"])
+  }
+
+  const editField = () => {
+    const model = models()[selectedRow()]
+    if (!model) return
+    const field = focusedField()
+    prompt(field, model[field], (next) => {
+      const updated = { ...model, [field]: next.trim() }
+      const providerID = updated.providerID.trim()
+      const modelID = updated.modelID.trim()
+      if (!providerID || !modelID) {
+        setMessage("providerID and modelID are required")
+        reopenWithSnapshot()
+        return
+      }
+      const nextModels = [...models()]
+      nextModels[selectedRow()] = { providerID, modelID }
+      setModels(nextModels)
+      setMessage(undefined)
+      reopenWithSnapshot()
+    })
+  }
+
+  const deleteModel = () => {
+    const index = selectedRow()
+    const current = models()
+    if (index < 0 || index >= current.length) return
+    const next = [...current]
+    next.splice(index, 1)
+    setModels(next)
+    setRowIndex(Math.min(index, Math.max(next.length - 1, 0)))
+  }
+
+  useKeyboard((key) => {
+    if (key.name === "escape") {
+      props.api.ui.dialog.clear()
+      props.onChange(models())
+      return
+    }
+    if (key.name === "a") {
+      addModel()
+      return
+    }
+    if (key.name === "d") {
+      deleteModel()
+      return
+    }
+    if (key.name === "up" || key.name === "k") {
+      setRowIndex((i) => Math.max(i - 1, 0))
+      return
+    }
+    if (key.name === "down" || key.name === "j") {
+      setRowIndex((i) => Math.min(i + 1, models().length - 1))
+      return
+    }
+    if (key.name === "left" || key.name === "h") {
+      setFieldIndex((i) => (i - 1 + fieldCount) % fieldCount)
+      return
+    }
+    if (key.name === "right" || key.name === "l") {
+      setFieldIndex((i) => (i + 1) % fieldCount)
+      return
+    }
+    if (key.name === "return") {
+      editField()
+      return
+    }
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme().text} attributes={TextAttributes.BOLD}>
+          validator models
+        </text>
+        <text fg={theme().textMuted}>esc close</text>
+      </box>
+      <box flexDirection="column" gap={1}>
+        <Show when={models().length > 0} fallback={<text fg={theme().textMuted}>No models. Press a to add one.</text>}>
+          <For each={models()}>
+            {(model, i) => {
+              const selected = () => i() === selectedRow()
+              const normalFg = () => (selected() ? theme().selectedListItemText : theme().text)
+              const fieldFg = (field: ValidatorModelField) =>
+                selected() && focusedField() === field ? theme().text : normalFg()
+              return (
+                <box flexDirection="row" gap={1} backgroundColor={selected() ? theme().primary : undefined}>
+                  <text width={24} wrapMode="none" fg={fieldFg("providerID")}>
+                    {model.providerID}
+                  </text>
+                  <text flexGrow={1} wrapMode="none" fg={fieldFg("modelID")}>
+                    {model.modelID}
+                  </text>
+                </box>
+              )
+            }}
+          </For>
+        </Show>
+      </box>
+      <Show when={message()}>
+        <text fg={theme().error}>{message()}</text>
+      </Show>
+      <box paddingTop={1} flexDirection="row" gap={2}>
+        <text fg={theme().text}>
+          enter <span style={{ fg: theme().textMuted }}>edit</span>
+        </text>
+        <text fg={theme().text}>
+          a <span style={{ fg: theme().textMuted }}>add</span>
+        </text>
+        <text fg={theme().text}>
+          d <span style={{ fg: theme().textMuted }}>delete</span>
+        </text>
+      </box>
+    </box>
+  )
 }
 
 function rowsFor(
@@ -140,31 +662,6 @@ function rowsFor(
         onCancel={() => api.ui.dialog.clear()}
       />
     ))
-  }
-
-  const editJsonArray = (
-    title: string,
-    value: string,
-    setter: (parsed: unknown[]) => void,
-    validate?: (parsed: unknown[]) => string | undefined,
-  ) => {
-    prompt(title, value, (next) => {
-      let parsed: unknown[]
-      try {
-        parsed = parseJsonArray(next)
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : String(error))
-        return
-      }
-      if (validate) {
-        const error = validate(parsed)
-        if (error) {
-          setMessage(error)
-          return
-        }
-      }
-      setter(parsed)
-    })
   }
 
   if (section === "General") {
@@ -216,22 +713,16 @@ function rowsFor(
         label: "setup",
         value: `${draft.commands.setup.length} command(s)`,
         edit: () =>
-          editJsonArray(
-            "setup commands JSON",
-            JSON.stringify(draft.commands.setup, null, 2),
-            (parsed) => setDraft({ ...draft, commands: { ...draft.commands, setup: parsed } }),
-            (parsed) => validateCommandPlan(parsed, "setup"),
+          openCommandListEditor(api, "setup", draft.commands.setup, (setup) =>
+            setDraft({ ...draft, commands: { ...draft.commands, setup } }),
           ),
       },
       {
         label: "check",
         value: `${draft.commands.check.length} command(s)`,
         edit: () =>
-          editJsonArray(
-            "check commands JSON",
-            JSON.stringify(draft.commands.check, null, 2),
-            (parsed) => setDraft({ ...draft, commands: { ...draft.commands, check: parsed } }),
-            (parsed) => validateCommandPlan(parsed, "check"),
+          openCommandListEditor(api, "check", draft.commands.check, (check) =>
+            setDraft({ ...draft, commands: { ...draft.commands, check } }),
           ),
       },
     ]
@@ -242,11 +733,8 @@ function rowsFor(
         label: "validatorModels",
         value: `${draft.validatorModels.length} model(s)`,
         edit: () =>
-          editJsonArray(
-            "validatorModels JSON",
-            JSON.stringify(draft.validatorModels, null, 2),
-            (parsed) => setDraft({ ...draft, validatorModels: parsed }),
-            validateValidatorModels,
+          openValidatorModelListEditor(api, draft.validatorModels, (models) =>
+            setDraft({ ...draft, validatorModels: models }),
           ),
       },
     ]

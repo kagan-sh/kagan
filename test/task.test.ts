@@ -116,10 +116,12 @@ describe("kagan() metadata view", () => {
   })
 
   test("scope returns sanitized task scope metadata", () => {
-    expect(kagan({ kagan: { scope: { values: ["member-app", "member-app"], custom: " docs " } } }).scope).toEqual({
-      values: ["member-app"],
-      custom: "docs",
-    })
+    expect(kagan({ kagan: { scope: { values: ["project-alpha", "project-alpha"], custom: " docs " } } }).scope).toEqual(
+      {
+        values: ["project-alpha"],
+        custom: "docs",
+      },
+    )
     expect(kagan({ kagan: { scope: { values: [] } } }).scope).toBeUndefined()
     expect(kagan({ kagan: { scope: null } }).scope).toBeUndefined()
   })
@@ -593,24 +595,20 @@ describe("commandPlan", () => {
       commandPlan(
         {
           commands: {
-            setup: [{ name: "member deps", cwd: "member-app", command: "npm ci", scope: ["^package"] }],
-            check: [{ name: "coach check", cwd: "coach-tools", command: "npm run check" }],
+            setup: [{ name: "alpha deps", cwd: "project-alpha", command: "npm ci", scope: ["^package"] }],
+            check: [{ name: "beta check", cwd: "project-beta", command: "npm run check" }],
           },
         },
         "setup",
       ),
-    ).toEqual([{ name: "member deps", cwd: "member-app", command: "npm ci", scope: ["^package"] }])
-  })
-
-  test("ignores legacy setupCommand and checkCommand options", () => {
-    expect(commandPlan({ setupCommand: "npm ci" }, "setup")).toEqual([])
-    expect(commandPlan({ checkCommand: "npm test" }, "check")).toEqual([])
+    ).toEqual([{ name: "alpha deps", cwd: "project-alpha", command: "npm ci", scope: ["^package"] }])
   })
 
   test("rejects unsafe cwd and invalid regex scopes", () => {
     const options = {
       commands: {
         check: [
+          { name: "root", cwd: "/", command: "npm test" },
           { name: "abs", cwd: "/tmp", command: "npm test" },
           { name: "parent", cwd: "../app", command: "npm test" },
           { name: "regex", cwd: "app", command: "npm test", scope: ["["] },
@@ -621,6 +619,17 @@ describe("commandPlan", () => {
     expect(commandPlan(options, "check")).toEqual([
       { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
     ])
+  })
+
+  test("normalizes relative cwd spelling", () => {
+    expect(
+      commandPlan(
+        {
+          commands: { check: [{ name: "app", cwd: "./app/", command: "npm test" }] },
+        },
+        "check",
+      ),
+    ).toEqual([{ name: "app", cwd: "app", command: "npm test" }])
   })
 
   test("treats an empty scope array as no scope filter", () => {
@@ -636,62 +645,44 @@ describe("commandPlan", () => {
     ).toEqual([{ name: "ok", cwd: "app", command: "npm test" }])
   })
 
-  test("rejects regex patterns with ReDoS risk", () => {
-    expect(
-      commandPlan(
-        {
-          commands: {
-            check: [
-              { name: "dangerous", cwd: "app", command: "npm test", scope: ["(a+)+"] },
-              { name: "lookaround", cwd: "app", command: "npm test", scope: ["(?=foo)"] },
-              { name: "backref", cwd: "app", command: "npm test", scope: ["(\\w+)\\s+\\1"] },
-              { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
-            ],
-          },
-        },
-        "check",
-      ),
-    ).toEqual([{ name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] }])
-  })
-
   test("extracts unique configured scopes from command cwd values", () => {
     expect(
       configuredScopes({
         commands: {
-          setup: [{ name: "member deps", cwd: "member-app", command: "npm ci" }],
+          setup: [{ name: "alpha deps", cwd: "project-alpha", command: "npm ci" }],
           check: [
-            { name: "member check", cwd: "member-app", command: "npm test" },
-            { name: "coach check", cwd: "coach-tools", command: "npm test" },
+            { name: "alpha check", cwd: "project-alpha", command: "npm test" },
+            { name: "beta check", cwd: "project-beta", command: "npm test" },
             { name: "root", cwd: ".", command: "npm test" },
           ],
         },
       }),
-    ).toEqual(["member-app", "coach-tools"])
+    ).toEqual(["project-alpha", "project-beta"])
   })
 })
 
 describe("task scope and command matching", () => {
   test("sanitizes task scope values and custom text", () => {
-    expect(sanitizeTaskScope({ values: ["member-app", "member-app", ""], custom: " docs " })).toEqual({
-      values: ["member-app"],
+    expect(sanitizeTaskScope({ values: ["project-alpha", "project-alpha", ""], custom: " docs " })).toEqual({
+      values: ["project-alpha"],
       custom: "docs",
     })
     expect(sanitizeTaskScope({ values: [] })).toBeUndefined()
   })
 
   test("runs setup commands only when task scope includes their cwd", () => {
-    const command = { name: "member deps", cwd: "member-app", command: "npm ci" }
-    expect(commandInTaskScope(command, { values: ["member-app"] })).toBe(true)
-    expect(commandInTaskScope(command, { values: ["coach-tools"], custom: "member-app" })).toBe(true)
-    expect(commandInTaskScope(command, { values: ["coach-tools"], custom: "docs" })).toBe(false)
+    const command = { name: "alpha deps", cwd: "project-alpha", command: "npm ci" }
+    expect(commandInTaskScope(command, { values: ["project-alpha"] })).toBe(true)
+    expect(commandInTaskScope(command, { values: ["project-beta"], custom: "project-alpha" })).toBe(false)
+    expect(commandInTaskScope(command, { values: ["project-beta"], custom: "docs" })).toBe(false)
     expect(commandInTaskScope({ name: "root", cwd: ".", command: "npm ci" }, undefined)).toBe(true)
   })
 
   test("runs check commands for changed files under cwd or repo-relative scope matches", () => {
-    const command = { name: "member check", cwd: "member-app", command: "npm test", scope: ["^\.github/"] }
-    expect(commandMatchesChangedFile(command, ["member-app/app/index.tsx"])).toBe(true)
+    const command = { name: "alpha check", cwd: "project-alpha", command: "npm test", scope: ["^\\.github/"] }
+    expect(commandMatchesChangedFile(command, ["project-alpha/app/index.tsx"])).toBe(true)
     expect(commandMatchesChangedFile(command, [".github/workflows/check.yml"])).toBe(true)
-    expect(commandMatchesChangedFile(command, ["coach-tools/app.tsx"])).toBe(false)
+    expect(commandMatchesChangedFile(command, ["project-beta/app.tsx"])).toBe(false)
   })
 })
 

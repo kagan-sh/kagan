@@ -6,6 +6,14 @@ const sequence: string[] = []
 let mergeResult = { ok: true, message: "Merged kagan/x" }
 let currentBranchValue: string | undefined = "kagan/x"
 let worktreeDiffResult: { file: string }[] = []
+type MockCommandStep = {
+  name: string
+  cwd: string
+  command: string
+  status: "ran" | "skipped"
+  exitCode: number | null
+  output: string
+}
 
 mock.module("../src/git", () => ({
   bunGitRunner: () => async () => ({ code: 0, stdout: "", stderr: "" }),
@@ -43,31 +51,41 @@ mock.module("../src/check", () => ({
     commands: Array<{ name: string; cwd: string; command: string }>,
     _worktree: string,
     shouldRun: (command: { name: string; cwd: string; command: string }) => boolean,
+    _skipReason?: string,
+    recordSkipped = true,
   ) => {
     if (commands.length === 0) return undefined
+    const steps: MockCommandStep[] = commands.flatMap((command): MockCommandStep[] => {
+      if (shouldRun(command)) {
+        return [
+          {
+            name: command.name,
+            cwd: command.cwd,
+            command: command.command,
+            status: "ran",
+            exitCode: command.command === "exit 1" ? 1 : 0,
+            output: command.command === 'echo "installed"' ? "installed\n" : "",
+          },
+        ]
+      }
+      if (!recordSkipped) return []
+      return [
+        {
+          name: command.name,
+          cwd: command.cwd,
+          command: command.command,
+          status: "skipped",
+          exitCode: null,
+          output: "",
+        },
+      ]
+    })
+    if (steps.length === 0) return undefined
     return {
-      command: commands.map((command) => `${command.name}: ${command.command}`).join(" && "),
-      exitCode: commands.some((command) => command.command === "exit 1") ? 1 : 0,
-      output: commands.map((command) => (command.command === 'echo "installed"' ? "installed\n" : "")).join(""),
-      steps: commands.map((command) =>
-        shouldRun(command)
-          ? {
-              name: command.name,
-              cwd: command.cwd,
-              command: command.command,
-              status: "ran",
-              exitCode: command.command === "exit 1" ? 1 : 0,
-              output: command.command === 'echo "installed"' ? "installed\n" : "",
-            }
-          : {
-              name: command.name,
-              cwd: command.cwd,
-              command: command.command,
-              status: "skipped",
-              exitCode: null,
-              output: "",
-            },
-      ),
+      command: steps.map((step) => `${step.name}: ${step.command}`).join(" && "),
+      exitCode: steps.some((step) => step.exitCode === 1) ? 1 : 0,
+      output: steps.map((step) => step.output).join(""),
+      steps,
     }
   },
 }))
@@ -248,7 +266,7 @@ describe("createTask", () => {
     expect(setup.exitCode).toBe(1)
   })
 
-  test("records skipped setup commands outside the task scope", async () => {
+  test("records only ran setup commands outside the task scope", async () => {
     let createArg: Record<string, unknown> | undefined
     const api = {
       state: { path: { worktree: "/repo" } },
@@ -266,20 +284,44 @@ describe("createTask", () => {
       title: "Task",
       description: "",
       baseBranch: "main",
-      scope: { values: ["member-app"] },
+      scope: { values: ["project-alpha"] },
       setupCommands: [
-        { name: "member deps", cwd: "member-app", command: "npm ci" },
-        { name: "coach deps", cwd: "coach-tools", command: "npm ci" },
+        { name: "alpha deps", cwd: "project-alpha", command: "npm ci" },
+        { name: "beta deps", cwd: "project-beta", command: "npm ci" },
       ],
     })
     const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
-    expect(kagan.scope).toEqual({ values: ["member-app"] })
+    expect(kagan.scope).toEqual({ values: ["project-alpha"] })
     expect(kagan.setup).toMatchObject({
-      steps: [
-        { name: "member deps", cwd: "member-app", status: "ran" },
-        { name: "coach deps", cwd: "coach-tools", status: "skipped" },
-      ],
+      command: "alpha deps: npm ci",
+      steps: [{ name: "alpha deps", cwd: "project-alpha", status: "ran" }],
     })
+  })
+
+  test("does not run setup from custom scope text", async () => {
+    let createArg: Record<string, unknown> | undefined
+    const api = {
+      state: { path: { worktree: "/repo" } },
+      client: {
+        session: {
+          list: async () => ({ data: [] }),
+          create: async (parameters: Record<string, unknown>) => {
+            createArg = parameters
+            return { data: { id: "s1" } }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+    await createTask(api, {
+      title: "Task",
+      description: "",
+      baseBranch: "main",
+      scope: { values: [], custom: "project-alpha" },
+      setupCommands: [{ name: "alpha deps", cwd: "project-alpha", command: "npm ci" }],
+    })
+    const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
+    expect(kagan.scope).toEqual({ values: [], custom: "project-alpha" })
+    expect(kagan.setup).toBeUndefined()
   })
 })
 

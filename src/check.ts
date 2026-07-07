@@ -97,20 +97,23 @@ export async function runCommandPlan(
   worktree: string,
   shouldRun: (command: CommandSpec) => boolean,
   skipReason = "no changed files in scope",
+  recordSkipped = true,
 ): Promise<CheckResult | undefined> {
   if (commands.length === 0) return undefined
   const steps: CommandStepResult[] = []
   for (const spec of commands) {
     if (!shouldRun(spec)) {
-      steps.push({
-        name: spec.name,
-        cwd: spec.cwd,
-        command: spec.command,
-        status: "skipped",
-        exitCode: null,
-        output: "",
-        reason: skipReason,
-      })
+      if (recordSkipped) {
+        steps.push({
+          name: spec.name,
+          cwd: spec.cwd,
+          command: spec.command,
+          status: "skipped",
+          exitCode: null,
+          output: "",
+          reason: skipReason,
+        })
+      }
       continue
     }
     const result = await runCheckCommand(spec.command, join(worktree, spec.cwd))
@@ -123,8 +126,9 @@ export async function runCommandPlan(
       output: result.output,
     })
   }
+  if (steps.length === 0) return undefined
   return {
-    command: commands.map((command) => `${command.name}: ${command.command}`).join(" && "),
+    command: steps.map((step) => `${step.name}: ${step.command}`).join(" && "),
     exitCode: aggregateExitCode(steps),
     output: summarizeSteps(steps),
     steps,

@@ -230,6 +230,7 @@ export async function createTask(
     directory,
     (command) => commandInTaskScope(command, input.scope),
     "task scope does not include this cwd",
+    false,
   )
   if (setup) patch.setup = setup
   const result = await api.client.session.create(

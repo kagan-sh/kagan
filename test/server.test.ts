@@ -74,7 +74,9 @@ function makeInput(
       },
     },
     $: ((_s: TemplateStringsArray, ..._e: unknown[]) => {
-      const stdout = config.gitStdout ? config.gitStdout((_e[1] as string[]) ?? []) : (config.shellStdout ?? "")
+      const last = _e.at(-1)
+      const args = Array.isArray(last) ? last : typeof last === "string" ? last.split(/\s+/).filter(Boolean) : []
+      const stdout = config.gitStdout ? config.gitStdout(args) : (config.shellStdout ?? "")
       return {
         nothrow: () => ({
           quiet: async () => ({ stdout: Buffer.from(stdout), stderr: Buffer.from(""), exitCode: 0 }),
@@ -568,7 +570,7 @@ describe("kagan server — review entry", () => {
     const hooks = await plugin.server(input, {
       commands: {
         check: [
-          { name: "member", cwd: "tmp", command: "echo member" },
+          { name: "alpha", cwd: "tmp", command: "echo alpha" },
           { name: "workflow", cwd: "var", command: "echo workflow", scope: ["^\\.github/"] },
         ],
       },
@@ -578,8 +580,9 @@ describe("kagan server — review entry", () => {
     } as never)
 
     const checkPatch = captured.updates.find((u) => u.kagan.check)
-    expect((checkPatch?.kagan.check as { steps?: unknown[] }).steps).toEqual([
-      { name: "member", cwd: "tmp", command: "echo member", status: "ran", exitCode: 0, output: "member\n" },
+    expect(checkPatch).toBeDefined()
+    expect((checkPatch!.kagan.check as { steps?: unknown[] }).steps).toEqual([
+      { name: "alpha", cwd: "tmp", command: "echo alpha", status: "ran", exitCode: 0, output: "alpha\n" },
       { name: "workflow", cwd: "var", command: "echo workflow", status: "ran", exitCode: 0, output: "workflow\n" },
     ])
   })
