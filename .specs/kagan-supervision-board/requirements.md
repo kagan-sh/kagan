@@ -21,7 +21,7 @@ starts from a known point with the context I intend.
 #### Acceptance Criteria
 
 1. WHEN the user triggers task creation on the board THEN the create-task dialog SHALL present a
-   title field, a description field, a model selector, and a base-branch selector.
+   title field, a description field, a scope selector, a model selector, and a base-branch selector.
 2. THE create-task dialog SHALL be a custom OpenTUI component rendered inside the host dialog stack.
 3. WHERE the project exposes more than one model, the model selector SHALL open a filterable
    dropdown listing every provider/model pair plus an "Auto (session default)" entry.
@@ -36,6 +36,12 @@ starts from a known point with the context I intend.
 8. WHEN a task session is created THEN Kagan SHALL record on the session the status `backlog`, the
    board-task marker, the task number, the base branch, the worktree path, the description when
    non-blank, and the chosen model when one was selected.
+9. WHERE configured command scopes exist, the scope selector SHALL allow choosing one or more
+   configured `cwd` values; WHERE no configured scopes exist, it SHALL still allow a custom
+   free-form scope value.
+10. WHEN a task is created with a custom free-form scope THEN Kagan SHALL persist it as task context
+    for intake, but SHALL NOT use it to run shell commands unless it exactly matches a configured
+    command `cwd`.
 
 ---
 
@@ -247,27 +253,28 @@ ranked before I decide.
     outcome), Kagan SHALL offer a manual retry that clears the recorded validator session, outcome,
     and attempt count so the state-based spawn respawns it — without affecting the task's worktree —
     so recovery does not depend on a failure having been auto-detected first.
-11. WHERE the plugin options set a non-empty `checkCommand`, Kagan SHALL run that command once in the task worktree when the task enters Review, SHALL record the command, its exit code, and the last 4000 characters of combined stdout+stderr on the task, and SHALL include that evidence in the validator prompt.
-12. IF the `checkCommand` exits non-zero, times out after 300 seconds, or cannot be spawned THEN Kagan SHALL record the failure honestly and SHALL still proceed with review entry and validator spawn.
-13. WHERE check evidence is recorded, the board card SHALL display a `check ok` badge when the exit code is zero and a `check failed` badge otherwise.
-14. THE check evidence SHALL NOT be considered by column-move gating or approval gating, and SHALL NOT appear in `columnMoveDenyReason` or `approveDenyReason` logic.
-15. WHEN duplicate or concurrent session lifecycle events are delivered for a task THEN Kagan SHALL
+11. WHERE the plugin options set a non-empty legacy `checkCommand`, Kagan SHALL run that command once in the task worktree when the task enters Review, SHALL record the command, its exit code, and the last 4000 characters of combined stdout+stderr on the task, and SHALL include that evidence in the validator prompt.
+12. WHERE the plugin options set `commands.check`, Kagan SHALL run each configured check whose `cwd` contains at least one changed file, or whose optional repo-relative `scope` regex matches at least one changed file, when the task enters Review.
+13. WHEN scoped checks are evaluated THEN Kagan SHALL record every configured check as `ran` or `skipped`; a failed, timed-out, or unspawnable ran check SHALL be recorded honestly and SHALL NOT block review entry or validator spawn.
+14. WHERE check evidence is recorded, the board card SHALL display `check ok` when every configured check ran and passed, `check failed` when any ran check failed, `check skipped` when every configured check skipped, and `check partial` when some checks ran and passed while others skipped.
+15. THE check evidence SHALL NOT be considered by column-move gating or approval gating, and SHALL NOT appear in `columnMoveDenyReason` or `approveDenyReason` logic.
+16. WHEN duplicate or concurrent session lifecycle events are delivered for a task THEN Kagan SHALL
     spawn at most one validator session for it (a new spawn SHALL occur only after the recorded
     validator state is cleared).
-16. WHEN the validator records findings THEN Kagan SHALL verify each finding's `location` citation
+17. WHEN the validator records findings THEN Kagan SHALL verify each finding's `location` citation
     against the worktree diff computed the same way the review entry diff is computed.
-17. IF a finding's citation does not resolve to a file in the diff, or resolves to a file but its
+18. IF a finding's citation does not resolve to a file in the diff, or resolves to a file but its
     line falls outside every new-side hunk range in that file's patch, THEN Kagan SHALL cap the
     finding's confidence at 2 and SHALL mark it `outOfDiff` rather than discarding it.
-18. IF the worktree diff cannot be computed when findings are recorded (for example, a missing
+19. IF the worktree diff cannot be computed when findings are recorded (for example, a missing
     worktree) THEN Kagan SHALL persist the findings unmodified.
-19. WHEN the validator runs THEN Kagan SHALL instruct it to: audit the diff for changes the refined
+20. WHEN the validator runs THEN Kagan SHALL instruct it to: audit the diff for changes the refined
     prompt and resolved decisions did not ask for and report each as a misalignment finding; check
     that every added or changed test can fail when the logic it covers breaks and report one that
     cannot as a bug finding; not report findings resting on unverified speculation and cap claims
     with no concrete failure mode at confidence 2; and report anything the diff alone cannot prove
     as an uncertainty finding.
-20. IF findings are recorded by a validator session that is no longer the task's recorded validator
+21. IF findings are recorded by a validator session that is no longer the task's recorded validator
     THEN Kagan SHALL NOT persist them, so a stale write cannot attach a superseded generation's
     findings to the current one.
 
@@ -417,25 +424,33 @@ so that failures, handoffs, and portable review context are visible instead of h
 
 1. WHEN a task worktree is created THEN Kagan SHALL write an OpenCode plugin config into that
    worktree so the plugin loads for worktree-hosted task sessions.
-2. WHERE the plugin options set a non-empty `setupCommand`, Kagan SHALL run that command once in the
-   fresh task worktree at creation, SHALL record the command, exit code, and last 4000 characters of
-   output, and SHALL show `setup ok` or `setup failed` on the card without blocking task creation.
-3. WHERE a Review task is sent back at or above the configured `sendBackStopThreshold`, Kagan SHALL
+2. WHERE the plugin options set a non-empty legacy `setupCommand`, Kagan SHALL run that command once
+   in the fresh task worktree at creation, SHALL record the command, exit code, and last 4000
+   characters of output, and SHALL show `setup ok` or `setup failed` on the card without blocking
+   task creation.
+3. WHERE the plugin options set `commands.setup`, Kagan SHALL run each setup command whose `cwd` is
+   included in the task's selected scope, record skipped setup commands as skipped evidence, and use
+   the same `setup ok` / `setup failed` / `setup skipped` / `setup partial` badge rules as checks.
+4. WHERE a Review task is sent back at or above the configured `sendBackStopThreshold`, Kagan SHALL
    ask whether to iterate again, let the human take over, or leave the task in Review.
-4. WHEN a board task or its active iteration waits on a permission reply THEN Kagan SHALL record an
+5. WHEN a board task or its active iteration waits on a permission reply THEN Kagan SHALL record an
    awaiting-input marker on the root task and surface a `needs you` badge until the permission is
    answered.
-5. WHEN a helper failure is newly observed THEN Kagan SHALL surface a board notice once for that
+6. WHEN a helper failure is newly observed THEN Kagan SHALL surface a board notice once for that
    failure and keep the persistent failure badge until retry or success clears it.
-6. WHEN the board opens for the first time in a run THEN Kagan SHALL offer the onboarding dialog,
+7. WHEN the board opens for the first time in a run THEN Kagan SHALL offer the onboarding dialog,
    unless the user has opted out; the user SHALL be able to reopen the tour at any time via the
    `kagan.tutorial` palette command (`/kagan-tutorial`), regardless of the opt-out.
-7. WHEN the user exports a trust packet THEN Kagan SHALL serialize the task's title, status, intake,
+8. WHEN the user exports a trust packet THEN Kagan SHALL serialize the task's title, status, intake,
    findings, prior triage, reports, and diff stats as JSON; WHEN the user imports one THEN Kagan
    SHALL display it read-only without mutating local tasks.
-8. WHEN concurrent handlers patch the same session's `kagan` metadata THEN Kagan SHALL serialize the
+9. WHEN concurrent handlers patch the same session's `kagan` metadata THEN Kagan SHALL serialize the
    read-modify-write operations per session so one patch cannot clobber another, and a failed patch
    SHALL NOT block later patches for that session.
-9. WHEN the user archives a Done task THEN Kagan SHALL stamp the session's `time.archived` via the
-   session API and remove it from the board on the next refresh; Kagan SHALL NOT offer an unarchive
-   action, since the session remains reachable through OpenCode's own session tooling.
+10. WHEN the user archives a Done task THEN Kagan SHALL stamp the session's `time.archived` via the
+    session API and remove it from the board on the next refresh; Kagan SHALL NOT offer an unarchive
+    action, since the session remains reachable through OpenCode's own session tooling.
+11. WHEN the user opens Kagan settings THEN Kagan SHALL show the configurable plugin options and a
+    JSON preview; WHEN the user saves settings THEN Kagan SHALL update the Kagan plugin entry in the
+    project's `opencode.json` only, preserving unrelated config entries, and SHALL tell the user to
+    restart OpenCode or reopen the project before expecting the saved settings to apply.

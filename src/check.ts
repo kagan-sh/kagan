@@ -1,4 +1,24 @@
-export type CheckResult = { command: string; exitCode: number | null; output: string }
+import { join } from "node:path"
+
+export type CommandSpec = {
+  name: string
+  cwd: string
+  command: string
+  scope?: string[]
+  always?: boolean
+}
+
+export type CommandStepResult = {
+  name: string
+  cwd: string
+  command: string
+  status: "ran" | "skipped"
+  exitCode: number | null
+  output: string
+  reason?: string
+}
+
+export type CheckResult = { command: string; exitCode: number | null; output: string; steps?: CommandStepResult[] }
 
 const OUTPUT_LIMIT = 4000
 
@@ -53,5 +73,61 @@ export async function runCheckCommand(command: string, cwd: string, timeoutMs = 
     }
   } finally {
     if (timeoutID !== undefined) clearTimeout(timeoutID)
+  }
+}
+
+function aggregateExitCode(steps: CommandStepResult[]): number | null {
+  const failed = steps.find((step) => step.status === "ran" && step.exitCode !== 0)
+  if (failed) return failed.exitCode
+  return 0
+}
+
+function summarizeSteps(steps: CommandStepResult[]): string {
+  return steps
+    .map((step) => {
+      if (step.status === "skipped") return `${step.name}: skipped (${step.reason ?? "not in scope"})`
+      const exit = step.exitCode === null ? "?" : step.exitCode
+      const output = step.output.trim()
+      return `${step.name}: exited ${exit}${output ? `\n${output}` : ""}`
+    })
+    .join("\n\n")
+}
+
+export async function runCommandPlan(
+  commands: readonly CommandSpec[],
+  worktree: string,
+  shouldRun: (command: CommandSpec) => boolean,
+  skipReason = "no changed files in scope",
+): Promise<CheckResult | undefined> {
+  if (commands.length === 0) return undefined
+  const steps: CommandStepResult[] = []
+  for (const spec of commands) {
+    if (!shouldRun(spec)) {
+      steps.push({
+        name: spec.name,
+        cwd: spec.cwd,
+        command: spec.command,
+        status: "skipped",
+        exitCode: null,
+        output: "",
+        reason: skipReason,
+      })
+      continue
+    }
+    const result = await runCheckCommand(spec.command, join(worktree, spec.cwd))
+    steps.push({
+      name: spec.name,
+      cwd: spec.cwd,
+      command: spec.command,
+      status: "ran",
+      exitCode: result.exitCode,
+      output: result.output,
+    })
+  }
+  return {
+    command: commands.map((command) => `${command.name}: ${command.command}`).join(" && "),
+    exitCode: aggregateExitCode(steps),
+    output: summarizeSteps(steps),
+    steps,
   }
 }

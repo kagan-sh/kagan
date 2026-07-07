@@ -95,6 +95,7 @@ describe("footerHints", () => {
       { key: "enter", label: "menu" },
       { key: "n", label: "new" },
       { key: "/", label: "filter" },
+      { key: ",", label: "settings" },
       { key: "?", label: "help" },
       { key: "q", label: "quit" },
     ])
@@ -250,6 +251,14 @@ describe("createBoardCommands", () => {
     expect(helpOpen).toBe(true)
     help?.run()
     expect(helpOpen).toBe(false)
+  })
+
+  test("kagan.settings navigates to the settings route", () => {
+    let route = ""
+    const api = { route: { navigate: (name: string) => (route = name) } } as unknown as TuiPluginApi
+    const commands = createBoardCommands(api, {} as BoardStore, () => {})
+    commands.find((command) => command.name === "kagan.settings")?.run()
+    expect(route).toBe("kagan-settings")
   })
 
   test("kagan.close closes the help overlay when it is open instead of navigating", () => {

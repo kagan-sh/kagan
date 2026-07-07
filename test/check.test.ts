@@ -1,5 +1,20 @@
-import { describe, expect, test } from "bun:test"
-import { runCheckCommand } from "../src/check"
+import { afterEach, describe, expect, test } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
+import { runCheckCommand, runCommandPlan } from "../src/check"
+
+const tempDirs: string[] = []
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+async function tempWorktree(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "kagan-check-"))
+  tempDirs.push(dir)
+  return dir
+}
 
 describe("runCheckCommand", () => {
   test("captures exit code and combined stdout + stderr", async () => {
@@ -45,5 +60,47 @@ describe("runCheckCommand", () => {
     const result = await runCheckCommand("echo ok", "/definitely-not-a-real-directory")
     expect(result.exitCode).toBeNull()
     expect(result.output.length).toBeGreaterThan(0)
+  })
+})
+
+describe("runCommandPlan", () => {
+  test("records skipped commands as evidence", async () => {
+    const worktree = await tempWorktree()
+    const result = await runCommandPlan(
+      [
+        { name: "member", cwd: ".", command: "echo member" },
+        { name: "coach", cwd: ".", command: "echo coach" },
+      ],
+      worktree,
+      (command) => command.name === "member",
+    )
+    expect(result?.exitCode).toBe(0)
+    expect(result?.steps).toEqual([
+      { name: "member", cwd: ".", command: "echo member", status: "ran", exitCode: 0, output: "member\n" },
+      {
+        name: "coach",
+        cwd: ".",
+        command: "echo coach",
+        status: "skipped",
+        exitCode: null,
+        output: "",
+        reason: "no changed files in scope",
+      },
+    ])
+  })
+
+  test("continues after a failing command", async () => {
+    const worktree = await tempWorktree()
+    const result = await runCommandPlan(
+      [
+        { name: "fail", cwd: ".", command: "exit 4" },
+        { name: "next", cwd: ".", command: "echo next" },
+      ],
+      worktree,
+      () => true,
+    )
+    expect(result?.exitCode).toBe(4)
+    expect(result?.steps?.map((step) => step.status)).toEqual(["ran", "ran"])
+    expect(result?.output).toContain("next")
   })
 })

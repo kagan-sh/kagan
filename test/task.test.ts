@@ -3,7 +3,11 @@ import {
   approveDenyReason,
   canRetryHelper,
   checkCommand,
+  commandInTaskScope,
+  commandMatchesChangedFile,
+  commandPlan,
   columnMoveDenyReason,
+  configuredScopes,
   countInProgressForMove,
   getRefinedPrompt,
   helper,
@@ -22,6 +26,7 @@ import {
   resolveIntakeDecision,
   sanitizeIntakeDecisions,
   setupCommand,
+  sanitizeTaskScope,
   validMode,
   sortFindingsByConfidence,
   helperRetries,
@@ -110,6 +115,15 @@ describe("kagan() metadata view", () => {
     expect(kagan({ kagan: { generation: 3 } }).generation).toBe(3)
     expect(kagan({ kagan: {} }).generation).toBe(1)
     expect(kagan(undefined).generation).toBe(1)
+  })
+
+  test("scope returns sanitized task scope metadata", () => {
+    expect(kagan({ kagan: { scope: { values: ["member-app", "member-app"], custom: " docs " } } }).scope).toEqual({
+      values: ["member-app"],
+      custom: "docs",
+    })
+    expect(kagan({ kagan: { scope: { values: [] } } }).scope).toBeUndefined()
+    expect(kagan({ kagan: { scope: null } }).scope).toBeUndefined()
   })
 })
 
@@ -586,6 +600,87 @@ describe.each([
     expect(reader({ [key]: "   " })).toBeUndefined()
     expect(reader({ [key]: 42 })).toBeUndefined()
     expect(reader()).toBeUndefined()
+  })
+})
+
+describe("commandPlan", () => {
+  test("normalizes configured setup and check commands", () => {
+    expect(
+      commandPlan(
+        {
+          commands: {
+            setup: [{ name: "member deps", cwd: "member-app", command: "npm ci", scope: ["^package"] }],
+            check: [{ name: "coach check", cwd: "coach-tools", command: "npm run check" }],
+          },
+        },
+        "setup",
+      ),
+    ).toEqual([{ name: "member deps", cwd: "member-app", command: "npm ci", scope: ["^package"] }])
+  })
+
+  test("keeps legacy setupCommand and checkCommand as one-step plans", () => {
+    expect(commandPlan({ setupCommand: "npm ci" }, "setup")).toEqual([
+      { name: "setup", cwd: ".", command: "npm ci", always: true },
+    ])
+    expect(commandPlan({ checkCommand: "npm test" }, "check")).toEqual([
+      { name: "check", cwd: ".", command: "npm test", always: true },
+    ])
+  })
+
+  test("rejects unsafe cwd and invalid regex scopes", () => {
+    const options = {
+      commands: {
+        check: [
+          { name: "abs", cwd: "/tmp", command: "npm test" },
+          { name: "parent", cwd: "../app", command: "npm test" },
+          { name: "regex", cwd: "app", command: "npm test", scope: ["["] },
+          { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
+        ],
+      },
+    }
+    expect(commandPlan(options, "check")).toEqual([
+      { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
+    ])
+  })
+
+  test("extracts unique configured scopes from command cwd values", () => {
+    expect(
+      configuredScopes({
+        commands: {
+          setup: [{ name: "member deps", cwd: "member-app", command: "npm ci" }],
+          check: [
+            { name: "member check", cwd: "member-app", command: "npm test" },
+            { name: "coach check", cwd: "coach-tools", command: "npm test" },
+            { name: "root", cwd: ".", command: "npm test" },
+          ],
+        },
+      }),
+    ).toEqual(["member-app", "coach-tools"])
+  })
+})
+
+describe("task scope and command matching", () => {
+  test("sanitizes task scope values and custom text", () => {
+    expect(sanitizeTaskScope({ values: ["member-app", "member-app", ""], custom: " docs " })).toEqual({
+      values: ["member-app"],
+      custom: "docs",
+    })
+    expect(sanitizeTaskScope({ values: [] })).toBeUndefined()
+  })
+
+  test("runs setup commands only when task scope includes their cwd", () => {
+    const command = { name: "member deps", cwd: "member-app", command: "npm ci" }
+    expect(commandInTaskScope(command, { values: ["member-app"] })).toBe(true)
+    expect(commandInTaskScope(command, { values: ["coach-tools"], custom: "member-app" })).toBe(true)
+    expect(commandInTaskScope(command, { values: ["coach-tools"], custom: "docs" })).toBe(false)
+    expect(commandInTaskScope({ name: "root", cwd: ".", command: "npm ci" }, undefined)).toBe(true)
+  })
+
+  test("runs check commands for changed files under cwd or repo-relative scope matches", () => {
+    const command = { name: "member check", cwd: "member-app", command: "npm test", scope: ["^\.github/"] }
+    expect(commandMatchesChangedFile(command, ["member-app/app/index.tsx"])).toBe(true)
+    expect(commandMatchesChangedFile(command, [".github/workflows/check.yml"])).toBe(true)
+    expect(commandMatchesChangedFile(command, ["coach-tools/app.tsx"])).toBe(false)
   })
 })
 

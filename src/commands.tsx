@@ -26,6 +26,7 @@ import { openFindingsReviewDialog } from "./findings-review"
 import { isTrustPacket, openTrustPacketView, serializeTrustPacket } from "./trust-packet"
 import type { createBoardStore } from "./store"
 import type { BoardSession } from "./types"
+import { SETTINGS_ROUTE } from "./types"
 
 export type BoardStore = ReturnType<typeof createBoardStore>
 
@@ -49,6 +50,7 @@ export const BOARD_BINDINGS = [
   { key: "r", cmd: "kagan.retry", desc: "Retry a failed intake or review", short: "retry" },
   { key: "/", cmd: "kagan.filter", desc: "Filter cards", short: "filter" },
   { key: "?", cmd: "kagan.help", desc: "Show help", short: "help" },
+  { key: ",", cmd: "kagan.settings", desc: "Open settings", short: "settings" },
   { key: "q", cmd: "kagan.close", desc: "Close Kagan", short: "quit" },
   { key: "escape", cmd: "kagan.dismiss", desc: "Dismiss help or clear filter", short: "dismiss" },
 ] as const
@@ -127,7 +129,7 @@ export function footerHints(selected: BoardSession | undefined, hasFilter: boole
   }
   hints.push({ key: "/", label: "filter" })
   if (hasFilter) hints.push({ key: "esc", label: "clears it" })
-  hints.push({ key: "?", label: "help" }, { key: "q", label: "quit" })
+  hints.push({ key: ",", label: "settings" }, { key: "?", label: "help" }, { key: "q", label: "quit" })
   return hints
 }
 
@@ -274,6 +276,10 @@ export function createBoardCommands(
 
   const showHelp = () => {
     setHelpOpen((open) => !open)
+  }
+
+  const openSettings = () => {
+    api.route.navigate(SETTINGS_ROUTE)
   }
 
   const promptDelete = () => {
@@ -819,6 +825,10 @@ export function createBoardCommands(
       title: "Import trust packet",
       category: "Kagan",
       run: importPacket,
+    },
+    {
+      name: "kagan.settings",
+      run: openSettings,
     },
     {
       name: "kagan.help",

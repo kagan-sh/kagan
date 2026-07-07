@@ -2,6 +2,7 @@ import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { z } from "zod"
 import { COLUMNS, DEFAULT_IN_PROGRESS_CAP, type ColumnType } from "./types"
 import { newSideHunkRanges } from "./git"
+import type { CommandSpec } from "./check"
 
 export function inProgressCap(options?: Record<string, unknown>): number {
   const value = options?.inProgressLimit
@@ -37,6 +38,104 @@ export function setupCommand(options?: Record<string, unknown>): string | undefi
 export function checkCommand(options?: Record<string, unknown>): string | undefined {
   const value = options?.checkCommand
   return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+export type TaskScope = { values: string[]; custom?: string }
+
+function isSafeCwd(cwd: string): boolean {
+  return cwd !== "" && !cwd.startsWith("/") && !cwd.split(/[\\/]+/).includes("..")
+}
+
+function validScopePatterns(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return undefined
+  const patterns: string[] = []
+  for (const raw of value) {
+    if (typeof raw !== "string") return undefined
+    const pattern = raw.trim()
+    if (!pattern) return undefined
+    try {
+      new RegExp(pattern)
+    } catch {
+      return undefined
+    }
+    patterns.push(pattern)
+  }
+  return patterns.length > 0 ? patterns : undefined
+}
+
+function commandSpec(value: unknown, fallbackName: string): CommandSpec | undefined {
+  if (typeof value === "string") {
+    const command = value.trim()
+    return command ? { name: fallbackName, cwd: ".", command } : undefined
+  }
+  if (typeof value !== "object" || value === null) return undefined
+  const raw = value as Record<string, unknown>
+  const name = typeof raw.name === "string" ? raw.name.trim() : ""
+  const cwd = typeof raw.cwd === "string" ? raw.cwd.trim().replace(/\/+$/, "") || "." : ""
+  const command = typeof raw.command === "string" ? raw.command.trim() : ""
+  const scope = validScopePatterns(raw.scope)
+  if (!name || !command || !isSafeCwd(cwd)) return undefined
+  if (raw.scope !== undefined && scope === undefined) return undefined
+  return scope ? { name, cwd, command, scope } : { name, cwd, command }
+}
+
+function commandSpecs(value: unknown, fallbackPrefix: string): CommandSpec[] {
+  if (typeof value === "string") {
+    const spec = commandSpec(value, fallbackPrefix)
+    return spec ? [spec] : []
+  }
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item, index) => commandSpec(item, `${fallbackPrefix} ${index + 1}`))
+    .filter((spec): spec is CommandSpec => spec !== undefined)
+}
+
+export function commandPlan(options: Record<string, unknown> | undefined, kind: "setup" | "check"): CommandSpec[] {
+  const commands = options?.commands
+  if (typeof commands === "object" && commands !== null) {
+    const plan = commandSpecs((commands as Record<string, unknown>)[kind], kind)
+    if (plan.length > 0) return plan
+  }
+  const legacy = kind === "setup" ? setupCommand(options) : checkCommand(options)
+  return legacy ? [{ name: kind, cwd: ".", command: legacy, always: true }] : []
+}
+
+export function configuredScopes(options?: Record<string, unknown>): string[] {
+  const seen = new Set<string>()
+  for (const command of [...commandPlan(options, "setup"), ...commandPlan(options, "check")]) {
+    if (command.cwd === "." || seen.has(command.cwd)) continue
+    seen.add(command.cwd)
+  }
+  return [...seen]
+}
+
+export function sanitizeTaskScope(value: unknown): TaskScope | undefined {
+  if (typeof value !== "object" || value === null) return undefined
+  const raw = value as Record<string, unknown>
+  const values = Array.isArray(raw.values)
+    ? raw.values
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim())
+    : []
+  const unique = [...new Set(values)]
+  const custom = typeof raw.custom === "string" && raw.custom.trim() ? raw.custom.trim() : undefined
+  return unique.length > 0 || custom ? { values: unique, ...(custom ? { custom } : {}) } : undefined
+}
+
+export function commandInTaskScope(command: CommandSpec, scope?: TaskScope): boolean {
+  if (command.cwd === ".") return true
+  if (!scope) return false
+  return scope.values.includes(command.cwd) || scope.custom === command.cwd
+}
+
+export function commandMatchesChangedFile(command: CommandSpec, changedFiles: readonly string[]): boolean {
+  if (command.always) return true
+  const cwdPrefix = command.cwd === "." ? "" : `${command.cwd}/`
+  const scope = command.scope?.map((pattern) => new RegExp(pattern)) ?? []
+  return changedFiles.some(
+    (file) => file === command.cwd || file.startsWith(cwdPrefix) || scope.some((regex) => regex.test(file)),
+  )
 }
 
 export type ModelRef = { providerID: string; modelID: string }
@@ -162,7 +261,27 @@ const CheckResultSchema = z
     command: z.string(),
     output: z.string(),
     exitCode: z.union([z.number(), z.null()]),
+    steps: z
+      .array(
+        z.object({
+          name: z.string(),
+          cwd: z.string(),
+          command: z.string(),
+          status: z.enum(["ran", "skipped"]),
+          exitCode: z.union([z.number(), z.null()]),
+          output: z.string(),
+          reason: z.string().optional().catch(undefined),
+        }),
+      )
+      .optional()
+      .catch(undefined),
   })
+  .optional()
+  .catch(undefined)
+
+const TaskScopeSchema = z
+  .object({ values: z.array(z.string()).optional().catch([]), custom: z.string().optional().catch(undefined) })
+  .transform((scope) => sanitizeTaskScope(scope))
   .optional()
   .catch(undefined)
 
@@ -206,6 +325,7 @@ const MetadataSchema = z.object({
   priorTriage: FindingsArraySchema,
   check: CheckResultSchema,
   setup: CheckResultSchema,
+  scope: TaskScopeSchema,
 })
 
 type Metadata = z.infer<typeof MetadataSchema>

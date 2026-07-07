@@ -1,6 +1,8 @@
 import type { Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin/tool"
 import {
+  commandMatchesChangedFile,
+  commandPlan,
   columnMoveDenyReason,
   countInProgressForMove,
   helper,
@@ -20,7 +22,7 @@ import { spawnIntake } from "./intake"
 import { getStatus, lastAssistantText, patchKagan } from "./session-api"
 import type { ColumnType } from "./types"
 import { spawnValidator } from "./validator"
-import { runCheckCommand, type CheckResult } from "./check"
+import { runCommandPlan, type CheckResult } from "./check"
 
 type SessionData = {
   title?: string
@@ -207,17 +209,23 @@ async function onEnterBacklog(input: PluginInput, sessionID: string, options?: R
   try {
     const session = await getSessionData(input, sessionID)
     const metadata = session?.metadata
-    if (kagan(metadata).boardTask !== true) return
+    const view = kagan(metadata)
+    if (view.boardTask !== true) return
     const before = helper(metadata, "intake")
     if (before.outcome !== undefined) return
     if (before.sessionID !== undefined) return
 
     const attempts = before.attempts + 1
-    const description = kagan(metadata).description
+    const description = view.description
     const references = await resolveTaskRefs(input, description)
     let childID: string | undefined
     try {
-      childID = await spawnIntake(input, sessionID, { title: session?.title ?? "", description, references }, options)
+      childID = await spawnIntake(
+        input,
+        sessionID,
+        { title: session?.title ?? "", description, references, scope: view.scope },
+        options,
+      )
     } catch (error) {
       failure = { attempts, message: errorMessage(error) }
       return
@@ -255,10 +263,13 @@ async function onEnterReview(input: PluginInput, sessionID: string, options?: Re
 
     const attempts = before.attempts + 1
     const diffs = await worktreeDiffs(shellGitRunner(input.$), worktree, view.baseBranch ?? "HEAD")
-    const checkCommand = typeof options?.checkCommand === "string" ? options.checkCommand.trim() : undefined
+    const checkCommands = commandPlan(options, "check")
     let check: CheckResult | undefined
-    if (checkCommand) {
-      check = await runCheckCommand(checkCommand, worktree)
+    if (checkCommands.length > 0) {
+      const changedFiles = diffs.map((diff) => diff.file).filter((file): file is string => typeof file === "string")
+      check = await runCommandPlan(checkCommands, worktree, (command) =>
+        commandMatchesChangedFile(command, changedFiles),
+      )
       await patchKagan(input.client, sessionID, { check })
     }
     let childID: string | undefined

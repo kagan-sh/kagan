@@ -525,10 +525,10 @@ describe("kagan server — review entry", () => {
     } as never)
 
     const checkPatch = captured.updates.find((u) => u.kagan.check)
-    expect(checkPatch?.kagan.check).toEqual({
-      command: "echo check-ok",
+    expect(checkPatch?.kagan.check).toMatchObject({
+      command: "check: echo check-ok",
       exitCode: 0,
-      output: "check-ok\n",
+      steps: [{ name: "check", cwd: ".", command: "echo check-ok", status: "ran", exitCode: 0, output: "check-ok\n" }],
     })
 
     const validatorPrompt = captured.prompts.find((p) => p.id === "validator-1")
@@ -536,6 +536,45 @@ describe("kagan server — review entry", () => {
     expect(text).toContain("Deterministic check evidence")
     expect(text).toContain("`echo check-ok` exited 0")
     expect(text).toContain("check-ok")
+  })
+
+  test("scoped check commands run from changed cwd or repo-relative scope matches", async () => {
+    const metadata = { kagan: { ...boardReview.kagan, worktree: "/tmp", baseBranch: "main" } }
+    const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
+    const { input, captured } = makeInput({ store, createId: "validator-1" })
+    const hooks = await plugin.server(input, {
+      commands: {
+        check: [
+          { name: "member", cwd: "member-app", command: "echo member" },
+          { name: "coach", cwd: "coach-tools", command: "echo coach", scope: ["^\.github/"] },
+        ],
+      },
+    })
+    await hooks.event?.({
+      event: { type: "session.updated", properties: { info: { id: "s1", metadata } } },
+    } as never)
+
+    const checkPatch = captured.updates.find((u) => u.kagan.check)
+    expect((checkPatch?.kagan.check as { steps?: unknown[] }).steps).toEqual([
+      {
+        name: "member",
+        cwd: "member-app",
+        command: "echo member",
+        status: "skipped",
+        exitCode: null,
+        output: "",
+        reason: "no changed files in scope",
+      },
+      {
+        name: "coach",
+        cwd: "coach-tools",
+        command: "echo coach",
+        status: "skipped",
+        exitCode: null,
+        output: "",
+        reason: "no changed files in scope",
+      },
+    ])
   })
 
   test("with a failing check command, still spawns the validator and records the failure", async () => {
@@ -548,7 +587,7 @@ describe("kagan server — review entry", () => {
     } as never)
 
     const checkPatch = captured.updates.find((u) => u.kagan.check)
-    expect(checkPatch?.kagan.check).toMatchObject({ command: "exit 3", exitCode: 3 })
+    expect(checkPatch?.kagan.check).toMatchObject({ command: "check: exit 3", exitCode: 3 })
 
     const validatorCreate = captured.creates.find(
       (c) => (c.metadata as { kagan?: { role?: string } })?.kagan?.role === "validator",

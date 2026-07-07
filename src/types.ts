@@ -1,6 +1,7 @@
 import type { Session } from "@opencode-ai/sdk/v2"
 
 export const ROUTE = "kagan"
+export const SETTINGS_ROUTE = "kagan-settings"
 
 export type ColumnType = "backlog" | "in_progress" | "review" | "done"
 

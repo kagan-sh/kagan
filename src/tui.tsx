@@ -2,9 +2,10 @@
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createRoot } from "solid-js"
 import { Board } from "./board"
+import { Settings } from "./settings"
 import { showOnboarding } from "./onboarding"
 import { createBoardStore, createSessionEventSubscription, createSessionStatusSubscription } from "./store"
-import { ROUTE } from "./types"
+import { ROUTE, SETTINGS_ROUTE } from "./types"
 
 const tui: TuiPlugin = async (api, options) => {
   const store = createRoot(() => createBoardStore(api, options))
@@ -17,6 +18,10 @@ const tui: TuiPlugin = async (api, options) => {
     {
       name: ROUTE,
       render: () => <Board api={api} store={store} />,
+    },
+    {
+      name: SETTINGS_ROUTE,
+      render: () => <Settings api={api} options={options} />,
     },
   ])
 
@@ -31,6 +36,16 @@ const tui: TuiPlugin = async (api, options) => {
         run() {
           api.route.navigate(ROUTE)
           store.refresh()
+        },
+      },
+      {
+        name: "kagan.settings",
+        title: "Open Kagan settings",
+        category: "Kagan",
+        namespace: "palette",
+        slashName: "kagan-settings",
+        run() {
+          api.route.navigate(SETTINGS_ROUTE)
         },
       },
       {

@@ -28,7 +28,7 @@ Or add a local clone to your project's `opencode.json`:
 
 Open the board with `/kagan` from the command palette, the `kagan` palette command, or `<leader>k` (the leader key defaults to `ctrl+x`).
 
-Pass options by using the array-of-array form — see the [configuration reference](https://docs.kagan.sh/reference/configuration/).
+Pass options by using the array-of-array form, or open `/kagan-settings` from the project — see the [configuration reference](https://docs.kagan.sh/reference/configuration/).
 
 ## Docs
 

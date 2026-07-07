@@ -2,10 +2,10 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { useKeyboard } from "@opentui/solid"
 import { TextAttributes, type TextareaRenderable } from "@opentui/core"
-import { createSignal, onMount } from "solid-js"
+import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { createTask, getOrder, setOrder } from "./session-api"
 import { bunGitRunner, listLocalBranches } from "./git"
-import type { ModelRef } from "./task"
+import type { ModelRef, TaskScope } from "./task"
 import type { createBoardStore } from "./store"
 
 type BoardStore = ReturnType<typeof createBoardStore>
@@ -15,9 +15,17 @@ type ModelChoice = { label: string; model?: ModelRef }
 type FormState = {
   title: string
   description: string
+  scope: TaskScope
+  scopeFilter: string
   modelIndex: number
   branchIndex: number
   focusIndex: number
+}
+
+function scopeLabel(scope: TaskScope): string {
+  const parts = [...scope.values]
+  if (scope.custom) parts.push(scope.custom)
+  return parts.length > 0 ? parts.join(", ") : "Not set"
 }
 
 function collectModels(api: TuiPluginApi): ModelChoice[] {
@@ -54,13 +62,16 @@ function CreateTaskForm(props: {
     const description = descriptionRef?.plainText ?? state.description
     props.api.ui.dialog.clear()
     try {
-      const session = await createTask(props.api, {
+      const scope = scopeLabel(state.scope) === "Not set" ? undefined : state.scope
+      const input = {
         title: trimmed,
         description,
         model: props.models[state.modelIndex]?.model,
         baseBranch: props.branches[state.branchIndex] ?? "HEAD",
-        setupCommand: props.store.setupCommand,
-      })
+        setupCommands: props.store.setupCommands,
+        ...(scope ? { scope } : {}),
+      }
+      const session = await createTask(props.api, input)
       setOrder(props.api, "backlog", [...getOrder(props.api, "backlog"), session.id])
       await props.store.refresh()
       props.store.notify({ variant: "success", title: "Kagan", message: `Created "${trimmed}"` })
@@ -76,7 +87,11 @@ function CreateTaskForm(props: {
   const openPicker = () => {
     state.focusIndex = focusIndex()
     state.description = descriptionRef?.plainText ?? state.description
-    const model = focusIndex() === 2
+    if (focusIndex() === 2) {
+      openScopePicker(props.api, props.store.configuredScopes, state, props.reopen)
+      return
+    }
+    const model = focusIndex() === 3
     const options = model
       ? props.models.map((choice, index) => ({ title: choice.label, value: index }))
       : props.branches.map((branch, index) => ({ title: branch, value: index }))
@@ -125,15 +140,15 @@ function CreateTaskForm(props: {
       return
     }
     if (key.name === "tab") {
-      setFocusIndex((index) => (key.shift ? (index + 3) % 4 : (index + 1) % 4))
+      setFocusIndex((index) => (key.shift ? (index + 4) % 5 : (index + 1) % 5))
       return
     }
     if (focusIndex() === 1) return
     if (key.name === "down") {
-      setFocusIndex((index) => (index + 1) % 4)
+      setFocusIndex((index) => (index + 1) % 5)
       return
     }
-    if (key.name === "up") setFocusIndex((index) => (index + 3) % 4)
+    if (key.name === "up") setFocusIndex((index) => (index + 4) % 5)
   })
 
   const labelColor = (index: number) => (focusIndex() === index ? theme().primary : theme().textMuted)
@@ -171,14 +186,21 @@ function CreateTaskForm(props: {
       </box>
       <box flexDirection="row" justifyContent="space-between">
         <box flexDirection="row" gap={1}>
-          <text fg={labelColor(2)}>Model</text>
+          <text fg={labelColor(2)}>Scope</text>
+          <text fg={theme().text}>{scopeLabel(state.scope)}</text>
+        </box>
+        <text fg={theme().textMuted}>›</text>
+      </box>
+      <box flexDirection="row" justifyContent="space-between">
+        <box flexDirection="row" gap={1}>
+          <text fg={labelColor(3)}>Model</text>
           <text fg={theme().text}>{props.models[state.modelIndex]?.label ?? "Auto (session default)"}</text>
         </box>
         <text fg={theme().textMuted}>›</text>
       </box>
       <box flexDirection="row" justifyContent="space-between">
         <box flexDirection="row" gap={1}>
-          <text fg={labelColor(3)}>Base branch</text>
+          <text fg={labelColor(4)}>Base branch</text>
           <text fg={theme().text}>{props.branches[state.branchIndex] ?? "HEAD"}</text>
         </box>
         <text fg={theme().textMuted}>›</text>
@@ -206,6 +228,8 @@ export async function openCreateTaskDialog(api: TuiPluginApi, store: BoardStore)
   const state: FormState = {
     title: "",
     description: "",
+    scope: { values: [] },
+    scopeFilter: "",
     modelIndex: 0,
     branchIndex: Math.max(0, branches.indexOf(api.state.vcs?.branch ?? "")),
     focusIndex: 0,
@@ -216,4 +240,125 @@ export async function openCreateTaskDialog(api: TuiPluginApi, store: BoardStore)
     ))
   }
   showForm()
+}
+
+function openCustomScopePrompt(api: TuiPluginApi, state: FormState, reopenScope: () => void) {
+  api.ui.dialog.replace(() => (
+    <api.ui.DialogPrompt
+      title="Custom scope"
+      placeholder="docs, infra, shared config..."
+      value={state.scope.custom ?? ""}
+      onConfirm={(value) => {
+        const custom = value.trim()
+        state.scope = { ...state.scope, ...(custom ? { custom } : { custom: undefined }) }
+        reopenScope()
+      }}
+      onCancel={reopenScope}
+    />
+  ))
+}
+
+function ScopePicker(props: {
+  api: TuiPluginApi
+  scopes: string[]
+  state: FormState
+  reopenTask: () => void
+  reopenScope: () => void
+}) {
+  const theme = () => props.api.theme.current
+  const [filter, setFilter] = createSignal(props.state.scopeFilter)
+  const [index, setIndex] = createSignal(0)
+  const options = createMemo(() => {
+    const query = filter().trim().toLowerCase()
+    const filtered = query ? props.scopes.filter((scope) => scope.toLowerCase().includes(query)) : props.scopes
+    return [...filtered, "custom..."]
+  })
+  const close = () => {
+    props.state.scopeFilter = filter()
+    props.reopenTask()
+  }
+  const toggle = (scope: string) => {
+    const values = props.state.scope.values.includes(scope)
+      ? props.state.scope.values.filter((value) => value !== scope)
+      : [...props.state.scope.values, scope]
+    props.state.scope = { ...props.state.scope, values }
+  }
+
+  onMount(() => props.api.ui.dialog.setSize("medium"))
+
+  useKeyboard((key) => {
+    if (key.name === "escape") {
+      close()
+      return
+    }
+    if (key.name === "down") {
+      setIndex((value) => Math.min(value + 1, options().length - 1))
+      return
+    }
+    if (key.name === "up") {
+      setIndex((value) => Math.max(value - 1, 0))
+      return
+    }
+    if (key.name === " " || key.name === "space") {
+      const scope = options()[index()]
+      if (!scope) return
+      if (scope === "custom...") openCustomScopePrompt(props.api, props.state, props.reopenScope)
+      else toggle(scope)
+      return
+    }
+    if (key.name === "return") close()
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme().text} attributes={TextAttributes.BOLD}>
+          Scope
+        </text>
+        <text fg={theme().textMuted}>esc</text>
+      </box>
+      <box flexDirection="column">
+        <text fg={theme().textMuted}>filter</text>
+        <input focused={true} value={filter()} onInput={setFilter} placeholder="Filter configured scopes" />
+      </box>
+      <box flexDirection="column">
+        <For each={options()}>
+          {(scope, i) => {
+            const selected = () => i() === index()
+            const checked = () => scope !== "custom..." && props.state.scope.values.includes(scope)
+            return (
+              <box backgroundColor={selected() ? theme().primary : undefined}>
+                <text fg={selected() ? theme().selectedListItemText : theme().text}>
+                  {scope === "custom..." ? "  " : checked() ? "✓ " : "  "}
+                  {scope}
+                </text>
+              </box>
+            )
+          }}
+        </For>
+        <Show when={props.state.scope.custom}>
+          <text fg={theme().textMuted}>custom: {props.state.scope.custom}</text>
+        </Show>
+      </box>
+      <box paddingBottom={1} flexDirection="row" gap={2}>
+        <text fg={theme().text}>
+          space <span style={{ fg: theme().textMuted }}>toggle/custom</span>
+        </text>
+        <text fg={theme().text}>
+          enter <span style={{ fg: theme().textMuted }}>apply</span>
+        </text>
+      </box>
+    </box>
+  )
+}
+
+function openScopePicker(api: TuiPluginApi, scopes: string[], state: FormState, reopenTask: () => void) {
+  if (scopes.length === 0) {
+    openCustomScopePrompt(api, state, reopenTask)
+    return
+  }
+  const reopenScope = () => openScopePicker(api, scopes, state, reopenTask)
+  api.ui.dialog.replace(() => (
+    <ScopePicker api={api} scopes={scopes} state={state} reopenTask={reopenTask} reopenScope={reopenScope} />
+  ))
 }

@@ -20,9 +20,9 @@ for the implementing agent. It also returns an advisory mode recommendation (`au
 never gates a move or approval.
 
 A task cannot enter In Progress until every required decision is resolved. If the intake helper
-fails to spawn, the task is treated as intake-ready — a broken helper never strands work. If a
-`setupCommand` is configured, it runs once in the fresh worktree at creation time; its result is
-recorded and shown as a `setup ok` or `setup failed` badge, but it never blocks creation.
+fails to spawn, the task is treated as intake-ready — a broken helper never strands work. If setup
+commands are configured, the commands matching the task scope run once in the fresh worktree; their
+results are recorded, but they never block creation.
 
 ## Start (In Progress)
 
@@ -34,10 +34,11 @@ agent may still be working, so that would strand it with nothing to resume it.
 
 ## Review
 
-When the active iteration goes idle, the card moves to Review automatically and its final report
-is captured as the task's report. If a `checkCommand` is configured, it runs once in the worktree
-now; its exit code and output tail are recorded as evidence and shown as a `check ok` or
-`check failed` badge. The check is evidence, not a gate: it never blocks approval or column moves.
+When the active iteration goes idle, the card moves to Review automatically and its final report is
+captured as the task's report. If check commands are configured, Kagan runs the commands whose
+`cwd` or repo-relative `scope` matches the changed files. Ran and skipped commands are recorded as
+evidence and shown on the card. Checks are evidence, not gates: they never block approval or column
+moves.
 
 A read-only **review** child session evaluates the worktree diff (against the base branch) against
 the original title, description, and intake, and files findings via a structured tool — each

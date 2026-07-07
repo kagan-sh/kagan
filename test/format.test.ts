@@ -150,6 +150,45 @@ describe("gateBadges", () => {
       [{ text: "check failed", tone: "error" }],
     ],
     [
+      "check skipped when every configured check was out of scope",
+      {
+        status: "review",
+        check: {
+          command: "member: npm test",
+          exitCode: 0,
+          output: "member: skipped",
+          steps: [
+            {
+              name: "member",
+              cwd: "member-app",
+              command: "npm test",
+              status: "skipped",
+              exitCode: null,
+              output: "",
+              reason: "no changed files in scope",
+            },
+          ],
+        },
+      },
+      [{ text: "check skipped", tone: "muted" }],
+    ],
+    [
+      "check partial when some configured checks ran and others skipped",
+      {
+        status: "review",
+        check: {
+          command: "member: npm test && coach: npm test",
+          exitCode: 0,
+          output: "member ok",
+          steps: [
+            { name: "member", cwd: "member-app", command: "npm test", status: "ran", exitCode: 0, output: "ok" },
+            { name: "coach", cwd: "coach-tools", command: "npm test", status: "skipped", exitCode: null, output: "" },
+          ],
+        },
+      },
+      [{ text: "check partial", tone: "warning" }],
+    ],
+    [
       "places the check badge before the validator/findings badge",
       { status: "review", check: { command: "t", exitCode: 0, output: "ok" }, validatorOutcome: "ran" },
       [

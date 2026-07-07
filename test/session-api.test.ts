@@ -39,6 +39,37 @@ mock.module("../src/check", () => ({
     if (command === "exit 1") return { command, exitCode: 1, output: "" }
     return { command, exitCode: null, output: "" }
   },
+  runCommandPlan: async (
+    commands: Array<{ name: string; cwd: string; command: string }>,
+    _worktree: string,
+    shouldRun: (command: { name: string; cwd: string; command: string }) => boolean,
+  ) => {
+    if (commands.length === 0) return undefined
+    return {
+      command: commands.map((command) => `${command.name}: ${command.command}`).join(" && "),
+      exitCode: commands.some((command) => command.command === "exit 1") ? 1 : 0,
+      output: commands.map((command) => (command.command === 'echo "installed"' ? "installed\n" : "")).join(""),
+      steps: commands.map((command) =>
+        shouldRun(command)
+          ? {
+              name: command.name,
+              cwd: command.cwd,
+              command: command.command,
+              status: "ran",
+              exitCode: command.command === "exit 1" ? 1 : 0,
+              output: command.command === 'echo "installed"' ? "installed\n" : "",
+            }
+          : {
+              name: command.name,
+              cwd: command.cwd,
+              command: command.command,
+              status: "skipped",
+              exitCode: null,
+              output: "",
+            },
+      ),
+    }
+  },
 }))
 
 const {
@@ -178,10 +209,15 @@ describe("createTask", () => {
         },
       },
     } as unknown as TuiPluginApi
-    await createTask(api, { title: "Task", description: "", baseBranch: "main", setupCommand: 'echo "installed"' })
+    await createTask(api, {
+      title: "Task",
+      description: "",
+      baseBranch: "main",
+      setupCommands: [{ name: "setup", cwd: ".", command: 'echo "installed"' }],
+    })
     const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
     const setup = kagan.setup as { command: string; exitCode: number | null; output: string }
-    expect(setup.command).toBe('echo "installed"')
+    expect(setup.command).toBe('setup: echo "installed"')
     expect(setup.exitCode).toBe(0)
     expect(setup.output).toContain("installed")
   })
@@ -204,12 +240,46 @@ describe("createTask", () => {
       title: "Task",
       description: "",
       baseBranch: "main",
-      setupCommand: "exit 1",
+      setupCommands: [{ name: "setup", cwd: ".", command: "exit 1" }],
     })
     expect(session.id).toBe("s1")
     const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
     const setup = kagan.setup as { exitCode: number | null }
     expect(setup.exitCode).toBe(1)
+  })
+
+  test("records skipped setup commands outside the task scope", async () => {
+    let createArg: Record<string, unknown> | undefined
+    const api = {
+      state: { path: { worktree: "/repo" } },
+      client: {
+        session: {
+          list: async () => ({ data: [] }),
+          create: async (parameters: Record<string, unknown>) => {
+            createArg = parameters
+            return { data: { id: "s1" } }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+    await createTask(api, {
+      title: "Task",
+      description: "",
+      baseBranch: "main",
+      scope: { values: ["member-app"] },
+      setupCommands: [
+        { name: "member deps", cwd: "member-app", command: "npm ci" },
+        { name: "coach deps", cwd: "coach-tools", command: "npm ci" },
+      ],
+    })
+    const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
+    expect(kagan.scope).toEqual({ values: ["member-app"] })
+    expect(kagan.setup).toMatchObject({
+      steps: [
+        { name: "member deps", cwd: "member-app", status: "ran" },
+        { name: "coach deps", cwd: "coach-tools", status: "skipped" },
+      ],
+    })
   })
 })
 

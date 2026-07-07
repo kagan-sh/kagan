@@ -111,6 +111,14 @@ export function resolveValidatorModel(
 }
 
 function formatCheck(check: CheckResult): string {
+  if (check.steps && check.steps.length > 0) {
+    const steps = check.steps.map((step) => {
+      if (step.status === "skipped") return `- ${step.name} (${step.cwd}): skipped — ${step.reason ?? "not in scope"}`
+      const exit = step.exitCode === null ? "?" : step.exitCode
+      return `- ${step.name} (${step.cwd}) — \`${step.command}\` exited ${exit}:\n${step.output}`
+    })
+    return `Deterministic check evidence:\n${steps.join("\n\n")}`
+  }
   if (check.exitCode === null) {
     return `Deterministic check \`${check.command}\` did not complete: ${check.output}`
   }

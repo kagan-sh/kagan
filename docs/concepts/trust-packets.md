@@ -14,7 +14,7 @@ to view one read-only.
 | `description`, `baseBranch` | What was asked, and against which branch                                |
 | `intake`                    | The intake understanding and every decision you approved or overrode    |
 | `findings`, `priorTriage`   | The reviewer's findings with your rulings, including earlier iterations |
-| `check`, `setup`            | Deterministic command evidence: exit codes and output tails             |
+| `check`, `setup`            | Deterministic command evidence: ran/skipped steps, exit codes, outputs  |
 | `diffStats`                 | Per-file additions/deletions of the reviewed diff                       |
 | `generation`, `approved`    | How many iterations it took, and whether you signed off                 |
 | `report`                    | The agent's final report                                                |

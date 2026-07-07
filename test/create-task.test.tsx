@@ -79,7 +79,8 @@ function harness() {
     },
   } as unknown as Partial<TuiPluginApi>)
   const store = {
-    setupCommand: "bun install",
+    setupCommands: [{ name: "setup", cwd: ".", command: "bun install" }],
+    configuredScopes: ["member-app", "coach-tools"],
     refresh: async () => {
       refreshes++
     },
@@ -132,6 +133,8 @@ describe("openCreateTaskDialog", () => {
     await renderSetup!.flush()
     renderSetup!.mockInput.pressTab()
     await renderSetup!.flush()
+    renderSetup!.mockInput.pressTab()
+    await renderSetup!.flush()
     renderSetup!.mockInput.pressEnter()
     await renderLatest(view.renders)
     expect(view.selectProps?.title).toBe("Model")
@@ -150,7 +153,7 @@ describe("openCreateTaskDialog", () => {
       description: "",
       model: { providerID: "anthropic", modelID: "sonnet" },
       baseBranch: "feature",
-      setupCommand: "bun install",
+      setupCommands: [{ name: "setup", cwd: ".", command: "bun install" }],
     })
     expect(writtenOrder).toEqual(["old", "new1"])
     expect(view.refreshes).toBe(1)

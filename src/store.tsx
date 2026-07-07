@@ -12,14 +12,14 @@ import {
   setOrder,
 } from "./session-api"
 import {
-  checkCommand,
+  commandPlan,
+  configuredScopes,
   columnMoveDenyReason,
   countInProgressForMove,
   inProgressCap,
   kagan,
   needsHuman,
   sendBackStopThreshold,
-  setupCommand,
   squashMerge,
 } from "./task"
 import { COLUMNS, ROUTE, type BoardCard, type BoardSession, type ColumnType } from "./types"
@@ -262,8 +262,11 @@ export function reconcileOrders(
 
 export function createBoardStore(api: TuiPluginApi, options?: Record<string, unknown>) {
   const squash = squashMerge(options)
-  const setup = setupCommand(options)
-  const check = checkCommand(options)
+  const setupCommands = commandPlan(options, "setup")
+  const checkCommands = commandPlan(options, "check")
+  const setup = setupCommands.map((command) => command.command).join(" && ") || undefined
+  const check = checkCommands.map((command) => command.command).join(" && ") || undefined
+  const scopes = configuredScopes(options)
   const sendBackThreshold = sendBackStopThreshold(options)
   const [sessions, setSessions] = createSignal<BoardSession[]>([])
   const [selectedID, setSelectedID] = createSignal<string | undefined>()
@@ -548,6 +551,9 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     squashMerge: squash,
     setupCommand: setup,
     checkCommand: check,
+    setupCommands,
+    checkCommands,
+    configuredScopes: scopes,
     sendBackStopThreshold: sendBackThreshold,
     inProgressCap: inProgressCap(options),
     columns,

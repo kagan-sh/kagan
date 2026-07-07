@@ -65,13 +65,29 @@ export function isTrustPacket(value: unknown): value is TrustPacket {
 function CheckEvidence(props: { api: TuiPluginApi; label: string; result?: CheckResult }) {
   if (!props.result) return null
   const { command, exitCode, output } = props.result
+  const steps = props.result.steps
   return (
     <box flexDirection="column" gap={1}>
       <text attributes={TextAttributes.BOLD}>{props.label}</text>
-      <text>
-        `{command}` exited {exitCode === null ? "?" : exitCode}
-      </text>
-      <text fg={props.api.theme.current.textMuted}>{output.slice(-4000)}</text>
+      {steps && steps.length > 0 ? (
+        <For each={steps}>
+          {(step) => (
+            <box flexDirection="column" paddingLeft={2}>
+              <text>
+                {step.name} ({step.cwd}) {step.status === "skipped" ? "skipped" : `exited ${step.exitCode ?? "?"}`}
+              </text>
+              <text fg={props.api.theme.current.textMuted}>{(step.reason ?? step.output).slice(-4000)}</text>
+            </box>
+          )}
+        </For>
+      ) : (
+        <>
+          <text>
+            `{command}` exited {exitCode === null ? "?" : exitCode}
+          </text>
+          <text fg={props.api.theme.current.textMuted}>{output.slice(-4000)}</text>
+        </>
+      )}
     </box>
   )
 }

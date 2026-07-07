@@ -21,16 +21,16 @@ Or add a local clone to your project's `opencode.json`:
 Open the board with `/kagan`, the `kagan` palette command, or `<leader>k` (leader defaults to
 `ctrl+x`). Run `/kagan-tutorial` anytime to replay the guided tour.
 
-To configure options such as `checkCommand` or `inProgressLimit`, use the array-of-array plugin
+To configure options such as `commands.check` or `inProgressLimit`, use the array-of-array plugin
 entry shown in the [configuration reference](/reference/configuration).
 
 ## Your first task
 
 1. **Open the board** — use `/kagan`, the `kagan` palette command, or `<leader>k`.
-2. **Create a task** — press `n`. Enter a title and an optional description, pick a model, pick
-   the base branch to work from. On submit, Kagan creates a `kagan/<slug>` worktree and the task
-   lands in Backlog. If you configure a `setupCommand`, it runs once in the fresh worktree and the
-   card shows `setup ok` or `setup failed`.
+2. **Create a task** — press `n`. Enter a title and optional description, pick a scope, pick a
+   model, and pick the base branch to work from. On submit, Kagan creates a `kagan/<slug>` worktree
+   and the task lands in Backlog. If you configure setup commands, matching scoped commands run once
+   in the fresh worktree and the card shows the setup result.
 3. **Answer the intake** — a read-only `task prep` agent analyzes the task and codebase. Once it
    finishes and all required intake decisions are resolved, the card turns green with an
    `intake ok` label.
@@ -41,8 +41,8 @@ entry shown in the [configuration reference](/reference/configuration).
    instruction the intake produced.
 5. **Review** — when the agent finishes, the card moves to Review automatically and a `review`
    agent evaluates the diff against the original task. Findings appear sorted by confidence. If
-   you configure a `checkCommand`, it runs when the task enters Review and its result is shown as
-   `check ok` or `check failed` and included in the reviewer's prompt.
+   you configure check commands, matching scoped commands run when the task enters Review and their
+   results are shown on the card and included in the reviewer's prompt.
 6. **Triage and approve** — press `a`. For each finding choose **Ignore**, **Intended behavior**,
    or **Answer & clarify**. Once everything is triaged, choose where to merge the work — current
    branch, another branch, or no action — and the card moves to Done. If the base branch has
@@ -67,6 +67,8 @@ iterating, take over the session, or leave it in Review.
   (a JSON snapshot of the task's evidence and rulings) or, for Done tasks, **archive** them so
   they leave the board. Archiving is one-way; the session remains reachable through OpenCode's
   own session list.
+- **Settings** — press `,` on the board or run `/kagan-settings` to edit Kagan's plugin options.
+  Saving writes project `opencode.json`; restart OpenCode or reopen the project for changes to apply.
 
 ## Referencing earlier tasks
 

@@ -22,6 +22,7 @@ help, or run `/kagan-tutorial` to replay the guided tour.
 | `s`       | Send back for another iteration (Review only)                                          |
 | `r`       | Retry a failed or stuck intake/review helper                                           |
 | `/`       | Filter cards by title, slug, or an exact `#N` task number                              |
+| `,`       | Open Kagan settings                                                                    |
 | `?`       | Toggle help                                                                            |
 | `q`       | Close the board                                                                        |
 | `Esc`     | Dismiss: close the help overlay, else clear an active filter                           |
@@ -35,8 +36,8 @@ Progress card whose agent is actively working shows `● working`; one that's re
 error shows `↻ retrying`. An In Progress card with neither word is quietly stalled.
 
 In the create dialog: `Tab` moves between fields, `↑`/`↓` move outside the description box, `→` or
-`Enter` opens the model/base-branch pickers, `Enter` submits from the title row, `Ctrl+Enter`
-submits from any field, and `Esc` cancels.
+`Enter` opens the scope/model/base-branch pickers, `Enter` submits from the title row,
+`Ctrl+Enter` submits from any field, and `Esc` cancels.
 
 Export, import, and archive live in the card action menu (`Enter`) rather than on dedicated keys.
 A trust packet is a JSON snapshot of a task's title, status, intake, findings, prior triage,

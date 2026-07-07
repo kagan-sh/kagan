@@ -2,9 +2,10 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { runCheckCommand } from "./check"
+import { runCommandPlan, type CommandSpec } from "./check"
 import {
   approveDenyReason,
+  commandInTaskScope,
   kagan,
   nextGenerationPatch,
   rawKagan,
@@ -13,6 +14,7 @@ import {
   type FindingResolution,
   type HelperRole,
   type ModelRef,
+  type TaskScope,
 } from "./task"
 import {
   bunGitRunner,
@@ -198,7 +200,14 @@ export async function archiveSession(api: TuiPluginApi, sessionID: string): Prom
 
 export async function createTask(
   api: TuiPluginApi,
-  input: { title: string; description: string; model?: ModelRef; baseBranch: string; setupCommand?: string },
+  input: {
+    title: string
+    description: string
+    model?: ModelRef
+    baseBranch: string
+    setupCommands?: CommandSpec[]
+    scope?: TaskScope
+  },
 ): Promise<Session> {
   const existing = await listSessions(api)
   const taskNumber = existing.reduce((max, session) => Math.max(max, kagan(session.metadata).taskNumber ?? 0), 0) + 1
@@ -215,7 +224,14 @@ export async function createTask(
   }
   if (description) patch.description = description
   if (input.model) patch.model = input.model
-  if (input.setupCommand) patch.setup = await runCheckCommand(input.setupCommand, directory)
+  if (input.scope) patch.scope = input.scope
+  const setup = await runCommandPlan(
+    input.setupCommands ?? [],
+    directory,
+    (command) => commandInTaskScope(command, input.scope),
+    "task scope does not include this cwd",
+  )
+  if (setup) patch.setup = setup
   const result = await api.client.session.create(
     {
       directory,
