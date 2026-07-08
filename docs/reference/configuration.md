@@ -6,7 +6,7 @@ All options are passed through OpenCode's plugin config — the array form of a 
 {
   "plugin": [
     [
-      "/path/to/kagan",
+      "@kagan-sh/kagan",
       {
         "inProgressLimit": 3,
         "intakeAgent": "plan",
@@ -55,7 +55,7 @@ Monorepo example:
 {
   "plugin": [
     [
-      "/path/to/kagan",
+      "@kagan-sh/kagan",
       {
         "commands": {
           "setup": [

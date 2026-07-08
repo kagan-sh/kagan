@@ -12,13 +12,13 @@ The agent never touches your checkout. It works on a `kagan/<slug>` branch in it
 
 You need [OpenCode](https://opencode.ai/) installed.
 
-From GitHub (until the package is on npm):
+From npm:
 
 ```bash
-opencode plugin https://github.com/kagan-sh/kagan
+opencode plugin @kagan-sh/kagan
 ```
 
-Or add a local clone to your project's `opencode.json`:
+Or add a local clone to both OpenCode config files:
 
 ```json
 {
