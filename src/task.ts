@@ -2,32 +2,23 @@ import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { z } from "zod"
 import { COLUMNS, DEFAULT_IN_PROGRESS_CAP, type ColumnType } from "./types"
 import { newSideHunkRanges } from "./git"
+import { parseOptions } from "./options"
 import type { CommandSpec } from "./check"
 
 export function inProgressCap(options?: Record<string, unknown>): number {
-  const value = options?.inProgressLimit
-  if (typeof value === "number" && Number.isInteger(value) && value >= 1) return value
-  return DEFAULT_IN_PROGRESS_CAP
+  return parseOptions(options).inProgressLimit
 }
 
-const DEFAULT_HELPER_RETRIES = 1
-const DEFAULT_SEND_BACK_STOP_THRESHOLD = 3
-
 export function helperRetries(options?: Record<string, unknown>): number {
-  const value = options?.helperRetries
-  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value
-  return DEFAULT_HELPER_RETRIES
+  return parseOptions(options).helperRetries
 }
 
 export function sendBackStopThreshold(options?: Record<string, unknown>): number {
-  const value = options?.sendBackStopThreshold
-  if (typeof value === "number" && Number.isInteger(value) && value >= 1) return value
-  return DEFAULT_SEND_BACK_STOP_THRESHOLD
+  return parseOptions(options).sendBackStopThreshold
 }
 
 export function squashMerge(options?: Record<string, unknown>): boolean {
-  const value = options?.squashMerge
-  return typeof value === "boolean" ? value : true
+  return parseOptions(options).squashMerge
 }
 
 export type TaskScope = { values: string[]; custom?: string }

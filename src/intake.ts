@@ -1,4 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
+import { parseOptions } from "./options"
 import { patchKagan } from "./session-api"
 import type { TaskScope } from "./task"
 
@@ -66,9 +67,8 @@ export async function spawnIntake(
     tools: { read: true, edit: false, write: false, bash: false, kagan_intake: true },
     parts: [{ type: "text", text: promptText }],
   }
-  if (typeof options?.intakeAgent === "string") {
-    body.agent = options.intakeAgent
-  }
+  const intakeAgent = parseOptions(options).intakeAgent
+  if (intakeAgent !== undefined) body.agent = intakeAgent
 
   await input.client.session.promptAsync({
     path: { id: childID },

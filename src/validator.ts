@@ -2,6 +2,7 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import type { Finding, Intake, ModelRef } from "./task"
 import type { CheckResult } from "./check"
+import { parseOptions } from "./options"
 import { patchKagan } from "./session-api"
 import { orderDiffsByRisk } from "./git"
 
@@ -215,9 +216,8 @@ export async function spawnValidator(
     parts: [{ type: "text", text: promptText }],
   }
   if (model) body.model = { providerID: model.providerID, modelID: model.modelID }
-  if (typeof options?.validatorAgent === "string") {
-    body.agent = options.validatorAgent
-  }
+  const validatorAgent = parseOptions(options).validatorAgent
+  if (validatorAgent !== undefined) body.agent = validatorAgent
 
   await input.client.session.promptAsync({
     path: { id: childID },
