@@ -11,7 +11,7 @@ import type { BoardSession } from "../src/types"
 import type { BoardStore, MergeDialogHandlers } from "../src/commands"
 import { bunGitRunner } from "../src/git"
 import { isTrustPacket, serializeTrustPacket } from "../src/trust-packet"
-import { mockSessionClient, mockTheme, mockTuiApi } from "./fixtures/api"
+import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "./fixtures/api"
 
 const { createBoardCommands, footerHints, menuOptions, mergeChoiceOptions, openMergeDialog } = await import(
   "../src/commands"
@@ -251,14 +251,6 @@ describe("createBoardCommands", () => {
     expect(helpOpen).toBe(true)
     help?.run()
     expect(helpOpen).toBe(false)
-  })
-
-  test("kagan.settings navigates to the settings route", () => {
-    let route = ""
-    const api = { route: { navigate: (name: string) => (route = name) } } as unknown as TuiPluginApi
-    const commands = createBoardCommands(api, {} as BoardStore, () => {})
-    commands.find((command) => command.name === "kagan.settings")?.run()
-    expect(route).toBe("kagan-settings")
   })
 
   test("kagan.close closes the help overlay when it is open instead of navigating", () => {
@@ -646,7 +638,7 @@ describe("createBoardCommands", () => {
       checkCommand: "bun run check",
     })
     let dialogRendered: (() => unknown) | undefined
-    const api = {
+    const api = mockTuiApi({
       theme: {
         current: {
           text: "white",
@@ -666,7 +658,7 @@ describe("createBoardCommands", () => {
           replace: (render: () => unknown) => (dialogRendered = render),
         },
       },
-    } as unknown as TuiPluginApi
+    } as unknown as Partial<TuiPluginApi>)
     await createBoardCommands(api, store, () => {})
       .find((command) => command.name === "kagan.approve")
       ?.run()
@@ -1320,6 +1312,7 @@ describe("createBoardCommands", () => {
       .find((command) => command.name === "kagan.approve")
       ?.run()
     renderSetup = await testRender(renders.at(-1) as () => JSX.Element, { width: 100, height: 24 })
+    attachRendererMockInput(api, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressKey("a")
     await waitFor(() => renders.length === 2)

@@ -1,7 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes } from "@opentui/core"
 import type { TuiPluginApi, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import { useKeyboard } from "@opentui/solid"
 import { createSignal, For, onMount, Show } from "solid-js"
 import { resolveSessionFinding } from "./session-api"
 import {
@@ -16,6 +15,7 @@ import {
 import { confidenceBar, formatModeRationale } from "./format"
 import type { createBoardStore } from "./store"
 import type { BoardSession } from "./types"
+import { useKeyIntercept } from "./tui-renderer"
 
 type BoardStore = ReturnType<typeof createBoardStore>
 type Mode = "list" | "detail"
@@ -133,55 +133,60 @@ export function FindingsReview(props: {
     }
   }
 
-  useKeyboard((key) => {
+  useKeyIntercept(props.api, (key) => {
     if (mode() === "list") {
       if (key.name === "escape") {
         close()
-        return
+        return true
       }
       if (key.name === "s") {
         runSendBack()
-        return
+        return true
       }
       if (key.name === "a") {
         runApprove()
-        return
+        return true
       }
-      if (clean()) return
+      if (clean()) return true
       if (key.name === "down" || key.name === "j") {
         setIndex((i) => Math.min(i + 1, findings().length - 1))
-        return
+        return true
       }
       if (key.name === "up" || key.name === "k") {
         setIndex((i) => Math.max(i - 1, 0))
-        return
+        return true
       }
-      if (key.name === "return") openDetail(index())
-      return
+      if (key.name === "return") {
+        openDetail(index())
+        return true
+      }
+      return false
     }
 
     if (key.name === "escape") {
       setError(undefined)
       setMode("list")
-      return
+      return true
     }
     const slots = SLOT_RESOLUTIONS.length
     if (key.name === "tab") {
       setFocus((f) => (key.shift ? (f + slots - 1) % slots : (f + 1) % slots))
-      return
+      return true
     }
     if (key.name === "down") {
       setFocus((f) => (f + 1) % slots)
-      return
+      return true
     }
     if (key.name === "up") {
       setFocus((f) => (f + slots - 1) % slots)
-      return
+      return true
     }
     if (key.name === "return" && focus() > 0) {
       const resolution = SLOT_RESOLUTIONS[focus()]
       if (resolution) void commit(resolution)
+      return true
     }
+    return false
   })
 
   const title = () => {

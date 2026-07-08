@@ -1,5 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { KeyEvent, TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { KeyInput, TestRendererSetup } from "@opentui/core/testing"
+import type { KeyInputContext } from "@opentui/keymap"
 import { COLUMNS, ROUTE, type BoardSession, type ColumnType } from "../../src/types"
 
 export const mockTheme = {
@@ -28,6 +30,8 @@ export function mockKv(overrides: Record<string, unknown> = {}): Record<string, 
 
 export function mockTuiApi(overrides: Partial<TuiPluginApi> & { kvMap?: Record<string, unknown> } = {}): TuiPluginApi {
   const kvMap = mockKv(overrides.kvMap)
+  const keyHandlers = new Set<(key: KeyEvent) => void>()
+  const interceptHandlers = new Set<(ctx: KeyInputContext) => void>()
   return {
     kv: {
       get: (key: string, defaultValue: unknown) => (key in kvMap ? kvMap[key] : defaultValue),
@@ -41,9 +45,117 @@ export function mockTuiApi(overrides: Partial<TuiPluginApi> & { kvMap?: Record<s
     },
     route: { current: { name: ROUTE } },
     theme: { current: mockTheme },
-    keymap: { registerLayer: () => {} },
+    keymap: {
+      registerLayer: () => {},
+      intercept: (name: "key", handler: (ctx: KeyInputContext) => void) => {
+        interceptHandlers.add(handler)
+        return () => interceptHandlers.delete(handler)
+      },
+    },
+    renderer: {
+      width: 120,
+      height: 40,
+      on: () => {},
+      off: () => {},
+      keyInput: {
+        on: (event: string, handler: (key: KeyEvent) => void) => {
+          if (event === "keypress") keyHandlers.add(handler)
+        },
+        off: (event: string, handler: (key: KeyEvent) => void) => {
+          if (event === "keypress") keyHandlers.delete(handler)
+        },
+        emitKey: (key: KeyEvent) => {
+          const ctx = {
+            event: key,
+            setData: () => {},
+            getData: () => undefined,
+            consume: () => {},
+          }
+          for (const handler of Array.from(interceptHandlers)) handler(ctx)
+          for (const handler of Array.from(keyHandlers)) handler(key)
+        },
+      },
+    },
     ...overrides,
   } as unknown as TuiPluginApi
+}
+
+export function attachRendererMockInput(api: TuiPluginApi, setup: TestRendererSetup) {
+  const emit = (api.renderer.keyInput as unknown as { emitKey?: (key: KeyEvent) => void }).emitKey
+  if (!emit) return
+  const pressKey = setup.mockInput.pressKey.bind(setup.mockInput)
+  const pressEnter = setup.mockInput.pressEnter.bind(setup.mockInput)
+  const pressEscape = setup.mockInput.pressEscape.bind(setup.mockInput)
+  const pressTab = setup.mockInput.pressTab.bind(setup.mockInput)
+  const pressArrow = setup.mockInput.pressArrow.bind(setup.mockInput)
+  const emitAndRender = (key: KeyEvent) => {
+    emit(key)
+    setup.renderer.requestRender()
+  }
+  setup.mockInput.pressKey = (key, modifiers) => {
+    pressKey(key, modifiers)
+    emitAndRender(mockKeyEvent(key, modifiers))
+  }
+  setup.mockInput.pressEnter = (modifiers) => {
+    pressEnter(modifiers)
+    emitAndRender(mockKeyEvent("RETURN", modifiers))
+  }
+  setup.mockInput.pressEscape = (modifiers) => {
+    pressEscape(modifiers)
+    emitAndRender(mockKeyEvent("ESCAPE", modifiers))
+  }
+  setup.mockInput.pressTab = (modifiers) => {
+    pressTab(modifiers)
+    emitAndRender(mockKeyEvent("TAB", modifiers))
+  }
+  setup.mockInput.pressArrow = (direction, modifiers) => {
+    pressArrow(direction, modifiers)
+    emitAndRender(mockKeyEvent(`ARROW_${direction.toUpperCase()}` as KeyInput, modifiers))
+  }
+}
+
+function mockKeyEvent(
+  key: KeyInput,
+  modifiers: { shift?: boolean; ctrl?: boolean; meta?: boolean; super?: boolean; hyper?: boolean } = {},
+): KeyEvent {
+  const name =
+    key === "RETURN"
+      ? "return"
+      : key === "ESCAPE"
+        ? "escape"
+        : key === "TAB"
+          ? "tab"
+          : key === "ARROW_UP"
+            ? "up"
+            : key === "ARROW_DOWN"
+              ? "down"
+              : key === "ARROW_LEFT"
+                ? "left"
+                : key === "ARROW_RIGHT"
+                  ? "right"
+                  : key
+  let defaultPrevented = false
+  let propagationStopped = false
+  return {
+    name,
+    ctrl: !!modifiers.ctrl,
+    shift: !!modifiers.shift,
+    meta: !!modifiers.meta,
+    super: !!modifiers.super,
+    hyper: !!modifiers.hyper,
+    get defaultPrevented() {
+      return defaultPrevented
+    },
+    get propagationStopped() {
+      return propagationStopped
+    },
+    preventDefault() {
+      defaultPrevented = true
+    },
+    stopPropagation() {
+      propagationStopped = true
+    },
+  } as KeyEvent
 }
 
 export function mockSession(

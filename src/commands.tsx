@@ -26,7 +26,6 @@ import { openFindingsReviewDialog } from "./findings-review"
 import { isTrustPacket, openTrustPacketView, serializeTrustPacket } from "./trust-packet"
 import type { createBoardStore } from "./store"
 import type { BoardSession } from "./types"
-import { SETTINGS_ROUTE } from "./types"
 
 export type BoardStore = ReturnType<typeof createBoardStore>
 
@@ -276,10 +275,6 @@ export function createBoardCommands(
 
   const showHelp = () => {
     setHelpOpen((open) => !open)
-  }
-
-  const openSettings = () => {
-    api.route.navigate(SETTINGS_ROUTE)
   }
 
   const promptDelete = () => {
@@ -825,10 +820,6 @@ export function createBoardCommands(
       title: "Import trust packet",
       category: "Kagan",
       run: importPacket,
-    },
-    {
-      name: "kagan.settings",
-      run: openSettings,
     },
     {
       name: "kagan.help",

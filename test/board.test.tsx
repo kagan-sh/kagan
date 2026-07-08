@@ -1,8 +1,7 @@
 /** @jsxImportSource @opentui/solid */
-import { afterEach, describe, expect, mock, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createRoot } from "solid-js"
-import type { JSX } from "solid-js"
 import type { TuiToast } from "@opencode-ai/plugin/tui"
 import { Board } from "../src/board"
 import { createBoardStore } from "../src/store"
@@ -11,24 +10,18 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { mockSession, mockTuiApi } from "./fixtures/api"
 import type { TestRendererSetup } from "@opentui/core/testing"
 
-let lastBindings: unknown
+let lastLayer: Parameters<TuiPluginApi["keymap"]["registerLayer"]>[0] | undefined
 
-mock.module("@opentui/keymap/solid", () => ({
-  KeymapProvider: (props: { children: JSX.Element }) => props.children,
-  useBindings: (config: unknown) => {
-    lastBindings = config
-  },
-  useKeymap: () => ({}),
-  useKeymapSelector: () => () => [],
-  reactiveMatcherFromSignal: () => ({ get: () => false, subscribe: () => () => {} }),
-}))
+function keyName(key: string | { name?: string }): string {
+  return typeof key === "string" ? key : (key.name ?? "")
+}
 
 let renderSetup: TestRendererSetup | undefined
 
 afterEach(async () => {
   await renderSetup?.renderer.destroy()
   renderSetup = undefined
-  lastBindings = undefined
+  lastLayer = undefined
 })
 
 function session(id: string, status: ColumnType, title: string): BoardSession {
@@ -70,6 +63,12 @@ function mockBoardApi(
       },
     },
     route: { current: { name: options.routeName ?? ROUTE } },
+    keymap: {
+      registerLayer: (layer: Parameters<TuiPluginApi["keymap"]["registerLayer"]>[0]) => {
+        lastLayer = layer
+        return () => {}
+      },
+    },
     toasts,
     dialogReplaces: 0,
   } as unknown as TuiPluginApi & { toasts: TuiToast[]; dialogReplaces: number }
@@ -92,21 +91,37 @@ describe("Board", () => {
     expect(frame).not.toContain("Kagan")
   })
 
-  test("expands comma-separated bindings before passing them to useBindings", async () => {
-    const api = mockBoardApi()
+  test("dispatches board commands through the registered keymap layer", async () => {
+    const api = mockBoardApi({
+      sessions: [session("s1", "backlog", "First"), session("s2", "backlog", "Second")],
+    })
     const store = createRoot(() => createBoardStore(api))
     await store.refresh()
+    store.select("backlog", "s1")
     renderSetup = await testRender(() => <Board api={api} store={store} />, { width: 120, height: 20 })
     await renderSetup.flush()
-    const config =
-      typeof lastBindings === "function"
-        ? (lastBindings as () => { bindings: { key: string; command: string }[] })()
-        : undefined
-    const keys = config?.bindings.map((binding) => binding.key)
-    expect(keys).toContain("j")
-    expect(keys).toContain("down")
-    expect(keys).toContain("o")
-    expect(keys).toContain("return")
+
+    const commands = new Map(lastLayer?.commands?.map((command) => [command.name, command]))
+
+    commands.get("kagan.down")?.run(undefined as never)
+    await renderSetup.flush()
+    expect(store.selected()).toBe("s2")
+
+    commands.get("kagan.menu")?.run(undefined as never)
+    await renderSetup.flush()
+    expect(api.dialogReplaces).toBe(1)
+
+    commands.get("kagan.help")?.run(undefined as never)
+    await renderSetup.flush()
+    expect(renderSetup.captureCharFrame()).toContain("Help")
+
+    const settingsBinding = lastLayer?.bindings?.find((binding) => binding.cmd === "kagan.settings")
+    expect(settingsBinding).toBeTruthy()
+    expect(keyName(settingsBinding!.key)).toContain(",")
+
+    const filterBinding = lastLayer?.bindings?.find((binding) => binding.cmd === "kagan.filter")
+    expect(filterBinding).toBeTruthy()
+    expect(keyName(filterBinding!.key)).toContain("/")
   })
 
   test("renders the footer's baseline hints when nothing is selected", async () => {
@@ -240,8 +255,7 @@ describe("Board", () => {
     await store.refresh()
     renderSetup = await testRender(() => <Board api={api} store={store} />, { width: 120, height: 20 })
     await renderSetup.flush()
-    const config = typeof lastBindings === "function" ? (lastBindings as () => { enabled: () => boolean })() : undefined
-    expect(config?.enabled()).toBe(true)
+    expect(lastLayer?.commands?.some((command) => command.name === "kagan.help")).toBe(true)
   })
 
   test("opens the onboarding dialog on first mount", async () => {
@@ -328,16 +342,12 @@ describe("Board", () => {
     await store.refresh()
     renderSetup = await testRender(() => <Board api={api} store={store} />, { width: 120, height: 20 })
     await renderSetup.flush()
-    const config =
-      typeof lastBindings === "function"
-        ? (lastBindings as () => { commands: { name: string; run: () => void }[] })()
-        : undefined
-    const help = config?.commands.find((command) => command.name === "kagan.help")
+    const help = lastLayer?.commands?.find((command) => command.name === "kagan.help")
     expect(help).toBeDefined()
-    help?.run()
+    help?.run(undefined as never)
     await renderSetup.waitForVisualIdle()
     expect(renderSetup.captureCharFrame()).toContain("Help")
-    help?.run()
+    help?.run(undefined as never)
     await renderSetup.waitForVisualIdle()
     expect(renderSetup.captureCharFrame()).not.toContain("Help")
   })

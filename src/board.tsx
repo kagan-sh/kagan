@@ -1,14 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BorderCharacters, Renderable, ScrollBoxRenderable } from "@opentui/core"
-import { useTerminalDimensions } from "@opentui/solid"
-import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { maybeShowOnboarding } from "./onboarding"
 import { Column } from "./column"
 import { BOARD_BINDINGS, createBoardCommands, footerHints, HelpOverlay, type BoardStore } from "./commands"
-import { COLUMNS, ROUTE, type ColumnType } from "./types"
-import { useBindings } from "@opentui/keymap/solid"
+import { COLUMNS, type ColumnType } from "./types"
 import { version } from "../package.json"
+import { useRendererDimensions } from "./tui-renderer"
 
 // Light │ so the rule stays subordinate to the heavy ┃ state bars on cards.
 const COLUMN_RULE_CHARS: BorderCharacters = {
@@ -141,7 +140,7 @@ const SIDE_BORDER_CHARS: BorderCharacters = {
 // api.ui.toast doesn't render on plugin routes — see the Notice rationale in store.ts.
 function Notice(props: { api: TuiPluginApi; store: BoardStore }) {
   const theme = () => props.api.theme.current
-  const dimensions = useTerminalDimensions()
+  const dimensions = useRendererDimensions(props.api)
 
   return (
     <box position="absolute" top={2} right={2} flexDirection="column" alignItems="flex-end" gap={1} zIndex={2}>
@@ -169,31 +168,31 @@ function Notice(props: { api: TuiPluginApi; store: BoardStore }) {
 }
 
 export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
-  const dimensions = useTerminalDimensions()
   const store = props.store
   const [helpOpen, setHelpOpen] = createSignal(false)
   const commands = createBoardCommands(props.api, store, setHelpOpen)
 
+  let disposeLayer: (() => void) | undefined
+
   onMount(() => {
     maybeShowOnboarding(props.api)
+    disposeLayer = props.api.keymap.registerLayer({
+      mode: "base",
+      priority: 100,
+      commands,
+      bindings: BOARD_BINDINGS.map((binding) => ({
+        key: keymapKey(binding.key),
+        cmd: binding.cmd,
+        desc: binding.desc,
+      })),
+    })
   })
+
+  onCleanup(() => disposeLayer?.())
+
   const hints = createMemo(() => footerHints(store.selectedSession(), store.filter() !== ""))
-
-  useBindings(() => ({
-    // Disable board keys while a modal dialog (new/filter prompt) is open so
-    // typed characters reach the input instead of triggering hotkeys. Board
-    // keys stay active while the inline help overlay is open so ? toggles it
-    // and q closes it. Also disable when the board route is not active so the
-    // layer does not leak into other routes.
-    enabled: () => props.api.route.current.name === ROUTE && !props.api.ui.dialog.open,
-    commands,
-    bindings: BOARD_BINDINGS.flatMap((binding) =>
-      binding.key.split(",").map((key) => ({ ...binding, key: key.trim() })),
-    ),
-  }))
-
   return (
-    <box position="absolute" left={0} top={0} width={dimensions().width} height={dimensions().height}>
+    <box position="absolute" left={0} top={0} width="100%" height="100%">
       <box flexDirection="column" width="100%" height="100%">
         <box flexGrow={1} minHeight={0}>
           <Main
@@ -210,4 +209,11 @@ export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
       <Notice api={props.api} store={store} />
     </box>
   )
+}
+
+function keymapKey(key: string): string | { name: string } {
+  if (key === ",") return { name: "," }
+  if (key === "?") return "?,shift+/"
+  if (key === "return") return "return,enter"
+  return key
 }

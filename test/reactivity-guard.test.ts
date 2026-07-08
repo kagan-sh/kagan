@@ -17,4 +17,19 @@ describe("host Solid bridge", () => {
     )
     expect(offenders).toEqual([])
   })
+
+  test("src does not import OpenTUI context hooks that bypass TuiPluginApi", () => {
+    const dir = new URL("../src/", import.meta.url)
+    const offenders = readdirSync(dir).filter((name) => {
+      if (!name.endsWith(".tsx")) return false
+      const source = readFileSync(new URL(name, dir), "utf8")
+      return (
+        /\bfrom\s+["']@opentui\/keymap\/solid["']/.test(source) ||
+        /\bimport\s+\{[^}]*\b(useRenderer|useTerminalDimensions|useKeyboard|Portal)\b[^}]*\}\s+from\s+["']@opentui\/solid["']/.test(
+          source,
+        )
+      )
+    })
+    expect(offenders).toEqual([])
+  })
 })

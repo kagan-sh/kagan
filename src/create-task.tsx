@@ -1,12 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { useKeyboard } from "@opentui/solid"
 import { TextAttributes, type TextareaRenderable } from "@opentui/core"
 import { createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { createTask, getOrder, setOrder } from "./session-api"
 import { bunGitRunner, listLocalBranches } from "./git"
 import type { ModelRef, TaskScope } from "./task"
 import type { createBoardStore } from "./store"
+import { useKeyIntercept } from "./tui-renderer"
 
 type BoardStore = ReturnType<typeof createBoardStore>
 
@@ -132,31 +132,37 @@ function CreateTaskForm(props: {
     )
   }
 
-  useKeyboard((key) => {
+  useKeyIntercept(props.api, (key) => {
     if (key.ctrl && key.name === "return") {
       void submit()
-      return
+      return true
     }
     if (key.name === "return") {
-      if (focusIndex() === 1) return
+      // In the description textarea, let Enter reach the field as a newline
+      // (ctrl+enter submits); consuming it here would swallow the newline.
+      if (focusIndex() === 1) return false
       if (focusIndex() >= 2) openPicker()
       else void submit()
-      return
+      return true
     }
     if (key.name === "right" && focusIndex() >= 2) {
       openPicker()
-      return
+      return true
     }
     if (key.name === "tab") {
       setFocusIndex((index) => (key.shift ? (index + 4) % 5 : (index + 1) % 5))
-      return
+      return true
     }
-    if (focusIndex() === 1) return
+    if (focusIndex() === 1) return false
     if (key.name === "down") {
       setFocusIndex((index) => (index + 1) % 5)
-      return
+      return true
     }
-    if (key.name === "up") setFocusIndex((index) => (index + 4) % 5)
+    if (key.name === "up") {
+      setFocusIndex((index) => (index + 4) % 5)
+      return true
+    }
+    return false
   })
 
   const labelColor = (index: number) => (focusIndex() === index ? theme().primary : theme().textMuted)
@@ -294,27 +300,31 @@ function ScopePicker(props: {
 
   onMount(() => props.api.ui.dialog.setSize("medium"))
 
-  useKeyboard((key) => {
+  useKeyIntercept(props.api, (key) => {
     if (key.name === "escape") {
       close()
-      return
+      return true
     }
     if (key.name === "down") {
       setIndex((value) => Math.min(value + 1, options().length - 1))
-      return
+      return true
     }
     if (key.name === "up") {
       setIndex((value) => Math.max(value - 1, 0))
-      return
+      return true
     }
     if (key.name === " " || key.name === "space") {
       const scope = options()[index()]
-      if (!scope) return
+      if (!scope) return false
       if (scope === "custom...") openCustomScopePrompt(props.api, props.state, props.reopenScope)
       else toggle(scope)
-      return
+      return true
     }
-    if (key.name === "return") close()
+    if (key.name === "return") {
+      close()
+      return true
+    }
+    return false
   })
 
   return (

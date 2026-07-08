@@ -7,7 +7,7 @@ import type { JSX } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { Settings } from "../src/settings"
 import { SETTINGS_ROUTE } from "../src/types"
-import { mockTuiApi } from "./fixtures/api"
+import { attachRendererMockInput, mockTuiApi } from "./fixtures/api"
 
 let renderSetups: TestRendererSetup[] = []
 
@@ -97,6 +97,7 @@ async function renderSettingsWithDialog(options?: Record<string, unknown>) {
     width: 120,
     height: 24,
   })
+  attachRendererMockInput(harness.api, setup)
   await flushAndSettle(setup)
   renderSetups.push(setup)
   return { harness, setup }
@@ -307,6 +308,7 @@ describe("Settings", () => {
     setup.mockInput.pressKey("ARROW_RIGHT")
     await flushAndSettle(setup)
     setup.mockInput.pressKey("RETURN")
+    await flushAndSettle(setup)
     await flushAndSettle(setup)
 
     setup.mockInput.pressKey("ARROW_DOWN")
