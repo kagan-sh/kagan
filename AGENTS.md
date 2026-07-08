@@ -20,6 +20,23 @@ worktree per task. Before changing lifecycle behavior, read [`.specs/README.md`]
   npm/pacote treat the repo as a git dep needing a build step, which breaks
   `opencode plugin https://github.com/kagan-sh/kagan`.
 
+## Release conventions
+
+Releases are automated with `semantic-release` on every push to `main`. Commits must follow
+conventional commits. During the `0.x` phase:
+
+- `fix:` — patch release (`0.1.0 → 0.1.1`)
+- `feat:` — minor release (`0.1.0 → 0.2.0`), may include breaking changes
+- `BREAKING CHANGE:` — major release (`0.2.0 → 1.0.0`); only use when ready to leave `0.x`
+
+Commits that do **not** trigger a release: `docs:`, `test:`, `chore:`, `ci:`, `build:`, `style:`,
+`refactor:`.
+
+While in `0.x`, express breaking changes as `feat:` so they stay in the `0.x` line. Do not customize
+`@semantic-release/commit-analyzer`. Reserve `BREAKING CHANGE:` for the `1.0.0` transition.
+
+This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha stages.
+
 ## Ground truth for external APIs
 
 - `references/opencode/` is a vendored, gitignored, read-only checkout of the OpenCode source.

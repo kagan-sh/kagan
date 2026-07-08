@@ -450,7 +450,7 @@ describe("ensureWorktreePluginConfig", () => {
     await ensureWorktreePluginConfig(dir)
     const config = await readConfig(dir)
     const spec = (config.plugin as string[])[0]!
-    expect(JSON.parse(await readFile(join(spec, "package.json"), "utf8")).name).toBe("kagan")
+    expect(JSON.parse(await readFile(join(spec, "package.json"), "utf8")).name).toBe("@kagan-sh/kagan")
   })
 
   test("appends to an existing config without touching other plugins or settings", async () => {

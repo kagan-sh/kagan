@@ -4,13 +4,13 @@
 
 You need [OpenCode](https://opencode.ai/) installed.
 
-From GitHub (until the package is on npm):
+From npm:
 
 ```bash
-opencode plugin https://github.com/kagan-sh/kagan
+opencode plugin @kagan-sh/kagan
 ```
 
-Or add a local clone to your project's `opencode.json`:
+Or add a local clone to both `opencode.json` and `tui.json`:
 
 ```json
 {
