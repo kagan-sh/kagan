@@ -3,6 +3,7 @@ import { defineConfig } from "vitepress"
 export default defineConfig({
   title: "Kagan",
   description: "Supervision board for AI coding agents inside OpenCode",
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }]],
   themeConfig: {
     nav: [
       { text: "Quickstart", link: "/quickstart" },
