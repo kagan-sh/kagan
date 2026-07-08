@@ -102,6 +102,7 @@ This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha
   default conditions, to solid's inert server build — a board that renders once and ignores every
   refresh. Tests still need bunfig's `preload = ["@opentui/solid/preload"]` because `bun test` runs
   without the host.
+- In plugin source, use `TuiPluginApi` for renderer dimensions, keyboard input, and keymap layers; never import OpenTUI/Solid context hooks for those surfaces.
 - Behavior changes land with matching `.specs/`, `docs/`, and README updates in the same change.
 
 ## Style and discipline

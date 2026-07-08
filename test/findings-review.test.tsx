@@ -7,7 +7,7 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { detailHeader, FindingsReview, locationMarker, openFindingsReviewDialog } from "../src/findings-review"
 import type { Finding } from "../src/task"
 import type { BoardSession } from "../src/types"
-import { mockSession, mockTuiApi } from "./fixtures/api"
+import { attachRendererMockInput, mockSession, mockTuiApi } from "./fixtures/api"
 
 let renderSetup: TestRendererSetup | undefined
 
@@ -182,6 +182,7 @@ describe("FindingsReview — list mode", () => {
       ),
       { width: 100, height: 24, kittyKeyboard: true },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressEscape()
     await renderSetup.waitFor(() => cleared)
@@ -190,10 +191,11 @@ describe("FindingsReview — list mode", () => {
 
   test("s sends the task back and closes the dialog", async () => {
     let sentBack = false
+    const boardApi = api()
     renderSetup = await testRender(
       () => (
         <FindingsReview
-          api={api()}
+          api={boardApi}
           store={store()}
           session={session([{ id: "f1", summary: "x" }])}
           onApprove={() => {}}
@@ -204,6 +206,7 @@ describe("FindingsReview — list mode", () => {
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressKey("s")
     await renderSetup.waitFor(() => sentBack)
@@ -212,10 +215,11 @@ describe("FindingsReview — list mode", () => {
 
   test("a does not approve while blocked", async () => {
     let approved: BoardSession | undefined
+    const boardApi = api()
     renderSetup = await testRender(
       () => (
         <FindingsReview
-          api={api()}
+          api={boardApi}
           store={store()}
           session={session([{ id: "f1", summary: "x" }])}
           onApprove={(s) => {
@@ -226,6 +230,7 @@ describe("FindingsReview — list mode", () => {
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressKey("a")
     await renderSetup.flush()
@@ -234,10 +239,11 @@ describe("FindingsReview — list mode", () => {
 
   test("a approves the clean session and closes the dialog", async () => {
     let approved: BoardSession | undefined
+    const boardApi = api()
     renderSetup = await testRender(
       () => (
         <FindingsReview
-          api={api()}
+          api={boardApi}
           store={store()}
           session={session([])}
           onApprove={(s) => {
@@ -248,6 +254,7 @@ describe("FindingsReview — list mode", () => {
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressKey("a")
     await renderSetup.waitFor(() => approved !== undefined)
@@ -271,10 +278,11 @@ describe("FindingsReview — detail mode", () => {
 
   test("refuses an ignore ruling with an empty note and does not persist", async () => {
     let updateCalls = 0
+    const boardApi = api({ update: () => updateCalls++ })
     renderSetup = await testRender(
       () => (
         <FindingsReview
-          api={api({ update: () => updateCalls++ })}
+          api={boardApi}
           store={store()}
           session={session([finding])}
           onApprove={() => {}}
@@ -283,6 +291,7 @@ describe("FindingsReview — detail mode", () => {
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressEnter()
     await renderSetup.flush()
@@ -295,10 +304,11 @@ describe("FindingsReview — detail mode", () => {
 
   test("refuses a clarify ruling with an insubstantive note and does not persist", async () => {
     let updateCalls = 0
+    const boardApi = api({ update: () => updateCalls++ })
     renderSetup = await testRender(
       () => (
         <FindingsReview
-          api={api({ update: () => updateCalls++ })}
+          api={boardApi}
           store={store()}
           session={session([finding])}
           onApprove={() => {}}
@@ -307,6 +317,7 @@ describe("FindingsReview — detail mode", () => {
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressEnter()
     await renderSetup.flush()
@@ -325,10 +336,11 @@ describe("FindingsReview — detail mode", () => {
 
   test("refuses an intended ruling on a high finding with an insubstantive note and does not persist", async () => {
     let updateCalls = 0
+    const boardApi = api({ update: () => updateCalls++ })
     renderSetup = await testRender(
       () => (
         <FindingsReview
-          api={api({ update: () => updateCalls++ })}
+          api={boardApi}
           store={store()}
           session={session([finding])}
           onApprove={() => {}}
@@ -337,6 +349,7 @@ describe("FindingsReview — detail mode", () => {
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressEnter()
     await renderSetup.flush()
@@ -354,18 +367,14 @@ describe("FindingsReview — detail mode", () => {
   test("persists a clarify ruling with a substantive note and returns to list", async () => {
     let updateArgs: unknown
     const target = session([finding])
+    const boardApi = api({ update: (args) => (updateArgs = args), metadata: target.metadata })
     renderSetup = await testRender(
       () => (
-        <FindingsReview
-          api={api({ update: (args) => (updateArgs = args), metadata: target.metadata })}
-          store={store()}
-          session={target}
-          onApprove={() => {}}
-          onSendBack={() => {}}
-        />
+        <FindingsReview api={boardApi} store={store()} session={target} onApprove={() => {}} onSendBack={() => {}} />
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressEnter()
     await renderSetup.flush()
@@ -389,18 +398,14 @@ describe("FindingsReview — detail mode", () => {
   test("persists an ignore ruling with a substantive note and returns to list", async () => {
     let updateArgs: unknown
     const target = session([finding])
+    const boardApi = api({ update: (args) => (updateArgs = args), metadata: target.metadata })
     renderSetup = await testRender(
       () => (
-        <FindingsReview
-          api={api({ update: (args) => (updateArgs = args), metadata: target.metadata })}
-          store={store()}
-          session={target}
-          onApprove={() => {}}
-          onSendBack={() => {}}
-        />
+        <FindingsReview api={boardApi} store={store()} session={target} onApprove={() => {}} onSendBack={() => {}} />
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressEnter()
     await renderSetup.flush()
@@ -421,18 +426,14 @@ describe("FindingsReview — detail mode", () => {
     const ruled: Finding = { ...finding, resolution: "clarified", note: "Timeout defaults to 30s per the config" }
     let updateArgs: unknown
     const target = session([ruled])
+    const boardApi = api({ update: (args) => (updateArgs = args), metadata: target.metadata })
     renderSetup = await testRender(
       () => (
-        <FindingsReview
-          api={api({ update: (args) => (updateArgs = args), metadata: target.metadata })}
-          store={store()}
-          session={target}
-          onApprove={() => {}}
-          onSendBack={() => {}}
-        />
+        <FindingsReview api={boardApi} store={store()} session={target} onApprove={() => {}} onSendBack={() => {}} />
       ),
       { width: 100, height: 24 },
     )
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressEnter()
     await renderSetup.flush()

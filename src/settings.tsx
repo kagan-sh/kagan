@@ -1,13 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { commandSpec, helperRetries, inProgressCap, sendBackStopThreshold, squashMerge, type ModelRef } from "./task"
 import type { CommandSpec } from "./check"
 import { SETTINGS_ROUTE, ROUTE } from "./types"
+import { useKeyIntercept } from "./tui-renderer"
 
 type Section = "General" | "Agents" | "Commands" | "Validator models" | "JSON preview"
 
@@ -327,48 +327,49 @@ function CommandListEditor(props: {
     setRowIndex(target)
   }
 
-  useKeyboard((key) => {
+  useKeyIntercept(props.api, (key) => {
     if (key.name === "escape") {
       props.api.ui.dialog.clear()
       props.onChange(commands())
-      return
+      return true
     }
     if (key.name === "a") {
       addCommand()
-      return
+      return true
     }
     if (key.name === "d") {
       deleteCommand()
-      return
+      return true
     }
     if (key.shift && (key.name === "up" || key.name === "k")) {
       moveCommand(-1)
-      return
+      return true
     }
     if (key.shift && (key.name === "down" || key.name === "j")) {
       moveCommand(1)
-      return
+      return true
     }
     if (key.name === "up" || key.name === "k") {
       setRowIndex((i) => Math.max(i - 1, 0))
-      return
+      return true
     }
     if (key.name === "down" || key.name === "j") {
       setRowIndex((i) => Math.min(i + 1, commands().length - 1))
-      return
+      return true
     }
     if (key.name === "left" || key.name === "h") {
       setFieldIndex((i) => (i - 1 + fieldCount) % fieldCount)
-      return
+      return true
     }
     if (key.name === "right" || key.name === "l") {
       setFieldIndex((i) => (i + 1) % fieldCount)
-      return
+      return true
     }
     if (key.name === "return") {
       editField()
-      return
+      return true
     }
+    return false
   })
 
   return (
@@ -558,40 +559,41 @@ function ValidatorModelListEditor(props: {
     setRowIndex(Math.min(index, Math.max(next.length - 1, 0)))
   }
 
-  useKeyboard((key) => {
+  useKeyIntercept(props.api, (key) => {
     if (key.name === "escape") {
       props.api.ui.dialog.clear()
       props.onChange(models())
-      return
+      return true
     }
     if (key.name === "a") {
       addModel()
-      return
+      return true
     }
     if (key.name === "d") {
       deleteModel()
-      return
+      return true
     }
     if (key.name === "up" || key.name === "k") {
       setRowIndex((i) => Math.max(i - 1, 0))
-      return
+      return true
     }
     if (key.name === "down" || key.name === "j") {
       setRowIndex((i) => Math.min(i + 1, models().length - 1))
-      return
+      return true
     }
     if (key.name === "left" || key.name === "h") {
       setFieldIndex((i) => (i - 1 + fieldCount) % fieldCount)
-      return
+      return true
     }
     if (key.name === "right" || key.name === "l") {
       setFieldIndex((i) => (i + 1) % fieldCount)
-      return
+      return true
     }
     if (key.name === "return") {
       editField()
-      return
+      return true
     }
+    return false
   })
 
   return (
@@ -743,7 +745,6 @@ function rowsFor(
 }
 
 export function Settings(props: { api: TuiPluginApi; options?: Record<string, unknown> }) {
-  const dimensions = useTerminalDimensions()
   const theme = () => props.api.theme.current
   const [draft, setDraft] = createSignal(draftFromOptions(props.options))
   const [sectionIndex, setSectionIndex] = createSignal(0)
@@ -753,29 +754,29 @@ export function Settings(props: { api: TuiPluginApi; options?: Record<string, un
   const rows = createMemo(() => rowsFor(section(), draft(), setDraft, setMessage, props.api))
   const selectedRow = () => rows()[rowIndex()]
 
-  useKeyboard((key) => {
-    if (props.api.route.current.name !== SETTINGS_ROUTE || props.api.ui.dialog.open) return
+  useKeyIntercept(props.api, (key) => {
+    if (props.api.route.current.name !== SETTINGS_ROUTE || props.api.ui.dialog.open) return false
     if (key.name === "escape" || key.name === "q") {
       props.api.route.navigate(ROUTE)
-      return
+      return true
     }
     if (key.name === "tab" || key.name === "right") {
       setSectionIndex((index) => (index + 1) % SECTIONS.length)
       setRowIndex(0)
-      return
+      return true
     }
     if (key.name === "left") {
       setSectionIndex((index) => (index + SECTIONS.length - 1) % SECTIONS.length)
       setRowIndex(0)
-      return
+      return true
     }
     if (key.name === "down" || key.name === "j") {
       setRowIndex((index) => Math.min(index + 1, rows().length - 1))
-      return
+      return true
     }
     if (key.name === "up" || key.name === "k") {
       setRowIndex((index) => Math.max(index - 1, 0))
-      return
+      return true
     }
     if (key.name === "return" || key.name === "e") {
       try {
@@ -783,17 +784,19 @@ export function Settings(props: { api: TuiPluginApi; options?: Record<string, un
       } catch (error) {
         setMessage(error instanceof Error ? error.message : String(error))
       }
-      return
+      return true
     }
     if (key.name === "s") {
       void saveOptions(props.api.state.path.worktree, draft()).then(setMessage, (error) =>
         setMessage(error instanceof Error ? error.message : String(error)),
       )
+      return true
     }
+    return false
   })
 
   return (
-    <box position="absolute" left={0} top={0} width={dimensions().width} height={dimensions().height} padding={1}>
+    <box position="absolute" left={0} top={0} width="100%" height="100%" padding={1}>
       <box flexDirection="column" width="100%" height="100%" borderColor={theme().border}>
         <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
           <text fg={theme().text} attributes={TextAttributes.BOLD}>

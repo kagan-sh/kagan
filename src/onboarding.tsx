@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard } from "@opentui/solid"
 import { createSignal, For, onMount } from "solid-js"
+import { useKeyIntercept } from "./tui-renderer"
 
 const SEEN_KEY = "kagan:onboarding"
 
@@ -52,21 +52,25 @@ export function Onboarding(props: { api: TuiPluginApi }) {
     close()
   }
 
-  useKeyboard((key) => {
+  useKeyIntercept(props.api, (key) => {
     if (key.name === "left" || key.name === "h") {
       setStep((current) => Math.max(0, current - 1))
-      return
+      return true
     }
     if (key.name === "right" || key.name === "l") {
       setStep((current) => Math.min(last, current + 1))
-      return
+      return true
     }
     if (key.name === "return") {
       if (step() === last) close()
       else setStep((current) => current + 1)
-      return
+      return true
     }
-    if (key.name === "x") dismissForever()
+    if (key.name === "x") {
+      dismissForever()
+      return true
+    }
+    return false
   })
 
   return (

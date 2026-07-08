@@ -4,7 +4,7 @@ import { testRender } from "@opentui/solid"
 import type { TestRendererSetup } from "@opentui/core/testing"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
-import { mockTuiApi } from "./fixtures/api"
+import { attachRendererMockInput, mockTuiApi } from "./fixtures/api"
 
 let branches = ["main", "feature"]
 let createInput: Record<string, unknown> | undefined
@@ -103,9 +103,10 @@ function harness(scopes: string[] = []) {
   }
 }
 
-async function renderLatest(renders: Array<() => JSX.Element>) {
+async function renderLatest(api: TuiPluginApi, renders: Array<() => JSX.Element>) {
   await renderSetup?.renderer.destroy()
   renderSetup = await testRender(() => renders.at(-1)!(), { width: 80, height: 24 })
+  attachRendererMockInput(api, renderSetup)
   await renderSetup.flush()
 }
 
@@ -113,7 +114,7 @@ describe("openCreateTaskDialog", () => {
   test("warns and does not create when title is blank", async () => {
     const view = harness()
     await openCreateTaskDialog(view.api, view.store as never)
-    await renderLatest(view.renders)
+    await renderLatest(view.api, view.renders)
 
     renderSetup!.mockInput.pressEnter()
     await renderSetup!.flush()
@@ -126,7 +127,7 @@ describe("openCreateTaskDialog", () => {
   test("creates with the chosen model, current branch, order append, refresh, and success notice", async () => {
     const view = harness()
     await openCreateTaskDialog(view.api, view.store as never)
-    await renderLatest(view.renders)
+    await renderLatest(view.api, view.renders)
 
     await renderSetup!.mockInput.typeText("  Ship docs  ")
     renderSetup!.mockInput.pressTab()
@@ -136,10 +137,10 @@ describe("openCreateTaskDialog", () => {
     renderSetup!.mockInput.pressTab()
     await renderSetup!.flush()
     renderSetup!.mockInput.pressEnter()
-    await renderLatest(view.renders)
+    await renderLatest(view.api, view.renders)
     expect(view.selectProps?.title).toBe("Model")
     view.selectProps?.onSelect({ value: 1 })
-    await renderLatest(view.renders)
+    await renderLatest(view.api, view.renders)
 
     renderSetup!.mockInput.pressTab()
     await renderSetup!.flush()
@@ -165,6 +166,7 @@ describe("openCreateTaskDialog", () => {
     await openCreateTaskDialog(view.api, view.store as never)
     await renderSetup?.renderer.destroy()
     renderSetup = await testRender(() => view.renders.at(-1)!(), { width: 80, height: 24, otherModifiersMode: true })
+    attachRendererMockInput(view.api, renderSetup)
     await renderSetup.flush()
 
     await renderSetup.mockInput.typeText("Ship docs")
@@ -179,7 +181,7 @@ describe("openCreateTaskDialog", () => {
   test("preselects the only configured static scope", async () => {
     const view = harness(["project-alpha"])
     await openCreateTaskDialog(view.api, view.store as never)
-    await renderLatest(view.renders)
+    await renderLatest(view.api, view.renders)
 
     await renderSetup!.mockInput.typeText("Ship alpha project")
     renderSetup!.mockInput.pressEnter()
@@ -191,7 +193,7 @@ describe("openCreateTaskDialog", () => {
   test("requires a scope when multiple static scopes are configured", async () => {
     const view = harness(["project-alpha", "project-beta"])
     await openCreateTaskDialog(view.api, view.store as never)
-    await renderLatest(view.renders)
+    await renderLatest(view.api, view.renders)
 
     await renderSetup!.mockInput.typeText("Ship scoped work")
     renderSetup!.mockInput.pressEnter()
@@ -206,7 +208,7 @@ describe("openCreateTaskDialog", () => {
     createError = new Error("worktree failed")
     const view = harness()
     await openCreateTaskDialog(view.api, view.store as never)
-    await renderLatest(view.renders)
+    await renderLatest(view.api, view.renders)
 
     await renderSetup!.mockInput.typeText("Fix flaky test")
     renderSetup!.mockInput.pressEnter()

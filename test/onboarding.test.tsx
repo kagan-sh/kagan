@@ -4,7 +4,7 @@ import { testRender } from "@opentui/solid"
 import type { TestRendererSetup } from "@opentui/core/testing"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { maybeShowOnboarding, Onboarding, showOnboarding } from "../src/onboarding"
-import { mockTuiApi } from "./fixtures/api"
+import { attachRendererMockInput, mockTuiApi } from "./fixtures/api"
 
 let renderSetup: TestRendererSetup | undefined
 
@@ -78,6 +78,7 @@ describe("Onboarding", () => {
       cleared = true
     }
     renderSetup = await testRender(() => <Onboarding api={boardApi} />, { width: 70, height: 24 })
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressKey("x")
     await renderSetup.waitFor(() => cleared)
@@ -91,6 +92,7 @@ describe("Onboarding", () => {
       cleared = true
     }
     renderSetup = await testRender(() => <Onboarding api={boardApi} />, { width: 70, height: 24 })
+    attachRendererMockInput(boardApi, renderSetup)
     await renderSetup.flush()
     for (let i = 0; i < 3; i++) {
       renderSetup.mockInput.pressEnter()
