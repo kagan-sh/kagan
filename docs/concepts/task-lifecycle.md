@@ -26,11 +26,11 @@ results are recorded, but they never block creation.
 
 ## Start (In Progress)
 
-On first entry the session is prompted automatically with the refined instruction, your resolved
-decisions, the intake understanding, and any `#N` referenced-task context — using the model you
-picked at creation. The move is denied if the In Progress cap is full, the task has no worktree,
-or intake is unresolved. Once the agent has started, the task can't move back to Backlog — the
-agent may still be working, so that would strand it with nothing to resume it.
+On first entry the session is prompted automatically with the original description, refined
+instruction, your resolved decisions, the intake understanding, and any `#N` referenced-task context
+— using the model you picked at creation. The move is denied if the In Progress cap is full, the
+task has no worktree, or intake is unresolved. Once the agent has started, the task can't move back
+to Backlog — the agent may still be working, so that would strand it with nothing to resume it.
 
 ## Review
 

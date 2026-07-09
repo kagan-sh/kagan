@@ -20,8 +20,27 @@ export type CommandStepResult = {
 export type CheckResult = { command: string; exitCode: number | null; output: string; steps?: CommandStepResult[] }
 
 const OUTPUT_LIMIT = 4000
+const METADATA_OUTPUT_LIMIT = 8000
 
-export async function runCheckCommand(command: string, cwd: string, timeoutMs = 300_000): Promise<CheckResult> {
+function truncateOutput(output: string, limit = OUTPUT_LIMIT): string {
+  return output.length > limit ? output.slice(-limit) : output
+}
+
+export function truncateCheckResultForMetadata(result: CheckResult): CheckResult {
+  if (!result.steps) {
+    return { ...result, output: truncateOutput(result.output) }
+  }
+  const steps = result.steps.map((step) => ({
+    ...step,
+    output: step.status === "ran" ? truncateOutput(step.output) : step.output,
+  }))
+  const output = truncateOutput(summarizeSteps(steps), METADATA_OUTPUT_LIMIT)
+  return { ...result, steps, output }
+}
+
+export const CHECK_COMMAND_TIMEOUT_MS = 300_000
+
+export async function runCheckCommand(command: string, cwd: string): Promise<CheckResult> {
   let proc: ReturnType<typeof Bun.spawn> | undefined
   let timedOut = false
   let timeoutID: ReturnType<typeof setTimeout> | undefined
@@ -46,7 +65,7 @@ export async function runCheckCommand(command: string, cwd: string, timeoutMs = 
           // Process already exited; let the normal path collect output.
         }
       }
-    }, timeoutMs)
+    }, CHECK_COMMAND_TIMEOUT_MS)
 
     await proc.exited
 
@@ -59,7 +78,7 @@ export async function runCheckCommand(command: string, cwd: string, timeoutMs = 
       return {
         command,
         exitCode: null,
-        output: `check timed out after ${timeoutMs / 1000}s\n${output}`,
+        output: `check timed out after ${CHECK_COMMAND_TIMEOUT_MS / 1000}s\n${output}`,
       }
     }
 

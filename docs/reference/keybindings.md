@@ -39,8 +39,8 @@ In the create dialog: `Tab` moves between fields, `↑`/`↓` move outside the d
 `Enter` opens the scope/model/base-branch pickers, `Enter` submits from the title row,
 `Ctrl+Enter` submits from any field, and `Esc` cancels.
 
-Export, import, and archive live in the card action menu (`Enter`) rather than on dedicated keys.
-A trust packet is a JSON snapshot of a task's title, status, intake, findings, prior triage,
-reports, and diff stats. Importing one opens a read-only view; it does not create or modify tasks.
+View details and archive live in the card action menu (`Enter`) rather than on dedicated keys.
+**View details** opens a read-only summary of the task's title, status, intake, findings, prior
+triage, reports, check/setup evidence, and diff stats.
 Archiving a Done task removes it from the board — it stays reachable through OpenCode's own session
 list, with no unarchive path back onto the board.

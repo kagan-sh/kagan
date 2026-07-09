@@ -47,12 +47,36 @@ export function taskBranch(slug: string): string {
 
 const COMMAND_SEPARATORS = /&&|\|\||[;\n|]/
 
+function hasUserWorkDuringMerge(porcelain: string): boolean {
+  for (const line of porcelain.split("\n")) {
+    const entry = line.trimEnd()
+    if (entry.length < 3 || entry[2] !== " ") continue
+    const index = entry[0]!
+    const worktree = entry[1]!
+    if (index === "?" || worktree === "?") return true
+    if (worktree === "M" && index !== "U") return true
+    if (worktree === "D" && index !== "U" && index !== "D") return true
+  }
+  return false
+}
+
 // Naive whitespace tokenization (no quote-awareness), matching from the first `git` token wherever
 // it appears: over-flagging prose that mentions a push (e.g. `echo "git push"`) is harmless, while
 // missing a real push behind an env-var or sudo prefix is not.
+function isGitToken(token: string): boolean {
+  return token === "git" || token.endsWith("/git")
+}
+
+function unwrapOuterParens(segment: string): string {
+  let s = segment.trim()
+  while (s.startsWith("(")) s = s.slice(1).trim()
+  while (s.endsWith(")")) s = s.slice(0, -1).trim()
+  return s
+}
+
 function isGitPushSegment(segment: string): boolean {
-  const tokens = segment.trim().split(/\s+/)
-  const start = tokens.indexOf("git")
+  const tokens = unwrapOuterParens(segment).split(/\s+/).filter(Boolean)
+  const start = tokens.findIndex(isGitToken)
   if (start === -1) return false
   for (let i = start + 1; i < tokens.length; i++) {
     const token = tokens[i]!
@@ -319,6 +343,18 @@ export async function commitAll(run: GitRunner, worktree: string, message: strin
 
 export type MergeResult = { ok: boolean; message: string }
 
+async function dirtyMainWorktreeMessage(
+  run: GitRunner,
+  checkoutDir: string,
+  targetBranch: string,
+): Promise<MergeResult | undefined> {
+  const status = await run(["status", "--porcelain"], checkoutDir)
+  if (status.stdout.trim()) {
+    return { ok: false, message: `Commit or stash changes on ${targetBranch} before merging` }
+  }
+  return undefined
+}
+
 async function mergeSquash(
   run: GitRunner,
   checkoutDir: string,
@@ -327,17 +363,21 @@ async function mergeSquash(
   commitMessage: string,
   isMainWorktree: boolean,
 ): Promise<MergeResult> {
+  let mergeStartedOnCleanMain = false
   if (isMainWorktree) {
-    const status = await run(["status", "--porcelain"], checkoutDir)
-    if (status.stdout.trim()) {
-      return { ok: false, message: `Commit or stash changes on ${targetBranch} before merging` }
-    }
+    const dirty = await dirtyMainWorktreeMessage(run, checkoutDir, targetBranch)
+    if (dirty) return dirty
+    mergeStartedOnCleanMain = true
   }
   // `git merge --abort` has no effect after `--squash` (there's no MERGE_HEAD), so `git reset
-  // --hard HEAD` is the only way back — safe here only because we just verified the main
-  // worktree was clean before starting, so nothing of the user's is lost.
+  // --hard HEAD` is the only way back — safe when the worktree was clean at merge start and any
+  // dirtiness is merge fallout, not uncommitted work created during the merge.
   const fail = async (message: string): Promise<MergeResult> => {
-    if (isMainWorktree) await run(["reset", "--hard", "HEAD"], checkoutDir)
+    if (isMainWorktree && mergeStartedOnCleanMain) {
+      const current = await run(["status", "--porcelain"], checkoutDir)
+      const out = current.stdout.trimEnd()
+      if (!out.trim() || !hasUserWorkDuringMerge(out)) await run(["reset", "--hard", "HEAD"], checkoutDir)
+    }
     return { ok: false, message }
   }
   const squashed = await run(["merge", "--squash", branch], checkoutDir)
@@ -362,6 +402,10 @@ async function mergeInto(
   isMainWorktree: boolean,
 ): Promise<MergeResult> {
   if (squash) return mergeSquash(run, checkoutDir, branch, targetBranch, commitMessage, isMainWorktree)
+  if (isMainWorktree) {
+    const dirty = await dirtyMainWorktreeMessage(run, checkoutDir, targetBranch)
+    if (dirty) return dirty
+  }
   const merged = await run(["merge", branch], checkoutDir)
   if (merged.code === 0) return { ok: true, message: merged.stdout.trim() || `Merged ${branch}` }
   await run(["merge", "--abort"], checkoutDir)

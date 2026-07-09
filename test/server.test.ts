@@ -943,6 +943,15 @@ describe("kagan server — tool.execute.before (git push guard)", () => {
     await expect(callGuard(hooks, "git push origin HEAD")).rejects.toThrow(/board/i)
   })
 
+  test("denies a subshell-wrapped git push from a board-task session", async () => {
+    const store: Record<string, SessionData> = {
+      s1: { metadata: { kagan: { boardTask: true, status: "in_progress" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    await expect(callGuard(hooks, "(git push origin main)")).rejects.toThrow(/board/i)
+  })
+
   test("allows a git push from a generic OpenCode session", async () => {
     const store: Record<string, SessionData> = { s1: { metadata: {} } }
     const { input } = makeInput({ store })

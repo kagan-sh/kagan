@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { runCommandPlan, type CommandSpec } from "./check"
+import { runCommandPlan, truncateCheckResultForMetadata, type CommandSpec } from "./check"
 import {
   approveDenyReason,
   commandInTaskScope,
@@ -28,17 +28,10 @@ import {
   type MergeResult,
 } from "./git"
 import { composeHandoffPrompt } from "./handoff"
-import { COLUMNS, type BoardSession, type ColumnType } from "./types"
+import { type BoardSession, type ColumnType } from "./types"
 
 export function getStatus(metadata?: Record<string, unknown>): ColumnType {
-  const status = rawKagan(metadata)?.status
-  if (typeof status !== "string") return "backlog"
-  if (!COLUMNS.includes(status as ColumnType)) return "backlog"
-  return status as ColumnType
-}
-
-export function setStatus(status: ColumnType): { kagan: { status: ColumnType } } {
-  return { kagan: { status } }
+  return kagan(metadata).status ?? "backlog"
 }
 
 function mergeKagan(current: Record<string, unknown>, partial: Record<string, unknown>): Record<string, unknown> {
@@ -272,7 +265,7 @@ export async function createTask(
     "task scope does not include this cwd",
     false,
   )
-  if (setup) patch.setup = setup
+  if (setup) patch.setup = truncateCheckResultForMetadata(setup)
   const result = await api.client.session.create(
     {
       directory,
@@ -369,7 +362,49 @@ export async function mergeTask(
   )
 }
 
+async function stopSession(api: TuiPluginApi, id: string): Promise<void> {
+  try {
+    await api.client.session.abort({ sessionID: id }, { throwOnError: true })
+  } catch {
+    // already idle or gone
+  }
+}
+
+async function removeSession(api: TuiPluginApi, id: string): Promise<void> {
+  try {
+    await api.client.session.delete({ sessionID: id }, { throwOnError: true })
+  } catch {
+    // may already be removed with the parent
+  }
+}
+
+async function relatedSessionIDs(api: TuiPluginApi, sessionID: string): Promise<Set<string>> {
+  const related = new Set<string>()
+  try {
+    const result = await api.client.session.get({ sessionID }, { throwOnError: true })
+    const view = kagan(result.data?.metadata)
+    if (view.intakeSessionID) related.add(view.intakeSessionID)
+    if (view.validatorSessionID) related.add(view.validatorSessionID)
+    if (view.activeIteration && view.activeIteration !== sessionID) related.add(view.activeIteration)
+  } catch {
+    // proceed with delete anyway
+  }
+  try {
+    const children = await api.client.session.children({ sessionID }, { throwOnError: true })
+    for (const child of children.data ?? []) {
+      if (child.id) related.add(child.id)
+    }
+  } catch {
+    // children lookup is best-effort
+  }
+  related.delete(sessionID)
+  return related
+}
+
 export async function deleteSession(api: TuiPluginApi, sessionID: string): Promise<void> {
+  const related = await relatedSessionIDs(api, sessionID)
+  await Promise.all([...related, sessionID].map((id) => stopSession(api, id)))
+  for (const id of related) await removeSession(api, id)
   await api.client.session.delete({ sessionID }, { throwOnError: true })
 }
 

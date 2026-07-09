@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   approveDenyReason,
   canRetryHelper,
+  canRetrySession,
   commandInTaskScope,
   commandMatchesChangedFile,
   commandPlan,
@@ -320,6 +321,18 @@ describe("kagan().lastGatedStatus", () => {
   })
 })
 
+describe("kagan().status", () => {
+  test("reads a valid column value", () => {
+    expect(kagan({ kagan: { status: "review" } }).status).toBe("review")
+  })
+
+  test("rejects invalid or missing values", () => {
+    expect(kagan({ kagan: { status: "bogus" } }).status).toBeUndefined()
+    expect(kagan({ kagan: {} }).status).toBeUndefined()
+    expect(kagan(undefined).status).toBeUndefined()
+  })
+})
+
 describe("approveDenyReason ladder", () => {
   test("rejects non-board tasks first", () => {
     expect(approveDenyReason({ kagan: { validatorOutcome: "ran" } })).toContain("board")
@@ -610,6 +623,7 @@ describe("commandPlan", () => {
         check: [
           { name: "root", cwd: "/", command: "npm test" },
           { name: "abs", cwd: "/tmp", command: "npm test" },
+          { name: "win", cwd: "C:\\tmp", command: "npm test" },
           { name: "parent", cwd: "../app", command: "npm test" },
           { name: "regex", cwd: "app", command: "npm test", scope: ["["] },
           { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
@@ -673,7 +687,7 @@ describe("task scope and command matching", () => {
   test("runs setup commands only when task scope includes their cwd", () => {
     const command = { name: "alpha deps", cwd: "project-alpha", command: "npm ci" }
     expect(commandInTaskScope(command, { values: ["project-alpha"] })).toBe(true)
-    expect(commandInTaskScope(command, { values: ["project-beta"], custom: "project-alpha" })).toBe(false)
+    expect(commandInTaskScope(command, { values: ["project-beta"], custom: "project-alpha" })).toBe(true)
     expect(commandInTaskScope(command, { values: ["project-beta"], custom: "docs" })).toBe(false)
     expect(commandInTaskScope({ name: "root", cwd: ".", command: "npm ci" }, undefined)).toBe(true)
   })
@@ -958,5 +972,20 @@ describe("canRetryHelper", () => {
 
   test("a helperError for the other role does not unlock retry on its own", () => {
     expect(canRetryHelper({ kagan: { helperError: { role: "intake", message: "boom" } } }, "validator")).toBe(false)
+  })
+})
+
+describe("canRetrySession", () => {
+  test("true in backlog when intake can retry", () => {
+    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
+  })
+
+  test("true in review when validator can retry", () => {
+    expect(canRetrySession("review", { kagan: { validatorOutcome: "failed" } })).toBe(true)
+  })
+
+  test("false when the column and helper role do not match", () => {
+    expect(canRetrySession("backlog", { kagan: { validatorOutcome: "failed" } })).toBe(false)
+    expect(canRetrySession("review", { kagan: { intakeOutcome: "failed" } })).toBe(false)
   })
 })

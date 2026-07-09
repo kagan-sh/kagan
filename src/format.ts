@@ -56,8 +56,10 @@ function commandBadge(
     return result.exitCode === 0 ? { text: `${label} ok`, tone: "success" } : { text: `${label} failed`, tone: "error" }
   }
   const ran = steps.filter((step) => step.status === "ran").length
-  if (ran === 0) return label === "check" ? { text: "check skipped", tone: "muted" } : undefined
+  const skipped = steps.length - ran
+  if (ran === 0) return { text: `${label} skipped`, tone: "muted" }
   if (result.exitCode !== 0) return { text: `${label} failed`, tone: "error" }
+  if (skipped > 0) return { text: `${label} partial`, tone: "success" }
   return { text: `${label} ok`, tone: "success" }
 }
 

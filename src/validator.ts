@@ -2,6 +2,7 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import type { Finding, Intake, ModelRef } from "./task"
 import type { CheckResult } from "./check"
+import { isolatedEvidenceBlock } from "./handoff"
 import { parseOptions } from "./options"
 import { patchKagan } from "./session-api"
 import { orderDiffsByRisk } from "./git"
@@ -55,7 +56,9 @@ function formatContext(context: { title: string; description?: string; intake?: 
   if (context.description) lines.push(`Description: ${context.description}`)
   const intake = context.intake
   if (intake) {
-    if (intake.understanding.trim()) lines.push(`Intake understanding: ${intake.understanding}`)
+    if (intake.understanding.trim()) {
+      lines.push("", isolatedEvidenceBlock("Intake understanding", intake.understanding))
+    }
     const resolved = intake.decisions.filter((d) => d.resolution === "approved" || d.resolution === "overridden")
     if (resolved.length > 0) {
       lines.push("Resolved decisions:")
@@ -64,7 +67,9 @@ function formatContext(context: { title: string; description?: string; intake?: 
         lines.push(`- ${d.question} → ${answer}`)
       }
     }
-    if (intake.refinedPrompt?.trim()) lines.push(`Refined prompt: ${intake.refinedPrompt}`)
+    if (intake.refinedPrompt?.trim()) {
+      lines.push("", isolatedEvidenceBlock("Refined prompt", intake.refinedPrompt))
+    }
   }
   return lines.join("\n")
 }
@@ -112,6 +117,7 @@ export function resolveValidatorModel(
 }
 
 function formatCheck(check: CheckResult): string {
+  let body: string
   if (check.steps && check.steps.length > 0) {
     const ran = check.steps.filter((step) => step.status === "ran")
     const skipped = check.steps.filter((step) => step.status === "skipped")
@@ -135,12 +141,13 @@ function formatCheck(check: CheckResult): string {
         ].join("\n"),
       )
     }
-    return sections.join("\n\n")
+    body = sections.join("\n\n")
+  } else if (check.exitCode === null) {
+    body = `Deterministic check \`${check.command}\` did not complete: ${check.output}`
+  } else {
+    body = `Deterministic check evidence — \`${check.command}\` exited ${check.exitCode}:\n${check.output}`
   }
-  if (check.exitCode === null) {
-    return `Deterministic check \`${check.command}\` did not complete: ${check.output}`
-  }
-  return `Deterministic check evidence — \`${check.command}\` exited ${check.exitCode}:\n${check.output}`
+  return isolatedEvidenceBlock("Check output", body)
 }
 
 export async function spawnValidator(

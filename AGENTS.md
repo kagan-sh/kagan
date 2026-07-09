@@ -7,7 +7,8 @@ worktree per task. Before changing lifecycle behavior, read [`.specs/README.md`]
 
 ## Commands
 
-- `bun run check` — the merge gate (prettier + oxlint + tsc + tests). CI runs exactly this.
+- `bun run check` — the merge gate (prettier + oxlint + tsc + tests + build + package:check). CI runs
+  exactly this.
 - `bun run test` — full suite (~1s; there is rarely a reason to run less).
 - NEVER run bare `bun test` or `bun test <file>`: positional args are substring path filters that
   also match the vendored `references/` tree (bunfig's exclude only applies to discovery mode), and
@@ -43,7 +44,7 @@ This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha
   Verify any claim about SDK/TUI/plugin behavior there and against the installed
   `@opencode-ai/*@1.17.13` in node_modules — never from memory. Never import from `references/`
   and never run its tests.
-- Dependency pins are exact (plugin 1.17.13, opentui 0.4.2, solid 1.9.13). `.opencode/package.json`
+- Dependency pins are exact (plugin 1.17.13, opentui 0.4.3, solid 1.9.10). `.opencode/package.json`
   must keep the same plugin version as the root manifest.
 
 ## Map
@@ -51,9 +52,9 @@ This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha
 - Entry points loaded by OpenCode: `src/server.ts` (events, gates, tools, push guard), `src/tui.tsx`
   (board route).
 - UI: `board.tsx`, `column.tsx`, `card.tsx`, `commands.tsx`, `create-task.tsx`,
-  `findings-review.tsx`, `trust-packet.tsx`, `onboarding.tsx`, `store.ts`, `format.ts`.
+  `findings-review.tsx`, `task-details.tsx`, `onboarding.tsx`, `settings.tsx`, `store.tsx`, `format.ts`.
 - Helper spawns: `intake.ts`, `validator.ts`.
-- Domain: `task.ts` (metadata schema, parsed view, gates), `handoff.ts` (prompts), `types.ts`.
+- Domain: `task.ts` (metadata schema, parsed view, gates), `handoff.ts` (prompts), `types.ts`, `options.ts`.
 - IO: `session-api.ts` (session CRUD, serialized metadata patching, merge/send-back), `git.ts`
   (worktrees, diffs, merge), `check.ts` (setup/check commands).
 
@@ -66,7 +67,7 @@ This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha
   `as Parameters<typeof …>[0]` cast idiom.
 - The server plugin loads once per directory instance and only sees events for its own directory;
   task sessions live in their worktrees, so a different plugin instance handles them. All task
-  state therefore lives in `session.metadata.kagan` (schema in `design.md`), read via `task.ts`'s
+  state therefore lives in `session.metadata.kagan` (schema in `.specs/kagan-supervision-board/design.md`), read via `task.ts`'s
   single parsed view — `kagan(metadata).field` — and written only through `patchKagan` /
   `tuiPatchKagan` (they merge; never replace the whole `kagan` object).
 - Order matters at creation: the worktree must exist before `session.create` (session directories
@@ -104,6 +105,13 @@ This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha
   without the host.
 - In plugin source, use `TuiPluginApi` for renderer dimensions, keyboard input, and keymap layers; never import OpenTUI/Solid context hooks for those surfaces.
 - Behavior changes land with matching `.specs/`, `docs/`, and README updates in the same change.
+
+## Self-align audit
+
+When asked to "self-align", audit, or health-check this repo, follow
+[`.claude/skills/self-align/SKILL.md`](.claude/skills/self-align/SKILL.md): four adversarial
+lenses (quality/YAGNI, security, spec alignment, docs freshness), self-assessed and reported by
+severity and confidence. It works with or without a subagent mechanism.
 
 ## Style and discipline
 

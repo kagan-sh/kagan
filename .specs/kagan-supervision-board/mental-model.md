@@ -76,7 +76,8 @@ anchor and a kagan mechanism that embodies it.
 2. **Spend human attention only at the highest-leverage points.** Mechanism: three gates + WIP cap.
 3. **Keep the human generating, not just approving.** Mechanism: fix via send-back instead of
    hand-editing task worktrees. Evidence: Anthropic skill-formation.
-4. **Make trust legible and portable.** Mechanism: trust packets. Evidence: Conway; Herbsleb–Mockus.
+4. **Make trust legible.** Mechanism: structured task details on the board and at merge. Evidence:
+   Conway; Herbsleb–Mockus.
 5. **Budget by cost-per-verified-success, human-centric.** Mechanism: prefer configured checks over
    LLM-judge calls. Evidence: Wharton CoT; LiteLLM; OWASP LLM10.
 6. **Right-size autonomy to enforceable determinism.** Mechanism: mode advisor.

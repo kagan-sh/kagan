@@ -23,8 +23,7 @@ the intake agent flags it and recommends you drive it yourself instead. See
 
 Plain OpenCode chat sessions are untouched: no board card, no intake, no gating.
 
-You can export a task's evidence and rulings as a [trust packet](/concepts/trust-packets), and
-supervised task sessions cannot push to a remote — work leaves the sandbox only through the board's
+Supervised task sessions cannot push to a remote — work leaves the sandbox only through the board's
 merge dialog.
 
 Start with the [Quickstart](/quickstart). The lifecycle in full detail:

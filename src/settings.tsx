@@ -4,7 +4,16 @@ import { TextAttributes } from "@opentui/core"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { commandSpec, helperRetries, inProgressCap, sendBackStopThreshold, squashMerge, type ModelRef } from "./task"
+import { OptionBoundsSchema } from "./options"
+import {
+  commandPlan,
+  commandSpec,
+  helperRetries,
+  inProgressCap,
+  sendBackStopThreshold,
+  squashMerge,
+  type ModelRef,
+} from "./task"
 import type { CommandSpec } from "./check"
 import { SETTINGS_ROUTE, ROUTE } from "./types"
 import { useKeyIntercept } from "./tui-renderer"
@@ -27,13 +36,6 @@ type Draft = {
 
 const SECTIONS: Section[] = ["General", "Agents", "Commands", "Validator models", "JSON preview"]
 
-function commandSpecs(value: unknown, kind: "setup" | "check"): CommandSpec[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item, index) => commandSpec(item, `${kind} ${index + 1}`))
-    .filter((spec): spec is CommandSpec => spec !== undefined)
-}
-
 function modelRef(value: unknown): ModelRef | undefined {
   if (typeof value !== "object" || value === null) return undefined
   const raw = value as Record<string, unknown>
@@ -44,7 +46,6 @@ function modelRef(value: unknown): ModelRef | undefined {
 }
 
 function draftFromOptions(options?: Record<string, unknown>): Draft {
-  const commands = options?.commands
   return {
     inProgressLimit: inProgressCap(options),
     helperRetries: helperRetries(options),
@@ -56,14 +57,8 @@ function draftFromOptions(options?: Record<string, unknown>): Draft {
       ? options.validatorModels.map(modelRef).filter((model): model is ModelRef => model !== undefined)
       : [],
     commands: {
-      setup: commandSpecs(
-        typeof commands === "object" && commands !== null ? (commands as Record<string, unknown>).setup : undefined,
-        "setup",
-      ),
-      check: commandSpecs(
-        typeof commands === "object" && commands !== null ? (commands as Record<string, unknown>).check : undefined,
-        "check",
-      ),
+      setup: commandPlan(options, "setup"),
+      check: commandPlan(options, "check"),
     },
   }
 }
@@ -100,10 +95,19 @@ function validateValidatorModels(value: ModelRef[]): string | undefined {
 }
 
 function validateDraft(draft: Draft): string | undefined {
-  if (draft.inProgressLimit < 1) return "inProgressLimit must be at least 1"
-  if (draft.helperRetries < 0) return "helperRetries must be at least 0"
-  if (draft.sendBackStopThreshold < 1) return "sendBackStopThreshold must be at least 1"
-  return validateValidatorModels(draft.validatorModels)
+  const modelError = validateValidatorModels(draft.validatorModels)
+  if (modelError) return modelError
+  const bounds = OptionBoundsSchema.safeParse({
+    inProgressLimit: draft.inProgressLimit,
+    helperRetries: draft.helperRetries,
+    sendBackStopThreshold: draft.sendBackStopThreshold,
+  })
+  if (bounds.success) return undefined
+  const field = bounds.error.issues[0]?.path[0]
+  if (field === "inProgressLimit") return "inProgressLimit must be at least 1"
+  if (field === "helperRetries") return "helperRetries must be at least 0"
+  if (field === "sendBackStopThreshold") return "sendBackStopThreshold must be at least 1"
+  return bounds.error.issues[0]?.message ?? "Invalid settings"
 }
 
 async function saveOptions(worktree: string, draft: Draft): Promise<string> {

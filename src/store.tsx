@@ -588,11 +588,7 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
 
 export const SESSION_EVENT_DEBOUNCE_MS = 1000
 
-export function createSessionEventSubscription(
-  api: TuiPluginApi,
-  refresh: () => Promise<void>,
-  debounceMs = SESSION_EVENT_DEBOUNCE_MS,
-): () => void {
+export function createSessionEventSubscription(api: TuiPluginApi, refresh: () => Promise<void>): () => void {
   const types: Array<Event["type"]> = ["session.created", "session.updated", "session.idle", "session.deleted"]
   let timer: ReturnType<typeof setTimeout> | undefined
   const scheduleRefresh = () => {
@@ -601,7 +597,7 @@ export function createSessionEventSubscription(
     timer = setTimeout(() => {
       timer = undefined
       refresh()
-    }, debounceMs)
+    }, SESSION_EVENT_DEBOUNCE_MS)
   }
   const disposers = types.map((type) => api.event.on(type, scheduleRefresh))
   return () => {

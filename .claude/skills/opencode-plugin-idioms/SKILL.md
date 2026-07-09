@@ -2,7 +2,7 @@
 name: opencode-plugin-idioms
 description: Event hook payload shapes, session lifecycle timing, toast/TUI-route render boundaries, and child-session tagging conventions for OpenCode server (@opencode-ai/plugin) and TUI (@opencode-ai/plugin/tui) plugins, grounded in the vendored OpenCode source at references/opencode.
 type: prompt
-whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/board.tsx, src/commands.tsx, src/store.ts, src/intake.ts, or src/validator.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
+whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/board.tsx, src/commands.tsx, src/store.tsx, src/intake.ts, or src/validator.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
 ---
 
 Version check: repo pins `@opencode-ai/plugin@1.17.13`; vendored copy at `references/opencode/packages/plugin/package.json` should match — verify there, never from memory.
@@ -52,7 +52,23 @@ const unsubscribe =
 
 ## 2. Reacting to session creation
 
-`session.created` (§1) already covers "instant reaction to a new session" — no need for a different hook. This repo's `src/server.ts` currently only branches on `session.updated`/`session.idle`/`session.deleted` (`src/server.ts:245,251,308`) and relies on a `lastColumn` Map with `prev === undefined` as a proxy for "first time seen" (`src/server.ts:257`) — that's a workaround for not listening to `session.created` directly; listening to `session.created` for board-column bootstrapping would be more direct and remove the `undefined`-sentinel indirection.
+`session.created` (§1) covers instant reaction to a new session. This repo's `src/server.ts` `event` hook
+switches on `session.created`, `session.updated`, `session.idle`, and others (`src/server.ts:477-491`).
+
+`handleSessionCreated` (`src/server.ts:317-324`) runs on `session.created`: skips helper/parented
+sessions (`role` or `parentID`), then for board tasks with no `lastGatedStatus` yet seeds it from
+`getStatus(metadata)` via `patchKagan`. That establishes the baseline column before
+`handleSessionUpdated` sees status changes.
+
+`handleSessionUpdated` (`src/server.ts:326-386`) reads `lastGatedStatus` from persisted
+`metadata.kagan` (not an in-memory Map). On first update where `prev === undefined`, it seeds
+`lastGatedStatus` for board tasks (covers sessions created before the field existed or when
+`session.created` raced). When `newCol !== prev`, it enforces column-move gates and updates
+`lastGatedStatus` on allowed moves.
+
+The `undefined` sentinel on `lastGatedStatus` distinguishes "never gated" from an explicit column
+value — `session.created` seeds it early so subsequent `session.updated` events can gate column
+transitions correctly.
 
 Full `Hooks` interface (all hook names a plugin may implement) — `references/opencode/packages/plugin/src/index.ts:222-335`:
 
@@ -76,7 +92,7 @@ for (const hook of s.hooks) {
 }
 ```
 
-So a later-registered plugin can silently overwrite an earlier plugin's `output.status` (`permission.ask`) or `output.args` (`tool.execute.before`). This repo's own `permission.ask` and `tool.execute.before` handlers (`src/server.ts:335-343`, `345-363`) only ever read `output`/set `output.status` or throw — they don't assume they're the only plugin present, which is correct defensive practice given this ordering.
+So a later-registered plugin can silently overwrite an earlier plugin's `output.status` (`permission.ask`, if wired) or `output.args` (`tool.execute.before`). This repo's own `tool.execute.before` handler reads `output` and throws only when it must block a command; it doesn't assume it's the only plugin present, which is correct defensive practice given this ordering.
 
 **`permission.ask` is declared in the `Hooks` type but has zero trigger call sites** anywhere in `packages/opencode/src` in this snapshot (`grep -rn '"permission.ask"\|trigger("permission' packages/opencode/src` returns nothing outside the type definition and this repo's own handler). Don't assume it's guaranteed to fire on every permission prompt without testing against the actual runtime version in use — treat it as declared-but-unverified-wired for 1.17.x and confirm empirically if a permission gate silently doesn't trigger.
 
@@ -132,7 +148,7 @@ This repo already implements the correct pattern in `src/intake.ts:9-19` and `sr
 
 - Set `parentID: parentSessionID` on `session.create()` for the structural link.
 - Set `metadata.kagan.role` to a discriminator (`"intake"` / `"validator"`) plus a back-pointer (`intakeParent` / `validatorParent`) so a downstream `event` handler can distinguish a helper session from a real task session by reading `session.metadata.kagan.role` before doing anything session-lifecycle-driven.
-- `src/server.ts`'s `event` handler never explicitly checks `role` before running `maybeRunReviewEntry`/`maybeRunIntakeEntry` — it relies on the child session's `metadata.kagan.status` never reaching `"review"`/`"backlog"` naturally (since intake/validator sessions are prompted directly via `session.prompt`, not moved through the board). If a future column-move handler is added that fires on any `session.updated` regardless of column, it must check `metadata?.kagan?.role` first to avoid an intake/validator session recursively spawning its own intake/validator.
+- `src/server.ts`'s `event` handler skips helper and parented sessions in `handleSessionUpdated` via `if (infoView.role || info.parentID) return` (`src/server.ts:328`) before running column-move gates — any new lifecycle handler on `session.updated` must apply the same guard first to avoid an intake/validator session recursively spawning its own intake/validator.
 
 Setting `parentID` is not purely structural bookkeeping — it changes real framework behavior worth relying on for helper/child sessions:
 

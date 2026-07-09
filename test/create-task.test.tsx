@@ -51,7 +51,6 @@ function harness(scopes: string[] = []) {
   const renders: Array<() => JSX.Element> = []
   let cleared = false
   let refreshes = 0
-  let selectProps: { title: string; onSelect: (option: { value: number }) => void } | undefined
   const api = mockTuiApi({
     state: {
       path: { worktree: "/repo" },
@@ -68,14 +67,6 @@ function harness(scopes: string[] = []) {
         replace: (render: () => JSX.Element) => {
           renders.push(render)
         },
-      },
-      DialogSelect: (props: { title: string; onSelect: (option: { value: number }) => void }) => {
-        selectProps = props
-        return (
-          <box>
-            <text>{props.title}</text>
-          </box>
-        )
       },
     },
   } as unknown as Partial<TuiPluginApi>)
@@ -97,9 +88,6 @@ function harness(scopes: string[] = []) {
     },
     get refreshes() {
       return refreshes
-    },
-    get selectProps() {
-      return selectProps
     },
   }
 }
@@ -156,8 +144,9 @@ describe("openCreateTaskDialog", () => {
     await renderSetup!.flush()
     renderSetup!.mockInput.pressEnter()
     await renderLatest(view.api, view.renders)
-    expect(view.selectProps?.title).toBe("Model")
-    view.selectProps?.onSelect({ value: 1 })
+    renderSetup!.mockInput.pressKey("ARROW_DOWN")
+    await renderSetup!.flush()
+    renderSetup!.mockInput.pressEnter()
     await renderLatest(view.api, view.renders)
 
     renderSetup!.mockInput.pressTab()

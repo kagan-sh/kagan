@@ -173,7 +173,7 @@ describe("gateBadges", () => {
       [{ text: "check skipped", tone: "muted" }],
     ],
     [
-      "check ok when some configured checks ran and others skipped",
+      "check partial when some configured checks ran and others skipped",
       {
         status: "review",
         check: {
@@ -186,10 +186,10 @@ describe("gateBadges", () => {
           ],
         },
       },
-      [{ text: "check ok", tone: "success" }],
+      [{ text: "check partial", tone: "success" }],
     ],
     [
-      "omits a legacy setup result when every step was skipped",
+      "setup skipped when every configured setup step was out of scope",
       {
         status: "backlog",
         setup: {
@@ -208,7 +208,23 @@ describe("gateBadges", () => {
           ],
         },
       },
-      [],
+      [{ text: "setup skipped", tone: "muted" }],
+    ],
+    [
+      "setup partial when some configured setup steps ran and others skipped",
+      {
+        status: "backlog",
+        setup: {
+          command: "alpha: npm ci && beta: npm ci",
+          exitCode: 0,
+          output: "alpha ok",
+          steps: [
+            { name: "alpha", cwd: "project-alpha", command: "npm ci", status: "ran", exitCode: 0, output: "ok" },
+            { name: "beta", cwd: "project-beta", command: "npm ci", status: "skipped", exitCode: null, output: "" },
+          ],
+        },
+      },
+      [{ text: "setup partial", tone: "success" }],
     ],
     [
       "places the check badge before the validator/findings badge",

@@ -80,18 +80,21 @@ status cues, so that I can see at a glance what needs my attention.
 6. WHILE a Backlog task is intake-ready, its card SHALL display a distinct border color and an
    `intake ok` badge indicating it is eligible to move to In Progress.
 7. THE board footer SHALL display the plugin name and version.
-8. WHILE a task is in Review and not yet approved, the board SHALL sort its card ahead of other
+8. WHERE the published npm `latest` dist-tag is a newer clean release (`x.y.z`) than the
+   installed plugin version, the board footer SHALL append an update-available indicator naming
+   that version.
+9. WHILE a task is in Review and not yet approved, the board SHALL sort its card ahead of other
    cards in that column.
-9. WHILE a Backlog task's intake outcome is `failed`, the card SHALL display a distinct failed
-   badge rather than the ready badge, so a failed helper never displays as a success.
-10. WHEN the user reorders the selected root card within its column, the board SHALL swap it with
+10. WHILE a Backlog task's intake outcome is `failed`, the card SHALL display a distinct failed
+    badge rather than the ready badge, so a failed helper never displays as a success.
+11. WHEN the user reorders the selected root card within its column, the board SHALL swap it with
     its adjacent neighbor in that column's persisted order and SHALL re-render the column in the
     new order; a reorder command issued with a subtask selected SHALL be a no-op.
-11. WHILE an In Progress task's active agent is busy, its card SHALL display a live `working`
+12. WHILE an In Progress task's active agent is busy, its card SHALL display a live `working`
     indicator; WHILE it is retrying after an error, its card SHALL display a live `retrying`
     indicator instead; an In Progress card with neither indicator SHALL be treated as stalled.
     THE indicator SHALL NOT appear on Backlog, Review, or Done cards.
-12. WHERE the user filters cards with a query of the form `#N`, the board SHALL match only the
+13. WHERE the user filters cards with a query of the form `#N`, the board SHALL match only the
     card whose task number equals `N` exactly, in addition to the existing title/slug substring
     match.
 
@@ -168,8 +171,10 @@ prompting.
 
 1. WHEN a board task first enters In Progress THEN Kagan SHALL record its start time.
 2. WHEN a board task first enters In Progress THEN Kagan SHALL start its session with a prompt
-   composed of the refined instruction (or the description, or the title, in that order of
-   preference) plus the resolved intake decisions and understanding.
+   composed of the refined instruction with the human's original description appended under
+   `## Original task description` when both exist, else whichever of refined prompt, description,
+   or title is present (in that order of preference), plus the resolved intake decisions and
+   understanding.
 3. WHERE the task has a chosen model, Kagan SHALL start the session with that model.
 4. WHERE the task's description references other tasks, Kagan SHALL append the resolved reference
    context to the start prompt.
@@ -417,7 +422,7 @@ to a remote, so that the board's merge dialog stays the only way work leaves the
 ## Requirement 17 — Support features
 
 **User Story:** As a developer, I want the supervision loop to expose its supporting state clearly,
-so that failures, handoffs, and portable review context are visible instead of hidden.
+so that failures, handoffs, and supervision evidence are visible instead of hidden.
 
 #### Acceptance Criteria
 
@@ -436,9 +441,9 @@ so that failures, handoffs, and portable review context are visible instead of h
 6. WHEN the board opens for the first time in a run THEN Kagan SHALL offer the onboarding dialog,
    unless the user has opted out; the user SHALL be able to reopen the tour at any time via the
    `kagan.tutorial` palette command (`/kagan-tutorial`), regardless of the opt-out.
-7. WHEN the user exports a trust packet THEN Kagan SHALL serialize the task's title, status, intake,
-   findings, prior triage, reports, and diff stats as JSON; WHEN the user imports one THEN Kagan
-   SHALL display it read-only without mutating local tasks.
+7. WHEN the user views task details from the card action menu THEN Kagan SHALL display a read-only
+   summary of the task's title, status, intake, findings, prior triage, reports, check/setup
+   evidence, and diff stats without mutating task state.
 8. WHEN concurrent handlers patch the same session's `kagan` metadata THEN Kagan SHALL serialize the
    read-modify-write operations per session so one patch cannot clobber another, and a failed patch
    SHALL NOT block later patches for that session.
@@ -449,3 +454,9 @@ so that failures, handoffs, and portable review context are visible instead of h
     JSON preview; WHEN the user saves settings THEN Kagan SHALL update the Kagan plugin entry in the
     project's `opencode.json` only, preserving unrelated config entries, and SHALL tell the user to
     restart OpenCode or reopen the project before expecting the saved settings to apply.
+11. WHERE the plugin options set `intakeAgent`, Kagan SHALL use that OpenCode agent for intake child
+    sessions instead of the session default.
+12. WHERE the plugin options set `validatorAgent`, Kagan SHALL use that OpenCode agent for validator
+    child sessions instead of the session default.
+13. WHERE the plugin options set `validatorModels`, Kagan SHALL rotate reviewer models per the
+    configuration reference when spawning validator sessions.

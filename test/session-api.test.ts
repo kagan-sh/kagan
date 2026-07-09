@@ -94,6 +94,7 @@ const {
   approveSession,
   archiveSession,
   createTask,
+  deleteSession,
   getFilter,
   getStatus,
   lastAssistantText,
@@ -103,7 +104,6 @@ const {
   retryHelper,
   sendBack,
   setFilter,
-  setStatus,
 } = await import("../src/session-api")
 
 beforeEach(() => {
@@ -127,9 +127,9 @@ describe("getStatus", () => {
   })
 })
 
-describe("setStatus", () => {
-  test("returns metadata shape for a status", () => {
-    expect(setStatus("in_progress")).toEqual({ kagan: { status: "in_progress" } })
+describe("status patch shape", () => {
+  test("column status is stored at kagan.status", () => {
+    expect({ kagan: { status: "in_progress" } }).toEqual({ kagan: { status: "in_progress" } })
   })
 })
 
@@ -298,7 +298,33 @@ describe("createTask", () => {
     })
   })
 
-  test("does not run setup from custom scope text", async () => {
+  test("does not run setup from custom scope text unless it matches a configured cwd", async () => {
+    let createArg: Record<string, unknown> | undefined
+    const api = {
+      state: { path: { worktree: "/repo" } },
+      client: {
+        session: {
+          list: async () => ({ data: [] }),
+          create: async (parameters: Record<string, unknown>) => {
+            createArg = parameters
+            return { data: { id: "s1" } }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+    await createTask(api, {
+      title: "Task",
+      description: "",
+      baseBranch: "main",
+      scope: { values: [], custom: "docs" },
+      setupCommands: [{ name: "alpha deps", cwd: "project-alpha", command: "npm ci" }],
+    })
+    const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
+    expect(kagan.scope).toEqual({ values: [], custom: "docs" })
+    expect(kagan.setup).toBeUndefined()
+  })
+
+  test("runs setup when custom scope exactly matches a configured command cwd", async () => {
     let createArg: Record<string, unknown> | undefined
     const api = {
       state: { path: { worktree: "/repo" } },
@@ -321,7 +347,7 @@ describe("createTask", () => {
     })
     const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
     expect(kagan.scope).toEqual({ values: [], custom: "project-alpha" })
-    expect(kagan.setup).toBeUndefined()
+    expect(kagan.setup).toBeDefined()
   })
 })
 
@@ -723,6 +749,88 @@ describe("retryHelper", () => {
     await expect(retryHelper(api, "s1", { metadata: {} } as never, "in_progress")).rejects.toThrow(
       "Retry only applies to backlog or review tasks",
     )
+  })
+})
+
+describe("deleteSession", () => {
+  test("aborts and deletes helper children before deleting the board task", async () => {
+    const aborted: string[] = []
+    const deleted: string[] = []
+    const api = {
+      client: {
+        session: {
+          get: async () => ({
+            data: {
+              metadata: {
+                kagan: {
+                  boardTask: true,
+                  intakeSessionID: "intake-1",
+                  validatorSessionID: "validator-1",
+                  activeIteration: "worker-1",
+                },
+              },
+            },
+          }),
+          children: async () => ({ data: [{ id: "worker-2" }] }),
+          abort: async ({ sessionID }: { sessionID: string }) => {
+            aborted.push(sessionID)
+            return { data: true }
+          },
+          delete: async ({ sessionID }: { sessionID: string }) => {
+            deleted.push(sessionID)
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+
+    await deleteSession(api, "root")
+
+    expect(aborted.sort()).toEqual(["intake-1", "root", "validator-1", "worker-1", "worker-2"].sort())
+    expect(deleted).toEqual(["intake-1", "validator-1", "worker-1", "worker-2", "root"])
+  })
+
+  test("still deletes the parent when helper lookups fail", async () => {
+    const deleted: string[] = []
+    const api = {
+      client: {
+        session: {
+          get: async () => {
+            throw new Error("missing")
+          },
+          children: async () => {
+            throw new Error("missing")
+          },
+          abort: async () => ({ data: true }),
+          delete: async ({ sessionID }: { sessionID: string }) => {
+            deleted.push(sessionID)
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+
+    await deleteSession(api, "root")
+
+    expect(deleted).toEqual(["root"])
+  })
+
+  test("propagates a parent delete failure after stopping children", async () => {
+    const api = {
+      client: {
+        session: {
+          get: async () => ({ data: { metadata: { kagan: { intakeSessionID: "intake-1" } } } }),
+          children: async () => ({ data: [] }),
+          abort: async () => ({ data: true }),
+          delete: async ({ sessionID }: { sessionID: string }) => {
+            if (sessionID === "root") throw new Error("delete failed")
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+
+    await expect(deleteSession(api, "root")).rejects.toThrow("delete failed")
   })
 })
 

@@ -83,7 +83,7 @@ Monorepo example:
 }
 ```
 
-Configured command `cwd` values become task scopes in the create-task dialog. If there is one static scope it is preselected; if there are several, choose at least one scope or enter custom scope text. Custom free-form scope text is saved on the task, but it never triggers setup commands.
+Configured command `cwd` values become task scopes in the create-task dialog. If there is one static scope it is preselected; if there are several, choose at least one scope or enter custom scope text. Custom free-form scope text is saved on the task. It triggers setup commands only when it exactly matches a configured `cwd`.
 
 Configured checks also control a deterministic advisory overlay: when no check command is configured, the intake mode rationale shown on the selected card and in the findings-review header appends "(no automatic check configured - lean assisted)". The mode recommendation itself — `autonomous`, `assisted`, or `manual` — is advisory only and never gates a move or approval.
 
@@ -92,6 +92,7 @@ stdout/stderr per command.
 
 Open settings with `/kagan-settings` or `,` on the board. Settings can edit the Kagan plugin options
 and save them to project `opencode.json`; restart OpenCode or reopen the project for saved settings
+to apply.
 
 Everything else is chosen per task in the create dialog: title, description, the implementing
 model, and the base branch.
