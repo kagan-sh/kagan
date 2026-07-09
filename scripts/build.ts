@@ -36,4 +36,4 @@ for (const file of files) {
   await writeFile(outPath, transformed)
 }
 
-console.log(`built ${files.length} files to dist/`)
+console.error(`built ${files.length} files to dist/`)

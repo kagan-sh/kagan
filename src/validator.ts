@@ -177,10 +177,7 @@ export async function spawnValidator(
   const childID = child.data?.id
   if (!childID) return undefined
 
-  await patchKagan(input.client, parentSessionID, {
-    validatorSessionID: childID,
-    validatorOutcome: "pending",
-  })
+  await patchKagan(input.client, parentSessionID, { validatorSessionID: childID })
 
   const priorTriage = formatPriorTriage(context.priorTriage)
   const check = context.check

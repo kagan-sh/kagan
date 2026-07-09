@@ -1695,6 +1695,68 @@ describe("kagan server — duplicate helper spawn regression", () => {
     expect(roleCreates(captured, "intake")).toHaveLength(1)
   })
 
+  test("two module copies with stale reads spawn validator exactly once", async () => {
+    ;((globalThis as Record<string, unknown>).__kaganHelperEntryClaims as Set<string> | undefined)?.clear()
+
+    const reviewKagan = { status: "review", boardTask: true, worktree: "/wt", description: "Do the thing" }
+    const store: Record<string, SessionData> = {
+      s1: { title: "Add retry", metadata: { kagan: { ...reviewKagan } } },
+    }
+    const captured: Captured = { updates: [], creates: [], prompts: [], listCalls: [] }
+    let createCount = 0
+    const sharedInput = {
+      client: {
+        session: {
+          get: (async (options: unknown) => {
+            const id = (options as { path: { id: string } }).path.id
+            return { data: store[id] ?? { metadata: {} } }
+          }) as never,
+          update: (async (options: unknown) => {
+            const typed = options as { path: { id: string }; body: { metadata: Record<string, unknown> } }
+            const kagan = typed.body.metadata.kagan as Record<string, unknown>
+            captured.updates.push({ id: typed.path.id, kagan })
+            const existing = store[typed.path.id] ?? { metadata: {} }
+            const existingKagan = (existing.metadata?.kagan as Record<string, unknown>) ?? {}
+            store[typed.path.id] = {
+              ...existing,
+              metadata: { ...existing.metadata, kagan: { ...existingKagan, ...kagan } },
+            }
+            return { data: undefined }
+          }) as never,
+          create: (async (options: unknown) => {
+            captured.creates.push((options as { body: Record<string, unknown> }).body)
+            createCount += 1
+            return { data: { id: `validator-${createCount}` } }
+          }) as never,
+          promptAsync: (async (options: unknown) => {
+            const typed = options as { path: { id: string }; body: Record<string, unknown> }
+            captured.prompts.push({ id: typed.path.id, body: typed.body })
+            return { data: undefined }
+          }) as never,
+          list: (async () => ({ data: [] })) as never,
+          messages: (async () => ({ data: [] })) as never,
+        },
+      },
+      $: ((_s: TemplateStringsArray, ..._e: unknown[]) => ({
+        nothrow: () => ({
+          quiet: async () => ({ stdout: Buffer.from(""), stderr: Buffer.from(""), exitCode: 0 }),
+        }),
+      })) as PluginInput["$"],
+      worktree: "/tmp/worktree",
+    } as unknown as PluginInput
+
+    const [modA, modB] = await Promise.all([loadServerCopy("val-a"), loadServerCopy("val-b")])
+    const [hooksA, hooksB] = await Promise.all([modA.server(sharedInput, {}), modB.server(sharedInput, {})])
+    const info = { id: "s1", title: "Add retry", metadata: { kagan: { ...reviewKagan, lastGatedStatus: "review" } } }
+
+    await Promise.all([
+      hooksA.event?.({ event: { type: "session.updated", properties: { info } } } as never),
+      hooksB.event?.({ event: { type: "session.updated", properties: { info } } } as never),
+    ])
+
+    expect(roleCreates(captured, "validator")).toHaveLength(1)
+  })
+
   test("spawn-failure auto-retry survives across two module copies", async () => {
     ;((globalThis as Record<string, unknown>).__kaganHelperEntryClaims as Set<string> | undefined)?.clear()
 

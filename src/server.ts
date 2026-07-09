@@ -264,6 +264,8 @@ async function onEnterReview(input: PluginInput, sessionID: string, options?: Re
     const worktree = view.worktree
     if (!worktree) return
 
+    if (!(await claimHelperSpawn(input.client, sessionID, "validator"))) return
+
     const attempts = before.attempts + 1
     const diffs = await worktreeDiffs(shellGitRunner(input.$), worktree, view.baseBranch ?? "HEAD")
     const checkCommands = commandPlan(options, "check")
