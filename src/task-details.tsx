@@ -151,6 +151,12 @@ export function openTaskDetailsView(api: TuiPluginApi, details: TaskDetails, tit
         {details.baseBranch ? ` · base: ${details.baseBranch}` : ""}
       </text>
       {details.description ? <text fg={muted}>{details.description}</text> : null}
+      {details.report ? (
+        <box flexDirection="column">
+          <text attributes={TextAttributes.BOLD}>Report</text>
+          <text paddingLeft={2}>{details.report}</text>
+        </box>
+      ) : null}
       {details.diffStats.length > 0 ? (
         <box flexDirection="column" gap={1}>
           <text attributes={TextAttributes.BOLD}>Changed files ({details.diffStats.length})</text>

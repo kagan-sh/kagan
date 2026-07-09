@@ -92,7 +92,7 @@ for (const hook of s.hooks) {
 }
 ```
 
-So a later-registered plugin can silently overwrite an earlier plugin's `output.status` (`permission.ask`) or `output.args` (`tool.execute.before`). This repo's own `permission.ask` and `tool.execute.before` handlers (`src/server.ts:335-343`, `345-363`) only ever read `output`/set `output.status` or throw — they don't assume they're the only plugin present, which is correct defensive practice given this ordering.
+So a later-registered plugin can silently overwrite an earlier plugin's `output.status` (`permission.ask`, if wired) or `output.args` (`tool.execute.before`). This repo's own `tool.execute.before` handler reads `output` and throws only when it must block a command; it doesn't assume it's the only plugin present, which is correct defensive practice given this ordering.
 
 **`permission.ask` is declared in the `Hooks` type but has zero trigger call sites** anywhere in `packages/opencode/src` in this snapshot (`grep -rn '"permission.ask"\|trigger("permission' packages/opencode/src` returns nothing outside the type definition and this repo's own handler). Don't assume it's guaranteed to fire on every permission prompt without testing against the actual runtime version in use — treat it as declared-but-unverified-wired for 1.17.x and confirm empirically if a permission gate silently doesn't trigger.
 

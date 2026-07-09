@@ -69,9 +69,8 @@ function isGitToken(token: string): boolean {
 
 function unwrapOuterParens(segment: string): string {
   let s = segment.trim()
-  while (s.startsWith("(") && s.endsWith(")")) {
-    s = s.slice(1, -1).trim()
-  }
+  while (s.startsWith("(")) s = s.slice(1).trim()
+  while (s.endsWith(")")) s = s.slice(0, -1).trim()
   return s
 }
 

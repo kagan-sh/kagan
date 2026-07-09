@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TextAttributes, type TextareaRenderable } from "@opentui/core"
-import { createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { createTask, getOrder, setOrder } from "./session-api"
 import { bunGitRunner, listLocalBranches } from "./git"
 import type { ModelRef, TaskScope } from "./task"
@@ -414,6 +414,10 @@ function FilterableSelectPicker(props: {
     return props.labels
       .map((label, index) => ({ label, index }))
       .filter(({ label }) => !query || label.toLowerCase().includes(query))
+  })
+  createEffect(() => {
+    const last = Math.max(0, options().length - 1)
+    setListIndex((value) => Math.min(value, last))
   })
   const close = (index?: number) => {
     props.onFilter(filter())

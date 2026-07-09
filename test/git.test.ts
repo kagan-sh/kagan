@@ -113,6 +113,8 @@ describe("isGitPushCommand", () => {
     ["GIT_SSH_COMMAND='ssh -i key' git push origin main", true],
     ["cd worktree && git push", true],
     ["(git push)", true],
+    ["(git push && true)", true],
+    ["(git push; true)", true],
     ["(git push origin main)", true],
     ["( /usr/bin/git push )", true],
     ["(git status)", false],

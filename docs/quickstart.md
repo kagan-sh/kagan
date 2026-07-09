@@ -2,7 +2,7 @@
 
 ## Install
 
-You need [OpenCode](https://opencode.ai/) installed.
+You need [OpenCode](https://opencode.ai/) 1.17.13 or newer, below 1.18.0.
 
 From npm:
 
