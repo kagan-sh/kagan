@@ -1,6 +1,13 @@
-# Kagan
+<h3 align="center">
+  <img src="https://raw.githubusercontent.com/kagan-sh/kagan/main/docs/public/favicon.svg" width="80" alt="Kagan" /><br />
+  kagan
+</h3>
 
-[Docs](https://docs.kagan.sh/) · [Quickstart](https://docs.kagan.sh/quickstart/)
+<p align="center">Supervised kanban for AI coding agents inside OpenCode.</p>
+
+<p align="center">
+  <a href="https://docs.kagan.sh/">Docs</a> · <a href="https://docs.kagan.sh/quickstart/">Quickstart</a>
+</p>
 
 ---
 
@@ -32,10 +39,8 @@ Pass options by using the array-of-array form, or open `/kagan-settings` from th
 
 ## Docs
 
-Full documentation lives in [`docs/`](https://docs.kagan.sh/).
+Documentation is available in [`docs/`](https://docs.kagan.sh/).
 
 ## License
 
 [MIT](LICENSE)
-
----
