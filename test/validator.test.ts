@@ -324,13 +324,12 @@ describe("spawnValidator", () => {
     )
   })
 
-  test("patches validatorSessionID and pending outcome before prompting", async () => {
+  test("patches validatorSessionID before prompting", async () => {
     const order: string[] = []
     const { input } = mockSpawnInput({
       onUpdate: (options) => {
         order.push("update")
         const metadata = (options as { body?: { metadata?: Record<string, unknown> } }).body?.metadata
-        expect((metadata?.kagan as Record<string, unknown> | undefined)?.validatorOutcome).toBe("pending")
         expect((metadata?.kagan as Record<string, unknown> | undefined)?.validatorSessionID).toBe("child-1")
       },
       onPrompt: () => order.push("prompt"),

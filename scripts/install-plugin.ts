@@ -4,6 +4,10 @@ import { join, resolve } from "node:path"
 
 const repoRoot = resolve(import.meta.dir, "..")
 const snapshotDir = join(homedir(), ".kagan", "plugin", "kagan-pinned")
+const prodPackageDir = join(homedir(), ".kagan", "plugin", "prod")
+const opencodeCacheDir = process.env.XDG_CACHE_HOME
+  ? join(process.env.XDG_CACHE_HOME, "opencode")
+  : join(homedir(), ".cache", "opencode")
 const globalConfigDir = process.env.XDG_CONFIG_HOME
   ? join(process.env.XDG_CONFIG_HOME, "opencode")
   : join(homedir(), ".config", "opencode")
@@ -44,13 +48,31 @@ async function addGlobalPluginSpec(spec: string): Promise<void> {
   await prettify(globalConfigFiles)
 }
 
-async function removeGlobalPluginSpecs(prefix: string): Promise<void> {
+function pluginSpec(entry: unknown): string | undefined {
+  if (typeof entry === "string") return entry
+  if (!Array.isArray(entry)) return
+  return typeof entry[0] === "string" ? entry[0] : undefined
+}
+
+function isKaganSpec(spec: string): boolean {
+  return (
+    spec.startsWith(snapshotDir) ||
+    spec.startsWith(`file:${prodPackageDir}/`) ||
+    spec === "@kagan-sh/kagan" ||
+    spec.startsWith("@kagan-sh/kagan@")
+  )
+}
+
+async function removeGlobalKaganPluginSpecs(): Promise<void> {
   const touched: string[] = []
   for (const file of globalConfigFiles) {
     if (!(await Bun.file(file).exists())) continue
     const config = await readConfig(file)
     const plugins = Array.isArray(config.plugin) ? (config.plugin as unknown[]) : []
-    const kept = plugins.filter((entry) => typeof entry !== "string" || !entry.startsWith(prefix))
+    const kept = plugins.filter((entry) => {
+      const spec = pluginSpec(entry)
+      return spec === undefined || !isKaganSpec(spec)
+    })
     if (kept.length === plugins.length) continue
     if (kept.length > 0) config.plugin = kept
     else delete config.plugin
@@ -64,6 +86,24 @@ async function removeGlobalPluginSpecs(prefix: string): Promise<void> {
     }
   }
   if (touched.length > 0) await prettify(touched)
+}
+
+async function run(args: string[], options?: { cwd?: string; stdout?: "pipe" | "inherit" }): Promise<string> {
+  const proc = Bun.spawn(args, {
+    cwd: options?.cwd ?? repoRoot,
+    stdout: options?.stdout ?? "pipe",
+    stderr: "inherit",
+  })
+  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+  if (code !== 0) throw new Error(`${args.join(" ")} failed`)
+  return stdout
+}
+
+function parsePackedFilename(stdout: string): string {
+  const packed = JSON.parse(stdout) as Array<{ filename?: string }>
+  const filename = packed[0]?.filename
+  if (!filename) throw new Error("npm pack returned no package")
+  return filename
 }
 
 async function gitDescription(): Promise<string> {
@@ -102,15 +142,32 @@ async function installDev(): Promise<void> {
   console.log("kagan loads in every folder. Re-run `bun run plugin:install` after edits, then restart opencode.")
 }
 
+async function packProductionPlugin(): Promise<string> {
+  await rm(prodPackageDir, { recursive: true, force: true })
+  await mkdir(prodPackageDir, { recursive: true })
+  const filename = parsePackedFilename(await run(["npm", "pack", "--json", "--pack-destination", prodPackageDir]))
+  return join(prodPackageDir, filename)
+}
+
+async function installProd(): Promise<void> {
+  const tgz = await packProductionPlugin()
+  await removeGlobalKaganPluginSpecs()
+  await rm(join(opencodeCacheDir, "packages", `file:${tgz}`), { recursive: true, force: true })
+  await run(["opencode", "plugin", `file:${tgz}`, "--global", "--force"], { stdout: "inherit" })
+  console.log(`Packed production plugin: ${tgz}`)
+  console.log("kagan loads from the packed package. Restart opencode to apply.")
+}
+
 async function reset(): Promise<void> {
-  await removeGlobalPluginSpecs(snapshotDir)
-  console.log("Removed the local kagan pin from the global config. Restart opencode to apply.")
+  await removeGlobalKaganPluginSpecs()
+  console.log("Removed kagan plugin entries from the global config. Restart opencode to apply.")
 }
 
 const mode = Bun.argv[2]
 if (mode === "dev") await installDev()
+else if (mode === "prod") await installProd()
 else if (mode === "reset") await reset()
 else {
-  console.error("Usage: bun scripts/install-plugin.ts <dev|reset>")
+  console.error("Usage: bun scripts/install-plugin.ts <dev|prod|reset>")
   process.exit(1)
 }

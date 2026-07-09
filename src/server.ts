@@ -19,7 +19,7 @@ import {
 import { isGitPushCommand, worktreeDiffs, shellGitRunner } from "./git"
 import { composeStartPrompt, formatTaskRef, parseTaskRefs } from "./handoff"
 import { spawnIntake } from "./intake"
-import { getStatus, lastAssistantText, patchKagan } from "./session-api"
+import { claimHelperSpawn, getStatus, lastAssistantText, patchKagan } from "./session-api"
 import type { ColumnType } from "./types"
 import { spawnValidator } from "./validator"
 import { runCommandPlan, type CheckResult } from "./check"
@@ -199,7 +199,8 @@ async function resolveOwningBoardTask(input: PluginInput, sessionID: string): Pr
   return owningRootTaskID(session?.metadata, sessionID, session?.parentID)
 }
 
-const helperEntryClaims = new Set<string>()
+const helperEntryClaims = ((globalThis as Record<string, unknown>).__kaganHelperEntryClaims ??=
+  new Set<string>()) as Set<string>
 
 async function onEnterBacklog(input: PluginInput, sessionID: string, options?: Record<string, unknown>): Promise<void> {
   const key = `${sessionID}:intake`
@@ -215,11 +216,13 @@ async function onEnterBacklog(input: PluginInput, sessionID: string, options?: R
     if (before.outcome !== undefined) return
     if (before.sessionID !== undefined) return
 
+    if (!(await claimHelperSpawn(input.client, sessionID, "intake"))) return
+
     const attempts = before.attempts + 1
-    const description = view.description
-    const references = await resolveTaskRefs(input, description)
     let childID: string | undefined
     try {
+      const description = view.description
+      const references = await resolveTaskRefs(input, description)
       childID = await spawnIntake(
         input,
         sessionID,
@@ -261,23 +264,25 @@ async function onEnterReview(input: PluginInput, sessionID: string, options?: Re
     const worktree = view.worktree
     if (!worktree) return
 
+    if (!(await claimHelperSpawn(input.client, sessionID, "validator"))) return
+
     const attempts = before.attempts + 1
-    const diffs = await worktreeDiffs(shellGitRunner(input.$), worktree, view.baseBranch ?? "HEAD")
-    const checkCommands = commandPlan(options, "check")
-    let check: CheckResult | undefined
-    if (checkCommands.length > 0) {
-      const changedFiles = diffs.map((diff) => diff.file).filter((file): file is string => typeof file === "string")
-      check = await runCommandPlan(checkCommands, worktree, (command) =>
-        commandMatchesChangedFile(command, changedFiles),
-      )
-      try {
-        await patchKagan(input.client, sessionID, { check })
-      } catch (error) {
-        console.error(`[kagan] failed to record check evidence for ${sessionID}: ${errorMessage(error)}`)
-      }
-    }
     let childID: string | undefined
     try {
+      const diffs = await worktreeDiffs(shellGitRunner(input.$), worktree, view.baseBranch ?? "HEAD")
+      const checkCommands = commandPlan(options, "check")
+      let check: CheckResult | undefined
+      if (checkCommands.length > 0) {
+        const changedFiles = diffs.map((diff) => diff.file).filter((file): file is string => typeof file === "string")
+        check = await runCommandPlan(checkCommands, worktree, (command) =>
+          commandMatchesChangedFile(command, changedFiles),
+        )
+        try {
+          await patchKagan(input.client, sessionID, { check })
+        } catch (error) {
+          console.error(`[kagan] failed to record check evidence for ${sessionID}: ${errorMessage(error)}`)
+        }
+      }
       childID = await spawnValidator(
         input,
         sessionID,

@@ -32,6 +32,33 @@ export function mockTuiApi(overrides: Partial<TuiPluginApi> & { kvMap?: Record<s
   const kvMap = mockKv(overrides.kvMap)
   const keyHandlers = new Set<(key: KeyEvent) => void>()
   const interceptHandlers = new Set<(ctx: KeyInputContext) => void>()
+  const keyInput: {
+    on: (event: string, handler: (key: KeyEvent) => void) => void
+    off: (event: string, handler: (key: KeyEvent) => void) => void
+    emitKey: (key: KeyEvent) => void
+    lastConsumed?: boolean
+  } = {
+    on: (event: string, handler: (key: KeyEvent) => void) => {
+      if (event === "keypress") keyHandlers.add(handler)
+    },
+    off: (event: string, handler: (key: KeyEvent) => void) => {
+      if (event === "keypress") keyHandlers.delete(handler)
+    },
+    emitKey: (key: KeyEvent) => {
+      let consumed = false
+      const ctx = {
+        event: key,
+        setData: () => {},
+        getData: () => undefined,
+        consume: () => {
+          consumed = true
+        },
+      }
+      for (const handler of Array.from(interceptHandlers)) handler(ctx)
+      for (const handler of Array.from(keyHandlers)) handler(key)
+      keyInput.lastConsumed = consumed
+    },
+  }
   return {
     kv: {
       get: (key: string, defaultValue: unknown) => (key in kvMap ? kvMap[key] : defaultValue),
@@ -57,24 +84,7 @@ export function mockTuiApi(overrides: Partial<TuiPluginApi> & { kvMap?: Record<s
       height: 40,
       on: () => {},
       off: () => {},
-      keyInput: {
-        on: (event: string, handler: (key: KeyEvent) => void) => {
-          if (event === "keypress") keyHandlers.add(handler)
-        },
-        off: (event: string, handler: (key: KeyEvent) => void) => {
-          if (event === "keypress") keyHandlers.delete(handler)
-        },
-        emitKey: (key: KeyEvent) => {
-          const ctx = {
-            event: key,
-            setData: () => {},
-            getData: () => undefined,
-            consume: () => {},
-          }
-          for (const handler of Array.from(interceptHandlers)) handler(ctx)
-          for (const handler of Array.from(keyHandlers)) handler(key)
-        },
-      },
+      keyInput,
     },
     ...overrides,
   } as unknown as TuiPluginApi
@@ -133,7 +143,9 @@ function mockKeyEvent(
                 ? "left"
                 : key === "ARROW_RIGHT"
                   ? "right"
-                  : key
+                  : typeof key === "string" && key.length === 1
+                    ? key.toLowerCase()
+                    : key
   let defaultPrevented = false
   let propagationStopped = false
   return {

@@ -137,10 +137,14 @@ function CreateTaskForm(props: {
       void submit()
       return true
     }
+    if (
+      focusIndex() === 1 &&
+      ((key.ctrl && key.name === "j") || key.name === "linefeed" || (key.shift && key.name === "return"))
+    ) {
+      descriptionRef?.newLine()
+      return true
+    }
     if (key.name === "return") {
-      // In the description textarea, let Enter reach the field as a newline
-      // (ctrl+enter submits); consuming it here would swallow the newline.
-      if (focusIndex() === 1) return false
       if (focusIndex() >= 2) openPicker()
       else void submit()
       return true
@@ -224,8 +228,13 @@ function CreateTaskForm(props: {
           tab <span style={{ fg: theme().textMuted }}>move</span>
         </text>
         <text fg={theme().text}>
-          {focusIndex() === 0 ? "enter" : "ctrl+enter"} <span style={{ fg: theme().textMuted }}>create</span>
+          enter <span style={{ fg: theme().textMuted }}>create</span>
         </text>
+        <Show when={focusIndex() === 1}>
+          <text fg={theme().text}>
+            ctrl+j <span style={{ fg: theme().textMuted }}>newline</span>
+          </text>
+        </Show>
         <text fg={theme().text}>
           esc <span style={{ fg: theme().textMuted }}>cancel</span>
         </text>
