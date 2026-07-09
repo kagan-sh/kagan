@@ -37,6 +37,7 @@
   },
   "scripts": {
     "plugin:install": "bun scripts/install-plugin.ts dev",
+    "plugin:install:prod": "bun scripts/install-plugin.ts prod",
     "plugin:reset": "bun scripts/install-plugin.ts reset",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",

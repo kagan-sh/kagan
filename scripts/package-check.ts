@@ -107,7 +107,10 @@ try {
       "--conditions",
       "browser",
       "-e",
-      `const server = await import("@kagan-sh/kagan/server")
+      `import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
+import { runtimeModules } from "@opentui/keymap/runtime-modules"
+ensureRuntimePluginSupport({ additional: runtimeModules })
+const server = await import("@kagan-sh/kagan/server")
 const tui = await import("@kagan-sh/kagan/tui")
 if (typeof server.default?.server !== "function") throw new Error("server export missing")
 if (typeof tui.default?.tui !== "function") throw new Error("tui export missing")`,

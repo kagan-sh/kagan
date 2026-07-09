@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { join, relative, resolve } from "node:path"
 import { transformAsync } from "@babel/core"
+import { runtimeModuleIdForSpecifier } from "@opentui/core/runtime-plugin"
 // @ts-expect-error untyped preset
 import solidPreset from "babel-preset-solid"
 // @ts-expect-error untyped preset
@@ -11,8 +12,28 @@ import moduleResolver from "babel-plugin-module-resolver"
 const repoRoot = resolve(import.meta.dir, "..")
 const srcDir = join(repoRoot, "src")
 const distDir = join(repoRoot, "dist")
+const hostRuntimeSpecifiers = new Set([
+  "@opentui/core",
+  "@opentui/core/testing",
+  "@opentui/keymap",
+  "@opentui/keymap/extras",
+  "@opentui/keymap/extras/graph",
+  "@opentui/keymap/addons",
+  "@opentui/keymap/addons/opentui",
+  "@opentui/keymap/html",
+  "@opentui/keymap/opentui",
+  "@opentui/keymap/react",
+  "@opentui/keymap/solid",
+  "@opentui/solid",
+  "@opentui/solid/components",
+  "@opentui/solid/jsx-runtime",
+  "@opentui/solid/jsx-dev-runtime",
+  "solid-js",
+  "solid-js/store",
+])
 
 function resolveImportPath(specifier: string): string | null {
+  if (hostRuntimeSpecifiers.has(specifier)) return runtimeModuleIdForSpecifier(specifier)
   if (!specifier.startsWith(".")) return null
   if (/\.(json|js|mjs|cjs)$/.test(specifier)) return specifier
   if (/\.tsx?$/.test(specifier)) return specifier.replace(/\.tsx?$/, ".js")
@@ -23,7 +44,7 @@ async function transformSolidSource(code: string, filename: string): Promise<str
   const cleanFilename = filename.replace(/[?#].*$/, "")
   const presets: unknown[] = []
   if (/\.[cm]?[jt]sx$/.test(cleanFilename)) {
-    presets.push([solidPreset, { moduleName: "@opentui/solid", generate: "universal" }])
+    presets.push([solidPreset, { moduleName: runtimeModuleIdForSpecifier("@opentui/solid"), generate: "universal" }])
   }
   if (/\.[cm]?tsx?$/.test(cleanFilename)) {
     presets.push([tsPreset])
