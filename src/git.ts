@@ -47,12 +47,29 @@ export function taskBranch(slug: string): string {
 
 const COMMAND_SEPARATORS = /&&|\|\||[;\n|]/
 
+function hasUserWorkDuringMerge(porcelain: string): boolean {
+  for (const line of porcelain.split("\n")) {
+    const entry = line.trimEnd()
+    if (entry.length < 3 || entry[2] !== " ") continue
+    const index = entry[0]!
+    const worktree = entry[1]!
+    if (index === "?" || worktree === "?") return true
+    if (worktree === "M" && index !== "U") return true
+    if (worktree === "D" && index !== "U" && index !== "D") return true
+  }
+  return false
+}
+
 // Naive whitespace tokenization (no quote-awareness), matching from the first `git` token wherever
 // it appears: over-flagging prose that mentions a push (e.g. `echo "git push"`) is harmless, while
 // missing a real push behind an env-var or sudo prefix is not.
+function isGitToken(token: string): boolean {
+  return token === "git" || token.endsWith("/git")
+}
+
 function isGitPushSegment(segment: string): boolean {
   const tokens = segment.trim().split(/\s+/)
-  const start = tokens.indexOf("git")
+  const start = tokens.findIndex(isGitToken)
   if (start === -1) return false
   for (let i = start + 1; i < tokens.length; i++) {
     const token = tokens[i]!
@@ -327,17 +344,23 @@ async function mergeSquash(
   commitMessage: string,
   isMainWorktree: boolean,
 ): Promise<MergeResult> {
+  let mergeStartedOnCleanMain = false
   if (isMainWorktree) {
     const status = await run(["status", "--porcelain"], checkoutDir)
     if (status.stdout.trim()) {
       return { ok: false, message: `Commit or stash changes on ${targetBranch} before merging` }
     }
+    mergeStartedOnCleanMain = true
   }
   // `git merge --abort` has no effect after `--squash` (there's no MERGE_HEAD), so `git reset
-  // --hard HEAD` is the only way back — safe here only because we just verified the main
-  // worktree was clean before starting, so nothing of the user's is lost.
+  // --hard HEAD` is the only way back — safe when the worktree was clean at merge start and any
+  // dirtiness is merge fallout, not uncommitted work created during the merge.
   const fail = async (message: string): Promise<MergeResult> => {
-    if (isMainWorktree) await run(["reset", "--hard", "HEAD"], checkoutDir)
+    if (isMainWorktree && mergeStartedOnCleanMain) {
+      const current = await run(["status", "--porcelain"], checkoutDir)
+      const out = current.stdout.trimEnd()
+      if (!out.trim() || !hasUserWorkDuringMerge(out)) await run(["reset", "--hard", "HEAD"], checkoutDir)
+    }
     return { ok: false, message }
   }
   const squashed = await run(["merge", "--squash", branch], checkoutDir)

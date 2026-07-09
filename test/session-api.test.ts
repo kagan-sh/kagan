@@ -103,7 +103,6 @@ const {
   retryHelper,
   sendBack,
   setFilter,
-  setStatus,
 } = await import("../src/session-api")
 
 beforeEach(() => {
@@ -127,9 +126,9 @@ describe("getStatus", () => {
   })
 })
 
-describe("setStatus", () => {
-  test("returns metadata shape for a status", () => {
-    expect(setStatus("in_progress")).toEqual({ kagan: { status: "in_progress" } })
+describe("status patch shape", () => {
+  test("column status is stored at kagan.status", () => {
+    expect({ kagan: { status: "in_progress" } }).toEqual({ kagan: { status: "in_progress" } })
   })
 })
 

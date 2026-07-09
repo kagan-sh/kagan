@@ -17,7 +17,7 @@ The agent never touches your checkout. It works on a `kagan/<slug>` branch in it
 
 ## Install
 
-You need [OpenCode](https://opencode.ai/) installed.
+You need [OpenCode](https://opencode.ai/) **1.17.13** or newer (below **1.18.0** — see `engines.opencode` in `package.json`).
 
 From npm:
 

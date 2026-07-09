@@ -92,6 +92,7 @@ stdout/stderr per command.
 
 Open settings with `/kagan-settings` or `,` on the board. Settings can edit the Kagan plugin options
 and save them to project `opencode.json`; restart OpenCode or reopen the project for saved settings
+to apply.
 
 Everything else is chosen per task in the create dialog: title, description, the implementing
 model, and the base branch.

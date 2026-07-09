@@ -37,10 +37,6 @@ export function getStatus(metadata?: Record<string, unknown>): ColumnType {
   return status as ColumnType
 }
 
-export function setStatus(status: ColumnType): { kagan: { status: ColumnType } } {
-  return { kagan: { status } }
-}
-
 function mergeKagan(current: Record<string, unknown>, partial: Record<string, unknown>): Record<string, unknown> {
   return { ...current, kagan: { ...rawKagan(current), ...partial } }
 }

@@ -2,7 +2,7 @@
 name: opencode-plugin-idioms
 description: Event hook payload shapes, session lifecycle timing, toast/TUI-route render boundaries, and child-session tagging conventions for OpenCode server (@opencode-ai/plugin) and TUI (@opencode-ai/plugin/tui) plugins, grounded in the vendored OpenCode source at references/opencode.
 type: prompt
-whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/board.tsx, src/commands.tsx, src/store.ts, src/intake.ts, or src/validator.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
+whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/board.tsx, src/commands.tsx, src/store.tsx, src/intake.ts, or src/validator.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
 ---
 
 Version check: repo pins `@opencode-ai/plugin@1.17.13`; vendored copy at `references/opencode/packages/plugin/package.json` should match — verify there, never from memory.
@@ -132,7 +132,7 @@ This repo already implements the correct pattern in `src/intake.ts:9-19` and `sr
 
 - Set `parentID: parentSessionID` on `session.create()` for the structural link.
 - Set `metadata.kagan.role` to a discriminator (`"intake"` / `"validator"`) plus a back-pointer (`intakeParent` / `validatorParent`) so a downstream `event` handler can distinguish a helper session from a real task session by reading `session.metadata.kagan.role` before doing anything session-lifecycle-driven.
-- `src/server.ts`'s `event` handler never explicitly checks `role` before running `maybeRunReviewEntry`/`maybeRunIntakeEntry` — it relies on the child session's `metadata.kagan.status` never reaching `"review"`/`"backlog"` naturally (since intake/validator sessions are prompted directly via `session.prompt`, not moved through the board). If a future column-move handler is added that fires on any `session.updated` regardless of column, it must check `metadata?.kagan?.role` first to avoid an intake/validator session recursively spawning its own intake/validator.
+- `src/server.ts`'s `event` handler skips helper and parented sessions in `handleSessionUpdated` via `if (infoView.role || info.parentID) return` (`src/server.ts:328`) before running column-move gates — any new lifecycle handler on `session.updated` must apply the same guard first to avoid an intake/validator session recursively spawning its own intake/validator.
 
 Setting `parentID` is not purely structural bookkeeping — it changes real framework behavior worth relying on for helper/child sessions:
 

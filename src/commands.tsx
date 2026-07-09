@@ -13,7 +13,7 @@ import {
 } from "./session-api"
 import {
   approveDenyReason,
-  canRetryHelper,
+  canRetrySession,
   intakeReady,
   isSubstantive,
   kagan,
@@ -121,9 +121,7 @@ export function footerHints(selected: BoardSession | undefined, hasFilter: boole
     if (selected.kaganStatus === "review") {
       hints.push({ key: "a", label: "approve" }, { key: "s", label: "send back" })
     }
-    const retryable =
-      (selected.kaganStatus === "backlog" && canRetryHelper(selected.metadata, "intake")) ||
-      (selected.kaganStatus === "review" && canRetryHelper(selected.metadata, "validator"))
+    const retryable = canRetrySession(selected.kaganStatus, selected.metadata)
     if (retryable) hints.push({ key: "r", label: "retry" })
   }
   hints.push({ key: "/", label: "filter" })
@@ -158,9 +156,7 @@ export function menuOptions(session: BoardSession): MenuOption[] {
   if (status === "review") {
     options.push({ title: "Send back — s", value: "send_back" }, { title: "Approve — a", value: "approve" })
   }
-  const retryable =
-    (status === "backlog" && canRetryHelper(session.metadata, "intake")) ||
-    (status === "review" && canRetryHelper(session.metadata, "validator"))
+  const retryable = canRetrySession(status, session.metadata)
   if (retryable) options.push({ title: "Retry intake/review — r", value: "retry" })
   options.push({ title: "Export trust packet", value: "export" }, { title: "Import trust packet", value: "import" })
   if (status === "done") options.push({ title: "Archive", value: "archive" })
@@ -428,9 +424,7 @@ export function createBoardCommands(
     const session = store.selectedSession()
     if (!session) return
     const status = session.kaganStatus
-    const canRetryIntake = status === "backlog" && canRetryHelper(session.metadata, "intake")
-    const canRetryValidator = status === "review" && canRetryHelper(session.metadata, "validator")
-    if (!canRetryIntake && !canRetryValidator) {
+    if (!canRetrySession(status, session.metadata)) {
       notifyWarning("Nothing to retry")
       return
     }
@@ -440,7 +434,7 @@ export function createBoardCommands(
       store.notify({
         variant: "success",
         title: "Kagan",
-        message: canRetryIntake ? "Retrying intake" : "Retrying review",
+        message: status === "backlog" ? "Retrying intake" : "Retrying review",
       })
     } catch (error) {
       notifyErrorFrom(error)

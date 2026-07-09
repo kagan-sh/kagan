@@ -4,7 +4,15 @@ import { TextAttributes } from "@opentui/core"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import { commandSpec, helperRetries, inProgressCap, sendBackStopThreshold, squashMerge, type ModelRef } from "./task"
+import {
+  commandPlan,
+  commandSpec,
+  helperRetries,
+  inProgressCap,
+  sendBackStopThreshold,
+  squashMerge,
+  type ModelRef,
+} from "./task"
 import type { CommandSpec } from "./check"
 import { SETTINGS_ROUTE, ROUTE } from "./types"
 import { useKeyIntercept } from "./tui-renderer"
@@ -27,13 +35,6 @@ type Draft = {
 
 const SECTIONS: Section[] = ["General", "Agents", "Commands", "Validator models", "JSON preview"]
 
-function commandSpecs(value: unknown, kind: "setup" | "check"): CommandSpec[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .map((item, index) => commandSpec(item, `${kind} ${index + 1}`))
-    .filter((spec): spec is CommandSpec => spec !== undefined)
-}
-
 function modelRef(value: unknown): ModelRef | undefined {
   if (typeof value !== "object" || value === null) return undefined
   const raw = value as Record<string, unknown>
@@ -44,7 +45,6 @@ function modelRef(value: unknown): ModelRef | undefined {
 }
 
 function draftFromOptions(options?: Record<string, unknown>): Draft {
-  const commands = options?.commands
   return {
     inProgressLimit: inProgressCap(options),
     helperRetries: helperRetries(options),
@@ -56,14 +56,8 @@ function draftFromOptions(options?: Record<string, unknown>): Draft {
       ? options.validatorModels.map(modelRef).filter((model): model is ModelRef => model !== undefined)
       : [],
     commands: {
-      setup: commandSpecs(
-        typeof commands === "object" && commands !== null ? (commands as Record<string, unknown>).setup : undefined,
-        "setup",
-      ),
-      check: commandSpecs(
-        typeof commands === "object" && commands !== null ? (commands as Record<string, unknown>).check : undefined,
-        "check",
-      ),
+      setup: commandPlan(options, "setup"),
+      check: commandPlan(options, "check"),
     },
   }
 }

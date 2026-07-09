@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   approveDenyReason,
   canRetryHelper,
+  canRetrySession,
   commandInTaskScope,
   commandMatchesChangedFile,
   commandPlan,
@@ -958,5 +959,20 @@ describe("canRetryHelper", () => {
 
   test("a helperError for the other role does not unlock retry on its own", () => {
     expect(canRetryHelper({ kagan: { helperError: { role: "intake", message: "boom" } } }, "validator")).toBe(false)
+  })
+})
+
+describe("canRetrySession", () => {
+  test("true in backlog when intake can retry", () => {
+    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
+  })
+
+  test("true in review when validator can retry", () => {
+    expect(canRetrySession("review", { kagan: { validatorOutcome: "failed" } })).toBe(true)
+  })
+
+  test("false when the column and helper role do not match", () => {
+    expect(canRetrySession("backlog", { kagan: { validatorOutcome: "failed" } })).toBe(false)
+    expect(canRetrySession("review", { kagan: { intakeOutcome: "failed" } })).toBe(false)
   })
 })

@@ -18,7 +18,9 @@ type FormState = {
   scope: TaskScope
   scopeFilter: string
   modelIndex: number
+  modelFilter: string
   branchIndex: number
+  branchFilter: string
   focusIndex: number
 }
 
@@ -100,36 +102,37 @@ function CreateTaskForm(props: {
       return
     }
     const model = focusIndex() === 3
-    const options = model
-      ? props.models.map((choice, index) => ({ title: choice.label, value: index }))
-      : props.branches.map((branch, index) => ({ title: branch, value: index }))
-    const current = model ? state.modelIndex : state.branchIndex
-    let settled = false
-    props.api.ui.dialog.replace(
-      () => (
-        <props.api.ui.DialogSelect<number>
-          title={model ? "Model" : "Base branch"}
-          options={options}
-          current={current}
-          onSelect={(option) => {
-            if (model) state.modelIndex = option.value
-            else state.branchIndex = option.value
-            settled = true
-            props.reopen()
-          }}
-        />
-      ),
-      () => {
-        // dialog.replace() calls onClose on every dialog it displaces, and the escape
-        // keybinding pops the stack right after calling onClose - reopening the form
-        // synchronously here would replace it back in, then have it popped straight back
-        // out. Deferring past that pop (and guarding re-entry from the replace() below)
-        // leaves exactly the form on the stack, whichever path triggered the close.
-        if (settled) return
-        settled = true
-        queueMicrotask(() => props.reopen())
+    if (model) {
+      openFilterableSelectPicker(props.api, {
+        title: "Model",
+        filterPlaceholder: "Filter models",
+        labels: props.models.map((choice) => choice.label),
+        selectedIndex: state.modelIndex,
+        filter: state.modelFilter,
+        onFilter: (value) => {
+          state.modelFilter = value
+        },
+        onSelect: (index) => {
+          state.modelIndex = index
+        },
+        reopen: props.reopen,
+      })
+      return
+    }
+    openFilterableSelectPicker(props.api, {
+      title: "Base branch",
+      filterPlaceholder: "Filter branches",
+      labels: props.branches,
+      selectedIndex: state.branchIndex,
+      filter: state.branchFilter,
+      onFilter: (value) => {
+        state.branchFilter = value
       },
-    )
+      onSelect: (index) => {
+        state.branchIndex = index
+      },
+      reopen: props.reopen,
+    })
   }
 
   useKeyIntercept(props.api, (key) => {
@@ -254,7 +257,9 @@ export async function openCreateTaskDialog(api: TuiPluginApi, store: BoardStore)
     scope: { values: store.configuredScopes.length === 1 ? [store.configuredScopes[0]!] : [] },
     scopeFilter: "",
     modelIndex: 0,
+    modelFilter: "",
     branchIndex: Math.max(0, branches.indexOf(api.state.vcs?.branch ?? "")),
+    branchFilter: "",
     focusIndex: 0,
   }
   const showForm = () => {
@@ -388,4 +393,104 @@ function openScopePicker(api: TuiPluginApi, scopes: string[], state: FormState, 
   api.ui.dialog.replace(() => (
     <ScopePicker api={api} scopes={scopes} state={state} reopenTask={reopenTask} reopenScope={reopenScope} />
   ))
+}
+
+function FilterableSelectPicker(props: {
+  api: TuiPluginApi
+  title: string
+  filterPlaceholder: string
+  labels: string[]
+  selectedIndex: number
+  filter: string
+  onFilter: (value: string) => void
+  onSelect: (index: number) => void
+  reopen: () => void
+}) {
+  const theme = () => props.api.theme.current
+  const [filter, setFilter] = createSignal(props.filter)
+  const [listIndex, setListIndex] = createSignal(0)
+  const options = createMemo(() => {
+    const query = filter().trim().toLowerCase()
+    return props.labels
+      .map((label, index) => ({ label, index }))
+      .filter(({ label }) => !query || label.toLowerCase().includes(query))
+  })
+  const close = (index?: number) => {
+    props.onFilter(filter())
+    if (index !== undefined) props.onSelect(index)
+    props.reopen()
+  }
+
+  onMount(() => {
+    props.api.ui.dialog.setSize("medium")
+    const selected = options().findIndex((option) => option.index === props.selectedIndex)
+    if (selected >= 0) setListIndex(selected)
+  })
+
+  useKeyIntercept(props.api, (key) => {
+    if (key.name === "escape") {
+      close()
+      return true
+    }
+    if (key.name === "down") {
+      setListIndex((value) => Math.min(value + 1, Math.max(0, options().length - 1)))
+      return true
+    }
+    if (key.name === "up") {
+      setListIndex((value) => Math.max(value - 1, 0))
+      return true
+    }
+    if (key.name === "return") {
+      const option = options()[listIndex()]
+      if (option) close(option.index)
+      else close()
+      return true
+    }
+    return false
+  })
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme().text} attributes={TextAttributes.BOLD}>
+          {props.title}
+        </text>
+        <text fg={theme().textMuted}>esc</text>
+      </box>
+      <box flexDirection="column">
+        <text fg={theme().textMuted}>filter</text>
+        <input focused={true} value={filter()} onInput={setFilter} placeholder={props.filterPlaceholder} />
+      </box>
+      <box flexDirection="column">
+        <For each={options()}>
+          {(option, i) => (
+            <box backgroundColor={i() === listIndex() ? theme().primary : undefined}>
+              <text fg={i() === listIndex() ? theme().selectedListItemText : theme().text}>{option.label}</text>
+            </box>
+          )}
+        </For>
+      </box>
+      <box paddingBottom={1} flexDirection="row" gap={2}>
+        <text fg={theme().text}>
+          enter <span style={{ fg: theme().textMuted }}>select</span>
+        </text>
+      </box>
+    </box>
+  )
+}
+
+function openFilterableSelectPicker(
+  api: TuiPluginApi,
+  props: {
+    title: string
+    filterPlaceholder: string
+    labels: string[]
+    selectedIndex: number
+    filter: string
+    onFilter: (value: string) => void
+    onSelect: (index: number) => void
+    reopen: () => void
+  },
+) {
+  api.ui.dialog.replace(() => <FilterableSelectPicker api={api} {...props} />)
 }

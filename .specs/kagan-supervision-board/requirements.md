@@ -168,8 +168,10 @@ prompting.
 
 1. WHEN a board task first enters In Progress THEN Kagan SHALL record its start time.
 2. WHEN a board task first enters In Progress THEN Kagan SHALL start its session with a prompt
-   composed of the refined instruction (or the description, or the title, in that order of
-   preference) plus the resolved intake decisions and understanding.
+   composed of the refined instruction with the human's original description appended under
+   `## Original task description` when both exist, else whichever of refined prompt, description,
+   or title is present (in that order of preference), plus the resolved intake decisions and
+   understanding.
 3. WHERE the task has a chosen model, Kagan SHALL start the session with that model.
 4. WHERE the task's description references other tasks, Kagan SHALL append the resolved reference
    context to the start prompt.

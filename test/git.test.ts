@@ -107,6 +107,9 @@ describe("isGitPushCommand", () => {
     ["git push origin HEAD", true],
     ["git -C somewhere push", true],
     ["git -c http.extraHeader=x push origin HEAD", true],
+    ["/usr/bin/git push", true],
+    ["/usr/bin/git push origin main", true],
+    ["sudo /usr/bin/git push", true],
     ["GIT_SSH_COMMAND='ssh -i key' git push origin main", true],
     ["cd worktree && git push", true],
     ["git commit -m wip; git push", true],
@@ -296,6 +299,25 @@ describe("mergeTaskBranch", () => {
     expect(result.ok).toBe(false)
     expect(result.message).toContain("commit hook failed")
     expect(calls.some((c) => c[0] === "merge")).toBe(false)
+  })
+
+  test("squash merge failure skips reset when the main worktree became dirty during merge", async () => {
+    let mainStatusCalls = 0
+    const calls: string[][] = []
+    const run = stubRunner((args, cwd) => {
+      if (args[0] === "status" && cwd === "/main") {
+        mainStatusCalls++
+        return { stdout: mainStatusCalls === 1 ? "" : " M src/a.ts\n" }
+      }
+      if (args[0] === "status") return { stdout: "" }
+      if (args[0] === "branch" && args.includes("--show-current")) return { stdout: "main\n" }
+      if (args[0] === "merge" && args.includes("--squash")) return { code: 1, stderr: "conflict" }
+      return undefined
+    }, calls)
+    const result = await mergeTaskBranch(run, "/main", "/wt", "kagan/x", "main", "kagan: task", true)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain("conflict")
+    expect(calls.filter((c) => c[0] === "reset")).toEqual([])
   })
 })
 

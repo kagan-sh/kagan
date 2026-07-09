@@ -63,15 +63,6 @@ export function commandSpec(value: unknown, fallbackName: string): CommandSpec |
   return { name, cwd, command, scope }
 }
 
-export function validateCommandPlan(value: unknown, kind: "setup" | "check"): string | undefined {
-  if (!Array.isArray(value)) return `${kind} commands must be a JSON array`
-  for (let i = 0; i < value.length; i++) {
-    const spec = commandSpec(value[i], `${kind} ${i + 1}`)
-    if (!spec) return `${kind} command ${i + 1} is invalid`
-  }
-  return undefined
-}
-
 function commandSpecs(value: unknown, fallbackPrefix: string): CommandSpec[] {
   if (typeof value === "string") {
     const spec = commandSpec(value, fallbackPrefix)
@@ -399,6 +390,13 @@ export function canRetryHelper(metadata: Record<string, unknown> | undefined, ro
   if (outcome === "ran") return false
   const helperError = kagan(metadata).helperError
   return helperError?.role === role || outcome !== undefined || sessionID !== undefined
+}
+
+export function canRetrySession(status: ColumnType, metadata: Record<string, unknown> | undefined): boolean {
+  return (
+    (status === "backlog" && canRetryHelper(metadata, "intake")) ||
+    (status === "review" && canRetryHelper(metadata, "validator"))
+  )
 }
 
 function isResolvedIntakeDecision(decision: IntakeDecision): boolean {
