@@ -79,6 +79,12 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
   board that does not repaint. The architecture guard enforces this.
 - Use `TuiPluginApi` for renderer dimensions, keyboard input, and keymap layers; do not import
   OpenTUI/Solid context hooks for those surfaces.
+- Automatic updates are TUI-only. `src/tui/updates.ts` checks npm `latest` for bare/`@latest`
+  installs, prepares compatible exact releases through `api.plugins.add`, promotes only on
+  `api.lifecycle.onDispose`, and toasts only on home/session routes. Never add a server update hook
+  or touch exact pins and file installs. `src/tui/update-manager.ts` treats cache paths as hostile:
+  it accepts only non-symlinked `@kagan-sh/kagan` wrappers and removes only its own marker and single
+  backup; never broaden that deletion.
 
 ## External APIs
 

@@ -8,6 +8,7 @@ import { BOARD_BINDINGS, createBoardCommands, footerHints, HelpOverlay, type Boa
 import { COLUMNS, type ColumnType } from "../../domain/task/types"
 import { version } from "../../../package.json"
 import { useRendererDimensions } from "../renderer"
+import type { UpdateStatus } from "../updates"
 
 // Light │ so the rule stays subordinate to the heavy ┃ state bars on cards.
 const COLUMN_RULE_CHARS: BorderCharacters = {
@@ -99,6 +100,12 @@ function Main(props: {
   )
 }
 
+function updateFooter(status: Exclude<UpdateStatus, undefined>) {
+  return status.kind === "ready"
+    ? ` · v${status.version} ready — restart OpenCode`
+    : ` · update OpenCode to ${status.requiredOpenCode} for Kagan v${status.version}`
+}
+
 function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () => { key: string; label: string }[] }) {
   const theme = () => props.api.theme.current
   const filter = () => props.store.filter()
@@ -107,8 +114,12 @@ function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () => { ke
     <box flexDirection="row" flexShrink={0} paddingLeft={2} paddingRight={2} justifyContent="space-between">
       <text wrapMode="none" truncate={true} fg={theme().textMuted}>
         kagan v{version}
-        <Show when={props.store.updateAvailable()}>
-          {(latest) => <span style={{ fg: theme().info }}>{` → v${latest()} available`}</span>}
+        <Show when={props.store.updateStatus()}>
+          {(status) => (
+            <span style={{ fg: status().kind === "ready" ? theme().info : theme().warning }}>
+              {updateFooter(status())}
+            </span>
+          )}
         </Show>
         <Show when={filter()}>{` · filter: ${filter()}`}</Show>
       </text>

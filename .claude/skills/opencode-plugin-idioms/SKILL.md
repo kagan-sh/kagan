@@ -2,10 +2,10 @@
 name: opencode-plugin-idioms
 description: Event hook payload shapes, session lifecycle timing, toast/TUI-route render boundaries, and child-session tagging conventions for OpenCode server (@opencode-ai/plugin) and TUI (@opencode-ai/plugin/tui) plugins, grounded in the vendored OpenCode source at references/opencode.
 type: prompt
-whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/tui/board/board.tsx, src/tui/board/commands.tsx, src/tui/board/store.tsx, src/server/intake.ts, or src/server/validator/spawn.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
+whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/tui/board/board.tsx, src/tui/board/commands.tsx, src/tui/board/store.tsx, src/tui/updates.ts, src/tui/update-manager.ts, src/server/intake.ts, or src/server/validator/spawn.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
 ---
 
-Version check: repo pins `@opencode-ai/plugin@1.17.13`; vendored copy at `references/opencode/packages/plugin/package.json` should match — verify there, never from memory.
+Version check: repo pins `@opencode-ai/plugin@1.17.18`; vendored copy at `references/opencode/packages/plugin/package.json` should match — verify there, never from memory.
 
 ## 1. Event hook: what fires, exact payload, and ordering guarantees
 
@@ -139,6 +139,10 @@ The shared `App()` render tree switches on route type and renders a plugin's cus
 ```
 
 When `route.data.type === "plugin"` (this repo's `api.route.navigate(ROUTE)` in `src/tui.tsx:29`), neither `<Switch>` `<Match>` fires, so `<Home/>`/`<Session/>` (and their embedded `<Toast/>`) don't mount. **A toast call made while the kagan board is the active route is not dropped by a race or clobbered visually — there is simply no `<Toast/>` component mounted to render it.** It is silently swallowed until the user navigates back to `home` or a `session` route. Use the board's own notice overlay for board-route feedback.
+
+Automatic update status deliberately uses a separate dual surface: `api.ui.toast` once when the
+current route is `home` or `session`, and persistent footer state on the Kagan route. It never enters
+`store.notify`; operational task warnings retain the board Notice queue.
 
 ## 4. Spawning child/helper sessions without recursive triggering
 

@@ -16,6 +16,7 @@ import { deleteSession } from "../tasks/delete"
 import { getFilter, getOrder, setFilter as persistFilter, setOrder } from "../session/preferences"
 import { COLUMNS, type ColumnType } from "../../domain/task/types"
 import { ROUTE, type BoardCard, type BoardSession } from "../types"
+import type { UpdateStatus } from "../updates"
 
 const TASK_NUMBER_QUERY = /^#(\d+)$/
 
@@ -263,7 +264,7 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
   const scopes = configuredScopes(options)
   const sendBackThreshold = sendBackStopThreshold(options)
   const [sessions, setSessions] = createSignal<BoardSession[]>([])
-  const [updateAvailable, setUpdateAvailable] = createSignal<string | undefined>()
+  const [updateStatus, setUpdateStatus] = createSignal<UpdateStatus>()
   const [selectedID, setSelectedID] = createSignal<string | undefined>()
   const [selectedColumn, setSelectedColumn] = createSignal<ColumnType>("backlog")
   const [filter, setFilterSignal] = createSignal(getFilter(api))
@@ -277,9 +278,8 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
   const filteredSessions = createMemo(() => filterSessions(sessions(), filter()))
   const columns = createMemo(() => groupCardsByColumn(filteredSessions(), orders()))
 
-  // Board feedback renders through the Notice overlay, not api.ui.toast: OpenCode mounts its
-  // <Toast/> per route (home, session) and plugin routes never get one, so a toast fired while
-  // the board is active updates state nothing renders.
+  // Task and board-action feedback renders through the Notice overlay: OpenCode mounts <Toast/>
+  // only on home/session routes. Update status is separate persistent footer state.
   const [notices, setNotices] = createSignal<BoardNotice[]>([])
   const noticeTimers = new Map<string, ReturnType<typeof setTimeout>>()
   let noticeSeq = 0
@@ -554,8 +554,8 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     columns,
     notices,
     notify,
-    updateAvailable,
-    setUpdateAvailable,
+    updateStatus,
+    setUpdateStatus,
     select,
     selectNext,
     selectPrevious,

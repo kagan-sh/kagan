@@ -6,7 +6,7 @@ plugin today.
 ## Files and authority order
 
 1. [`requirements.md`](./kagan-supervision-board/requirements.md) — what must be true. EARS-style
-   acceptance criteria with stable numbers (R1–R17); code and tests trace to these. When documents
+   acceptance criteria with stable numbers (R1–R18); code and tests trace to these. When documents
    disagree, this one wins.
 2. [`design.md`](./kagan-supervision-board/design.md) — how it's built: architecture constraints,
    the metadata model, and the key flows, each traced to the requirements it satisfies.

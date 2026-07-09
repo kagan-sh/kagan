@@ -26,26 +26,17 @@ entry shown in the [configuration reference](/reference/configuration).
 
 ## Updating
 
-When a newer version is published, the board footer shows `→ vX.Y.Z available` (the check hits npm at
-most once a day). OpenCode does **not** update plugins on its own: the
-first version it installs is cached and reused on every launch, and re-running `opencode plugin
-@kagan-sh/kagan` reuses that same cache. To move to a newer version, use one of these:
+Bare `@kagan-sh/kagan` and explicit `@latest` installs check npm at most once per successful
+one-hour window. When `latest` supports the running OpenCode, Kagan prepares it in the background
+and shows `vX.Y.Z ready — restart OpenCode`; restart once to apply it. Ready and blocked status
+appears once as a host toast on home/session routes and persists in the board footer.
 
-**Refresh the cached install** — remove Kagan's cached package, then restart OpenCode. It reinstalls
-the latest on the next launch.
+If `latest` requires another OpenCode version, Kagan keeps the current release and names the
+required OpenCode range. Update-check and preparation failures are silent and never disturb the
+working plugin; the ready message appears only after preparation succeeds.
 
-```bash
-rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@kagan-sh/kagan@latest"
-```
-
-**Pin a version and bump it** — set an explicit version in `opencode.json` and `tui.json`. OpenCode
-caches each exact version separately, so changing the number forces a clean install:
-
-```json
-{
-  "plugin": ["@kagan-sh/kagan@0.1.3"]
-}
-```
+Exact version pins and local/file installs are advanced-user choices. Kagan never checks or changes
+them automatically.
 
 ## Your first task
 
