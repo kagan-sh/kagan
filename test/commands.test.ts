@@ -8,13 +8,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { BoardSession } from "../src/types"
+import { SETTINGS_ROUTE } from "../src/types"
 import type { BoardStore, MergeDialogHandlers } from "../src/commands"
 import { bunGitRunner } from "../src/git"
 import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "./fixtures/api"
 
-const { createBoardCommands, footerHints, menuOptions, mergeChoiceOptions, openMergeDialog } = await import(
-  "../src/commands"
-)
+const { BOARD_BINDINGS, createBoardCommands, footerHints, menuOptions, mergeChoiceOptions, openMergeDialog } =
+  await import("../src/commands")
 
 let renderSetup: TestRendererSetup | undefined
 const tempDirs: string[] = []
@@ -187,6 +187,21 @@ describe("menuOptions", () => {
 })
 
 describe("createBoardCommands", () => {
+  test("registers every board binding command", () => {
+    const names = new Set(
+      createBoardCommands({} as TuiPluginApi, {} as BoardStore, () => {}).map((command) => command.name),
+    )
+    expect(BOARD_BINDINGS.every((binding) => names.has(binding.cmd))).toBe(true)
+  })
+
+  test("kagan.settings opens the settings route", () => {
+    let route = ""
+    const api = { route: { navigate: (next: string) => (route = next) } } as unknown as TuiPluginApi
+    const commands = createBoardCommands(api, {} as BoardStore, () => {})
+    commands.find((command) => command.name === "kagan.settings")?.run()
+    expect(route).toBe(SETTINGS_ROUTE)
+  })
+
   test("kagan.dismiss clears the filter when help is closed and a filter is active", () => {
     let filter = "board"
     let helpOpen = false

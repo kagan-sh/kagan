@@ -25,7 +25,7 @@ import { openCreateTaskDialog } from "./create-task"
 import { openFindingsReviewDialog } from "./findings-review"
 import { buildTaskDetails, openTaskDetailsView } from "./task-details"
 import type { createBoardStore } from "./store"
-import type { BoardSession } from "./types"
+import { SETTINGS_ROUTE, type BoardSession } from "./types"
 
 export type BoardStore = ReturnType<typeof createBoardStore>
 
@@ -710,6 +710,12 @@ export function createBoardCommands(
       title: "Retry a failed intake or review",
       category: "Kagan",
       run: retryHelperTask,
+    },
+    {
+      name: "kagan.settings",
+      title: "Open settings",
+      category: "Kagan",
+      run: () => api.route.navigate(SETTINGS_ROUTE),
     },
     {
       name: "kagan.help",
