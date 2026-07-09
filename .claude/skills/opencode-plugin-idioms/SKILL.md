@@ -52,7 +52,23 @@ const unsubscribe =
 
 ## 2. Reacting to session creation
 
-`session.created` (§1) already covers "instant reaction to a new session" — no need for a different hook. This repo's `src/server.ts` currently only branches on `session.updated`/`session.idle`/`session.deleted` (`src/server.ts:245,251,308`) and relies on a `lastColumn` Map with `prev === undefined` as a proxy for "first time seen" (`src/server.ts:257`) — that's a workaround for not listening to `session.created` directly; listening to `session.created` for board-column bootstrapping would be more direct and remove the `undefined`-sentinel indirection.
+`session.created` (§1) covers instant reaction to a new session. This repo's `src/server.ts` `event` hook
+switches on `session.created`, `session.updated`, `session.idle`, and others (`src/server.ts:477-491`).
+
+`handleSessionCreated` (`src/server.ts:317-324`) runs on `session.created`: skips helper/parented
+sessions (`role` or `parentID`), then for board tasks with no `lastGatedStatus` yet seeds it from
+`getStatus(metadata)` via `patchKagan`. That establishes the baseline column before
+`handleSessionUpdated` sees status changes.
+
+`handleSessionUpdated` (`src/server.ts:326-386`) reads `lastGatedStatus` from persisted
+`metadata.kagan` (not an in-memory Map). On first update where `prev === undefined`, it seeds
+`lastGatedStatus` for board tasks (covers sessions created before the field existed or when
+`session.created` raced). When `newCol !== prev`, it enforces column-move gates and updates
+`lastGatedStatus` on allowed moves.
+
+The `undefined` sentinel on `lastGatedStatus` distinguishes "never gated" from an explicit column
+value — `session.created` seeds it early so subsequent `session.updated` events can gate column
+transitions correctly.
 
 Full `Hooks` interface (all hook names a plugin may implement) — `references/opencode/packages/plugin/src/index.ts:222-335`:
 

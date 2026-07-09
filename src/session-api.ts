@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { runCommandPlan, type CommandSpec } from "./check"
+import { runCommandPlan, truncateCheckResultForMetadata, type CommandSpec } from "./check"
 import {
   approveDenyReason,
   commandInTaskScope,
@@ -28,13 +28,10 @@ import {
   type MergeResult,
 } from "./git"
 import { composeHandoffPrompt } from "./handoff"
-import { COLUMNS, type BoardSession, type ColumnType } from "./types"
+import { type BoardSession, type ColumnType } from "./types"
 
 export function getStatus(metadata?: Record<string, unknown>): ColumnType {
-  const status = rawKagan(metadata)?.status
-  if (typeof status !== "string") return "backlog"
-  if (!COLUMNS.includes(status as ColumnType)) return "backlog"
-  return status as ColumnType
+  return kagan(metadata).status ?? "backlog"
 }
 
 function mergeKagan(current: Record<string, unknown>, partial: Record<string, unknown>): Record<string, unknown> {
@@ -268,7 +265,7 @@ export async function createTask(
     "task scope does not include this cwd",
     false,
   )
-  if (setup) patch.setup = setup
+  if (setup) patch.setup = truncateCheckResultForMetadata(setup)
   const result = await api.client.session.create(
     {
       directory,

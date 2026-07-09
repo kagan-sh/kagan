@@ -321,6 +321,18 @@ describe("kagan().lastGatedStatus", () => {
   })
 })
 
+describe("kagan().status", () => {
+  test("reads a valid column value", () => {
+    expect(kagan({ kagan: { status: "review" } }).status).toBe("review")
+  })
+
+  test("rejects invalid or missing values", () => {
+    expect(kagan({ kagan: { status: "bogus" } }).status).toBeUndefined()
+    expect(kagan({ kagan: {} }).status).toBeUndefined()
+    expect(kagan(undefined).status).toBeUndefined()
+  })
+})
+
 describe("approveDenyReason ladder", () => {
   test("rejects non-board tasks first", () => {
     expect(approveDenyReason({ kagan: { validatorOutcome: "ran" } })).toContain("board")
@@ -611,6 +623,7 @@ describe("commandPlan", () => {
         check: [
           { name: "root", cwd: "/", command: "npm test" },
           { name: "abs", cwd: "/tmp", command: "npm test" },
+          { name: "win", cwd: "C:\\tmp", command: "npm test" },
           { name: "parent", cwd: "../app", command: "npm test" },
           { name: "regex", cwd: "app", command: "npm test", scope: ["["] },
           { name: "ok", cwd: "app", command: "npm test", scope: ["^shared/"] },
@@ -674,7 +687,7 @@ describe("task scope and command matching", () => {
   test("runs setup commands only when task scope includes their cwd", () => {
     const command = { name: "alpha deps", cwd: "project-alpha", command: "npm ci" }
     expect(commandInTaskScope(command, { values: ["project-alpha"] })).toBe(true)
-    expect(commandInTaskScope(command, { values: ["project-beta"], custom: "project-alpha" })).toBe(false)
+    expect(commandInTaskScope(command, { values: ["project-beta"], custom: "project-alpha" })).toBe(true)
     expect(commandInTaskScope(command, { values: ["project-beta"], custom: "docs" })).toBe(false)
     expect(commandInTaskScope({ name: "root", cwd: ".", command: "npm ci" }, undefined)).toBe(true)
   })

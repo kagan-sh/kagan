@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { runCheckCommand, runCommandPlan } from "../src/check"
+import { CHECK_COMMAND_TIMEOUT_MS, runCheckCommand, runCommandPlan, truncateCheckResultForMetadata } from "../src/check"
 
 const tempDirs: string[] = []
 
@@ -15,6 +15,44 @@ async function tempWorktree(): Promise<string> {
   tempDirs.push(dir)
   return dir
 }
+
+function withCheckTimeout<T>(timeoutMs: number, run: () => Promise<T>): Promise<T> {
+  const original = globalThis.setTimeout
+  const timer = spyOn(globalThis, "setTimeout").mockImplementation(((fn: TimerHandler, ms?: number) =>
+    original(fn, ms === CHECK_COMMAND_TIMEOUT_MS ? timeoutMs : (ms ?? 0))) as typeof setTimeout)
+  return run().finally(() => timer.mockRestore())
+}
+
+describe("truncateCheckResultForMetadata", () => {
+  test("truncates per-step output and caps aggregate metadata output", () => {
+    const result = truncateCheckResultForMetadata({
+      command: "many steps",
+      exitCode: 0,
+      output: "y".repeat(9000),
+      steps: [
+        {
+          name: "alpha",
+          cwd: ".",
+          command: "echo a",
+          status: "ran",
+          exitCode: 0,
+          output: "a".repeat(5000),
+        },
+        {
+          name: "beta",
+          cwd: ".",
+          command: "echo b",
+          status: "ran",
+          exitCode: 0,
+          output: "b".repeat(5000),
+        },
+      ],
+    })
+    expect(result.steps?.[0]?.output).toHaveLength(4000)
+    expect(result.steps?.[1]?.output).toHaveLength(4000)
+    expect(result.output.length).toBeLessThanOrEqual(8000)
+  })
+})
 
 describe("runCheckCommand", () => {
   test("captures exit code and combined stdout + stderr", async () => {
@@ -36,13 +74,13 @@ describe("runCheckCommand", () => {
   })
 
   test("returns exitCode null on timeout without throwing", async () => {
-    const result = await runCheckCommand("sleep 5", "/tmp", 1)
+    const result = await withCheckTimeout(1, () => runCheckCommand("sleep 5", "/tmp"))
     expect(result.exitCode).toBeNull()
     expect(result.output).toContain("timed out")
   })
 
   test("keeps captured output on timeout", async () => {
-    const result = await runCheckCommand("echo partial; exec sleep 5", "/tmp", 50)
+    const result = await withCheckTimeout(50, () => runCheckCommand("echo partial; exec sleep 5", "/tmp"))
     expect(result.exitCode).toBeNull()
     expect(result.output).toContain("timed out")
     expect(result.output).toContain("partial")
@@ -50,7 +88,7 @@ describe("runCheckCommand", () => {
 
   test("resolves by the deadline even when a background child outlives the killed shell", async () => {
     const start = Date.now()
-    const result = await runCheckCommand("sh -c 'sleep 30 & sleep 30'", "/tmp", 500)
+    const result = await withCheckTimeout(500, () => runCheckCommand("sh -c 'sleep 30 & sleep 30'", "/tmp"))
     expect(Date.now() - start).toBeLessThan(5000)
     expect(result.exitCode).toBeNull()
     expect(result.output).toContain("timed out")

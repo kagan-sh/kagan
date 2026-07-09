@@ -22,7 +22,7 @@ import { spawnIntake } from "./intake"
 import { claimHelperSpawn, getStatus, lastAssistantText, patchKagan } from "./session-api"
 import type { ColumnType } from "./types"
 import { spawnValidator } from "./validator"
-import { runCommandPlan, type CheckResult } from "./check"
+import { runCommandPlan, truncateCheckResultForMetadata, type CheckResult } from "./check"
 
 type SessionData = {
   title?: string
@@ -277,6 +277,7 @@ async function onEnterReview(input: PluginInput, sessionID: string, options?: Re
         check = await runCommandPlan(checkCommands, worktree, (command) =>
           commandMatchesChangedFile(command, changedFiles),
         )
+        if (check) check = truncateCheckResultForMetadata(check)
         try {
           await patchKagan(input.client, sessionID, { check })
         } catch (error) {

@@ -84,8 +84,8 @@ iterating, take over the session, or leave it in Review.
 - **Retry a helper** — if `task prep` or `review` fails, the card shows `intake failed` or
   `review failed`. Press `r` to retry manually; Kagan also retries automatically up to
   `helperRetries` times.
-- **Filter and reorder** — press `/` to filter cards by title or slug. Type `#3` to jump straight
-  to task 3. Press `J` / `K` to reorder the selected root card within its column.
+- **Filter and reorder** — press `/` to filter cards by title or slug. Type `#3` to filter to task
+  #3. Press `J` / `K` to reorder the selected root card within its column.
 - **Export and archive** — open a card's action menu with `Enter` to **export a trust packet**
   (a JSON snapshot of the task's evidence and rulings) or, for Done tasks, **archive** them so
   they leave the board. Archiving is one-way; the session remains reachable through OpenCode's

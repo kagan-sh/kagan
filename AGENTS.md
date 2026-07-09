@@ -7,7 +7,8 @@ worktree per task. Before changing lifecycle behavior, read [`.specs/README.md`]
 
 ## Commands
 
-- `bun run check` — the merge gate (prettier + oxlint + tsc + tests). CI runs exactly this.
+- `bun run check` — the merge gate (prettier + oxlint + tsc + tests + build + package:check). CI runs
+  exactly this.
 - `bun run test` — full suite (~1s; there is rarely a reason to run less).
 - NEVER run bare `bun test` or `bun test <file>`: positional args are substring path filters that
   also match the vendored `references/` tree (bunfig's exclude only applies to discovery mode), and
@@ -43,7 +44,7 @@ This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha
   Verify any claim about SDK/TUI/plugin behavior there and against the installed
   `@opencode-ai/*@1.17.13` in node_modules — never from memory. Never import from `references/`
   and never run its tests.
-- Dependency pins are exact (plugin 1.17.13, opentui 0.4.2, solid 1.9.13). `.opencode/package.json`
+- Dependency pins are exact (plugin 1.17.13, opentui 0.4.3, solid 1.9.10). `.opencode/package.json`
   must keep the same plugin version as the root manifest.
 
 ## Map

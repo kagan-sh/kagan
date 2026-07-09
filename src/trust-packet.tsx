@@ -4,11 +4,14 @@ import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { kagan, type Finding, type Intake } from "./task"
+import type { ColumnType } from "./types"
 import type { CheckResult } from "./check"
 
 export type TrustPacket = {
   version: 1
   exportedAt: string
+  title?: string
+  status?: ColumnType
   taskNumber?: number
   report?: string
   description?: string
@@ -23,11 +26,17 @@ export type TrustPacket = {
   diffStats: Array<{ file: string; additions: number; deletions: number; status?: string }>
 }
 
-export function serializeTrustPacket(metadata: Record<string, unknown>, diffs: Array<SnapshotFileDiff>): TrustPacket {
+export function serializeTrustPacket(
+  metadata: Record<string, unknown>,
+  diffs: Array<SnapshotFileDiff>,
+  title?: string,
+): TrustPacket {
   const view = kagan(metadata)
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
+    title,
+    status: view.status ?? "backlog",
     taskNumber: view.taskNumber,
     report: view.report,
     description: view.description,
@@ -153,9 +162,10 @@ export function openTrustPacketView(api: TuiPluginApi, packet: TrustPacket, titl
       <text fg={muted}>Exported {packet.exportedAt}</text>
       <text>
         {packet.taskNumber !== undefined ? `#${packet.taskNumber} ` : ""}
-        {packet.report || "Untitled task"}
+        {packet.title || packet.report || "Untitled task"}
       </text>
       <text>
+        {packet.status ? `${packet.status} · ` : ""}
         Generation {packet.generation} · {packet.approved ? "approved" : "not approved"}
         {packet.baseBranch ? ` · base: ${packet.baseBranch}` : ""}
       </text>

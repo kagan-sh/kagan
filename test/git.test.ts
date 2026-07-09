@@ -112,6 +112,10 @@ describe("isGitPushCommand", () => {
     ["sudo /usr/bin/git push", true],
     ["GIT_SSH_COMMAND='ssh -i key' git push origin main", true],
     ["cd worktree && git push", true],
+    ["(git push)", true],
+    ["(git push origin main)", true],
+    ["( /usr/bin/git push )", true],
+    ["(git status)", false],
     ["git commit -m wip; git push", true],
     ["git commit -m wip\ngit push", true],
     ["git pull", false],
@@ -418,6 +422,20 @@ describe("mergeTaskBranch (real repo)", () => {
 
     const before = await headSha(mainDir)
     const result = await mergeTaskBranch(run, mainDir, taskDir, "kagan/dirty", "main", "kagan: dirty", true)
+
+    expect(result).toEqual({ ok: false, message: "Commit or stash changes on main before merging" })
+    expect(await headSha(mainDir)).toBe(before)
+    expect(await Bun.file(join(mainDir, "shared.txt")).text()).toBe("dirty-uncommitted\n")
+  })
+
+  test("non-squash merge on a dirty main worktree refuses and leaves the tree untouched", async () => {
+    const mainDir = await createRepo()
+    const taskDir = await addTaskWorktree(mainDir, "kagan/dirty-ns")
+    await commitToBranch(taskDir, "shared.txt", "task-version\n", "task change")
+    await writeFile(join(mainDir, "shared.txt"), "dirty-uncommitted\n")
+
+    const before = await headSha(mainDir)
+    const result = await mergeTaskBranch(run, mainDir, taskDir, "kagan/dirty-ns", "main", "kagan: dirty-ns", false)
 
     expect(result).toEqual({ ok: false, message: "Commit or stash changes on main before merging" })
     expect(await headSha(mainDir)).toBe(before)

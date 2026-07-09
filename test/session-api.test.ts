@@ -297,7 +297,33 @@ describe("createTask", () => {
     })
   })
 
-  test("does not run setup from custom scope text", async () => {
+  test("does not run setup from custom scope text unless it matches a configured cwd", async () => {
+    let createArg: Record<string, unknown> | undefined
+    const api = {
+      state: { path: { worktree: "/repo" } },
+      client: {
+        session: {
+          list: async () => ({ data: [] }),
+          create: async (parameters: Record<string, unknown>) => {
+            createArg = parameters
+            return { data: { id: "s1" } }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+    await createTask(api, {
+      title: "Task",
+      description: "",
+      baseBranch: "main",
+      scope: { values: [], custom: "docs" },
+      setupCommands: [{ name: "alpha deps", cwd: "project-alpha", command: "npm ci" }],
+    })
+    const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
+    expect(kagan.scope).toEqual({ values: [], custom: "docs" })
+    expect(kagan.setup).toBeUndefined()
+  })
+
+  test("runs setup when custom scope exactly matches a configured command cwd", async () => {
     let createArg: Record<string, unknown> | undefined
     const api = {
       state: { path: { worktree: "/repo" } },
@@ -320,7 +346,7 @@ describe("createTask", () => {
     })
     const kagan = (createArg!.metadata as { kagan: Record<string, unknown> }).kagan
     expect(kagan.scope).toEqual({ values: [], custom: "project-alpha" })
-    expect(kagan.setup).toBeUndefined()
+    expect(kagan.setup).toBeDefined()
   })
 })
 

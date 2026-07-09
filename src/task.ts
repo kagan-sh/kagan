@@ -24,7 +24,9 @@ export function squashMerge(options?: Record<string, unknown>): boolean {
 export type TaskScope = { values: string[]; custom?: string }
 
 function isSafeCwd(cwd: string): boolean {
-  return cwd !== "" && !cwd.startsWith("/") && !cwd.split(/[\\/]+/).includes("..")
+  if (cwd === "" || cwd.startsWith("/") || cwd.startsWith("\\")) return false
+  if (/^[A-Za-z]:[\\/]/.test(cwd)) return false
+  return !cwd.split(/[\\/]+/).includes("..")
 }
 
 function validScopePatterns(value: unknown): string[] | undefined {
@@ -54,7 +56,8 @@ export function commandSpec(value: unknown, fallbackName: string): CommandSpec |
   const raw = value as Record<string, unknown>
   const name = typeof raw.name === "string" ? raw.name.trim() : ""
   const rawCwd = typeof raw.cwd === "string" ? raw.cwd.trim() : ""
-  const cwd = rawCwd.startsWith("/") ? rawCwd : rawCwd.replace(/\/+$/, "").replace(/^\.\/+/, "") || "."
+  if (rawCwd.startsWith("/") || rawCwd.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(rawCwd)) return undefined
+  const cwd = rawCwd.replace(/\/+$/, "").replace(/^\.\/+/, "") || "."
   const command = typeof raw.command === "string" ? raw.command.trim() : ""
   const scope = validScopePatterns(raw.scope)
   if (!name || !command || !isSafeCwd(cwd)) return undefined
@@ -105,7 +108,7 @@ export function sanitizeTaskScope(value: unknown): TaskScope | undefined {
 export function commandInTaskScope(command: CommandSpec, scope?: TaskScope): boolean {
   if (command.cwd === ".") return true
   if (!scope) return false
-  return scope.values.includes(command.cwd)
+  return scope.values.includes(command.cwd) || scope.custom === command.cwd
 }
 
 export function commandMatchesChangedFile(command: CommandSpec, changedFiles: readonly string[]): boolean {
@@ -280,6 +283,10 @@ const MetadataSchema = z.object({
     .catch(undefined)
     .transform((value) => (value !== undefined && value >= 1 ? value : 1)),
   role: z.enum(["intake", "validator", "worker"]).optional().catch(undefined),
+  status: z
+    .enum(COLUMNS as unknown as [ColumnType, ...ColumnType[]])
+    .optional()
+    .catch(undefined),
   lastGatedStatus: z
     .enum(COLUMNS as unknown as [ColumnType, ...ColumnType[]])
     .optional()

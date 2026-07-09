@@ -22,6 +22,7 @@ describe("serializeTrustPacket", () => {
     const metadata = {
       kagan: {
         taskNumber: 7,
+        status: "review",
         report: "Add cache",
         description: "Speed up resolver.",
         baseBranch: "main",
@@ -36,8 +37,10 @@ describe("serializeTrustPacket", () => {
     const diffs: Array<SnapshotFileDiff> = [
       { file: "src/cache.ts", additions: 10, deletions: 2, status: "modified" as const, patch: "+x" },
     ]
-    const packet = serializeTrustPacket(metadata, diffs)
+    const packet = serializeTrustPacket(metadata, diffs, "Add tenant cache")
     expect(packet.version).toBe(1)
+    expect(packet.title).toBe("Add tenant cache")
+    expect(packet.status).toBe("review")
     expect(packet.taskNumber).toBe(7)
     expect(packet.report).toBe("Add cache")
     expect(packet.description).toBe("Speed up resolver.")
@@ -53,6 +56,7 @@ describe("serializeTrustPacket", () => {
   test("defaults missing fields safely", () => {
     const packet = serializeTrustPacket({}, [])
     expect(packet.generation).toBe(1)
+    expect(packet.status).toBe("backlog")
     expect(packet.approved).toBe(false)
     expect(packet.findings).toEqual([])
     expect(packet.priorTriage).toEqual([])

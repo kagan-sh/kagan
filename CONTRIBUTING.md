@@ -30,8 +30,8 @@ see your changes. Run `bun run plugin:reset` to undo it.
 bun run check
 ```
 
-This runs formatting, linting, type-checking, and the tests — the exact same thing CI runs. If it
-passes, your change is ready. Two helpers:
+This runs formatting, linting, type-checking, tests, build, and package:check — the exact same
+thing CI runs. If it passes, your change is ready. Two helpers:
 
 - `bun run format:fix` — auto-fix formatting before you finish.
 - `bun run test` — just the tests (use this, not a bare `bun test`).

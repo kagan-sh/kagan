@@ -67,8 +67,16 @@ function isGitToken(token: string): boolean {
   return token === "git" || token.endsWith("/git")
 }
 
+function unwrapOuterParens(segment: string): string {
+  let s = segment.trim()
+  while (s.startsWith("(") && s.endsWith(")")) {
+    s = s.slice(1, -1).trim()
+  }
+  return s
+}
+
 function isGitPushSegment(segment: string): boolean {
-  const tokens = segment.trim().split(/\s+/)
+  const tokens = unwrapOuterParens(segment).split(/\s+/).filter(Boolean)
   const start = tokens.findIndex(isGitToken)
   if (start === -1) return false
   for (let i = start + 1; i < tokens.length; i++) {
@@ -336,6 +344,18 @@ export async function commitAll(run: GitRunner, worktree: string, message: strin
 
 export type MergeResult = { ok: boolean; message: string }
 
+async function dirtyMainWorktreeMessage(
+  run: GitRunner,
+  checkoutDir: string,
+  targetBranch: string,
+): Promise<MergeResult | undefined> {
+  const status = await run(["status", "--porcelain"], checkoutDir)
+  if (status.stdout.trim()) {
+    return { ok: false, message: `Commit or stash changes on ${targetBranch} before merging` }
+  }
+  return undefined
+}
+
 async function mergeSquash(
   run: GitRunner,
   checkoutDir: string,
@@ -346,10 +366,8 @@ async function mergeSquash(
 ): Promise<MergeResult> {
   let mergeStartedOnCleanMain = false
   if (isMainWorktree) {
-    const status = await run(["status", "--porcelain"], checkoutDir)
-    if (status.stdout.trim()) {
-      return { ok: false, message: `Commit or stash changes on ${targetBranch} before merging` }
-    }
+    const dirty = await dirtyMainWorktreeMessage(run, checkoutDir, targetBranch)
+    if (dirty) return dirty
     mergeStartedOnCleanMain = true
   }
   // `git merge --abort` has no effect after `--squash` (there's no MERGE_HEAD), so `git reset
@@ -385,6 +403,10 @@ async function mergeInto(
   isMainWorktree: boolean,
 ): Promise<MergeResult> {
   if (squash) return mergeSquash(run, checkoutDir, branch, targetBranch, commitMessage, isMainWorktree)
+  if (isMainWorktree) {
+    const dirty = await dirtyMainWorktreeMessage(run, checkoutDir, targetBranch)
+    if (dirty) return dirty
+  }
   const merged = await run(["merge", branch], checkoutDir)
   if (merged.code === 0) return { ok: true, message: merged.stdout.trim() || `Merged ${branch}` }
   await run(["merge", "--abort"], checkoutDir)

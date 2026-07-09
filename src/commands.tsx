@@ -258,7 +258,7 @@ export function createBoardCommands(
     api.ui.dialog.replace(() => (
       <api.ui.DialogPrompt
         title="Filter cards"
-        placeholder="Filter by title"
+        placeholder="Filter by title or #N"
         value={store.filter()}
         onConfirm={(value) => {
           api.ui.dialog.clear()
@@ -509,7 +509,7 @@ export function createBoardCommands(
   }
 
   const viewDetails = async (session: BoardSession) => {
-    const packet = serializeTrustPacket(session.metadata ?? {}, await packetDiffs(session.metadata))
+    const packet = serializeTrustPacket(session.metadata ?? {}, await packetDiffs(session.metadata), session.title)
     const title = packet.taskNumber !== undefined ? `#${packet.taskNumber} ${session.title}` : session.title
     openTrustPacketView(api, packet, title)
   }
@@ -521,7 +521,7 @@ export function createBoardCommands(
       return
     }
     void (async () => {
-      const packet = serializeTrustPacket(session.metadata ?? {}, await packetDiffs(session.metadata))
+      const packet = serializeTrustPacket(session.metadata ?? {}, await packetDiffs(session.metadata), session.title)
       const defaultName = `kagan-export-${packet.taskNumber ?? session.id.slice(-6)}.json`
       const path = `${api.state.path.worktree}/${defaultName}`
       try {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import type { TuiPluginApi, TuiToast } from "@opencode-ai/plugin/tui"
 import type { Event, SessionStatus } from "@opencode-ai/sdk/v2"
 import { createRoot } from "solid-js"
@@ -18,6 +18,7 @@ import {
   noticeDuration,
   reconcileOrders,
   rootSessions,
+  SESSION_EVENT_DEBOUNCE_MS,
   sortNeedsHumanFirst,
   sortSessionsByOrder,
 } from "../src/store"
@@ -494,73 +495,74 @@ describe("noticeDuration", () => {
 })
 
 describe("createSessionEventSubscription", () => {
+  const DEBOUNCE_TEST_MS = 10
+
+  function withDebounce<T>(run: () => Promise<T>): Promise<T> {
+    const original = globalThis.setTimeout
+    const timer = spyOn(globalThis, "setTimeout").mockImplementation(((fn: TimerHandler, ms?: number) =>
+      original(fn, ms === SESSION_EVENT_DEBOUNCE_MS ? DEBOUNCE_TEST_MS : (ms ?? 0))) as typeof setTimeout)
+    return run().finally(() => timer.mockRestore())
+  }
+
   test("collapses a burst of session events into a single debounced refresh", async () => {
-    const { api, trigger } = mockEventApi(ROUTE)
-    let calls = 0
-    createSessionEventSubscription(
-      api,
-      async () => {
+    await withDebounce(async () => {
+      const { api, trigger } = mockEventApi(ROUTE)
+      let calls = 0
+      createSessionEventSubscription(api, async () => {
         calls++
-      },
-      10,
-    )
-    trigger("session.created")
-    trigger("session.updated")
-    trigger("session.idle")
-    trigger("session.deleted")
-    expect(calls).toBe(0)
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(calls).toBe(1)
+      })
+      trigger("session.created")
+      trigger("session.updated")
+      trigger("session.idle")
+      trigger("session.deleted")
+      expect(calls).toBe(0)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(calls).toBe(1)
+    })
   })
 
   test("restarts the debounce window on each new event instead of refreshing on a fixed cadence", async () => {
-    const { api, trigger } = mockEventApi(ROUTE)
-    let calls = 0
-    createSessionEventSubscription(
-      api,
-      async () => {
+    await withDebounce(async () => {
+      const { api, trigger } = mockEventApi(ROUTE)
+      let calls = 0
+      createSessionEventSubscription(api, async () => {
         calls++
-      },
-      10,
-    )
-    trigger("session.created")
-    await new Promise((resolve) => setTimeout(resolve, 6))
-    trigger("session.updated")
-    await new Promise((resolve) => setTimeout(resolve, 6))
-    expect(calls).toBe(0)
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    expect(calls).toBe(1)
+      })
+      trigger("session.created")
+      await new Promise((resolve) => setTimeout(resolve, 6))
+      trigger("session.updated")
+      await new Promise((resolve) => setTimeout(resolve, 6))
+      expect(calls).toBe(0)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(calls).toBe(1)
+    })
   })
 
   test("ignores session events while the route is inactive", async () => {
-    const { api, trigger } = mockEventApi("home")
-    let calls = 0
-    createSessionEventSubscription(
-      api,
-      async () => {
+    await withDebounce(async () => {
+      const { api, trigger } = mockEventApi("home")
+      let calls = 0
+      createSessionEventSubscription(api, async () => {
         calls++
-      },
-      10,
-    )
-    trigger("session.created")
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(calls).toBe(0)
+      })
+      trigger("session.created")
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(calls).toBe(0)
+    })
   })
 
   test("disposing cancels a pending debounced refresh", async () => {
-    const { api, trigger } = mockEventApi(ROUTE)
-    let calls = 0
-    const dispose = createSessionEventSubscription(
-      api,
-      async () => {
+    await withDebounce(async () => {
+      const { api, trigger } = mockEventApi(ROUTE)
+      let calls = 0
+      const dispose = createSessionEventSubscription(api, async () => {
         calls++
-      },
-      10,
-    )
-    trigger("session.created")
-    dispose()
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    expect(calls).toBe(0)
+      })
+      trigger("session.created")
+      dispose()
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(calls).toBe(0)
+    })
   })
 })
 

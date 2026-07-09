@@ -80,18 +80,21 @@ status cues, so that I can see at a glance what needs my attention.
 6. WHILE a Backlog task is intake-ready, its card SHALL display a distinct border color and an
    `intake ok` badge indicating it is eligible to move to In Progress.
 7. THE board footer SHALL display the plugin name and version.
-8. WHILE a task is in Review and not yet approved, the board SHALL sort its card ahead of other
+8. WHERE the published npm `latest` dist-tag is a newer clean release (`x.y.z`) than the
+   installed plugin version, the board footer SHALL append an update-available indicator naming
+   that version.
+9. WHILE a task is in Review and not yet approved, the board SHALL sort its card ahead of other
    cards in that column.
-9. WHILE a Backlog task's intake outcome is `failed`, the card SHALL display a distinct failed
-   badge rather than the ready badge, so a failed helper never displays as a success.
-10. WHEN the user reorders the selected root card within its column, the board SHALL swap it with
+10. WHILE a Backlog task's intake outcome is `failed`, the card SHALL display a distinct failed
+    badge rather than the ready badge, so a failed helper never displays as a success.
+11. WHEN the user reorders the selected root card within its column, the board SHALL swap it with
     its adjacent neighbor in that column's persisted order and SHALL re-render the column in the
     new order; a reorder command issued with a subtask selected SHALL be a no-op.
-11. WHILE an In Progress task's active agent is busy, its card SHALL display a live `working`
+12. WHILE an In Progress task's active agent is busy, its card SHALL display a live `working`
     indicator; WHILE it is retrying after an error, its card SHALL display a live `retrying`
     indicator instead; an In Progress card with neither indicator SHALL be treated as stalled.
     THE indicator SHALL NOT appear on Backlog, Review, or Done cards.
-12. WHERE the user filters cards with a query of the form `#N`, the board SHALL match only the
+13. WHERE the user filters cards with a query of the form `#N`, the board SHALL match only the
     card whose task number equals `N` exactly, in addition to the existing title/slug substring
     match.
 
@@ -451,3 +454,9 @@ so that failures, handoffs, and portable review context are visible instead of h
     JSON preview; WHEN the user saves settings THEN Kagan SHALL update the Kagan plugin entry in the
     project's `opencode.json` only, preserving unrelated config entries, and SHALL tell the user to
     restart OpenCode or reopen the project before expecting the saved settings to apply.
+11. WHERE the plugin options set `intakeAgent`, Kagan SHALL use that OpenCode agent for intake child
+    sessions instead of the session default.
+12. WHERE the plugin options set `validatorAgent`, Kagan SHALL use that OpenCode agent for validator
+    child sessions instead of the session default.
+13. WHERE the plugin options set `validatorModels`, Kagan SHALL rotate reviewer models per the
+    configuration reference when spawning validator sessions.

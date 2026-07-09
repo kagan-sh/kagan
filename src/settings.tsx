@@ -4,6 +4,7 @@ import { TextAttributes } from "@opentui/core"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { OptionBoundsSchema } from "./options"
 import {
   commandPlan,
   commandSpec,
@@ -94,10 +95,19 @@ function validateValidatorModels(value: ModelRef[]): string | undefined {
 }
 
 function validateDraft(draft: Draft): string | undefined {
-  if (draft.inProgressLimit < 1) return "inProgressLimit must be at least 1"
-  if (draft.helperRetries < 0) return "helperRetries must be at least 0"
-  if (draft.sendBackStopThreshold < 1) return "sendBackStopThreshold must be at least 1"
-  return validateValidatorModels(draft.validatorModels)
+  const modelError = validateValidatorModels(draft.validatorModels)
+  if (modelError) return modelError
+  const bounds = OptionBoundsSchema.safeParse({
+    inProgressLimit: draft.inProgressLimit,
+    helperRetries: draft.helperRetries,
+    sendBackStopThreshold: draft.sendBackStopThreshold,
+  })
+  if (bounds.success) return undefined
+  const field = bounds.error.issues[0]?.path[0]
+  if (field === "inProgressLimit") return "inProgressLimit must be at least 1"
+  if (field === "helperRetries") return "helperRetries must be at least 0"
+  if (field === "sendBackStopThreshold") return "sendBackStopThreshold must be at least 1"
+  return bounds.error.issues[0]?.message ?? "Invalid settings"
 }
 
 async function saveOptions(worktree: string, draft: Draft): Promise<string> {
