@@ -35,6 +35,8 @@ Or add a local clone to both OpenCode config files:
 
 Open the board with `/kagan` from the command palette, the `kagan` palette command, or `<leader>k` (the leader key defaults to `ctrl+x`).
 
+OpenCode caches the version it first installs and never re-checks, so the board footer flags when a newer release is out — see [Updating](https://docs.kagan.sh/quickstart/#updating) to move to it.
+
 Pass options by using the array-of-array form, or open `/kagan-settings` from the project — see the [configuration reference](https://docs.kagan.sh/reference/configuration/).
 
 ## Docs

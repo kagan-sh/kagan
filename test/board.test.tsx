@@ -137,6 +137,19 @@ describe("Board", () => {
     expect(frame).not.toContain("d delete")
   })
 
+  test("shows the update indicator in the footer once a newer version is available", async () => {
+    const api = mockBoardApi()
+    const store = createRoot(() => createBoardStore(api))
+    await store.refresh()
+    renderSetup = await testRender(() => <Board api={api} store={store} />, { width: 120, height: 20 })
+    await renderSetup.flush()
+    expect(renderSetup.captureCharFrame()).not.toContain("available")
+
+    store.setUpdateAvailable("9.9.9")
+    await renderSetup.flush()
+    expect(renderSetup.captureCharFrame()).toContain("v9.9.9 available")
+  })
+
   test("keeps the footer trimmed once a card is selected", async () => {
     const api = mockBoardApi({
       sessions: [

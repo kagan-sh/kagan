@@ -5,7 +5,9 @@ import { Board } from "./board"
 import { Settings } from "./settings"
 import { showOnboarding } from "./onboarding"
 import { createBoardStore, createSessionEventSubscription, createSessionStatusSubscription } from "./store"
+import { checkForUpdate } from "./update-check"
 import { ROUTE, SETTINGS_ROUTE } from "./types"
+import { version } from "../package.json"
 
 const tui: TuiPlugin = async (api, options) => {
   const store = createRoot(() => createBoardStore(api, options))
@@ -13,6 +15,13 @@ const tui: TuiPlugin = async (api, options) => {
   const disposeStatusEvents = createSessionStatusSubscription(api, store.setSessionStatus)
   api.lifecycle.onDispose(() => disposeEvents())
   api.lifecycle.onDispose(() => disposeStatusEvents())
+
+  checkForUpdate({
+    kv: api.kv,
+    currentVersion: version,
+    now: Date.now(),
+    onUpdate: (latest) => store.setUpdateAvailable(latest),
+  }).catch(() => {})
 
   api.route.register([
     {
