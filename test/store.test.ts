@@ -631,6 +631,8 @@ function mockStoreApi(
           if (options.moveError) throw options.moveError
           return { data: undefined }
         },
+        abort: async () => ({ data: undefined }),
+        children: async () => ({ data: [] }),
         delete: async ({ sessionID }: { sessionID: string }) => {
           if (options.deleteError) throw options.deleteError
           deleted.push(sessionID)

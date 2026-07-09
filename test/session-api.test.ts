@@ -94,6 +94,7 @@ const {
   approveSession,
   archiveSession,
   createTask,
+  deleteSession,
   getFilter,
   getStatus,
   lastAssistantText,
@@ -748,6 +749,88 @@ describe("retryHelper", () => {
     await expect(retryHelper(api, "s1", { metadata: {} } as never, "in_progress")).rejects.toThrow(
       "Retry only applies to backlog or review tasks",
     )
+  })
+})
+
+describe("deleteSession", () => {
+  test("aborts and deletes helper children before deleting the board task", async () => {
+    const aborted: string[] = []
+    const deleted: string[] = []
+    const api = {
+      client: {
+        session: {
+          get: async () => ({
+            data: {
+              metadata: {
+                kagan: {
+                  boardTask: true,
+                  intakeSessionID: "intake-1",
+                  validatorSessionID: "validator-1",
+                  activeIteration: "worker-1",
+                },
+              },
+            },
+          }),
+          children: async () => ({ data: [{ id: "worker-2" }] }),
+          abort: async ({ sessionID }: { sessionID: string }) => {
+            aborted.push(sessionID)
+            return { data: true }
+          },
+          delete: async ({ sessionID }: { sessionID: string }) => {
+            deleted.push(sessionID)
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+
+    await deleteSession(api, "root")
+
+    expect(aborted.sort()).toEqual(["intake-1", "root", "validator-1", "worker-1", "worker-2"].sort())
+    expect(deleted).toEqual(["intake-1", "validator-1", "worker-1", "worker-2", "root"])
+  })
+
+  test("still deletes the parent when helper lookups fail", async () => {
+    const deleted: string[] = []
+    const api = {
+      client: {
+        session: {
+          get: async () => {
+            throw new Error("missing")
+          },
+          children: async () => {
+            throw new Error("missing")
+          },
+          abort: async () => ({ data: true }),
+          delete: async ({ sessionID }: { sessionID: string }) => {
+            deleted.push(sessionID)
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+
+    await deleteSession(api, "root")
+
+    expect(deleted).toEqual(["root"])
+  })
+
+  test("propagates a parent delete failure after stopping children", async () => {
+    const api = {
+      client: {
+        session: {
+          get: async () => ({ data: { metadata: { kagan: { intakeSessionID: "intake-1" } } } }),
+          children: async () => ({ data: [] }),
+          abort: async () => ({ data: true }),
+          delete: async ({ sessionID }: { sessionID: string }) => {
+            if (sessionID === "root") throw new Error("delete failed")
+            return { data: true }
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+
+    await expect(deleteSession(api, "root")).rejects.toThrow("delete failed")
   })
 })
 
