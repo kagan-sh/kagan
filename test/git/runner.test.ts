@@ -5,7 +5,6 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   baseBranchFreshness,
-  bunGitRunner,
   createTaskWorktree,
   ensureWorktreePluginConfig,
   type GitResult,
@@ -16,6 +15,7 @@ import {
 import { mergeTaskBranch } from "../../src/git/merge"
 import { orderDiffsByRisk, worktreeDiffs } from "../../src/git/diffs"
 import { newSideHunkRanges } from "../../src/domain/task/findings"
+import { hermeticGitRunner } from "../fixtures/git"
 
 function stubRunner(
   handler: (args: string[], cwd: string) => Partial<GitResult> | undefined,
@@ -336,7 +336,7 @@ describe("mergeTaskBranch", () => {
 })
 
 describe("mergeTaskBranch (real repo)", () => {
-  const run = bunGitRunner()
+  const run = hermeticGitRunner()
   const tempDirs: string[] = []
 
   afterEach(async () => {

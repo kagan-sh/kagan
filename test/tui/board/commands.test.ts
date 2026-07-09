@@ -10,7 +10,7 @@ import { join } from "node:path"
 import type { BoardSession } from "../../../src/tui/types"
 import { SETTINGS_ROUTE } from "../../../src/tui/types"
 import type { BoardStore } from "../../../src/tui/board/commands"
-import { bunGitRunner } from "../../../src/git/runner"
+import { hermeticGitRunner } from "../../fixtures/git"
 import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "../../fixtures/api"
 
 import { BOARD_BINDINGS, createBoardCommands, footerHints } from "../../../src/tui/board/commands"
@@ -1128,7 +1128,7 @@ describe("createBoardCommands", () => {
   }
 
   test("approving reaches promptAnotherBranch, which warns when the task's own branch is the only local branch", async () => {
-    const run = bunGitRunner()
+    const run = hermeticGitRunner()
     const repoDir = await mkdtemp(join(tmpdir(), "kagan-cmd-repo-"))
     tempDirs.push(repoDir)
     await run(["init", "-q", "-b", "main"], repoDir)
