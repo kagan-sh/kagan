@@ -1,130 +1,99 @@
 # AGENTS.md
 
-Kagan: an OpenCode plugin that supervises AI coding tasks as a kanban board, one isolated git
-worktree per task. Before changing lifecycle behavior, read [`.specs/README.md`](.specs/README.md)
-— it indexes the behavior specs, their authority order, and the newcomer read order.
-`src/task.ts` is the authoritative metadata schema.
+Kagan is an OpenCode plugin that supervises coding tasks on a kanban board, with one git worktree
+per task. Before changing lifecycle behavior, read [`.specs/README.md`](.specs/README.md) for the
+spec authority and read order. `src/domain/task/metadata.ts` is the authoritative metadata schema.
 
 ## Commands
 
-- `bun run check` — the merge gate (prettier + oxlint + tsc + tests + build + package:check). CI runs
-  exactly this.
-- `bun run test` — full suite (~1s; there is rarely a reason to run less).
-- NEVER run bare `bun test` or `bun test <file>`: positional args are substring path filters that
-  also match the vendored `references/` tree (bunfig's exclude only applies to discovery mode), and
-  the suite needs `--conditions browser` (Solid/OpenTUI resolve their browser builds; tests fail
-  confusingly without it). If you must focus, anchor the path and pass the flag:
-  `bun test ./test/task.test.ts --conditions browser`.
-- `bun run format:fix` before finishing any edit batch.
-- `bun run setup` — one-time after cloning: points git at `.githooks` (pre-commit runs
-  format/lint/typecheck). Not a `prepare`/`postinstall` lifecycle script on purpose: those make
-  npm/pacote treat the repo as a git dep needing a build step, which breaks
-  `opencode plugin https://github.com/kagan-sh/kagan`.
+- Use Bun 1.3 or newer; CI pins 1.3.14. Run `bun install`, then `bun run setup` once after cloning to
+  enable the `.githooks/pre-commit` hook.
+- `bun run verify` is the merge gate and the exact CI command. It runs all built-in `verifyx`
+  checks, project overrides, tests, and package validation in parallel. Local runs fix formatting;
+  CI only checks it.
+- Run one project check with `bun run verify:format`, `bun run verify:lint`,
+  `bun run verify:check-types`, or `bun run verify:package`.
+- Run the full suite with `bun run test`, not bare `bun test`. The script supplies
+  `--conditions browser`; `bunfig.toml` supplies the Solid preload. Bun positional test filters can
+  also match a local gitignored `references/` checkout because its exclude applies only to test
+  discovery.
+- Focus a test with an anchored path and the browser condition, for example
+  `bun test ./test/domain/task/policy.test.ts --conditions browser`.
+- `bun run plugin:install` installs a raw development snapshot globally. Re-run it after source
+  edits and restart OpenCode. `bun run plugin:install:prod` installs the packed production artifact;
+  `bun run plugin:reset` removes Kagan from global OpenCode config.
 
-## Release conventions
+## Build And Package
 
-Releases are automated with `semantic-release` on every push to `main`. Commits must follow
-conventional commits. During the `0.x` phase:
+- `bun run build` recreates gitignored `dist/` from every `src/**/*.ts` and `src/**/*.tsx` file,
+  preserving directories, compiling Solid JSX, changing relative imports to `.js`, and mapping
+  host OpenTUI/Solid imports to runtime module IDs. Do not edit `dist/`.
+- The published package contains compiled `dist/`, not `src/`. `bun run verify:package` rebuilds,
+  checks compiled Solid output and the exact tarball file list, installs the tarball in a clean
+  consumer, rejects bundled OpenTUI/Solid copies, and imports both public exports.
+- The development installer deliberately copies raw `src/` and the full local `node_modules` into
+  `~/.kagan/plugin/kagan-pinned`; do not optimize that snapshot as if it were the published package.
 
-- `fix:` — patch release (`0.1.0 → 0.1.1`)
-- `feat:` — minor release (`0.1.0 → 0.2.0`), may include breaking changes
-- `BREAKING CHANGE:` — major release (`0.2.0 → 1.0.0`); only use when ready to leave `0.x`
+## Code Map
 
-Commits that do **not** trigger a release: `docs:`, `test:`, `chore:`, `ci:`, `build:`, `style:`,
-`refactor:`.
+- OpenCode entrypoints: `src/server.ts` for events, tools, and push protection; `src/tui.tsx` for the
+  board and settings routes.
+- `src/domain/` owns metadata parsing, policy, options, prompts, findings, and pure task logic.
+- `src/server/` owns the v1 plugin lifecycle, intake/validator helpers, and serialized server-side
+  metadata patches.
+- `src/tui/` owns the v2 TUI client, board store/components, dialogs, routes, and user actions.
+- `src/git/` owns worktrees, canonical diffs, merges, and the git runner abstraction.
+- `src/checks/runner.ts` runs configured setup and review commands.
+- `test/guards/` enforces source boundaries, host-reactivity rules, and local dependency pins.
 
-While in `0.x`, express breaking changes as `feat:` so they stay in the `0.x` line. Do not customize
-`@semantic-release/commit-analyzer`. Reserve `BREAKING CHANGE:` for the `1.0.0` transition.
+## Architecture Constraints
 
-This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha stages.
+- The two plugin surfaces use different SDK call shapes. Server code uses the v1 client
+  (`client.session.x({ path, body, query, throwOnError })`); TUI code uses the v2 client
+  (`api.client.session.x(params, { throwOnError })`). For v1 fields missing from generated types,
+  follow the existing `as Parameters<typeof ...>[0]` cast pattern.
+- Domain code must not import `src/server/` or `src/tui/`; server and TUI implementations must not
+  import each other. `test/guards/architecture.test.ts` enforces these boundaries.
+- Durable task state lives in `session.metadata.kagan`. Read it through `kagan(metadata)`. When
+  updating an existing session, use `patchKagan`, `claimHelperSpawn`, or `tuiPatchKagan`; they
+  fresh-read, merge, and serialize writes so concurrent handlers do not replace sibling fields.
+- Task creation order is fixed: create the worktree, register the plugin in that worktree, run
+  eligible setup commands, then create the session with that directory. Session directories are
+  immutable. Session listings must use `scope: "project"` or worktree sessions disappear.
+- Root board cards have `boardTask: true`. Helper and worker children are supervised through `role`
+  and parent back-pointers. Root transition handlers skip children, but helper error/idle handlers
+  intentionally process them; use `isSupervisedSession` for the full rule.
+- OpenCode session event payloads differ: `session.created` and `session.updated` use
+  `properties.info`; `session.error` and `session.idle` use `properties.sessionID`.
+- Use `worktreeDiffs` for review input, citations, changed-file checks, and send-back context. It
+  includes committed and tracked changes from the merge base plus untracked files; session-summary
+  diffs are not canonical.
+- Configured command plans must continue after one command fails. Record skipped, failed, timed-out,
+  or unspawnable steps and truncate output before writing it to metadata.
+- Start every agent turn with `promptAsync`, never blocking `prompt`.
+- Board feedback uses `store.notify`, not `api.ui.toast`, because host toasts do not render on plugin
+  routes. Content passed to `api.ui.dialog.replace` must be bare; wrapping it in `api.ui.Dialog`
+  creates a second overlay.
+- Any source file importing `solid-js` or `@opentui/*` must use `.tsx`, even without JSX. The host's
+  raw-source transform ignores `.ts`, which creates a separate Solid instance in development and a
+  board that does not repaint. The architecture guard enforces this.
+- Use `TuiPluginApi` for renderer dimensions, keyboard input, and keymap layers; do not import
+  OpenTUI/Solid context hooks for those surfaces.
 
-## Ground truth for external APIs
+## External APIs
 
-- `references/opencode/` is a vendored, gitignored, read-only checkout of the OpenCode source.
-  Verify any claim about SDK/TUI/plugin behavior there and against the installed
-  `@opencode-ai/*@1.17.13` in node_modules — never from memory. Never import from `references/`
-  and never run its tests.
-- Dependency pins are exact (plugin 1.17.13, opentui 0.4.3, solid 1.9.10). `.opencode/package.json`
-  must keep the same plugin version as the root manifest.
+- Treat `package.json`, installed `@opencode-ai/*`, and the OpenCode support range in
+  `engines.opencode` as current truth. Verify SDK/TUI behavior against those versions, not memory.
+- When `references/opencode/` exists, it is a gitignored, read-only OpenCode source checkout for
+  verifying host behavior. Never import from it or run its tests.
 
-## Map
+## Specs And Releases
 
-- Entry points loaded by OpenCode: `src/server.ts` (events, gates, tools, push guard), `src/tui.tsx`
-  (board route).
-- UI: `board.tsx`, `column.tsx`, `card.tsx`, `commands.tsx`, `create-task.tsx`,
-  `findings-review.tsx`, `task-details.tsx`, `onboarding.tsx`, `settings.tsx`, `store.tsx`, `format.ts`.
-- Helper spawns: `intake.ts`, `validator.ts`.
-- Domain: `task.ts` (metadata schema, parsed view, gates), `handoff.ts` (prompts), `types.ts`, `options.ts`.
-- IO: `session-api.ts` (session CRUD, serialized metadata patching, merge/send-back), `git.ts`
-  (worktrees, diffs, merge), `check.ts` (setup/check commands).
-
-## Architecture facts that are easy to get wrong
-
-- Two plugin surfaces, two SDK dialects: `src/server.ts` uses the v1 client
-  (`client.session.x({ path, body, query, throwOnError })`); the TUI files use the v2 client
-  (`api.client.session.x(params, { throwOnError })`). Don't mix the call shapes. The server accepts
-  more body/query fields than the generated v1 types declare — follow the existing
-  `as Parameters<typeof …>[0]` cast idiom.
-- The server plugin loads once per directory instance and only sees events for its own directory;
-  task sessions live in their worktrees, so a different plugin instance handles them. All task
-  state therefore lives in `session.metadata.kagan` (schema in `.specs/kagan-supervision-board/design.md`), read via `task.ts`'s
-  single parsed view — `kagan(metadata).field` — and written only through `patchKagan` /
-  `tuiPatchKagan` (they merge; never replace the whole `kagan` object).
-- Order matters at creation: the worktree must exist before `session.create` (session directories
-  are immutable). Board listing must pass `scope: "project"` or worktree-hosted sessions vanish.
-- Only sessions with the `boardTask` marker are supervised or shown on the board; generic OpenCode
-  sessions must remain untouched. Helper/iteration children carry `role` + a `*Parent` back-pointer
-  — every lifecycle handler must skip role/parented sessions first (recursion guard).
-- Board UI feedback goes through the store's `Notice` overlay (`store.notify`), never
-  `api.ui.toast` (toasts don't render while the board route is active). Elements passed to
-  `api.ui.dialog.replace` render bare content — the host stack already wraps them in a centered
-  overlay; adding `api.ui.Dialog` around them double-wraps and breaks layout.
-- All agent-starting prompts use `promptAsync`, never the blocking `prompt`.
-- Board reactivity depends on file extension. The host's OpenTUI Solid transform (registered in
-  `references/opencode/packages/opencode/src/plugin/tui/runtime.ts`) only rewires imports for
-  `.jsx`/`.tsx` files — its Bun `onLoad` filter excludes plain `.ts`. Any file importing `solid-js`
-  or `@opentui/*` MUST be `.tsx`, even when it contains no JSX: a `.ts` file resolves those to the
-  snapshot's own bundled Solid instance instead of the host's, so its signals update but never
-  repaint the mounted board (remounting the route re-reads state once, which masks it). `store.tsx`
-  holds the board's signals and is `.tsx` for exactly this reason — a `test/` gate fails if any
-  `src/*.ts` imports those modules. Because every board file is bridged, the board is plain reactive
-  JSX with no imperative repaint workarounds.
-- `plugin:install` copies the full dev `node_modules` and never strips it. The bundled
-  `solid-js`/`@opentui/*` are inert — every `.tsx` import rewrites to the host's live instances
-  before resolution — but they must be present or the plugin fails to load. `@opencode-ai` must stay
-  too: `server.ts` value-imports `@opencode-ai/plugin/tool`, which the host does not bridge.
-- The `.tsx` board is only reactive after the Solid transform runs; Bun's plain automatic JSX
-  runtime evaluates each JSX expression once, so signals never repaint mounted content. The
-  opencode host applies that transform itself when it imports raw plugin `.tsx` (it registers
-  `@opentui/solid`'s runtime plugin support and rewires `solid-js`/`@opentui/solid` imports to its
-  own live instances — `references/opencode/packages/opencode/src/plugin/tui/runtime.ts`). Ship the
-  plugin as raw source; never pre-transform it. Pre-transformed output imports bare
-  `@opentui/solid`/`solid-js`, which resolve to the snapshot's own node_modules and, under Bun's
-  default conditions, to solid's inert server build — a board that renders once and ignores every
-  refresh. Tests still need bunfig's `preload = ["@opentui/solid/preload"]` because `bun test` runs
-  without the host.
-- In plugin source, use `TuiPluginApi` for renderer dimensions, keyboard input, and keymap layers; never import OpenTUI/Solid context hooks for those surfaces.
-- Behavior changes land with matching `.specs/`, `docs/`, and README updates in the same change.
-
-## Self-align audit
-
-When asked to "self-align", audit, or health-check this repo, follow
-[`.claude/skills/self-align/SKILL.md`](.claude/skills/self-align/SKILL.md): four adversarial
-lenses (quality/YAGNI, security, spec alignment, docs freshness), self-assessed and reported by
-severity and confidence. It works with or without a subagent mechanism.
-
-## Style and discipline
-
-- Strict YAGNI: build only what the task needs — no speculative options, abstraction layers, or
-  fallback paths; when replacing behavior, delete the old path and its tests (no compat shims).
-- Compactness without cleverness: no branch that re-checks what an earlier guard or schema already
-  guarantees; no near-duplicate messages for indistinguishable cases.
-- Mirror the established idioms instead of inventing new shapes: `task.ts`'s single `kagan()`
-  parsed view for reads (never re-derive a field with ad hoc checks), chained
-  `DialogSelect`/`DialogPrompt` flows in `commands.tsx`, the mock `PluginInput` / mock api styles
-  already in `test/`.
-- Prettier is config-as-law: no semicolons, printWidth 120. Comments only where the code alone
-  would mislead (external constraint, deliberate deviation) — never narration.
-- Test depth matches siblings: pure logic gets direct tests; thin glue is covered through its
-  caller, not with dedicated suites.
-- Uncommitted working notes go in `.plans/` (gitignored), nowhere else.
+- A behavior change must update `.specs/kagan-supervision-board/requirements.md`, `design.md`, user
+  docs, and README in the same change, citing the requirement numbers changed.
+- Pushes to `main` release through semantic-release. During `0.x`, `fix:` makes a patch and `feat:`
+  makes a minor release, including breaking changes. `docs:`, `test:`, `chore:`, `ci:`, `build:`,
+  `style:`, and `refactor:` do not release; reserve `BREAKING CHANGE:` for the move to 1.0.
+- For explicit self-align, audit, or health-check requests, follow
+  [`.claude/skills/self-align/SKILL.md`](.claude/skills/self-align/SKILL.md).
+- Keep uncommitted plans and scratch notes in the gitignored `.plans/` directory.

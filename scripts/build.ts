@@ -60,12 +60,16 @@ async function transformSolidSource(code: string, filename: string): Promise<str
   return result?.code ?? code
 }
 
-async function listSourceFiles(): Promise<string[]> {
-  const entries = await readdir(srcDir, { withFileTypes: true })
-  return entries
-    .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
-    .map((entry) => join(srcDir, entry.name))
-    .sort()
+async function listSourceFiles(directory = srcDir): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const files = await Promise.all(
+    entries.map((entry) => {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) return listSourceFiles(path)
+      return entry.isFile() && /\.tsx?$/.test(entry.name) ? [path] : []
+    }),
+  )
+  return files.flat().sort()
 }
 
 await rm(distDir, { recursive: true, force: true })
@@ -77,6 +81,7 @@ for (const file of files) {
   const outPath = join(distDir, rel.replace(/\.tsx?$/, ".js"))
   const code = await readFile(file, "utf8")
   const transformed = await transformSolidSource(code, rel)
+  await mkdir(join(outPath, ".."), { recursive: true })
   await writeFile(outPath, transformed)
 }
 

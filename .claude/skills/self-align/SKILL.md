@@ -27,7 +27,7 @@ sequential fallback, one at a time.
 ## Ground rules (all phases, all agents)
 
 - Never read `references/` (vendored, out of scope), `node_modules/`, `dist/`, `.plans/`, or `bun.lock`.
-- Never run linters, type checks, or tests — `bun run check` owns those; re-deriving them wastes tokens.
+- Never run linters, type checks, or tests — `bun run verify` owns those; re-deriving them wastes tokens.
 - Read-only audit: no writes, no network, no state-changing commands.
 - Every finding must cite evidence actually read, not assumed.
 

@@ -2,7 +2,7 @@
 name: opencode-plugin-idioms
 description: Event hook payload shapes, session lifecycle timing, toast/TUI-route render boundaries, and child-session tagging conventions for OpenCode server (@opencode-ai/plugin) and TUI (@opencode-ai/plugin/tui) plugins, grounded in the vendored OpenCode source at references/opencode.
 type: prompt
-whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/board.tsx, src/commands.tsx, src/store.tsx, src/intake.ts, or src/validator.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
+whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/tui/board/board.tsx, src/tui/board/commands.tsx, src/tui/board/store.tsx, src/server/intake.ts, or src/server/validator/spawn.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
 ---
 
 Version check: repo pins `@opencode-ai/plugin@1.17.13`; vendored copy at `references/opencode/packages/plugin/package.json` should match — verify there, never from memory.
@@ -144,7 +144,7 @@ When `route.data.type === "plugin"` (this repo's `api.route.navigate(ROUTE)` in 
 
 `SessionInfo` has first-class `parentID?: SessionID` and free-form `metadata?: Record<string, unknown>` — `references/opencode/packages/schema/src/v1/session.ts:550,559`. There is **no built-in "internal/helper session" flag** anywhere in the schema or in any bundled OpenCode plugin (`references/opencode/packages/opencode/src/plugin/*` only contains auth-provider plugins; none spawn sessions). The tagging convention is project-invented, not an OpenCode-documented idiom — state that plainly rather than citing it as upstream guidance.
 
-This repo already implements the correct pattern in `src/intake.ts:9-19` and `src/validator.ts:51-61`:
+This repo already implements the correct pattern in `src/server/intake.ts:9-19` and `src/server/validator/spawn.ts:51-61`:
 
 - Set `parentID: parentSessionID` on `session.create()` for the structural link.
 - Set `metadata.kagan.role` to a discriminator (`"intake"` / `"validator"`) plus a back-pointer (`intakeParent` / `validatorParent`) so a downstream `event` handler can distinguish a helper session from a real task session by reading `session.metadata.kagan.role` before doing anything session-lifecycle-driven.
@@ -157,7 +157,7 @@ Setting `parentID` is not purely structural bookkeeping — it changes real fram
 - Gets a distinct default title prefix when no explicit title is passed: `"Child session - " + ISO timestamp` vs `"New session - " + ISO timestamp` (`references/opencode/packages/opencode/src/session/session.ts:48-49,523`).
 - Excluded from the legacy CLI's top-level `--continue` session listing (`references/opencode/packages/opencode/src/cli/cmd/run.ts:492`).
 
-None of this stops the child's own `session.created`/`session.updated` events from re-entering the same plugin `event` hook — there is no dispatch-level recursion filtering. `parentID` buys framework side-benefits only; the recursion guard is still entirely on the handler, via `metadata?.kagan?.role`/`*Parent` lookups (`src/server.ts`) and via skipping any `parentID`-bearing session in WIP/board counts (`src/task.ts`: `if (session.parentID) continue`).
+None of this stops the child's own `session.created`/`session.updated` events from re-entering the same plugin `event` hook — there is no dispatch-level recursion filtering. `parentID` buys framework side-benefits only; the recursion guard is still entirely on the handler, via `metadata?.kagan?.role`/`*Parent` lookups (`src/server.ts`) and via skipping any `parentID`-bearing session in WIP/board counts (`src/server/data.ts`: `if (session.parentID) continue`).
 
 ## 5. Permission-config merging convention
 
@@ -180,7 +180,7 @@ Because `cfg` is shared and mutated (not replaced per-plugin), the idiomatic mer
 - `(input, output)` hooks (`permission.ask`, `tool.execute.before`, etc.) run sequentially and awaited, sharing one mutable `output` — later plugins can overwrite earlier plugins' decisions. `packages/opencode/src/plugin/index.ts:280-293`.
 - Server-side `PluginInput` has no `ui`/toast surface; use `client.tui.showToast(...)`, not `api.ui.toast`. `packages/plugin/src/index.ts:56-66` vs `packages/plugin/src/tui.ts:599-609`; SDK method at `packages/sdk/js/src/gen/sdk.gen.ts:1115-1127`.
 - `<Toast/>` is not mounted while a plugin's custom full-screen route (`route.data.type === "plugin"`) is active — toasts fired during that time render nothing, not a visual clobber. `packages/tui/src/app.tsx:1096-1109` vs `1322` (session route) / `home.tsx:88`.
-- No built-in "internal session" flag — `metadata.kagan.role` + `parentID`/`*Parent` back-pointer is this repo's own convention (`src/intake.ts`, `src/validator.ts`), not an OpenCode-documented idiom.
+- No built-in "internal session" flag — `metadata.kagan.role` + `parentID`/`*Parent` back-pointer is this repo's own convention (`src/server/intake.ts`, `src/server/validator/spawn.ts`), not an OpenCode-documented idiom.
 - `Config` passed to `Hooks.config` is shared/mutated across plugins in registration order — merge additively, never reassign wholesale. `packages/opencode/src/plugin/index.ts:241-249`.
 - `permission.ask` is declared in `Hooks` but has no confirmed trigger call site in `packages/opencode/src` in this snapshot — verify empirically before relying on it firing. `packages/plugin/src/index.ts:261`.
 - `parentID` on session create skips auto-share and auto-title generation and changes the default title prefix — real framework behavior, not just bookkeeping. `packages/opencode/src/share/session.ts:41`; `packages/opencode/src/session/prompt.ts:199`; `packages/opencode/src/session/session.ts:48-49,523`.

@@ -66,7 +66,7 @@ async function assertNoBundledHostDeps(pluginRoot: string) {
 }
 
 await run(["bun", "scripts/build.ts"])
-await Promise.all([assertCompiledSolid("dist/tui.js"), assertCompiledSolid("dist/board.js")])
+await Promise.all([assertCompiledSolid("dist/tui.js"), assertCompiledSolid("dist/tui/board/board.js")])
 
 const expected = await expectedPackageFiles()
 assertSameFiles(

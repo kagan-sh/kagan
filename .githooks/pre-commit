@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
-bun run format
-bun run lint
-bun run typecheck
+# git exports GIT_DIR/GIT_INDEX_FILE into hooks (always, in linked worktrees),
+# which hijacks the real-git test repos the suite creates under tmpdir.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX
+bun run verify

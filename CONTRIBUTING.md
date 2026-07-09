@@ -27,13 +27,12 @@ see your changes. Run `bun run plugin:reset` to undo it.
 ## The one command that has to pass
 
 ```sh
-bun run check
+bun run verify
 ```
 
-This runs formatting, linting, type-checking, tests, build, and package:check — the exact same
-thing CI runs. If it passes, your change is ready. Two helpers:
+This runs every built-in `verifyx` check plus formatting, linting, type-checking, tests, build, and
+package validation — the exact same thing CI runs. If it passes, your change is ready. One helper:
 
-- `bun run format:fix` — auto-fix formatting before you finish.
 - `bun run test` — just the tests (use this, not a bare `bun test`).
 
 ## Commits and pull requests

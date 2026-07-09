@@ -16,7 +16,7 @@ All options are passed through OpenCode's plugin config — the array form of a 
         "squashMerge": true,
         "commands": {
           "setup": [{ "name": "deps", "cwd": ".", "command": "bun install" }],
-          "check": [{ "name": "check", "cwd": ".", "command": "bun run check" }]
+          "check": [{ "name": "verify", "cwd": ".", "command": "bun run verify" }]
         }
       }
     ]
@@ -42,7 +42,7 @@ Each command has this shape:
 {
   "name": "alpha check",
   "cwd": "project-alpha",
-  "command": "npm run check",
+  "command": "npm run verify",
   "scope": ["^\\.github/", "^scripts/"]
 }
 ```
@@ -66,13 +66,13 @@ Monorepo example:
             {
               "name": "alpha check",
               "cwd": "project-alpha",
-              "command": "npm run check",
+              "command": "npm run verify",
               "scope": ["^\\.github/", "^scripts/"]
             },
             {
               "name": "beta check",
               "cwd": "project-beta",
-              "command": "npm run check",
+              "command": "npm run verify",
               "scope": ["^\\.github/", "^scripts/"]
             }
           ]

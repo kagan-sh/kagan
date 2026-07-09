@@ -55,7 +55,7 @@ lacks patch text.
 
 ## Data model — `session.metadata.kagan`
 
-`src/task.ts` is the authoritative schema and parsed read view. It validates the `kagan` metadata
+`src/domain/task/metadata.ts` is the authoritative schema and parsed read view. It validates the `kagan` metadata
 blob into `kagan(metadata).field`, salvages malformed optional fields where safe, and exposes the
 derived gate functions. The main stored groups are: root task identity (`boardTask`, `taskNumber`,
 `status`), task setup (`description`, `baseBranch`, `worktree`, `model`, `scope`, `setup`), lifecycle state
@@ -69,25 +69,25 @@ same-session writes so concurrent event handlers cannot clobber each other.
 
 ## Components
 
-| File                                    | Responsibility                                                                                                                                                    | Requirements                                         |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `task.ts`                               | Metadata schema and parsed view; option readers; scoped command parsing/matching; gate functions; finding/intake rules; citation verification; generation patches | R1.9–10, R2.3, R5, R7, R9.6, R9.17–19, R10, R12, R16 |
-| `git.ts`                                | Runner abstraction; worktree create/config; diff assembly; hunk-range parser; `git push` matcher; merge implementation                                            | R1.6, R2, R9.2, R9.16–17, R11.2, R12.3–10, R16       |
-| `handoff.ts`                            | Prompt composition and task-reference formatting                                                                                                                  | R6.2, R11.2, R13                                     |
-| `server.ts`                             | Event lifecycle; helper failure funnel; tools; permission-wait tracking; reference resolution; report capture; remote-push guard                                  | R4, R6, R7.3, R8, R9, R13, R15–17                    |
-| `intake.ts`                             | `spawnIntake` read-only child                                                                                                                                     | R4                                                   |
-| `validator.ts`                          | `spawnValidator` read-only child, diff+context prompt, validator model rotation                                                                                   | R9                                                   |
-| `check.ts`                              | Setup/check command runner with timeout, skipped/ran step evidence, and output tail                                                                               | R9.11–15, R17.2–3                                    |
-| `session-api.ts`                        | TUI data ops: list/create, serialized metadata patching, send-back, merge, triage, approval, retry                                                                | R1, R3.2, R11, R12, R17.8                            |
-| `create-task.tsx`                       | Custom OpenTUI create dialog, including configured/custom task scope selection                                                                                    | R1.1–1.4, R1.9–10                                    |
-| `store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices                                                                                   | R3, R7, R17.4–5                                      |
-| `commands.tsx`                          | Key bindings and dialog flows: create, move, triage, approve/merge, send-back, retry, task details view                                                           | R5.2, R10, R11, R12, R17.3, R17.7                    |
-| `board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version and update banner                                            | R3, R3.7–8, R7.4                                     |
-| `update-check.ts`                       | npm dist-tag lookup with TTL cache; semver comparison for update banner                                                                                           | R3.8                                                 |
-| `format.ts`                             | Card badges, age/diff/subtask formatting                                                                                                                          | R3.6                                                 |
-| `task-details.tsx`                      | Read-only task details view from live session metadata and diff stats                                                                                             | R17.7                                                |
-| `onboarding.tsx`                        | First-run board tour and opt-out persistence                                                                                                                      | R17.6                                                |
-| `settings.tsx`                          | Settings route for editing plugin options and saving `opencode.json`                                                                                              | R17.10–13                                            |
+| File                                              | Responsibility                                                                                                                                                     | Requirements                                         |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `domain/task/`, `domain/options.ts`               | Metadata schema, parsed view, option readers, scoped command parsing/matching, gate functions, finding/intake rules, citation verification, and generation patches | R1.9–10, R2.3, R5, R7, R9.6, R9.17–19, R10, R12, R16 |
+| `git/`                                            | Runner abstraction; worktree create/config; diff assembly; hunk-range parser; `git push` matcher; merge implementation                                             | R1.6, R2, R9.2, R9.16–17, R11.2, R12.3–10, R16       |
+| `domain/handoff.ts`                               | Prompt composition and task-reference formatting                                                                                                                   | R6.2, R11.2, R13                                     |
+| `server.ts`                                       | Event lifecycle; helper failure funnel; tools; permission-wait tracking; reference resolution; report capture; remote-push guard                                   | R4, R6, R7.3, R8, R9, R13, R15–17                    |
+| `server/intake.ts`                                | `spawnIntake` read-only child                                                                                                                                      | R4                                                   |
+| `server/validator/`                               | `spawnValidator` read-only child, diff+context prompt, validator model rotation                                                                                    | R9                                                   |
+| `checks/runner.ts`                                | Setup/check command runner with timeout, skipped/ran step evidence, and output tail                                                                                | R9.11–15, R17.2–3                                    |
+| `tui/session/`, `tui/tasks/`                      | TUI data ops: list/create, serialized metadata patching, send-back, merge, triage, approval, retry                                                                 | R1, R3.2, R11, R12, R17.8                            |
+| `tui/dialogs/create-task.tsx`                     | Custom OpenTUI create dialog, including configured/custom task scope selection                                                                                     | R1.1–1.4, R1.9–10                                    |
+| `tui/board/store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices                                                                                    | R3, R7, R17.4–5                                      |
+| `tui/board/commands.tsx`                          | Key bindings and dialog flows: create, move, triage, approve/merge, send-back, retry, task details view                                                            | R5.2, R10, R11, R12, R17.3, R17.7                    |
+| `tui/board/board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version and update banner                                             | R3, R3.7–8, R7.4                                     |
+| `tui/updates.ts`                                  | npm dist-tag lookup with TTL cache; semver comparison for update banner                                                                                            | R3.8                                                 |
+| `tui/format.ts`                                   | Card badges, age/diff/subtask formatting                                                                                                                           | R3.6                                                 |
+| `tui/dialogs/task-details.tsx`                    | Read-only task details view from live session metadata and diff stats                                                                                              | R17.7                                                |
+| `tui/dialogs/onboarding.tsx`                      | First-run board tour and opt-out persistence                                                                                                                       | R17.6                                                |
+| `tui/routes/settings.tsx`                         | Settings route for editing plugin options and saving `opencode.json`                                                                                               | R17.10–13                                            |
 
 ## Key flows
 
@@ -142,7 +142,7 @@ All matching commands run, even after a previous command fails, and the validato
 timing-out, or unspawnable command is recorded honestly and does not block review entry. The
 validator calls `kagan_findings`, which recomputes
 the worktree diff the same way review entry did, runs each finding's `location` through
-`verifyFindingCitations` (file/line must resolve inside a diff hunk range, via `git.ts`'s pure
+`verifyFindingCitations` (file/line must resolve inside a diff hunk range, via `domain/diff/ranges.ts`'s pure
 `newSideHunkRanges` parser), caps confidence at 2 and marks `outOfDiff` on any citation that
 doesn't verify — never dropping the finding — then persists findings, sets outcome `ran`, and
 clears any stale `helperError`. If the diff can't be computed (e.g. no worktree), findings persist
@@ -197,8 +197,8 @@ understanding, `report`) — no per-reference API calls. Misses render `(#N not 
 
 **Remote push denial (R16).** `server.ts` registers a `tool.execute.before` hook alongside the
 `event` handlers above. On every `bash` tool call it runs the pure matcher `isGitPushCommand`
-(`git.ts`) against `output.args.command`; if the command pushes to a remote, it re-fetches the
-calling session and checks the pure predicate `isSupervisedSession` (`task.ts`) — true for a root
+(`git/runner.ts`) against `output.args.command`; if the command pushes to a remote, it re-fetches the
+calling session and checks the pure predicate `isSupervisedSession` (`domain/task/policy.ts`) — true for a root
 board task, a helper/iteration child identified by role, or a session carrying a kagan parent
 back-pointer even if role is absent. When both are true it throws, which OpenCode surfaces to the
 agent as a failed tool call carrying the thrown message; a generic OpenCode session (neither board
@@ -208,8 +208,8 @@ commands are ignored.
 ## Configuration
 
 The canonical option list is [`docs/reference/configuration.md`](../../docs/reference/configuration.md).
-`task.ts` owns option parsing helpers such as `inProgressCap`, `helperRetries`, `squashMerge`,
-`commandPlan`, `configuredScopes`, and `sendBackStopThreshold`; `validator.ts` owns `validatorModels` rotation. The TUI settings route can
+`domain/task/policy.ts` owns option parsing helpers such as `inProgressCap`, `helperRetries`, `squashMerge`,
+`commandPlan`, `configuredScopes`, and `sendBackStopThreshold`; `server/validator/spawn.ts` owns `validatorModels` rotation. The TUI settings route can
 edit the plugin options and save them back only to project `opencode.json`; it does not hot-reload
 the active plugin instance, so it reports that OpenCode must be restarted or the project reopened.
 

@@ -16,7 +16,7 @@ plugin today.
 
 ## Read order for newcomers
 
-`mental-model.md` → the Map in [`AGENTS.md`](../AGENTS.md) → `src/task.ts` → `src/server.ts`.
+`mental-model.md` → the Map in [`AGENTS.md`](../AGENTS.md) → `src/domain/task/metadata.ts` → `src/server.ts`.
 
 ## Update rule
 

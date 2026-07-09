@@ -2,7 +2,8 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import type { KeyEvent, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { KeyInput, TestRendererSetup } from "@opentui/core/testing"
 import type { KeyInputContext } from "@opentui/keymap"
-import { COLUMNS, ROUTE, type BoardSession, type ColumnType } from "../../src/types"
+import { ROUTE, type BoardSession } from "../../src/tui/types"
+import { COLUMNS, type ColumnType } from "../../src/domain/task/types"
 
 export const mockTheme = {
   text: "white",

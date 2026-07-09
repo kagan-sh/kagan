@@ -11,7 +11,7 @@ concrete trigger: name the input, the sink, and the path between them.
 
 ## Checks
 
-1. **Command construction** — `src/git.ts`, `src/check.ts`, `scripts/`: untrusted strings
+1. **Command construction** — `src/git/runner.ts`, `src/checks/runner.ts`, `scripts/`: untrusted strings
    interpolated into shell commands, or passed as git arguments where a value like `--force` or
    `--upload-pack=...` would be parsed as a flag (missing `--` separation, unvalidated branch
    names).
@@ -19,7 +19,7 @@ concrete trigger: name the input, the sink, and the path between them.
    intended root (`../`, absolute paths, symlinks).
 3. **Prompt injection** — user-typed task text is trusted input by design; do not flag it. Flag
    only agent-generated content (task output, diffs, findings) flowing into another agent's prompt
-   (`handoff.ts`, `intake.ts`, `validator.ts`) where it could override the supervisor's
+   (`src/domain/handoff.ts`, `src/server/intake.ts`, `src/server/validator/`) where it could override the supervisor's
    instructions or forge its output format.
 4. **Destructive git operations** — merge, reset, branch/worktree deletion, or send-back flows
    that can destroy uncommitted user work without the guard the spec intends (cross-check

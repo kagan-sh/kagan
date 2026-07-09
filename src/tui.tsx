@@ -1,12 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createRoot } from "solid-js"
-import { Board } from "./board"
-import { Settings } from "./settings"
-import { showOnboarding } from "./onboarding"
-import { createBoardStore, createSessionEventSubscription, createSessionStatusSubscription } from "./store"
-import { checkForUpdate } from "./update-check"
-import { ROUTE, SETTINGS_ROUTE } from "./types"
+import { Board } from "./tui/board/board"
+import { Settings } from "./tui/routes/settings"
+import { showOnboarding } from "./tui/dialogs/onboarding"
+import { createBoardStore, createSessionEventSubscription, createSessionStatusSubscription } from "./tui/board/store"
+import { checkForUpdate } from "./tui/updates"
+import { ROUTE, SETTINGS_ROUTE } from "./tui/types"
 import { version } from "../package.json"
 
 const tui: TuiPlugin = async (api, options) => {
