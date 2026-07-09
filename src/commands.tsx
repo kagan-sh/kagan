@@ -23,7 +23,7 @@ import { formatModeRationale } from "./format"
 import { baseBranchFreshness, bunGitRunner, currentBranch, listLocalBranches, worktreeDiffs } from "./git"
 import { openCreateTaskDialog } from "./create-task"
 import { openFindingsReviewDialog } from "./findings-review"
-import { isTrustPacket, openTrustPacketView, serializeTrustPacket } from "./trust-packet"
+import { buildTaskDetails, openTaskDetailsView } from "./task-details"
 import type { createBoardStore } from "./store"
 import type { BoardSession } from "./types"
 
@@ -130,22 +130,12 @@ export function footerHints(selected: BoardSession | undefined, hasFilter: boole
   return hints
 }
 
-export type MenuAction =
-  | "view"
-  | "open"
-  | "advance"
-  | "send_back"
-  | "approve"
-  | "retry"
-  | "export"
-  | "import"
-  | "archive"
-  | "delete"
+export type MenuAction = "view" | "open" | "advance" | "send_back" | "approve" | "retry" | "archive" | "delete"
 
 export type MenuOption = { title: string; value: MenuAction }
 
 // Mirrors the direct shortcuts (o/m/s/a/r/d) in each title so the menu teaches the fast path;
-// options with no dedicated key (view/export/import/archive) stay plain.
+// options with no dedicated key (view/archive) stay plain.
 export function menuOptions(session: BoardSession): MenuOption[] {
   const status = session.kaganStatus
   const options: MenuOption[] = [
@@ -158,7 +148,6 @@ export function menuOptions(session: BoardSession): MenuOption[] {
   }
   const retryable = canRetrySession(status, session.metadata)
   if (retryable) options.push({ title: "Retry intake/review — r", value: "retry" })
-  options.push({ title: "Export trust packet", value: "export" }, { title: "Import trust packet", value: "import" })
   if (status === "done") options.push({ title: "Archive", value: "archive" })
   options.push({ title: "Delete — d", value: "delete" })
   return options
@@ -497,99 +486,20 @@ export function createBoardCommands(
     ))
   }
 
-  const packetDiffs = async (metadata: Record<string, unknown> | undefined): Promise<Array<SnapshotFileDiff>> => {
+  const taskDetailsDiffs = async (metadata: Record<string, unknown> | undefined): Promise<Array<SnapshotFileDiff>> => {
     const worktree = kagan(metadata).worktree
     if (!worktree) return []
     try {
       return await worktreeDiffs(bunGitRunner(), worktree, kagan(metadata).baseBranch ?? "HEAD")
     } catch {
-      // Export/peek without diff stats if the worktree cannot be read.
       return []
     }
   }
 
   const viewDetails = async (session: BoardSession) => {
-    const packet = serializeTrustPacket(session.metadata ?? {}, await packetDiffs(session.metadata), session.title)
-    const title = packet.taskNumber !== undefined ? `#${packet.taskNumber} ${session.title}` : session.title
-    openTrustPacketView(api, packet, title)
-  }
-
-  const exportPacket = () => {
-    const session = store.selectedSession()
-    if (!session) {
-      notifyWarning("Select a task to export")
-      return
-    }
-    void (async () => {
-      const packet = serializeTrustPacket(session.metadata ?? {}, await packetDiffs(session.metadata), session.title)
-      const defaultName = `kagan-export-${packet.taskNumber ?? session.id.slice(-6)}.json`
-      const path = `${api.state.path.worktree}/${defaultName}`
-      try {
-        await Bun.write(path, JSON.stringify(packet, null, 2))
-        store.notify({ variant: "success", title: "Kagan", message: `Exported trust packet to ${path}` })
-      } catch (error) {
-        notifyErrorFrom(error)
-      }
-    })()
-  }
-
-  const openPacketFile = async (path: string) => {
-    try {
-      const file = Bun.file(path)
-      if (!(await file.exists())) {
-        notifyError("File not found")
-        return
-      }
-      const parsed = (await file.json()) as unknown
-      if (!isTrustPacket(parsed)) {
-        notifyError("Invalid trust packet")
-        return
-      }
-      openTrustPacketView(api, parsed)
-    } catch (error) {
-      notifyErrorFrom(error)
-    }
-  }
-
-  const promptImportPath = () => {
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogPrompt
-        title="Import trust packet"
-        placeholder="Path to JSON packet"
-        value={`${api.state.path.worktree}/`}
-        onConfirm={async (path) => {
-          api.ui.dialog.clear()
-          await openPacketFile(path)
-        }}
-        onCancel={() => api.ui.dialog.clear()}
-      />
-    ))
-  }
-
-  const importPacket = () => {
-    void (async () => {
-      const worktree = api.state.path.worktree
-      const glob = new Bun.Glob("kagan-export-*.json")
-      const matches: Array<{ path: string; mtimeMs: number }> = []
-      for await (const path of glob.scan({ cwd: worktree, absolute: true })) {
-        matches.push({ path, mtimeMs: (await Bun.file(path).stat()).mtimeMs })
-      }
-      if (matches.length === 0) {
-        promptImportPath()
-        return
-      }
-      matches.sort((left, right) => right.mtimeMs - left.mtimeMs)
-      api.ui.dialog.replace(() => (
-        <api.ui.DialogSelect<string>
-          title="Import trust packet"
-          options={matches.map((match) => ({ title: match.path.split("/").pop() ?? match.path, value: match.path }))}
-          onSelect={(option) => {
-            api.ui.dialog.clear()
-            void openPacketFile(option.value)
-          }}
-        />
-      ))
-    })()
+    const details = buildTaskDetails(session.metadata ?? {}, await taskDetailsDiffs(session.metadata), session.title)
+    const title = details.taskNumber !== undefined ? `#${details.taskNumber} ${session.title}` : session.title
+    openTaskDetailsView(api, details, title)
   }
 
   const archiveSelected = async () => {
@@ -661,8 +571,6 @@ export function createBoardCommands(
     if (action === "send_back") return sendBackTask()
     if (action === "approve") return approve()
     if (action === "retry") return retryHelperTask()
-    if (action === "export") return exportPacket()
-    if (action === "import") return importPacket()
     if (action === "archive") return archiveSelected()
     promptDelete()
   }
@@ -802,18 +710,6 @@ export function createBoardCommands(
       title: "Retry a failed intake or review",
       category: "Kagan",
       run: retryHelperTask,
-    },
-    {
-      name: "kagan.export_packet",
-      title: "Export trust packet",
-      category: "Kagan",
-      run: exportPacket,
-    },
-    {
-      name: "kagan.import_packet",
-      title: "Import trust packet",
-      category: "Kagan",
-      run: importPacket,
     },
     {
       name: "kagan.help",

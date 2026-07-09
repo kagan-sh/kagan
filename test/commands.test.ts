@@ -4,13 +4,12 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { TestRendererSetup } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { BoardSession } from "../src/types"
 import type { BoardStore, MergeDialogHandlers } from "../src/commands"
 import { bunGitRunner } from "../src/git"
-import { isTrustPacket, serializeTrustPacket } from "../src/trust-packet"
 import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "./fixtures/api"
 
 const { createBoardCommands, footerHints, menuOptions, mergeChoiceOptions, openMergeDialog } = await import(
@@ -147,9 +146,9 @@ describe("menuOptions", () => {
     return { id: "s1", title: "Task", kaganStatus, metadata } as unknown as BoardSession
   }
 
-  test("backlog: view, open, advance, export, import, delete — no review-only or archive actions", () => {
+  test("backlog: view, open, advance, delete — no review-only or archive actions", () => {
     const options = menuOptions(menuSession("backlog"))
-    expect(options.map((option) => option.value)).toEqual(["view", "open", "advance", "export", "import", "delete"])
+    expect(options.map((option) => option.value)).toEqual(["view", "open", "advance", "delete"])
   })
 
   test("backlog: adds retry once the intake helper is retryable", () => {
@@ -166,15 +165,13 @@ describe("menuOptions", () => {
       "send_back",
       "approve",
       "retry",
-      "export",
-      "import",
       "delete",
     ])
   })
 
   test("done: no advance, send back, approve, or retry — adds archive", () => {
     const options = menuOptions(menuSession("done"))
-    expect(options.map((option) => option.value)).toEqual(["view", "open", "export", "import", "archive", "delete"])
+    expect(options.map((option) => option.value)).toEqual(["view", "open", "archive", "delete"])
   })
 
   test("titles carry the direct shortcut for keyed actions", () => {
@@ -1014,140 +1011,6 @@ describe("createBoardCommands", () => {
     expect(selectedSessionID).toBe("s1")
   })
 
-  test("kagan.export_packet warns when no task is selected", async () => {
-    const notices: unknown[] = []
-    const store = mockStore({
-      selected: () => undefined,
-      sessions: () => [],
-      notify: (options: unknown) => notices.push(options),
-    })
-    await createBoardCommands({} as TuiPluginApi, store, () => {})
-      .find((command) => command.name === "kagan.export_packet")
-      ?.run()
-    expect(notices).toEqual([{ variant: "warning", title: "Kagan", message: "Select a task to export" }])
-  })
-
-  test("kagan.export_packet writes a valid trust packet straight to the default path", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "kagan-export-"))
-    tempDirs.push(tempDir)
-    const session = {
-      id: "s1",
-      title: "Add retry",
-      kaganStatus: "review" as const,
-      metadata: { kagan: { boardTask: true, taskNumber: 7, generation: 2, approved: true } },
-    }
-    const notices: unknown[] = []
-    const store = mockStore({
-      selected: () => "s1",
-      sessions: () => [session],
-      notify: (options: unknown) => notices.push(options),
-    })
-    const api = { state: { path: { worktree: tempDir } } } as unknown as TuiPluginApi
-    await createBoardCommands(api, store, () => {})
-      .find((command) => command.name === "kagan.export_packet")
-      ?.run()
-    const expectedPath = `${tempDir}/kagan-export-7.json`
-    await waitFor(() => notices.length > 0)
-    expect(notices).toContainEqual({
-      variant: "success",
-      title: "Kagan",
-      message: `Exported trust packet to ${expectedPath}`,
-    })
-    const written: unknown = JSON.parse(await readFile(expectedPath, "utf8"))
-    expect(isTrustPacket(written)).toBe(true)
-    expect(written).toMatchObject({ taskNumber: 7, generation: 2, approved: true })
-  })
-
-  test("kagan.import_packet falls back to the path prompt when the worktree has no exports", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "kagan-import-"))
-    tempDirs.push(tempDir)
-    const notices: unknown[] = []
-    const store = mockStore({
-      selected: () => undefined,
-      sessions: () => [],
-      notify: (options: unknown) => notices.push(options),
-    })
-    let dialogRendered: (() => { onConfirm: (path: string) => Promise<void> }) | undefined
-    const api = {
-      state: { path: { worktree: tempDir } },
-      ui: {
-        dialog: {
-          replace: (render: () => unknown) => {
-            dialogRendered = render as () => { onConfirm: (path: string) => Promise<void> }
-          },
-          clear: () => {},
-        },
-        DialogPrompt: (props: unknown) => props,
-      },
-    } as unknown as TuiPluginApi
-    await createBoardCommands(api, store, () => {})
-      .find((command) => command.name === "kagan.import_packet")
-      ?.run()
-    await waitFor(() => dialogRendered !== undefined)
-    await dialogRendered!().onConfirm(join(tempDir, "does-not-exist.json"))
-    expect(notices).toContainEqual({ variant: "error", title: "Kagan", message: "File not found" })
-  })
-
-  test("kagan.import_packet lists matching exports newest-first and opens the selected one", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "kagan-import-"))
-    tempDirs.push(tempDir)
-    const older = serializeTrustPacket({ kagan: { taskNumber: 3, generation: 1, approved: false } }, [])
-    const newer = serializeTrustPacket({ kagan: { taskNumber: 9, generation: 1, approved: false } }, [])
-    await writeFile(join(tempDir, "kagan-export-3.json"), JSON.stringify(older))
-    await writeFile(join(tempDir, "not-an-export.json"), JSON.stringify({ hello: "world" }))
-    await new Promise((resolve) => setTimeout(resolve, 5))
-    await writeFile(join(tempDir, "kagan-export-9.json"), JSON.stringify(newer))
-    const store = mockStore({ selected: () => undefined, sessions: () => [] })
-    const renders: Array<() => unknown> = []
-    const api = {
-      state: { path: { worktree: tempDir } },
-      theme: { current: mockTheme },
-      ui: {
-        dialog: { replace: (render: () => unknown) => renders.push(render), clear: () => {} },
-        DialogSelect: (props: unknown) => props,
-      },
-    } as unknown as TuiPluginApi
-    await createBoardCommands(api, store, () => {})
-      .find((command) => command.name === "kagan.import_packet")
-      ?.run()
-    await waitFor(() => renders.length === 1)
-    const selectProps = renders[0]!() as {
-      options: { title: string; value: string }[]
-      onSelect: (option: { value: string }) => void
-    }
-    expect(selectProps.options.map((option) => option.title)).toEqual(["kagan-export-9.json", "kagan-export-3.json"])
-    selectProps.onSelect(selectProps.options[0]!)
-    await waitFor(() => renders.length === 2)
-  })
-
-  test("kagan.import_packet errors when the selected export is not a valid trust packet", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "kagan-import-"))
-    tempDirs.push(tempDir)
-    await writeFile(join(tempDir, "kagan-export-1.json"), JSON.stringify({ hello: "world" }))
-    const notices: unknown[] = []
-    const store = mockStore({
-      selected: () => undefined,
-      sessions: () => [],
-      notify: (options: unknown) => notices.push(options),
-    })
-    const renders: Array<() => unknown> = []
-    const api = {
-      state: { path: { worktree: tempDir } },
-      ui: {
-        dialog: { replace: (render: () => unknown) => renders.push(render), clear: () => {} },
-        DialogSelect: (props: unknown) => props,
-      },
-    } as unknown as TuiPluginApi
-    await createBoardCommands(api, store, () => {})
-      .find((command) => command.name === "kagan.import_packet")
-      ?.run()
-    await waitFor(() => renders.length === 1)
-    const selectProps = renders[0]!() as { options: { value: string }[]; onSelect: (option: { value: string }) => void }
-    selectProps.onSelect(selectProps.options[0]!)
-    await waitFor(() => notices.length > 0)
-    expect(notices).toContainEqual({ variant: "error", title: "Kagan", message: "Invalid trust packet" })
-  })
-
   test("kagan.menu does nothing when no task is selected", () => {
     let dialogOpened = false
     const store = mockStore({ selected: () => undefined, sessions: () => [] })
@@ -1187,8 +1050,6 @@ describe("createBoardCommands", () => {
       "send_back",
       "approve",
       "retry",
-      "export",
-      "import",
       "delete",
     ])
   })

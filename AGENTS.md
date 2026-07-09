@@ -52,7 +52,7 @@ This rule will be updated after 1.0.0 release for now assume we are in 0.x alpha
 - Entry points loaded by OpenCode: `src/server.ts` (events, gates, tools, push guard), `src/tui.tsx`
   (board route).
 - UI: `board.tsx`, `column.tsx`, `card.tsx`, `commands.tsx`, `create-task.tsx`,
-  `findings-review.tsx`, `trust-packet.tsx`, `onboarding.tsx`, `settings.tsx`, `store.tsx`, `format.ts`.
+  `findings-review.tsx`, `task-details.tsx`, `onboarding.tsx`, `settings.tsx`, `store.tsx`, `format.ts`.
 - Helper spawns: `intake.ts`, `validator.ts`.
 - Domain: `task.ts` (metadata schema, parsed view, gates), `handoff.ts` (prompts), `types.ts`, `options.ts`.
 - IO: `session-api.ts` (session CRUD, serialized metadata patching, merge/send-back), `git.ts`

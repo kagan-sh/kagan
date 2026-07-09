@@ -422,7 +422,7 @@ to a remote, so that the board's merge dialog stays the only way work leaves the
 ## Requirement 17 — Support features
 
 **User Story:** As a developer, I want the supervision loop to expose its supporting state clearly,
-so that failures, handoffs, and portable review context are visible instead of hidden.
+so that failures, handoffs, and supervision evidence are visible instead of hidden.
 
 #### Acceptance Criteria
 
@@ -441,9 +441,9 @@ so that failures, handoffs, and portable review context are visible instead of h
 6. WHEN the board opens for the first time in a run THEN Kagan SHALL offer the onboarding dialog,
    unless the user has opted out; the user SHALL be able to reopen the tour at any time via the
    `kagan.tutorial` palette command (`/kagan-tutorial`), regardless of the opt-out.
-7. WHEN the user exports a trust packet THEN Kagan SHALL serialize the task's title, status, intake,
-   findings, prior triage, reports, and diff stats as JSON; WHEN the user imports one THEN Kagan
-   SHALL display it read-only without mutating local tasks.
+7. WHEN the user views task details from the card action menu THEN Kagan SHALL display a read-only
+   summary of the task's title, status, intake, findings, prior triage, reports, check/setup
+   evidence, and diff stats without mutating task state.
 8. WHEN concurrent handlers patch the same session's `kagan` metadata THEN Kagan SHALL serialize the
    read-modify-write operations per session so one patch cannot clobber another, and a failed patch
    SHALL NOT block later patches for that session.

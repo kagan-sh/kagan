@@ -7,9 +7,7 @@ import { kagan, type Finding, type Intake } from "./task"
 import type { ColumnType } from "./types"
 import type { CheckResult } from "./check"
 
-export type TrustPacket = {
-  version: 1
-  exportedAt: string
+export type TaskDetails = {
   title?: string
   status?: ColumnType
   taskNumber?: number
@@ -26,15 +24,13 @@ export type TrustPacket = {
   diffStats: Array<{ file: string; additions: number; deletions: number; status?: string }>
 }
 
-export function serializeTrustPacket(
+export function buildTaskDetails(
   metadata: Record<string, unknown>,
   diffs: Array<SnapshotFileDiff>,
   title?: string,
-): TrustPacket {
+): TaskDetails {
   const view = kagan(metadata)
   return {
-    version: 1,
-    exportedAt: new Date().toISOString(),
     title,
     status: view.status ?? "backlog",
     taskNumber: view.taskNumber,
@@ -55,20 +51,6 @@ export function serializeTrustPacket(
       status: diff.status,
     })),
   }
-}
-
-export function isTrustPacket(value: unknown): value is TrustPacket {
-  if (typeof value !== "object" || value === null) return false
-  const packet = value as Partial<TrustPacket>
-  return (
-    packet.version === 1 &&
-    typeof packet.exportedAt === "string" &&
-    typeof packet.generation === "number" &&
-    typeof packet.approved === "boolean" &&
-    Array.isArray(packet.findings) &&
-    Array.isArray(packet.priorTriage) &&
-    Array.isArray(packet.diffStats)
-  )
 }
 
 function CheckEvidence(props: { api: TuiPluginApi; label: string; result?: CheckResult }) {
@@ -151,7 +133,7 @@ function IntakeView(props: { intake?: Intake }) {
   )
 }
 
-export function openTrustPacketView(api: TuiPluginApi, packet: TrustPacket, title = "Trust packet — view only"): void {
+export function openTaskDetailsView(api: TuiPluginApi, details: TaskDetails, title = "Task details"): void {
   const muted = api.theme.current.textMuted
   api.ui.dialog.replace(() => (
     <box flexDirection="column" paddingLeft={1} paddingRight={1} gap={1}>
@@ -159,21 +141,20 @@ export function openTrustPacketView(api: TuiPluginApi, packet: TrustPacket, titl
         <text attributes={TextAttributes.BOLD}>{title}</text>
         <text fg={muted}>esc close</text>
       </box>
-      <text fg={muted}>Exported {packet.exportedAt}</text>
       <text>
-        {packet.taskNumber !== undefined ? `#${packet.taskNumber} ` : ""}
-        {packet.title || packet.report || "Untitled task"}
+        {details.taskNumber !== undefined ? `#${details.taskNumber} ` : ""}
+        {details.title || details.report || "Untitled task"}
       </text>
       <text>
-        {packet.status ? `${packet.status} · ` : ""}
-        Generation {packet.generation} · {packet.approved ? "approved" : "not approved"}
-        {packet.baseBranch ? ` · base: ${packet.baseBranch}` : ""}
+        {details.status ? `${details.status} · ` : ""}
+        Generation {details.generation} · {details.approved ? "approved" : "not approved"}
+        {details.baseBranch ? ` · base: ${details.baseBranch}` : ""}
       </text>
-      {packet.description ? <text fg={muted}>{packet.description}</text> : null}
-      {packet.diffStats.length > 0 ? (
+      {details.description ? <text fg={muted}>{details.description}</text> : null}
+      {details.diffStats.length > 0 ? (
         <box flexDirection="column" gap={1}>
-          <text attributes={TextAttributes.BOLD}>Changed files ({packet.diffStats.length})</text>
-          <For each={packet.diffStats}>
+          <text attributes={TextAttributes.BOLD}>Changed files ({details.diffStats.length})</text>
+          <For each={details.diffStats}>
             {(stat) => (
               <text paddingLeft={2}>
                 {stat.file} (+{stat.additions}/-{stat.deletions}){stat.status ? ` · ${stat.status}` : ""}
@@ -182,11 +163,11 @@ export function openTrustPacketView(api: TuiPluginApi, packet: TrustPacket, titl
           </For>
         </box>
       ) : null}
-      <CheckEvidence api={api} label="Setup" result={packet.setup} />
-      <CheckEvidence api={api} label="Check" result={packet.check} />
-      <IntakeView intake={packet.intake} />
-      <FindingList api={api} title="Findings" findings={packet.findings} />
-      <FindingList api={api} title="Prior triage" findings={packet.priorTriage} />
+      <CheckEvidence api={api} label="Setup" result={details.setup} />
+      <CheckEvidence api={api} label="Check" result={details.check} />
+      <IntakeView intake={details.intake} />
+      <FindingList api={api} title="Findings" findings={details.findings} />
+      <FindingList api={api} title="Prior triage" findings={details.priorTriage} />
     </box>
   ))
 }
