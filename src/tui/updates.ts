@@ -1,39 +1,50 @@
+import { clean, gt, satisfies, valid, validRange } from "semver"
+
 const REGISTRY_DIST_TAGS = "https://registry.npmjs.org/-/package/@kagan-sh/kagan/dist-tags"
-const CHECK_TTL_MS = 24 * 60 * 60 * 1000
+const REGISTRY_MANIFEST = "https://registry.npmjs.org/@kagan-sh%2Fkagan"
+const CHECK_TTL_MS = 60 * 60 * 1000
 const FETCH_TIMEOUT_MS = 3000
 const LAST_CHECK_KEY = "kagan:update:lastCheck"
-const LATEST_KEY = "kagan:update:latest"
+const MANIFEST_KEY = "kagan:update:manifest"
+export const KAGAN_PACKAGE = "@kagan-sh/kagan"
+
+export type UpdateStatus =
+  | { kind: "ready"; version: string }
+  | { kind: "blocked"; version: string; requiredOpenCode: string }
+  | undefined
 
 type UpdateKv = {
   get: <Value = unknown>(key: string, fallback?: Value) => Value
   set: (key: string, value: unknown) => void
 }
 
-function parseRelease(version: string): [number, number, number] | undefined {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim())
-  if (!match) return undefined
-  return [Number(match[1]), Number(match[2]), Number(match[3])]
+// Automatic updates intentionally exclude development and prerelease builds from both sides.
+export function parseRelease(version: string): string | undefined {
+  const normalized = clean(version.trim())
+  return normalized === version.trim() && /^\d+\.\d+\.\d+$/.test(normalized) ? normalized : undefined
 }
 
-function isNewerRelease(latest: string, current: string): boolean {
+function isAutomaticUpdateSpec(spec: string): boolean {
+  return spec === KAGAN_PACKAGE || spec === `${KAGAN_PACKAGE}@latest`
+}
+
+export function isAutomaticUpdateInstall(input: { source: string; spec: string; version: string }): boolean {
+  return input.source === "npm" && isAutomaticUpdateSpec(input.spec) && parseRelease(input.version) !== undefined
+}
+
+export function isNewerRelease(latest: string, current: string): boolean {
   const next = parseRelease(latest)
   const now = parseRelease(current)
-  if (!next || !now) return false
-  const [nextMajor, nextMinor, nextPatch] = next
-  const [nowMajor, nowMinor, nowPatch] = now
-  if (nextMajor !== nowMajor) return nextMajor > nowMajor
-  if (nextMinor !== nowMinor) return nextMinor > nowMinor
-  return nextPatch > nowPatch
+  return Boolean(next && now && gt(next, now))
 }
 
-async function fetchLatestVersion(fetchImpl: typeof fetch, timeoutMs: number): Promise<string | undefined> {
+async function fetchJson(fetchImpl: typeof fetch, url: string, timeoutMs: number): Promise<unknown> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetchImpl(REGISTRY_DIST_TAGS, { signal: controller.signal })
+    const response = await fetchImpl(url, { signal: controller.signal })
     if (!response.ok) return undefined
-    const data = (await response.json()) as { latest?: unknown }
-    return typeof data.latest === "string" ? data.latest : undefined
+    return await response.json()
   } catch {
     return undefined
   } finally {
@@ -41,35 +52,86 @@ async function fetchLatestVersion(fetchImpl: typeof fetch, timeoutMs: number): P
   }
 }
 
-async function resolveLatestVersion(
-  kv: UpdateKv,
-  now: number,
-  deps: { fetchImpl?: typeof fetch; ttlMs?: number } = {},
-): Promise<string | undefined> {
-  const ttl = deps.ttlMs ?? CHECK_TTL_MS
-  const cached = kv.get<string | undefined>(LATEST_KEY, undefined)
-  const lastCheck = kv.get<number>(LAST_CHECK_KEY, 0)
-  if (lastCheck <= now && now - lastCheck < ttl) return cached
+type LatestManifest = { version: string; requiredOpenCode?: string }
 
-  const latest = await fetchLatestVersion(deps.fetchImpl ?? fetch, FETCH_TIMEOUT_MS)
-  if (latest === undefined) return cached
-  kv.set(LATEST_KEY, latest)
-  kv.set(LAST_CHECK_KEY, now)
-  return latest
+function readCachedManifest(value: unknown): LatestManifest | undefined {
+  if (!value || typeof value !== "object") return
+  const candidate = value as Record<string, unknown>
+  if (typeof candidate.version !== "string" || !parseRelease(candidate.version)) return
+  if (candidate.requiredOpenCode !== undefined && typeof candidate.requiredOpenCode !== "string") return
+  if (typeof candidate.requiredOpenCode === "string" && !validRange(candidate.requiredOpenCode)) return
+  return { version: candidate.version, requiredOpenCode: candidate.requiredOpenCode }
 }
 
-export async function checkForUpdate(input: {
+export async function resolveLatestManifest(
+  kv: UpdateKv,
+  currentVersion: string,
+  now: number,
+  deps: { fetchImpl?: typeof fetch } = {},
+): Promise<LatestManifest | undefined> {
+  const cached = readCachedManifest(kv.get(MANIFEST_KEY))
+  const lastCheck = kv.get<number>(LAST_CHECK_KEY, 0)
+  if (lastCheck <= now && now - lastCheck < CHECK_TTL_MS) return cached
+
+  const fetchImpl = deps.fetchImpl ?? fetch
+  const tags = (await fetchJson(fetchImpl, REGISTRY_DIST_TAGS, FETCH_TIMEOUT_MS)) as { latest?: unknown } | undefined
+  const latest = typeof tags?.latest === "string" ? parseRelease(tags.latest) : undefined
+  if (!latest) return
+
+  let manifest: LatestManifest = { version: latest }
+  if (latest !== currentVersion) {
+    const data = (await fetchJson(fetchImpl, `${REGISTRY_MANIFEST}/${latest}`, FETCH_TIMEOUT_MS)) as
+      | { engines?: { opencode?: unknown } }
+      | undefined
+    const requiredOpenCode = data?.engines?.opencode
+    if (typeof requiredOpenCode !== "string" || !validRange(requiredOpenCode)) return
+    manifest = { version: latest, requiredOpenCode: requiredOpenCode.trim() }
+  }
+
+  kv.set(MANIFEST_KEY, manifest)
+  kv.set(LAST_CHECK_KEY, now)
+  return manifest
+}
+
+type CheckInput = {
   kv: UpdateKv
   currentVersion: string
+  openCodeVersion: string
+  source: "file" | "npm" | "internal"
+  spec: string
   now: number
-  onUpdate: (latest: string) => void
   fetchImpl?: typeof fetch
-  ttlMs?: number
-}): Promise<void> {
-  if (!parseRelease(input.currentVersion)) return
-  const latest = await resolveLatestVersion(input.kv, input.now, {
+}
+
+async function runCheck(input: CheckInput): Promise<UpdateStatus> {
+  if (
+    !isAutomaticUpdateInstall({ source: input.source, spec: input.spec, version: input.currentVersion }) ||
+    !valid(input.openCodeVersion)
+  ) {
+    return
+  }
+
+  const manifest = await resolveLatestManifest(input.kv, input.currentVersion, input.now, {
     fetchImpl: input.fetchImpl,
-    ttlMs: input.ttlMs,
   })
-  if (latest && isNewerRelease(latest, input.currentVersion)) input.onUpdate(latest)
+  if (!manifest || !isNewerRelease(manifest.version, input.currentVersion) || !manifest.requiredOpenCode) return
+  if (satisfies(input.openCodeVersion, manifest.requiredOpenCode)) {
+    return { kind: "ready", version: manifest.version }
+  }
+  return { kind: "blocked", version: manifest.version, requiredOpenCode: manifest.requiredOpenCode }
+}
+
+const pendingChecks = new WeakMap<UpdateKv, Map<string, Promise<UpdateStatus>>>()
+
+export function checkForUpdate(input: CheckInput): Promise<UpdateStatus> {
+  const key = [input.source, input.spec, input.currentVersion, input.openCodeVersion].join("\0")
+  const checks = pendingChecks.get(input.kv) ?? new Map<string, Promise<UpdateStatus>>()
+  pendingChecks.set(input.kv, checks)
+  const existing = checks.get(key)
+  if (existing) return existing
+  const check = runCheck(input).finally(() => {
+    checks.delete(key)
+  })
+  checks.set(key, check)
+  return check
 }

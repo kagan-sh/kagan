@@ -1,8 +1,16 @@
 import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { minVersion } from "semver"
 
 const repoRoot = resolve(import.meta.dir, "..")
+const rootPackage = (await Bun.file(join(repoRoot, "package.json")).json()) as {
+  dependencies: Record<string, string>
+  engines: { opencode: string }
+}
+const engineFloor = minVersion(rootPackage.engines.opencode)?.version
+if (!engineFloor) throw new Error(`Invalid OpenCode engine range: ${rootPackage.engines.opencode}`)
+const openCodeVersions = [...new Set([rootPackage.dependencies["@opencode-ai/plugin"], engineFloor])]
 
 type PackedFile = { path: string }
 type PackResult = { filename: string; files: PackedFile[] }
@@ -79,46 +87,51 @@ assertSameFiles(
 const dir = await mkdtemp(join(tmpdir(), "kagan-package-"))
 try {
   const packed = parsePackJson(await run(["npm", "pack", "--json", "--pack-destination", dir]))
-  const consumer = join(dir, "consumer")
-  await mkdir(consumer)
-  await writeFile(
-    join(consumer, "package.json"),
-    JSON.stringify(
-      {
-        type: "module",
-        dependencies: {
-          "@kagan-sh/kagan": `file:${join(dir, packed.filename)}`,
-          "@opentui/core": "0.4.3",
-          "@opentui/keymap": "0.4.3",
-          "@opentui/solid": "0.4.3",
-          "solid-js": "1.9.12",
+  for (const openCodeVersion of openCodeVersions) {
+    const consumer = join(dir, `consumer-${openCodeVersion}`)
+    await mkdir(consumer)
+    await writeFile(
+      join(consumer, "package.json"),
+      JSON.stringify(
+        {
+          type: "module",
+          dependencies: {
+            "@kagan-sh/kagan": `file:${join(dir, packed.filename)}`,
+            "@opentui/core": "0.4.3",
+            "@opentui/keymap": "0.4.3",
+            "@opentui/solid": "0.4.3",
+            "solid-js": "1.9.12",
+          },
+          overrides: {
+            "@opencode-ai/plugin": openCodeVersion,
+            "@opencode-ai/sdk": openCodeVersion,
+          },
         },
-      },
-      null,
-      2,
-    ),
-  )
-  await run(["npm", "install", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"], consumer)
-  const pluginRoot = join(consumer, "node_modules", "@kagan-sh", "kagan")
-  await assertNoBundledHostDeps(pluginRoot)
-  await run(
-    [
-      "bun",
-      "--conditions",
-      "browser",
-      "-e",
-      `import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
+        null,
+        2,
+      ),
+    )
+    await run(["npm", "install", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"], consumer)
+    const pluginRoot = join(consumer, "node_modules", "@kagan-sh", "kagan")
+    await assertNoBundledHostDeps(pluginRoot)
+    await run(
+      [
+        "bun",
+        "--conditions",
+        "browser",
+        "-e",
+        `import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-support/configure"
 import { runtimeModules } from "@opentui/keymap/runtime-modules"
 ensureRuntimePluginSupport({ additional: runtimeModules })
 const server = await import("@kagan-sh/kagan/server")
 const tui = await import("@kagan-sh/kagan/tui")
 if (typeof server.default?.server !== "function") throw new Error("server export missing")
 if (typeof tui.default?.tui !== "function") throw new Error("tui export missing")`,
-    ],
-    consumer,
-  )
+      ],
+      consumer,
+    )
+    console.log(`package check passed with OpenCode ${openCodeVersion}`)
+  }
 } finally {
   await rm(dir, { recursive: true, force: true })
 }
-
-console.log("package check passed")

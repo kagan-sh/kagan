@@ -1,7 +1,7 @@
 # Design — Kagan Supervision Board
 
 Technical design backing [requirements.md](./requirements.md). Traces each subsystem to the
-requirements it satisfies (R1–R17).
+requirements it satisfies (R1–R18).
 
 ## Overview
 
@@ -13,12 +13,13 @@ Kagan ships as two OpenCode plugin surfaces from one package:
   state of its own; everything authoritative lives in session metadata.
 - **TUI plugin** (`src/tui.tsx`, default export `{ id, tui }`) — renders the board route, the
   create-task dialog, and the triage/merge dialogs; owns user-initiated actions (create, move,
-  triage, approve, send-back) via a Solid store.
+  triage, approve, send-back) via a Solid store and owns automatic update checking, preparation,
+  promotion, and feedback.
 
 Both receive the plugin `options` object (OpenCode config). The option reference in
 [`docs/reference/configuration.md`](../../docs/reference/configuration.md) is canonical.
 
-## Architecture constraints (verified against @opencode-ai/{plugin,sdk} 1.17.13)
+## Architecture constraints (verified against @opencode-ai/{plugin,sdk} 1.17.18)
 
 These constraints shape the design and must hold for it to be correct:
 
@@ -38,8 +39,14 @@ These constraints shape the design and must hold for it to be correct:
   `info.id`); `session.idle` carries `properties.sessionID`.
 - **`promptAsync`** starts an agent turn and returns immediately; used for every agent-starting
   prompt (intake, validator, auto-start, send-back).
-- **Toasts are invisible while the board route is active**, so all board feedback uses the board's
-  own `Notice` overlay via the store, never `api.ui.toast`.
+- **Toasts are invisible while the board route is active**, so task and board-action feedback uses
+  the board's own `Notice` overlay. Automatic update feedback is the deliberate exception: one host
+  toast on home/session routes plus persistent board footer state, never the Notice queue (R3.8,
+  R18.5).
+- **Plugin activation ends at restart.** `api.plugins.add` can resolve, compatibility-check, import,
+  and validate an exact package during the current TUI process, but server hooks already loaded by
+  OpenCode cannot be replaced safely. Compatible npm updates therefore promote only during
+  `api.lifecycle.onDispose`; restart loads the promoted wrapper (R18).
 - **The host dialog stack already centers each dialog element** in a full-screen overlay, so the
   create-task dialog renders bare content and calls `dialog.setSize`, rather than wrapping itself in
   another overlay.
@@ -78,12 +85,14 @@ same-session writes so concurrent event handlers cannot clobber each other.
 | `server/intake.ts`                                | `spawnIntake` read-only child                                                                                                                                      | R4                                                   |
 | `server/validator/`                               | `spawnValidator` read-only child, diff+context prompt, validator model rotation                                                                                    | R9                                                   |
 | `checks/runner.ts`                                | Setup/check command runner with timeout, skipped/ran step evidence, and output tail                                                                                | R9.11–15, R17.2–3                                    |
+| `tui.tsx`                                         | TUI composition, routes, subscriptions, automatic-update orchestration, and route-aware update toast                                                               | R3, R18.3–5, R18.9                                   |
 | `tui/session/`, `tui/tasks/`                      | TUI data ops: list/create, serialized metadata patching, send-back, merge, triage, approval, retry                                                                 | R1, R3.2, R11, R12, R17.8                            |
 | `tui/dialogs/create-task.tsx`                     | Custom OpenTUI create dialog, including configured/custom task scope selection                                                                                     | R1.1–1.4, R1.9–10                                    |
-| `tui/board/store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices                                                                                    | R3, R7, R17.4–5                                      |
+| `tui/board/store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices, and update status                                                                 | R3, R7, R17.4–5, R18                                 |
 | `tui/board/commands.tsx`                          | Key bindings and dialog flows: create, move, triage, approve/merge, send-back, retry, task details view                                                            | R5.2, R10, R11, R12, R17.3, R17.7                    |
-| `tui/board/board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version and update banner                                             | R3, R3.7–8, R7.4                                     |
-| `tui/updates.ts`                                  | npm dist-tag lookup with TTL cache; semver comparison for update banner                                                                                            | R3.8                                                 |
+| `tui/board/board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version and persistent update status                                  | R3, R3.7–8, R7.4, R18                                |
+| `tui/updates.ts`                                  | one-hour npm latest/manifest cache and `engines.opencode` classification                                                                                           | R3.8, R18.1, R18.4, R18.6–7                          |
+| `tui/update-manager.ts`                           | exact-release preparation, hostile-path validation, disposal promotion/restore, and successful-load cleanup                                                        | R18.2–3, R18.6–9                                     |
 | `tui/format.ts`                                   | Card badges, age/diff/subtask formatting                                                                                                                           | R3.6                                                 |
 | `tui/dialogs/task-details.tsx`                    | Read-only task details view from live session metadata and diff stats                                                                                              | R17.7                                                |
 | `tui/dialogs/onboarding.tsx`                      | First-run board tour and opt-out persistence                                                                                                                       | R17.6                                                |
@@ -204,6 +213,19 @@ back-pointer even if role is absent. When both are true it throws, which OpenCod
 agent as a failed tool call carrying the thrown message; a generic OpenCode session (neither board
 task, role, nor parent back-pointer) is left untouched, and non-`bash` tool calls and non-push bash
 commands are ignored.
+
+**Automatic update (R18).** Only TUI instances loaded from bare `@kagan-sh/kagan` or explicit
+`@latest` resolve npm `latest`; exact pins and file installs return before network access. A newer
+clean release is classified only after its manifest supplies a valid `engines.opencode` range.
+Compatible latest is prepared exactly through `api.plugins.add`, which independently performs the
+host compatibility check and imports the package without activating a duplicate `kagan` plugin id.
+The manager proves that the current and prepared targets are non-symlinked
+`opencode/packages/@kagan-sh/kagan@…/node_modules/@kagan-sh/kagan` wrappers before writing one
+sibling marker. Its disposal callback renames current to one backup, promotes prepared to
+`kagan@latest`, and restores current if promotion fails. The next successful load of the marker's
+version removes only that validated backup and marker. Ready/blocked status is a dedicated store
+signal: home/session routes receive one host toast, while the board renders persistent footer text
+and never consumes Notice capacity.
 
 ## Configuration
 

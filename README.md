@@ -17,7 +17,8 @@ The agent never touches your checkout. It works on a `kagan/<slug>` branch in it
 
 ## Install
 
-You need [OpenCode](https://opencode.ai/) **1.17.13** or newer (below **1.18.0** — see `engines.opencode` in `package.json`).
+You need [OpenCode](https://opencode.ai/) **1.17.13** or newer (below **1.18.0** — see
+`engines.opencode` in `package.json`).
 
 From npm:
 
@@ -35,7 +36,11 @@ Or add a local clone to both OpenCode config files:
 
 Open the board with `/kagan` from the command palette, the `kagan` palette command, or `<leader>k` (the leader key defaults to `ctrl+x`).
 
-OpenCode caches the version it first installs and never re-checks, so the board footer flags when a newer release is out — see [Updating](https://docs.kagan.sh/quickstart/#updating) to move to it.
+For bare `@kagan-sh/kagan` and explicit `@latest` installs, Kagan prepares compatible `latest`
+releases automatically. Ready or blocked updates appear once as a host toast on home/session routes
+and persist in the board footer. Restart OpenCode when an update is ready; if `latest` needs a newer
+OpenCode, Kagan names the required range. Exact version pins and local installs remain unchanged. See
+[Updating](https://docs.kagan.sh/quickstart/#updating).
 
 Pass options by using the array-of-array form, or open `/kagan-settings` from the project — see the [configuration reference](https://docs.kagan.sh/reference/configuration/).
 

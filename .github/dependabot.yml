@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      opencode:
+        patterns:
+          - "@opencode-ai/plugin"
+          - "@opencode-ai/sdk"
+        update-types:
+          - minor
+          - patch

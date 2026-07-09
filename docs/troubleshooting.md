@@ -36,6 +36,14 @@ task back with instructions to rebase onto the current base.
 Supervised sessions cannot push to a remote. Use the board's approve/merge flow, or take over the
 worktree yourself if you need a different git flow.
 
+**The footer says an update is ready.**
+Kagan has prepared that release without changing the running plugin. Restart OpenCode once to
+apply it.
+
+**The footer says to update OpenCode for a Kagan release.**
+That Kagan release does not support the running OpenCode version. The footer names the required
+range; the current Kagan release remains active until OpenCode is compatible.
+
 **My existing sessions don't appear on the board.**
 By design — the board shows only tasks created through it. Chat sessions stay in OpenCode's
 native session list.
