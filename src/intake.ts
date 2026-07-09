@@ -34,10 +34,7 @@ export async function spawnIntake(
   const childID = child.data?.id
   if (!childID) return undefined
 
-  await patchKagan(input.client, parentSessionID, {
-    intakeSessionID: childID,
-    intakeOutcome: "pending",
-  })
+  await patchKagan(input.client, parentSessionID, { intakeSessionID: childID })
 
   const scope = formatScope(task.scope)
   const promptText = [

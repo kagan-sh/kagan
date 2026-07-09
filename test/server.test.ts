@@ -3,6 +3,12 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import plugin from "../src/server"
 import { approveDenyReason, helper, intakeReady } from "../src/task"
 
+const serverModuleUrl = new URL("../src/server.ts", import.meta.url).href
+
+async function loadServerCopy(suffix: string) {
+  return (await import(`${serverModuleUrl}?copy=${suffix}`)).default as typeof plugin
+}
+
 type SessionData = { title?: string; metadata?: Record<string, unknown>; parentID?: string | null }
 type ListedSession = { id: string; title?: string; parentID?: string | null; metadata?: Record<string, unknown> }
 
@@ -142,8 +148,10 @@ describe("kagan server — session.created", () => {
       bash: false,
       kagan_intake: true,
     })
+    const claim = captured.updates.find((u) => u.id === "s1" && u.kagan.intakeOutcome === "pending")
+    expect(claim).toBeDefined()
     const patch = captured.updates.find((u) => u.kagan.intakeSessionID === "intake-1")
-    expect(patch?.kagan.intakeOutcome).toBe("pending")
+    expect(patch?.kagan.intakeSessionID).toBe("intake-1")
   })
 
   test("skips non-board sessions", async () => {
@@ -1618,6 +1626,141 @@ describe("kagan server — duplicate helper spawn regression", () => {
     hooks = await plugin.server(input, {})
 
     await hooks.event?.({
+      event: { type: "session.updated", properties: { info: { id: "s1", ...store.s1 } } },
+    } as never)
+
+    const intakes = roleCreates(captured, "intake")
+    expect(intakes).toHaveLength(2)
+    expect(captured.prompts.filter((p) => p.id === "intake-2")).toHaveLength(1)
+  })
+
+  test("two module copies with stale reads spawn intake exactly once", async () => {
+    ;((globalThis as Record<string, unknown>).__kaganHelperEntryClaims as Set<string> | undefined)?.clear()
+
+    const store: Record<string, SessionData> = {
+      s1: { title: "Add retry", metadata: { kagan: { status: "backlog", boardTask: true } } },
+    }
+    const captured: Captured = { updates: [], creates: [], prompts: [], listCalls: [] }
+    let createCount = 0
+    const sharedInput = {
+      client: {
+        session: {
+          get: (async (options: unknown) => {
+            const id = (options as { path: { id: string } }).path.id
+            return { data: store[id] ?? { metadata: {} } }
+          }) as never,
+          update: (async (options: unknown) => {
+            const typed = options as { path: { id: string }; body: { metadata: Record<string, unknown> } }
+            const kagan = typed.body.metadata.kagan as Record<string, unknown>
+            captured.updates.push({ id: typed.path.id, kagan })
+            const existing = store[typed.path.id] ?? { metadata: {} }
+            const existingKagan = (existing.metadata?.kagan as Record<string, unknown>) ?? {}
+            store[typed.path.id] = {
+              ...existing,
+              metadata: { ...existing.metadata, kagan: { ...existingKagan, ...kagan } },
+            }
+            return { data: undefined }
+          }) as never,
+          create: (async (options: unknown) => {
+            captured.creates.push((options as { body: Record<string, unknown> }).body)
+            createCount += 1
+            return { data: { id: `intake-${createCount}` } }
+          }) as never,
+          promptAsync: (async (options: unknown) => {
+            const typed = options as { path: { id: string }; body: Record<string, unknown> }
+            captured.prompts.push({ id: typed.path.id, body: typed.body })
+            return { data: undefined }
+          }) as never,
+          list: (async () => ({ data: [] })) as never,
+          messages: (async () => ({ data: [] })) as never,
+        },
+      },
+      $: ((_s: TemplateStringsArray, ..._e: unknown[]) => ({
+        nothrow: () => ({
+          quiet: async () => ({ stdout: Buffer.from(""), stderr: Buffer.from(""), exitCode: 0 }),
+        }),
+      })) as PluginInput["$"],
+      worktree: "/tmp/worktree",
+    } as unknown as PluginInput
+
+    const [modA, modB] = await Promise.all([loadServerCopy("a"), loadServerCopy("b")])
+    const [hooksA, hooksB] = await Promise.all([modA.server(sharedInput, {}), modB.server(sharedInput, {})])
+    const info = { id: "s1", title: "Add retry", metadata: { kagan: { status: "backlog", boardTask: true } } }
+
+    await Promise.all([
+      hooksA.event?.({ event: { type: "session.updated", properties: { info } } } as never),
+      hooksB.event?.({ event: { type: "session.updated", properties: { info } } } as never),
+    ])
+
+    expect(roleCreates(captured, "intake")).toHaveLength(1)
+  })
+
+  test("spawn-failure auto-retry survives across two module copies", async () => {
+    ;((globalThis as Record<string, unknown>).__kaganHelperEntryClaims as Set<string> | undefined)?.clear()
+
+    const store: Record<string, SessionData> = {
+      s1: {
+        title: "Add retry",
+        metadata: { kagan: { status: "backlog", boardTask: true, lastGatedStatus: "backlog" } },
+      },
+    }
+    const captured: Captured = { updates: [], creates: [], prompts: [], listCalls: [] }
+    let child = 0
+    const hooksByMod: Array<Awaited<ReturnType<typeof plugin.server>>> = []
+    const sharedInput = {
+      client: {
+        session: {
+          get: (async (options: unknown) => {
+            const id = (options as { path: { id: string } }).path.id
+            return { data: store[id] ?? { metadata: {} } }
+          }) as never,
+          update: (async (options: unknown) => {
+            const typed = options as { path: { id: string }; body: { metadata: Record<string, unknown> } }
+            const kagan = typed.body.metadata.kagan as Record<string, unknown>
+            captured.updates.push({ id: typed.path.id, kagan })
+            const existing = store[typed.path.id] ?? { metadata: {} }
+            const existingKagan = (existing.metadata?.kagan as Record<string, unknown>) ?? {}
+            store[typed.path.id] = {
+              ...existing,
+              metadata: { ...existing.metadata, kagan: { ...existingKagan, ...kagan } },
+            }
+            for (const hooks of hooksByMod) {
+              await hooks.event?.({
+                event: {
+                  type: "session.updated",
+                  properties: { info: { id: typed.path.id, ...store[typed.path.id] } },
+                },
+              } as never)
+            }
+            return { data: undefined }
+          }) as never,
+          create: (async (options: unknown) => {
+            captured.creates.push((options as { body: Record<string, unknown> }).body)
+            return { data: { id: `intake-${++child}` } }
+          }) as never,
+          promptAsync: (async (options: unknown) => {
+            const typed = options as { path: { id: string }; body: Record<string, unknown> }
+            captured.prompts.push({ id: typed.path.id, body: typed.body })
+            if (typed.path.id === "intake-1") throw new Error("boom")
+            return { data: undefined }
+          }) as never,
+          list: (async () => ({ data: [] })) as never,
+          messages: (async () => ({ data: [] })) as never,
+        },
+      },
+      $: ((_s: TemplateStringsArray, ..._e: unknown[]) => ({
+        nothrow: () => ({
+          quiet: async () => ({ stdout: Buffer.from(""), stderr: Buffer.from(""), exitCode: 0 }),
+        }),
+      })) as PluginInput["$"],
+      worktree: "/tmp/worktree",
+    } as unknown as PluginInput
+
+    const [modA, modB] = await Promise.all([loadServerCopy("retry-a"), loadServerCopy("retry-b")])
+    const [hooksA, hooksB] = await Promise.all([modA.server(sharedInput, {}), modB.server(sharedInput, {})])
+    hooksByMod.push(hooksA, hooksB)
+
+    await hooksA.event?.({
       event: { type: "session.updated", properties: { info: { id: "s1", ...store.s1 } } },
     } as never)
 

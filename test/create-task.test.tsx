@@ -110,6 +110,17 @@ async function renderLatest(api: TuiPluginApi, renders: Array<() => JSX.Element>
   await renderSetup.flush()
 }
 
+function lastKeyConsumed(api: TuiPluginApi): boolean {
+  return !!(api.renderer.keyInput as { lastConsumed?: boolean }).lastConsumed
+}
+
+async function focusField(tabCount: number) {
+  for (let i = 0; i < tabCount; i++) {
+    renderSetup!.mockInput.pressTab()
+    await renderSetup!.flush()
+  }
+}
+
 describe("openCreateTaskDialog", () => {
   test("warns and does not create when title is blank", async () => {
     const view = harness()
@@ -161,7 +172,34 @@ describe("openCreateTaskDialog", () => {
     expect(view.notices.at(-1)).toEqual({ variant: "success", title: "Kagan", message: 'Created "Ship docs"' })
   })
 
-  test("ctrl+enter submits from the description field instead of inserting a newline", async () => {
+  test("enter submits from the description field", async () => {
+    const view = harness()
+    await openCreateTaskDialog(view.api, view.store as never)
+    await renderLatest(view.api, view.renders)
+
+    await renderSetup!.mockInput.typeText("Ship docs")
+    await focusField(1)
+    renderSetup!.mockInput.pressEnter()
+    await renderSetup!.flush()
+
+    expect(createInput).toMatchObject({ title: "Ship docs", baseBranch: "feature" })
+  })
+
+  test("ctrl+j inserts a newline in the description field instead of submitting", async () => {
+    const view = harness()
+    await openCreateTaskDialog(view.api, view.store as never)
+    await renderLatest(view.api, view.renders)
+
+    await renderSetup!.mockInput.typeText("Ship docs")
+    await focusField(1)
+    renderSetup!.mockInput.pressKey("j", { ctrl: true })
+    await renderSetup!.flush()
+
+    expect(createInput).toBeUndefined()
+    expect(lastKeyConsumed(view.api)).toBe(false)
+  })
+
+  test("ctrl+enter still submits from the description field on Kitty-style terminals", async () => {
     const view = harness()
     await openCreateTaskDialog(view.api, view.store as never)
     await renderSetup?.renderer.destroy()
@@ -176,6 +214,32 @@ describe("openCreateTaskDialog", () => {
     await renderSetup.flush()
 
     expect(createInput).toMatchObject({ title: "Ship docs", baseBranch: "feature" })
+  })
+
+  test("return is intercepted from every focus field; ctrl+j is not in description", async () => {
+    async function assertReturnConsumed(tabToFocus: number, scopes: string[] = []) {
+      const view = harness(scopes)
+      await openCreateTaskDialog(view.api, view.store as never)
+      await renderLatest(view.api, view.renders)
+      await focusField(tabToFocus)
+      renderSetup!.mockInput.pressEnter()
+      await renderSetup!.flush()
+      expect(lastKeyConsumed(view.api)).toBe(true)
+    }
+
+    await assertReturnConsumed(0)
+    await assertReturnConsumed(1)
+    await assertReturnConsumed(2, ["alpha", "beta"])
+    await assertReturnConsumed(3)
+    await assertReturnConsumed(4)
+
+    const view = harness()
+    await openCreateTaskDialog(view.api, view.store as never)
+    await renderLatest(view.api, view.renders)
+    await focusField(1)
+    renderSetup!.mockInput.pressKey("j", { ctrl: true })
+    await renderSetup!.flush()
+    expect(lastKeyConsumed(view.api)).toBe(false)
   })
 
   test("preselects the only configured static scope", async () => {

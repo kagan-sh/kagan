@@ -83,13 +83,12 @@ describe("spawnIntake", () => {
     )
   })
 
-  test("patches intakeSessionID and pending outcome before prompting", async () => {
+  test("patches intakeSessionID before prompting", async () => {
     const order: string[] = []
     const { input } = mockSpawnInput({
       onUpdate: (options) => {
         order.push("update")
         const metadata = (options as { body?: { metadata?: Record<string, unknown> } }).body?.metadata
-        expect((metadata?.kagan as Record<string, unknown> | undefined)?.intakeOutcome).toBe("pending")
         expect((metadata?.kagan as Record<string, unknown> | undefined)?.intakeSessionID).toBe("child-1")
       },
       onPrompt: () => order.push("prompt"),

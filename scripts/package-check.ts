@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
@@ -6,6 +6,8 @@ const repoRoot = resolve(import.meta.dir, "..")
 
 type PackedFile = { path: string }
 type PackResult = { filename: string; files: PackedFile[] }
+
+const rawJsxPattern = /<(?:box|text)\b/
 
 async function run(args: string[], cwd = repoRoot) {
   const proc = Bun.spawn(args, { cwd, stdout: "pipe", stderr: "pipe" })
@@ -20,7 +22,7 @@ async function run(args: string[], cwd = repoRoot) {
 
 async function expectedPackageFiles() {
   const files = new Set(["package.json", "README.md", "LICENSE", "tsconfig.json", "bun.lock"])
-  for await (const file of new Bun.Glob("src/**/*").scan({ cwd: repoRoot, onlyFiles: true })) {
+  for await (const file of new Bun.Glob("dist/**/*").scan({ cwd: repoRoot, onlyFiles: true })) {
     if ((await stat(join(repoRoot, file))).isFile()) files.add(file)
   }
   return [...files].sort()
@@ -43,6 +45,29 @@ function assertSameFiles(actual: string[], expected: string[]) {
   }
 }
 
+function assertCompiledSolid(file: string) {
+  const source = Bun.file(join(repoRoot, file))
+  if (!source.size) throw new Error(`${file} is empty`)
+  return source.text().then((code) => {
+    if (rawJsxPattern.test(code)) throw new Error(`${file} still contains raw JSX`)
+    if (!code.includes("createComponent")) throw new Error(`${file} missing compiled Solid output`)
+  })
+}
+
+async function assertNoBundledHostDeps(pluginRoot: string) {
+  const nested = join(pluginRoot, "node_modules")
+  if (!(await Bun.file(nested).exists())) return
+  const entries = await readdir(nested)
+  for (const name of ["@opentui", "solid-js"]) {
+    if (entries.includes(name)) {
+      throw new Error(`packed install bundles host dependency under ${nested}/${name}`)
+    }
+  }
+}
+
+await run(["bun", "scripts/build.ts"])
+await Promise.all([assertCompiledSolid("dist/tui.js"), assertCompiledSolid("dist/board.js")])
+
 const expected = await expectedPackageFiles()
 assertSameFiles(
   parsePackJson(await run(["npm", "pack", "--dry-run", "--json"]))
@@ -59,12 +84,23 @@ try {
   await writeFile(
     join(consumer, "package.json"),
     JSON.stringify(
-      { type: "module", dependencies: { "@kagan-sh/kagan": `file:${join(dir, packed.filename)}` } },
+      {
+        type: "module",
+        dependencies: {
+          "@kagan-sh/kagan": `file:${join(dir, packed.filename)}`,
+          "@opentui/core": "0.4.3",
+          "@opentui/keymap": "0.4.3",
+          "@opentui/solid": "0.4.3",
+          "solid-js": "1.9.12",
+        },
+      },
       null,
       2,
     ),
   )
   await run(["npm", "install", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"], consumer)
+  const pluginRoot = join(consumer, "node_modules", "@kagan-sh", "kagan")
+  await assertNoBundledHostDeps(pluginRoot)
   await run(
     [
       "bun",

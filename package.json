@@ -21,7 +21,7 @@
     "worktree"
   ],
   "files": [
-    "src",
+    "dist",
     "tsconfig.json",
     "bun.lock",
     "README.md",
@@ -43,16 +43,18 @@
     "lint": "oxlint --ignore-pattern node_modules .",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "bun test ./test/*.test.ts ./test/*.test.tsx --conditions browser",
+    "build": "bun scripts/build.ts",
+    "prepack": "bun scripts/build.ts",
     "package:check": "bun scripts/package-check.ts",
-    "check": "prettier --check . && oxlint --ignore-pattern node_modules . && tsc --noEmit -p tsconfig.test.json && bun run test && bun run package:check",
+    "check": "prettier --check . && oxlint --ignore-pattern node_modules . && tsc --noEmit -p tsconfig.test.json && bun run test && bun run build && bun run package:check",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "setup": "node scripts/setup.mjs"
   },
   "exports": {
-    "./tui": "./src/tui.tsx",
-    "./server": "./src/server.ts"
+    "./tui": "./dist/tui.js",
+    "./server": "./dist/server.js"
   },
   "prettier": {
     "semi": false,
@@ -60,19 +62,43 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.17.13",
+    "zod": "4.1.8"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.4.3",
+    "@opentui/keymap": ">=0.4.3",
+    "@opentui/solid": ">=0.4.3",
+    "solid-js": ">=1.9.10"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/keymap": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@babel/core": "7.28.0",
+    "@babel/preset-typescript": "7.27.1",
+    "@opencode-ai/sdk": "1.17.13",
     "@opentui/core": "0.4.2",
     "@opentui/keymap": "0.4.2",
     "@opentui/solid": "0.4.2",
-    "solid-js": "1.9.13",
-    "zod": "4.1.8"
-  },
-  "devDependencies": {
-    "@opencode-ai/sdk": "1.17.13",
     "@tsconfig/bun": "1.0.10",
     "@types/bun": "1.3.13",
+    "babel-plugin-module-resolver": "5.0.2",
+    "babel-preset-solid": "1.9.12",
     "oxlint": "1.60.0",
     "prettier": "3.6.2",
     "semantic-release": "25.0.5",
+    "solid-js": "1.9.13",
     "typescript": "5.8.2",
     "vitepress": "1.6.4"
   }

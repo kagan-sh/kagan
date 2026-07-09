@@ -6,6 +6,7 @@ import { runCommandPlan, type CommandSpec } from "./check"
 import {
   approveDenyReason,
   commandInTaskScope,
+  helper,
   kagan,
   nextGenerationPatch,
   rawKagan,
@@ -48,7 +49,10 @@ function mergeKagan(current: Record<string, unknown>, partial: Record<string, un
 // TUI plugins can run concurrently against the same session. Without serialization, two concurrent
 // patches read the same metadata snapshot and the second write clobbers the first (lost update).
 // This queues patches per session so each read-modify-write completes before the next one starts.
-const sessionLocks = new Map<string, Promise<unknown>>()
+const sessionLocks = ((globalThis as Record<string, unknown>).__kaganSessionLocks ??= new Map<
+  string,
+  Promise<unknown>
+>()) as Map<string, Promise<unknown>>
 
 // OpenCode also delivers a session.updated event — which can trigger another patch on the same
 // session — before the session.update() call that caused it has resolved. That makes the follow-up
@@ -90,6 +94,42 @@ async function patchCore(
     const currentMetadata = await get()
     const merged = mergeKagan(currentMetadata, partial)
     await update(merged)
+  })
+}
+
+async function patchKaganWhen(
+  client: PluginInput["client"],
+  sessionID: string,
+  compute: (metadata: Record<string, unknown>) => Record<string, unknown> | undefined,
+): Promise<boolean> {
+  let applied = false
+  await withSessionLock(sessionID, async () => {
+    const result = await client.session.get({ path: { id: sessionID }, throwOnError: true })
+    const currentMetadata = ((result.data as { metadata?: Record<string, unknown> } | undefined)?.metadata ??
+      {}) as Record<string, unknown>
+    const partial = compute(currentMetadata)
+    if (partial === undefined) return
+    applied = true
+    const merged = mergeKagan(currentMetadata, partial)
+    await client.session.update({
+      path: { id: sessionID },
+      body: { metadata: merged },
+      throwOnError: true,
+    } as Parameters<typeof client.session.update>[0])
+  })
+  return applied
+}
+
+export async function claimHelperSpawn(
+  client: PluginInput["client"],
+  sessionID: string,
+  role: HelperRole,
+): Promise<boolean> {
+  const outcomeField = `${role}Outcome`
+  return patchKaganWhen(client, sessionID, (metadata) => {
+    const before = helper(metadata, role)
+    if (before.outcome !== undefined || before.sessionID !== undefined) return undefined
+    return { [outcomeField]: "pending" }
   })
 }
 

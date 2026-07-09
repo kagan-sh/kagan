@@ -19,7 +19,7 @@ import {
 import { isGitPushCommand, worktreeDiffs, shellGitRunner } from "./git"
 import { composeStartPrompt, formatTaskRef, parseTaskRefs } from "./handoff"
 import { spawnIntake } from "./intake"
-import { getStatus, lastAssistantText, patchKagan } from "./session-api"
+import { claimHelperSpawn, getStatus, lastAssistantText, patchKagan } from "./session-api"
 import type { ColumnType } from "./types"
 import { spawnValidator } from "./validator"
 import { runCommandPlan, type CheckResult } from "./check"
@@ -199,7 +199,8 @@ async function resolveOwningBoardTask(input: PluginInput, sessionID: string): Pr
   return owningRootTaskID(session?.metadata, sessionID, session?.parentID)
 }
 
-const helperEntryClaims = new Set<string>()
+const helperEntryClaims = ((globalThis as Record<string, unknown>).__kaganHelperEntryClaims ??=
+  new Set<string>()) as Set<string>
 
 async function onEnterBacklog(input: PluginInput, sessionID: string, options?: Record<string, unknown>): Promise<void> {
   const key = `${sessionID}:intake`
@@ -214,6 +215,8 @@ async function onEnterBacklog(input: PluginInput, sessionID: string, options?: R
     const before = helper(metadata, "intake")
     if (before.outcome !== undefined) return
     if (before.sessionID !== undefined) return
+
+    if (!(await claimHelperSpawn(input.client, sessionID, "intake"))) return
 
     const attempts = before.attempts + 1
     const description = view.description
