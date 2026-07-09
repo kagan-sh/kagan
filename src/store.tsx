@@ -269,6 +269,7 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
   const scopes = configuredScopes(options)
   const sendBackThreshold = sendBackStopThreshold(options)
   const [sessions, setSessions] = createSignal<BoardSession[]>([])
+  const [updateAvailable, setUpdateAvailable] = createSignal<string | undefined>()
   const [selectedID, setSelectedID] = createSignal<string | undefined>()
   const [selectedColumn, setSelectedColumn] = createSignal<ColumnType>("backlog")
   const [filter, setFilterSignal] = createSignal(getFilter(api))
@@ -559,6 +560,8 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     columns,
     notices,
     notify,
+    updateAvailable,
+    setUpdateAvailable,
     select,
     selectNext,
     selectPrevious,

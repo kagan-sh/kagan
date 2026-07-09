@@ -107,6 +107,9 @@ function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () => { ke
     <box flexDirection="row" flexShrink={0} paddingLeft={2} paddingRight={2} justifyContent="space-between">
       <text wrapMode="none" truncate={true} fg={theme().textMuted}>
         kagan v{version}
+        <Show when={props.store.updateAvailable()}>
+          {(latest) => <span style={{ fg: theme().info }}>{` → v${latest()} available`}</span>}
+        </Show>
         <Show when={filter()}>{` · filter: ${filter()}`}</Show>
       </text>
       <box flexDirection="row" gap={2} flexShrink={0}>

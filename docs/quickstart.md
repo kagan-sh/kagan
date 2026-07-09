@@ -24,6 +24,29 @@ Open the board with `/kagan`, the `kagan` palette command, or `<leader>k` (leade
 To configure options such as `commands.check` or `inProgressLimit`, use the array-of-array plugin
 entry shown in the [configuration reference](/reference/configuration).
 
+## Updating
+
+When a newer version is published, the board footer shows `→ vX.Y.Z available` (the check hits npm at
+most once a day). OpenCode does **not** update plugins on its own: the
+first version it installs is cached and reused on every launch, and re-running `opencode plugin
+@kagan-sh/kagan` reuses that same cache. To move to a newer version, use one of these:
+
+**Refresh the cached install** — remove Kagan's cached package, then restart OpenCode. It reinstalls
+the latest on the next launch.
+
+```bash
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@kagan-sh/kagan@latest"
+```
+
+**Pin a version and bump it** — set an explicit version in `opencode.json` and `tui.json`. OpenCode
+caches each exact version separately, so changing the number forces a clean install:
+
+```json
+{
+  "plugin": ["@kagan-sh/kagan@0.1.3"]
+}
+```
+
 ## Your first task
 
 1. **Open the board** — use `/kagan`, the `kagan` palette command, or `<leader>k`.
