@@ -219,10 +219,10 @@ async function onEnterBacklog(input: PluginInput, sessionID: string, options?: R
     if (!(await claimHelperSpawn(input.client, sessionID, "intake"))) return
 
     const attempts = before.attempts + 1
-    const description = view.description
-    const references = await resolveTaskRefs(input, description)
     let childID: string | undefined
     try {
+      const description = view.description
+      const references = await resolveTaskRefs(input, description)
       childID = await spawnIntake(
         input,
         sessionID,
@@ -267,22 +267,22 @@ async function onEnterReview(input: PluginInput, sessionID: string, options?: Re
     if (!(await claimHelperSpawn(input.client, sessionID, "validator"))) return
 
     const attempts = before.attempts + 1
-    const diffs = await worktreeDiffs(shellGitRunner(input.$), worktree, view.baseBranch ?? "HEAD")
-    const checkCommands = commandPlan(options, "check")
-    let check: CheckResult | undefined
-    if (checkCommands.length > 0) {
-      const changedFiles = diffs.map((diff) => diff.file).filter((file): file is string => typeof file === "string")
-      check = await runCommandPlan(checkCommands, worktree, (command) =>
-        commandMatchesChangedFile(command, changedFiles),
-      )
-      try {
-        await patchKagan(input.client, sessionID, { check })
-      } catch (error) {
-        console.error(`[kagan] failed to record check evidence for ${sessionID}: ${errorMessage(error)}`)
-      }
-    }
     let childID: string | undefined
     try {
+      const diffs = await worktreeDiffs(shellGitRunner(input.$), worktree, view.baseBranch ?? "HEAD")
+      const checkCommands = commandPlan(options, "check")
+      let check: CheckResult | undefined
+      if (checkCommands.length > 0) {
+        const changedFiles = diffs.map((diff) => diff.file).filter((file): file is string => typeof file === "string")
+        check = await runCommandPlan(checkCommands, worktree, (command) =>
+          commandMatchesChangedFile(command, changedFiles),
+        )
+        try {
+          await patchKagan(input.client, sessionID, { check })
+        } catch (error) {
+          console.error(`[kagan] failed to record check evidence for ${sessionID}: ${errorMessage(error)}`)
+        }
+      }
       childID = await spawnValidator(
         input,
         sessionID,

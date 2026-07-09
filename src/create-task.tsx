@@ -137,7 +137,13 @@ function CreateTaskForm(props: {
       void submit()
       return true
     }
-    if (key.ctrl && key.name === "j") return false
+    if (
+      focusIndex() === 1 &&
+      ((key.ctrl && key.name === "j") || key.name === "linefeed" || (key.shift && key.name === "return"))
+    ) {
+      descriptionRef?.newLine()
+      return true
+    }
     if (key.name === "return") {
       if (focusIndex() >= 2) openPicker()
       else void submit()

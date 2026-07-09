@@ -1276,6 +1276,88 @@ describe("kagan server — helper failure: spawn-time throw", () => {
   })
 })
 
+describe("kagan server — helper failure: pre-spawn work throws before the claim is released", () => {
+  function roleCreates(captured: Captured, role: string) {
+    return captured.creates.filter((c) => (c.metadata as { kagan?: { role?: string } })?.kagan?.role === role)
+  }
+
+  test("validator: worktreeDiffs throwing before spawn clears the pending claim and a later event retries", async () => {
+    const metadata = { kagan: { ...boardReview.kagan, worktree: "/wt" } }
+    const store: Record<string, SessionData> = { s1: { title: "Task", metadata } }
+    let diffThrows = true
+    const { input, captured } = makeInput({
+      store,
+      createId: "validator-1",
+      gitStdout: (args) => {
+        if (diffThrows && args[0] === "merge-base") throw new Error("git merge-base exploded")
+        if (args[0] === "merge-base") return "abc123"
+        if (args.includes("--numstat")) return "1\t1\tfile.txt"
+        if (args.includes("--name-status")) return "M\tfile.txt"
+        return ""
+      },
+    })
+    const hooks = await plugin.server(input, {})
+
+    await hooks.event?.({
+      event: { type: "session.updated", properties: { info: { id: "s1", metadata } } },
+    } as never)
+
+    // The claim must be cleared by the failure funnel, not left stuck at "pending" forever.
+    expect(store.s1?.metadata?.kagan).toMatchObject({ validatorOutcome: undefined, validatorSessionID: undefined })
+    const cleared = captured.updates.find(
+      (u) => u.id === "s1" && u.kagan.validatorOutcome === undefined && u.kagan.validatorSessionID === undefined,
+    )
+    expect(cleared).toBeDefined()
+    expect(roleCreates(captured, "validator")).toHaveLength(0)
+
+    // A follow-up session.updated (diffs now succeed) must re-attempt the spawn.
+    diffThrows = false
+    await hooks.event?.({
+      event: { type: "session.updated", properties: { info: { id: "s1", metadata: store.s1!.metadata } } },
+    } as never)
+    expect(roleCreates(captured, "validator")).toHaveLength(1)
+  })
+
+  test("intake: a throw in the widened try (with resolveTaskRefs run inside it) clears the claim and the retry succeeds", async () => {
+    const metadata = { kagan: { status: "backlog", boardTask: true, description: "Build on #3" } }
+    const store: Record<string, SessionData> = { s1: { title: "T", metadata } }
+    let child = 0
+    const { input, captured } = makeInput({
+      store,
+      // sessions is empty so resolveTaskRefs does real work (resolves #3 to a not-found block)
+      // inside the widened try before spawnIntake runs.
+      sessions: [],
+      createId: () => `intake-${++child}`,
+      promptError: (id) => (id === "intake-1" ? new Error("ProviderModelNotFoundError: bad model") : undefined),
+    })
+    const hooks = await plugin.server(input, {})
+
+    const info = { id: "s1", title: "T", metadata }
+    await hooks.event?.({ event: { type: "session.created", properties: { info } } } as never)
+    await hooks.event?.({ event: { type: "session.updated", properties: { info } } } as never)
+
+    // First attempt threw inside spawnIntake: the claim must be cleared (not left pending), attempts bumped.
+    expect(store.s1?.metadata?.kagan).toMatchObject({ intakeOutcome: undefined, intakeSessionID: undefined })
+    const cleared = captured.updates.find(
+      (u) =>
+        u.id === "s1" &&
+        "intakeOutcome" in u.kagan &&
+        u.kagan.intakeOutcome === undefined &&
+        u.kagan.intakeSessionID === undefined,
+    )
+    expect(cleared?.kagan.intakeAttempts).toBe(1)
+    expect(roleCreates(captured, "intake")).toHaveLength(1)
+
+    // Follow-up session.updated drives the retry; the second child prompt succeeds.
+    await hooks.event?.({
+      event: { type: "session.updated", properties: { info: { id: "s1", metadata: store.s1!.metadata } } },
+    } as never)
+    expect(roleCreates(captured, "intake")).toHaveLength(2)
+    expect(captured.prompts.filter((p) => p.id === "intake-2")).toHaveLength(1)
+    expect(captured.updates.some((u) => u.id === "s1" && u.kagan.intakeOutcome === "failed")).toBe(false)
+  })
+})
+
 describe("kagan server — helper failure: session.error event", () => {
   const runningValidator = {
     kagan: {

@@ -1,8 +1,9 @@
 /** @jsxImportSource @opentui/solid */
-import { afterEach, describe, expect, mock, test } from "bun:test"
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { testRender } from "@opentui/solid"
+import { EditBufferRenderable } from "@opentui/core"
 import type { TestRendererSetup } from "@opentui/core/testing"
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { KeyEvent, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { JSX } from "solid-js"
 import { attachRendererMockInput, mockTuiApi } from "./fixtures/api"
 
@@ -114,6 +115,12 @@ function lastKeyConsumed(api: TuiPluginApi): boolean {
   return !!(api.renderer.keyInput as { lastConsumed?: boolean }).lastConsumed
 }
 
+// Emit a raw key event through the mock keyInput. Used for chords the mockInput helper cannot
+// name directly (e.g. the Kitty-mode "linefeed" name, or shift+return).
+function emitKey(api: TuiPluginApi, event: Partial<KeyEvent> & { name: string }) {
+  ;(api.renderer.keyInput as unknown as { emitKey: (key: KeyEvent) => void }).emitKey(event as KeyEvent)
+}
+
 async function focusField(tabCount: number) {
   for (let i = 0; i < tabCount; i++) {
     renderSetup!.mockInput.pressTab()
@@ -185,18 +192,67 @@ describe("openCreateTaskDialog", () => {
     expect(createInput).toMatchObject({ title: "Ship docs", baseBranch: "feature" })
   })
 
-  test("ctrl+j inserts a newline in the description field instead of submitting", async () => {
-    const view = harness()
-    await openCreateTaskDialog(view.api, view.store as never)
-    await renderLatest(view.api, view.renders)
+  test("ctrl+j inserts a newline in the focused description field and consumes the key instead of submitting", async () => {
+    const newLine = spyOn(EditBufferRenderable.prototype, "newLine").mockImplementation(() => true)
+    try {
+      const view = harness()
+      await openCreateTaskDialog(view.api, view.store as never)
+      await renderLatest(view.api, view.renders)
 
-    await renderSetup!.mockInput.typeText("Ship docs")
-    await focusField(1)
-    renderSetup!.mockInput.pressKey("j", { ctrl: true })
-    await renderSetup!.flush()
+      await renderSetup!.mockInput.typeText("Ship docs")
+      await focusField(1)
+      renderSetup!.mockInput.pressKey("j", { ctrl: true })
+      await renderSetup!.flush()
 
-    expect(createInput).toBeUndefined()
-    expect(lastKeyConsumed(view.api)).toBe(false)
+      // The real test renderer also decodes legacy Ctrl+J as linefeed into the textarea, so newLine
+      // may fire both from that path and from our intercept — assert it fired, not an exact count.
+      expect(newLine).toHaveBeenCalled()
+      expect(createInput).toBeUndefined()
+      expect(lastKeyConsumed(view.api)).toBe(true)
+    } finally {
+      newLine.mockRestore()
+    }
+  })
+
+  test("linefeed (legacy Ctrl+J decode) and shift+return also insert a newline in the description", async () => {
+    const newLine = spyOn(EditBufferRenderable.prototype, "newLine").mockImplementation(() => true)
+    try {
+      const view = harness()
+      await openCreateTaskDialog(view.api, view.store as never)
+      await renderLatest(view.api, view.renders)
+
+      await renderSetup!.mockInput.typeText("Ship docs")
+      await focusField(1)
+
+      emitKey(view.api, { name: "linefeed" })
+      expect(lastKeyConsumed(view.api)).toBe(true)
+
+      emitKey(view.api, { name: "return", shift: true })
+      expect(lastKeyConsumed(view.api)).toBe(true)
+
+      expect(newLine).toHaveBeenCalledTimes(2)
+      expect(createInput).toBeUndefined()
+    } finally {
+      newLine.mockRestore()
+    }
+  })
+
+  test("ctrl+j outside the description field is not treated as a newline", async () => {
+    const newLine = spyOn(EditBufferRenderable.prototype, "newLine").mockImplementation(() => true)
+    try {
+      const view = harness()
+      await openCreateTaskDialog(view.api, view.store as never)
+      await renderLatest(view.api, view.renders)
+
+      // focusIndex 0 (title): the newline handler must not fire.
+      renderSetup!.mockInput.pressKey("j", { ctrl: true })
+      await renderSetup!.flush()
+
+      expect(newLine).not.toHaveBeenCalled()
+      expect(lastKeyConsumed(view.api)).toBe(false)
+    } finally {
+      newLine.mockRestore()
+    }
   })
 
   test("ctrl+enter still submits from the description field on Kitty-style terminals", async () => {
@@ -216,7 +272,7 @@ describe("openCreateTaskDialog", () => {
     expect(createInput).toMatchObject({ title: "Ship docs", baseBranch: "feature" })
   })
 
-  test("return is intercepted from every focus field; ctrl+j is not in description", async () => {
+  test("return is intercepted from every focus field; ctrl+j is intercepted in the description", async () => {
     async function assertReturnConsumed(tabToFocus: number, scopes: string[] = []) {
       const view = harness(scopes)
       await openCreateTaskDialog(view.api, view.store as never)
@@ -233,13 +289,18 @@ describe("openCreateTaskDialog", () => {
     await assertReturnConsumed(3)
     await assertReturnConsumed(4)
 
-    const view = harness()
-    await openCreateTaskDialog(view.api, view.store as never)
-    await renderLatest(view.api, view.renders)
-    await focusField(1)
-    renderSetup!.mockInput.pressKey("j", { ctrl: true })
-    await renderSetup!.flush()
-    expect(lastKeyConsumed(view.api)).toBe(false)
+    const newLine = spyOn(EditBufferRenderable.prototype, "newLine").mockImplementation(() => true)
+    try {
+      const view = harness()
+      await openCreateTaskDialog(view.api, view.store as never)
+      await renderLatest(view.api, view.renders)
+      await focusField(1)
+      renderSetup!.mockInput.pressKey("j", { ctrl: true })
+      await renderSetup!.flush()
+      expect(lastKeyConsumed(view.api)).toBe(true)
+    } finally {
+      newLine.mockRestore()
+    }
   })
 
   test("preselects the only configured static scope", async () => {
