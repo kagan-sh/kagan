@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import { TextAttributes } from "@opentui/core"
-import { For, Show, createMemo, createSignal } from "solid-js"
+import { type Accessor, type JSX, type ParentProps, type Setter, For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { OptionBoundsSchema } from "../../domain/options"
@@ -11,6 +11,7 @@ import type { ModelRef } from "../../domain/task/types"
 import type { CommandSpec } from "../../domain/task/types"
 import { SETTINGS_ROUTE, ROUTE } from "../types"
 import { useKeyIntercept } from "../renderer"
+import { DialogFrame } from "../dialogs/chrome"
 
 type Section = "General" | "Agents" | "Commands" | "Validator models" | "JSON preview"
 
@@ -137,11 +138,239 @@ const COMMAND_FIELDS = ["name", "cwd", "command", "scope"] as const
 
 type CommandField = (typeof COMMAND_FIELDS)[number]
 
-type CommandListState = {
-  commands: CommandSpec[]
+const COMMAND_COLUMNS: ListEditorColumn<CommandSpec>[] = [
+  { field: "name", width: 16, value: (command) => command.name },
+  { field: "cwd", width: 14, value: (command) => command.cwd },
+  { field: "command", flexGrow: 1, value: (command) => command.command },
+  { field: "scope", width: 20, value: (command) => (command.scope ?? []).join(", ") },
+]
+
+type ListEditorState<T> = {
+  items: T[]
   row: number
   field: number
   message?: string
+}
+
+function listEditorDialogControls<T>(props: {
+  api: TuiPluginApi
+  state: ListEditorState<T>
+  items: Accessor<T[]>
+  selectedRow: Accessor<number>
+  fieldIndex: Accessor<number>
+  message: Accessor<string | undefined>
+  reopen: () => void
+}) {
+  const snapshot = () => ({
+    items: props.items(),
+    row: props.selectedRow(),
+    field: props.fieldIndex(),
+    message: props.message(),
+  })
+  const reopenWithSnapshot = () => {
+    Object.assign(props.state, snapshot())
+    props.reopen()
+  }
+  const prompt = (title: string, value: string, onConfirm: (value: string) => void) => {
+    Object.assign(props.state, snapshot())
+    props.api.ui.dialog.replace(() => (
+      <props.api.ui.DialogPrompt
+        title={title}
+        value={value}
+        placeholder={title}
+        onConfirm={onConfirm}
+        onCancel={props.reopen}
+      />
+    ))
+  }
+  return { reopenWithSnapshot, prompt }
+}
+
+function listEditorSignals<T>(state: ListEditorState<T>) {
+  const [items, setItems] = createSignal(state.items)
+  const [rowIndex, setRowIndex] = createSignal(Math.min(state.row, Math.max(state.items.length - 1, 0)))
+  const [fieldIndex, setFieldIndex] = createSignal(state.field)
+  const [message, setMessage] = createSignal(state.message)
+  return { items, setItems, rowIndex, setRowIndex, fieldIndex, setFieldIndex, message, setMessage }
+}
+
+function listEditorFieldColor(theme: TuiThemeCurrent, selected: boolean, focused: boolean) {
+  return selected && focused ? theme.text : selected ? theme.selectedListItemText : theme.text
+}
+
+function useListEditorKeys(props: {
+  api: TuiPluginApi
+  itemCount: Accessor<number>
+  fieldCount: number
+  setRowIndex: Setter<number>
+  setFieldIndex: Setter<number>
+  close: () => void
+  add: () => void
+  remove: () => void
+  edit: () => void
+  move?: (delta: number) => void
+}) {
+  useKeyIntercept(props.api, (key) => {
+    if (key.name === "escape") {
+      props.close()
+      return true
+    }
+    if (key.name === "a") {
+      props.add()
+      return true
+    }
+    if (key.name === "d") {
+      props.remove()
+      return true
+    }
+    if (props.move && key.shift && (key.name === "up" || key.name === "k")) {
+      props.move(-1)
+      return true
+    }
+    if (props.move && key.shift && (key.name === "down" || key.name === "j")) {
+      props.move(1)
+      return true
+    }
+    if (key.name === "up" || key.name === "k") {
+      props.setRowIndex((i) => Math.max(i - 1, 0))
+      return true
+    }
+    if (key.name === "down" || key.name === "j") {
+      props.setRowIndex((i) => Math.min(i + 1, props.itemCount() - 1))
+      return true
+    }
+    if (key.name === "left" || key.name === "h") {
+      props.setFieldIndex((i) => (i - 1 + props.fieldCount) % props.fieldCount)
+      return true
+    }
+    if (key.name === "right" || key.name === "l") {
+      props.setFieldIndex((i) => (i + 1) % props.fieldCount)
+      return true
+    }
+    if (key.name === "return") {
+      props.edit()
+      return true
+    }
+    return false
+  })
+}
+
+function ListEditorHints(props: { api: TuiPluginApi; reorder?: boolean }) {
+  const theme = () => props.api.theme.current
+  return (
+    <box paddingTop={1} flexDirection="row" gap={2}>
+      <text fg={theme().text}>
+        enter <span style={{ fg: theme().textMuted }}>edit</span>
+      </text>
+      <text fg={theme().text}>
+        a <span style={{ fg: theme().textMuted }}>add</span>
+      </text>
+      <text fg={theme().text}>
+        d <span style={{ fg: theme().textMuted }}>delete</span>
+      </text>
+      <Show when={props.reorder}>
+        <text fg={theme().text}>
+          shift+↑↓ <span style={{ fg: theme().textMuted }}>reorder</span>
+        </text>
+      </Show>
+    </box>
+  )
+}
+
+function ListEditorCell(props: ParentProps<{ fg: TuiThemeCurrent["text"]; width?: number; flexGrow?: number }>) {
+  return (
+    <text width={props.width} flexGrow={props.flexGrow} wrapMode="none" fg={props.fg}>
+      {props.children}
+    </text>
+  )
+}
+
+function ListEditorRow(props: ParentProps<{ theme: TuiThemeCurrent; selected: Accessor<boolean> }>) {
+  return (
+    <box flexDirection="row" gap={1} backgroundColor={props.selected() ? props.theme.primary : undefined}>
+      {props.children}
+    </box>
+  )
+}
+
+type ListEditorColumn<T> = {
+  field: string
+  value: (item: T) => string
+  width?: number
+  flexGrow?: number
+}
+
+function ListEditorRows<T>(props: {
+  items: Accessor<T[]>
+  selectedRow: Accessor<number>
+  focusedField: Accessor<string>
+  theme: Accessor<TuiThemeCurrent>
+  columns: ListEditorColumn<T>[]
+}) {
+  return (
+    <For each={props.items()}>
+      {(item, i) => {
+        const selected = () => i() === props.selectedRow()
+        const fieldFg = (field: string) =>
+          listEditorFieldColor(props.theme(), selected(), props.focusedField() === field)
+        return (
+          <ListEditorRow theme={props.theme()} selected={selected}>
+            <For each={props.columns}>
+              {(column) => (
+                <ListEditorCell width={column.width} flexGrow={column.flexGrow} fg={fieldFg(column.field)}>
+                  {column.value(item)}
+                </ListEditorCell>
+              )}
+            </For>
+          </ListEditorRow>
+        )
+      }}
+    </For>
+  )
+}
+
+function renderListEditorRows<T>(
+  items: Accessor<T[]>,
+  selectedRow: Accessor<number>,
+  focusedField: Accessor<string>,
+  theme: Accessor<TuiThemeCurrent>,
+  columns: ListEditorColumn<T>[],
+): JSX.Element {
+  return (
+    <ListEditorRows
+      items={items}
+      selectedRow={selectedRow}
+      focusedField={focusedField}
+      theme={theme}
+      columns={columns}
+    />
+  )
+}
+
+function ListEditorContents<T>(props: {
+  api: TuiPluginApi
+  theme: Accessor<TuiThemeCurrent>
+  items: Accessor<T[]>
+  selectedRow: Accessor<number>
+  focusedField: Accessor<string>
+  columns: ListEditorColumn<T>[]
+  empty: string
+  message: Accessor<string | undefined>
+  reorder?: boolean
+}) {
+  return (
+    <>
+      <box flexDirection="column" gap={1}>
+        <Show when={props.items().length > 0} fallback={<text fg={props.theme().textMuted}>{props.empty}</text>}>
+          {renderListEditorRows(props.items, props.selectedRow, props.focusedField, props.theme, props.columns)}
+        </Show>
+      </box>
+      <Show when={props.message()}>
+        <text fg={props.theme().error}>{props.message()}</text>
+      </Show>
+      <ListEditorHints api={props.api} reorder={props.reorder} />
+    </>
+  )
 }
 
 function openCommandListEditor(
@@ -150,7 +379,7 @@ function openCommandListEditor(
   initial: CommandSpec[],
   onChange: (commands: CommandSpec[]) => void,
 ) {
-  const state: CommandListState = { commands: initial, row: 0, field: 0 }
+  const state: ListEditorState<CommandSpec> = { items: initial, row: 0, field: 0 }
   const reopen = () => {
     api.ui.dialog.replace(() => (
       <CommandListEditor api={api} kind={kind} state={state} onChange={onChange} reopen={reopen} />
@@ -162,46 +391,35 @@ function openCommandListEditor(
 function CommandListEditor(props: {
   api: TuiPluginApi
   kind: "setup" | "check"
-  state: CommandListState
+  state: ListEditorState<CommandSpec>
   onChange: (commands: CommandSpec[]) => void
   reopen: () => void
 }) {
   const theme = () => props.api.theme.current
-  const [commands, setCommands] = createSignal(props.state.commands)
-  const [rowIndex, setRowIndex] = createSignal(Math.min(props.state.row, Math.max(props.state.commands.length - 1, 0)))
-  const [fieldIndex, setFieldIndex] = createSignal(props.state.field)
-  const [message, setMessage] = createSignal(props.state.message)
+  const {
+    items: commands,
+    setItems: setCommands,
+    rowIndex,
+    setRowIndex,
+    fieldIndex,
+    setFieldIndex,
+    message,
+    setMessage,
+  } = listEditorSignals(props.state)
 
   const fieldCount = COMMAND_FIELDS.length
   const selectedRow = () => Math.min(rowIndex(), Math.max(commands().length - 1, 0))
   const focusedField = () => COMMAND_FIELDS[fieldIndex() % fieldCount] ?? "name"
 
-  const snapshot = () => ({
-    commands: commands(),
-    row: selectedRow(),
-    field: fieldIndex(),
-    message: message(),
+  const { reopenWithSnapshot, prompt } = listEditorDialogControls({
+    api: props.api,
+    state: props.state,
+    items: commands,
+    selectedRow,
+    fieldIndex,
+    message,
+    reopen: props.reopen,
   })
-
-  const reopenWithSnapshot = () => {
-    Object.assign(props.state, snapshot())
-    props.reopen()
-  }
-
-  const prompt = (title: string, value: string, onConfirm: (value: string) => void) => {
-    Object.assign(props.state, snapshot())
-    props.api.ui.dialog.replace(() => (
-      <props.api.ui.DialogPrompt
-        title={title}
-        value={value}
-        placeholder={title}
-        onConfirm={(next) => {
-          onConfirm(next)
-        }}
-        onCancel={() => props.reopen()}
-      />
-    ))
-  }
 
   const addCommand = () => {
     const values: Partial<Record<CommandField, string>> = {}
@@ -325,108 +543,36 @@ function CommandListEditor(props: {
     setRowIndex(target)
   }
 
-  useKeyIntercept(props.api, (key) => {
-    if (key.name === "escape") {
+  useListEditorKeys({
+    api: props.api,
+    itemCount: () => commands().length,
+    fieldCount,
+    setRowIndex,
+    setFieldIndex,
+    close: () => {
       props.api.ui.dialog.clear()
       props.onChange(commands())
-      return true
-    }
-    if (key.name === "a") {
-      addCommand()
-      return true
-    }
-    if (key.name === "d") {
-      deleteCommand()
-      return true
-    }
-    if (key.shift && (key.name === "up" || key.name === "k")) {
-      moveCommand(-1)
-      return true
-    }
-    if (key.shift && (key.name === "down" || key.name === "j")) {
-      moveCommand(1)
-      return true
-    }
-    if (key.name === "up" || key.name === "k") {
-      setRowIndex((i) => Math.max(i - 1, 0))
-      return true
-    }
-    if (key.name === "down" || key.name === "j") {
-      setRowIndex((i) => Math.min(i + 1, commands().length - 1))
-      return true
-    }
-    if (key.name === "left" || key.name === "h") {
-      setFieldIndex((i) => (i - 1 + fieldCount) % fieldCount)
-      return true
-    }
-    if (key.name === "right" || key.name === "l") {
-      setFieldIndex((i) => (i + 1) % fieldCount)
-      return true
-    }
-    if (key.name === "return") {
-      editField()
-      return true
-    }
-    return false
+    },
+    add: addCommand,
+    remove: deleteCommand,
+    edit: editField,
+    move: moveCommand,
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme().text} attributes={TextAttributes.BOLD}>
-          {props.kind} commands
-        </text>
-        <text fg={theme().textMuted}>esc close</text>
-      </box>
-      <box flexDirection="column" gap={1}>
-        <Show
-          when={commands().length > 0}
-          fallback={<text fg={theme().textMuted}>No commands. Press a to add one.</text>}
-        >
-          <For each={commands()}>
-            {(command, i) => {
-              const selected = () => i() === selectedRow()
-              const normalFg = () => (selected() ? theme().selectedListItemText : theme().text)
-              const fieldFg = (field: CommandField) =>
-                selected() && focusedField() === field ? theme().text : normalFg()
-              return (
-                <box flexDirection="row" gap={1} backgroundColor={selected() ? theme().primary : undefined}>
-                  <text width={16} wrapMode="none" fg={fieldFg("name")}>
-                    {command.name}
-                  </text>
-                  <text width={14} wrapMode="none" fg={fieldFg("cwd")}>
-                    {command.cwd}
-                  </text>
-                  <text flexGrow={1} wrapMode="none" fg={fieldFg("command")}>
-                    {command.command}
-                  </text>
-                  <text width={20} wrapMode="none" fg={fieldFg("scope")}>
-                    {(command.scope ?? []).join(", ")}
-                  </text>
-                </box>
-              )
-            }}
-          </For>
-        </Show>
-      </box>
-      <Show when={message()}>
-        <text fg={theme().error}>{message()}</text>
-      </Show>
-      <box paddingTop={1} flexDirection="row" gap={2}>
-        <text fg={theme().text}>
-          enter <span style={{ fg: theme().textMuted }}>edit</span>
-        </text>
-        <text fg={theme().text}>
-          a <span style={{ fg: theme().textMuted }}>add</span>
-        </text>
-        <text fg={theme().text}>
-          d <span style={{ fg: theme().textMuted }}>delete</span>
-        </text>
-        <text fg={theme().text}>
-          shift+↑↓ <span style={{ fg: theme().textMuted }}>reorder</span>
-        </text>
-      </box>
-    </box>
+    <DialogFrame api={props.api} title={`${props.kind} commands`} closeLabel="esc close">
+      <ListEditorContents
+        api={props.api}
+        theme={theme}
+        items={commands}
+        selectedRow={selectedRow}
+        focusedField={focusedField}
+        columns={COMMAND_COLUMNS}
+        empty="No commands. Press a to add one."
+        message={message}
+        reorder={true}
+      />
+    </DialogFrame>
   )
 }
 
@@ -434,15 +580,13 @@ const VALIDATOR_MODEL_FIELDS = ["providerID", "modelID"] as const
 
 type ValidatorModelField = (typeof VALIDATOR_MODEL_FIELDS)[number]
 
-type ValidatorModelListState = {
-  models: ModelRef[]
-  row: number
-  field: number
-  message?: string
-}
+const VALIDATOR_MODEL_COLUMNS: ListEditorColumn<ModelRef>[] = [
+  { field: "providerID", width: 24, value: (model) => model.providerID },
+  { field: "modelID", flexGrow: 1, value: (model) => model.modelID },
+]
 
 function openValidatorModelListEditor(api: TuiPluginApi, initial: ModelRef[], onChange: (models: ModelRef[]) => void) {
-  const state: ValidatorModelListState = { models: initial, row: 0, field: 0 }
+  const state: ListEditorState<ModelRef> = { items: initial, row: 0, field: 0 }
   const reopen = () => {
     api.ui.dialog.replace(() => (
       <ValidatorModelListEditor api={api} state={state} onChange={onChange} reopen={reopen} />
@@ -453,46 +597,35 @@ function openValidatorModelListEditor(api: TuiPluginApi, initial: ModelRef[], on
 
 function ValidatorModelListEditor(props: {
   api: TuiPluginApi
-  state: ValidatorModelListState
+  state: ListEditorState<ModelRef>
   onChange: (models: ModelRef[]) => void
   reopen: () => void
 }) {
   const theme = () => props.api.theme.current
-  const [models, setModels] = createSignal(props.state.models)
-  const [rowIndex, setRowIndex] = createSignal(Math.min(props.state.row, Math.max(props.state.models.length - 1, 0)))
-  const [fieldIndex, setFieldIndex] = createSignal(props.state.field)
-  const [message, setMessage] = createSignal(props.state.message)
+  const {
+    items: models,
+    setItems: setModels,
+    rowIndex,
+    setRowIndex,
+    fieldIndex,
+    setFieldIndex,
+    message,
+    setMessage,
+  } = listEditorSignals(props.state)
 
   const fieldCount = VALIDATOR_MODEL_FIELDS.length
   const selectedRow = () => Math.min(rowIndex(), Math.max(models().length - 1, 0))
   const focusedField = () => VALIDATOR_MODEL_FIELDS[fieldIndex() % fieldCount] ?? "providerID"
 
-  const snapshot = () => ({
-    models: models(),
-    row: selectedRow(),
-    field: fieldIndex(),
-    message: message(),
+  const { reopenWithSnapshot, prompt } = listEditorDialogControls({
+    api: props.api,
+    state: props.state,
+    items: models,
+    selectedRow,
+    fieldIndex,
+    message,
+    reopen: props.reopen,
   })
-
-  const reopenWithSnapshot = () => {
-    Object.assign(props.state, snapshot())
-    props.reopen()
-  }
-
-  const prompt = (title: string, value: string, onConfirm: (value: string) => void) => {
-    Object.assign(props.state, snapshot())
-    props.api.ui.dialog.replace(() => (
-      <props.api.ui.DialogPrompt
-        title={title}
-        value={value}
-        placeholder={title}
-        onConfirm={(next) => {
-          onConfirm(next)
-        }}
-        onCancel={() => props.reopen()}
-      />
-    ))
-  }
 
   const addModel = () => {
     const values: Partial<Record<ValidatorModelField, string>> = {}
@@ -557,88 +690,34 @@ function ValidatorModelListEditor(props: {
     setRowIndex(Math.min(index, Math.max(next.length - 1, 0)))
   }
 
-  useKeyIntercept(props.api, (key) => {
-    if (key.name === "escape") {
+  useListEditorKeys({
+    api: props.api,
+    itemCount: () => models().length,
+    fieldCount,
+    setRowIndex,
+    setFieldIndex,
+    close: () => {
       props.api.ui.dialog.clear()
       props.onChange(models())
-      return true
-    }
-    if (key.name === "a") {
-      addModel()
-      return true
-    }
-    if (key.name === "d") {
-      deleteModel()
-      return true
-    }
-    if (key.name === "up" || key.name === "k") {
-      setRowIndex((i) => Math.max(i - 1, 0))
-      return true
-    }
-    if (key.name === "down" || key.name === "j") {
-      setRowIndex((i) => Math.min(i + 1, models().length - 1))
-      return true
-    }
-    if (key.name === "left" || key.name === "h") {
-      setFieldIndex((i) => (i - 1 + fieldCount) % fieldCount)
-      return true
-    }
-    if (key.name === "right" || key.name === "l") {
-      setFieldIndex((i) => (i + 1) % fieldCount)
-      return true
-    }
-    if (key.name === "return") {
-      editField()
-      return true
-    }
-    return false
+    },
+    add: addModel,
+    remove: deleteModel,
+    edit: editField,
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme().text} attributes={TextAttributes.BOLD}>
-          validator models
-        </text>
-        <text fg={theme().textMuted}>esc close</text>
-      </box>
-      <box flexDirection="column" gap={1}>
-        <Show when={models().length > 0} fallback={<text fg={theme().textMuted}>No models. Press a to add one.</text>}>
-          <For each={models()}>
-            {(model, i) => {
-              const selected = () => i() === selectedRow()
-              const normalFg = () => (selected() ? theme().selectedListItemText : theme().text)
-              const fieldFg = (field: ValidatorModelField) =>
-                selected() && focusedField() === field ? theme().text : normalFg()
-              return (
-                <box flexDirection="row" gap={1} backgroundColor={selected() ? theme().primary : undefined}>
-                  <text width={24} wrapMode="none" fg={fieldFg("providerID")}>
-                    {model.providerID}
-                  </text>
-                  <text flexGrow={1} wrapMode="none" fg={fieldFg("modelID")}>
-                    {model.modelID}
-                  </text>
-                </box>
-              )
-            }}
-          </For>
-        </Show>
-      </box>
-      <Show when={message()}>
-        <text fg={theme().error}>{message()}</text>
-      </Show>
-      <box paddingTop={1} flexDirection="row" gap={2}>
-        <text fg={theme().text}>
-          enter <span style={{ fg: theme().textMuted }}>edit</span>
-        </text>
-        <text fg={theme().text}>
-          a <span style={{ fg: theme().textMuted }}>add</span>
-        </text>
-        <text fg={theme().text}>
-          d <span style={{ fg: theme().textMuted }}>delete</span>
-        </text>
-      </box>
-    </box>
+    <DialogFrame api={props.api} title="validator models" closeLabel="esc close">
+      <ListEditorContents
+        api={props.api}
+        theme={theme}
+        items={models}
+        selectedRow={selectedRow}
+        focusedField={focusedField}
+        columns={VALIDATOR_MODEL_COLUMNS}
+        empty="No models. Press a to add one."
+        message={message}
+      />
+    </DialogFrame>
   )
 }
 
