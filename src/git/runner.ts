@@ -5,7 +5,6 @@ import { join, resolve } from "node:path"
 
 export type GitResult = { code: number; stdout: string; stderr: string }
 export type GitRunner = (args: string[], cwd: string) => Promise<GitResult>
-export type MergeResult = { ok: boolean; message: string }
 
 export function bunGitRunner(): GitRunner {
   return async (args, cwd) => {

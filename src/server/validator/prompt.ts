@@ -1,8 +1,96 @@
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import type { CheckResult } from "../../checks/runner"
 import { isolatedEvidenceBlock } from "../../domain/handoff"
-import { formatContext, formatPriorTriage, type ValidatorContext } from "./context"
-import { formatDiffsForPrompt } from "./diffs"
+import type { Finding } from "../../domain/task/findings"
+import type { Intake } from "../../domain/task/intake"
+import { orderDiffsByRisk } from "../../git/diffs"
+
+export interface ValidatorContext {
+  title: string
+  description?: string
+  intake?: Intake
+  priorTriage?: Finding[]
+  generation: number
+}
+
+function formatContext(context: ValidatorContext): string {
+  const lines = [`Title: ${context.title}`]
+  if (context.description) lines.push(`Description: ${context.description}`)
+  const intake = context.intake
+  if (!intake) return lines.join("\n")
+
+  if (intake.understanding.trim()) {
+    lines.push("", isolatedEvidenceBlock("Intake understanding", intake.understanding))
+  }
+  const resolved = intake.decisions.filter((d) => d.resolution === "approved" || d.resolution === "overridden")
+  if (resolved.length > 0) {
+    lines.push("Resolved decisions:")
+    for (const d of resolved) {
+      const answer = d.resolution === "approved" ? d.assumption : (d.answer ?? "")
+      lines.push(`- ${d.question} → ${answer}`)
+    }
+  }
+  if (intake.refinedPrompt?.trim()) {
+    lines.push("", isolatedEvidenceBlock("Refined prompt", intake.refinedPrompt))
+  }
+  return lines.join("\n")
+}
+
+function formatPriorTriage(priorTriage?: Finding[]): string | undefined {
+  if (!priorTriage || priorTriage.length === 0) return undefined
+  return [
+    "The human has already reviewed these issues in earlier iterations and ruled on them.",
+    "Do not re-report them or close variations of them:",
+    ...priorTriage.map((finding) => {
+      const category = finding.category ? `[${finding.category}] ` : ""
+      const resolution = finding.resolution ? ` — ruled ${finding.resolution}` : ""
+      const note = finding.note ? `: ${finding.note}` : ""
+      return `- ${category}${finding.summary}${resolution}${note}`
+    }),
+  ].join("\n")
+}
+
+const PATCH_CHAR_LIMIT = 8000
+const DIFF_CHAR_BUDGET = 60000
+const LOCKFILE_BASENAMES = new Set([
+  "bun.lock",
+  "bun.lockb",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "Cargo.lock",
+  "poetry.lock",
+  "uv.lock",
+])
+
+function statLine(file: string, reason: string, diff: SnapshotFileDiff): string {
+  return `--- ${file} (${reason}, +${diff.additions ?? 0}/-${diff.deletions ?? 0})`
+}
+
+function truncatePatch(patch: string): string {
+  if (patch.length <= PATCH_CHAR_LIMIT) return patch
+  return `${patch.slice(0, PATCH_CHAR_LIMIT)}\n[patch truncated — showing ${PATCH_CHAR_LIMIT} of ${patch.length} chars; read the file in the worktree for full context]`
+}
+
+function formatDiffsForPrompt(diffs: Array<SnapshotFileDiff>): string {
+  let budgetRemaining = DIFF_CHAR_BUDGET
+  let budgetExhausted = false
+  return orderDiffsByRisk(diffs)
+    .map((diff) => {
+      const file = diff.file ?? "unknown"
+      const basename = file.split("/").pop() ?? file
+      if (LOCKFILE_BASENAMES.has(basename)) return statLine(file, "lockfile — patch omitted", diff)
+
+      const patch = truncatePatch(diff.patch ?? "")
+      if (budgetExhausted || patch.length > budgetRemaining) {
+        budgetExhausted = true
+        return statLine(file, "patch omitted — diff budget exhausted", diff)
+      }
+      budgetRemaining -= patch.length
+      return `--- ${file}\n${patch}`
+    })
+    .join("\n\n")
+}
 
 function formatCheck(check: CheckResult): string {
   let body: string

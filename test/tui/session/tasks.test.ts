@@ -6,7 +6,6 @@ import { getStatus, kagan } from "../../../src/domain/task/metadata"
 const sequence: string[] = []
 let mergeResult = { ok: true, message: "Merged kagan/x" }
 let currentBranchValue: string | undefined = "kagan/x"
-let worktreeDiffResult: { file: string }[] = []
 type MockCommandStep = {
   name: string
   cwd: string
@@ -29,10 +28,6 @@ mock.module("../../../src/git/runner", () => ({
   currentBranch: async () => currentBranchValue,
 }))
 
-mock.module("../../../src/git/diffs", () => ({
-  worktreeDiffs: async () => worktreeDiffResult,
-}))
-
 mock.module("../../../src/git/merge", () => ({
   mergeTaskBranch: async (
     _run: unknown,
@@ -49,6 +44,7 @@ mock.module("../../../src/git/merge", () => ({
 }))
 
 mock.module("../../../src/checks/runner", () => ({
+  truncateCheckResultForMetadata: <T>(result: T) => result,
   runCheckCommand: async (command: string) => {
     if (command === 'echo "installed"') return { command, exitCode: 0, output: "installed\n" }
     if (command === "exit 1") return { command, exitCode: 1, output: "" }
@@ -99,16 +95,13 @@ mock.module("../../../src/checks/runner", () => ({
 
 const { approveSession, archiveSession, resolveSessionFinding, resolveSessionIntakeDecision, retryHelper } =
   await import("../../../src/tui/session/tasks")
-const { createTask } = await import("../../../src/tui/tasks/create")
-const { deleteSession } = await import("../../../src/tui/tasks/delete")
+const { createTask, deleteSession, mergeTask, sendBack } = await import("../../../src/tui/tasks")
 const { getFilter, setFilter } = await import("../../../src/tui/session/preferences")
-const { mergeTask, sendBack } = await import("../../../src/tui/tasks/iteration")
 
 beforeEach(() => {
   sequence.length = 0
   mergeResult = { ok: true, message: "Merged kagan/x" }
   currentBranchValue = "kagan/x"
-  worktreeDiffResult = []
 })
 
 describe("getStatus", () => {

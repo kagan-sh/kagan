@@ -2,7 +2,7 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TextAttributes, type TextareaRenderable } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
-import { createTask } from "../tasks/create"
+import { createTask } from "../tasks"
 import { getOrder, setOrder } from "../session/preferences"
 import { bunGitRunner, listLocalBranches } from "../../git/runner"
 import type { ModelRef } from "../../domain/task/types"

@@ -12,7 +12,7 @@ import {
 } from "../../domain/task/policy"
 import { isSubstantive } from "../../domain/task/intake"
 import { kagan } from "../../domain/task/metadata"
-import { mergeTask, sendBack } from "../tasks/iteration"
+import { mergeTask, sendBack } from "../tasks"
 import { formatModeRationale } from "../format"
 import { baseBranchFreshness, bunGitRunner, currentBranch, listLocalBranches } from "../../git/runner"
 import { worktreeDiffs } from "../../git/diffs"
