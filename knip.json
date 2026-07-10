@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip/schema.json",
   "entry": ["src/server.ts", "src/tui.tsx", "scripts/*.{ts,mjs}", "test/**/*.test.ts", "docs/.vitepress/config.mts"],
-  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "test/**/*.{ts,tsx}", "docs/.vitepress/**/*.{mts,ts}"]
+  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.ts", "test/**/*.{ts,tsx}", "docs/.vitepress/**/*.{mts,ts}"],
+  "ignoreDependencies": ["oxlint"]
 }
