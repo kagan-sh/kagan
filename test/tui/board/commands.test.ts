@@ -1233,8 +1233,9 @@ describe("createBoardCommands", () => {
     mergeProps.onSelect({ value: "current" })
     // The approve flow also notifies about the mock api's missing client surface; that notice races
     // the merge result, so wait for the conflict notice specifically instead of asserting notices[0].
+    // The merge path spawns ~10 git processes, which can exceed 500ms on cold CI runners.
     const mergeFailure = () => notices.find((n) => /conflict/i.test((n as { message?: string }).message ?? ""))
-    await waitFor(() => mergeFailure() !== undefined)
+    await waitFor(() => mergeFailure() !== undefined, 5000)
     expect(mergeFailure()).toMatchObject({ variant: "error", title: "Kagan" })
     expect(refreshCalls).toBe(0)
   })
