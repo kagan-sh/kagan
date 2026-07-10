@@ -10,7 +10,7 @@ export type UpdatePaths = {
   marker: string
 }
 
-export type UpdateMarker = Pick<UpdatePaths, "current" | "prepared" | "backup"> & { version: string }
+export type UpdateMarker = { version: string }
 
 export type FileSystem = {
   lstat: typeof lstat
@@ -21,6 +21,10 @@ export type FileSystem = {
 }
 
 export const defaultFileSystem: FileSystem = { lstat, readFile, rename, rm, writeFile }
+
+export function wrapperTarget(wrapper: string) {
+  return join(wrapper, "node_modules", "@kagan-sh", "kagan")
+}
 
 export function updatePaths(target: string, version: string): UpdatePaths {
   if (!isAbsolute(target) || resolve(target) !== target || !parseRelease(version)) {
@@ -42,7 +46,7 @@ export function updatePaths(target: string, version: string): UpdatePaths {
     basename(scopeCache) !== "@kagan-sh" ||
     basename(packagesCache) !== "packages" ||
     basename(openCodeCache) !== "opencode" ||
-    packageDir !== join(current, "node_modules", "@kagan-sh", "kagan")
+    packageDir !== wrapperTarget(current)
   ) {
     throw new Error("Unexpected Kagan cache layout")
   }
@@ -51,7 +55,7 @@ export function updatePaths(target: string, version: string): UpdatePaths {
   return {
     current,
     prepared,
-    preparedTarget: join(prepared, "node_modules", "@kagan-sh", "kagan"),
+    preparedTarget: wrapperTarget(prepared),
     backup: join(scopeCache, "kagan@latest.kagan-backup"),
     marker: join(scopeCache, "kagan@latest.kagan-update.json"),
   }
@@ -78,13 +82,4 @@ export async function validateWrapper(fs: FileSystem, wrapper: string, target: s
   if (manifest.name !== KAGAN_PACKAGE || (expectedVersion !== undefined && manifest.version !== expectedVersion)) {
     throw new Error("Unexpected Kagan package in cache wrapper")
   }
-}
-
-export function markerMatches(marker: UpdateMarker, paths: UpdatePaths, version: string) {
-  return (
-    marker.version === version &&
-    marker.current === paths.current &&
-    marker.prepared === paths.prepared &&
-    marker.backup === paths.backup
-  )
 }

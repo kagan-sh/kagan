@@ -4,8 +4,11 @@ import { prepareUpdate } from "./update-manager"
 import { checkForUpdate, type UpdateStatus } from "./updates"
 import { defaultFileSystem, type FileSystem } from "./update-paths"
 
-export function showUpdateToast(api: TuiPluginApi, currentVersion: string, status: Exclude<UpdateStatus, undefined>) {
-  if (status.kind === "broken") return
+export function showUpdateToast(
+  api: TuiPluginApi,
+  currentVersion: string,
+  status: Extract<UpdateStatus, { kind: "ready" | "blocked" }>,
+) {
   if (api.route.current.name !== "home" && api.route.current.name !== "session") return
   api.ui.toast({
     variant: status.kind === "ready" ? "success" : "warning",

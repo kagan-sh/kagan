@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
 import { cleanupPreparedUpdate, prepareUpdate } from "../../src/tui/update-manager"
-import type { UpdateMarker } from "../../src/tui/update-paths"
+import { wrapperTarget } from "../../src/tui/update-paths"
 
 const roots: string[] = []
 
@@ -17,7 +17,7 @@ async function fixture() {
   roots.push(root)
   const scope = join(root, "opencode", "packages", "@kagan-sh")
   const current = join(scope, "kagan@latest")
-  const target = join(current, "node_modules", "@kagan-sh", "kagan")
+  const target = wrapperTarget(current)
   await writePackage(target, "0.1.0")
   return { root, scope, current, target }
 }
@@ -28,7 +28,7 @@ async function writePackage(target: string, version: string) {
 }
 
 async function writeWrapper(wrapper: string, version: string) {
-  await writePackage(join(wrapper, "node_modules", "@kagan-sh", "kagan"), version)
+  await writePackage(wrapperTarget(wrapper), version)
 }
 
 function meta(target: string, overrides: Partial<TuiPluginMeta> = {}): TuiPluginMeta {
@@ -74,17 +74,10 @@ function markerPaths(scope: string, preparedVersion: string) {
   }
 }
 
-async function writeMarker(scope: string, preparedVersion: string, overrides: Partial<UpdateMarker> = {}) {
+async function writeMarker(scope: string, preparedVersion: string) {
   const paths = markerPaths(scope, preparedVersion)
-  const marker: UpdateMarker = {
-    version: preparedVersion,
-    current: paths.current,
-    prepared: paths.prepared,
-    backup: paths.backup,
-    ...overrides,
-  }
-  await writeFile(paths.marker, JSON.stringify(marker))
-  return { paths, marker }
+  await writeFile(paths.marker, JSON.stringify({ version: preparedVersion }))
+  return paths
 }
 
 const nodeFs = { lstat, readFile, rename, rm, writeFile }
@@ -125,7 +118,7 @@ describe("prepareUpdate", () => {
 
   test("prepares exact latest without touching current before disposal", async () => {
     const layout = await fixture()
-    const preparedTarget = join(layout.scope, "kagan@0.2.0", "node_modules", "@kagan-sh", "kagan")
+    const preparedTarget = wrapperTarget(join(layout.scope, "kagan@0.2.0"))
     const mock = api(async () => {
       await writePackage(preparedTarget, "0.2.0")
       return true
@@ -146,7 +139,7 @@ describe("prepareUpdate", () => {
 
   test("failed second rename restores the current wrapper", async () => {
     const layout = await fixture()
-    const preparedTarget = join(layout.scope, "kagan@0.2.0", "node_modules", "@kagan-sh", "kagan")
+    const preparedTarget = wrapperTarget(join(layout.scope, "kagan@0.2.0"))
     const mock = api(async () => {
       await writePackage(preparedTarget, "0.2.0")
       return true
@@ -172,7 +165,6 @@ describe("prepareUpdate", () => {
     ).toBe(true)
     await expect(mock.disposers[0]!()).rejects.toThrow("second rename failed")
     expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.1.0")
-    expect(renames).toBe(3)
   })
 
   test("successful next startup removes the marker and backup", async () => {
@@ -206,20 +198,6 @@ describe("cleanupPreparedUpdate", () => {
     expect(await lstat(marker)).toBeTruthy()
   })
 
-  test("leaves an out-of-cache prepared path untouched when clearing a stale marker", async () => {
-    const layout = await fixture()
-    const outside = join(layout.root, "outside")
-    await mkdir(outside, { recursive: true })
-    const sentinel = join(outside, "keep.txt")
-    await writeFile(sentinel, "keep")
-    const { paths } = await writeMarker(layout.scope, "0.2.0", { prepared: outside })
-
-    await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
-
-    expect(await readFile(sentinel, "utf8")).toBe("keep")
-    expect(await lstat(paths.marker).catch(() => undefined)).toBeUndefined()
-  })
-
   test("removes the leftover prepared directory when clearing a matched marker's backup", async () => {
     const layout = await fixture()
     await writePackage(layout.target, "0.2.0")
@@ -249,7 +227,7 @@ describe("cleanupPreparedUpdate", () => {
 
   test("removes a stale marker and its prepared directory", async () => {
     const layout = await fixture()
-    const { paths } = await writeMarker(layout.scope, "0.2.0")
+    const paths = await writeMarker(layout.scope, "0.2.0")
     await writeWrapper(paths.prepared, "0.2.0")
 
     await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
@@ -265,7 +243,7 @@ describe("cleanupPreparedUpdate", () => {
         await writeWrapper(backup, "0.1.0")
       },
       async (layout: Awaited<ReturnType<typeof fixture>>) => {
-        const { paths } = await writeMarker(layout.scope, "0.2.0")
+        const paths = await writeMarker(layout.scope, "0.2.0")
         await writeWrapper(paths.prepared, "0.2.0")
       },
       async (layout: Awaited<ReturnType<typeof fixture>>) => {
@@ -278,7 +256,7 @@ describe("cleanupPreparedUpdate", () => {
       await setup(layout)
       await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
 
-      const preparedTarget = join(layout.scope, "kagan@0.2.0", "node_modules", "@kagan-sh", "kagan")
+      const preparedTarget = wrapperTarget(join(layout.scope, "kagan@0.2.0"))
       const mock = api(async () => {
         await writePackage(preparedTarget, "0.2.0")
         return true

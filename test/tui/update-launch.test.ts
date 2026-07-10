@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
 import type { UpdateStatus } from "../../src/tui/updates"
-import type { FileSystem } from "../../src/tui/update-paths"
+import { type FileSystem, wrapperTarget } from "../../src/tui/update-paths"
 import { runAutomaticUpdateLaunch } from "../../src/tui/update-launch"
 
 const roots: string[] = []
@@ -56,14 +56,14 @@ async function fixture() {
   roots.push(root)
   const scope = join(root, "opencode", "packages", "@kagan-sh")
   const current = join(scope, "kagan@latest")
-  const target = join(current, "node_modules", "@kagan-sh", "kagan")
+  const target = wrapperTarget(current)
   await mkdir(target, { recursive: true })
   await writeFile(join(target, "package.json"), JSON.stringify({ name: "@kagan-sh/kagan", version: "0.1.0" }))
   return { scope, target }
 }
 
 async function writeWrapper(wrapper: string, version: string) {
-  const target = join(wrapper, "node_modules", "@kagan-sh", "kagan")
+  const target = wrapperTarget(wrapper)
   await mkdir(target, { recursive: true })
   await writeFile(join(target, "package.json"), JSON.stringify({ name: "@kagan-sh/kagan", version }))
 }
@@ -103,7 +103,7 @@ describe("runAutomaticUpdateLaunch", () => {
       plugins: {
         add: async () => {
           order.push("prepare")
-          const preparedTarget = join(layout.scope, "kagan@0.2.0", "node_modules", "@kagan-sh", "kagan")
+          const preparedTarget = wrapperTarget(join(layout.scope, "kagan@0.2.0"))
           await mkdir(preparedTarget, { recursive: true })
           await writeFile(
             join(preparedTarget, "package.json"),

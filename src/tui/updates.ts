@@ -14,6 +14,8 @@ export type UpdateStatus =
   | { kind: "broken" }
   | undefined
 
+export type CheckedUpdateStatus = Exclude<UpdateStatus, { kind: "broken" }>
+
 type UpdateKv = {
   get: <Value = unknown>(key: string, fallback?: Value) => Value
   set: (key: string, value: unknown) => void
@@ -104,7 +106,7 @@ export type CheckInput = {
   fetchImpl?: typeof fetch
 }
 
-export async function checkForUpdate(input: CheckInput): Promise<UpdateStatus> {
+export async function checkForUpdate(input: CheckInput): Promise<CheckedUpdateStatus> {
   if (
     !isAutomaticUpdateInstall({ source: input.source, spec: input.spec, version: input.currentVersion }) ||
     !valid(input.openCodeVersion)

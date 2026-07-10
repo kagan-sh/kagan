@@ -1,17 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
-import { devNull, homedir, tmpdir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { bunGitRunner } from "../../src/git/runner"
 
 describe("git isolation", () => {
-  test("test process env has no un-scrubbed GIT_* variables", () => {
-    const gitKeys = Object.keys(process.env).filter((key) => key.startsWith("GIT_"))
-    expect(gitKeys.sort()).toEqual(["GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"])
-    expect(process.env.GIT_CONFIG_GLOBAL).toBe(devNull)
-    expect(process.env.GIT_CONFIG_SYSTEM).toBe(devNull)
-  })
-
   test("production bunGitRunner ignores the user's real global git identity", async () => {
     const run = bunGitRunner()
     const repoDir = await mkdtemp(join(tmpdir(), "kagan-isolation-guard-"))

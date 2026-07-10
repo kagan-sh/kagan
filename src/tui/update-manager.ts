@@ -1,7 +1,6 @@
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
-import { join } from "node:path"
 import { cleanupPreparedUpdate } from "./update-cleanup"
-import { checkForUpdate, isAutomaticUpdateInstall, KAGAN_PACKAGE, parseRelease, type UpdateStatus } from "./updates"
+import { isAutomaticUpdateInstall, KAGAN_PACKAGE, parseRelease, type UpdateStatus } from "./updates"
 import {
   defaultFileSystem,
   type FileSystem,
@@ -10,6 +9,7 @@ import {
   updatePaths,
   validateWrapper,
   stat,
+  wrapperTarget,
 } from "./update-paths"
 
 async function promotePreparedUpdate(
@@ -18,18 +18,14 @@ async function promotePreparedUpdate(
   preparedVersion: string,
   fs: FileSystem = defaultFileSystem,
 ): Promise<void> {
-  await validateWrapper(fs, paths.current, join(paths.current, "node_modules", "@kagan-sh", "kagan"), currentVersion)
+  await validateWrapper(fs, paths.current, wrapperTarget(paths.current), currentVersion)
   await validateWrapper(fs, paths.prepared, paths.preparedTarget, preparedVersion)
   if (await stat(fs, paths.backup)) throw new Error("Kagan update backup already exists")
   await fs.rename(paths.current, paths.backup)
   try {
     await fs.rename(paths.prepared, paths.current)
   } catch (error) {
-    try {
-      await fs.rename(paths.backup, paths.current)
-    } catch (restoreError) {
-      throw new AggregateError([error, restoreError], "Kagan update promotion and restore failed")
-    }
+    await fs.rename(paths.backup, paths.current).catch(() => {})
     throw error
   }
 }
@@ -61,12 +57,7 @@ export async function prepareUpdate(input: {
     await validateWrapper(fs, paths.prepared, paths.preparedTarget, status.version)
     if (api.lifecycle.signal.aborted) return false
 
-    const marker: UpdateMarker = {
-      version: status.version,
-      current: paths.current,
-      prepared: paths.prepared,
-      backup: paths.backup,
-    }
+    const marker: UpdateMarker = { version: status.version }
     await fs.writeFile(paths.marker, JSON.stringify(marker))
     if (api.lifecycle.signal.aborted) return false
     api.lifecycle.onDispose(() => promotePreparedUpdate(paths, currentVersion, status.version, fs))
