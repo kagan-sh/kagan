@@ -102,9 +102,11 @@ function Main(props: {
 }
 
 function updateFooter(status: Exclude<UpdateStatus, undefined>) {
-  return status.kind === "ready"
-    ? ` · v${status.version} ready — restart OpenCode`
-    : ` · update OpenCode to ${status.requiredOpenCode} for Kagan v${status.version}`
+  if (status.kind === "ready") return ` · v${status.version} ready — restart OpenCode`
+  if (status.kind === "blocked") {
+    return ` · update OpenCode to ${status.requiredOpenCode} for Kagan v${status.version}`
+  }
+  return " · updates unavailable"
 }
 
 function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () => { key: string; label: string }[] }) {

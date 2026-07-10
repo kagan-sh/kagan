@@ -9,7 +9,13 @@ export type MergeResult = { ok: boolean; message: string }
 
 export function bunGitRunner(): GitRunner {
   return async (args, cwd) => {
-    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe", stdin: "ignore" })
+    const proc = Bun.spawn(["git", ...args], {
+      cwd,
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+    })
     const [stdout, stderr, code] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
@@ -80,7 +86,9 @@ export function isGitPushCommand(command: string): boolean {
 }
 
 function taskWorktreePath(mainWorktree: string, slug: string): string {
-  return join(homedir(), ".kagan", "worktrees", Bun.hash(mainWorktree).toString(16), slug)
+  // KAGAN_WORKTREE_ROOT exists for test isolation (see test/preload/git-isolation.ts).
+  const root = process.env.KAGAN_WORKTREE_ROOT ?? join(homedir(), ".kagan", "worktrees")
+  return join(root, Bun.hash(mainWorktree).toString(16), slug)
 }
 
 export async function baseBranchFreshness(

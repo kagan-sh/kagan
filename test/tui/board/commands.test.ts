@@ -10,7 +10,7 @@ import { join } from "node:path"
 import type { BoardSession } from "../../../src/tui/types"
 import { SETTINGS_ROUTE } from "../../../src/tui/types"
 import type { BoardStore } from "../../../src/tui/board/commands"
-import { hermeticGitRunner } from "../../fixtures/git"
+import { bunGitRunner } from "../../../src/git/runner"
 import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "../../fixtures/api"
 
 import { BOARD_BINDINGS, createBoardCommands, footerHints } from "../../../src/tui/board/commands"
@@ -1128,7 +1128,7 @@ describe("createBoardCommands", () => {
   }
 
   test("approving reaches promptAnotherBranch, which warns when the task's own branch is the only local branch", async () => {
-    const run = hermeticGitRunner()
+    const run = bunGitRunner()
     const repoDir = await mkdtemp(join(tmpdir(), "kagan-cmd-repo-"))
     tempDirs.push(repoDir)
     await run(["init", "-q", "-b", "main"], repoDir)
@@ -1176,11 +1176,32 @@ describe("createBoardCommands", () => {
   })
 
   test("approving and merging into the current branch surfaces the merge failure without approving", async () => {
+    const run = bunGitRunner()
+    const repoDir = await mkdtemp(join(tmpdir(), "kagan-cmd-merge-fail-"))
+    tempDirs.push(repoDir)
+    await run(["init", "-q", "-b", "main"], repoDir)
+    await run(["config", "user.email", "test@kagan.dev"], repoDir)
+    await run(["config", "user.name", "Kagan Test"], repoDir)
+    await writeFile(join(repoDir, "shared.txt"), "main\n")
+    await run(["add", "-A"], repoDir)
+    await run(["commit", "-q", "-m", "initial"], repoDir)
+
+    const taskDir = await mkdtemp(join(tmpdir(), "kagan-cmd-task-"))
+    tempDirs.push(taskDir)
+    await rm(taskDir, { recursive: true, force: true })
+    await run(["worktree", "add", "-q", "-b", "kagan/task", taskDir, "main"], repoDir)
+    await writeFile(join(taskDir, "shared.txt"), "task\n")
+    await run(["add", "-A"], taskDir)
+    await run(["commit", "-q", "-m", "task change"], taskDir)
+    await writeFile(join(repoDir, "shared.txt"), "main conflict\n")
+    await run(["add", "-A"], repoDir)
+    await run(["commit", "-q", "-m", "main change"], repoDir)
+
     const session = {
       id: "s1",
       title: "Task",
       kaganStatus: "review" as const,
-      metadata: { kagan: { boardTask: true, validatorOutcome: "ran" } },
+      metadata: { kagan: { boardTask: true, validatorOutcome: "ran", worktree: taskDir, baseBranch: "main" } },
     }
     const notices: unknown[] = []
     let refreshCalls = 0
@@ -1195,7 +1216,7 @@ describe("createBoardCommands", () => {
     })
     const renders: Array<() => unknown> = []
     const api = mockTuiApi({
-      state: { path: { worktree: "/repo" }, vcs: { branch: "main" } },
+      state: { path: { worktree: repoDir }, vcs: { branch: "main" } },
       ui: {
         toast: () => {},
         dialog: {
@@ -1210,8 +1231,12 @@ describe("createBoardCommands", () => {
 
     const mergeProps = await driveApproveToMergeDialog(api, store, renders)
     mergeProps.onSelect({ value: "current" })
-    await waitFor(() => notices.length > 0)
-    expect(notices).toEqual([{ variant: "error", title: "Kagan", message: "Task has no isolated worktree" }])
+    // The approve flow also notifies about the mock api's missing client surface; that notice races
+    // the merge result, so wait for the conflict notice specifically instead of asserting notices[0].
+    // The merge path spawns ~10 git processes, which can exceed 500ms on cold CI runners.
+    const mergeFailure = () => notices.find((n) => /conflict/i.test((n as { message?: string }).message ?? ""))
+    await waitFor(() => mergeFailure() !== undefined, 5000)
+    expect(mergeFailure()).toMatchObject({ variant: "error", title: "Kagan" })
     expect(refreshCalls).toBe(0)
   })
 

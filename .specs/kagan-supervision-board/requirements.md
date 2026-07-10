@@ -483,8 +483,9 @@ me when OpenCode blocks one, so that updating requires only a restart and no com
 6. IF Kagan was loaded from an exact npm pin or a local/file source THEN Kagan SHALL NOT query npm,
    prepare a release, or mutate its wrapper.
 7. IF a registry request, manifest validation, download, import, or cache-path validation fails THEN
-   Kagan SHALL remain quiet and SHALL leave the current wrapper unchanged.
-8. WHEN promotion of the prepared wrapper fails after the current wrapper was moved to backup THEN
-   Kagan SHALL restore the current wrapper immediately.
+   Kagan SHALL leave the current wrapper unchanged; WHEN cleanup or preparation fails due to local cache
+   state THEN Kagan SHALL persistently show that automatic updates are unavailable on the board
+   footer.
+8. WHEN promotion of the prepared wrapper fails in-process after the current wrapper was moved to backup THEN Kagan SHALL restore the current wrapper immediately; WHEN promotion was interrupted by process exit THEN the host SHALL re-download `latest` on the next launch (requiring network) and Kagan's cleanup SHALL then remove the leftover backup, marker, and prepared directory.
 9. WHEN the prepared version loads successfully after restart THEN Kagan SHALL remove its validated
    backup and marker without deleting any broader OpenCode cache path.
