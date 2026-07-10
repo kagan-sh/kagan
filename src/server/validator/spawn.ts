@@ -5,7 +5,7 @@ import type { Intake } from "../../domain/task/intake"
 import type { ModelRef } from "../../domain/task/types"
 import type { CheckResult } from "../../checks/runner"
 import { parseOptions } from "../../domain/options"
-import { patchKagan } from "../session/patch"
+import { createHelperChild } from "../helpers/child"
 import { buildValidatorPrompt } from "./prompt"
 
 function isModelRef(value: unknown): value is ModelRef {
@@ -53,24 +53,13 @@ export async function spawnValidator(
 ): Promise<string | undefined> {
   const model = resolveValidatorModel(options, context.generation, context.builderModel)
 
-  const child = await input.client.session.create({
-    body: {
-      parentID: parentSessionID,
-      title: context.generation > 1 ? `review #${context.generation}` : "review",
-      metadata: {
-        kagan: {
-          validatorParent: parentSessionID,
-          role: "validator",
-        },
-      },
-    },
-    throwOnError: true,
-  } as Parameters<typeof input.client.session.create>[0])
-
-  const childID = child.data?.id
+  const childID = await createHelperChild(
+    input,
+    parentSessionID,
+    "validator",
+    context.generation > 1 ? `review #${context.generation}` : "review",
+  )
   if (!childID) return undefined
-
-  await patchKagan(input.client, parentSessionID, { validatorSessionID: childID })
 
   const promptText = buildValidatorPrompt(diffs, context)
 

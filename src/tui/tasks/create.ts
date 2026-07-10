@@ -1,6 +1,7 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { runCommandPlan, truncateCheckResultForMetadata, type CommandSpec } from "../../checks/runner"
+import { runCommandPlan, truncateCheckResultForMetadata } from "../../checks/runner"
+import type { CommandSpec } from "../../domain/task/types"
 import { bunGitRunner, createTaskWorktree, ensureWorktreePluginConfig, uniqueTaskSlug } from "../../git/runner"
 import { listSessions } from "../session/tasks"
 import { commandInTaskScope } from "../../domain/task/commands"

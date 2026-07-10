@@ -9,8 +9,9 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
 - Use Bun 1.3 or newer; CI pins 1.3.14. Run `bun install`, then `bun run setup` once after cloning to
   enable the `.githooks/pre-commit` hook.
 - `bun run verify` is the merge gate and the exact CI command. It runs all built-in `verifyx`
-  checks, project overrides, tests, and package validation in parallel. Local runs fix formatting;
-  CI only checks it.
+  checks (lint, format, type-check, unused-code, circular-deps, duplicate-code, and native gates),
+  project overrides, tests, and package validation in parallel. Local pre-commit runs check-only via
+  `bun run verify -- --check`; CI runs the same gate under `CI`, which also selects check-only.
 - Run one project check with `bun run verify:format`, `bun run verify:lint`,
   `bun run verify:check-types`, or `bun run verify:package`.
 - Run the full suite with `bun run test`, not bare `bun test`. The script supplies

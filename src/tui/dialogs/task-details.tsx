@@ -3,7 +3,7 @@ import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { kagan } from "../../domain/task/metadata"
+import { getStatus, kagan } from "../../domain/task/metadata"
 import type { Finding } from "../../domain/task/findings"
 import type { Intake } from "../../domain/task/intake"
 import type { ColumnType } from "../../domain/task/types"
@@ -34,7 +34,7 @@ export function buildTaskDetails(
   const view = kagan(metadata)
   return {
     title,
-    status: view.status ?? "backlog",
+    status: getStatus(metadata),
     taskNumber: view.taskNumber,
     report: view.report,
     description: view.description,

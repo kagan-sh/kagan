@@ -10,7 +10,7 @@ import {
   sendBackStopThreshold,
   squashMerge,
 } from "../../domain/task/policy"
-import { kagan } from "../../domain/task/metadata"
+import { getStatus, kagan } from "../../domain/task/metadata"
 import { commandInTaskScope, commandPlan, configuredScopes } from "../../domain/task/commands"
 import { deleteSession } from "../tasks/delete"
 import { getFilter, getOrder, setFilter as persistFilter, setOrder } from "../session/preferences"
@@ -19,10 +19,6 @@ import { ROUTE, type BoardCard, type BoardSession } from "../types"
 import type { UpdateStatus } from "../updates"
 
 const TASK_NUMBER_QUERY = /^#(\d+)$/
-
-function getStatus(metadata?: Record<string, unknown>): ColumnType {
-  return kagan(metadata).status ?? "backlog"
-}
 
 function sessionMatchesFilter(session: BoardSession, query: string): boolean {
   const taskNumberQuery = TASK_NUMBER_QUERY.exec(query)

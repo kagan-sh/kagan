@@ -8,7 +8,7 @@ import { OptionBoundsSchema } from "../../domain/options"
 import { commandPlan, commandSpec } from "../../domain/task/commands"
 import { helperRetries, inProgressCap, sendBackStopThreshold, squashMerge } from "../../domain/task/policy"
 import type { ModelRef } from "../../domain/task/types"
-import type { CommandSpec } from "../../checks/runner"
+import type { CommandSpec } from "../../domain/task/types"
 import { SETTINGS_ROUTE, ROUTE } from "../types"
 import { useKeyIntercept } from "../renderer"
 

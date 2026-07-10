@@ -1,6 +1,7 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { bunGitRunner, currentBranch } from "../../git/runner"
-import { mergeTaskBranch, type MergeResult } from "../../git/merge"
+import { mergeTaskBranch } from "../../git/merge"
+import type { MergeResult } from "../../git/runner"
 import { worktreeDiffs } from "../../git/diffs"
 import { composeHandoffPrompt } from "../../domain/handoff"
 import { lastAssistantText } from "../../domain/session/messages"

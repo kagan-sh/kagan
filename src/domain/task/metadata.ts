@@ -130,6 +130,10 @@ export function kagan(metadata?: Record<string, unknown>): Metadata {
   return MetadataSchema.parse(rawKagan(metadata) ?? {})
 }
 
+export function getStatus(metadata?: Record<string, unknown>): ColumnType {
+  return kagan(metadata).status ?? "backlog"
+}
+
 export function validMode(raw: unknown): IntakeMode | undefined {
   return IntakeModeSchema.parse(raw)
 }

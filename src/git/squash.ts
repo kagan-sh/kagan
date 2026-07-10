@@ -1,5 +1,4 @@
-import type { GitRunner } from "./runner"
-import type { MergeResult } from "./merge"
+import type { GitRunner, MergeResult } from "./runner"
 
 function hasUserWorkDuringMerge(porcelain: string): boolean {
   for (const line of porcelain.split("\n")) {

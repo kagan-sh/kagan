@@ -1,7 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import { parseOptions } from "../domain/options"
 import type { TaskScope } from "../domain/task/commands"
-import { patchKagan } from "./session/patch"
+import { createHelperChild } from "./helpers/child"
 
 function formatScope(scope?: TaskScope): string | undefined {
   if (!scope) return undefined
@@ -17,24 +17,8 @@ export async function spawnIntake(
   task: { title: string; description?: string; references?: string; scope?: TaskScope },
   options?: Record<string, unknown>,
 ): Promise<string | undefined> {
-  const child = await input.client.session.create({
-    body: {
-      parentID: parentSessionID,
-      title: "task prep",
-      metadata: {
-        kagan: {
-          intakeParent: parentSessionID,
-          role: "intake",
-        },
-      },
-    },
-    throwOnError: true,
-  } as Parameters<typeof input.client.session.create>[0])
-
-  const childID = child.data?.id
+  const childID = await createHelperChild(input, parentSessionID, "intake", "task prep")
   if (!childID) return undefined
-
-  await patchKagan(input.client, parentSessionID, { intakeSessionID: childID })
 
   const scope = formatScope(task.scope)
   const promptText = [

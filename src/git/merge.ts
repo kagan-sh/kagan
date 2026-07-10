@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { currentBranch, type GitResult, type GitRunner } from "./runner"
+import { currentBranch, type GitResult, type GitRunner, type MergeResult } from "./runner"
 import { mergeSquash } from "./squash"
 
 async function commitAll(run: GitRunner, worktree: string, message: string): Promise<GitResult | undefined> {
@@ -11,8 +11,6 @@ async function commitAll(run: GitRunner, worktree: string, message: string): Pro
   if (added.code !== 0) return added
   return run(["commit", "-m", message], worktree)
 }
-
-export type MergeResult = { ok: boolean; message: string }
 
 async function dirtyMainWorktreeMessage(
   run: GitRunner,

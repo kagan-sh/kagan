@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { mockSessionClient, mockTuiApi } from "../../fixtures/api"
-import { kagan } from "../../../src/domain/task/metadata"
+import { getStatus, kagan } from "../../../src/domain/task/metadata"
 
 const sequence: string[] = []
 let mergeResult = { ok: true, message: "Merged kagan/x" }
@@ -103,7 +103,6 @@ const { createTask } = await import("../../../src/tui/tasks/create")
 const { deleteSession } = await import("../../../src/tui/tasks/delete")
 const { getFilter, setFilter } = await import("../../../src/tui/session/preferences")
 const { mergeTask, sendBack } = await import("../../../src/tui/tasks/iteration")
-const getStatus = (metadata?: Record<string, unknown>) => kagan(metadata).status ?? "backlog"
 
 beforeEach(() => {
   sequence.length = 0
