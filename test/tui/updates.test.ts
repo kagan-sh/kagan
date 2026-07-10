@@ -164,47 +164,4 @@ describe("checkForUpdate", () => {
       expect(calls).toHaveLength(0)
     }
   })
-
-  test("does not share an in-flight npm result with an exact-pin caller", async () => {
-    let releaseTags!: () => void
-    const tagsReady = new Promise<void>((resolve) => {
-      releaseTags = resolve
-    })
-    let calls = 0
-    const fetchImpl = (async () => {
-      calls++
-      if (calls === 1) await tagsReady
-      return {
-        ok: true,
-        json: async () => (calls === 1 ? { latest: "0.2.0" } : { engines: { opencode: ">=1.17.13" } }),
-      }
-    }) as unknown as typeof fetch
-    const kv = mockKv()
-    const npmCheck = checkForUpdate({ ...base, kv, fetchImpl })
-    expect(
-      await checkForUpdate({
-        ...base,
-        kv,
-        spec: "@kagan-sh/kagan@0.1.0",
-        fetchImpl,
-      }),
-    ).toBeUndefined()
-    releaseTags()
-    expect(await npmCheck).toEqual({ kind: "ready", version: "0.2.0" })
-  })
-
-  test("deduplicates concurrent checks with the same inputs", async () => {
-    const calls: string[] = []
-    const kv = mockKv()
-    const input = {
-      ...base,
-      kv,
-      fetchImpl: registryFetch({ latest: "0.2.0", engine: ">=1.17.13", calls }),
-    }
-    expect(await Promise.all([checkForUpdate(input), checkForUpdate(input)])).toEqual([
-      { kind: "ready", version: "0.2.0" },
-      { kind: "ready", version: "0.2.0" },
-    ])
-    expect(calls).toHaveLength(2)
-  })
 })

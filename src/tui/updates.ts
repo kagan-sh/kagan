@@ -11,6 +11,7 @@ export const KAGAN_PACKAGE = "@kagan-sh/kagan"
 export type UpdateStatus =
   | { kind: "ready"; version: string }
   | { kind: "blocked"; version: string; requiredOpenCode: string }
+  | { kind: "broken" }
   | undefined
 
 type UpdateKv = {
@@ -93,7 +94,7 @@ export async function resolveLatestManifest(
   return manifest
 }
 
-type CheckInput = {
+export type CheckInput = {
   kv: UpdateKv
   currentVersion: string
   openCodeVersion: string
@@ -103,7 +104,7 @@ type CheckInput = {
   fetchImpl?: typeof fetch
 }
 
-async function runCheck(input: CheckInput): Promise<UpdateStatus> {
+export async function checkForUpdate(input: CheckInput): Promise<UpdateStatus> {
   if (
     !isAutomaticUpdateInstall({ source: input.source, spec: input.spec, version: input.currentVersion }) ||
     !valid(input.openCodeVersion)
@@ -119,19 +120,4 @@ async function runCheck(input: CheckInput): Promise<UpdateStatus> {
     return { kind: "ready", version: manifest.version }
   }
   return { kind: "blocked", version: manifest.version, requiredOpenCode: manifest.requiredOpenCode }
-}
-
-const pendingChecks = new WeakMap<UpdateKv, Map<string, Promise<UpdateStatus>>>()
-
-export function checkForUpdate(input: CheckInput): Promise<UpdateStatus> {
-  const key = [input.source, input.spec, input.currentVersion, input.openCodeVersion].join("\0")
-  const checks = pendingChecks.get(input.kv) ?? new Map<string, Promise<UpdateStatus>>()
-  pendingChecks.set(input.kv, checks)
-  const existing = checks.get(key)
-  if (existing) return existing
-  const check = runCheck(input).finally(() => {
-    checks.delete(key)
-  })
-  checks.set(key, check)
-  return check
 }

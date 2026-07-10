@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { link, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises"
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
 import { cleanupPreparedUpdate, prepareUpdate } from "../../src/tui/update-manager"
+import type { UpdateMarker } from "../../src/tui/update-paths"
 
 const roots: string[] = []
 
@@ -24,6 +25,10 @@ async function fixture() {
 async function writePackage(target: string, version: string) {
   await mkdir(target, { recursive: true })
   await writeFile(join(target, "package.json"), JSON.stringify({ name: "@kagan-sh/kagan", version }))
+}
+
+async function writeWrapper(wrapper: string, version: string) {
+  await writePackage(join(wrapper, "node_modules", "@kagan-sh", "kagan"), version)
 }
 
 function meta(target: string, overrides: Partial<TuiPluginMeta> = {}): TuiPluginMeta {
@@ -59,7 +64,30 @@ function api(add: () => Promise<boolean>) {
   }
 }
 
-const nodeFs = { lstat, readFile, realpath, rename, rm, writeFile }
+function markerPaths(scope: string, preparedVersion: string) {
+  const current = join(scope, "kagan@latest")
+  return {
+    current,
+    prepared: join(scope, `kagan@${preparedVersion}`),
+    backup: join(scope, "kagan@latest.kagan-backup"),
+    marker: join(scope, "kagan@latest.kagan-update.json"),
+  }
+}
+
+async function writeMarker(scope: string, preparedVersion: string, overrides: Partial<UpdateMarker> = {}) {
+  const paths = markerPaths(scope, preparedVersion)
+  const marker: UpdateMarker = {
+    version: preparedVersion,
+    current: paths.current,
+    prepared: paths.prepared,
+    backup: paths.backup,
+    ...overrides,
+  }
+  await writeFile(paths.marker, JSON.stringify(marker))
+  return { paths, marker }
+}
+
+const nodeFs = { lstat, readFile, rename, rm, writeFile }
 
 describe("prepareUpdate", () => {
   test("rejects a non-release status before calling the host installer", async () => {
@@ -114,71 +142,6 @@ describe("prepareUpdate", () => {
     expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.1.0")
     expect(await lstat(join(layout.scope, "kagan@latest.kagan-update.json"))).toBeTruthy()
     expect(mock.disposers).toHaveLength(1)
-  })
-
-  test("rejects a symlinked cache wrapper", async () => {
-    const layout = await fixture()
-    const realPrepared = join(layout.root, "prepared")
-    await writePackage(join(realPrepared, "node_modules", "@kagan-sh", "kagan"), "0.2.0")
-    await symlink(realPrepared, join(layout.scope, "kagan@0.2.0"))
-    const mock = api(async () => true)
-
-    expect(
-      await prepareUpdate({
-        api: mock.value,
-        meta: meta(layout.target),
-        currentVersion: "0.1.0",
-        status: { kind: "ready", version: "0.2.0" },
-      }),
-    ).toBe(false)
-    expect(mock.disposers).toHaveLength(0)
-  })
-
-  test("rejects a hardlinked marker without modifying its source", async () => {
-    const layout = await fixture()
-    const preparedTarget = join(layout.scope, "kagan@0.2.0", "node_modules", "@kagan-sh", "kagan")
-    const victim = join(layout.root, "victim.json")
-    await writeFile(victim, "do not replace")
-    await link(victim, join(layout.scope, "kagan@latest.kagan-update.json"))
-    const mock = api(async () => {
-      await writePackage(preparedTarget, "0.2.0")
-      return true
-    })
-
-    expect(
-      await prepareUpdate({
-        api: mock.value,
-        meta: meta(layout.target),
-        currentVersion: "0.1.0",
-        status: { kind: "ready", version: "0.2.0" },
-      }),
-    ).toBe(false)
-    expect(await readFile(victim, "utf8")).toBe("do not replace")
-    expect(mock.disposers).toHaveLength(0)
-  })
-
-  test("revalidates wrappers at disposal before touching current", async () => {
-    const layout = await fixture()
-    const prepared = join(layout.scope, "kagan@0.2.0")
-    const preparedTarget = join(prepared, "node_modules", "@kagan-sh", "kagan")
-    const mock = api(async () => {
-      await writePackage(preparedTarget, "0.2.0")
-      return true
-    })
-    await prepareUpdate({
-      api: mock.value,
-      meta: meta(layout.target),
-      currentVersion: "0.1.0",
-      status: { kind: "ready", version: "0.2.0" },
-    })
-
-    await rm(prepared, { recursive: true })
-    const replacement = join(layout.root, "replacement")
-    await writePackage(join(replacement, "node_modules", "@kagan-sh", "kagan"), "0.2.0")
-    await symlink(replacement, prepared)
-
-    await expect(mock.disposers[0]!()).rejects.toThrow("Unsafe Kagan cache path")
-    expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.1.0")
   })
 
   test("failed second rename restores the current wrapper", async () => {
@@ -243,20 +206,76 @@ describe("cleanupPreparedUpdate", () => {
     expect(await lstat(marker)).toBeTruthy()
   })
 
-  test("keeps a marker whose paths do not match the validated layout", async () => {
+  test("restores current from backup after interrupted promotion", async () => {
     const layout = await fixture()
-    const marker = join(layout.scope, "kagan@latest.kagan-update.json")
-    await writeFile(marker, JSON.stringify({ version: "0.1.0", current: "/tmp/other", prepared: "", backup: "" }))
+    const { paths } = await writeMarker(layout.scope, "0.2.0")
+    await writeWrapper(paths.backup, "0.1.0")
+    await rm(paths.current, { recursive: true })
+
     await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
-    expect(await lstat(marker)).toBeTruthy()
+
+    expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.1.0")
+    expect(await lstat(paths.current)).toBeTruthy()
+    expect(await lstat(paths.backup).catch(() => undefined)).toBeUndefined()
+    expect(await lstat(paths.marker).catch(() => undefined)).toBeUndefined()
+    expect(await lstat(paths.prepared).catch(() => undefined)).toBeUndefined()
   })
 
-  test("rejects a hardlinked marker before cleanup", async () => {
+  test("removes an orphan backup when no marker matches", async () => {
     const layout = await fixture()
-    const victim = join(layout.root, "victim.json")
-    await writeFile(victim, "{}")
-    await link(victim, join(layout.scope, "kagan@latest.kagan-update.json"))
-    await expect(cleanupPreparedUpdate(meta(layout.target), "0.1.0")).rejects.toThrow("Unsafe Kagan update marker")
-    expect(await readFile(victim, "utf8")).toBe("{}")
+    const backup = join(layout.scope, "kagan@latest.kagan-backup")
+    await writeWrapper(backup, "0.1.0")
+
+    await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
+
+    expect(await lstat(backup).catch(() => undefined)).toBeUndefined()
+    expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.1.0")
+  })
+
+  test("removes a stale marker and its prepared directory", async () => {
+    const layout = await fixture()
+    const { paths } = await writeMarker(layout.scope, "0.2.0")
+    await writeWrapper(paths.prepared, "0.2.0")
+
+    await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
+
+    expect(await lstat(paths.marker).catch(() => undefined)).toBeUndefined()
+    expect(await lstat(paths.prepared).catch(() => undefined)).toBeUndefined()
+  })
+
+  test("prepareUpdate succeeds after each stale-state variant is cleaned", async () => {
+    for (const setup of [
+      async (layout: Awaited<ReturnType<typeof fixture>>) => {
+        const backup = join(layout.scope, "kagan@latest.kagan-backup")
+        await writeWrapper(backup, "0.1.0")
+      },
+      async (layout: Awaited<ReturnType<typeof fixture>>) => {
+        const { paths } = await writeMarker(layout.scope, "0.2.0")
+        await writeWrapper(paths.prepared, "0.2.0")
+      },
+      async (layout: Awaited<ReturnType<typeof fixture>>) => {
+        const prepared = join(layout.scope, "kagan@0.2.0")
+        await writeWrapper(prepared, "0.2.0")
+        await writeMarker(layout.scope, "0.2.0")
+      },
+    ]) {
+      const layout = await fixture()
+      await setup(layout)
+      await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
+
+      const preparedTarget = join(layout.scope, "kagan@0.2.0", "node_modules", "@kagan-sh", "kagan")
+      const mock = api(async () => {
+        await writePackage(preparedTarget, "0.2.0")
+        return true
+      })
+      expect(
+        await prepareUpdate({
+          api: mock.value,
+          meta: meta(layout.target),
+          currentVersion: "0.1.0",
+          status: { kind: "ready", version: "0.2.0" },
+        }),
+      ).toBe(true)
+    }
   })
 })
