@@ -224,9 +224,9 @@ The manager verifies that the current and prepared targets are valid
 `opencode/packages/@kagan-sh/kagan@…/node_modules/@kagan-sh/kagan` wrappers before writing one
 sibling marker. Its disposal callback renames current to one backup, promotes prepared to
 `kagan@latest`, and restores current if promotion fails in-process. If promotion was interrupted by
-process exit, the next launch's cleanup restores current from backup before removing stale marker
-and prepared state. The next successful load of the marker's version removes only that validated
-backup and marker. Ready/blocked/broken status is a dedicated store signal: home/session routes
+process exit, the host re-downloads `latest` on the next launch (requiring network) and Kagan's
+cleanup then removes the leftover backup, marker, and prepared directory. The next successful load
+of the marker's version removes only that validated backup and marker. Ready/blocked/broken status is a dedicated store signal: home/session routes
 receive one host toast for ready/blocked, while the board renders persistent footer text and never
 consumes Notice capacity.
 

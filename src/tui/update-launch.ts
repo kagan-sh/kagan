@@ -31,11 +31,11 @@ export async function runAutomaticUpdateLaunch(input: {
   const showToast = input.showToast ?? showUpdateToast
   const fs = input.fs ?? defaultFileSystem
 
-  let cleanupFailed = false
   try {
     await cleanupPreparedUpdate(meta, currentVersion, fs)
   } catch {
-    cleanupFailed = true
+    setUpdateStatus({ kind: "broken" })
+    return
   }
 
   const status = await checkForUpdate({
@@ -48,15 +48,11 @@ export async function runAutomaticUpdateLaunch(input: {
     fetchImpl: input.fetchImpl,
   })
 
-  if (cleanupFailed) {
-    setUpdateStatus({ kind: "broken" })
-    return
-  }
-
   if (!status || api.lifecycle.signal.aborted) return
 
-  if (status.kind === "ready") {
-    await prepareUpdate({ api, meta, currentVersion, status, fs })
+  if (status.kind === "ready" && !(await prepareUpdate({ api, meta, currentVersion, status, fs }))) {
+    setUpdateStatus({ kind: "broken" })
+    return
   }
 
   setUpdateStatus(status)

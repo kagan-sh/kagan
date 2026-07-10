@@ -206,19 +206,34 @@ describe("cleanupPreparedUpdate", () => {
     expect(await lstat(marker)).toBeTruthy()
   })
 
-  test("restores current from backup after interrupted promotion", async () => {
+  test("leaves an out-of-cache prepared path untouched when clearing a stale marker", async () => {
     const layout = await fixture()
-    const { paths } = await writeMarker(layout.scope, "0.2.0")
-    await writeWrapper(paths.backup, "0.1.0")
-    await rm(paths.current, { recursive: true })
+    const outside = join(layout.root, "outside")
+    await mkdir(outside, { recursive: true })
+    const sentinel = join(outside, "keep.txt")
+    await writeFile(sentinel, "keep")
+    const { paths } = await writeMarker(layout.scope, "0.2.0", { prepared: outside })
 
     await cleanupPreparedUpdate(meta(layout.target), "0.1.0")
 
-    expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.1.0")
-    expect(await lstat(paths.current)).toBeTruthy()
-    expect(await lstat(paths.backup).catch(() => undefined)).toBeUndefined()
+    expect(await readFile(sentinel, "utf8")).toBe("keep")
     expect(await lstat(paths.marker).catch(() => undefined)).toBeUndefined()
+  })
+
+  test("removes the leftover prepared directory when clearing a matched marker's backup", async () => {
+    const layout = await fixture()
+    await writePackage(layout.target, "0.2.0")
+    const paths = markerPaths(layout.scope, "0.2.0")
+    await writeMarker(layout.scope, "0.2.0")
+    await writeWrapper(paths.backup, "0.1.0")
+    await writeWrapper(paths.prepared, "0.2.0")
+
+    await cleanupPreparedUpdate(meta(layout.target), "0.2.0")
+
+    expect(await lstat(paths.backup).catch(() => undefined)).toBeUndefined()
     expect(await lstat(paths.prepared).catch(() => undefined)).toBeUndefined()
+    expect(await lstat(paths.marker).catch(() => undefined)).toBeUndefined()
+    expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.2.0")
   })
 
   test("removes an orphan backup when no marker matches", async () => {

@@ -99,7 +99,7 @@ describe("runAutomaticUpdateLaunch", () => {
       kv,
       app: { version: "1.17.18" },
       route: { current: { name: "home" } },
-      lifecycle: { signal: new AbortController().signal },
+      lifecycle: { signal: new AbortController().signal, onDispose: () => () => {} },
       plugins: {
         add: async () => {
           order.push("prepare")
@@ -139,7 +139,7 @@ describe("runAutomaticUpdateLaunch", () => {
     expect(toasts).toEqual([{ kind: "ready", version: "0.2.0" }])
   })
 
-  test("continues to version check when cleanup fails and surfaces broken status", async () => {
+  test("surfaces broken status and skips the version check when cleanup fails", async () => {
     const layout = await fixture()
     const statuses: UpdateStatus[] = []
     const checks: string[] = []
@@ -178,11 +178,11 @@ describe("runAutomaticUpdateLaunch", () => {
       } as unknown as FileSystem,
     })
 
-    expect(checks.length).toBeGreaterThan(0)
+    expect(checks).toEqual([])
     expect(statuses).toEqual([{ kind: "broken" }])
   })
 
-  test("keeps ready footer status when prepare fails", async () => {
+  test("shows broken status and no toast when prepare fails", async () => {
     const layout = await fixture()
     const statuses: UpdateStatus[] = []
     const kv = mockKv()
@@ -201,9 +201,12 @@ describe("runAutomaticUpdateLaunch", () => {
       currentVersion: "0.1.0",
       now: HOUR + 1,
       setUpdateStatus: (status) => statuses.push(status),
+      showToast: () => {
+        throw new Error("toast should not run")
+      },
       fetchImpl: registryFetch(),
     })
 
-    expect(statuses).toEqual([{ kind: "ready", version: "0.2.0" }])
+    expect(statuses).toEqual([{ kind: "broken" }])
   })
 })
