@@ -1231,9 +1231,11 @@ describe("createBoardCommands", () => {
 
     const mergeProps = await driveApproveToMergeDialog(api, store, renders)
     mergeProps.onSelect({ value: "current" })
-    await waitFor(() => notices.length > 0)
-    expect(notices[0]).toMatchObject({ variant: "error", title: "Kagan" })
-    expect((notices[0] as { message: string }).message).toMatch(/conflict/i)
+    // The approve flow also notifies about the mock api's missing client surface; that notice races
+    // the merge result, so wait for the conflict notice specifically instead of asserting notices[0].
+    const mergeFailure = () => notices.find((n) => /conflict/i.test((n as { message?: string }).message ?? ""))
+    await waitFor(() => mergeFailure() !== undefined)
+    expect(mergeFailure()).toMatchObject({ variant: "error", title: "Kagan" })
     expect(refreshCalls).toBe(0)
   })
 
