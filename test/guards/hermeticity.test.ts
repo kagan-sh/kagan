@@ -1,30 +1,53 @@
 import { describe, expect, test } from "bun:test"
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
-
-const testDir = new URL("../", import.meta.url).pathname
-const helper = "fixtures/git.ts"
-
-function testFiles(directory = testDir): string[] {
-  return readdirSync(directory).flatMap((name) => {
-    const path = join(directory, name)
-    if (statSync(path).isDirectory()) return testFiles(path)
-    return /\.tsx?$/.test(name) ? [path] : []
-  })
-}
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { devNull, homedir, tmpdir } from "node:os"
+import { join } from "node:path"
+import { bunGitRunner } from "../../src/git/runner"
 
 describe("git hermeticity", () => {
-  test("no test spawns real git except through the hermetic helper", () => {
-    const offenders = testFiles().filter((path) => {
-      if (relative(testDir, path) === helper) return false
-      const source = readFileSync(path, "utf8")
-      return /\bbunGitRunner\(/.test(source) || /Bun\.spawn\(\s*\[\s*["']git["']/.test(source)
-    })
-    expect(offenders.map((path) => relative(testDir, path))).toEqual([])
+  test("test process env has no un-scrubbed GIT_* variables", () => {
+    const gitKeys = Object.keys(process.env).filter((key) => key.startsWith("GIT_"))
+    expect(gitKeys.sort()).toEqual(["GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"])
+    expect(process.env.GIT_CONFIG_GLOBAL).toBe(devNull)
+    expect(process.env.GIT_CONFIG_SYSTEM).toBe(devNull)
   })
 
-  test("no test passes --global or --system to git", () => {
-    const offenders = testFiles().filter((path) => /["'](--global|--system)["']/.test(readFileSync(path, "utf8")))
-    expect(offenders.map((path) => relative(testDir, path))).toEqual([])
+  test("production bunGitRunner ignores the user's real global git identity", async () => {
+    const run = bunGitRunner()
+    const repoDir = await mkdtemp(join(tmpdir(), "kagan-hermetic-guard-"))
+    try {
+      expect((await run(["init", "-q", "-b", "main"], repoDir)).code).toBe(0)
+      expect((await run(["config", "--get", "user.name"], repoDir)).stdout.trim()).toBe("")
+      const globalList = await run(["config", "--global", "--list"], repoDir)
+      expect(globalList.stdout.trim()).toBe("")
+    } finally {
+      await rm(repoDir, { recursive: true, force: true })
+    }
+  })
+
+  test("git home-dotfile paths under XDG_CONFIG_HOME are isolated from the real user config", async () => {
+    const configHome = process.env.XDG_CONFIG_HOME!
+    expect(configHome).not.toBe(join(homedir(), ".config"))
+
+    const gitConfigDir = join(configHome, "git")
+    await mkdir(gitConfigDir, { recursive: true })
+    await writeFile(join(gitConfigDir, "ignore"), "*.secret\n")
+
+    const run = bunGitRunner()
+    const repoDir = await mkdtemp(join(tmpdir(), "kagan-hermetic-xdg-"))
+    try {
+      await run(["init", "-q", "-b", "main"], repoDir)
+      await run(["config", "user.email", "test@kagan.dev"], repoDir)
+      await run(["config", "user.name", "Kagan Test"], repoDir)
+      await writeFile(join(repoDir, "tracked.secret"), "x\n")
+      await writeFile(join(repoDir, "visible.txt"), "y\n")
+      await run(["add", "visible.txt"], repoDir)
+      await run(["commit", "-q", "-m", "initial"], repoDir)
+
+      const status = await run(["status", "--porcelain"], repoDir)
+      expect(status.stdout).not.toContain("tracked.secret")
+    } finally {
+      await rm(repoDir, { recursive: true, force: true })
+    }
   })
 })
