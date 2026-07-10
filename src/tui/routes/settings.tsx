@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import { TextAttributes } from "@opentui/core"
-import { type Accessor, type JSX, type ParentProps, type Setter, For, Show, createMemo, createSignal } from "solid-js"
+import { type Accessor, type ParentProps, type Setter, For, Show, createMemo, createSignal } from "solid-js"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { OptionBoundsSchema } from "../../domain/options"
@@ -329,24 +329,6 @@ function ListEditorRows<T>(props: {
   )
 }
 
-function renderListEditorRows<T>(
-  items: Accessor<T[]>,
-  selectedRow: Accessor<number>,
-  focusedField: Accessor<string>,
-  theme: Accessor<TuiThemeCurrent>,
-  columns: ListEditorColumn<T>[],
-): JSX.Element {
-  return (
-    <ListEditorRows
-      items={items}
-      selectedRow={selectedRow}
-      focusedField={focusedField}
-      theme={theme}
-      columns={columns}
-    />
-  )
-}
-
 function ListEditorContents<T>(props: {
   api: TuiPluginApi
   theme: Accessor<TuiThemeCurrent>
@@ -362,7 +344,13 @@ function ListEditorContents<T>(props: {
     <>
       <box flexDirection="column" gap={1}>
         <Show when={props.items().length > 0} fallback={<text fg={props.theme().textMuted}>{props.empty}</text>}>
-          {renderListEditorRows(props.items, props.selectedRow, props.focusedField, props.theme, props.columns)}
+          <ListEditorRows
+            items={props.items}
+            selectedRow={props.selectedRow}
+            focusedField={props.focusedField}
+            theme={props.theme}
+            columns={props.columns}
+          />
         </Show>
       </box>
       <Show when={props.message()}>
