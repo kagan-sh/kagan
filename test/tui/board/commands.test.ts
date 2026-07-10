@@ -1176,7 +1176,12 @@ describe("createBoardCommands", () => {
   })
 
   test("approving and merging into the current branch surfaces the merge failure without approving", async () => {
-    const run = bunGitRunner()
+    const inner = bunGitRunner()
+    const run: typeof inner = async (args, cwd) => {
+      const result = await inner(args, cwd)
+      console.error("GIT", JSON.stringify({ args, cwd, ...result }))
+      return result
+    }
     const repoDir = await mkdtemp(join(tmpdir(), "kagan-cmd-merge-fail-"))
     tempDirs.push(repoDir)
     await run(["init", "-q", "-b", "main"], repoDir)
@@ -1235,7 +1240,8 @@ describe("createBoardCommands", () => {
     // the merge result, so wait for the conflict notice specifically instead of asserting notices[0].
     // The merge path spawns ~10 git processes, which can exceed 500ms on cold CI runners.
     const mergeFailure = () => notices.find((n) => /conflict/i.test((n as { message?: string }).message ?? ""))
-    await waitFor(() => mergeFailure() !== undefined, 5000)
+    await waitFor(() => mergeFailure() !== undefined, 5000).catch(() => {})
+    console.error("NOTICES", JSON.stringify(notices))
     expect(mergeFailure()).toMatchObject({ variant: "error", title: "Kagan" })
     expect(refreshCalls).toBe(0)
   })
