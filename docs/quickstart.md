@@ -32,8 +32,9 @@ and shows `vX.Y.Z ready — restart OpenCode`; restart once to apply it. Ready a
 appears once as a host toast on home/session routes and persists in the board footer.
 
 If `latest` requires another OpenCode version, Kagan keeps the current release and names the
-required OpenCode range. Update-check and preparation failures are silent and never disturb the
-working plugin; the ready message appears only after preparation succeeds.
+required OpenCode range. Registry and manifest failures stay silent and never disturb the working
+plugin. Local cache cleanup or preparation failures show `updates unavailable` in the board footer;
+the ready message appears only after preparation succeeds.
 
 Exact version pins and local/file installs are advanced-user choices. Kagan never checks or changes
 them automatically.

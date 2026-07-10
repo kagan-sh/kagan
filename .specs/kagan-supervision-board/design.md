@@ -218,14 +218,17 @@ commands are ignored.
 `@latest` resolve npm `latest`; exact pins and file installs return before network access. A newer
 clean release is classified only after its manifest supplies a valid `engines.opencode` range.
 Compatible latest is prepared exactly through `api.plugins.add`, which independently performs the
-host compatibility check and imports the package without activating a duplicate `kagan` plugin id.
-The manager proves that the current and prepared targets are non-symlinked
+host compatibility check and imports the package without activating a duplicate `kagan` plugin id
+(the host dedupes by module id).
+The manager verifies that the current and prepared targets are valid
 `opencode/packages/@kagan-sh/kagan@…/node_modules/@kagan-sh/kagan` wrappers before writing one
 sibling marker. Its disposal callback renames current to one backup, promotes prepared to
-`kagan@latest`, and restores current if promotion fails. The next successful load of the marker's
-version removes only that validated backup and marker. Ready/blocked status is a dedicated store
-signal: home/session routes receive one host toast, while the board renders persistent footer text
-and never consumes Notice capacity.
+`kagan@latest`, and restores current if promotion fails in-process. If promotion was interrupted by
+process exit, the host re-downloads `latest` on the next launch (requiring network) and Kagan's
+cleanup then removes the leftover backup, marker, and prepared directory. The next successful load
+of the marker's version removes only that validated backup and marker. Ready/blocked/broken status is a dedicated store signal: home/session routes
+receive one host toast for ready/blocked, while the board renders persistent footer text and never
+consumes Notice capacity.
 
 ## Configuration
 
