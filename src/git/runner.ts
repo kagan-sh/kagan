@@ -86,7 +86,7 @@ export function isGitPushCommand(command: string): boolean {
 }
 
 function taskWorktreePath(mainWorktree: string, slug: string): string {
-  // KAGAN_WORKTREE_ROOT exists for test isolation (see test/preload/hermetic.ts).
+  // KAGAN_WORKTREE_ROOT exists for test isolation (see test/preload/git-isolation.ts).
   const root = process.env.KAGAN_WORKTREE_ROOT ?? join(homedir(), ".kagan", "worktrees")
   return join(root, Bun.hash(mainWorktree).toString(16), slug)
 }
