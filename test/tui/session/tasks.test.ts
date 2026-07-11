@@ -26,6 +26,10 @@ mock.module("../../../src/git/runner", () => ({
     sequence.push(`plugin-config:${directory}`)
   },
   currentBranch: async () => currentBranchValue,
+  // mock.module replaces the whole module namespace process-wide, so unlisted exports vanish and break
+  // any other file whose import binds while this mock is active. Stub every runner export this suite uses.
+  listLocalBranches: async () => [] as string[],
+  baseBranchFreshness: async () => ({ ahead: 0 }),
 }))
 
 mock.module("../../../src/git/merge", () => ({

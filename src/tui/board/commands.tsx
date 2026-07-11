@@ -87,15 +87,13 @@ function openMergeDialog(
       onSelect={(option) => {
         if (option.value === "current" && current) {
           api.ui.dialog.clear()
-          void handlers.runMerge(session, current)
-          return
+          return handlers.runMerge(session, current)
         }
         if (option.value === "another") {
-          void handlers.promptAnotherBranch(session)
-          return
+          return handlers.promptAnotherBranch(session)
         }
         api.ui.dialog.clear()
-        void handlers.finalizeApprove(session)
+        return handlers.finalizeApprove(session)
       }}
     />
   ))
