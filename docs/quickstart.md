@@ -21,6 +21,21 @@ Or add a local clone to both `opencode.json` and `tui.json`:
 Open the board with `/kagan`, the `kagan` palette command, or `<leader>k` (leader defaults to
 `ctrl+x`). Run `/kagan-tutorial` anytime to replay the guided tour.
 
+From any regular OpenCode session, run `/kagan-task` to create one or more board tasks
+conversationally. The agent refines tickets with you, confirms the list, then calls
+`kagan_create_tasks` once after you approve the permission prompt.
+
+### Formalize a session into tasks
+
+Because `/kagan-task` runs inside your current session, you can run it after working or discussing
+for a while and it will turn that conversation into tickets:
+
+- When the session already has context, the agent asks once whether to base tickets on the
+  conversation so far or only on what you type after the command.
+- When the session is empty, it plans straight from what you type — no question asked.
+- For a guaranteed clean slate, run `/kagan-task` in a fresh OpenCode session, which has no prior
+  context by construction.
+
 To configure options such as `commands.check` or `inProgressLimit`, use the array-of-array plugin
 entry shown in the [configuration reference](/reference/configuration).
 

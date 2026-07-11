@@ -6,7 +6,7 @@ import { For, Show } from "solid-js"
 import { approveSession, archiveSession, resolveSessionIntakeDecision, retryHelper } from "../session/tasks"
 import {
   approveDenyReason,
-  canRetrySession,
+  canRestartHelper,
   intakeReady,
   pendingRequiredIntakeDecisions,
 } from "../../domain/task/policy"
@@ -41,7 +41,7 @@ export const BOARD_BINDINGS = [
   { key: "d", cmd: "kagan.delete", desc: "Delete selected session", short: "delete" },
   { key: "a", cmd: "kagan.approve", desc: "Approve task", short: "approve" },
   { key: "s", cmd: "kagan.send_back", desc: "Send back for another iteration", short: "send back" },
-  { key: "r", cmd: "kagan.retry", desc: "Retry a failed intake or review", short: "retry" },
+  { key: "r", cmd: "kagan.retry", desc: "Restart intake or review", short: "restart" },
   { key: "/", cmd: "kagan.filter", desc: "Filter cards", short: "filter" },
   { key: "?", cmd: "kagan.help", desc: "Show help", short: "help" },
   { key: ",", cmd: "kagan.settings", desc: "Open settings", short: "settings" },
@@ -111,8 +111,13 @@ export function footerHints(selected: BoardSession | undefined, hasFilter: boole
     if (selected.kaganStatus === "review") {
       hints.push({ key: "a", label: "approve" }, { key: "s", label: "send back" })
     }
-    const retryable = canRetrySession(selected.kaganStatus, selected.metadata)
-    if (retryable) hints.push({ key: "r", label: "retry" })
+    const restartable = canRestartHelper(selected.kaganStatus, selected.metadata)
+    if (restartable) {
+      hints.push({
+        key: "r",
+        label: selected.kaganStatus === "backlog" ? "restart intake" : "restart review",
+      })
+    }
   }
   hints.push({ key: "/", label: "filter" })
   if (hasFilter) hints.push({ key: "esc", label: "clears it" })
@@ -136,8 +141,13 @@ function menuOptions(session: BoardSession): MenuOption[] {
   if (status === "review") {
     options.push({ title: "Send back — s", value: "send_back" }, { title: "Approve — a", value: "approve" })
   }
-  const retryable = canRetrySession(status, session.metadata)
-  if (retryable) options.push({ title: "Retry intake/review — r", value: "retry" })
+  const restartable = canRestartHelper(status, session.metadata)
+  if (restartable) {
+    options.push({
+      title: status === "backlog" ? "Restart intake — r" : "Restart review — r",
+      value: "retry",
+    })
+  }
   if (status === "done") options.push({ title: "Archive", value: "archive" })
   options.push({ title: "Delete — d", value: "delete" })
   return options
@@ -403,8 +413,8 @@ export function createBoardCommands(
     const session = store.selectedSession()
     if (!session) return
     const status = session.kaganStatus
-    if (!canRetrySession(status, session.metadata)) {
-      notifyWarning("Nothing to retry")
+    if (!canRestartHelper(status, session.metadata)) {
+      notifyWarning("Nothing to restart")
       return
     }
     try {
@@ -413,7 +423,7 @@ export function createBoardCommands(
       store.notify({
         variant: "success",
         title: "Kagan",
-        message: status === "backlog" ? "Retrying intake" : "Retrying review",
+        message: status === "backlog" ? "Restarting intake" : "Restarting review",
       })
     } catch (error) {
       notifyErrorFrom(error)
@@ -697,7 +707,7 @@ export function createBoardCommands(
     },
     {
       name: "kagan.retry",
-      title: "Retry a failed intake or review",
+      title: "Restart intake or review",
       category: "Kagan",
       run: retryHelperTask,
     },

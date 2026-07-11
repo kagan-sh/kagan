@@ -97,8 +97,8 @@ async function collectCheck(
   const check = truncateCheckResultForMetadata(result)
   try {
     await patchKagan(input.client, sessionID, { check })
-  } catch (error) {
-    console.error(`[kagan] failed to record check evidence for ${sessionID}: ${errorMessage(error)}`)
+  } catch {
+    // check evidence is best-effort; a failed write must not block validator spawn
   }
   return { diffs, check }
 }

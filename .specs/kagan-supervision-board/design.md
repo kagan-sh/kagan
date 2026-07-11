@@ -1,7 +1,7 @@
 # Design — Kagan Supervision Board
 
 Technical design backing [requirements.md](./requirements.md). Traces each subsystem to the
-requirements it satisfies (R1–R18).
+requirements it satisfies (R1–R19).
 
 ## Overview
 
@@ -76,37 +76,45 @@ same-session writes so concurrent event handlers cannot clobber each other.
 
 ## Components
 
-| File                                              | Responsibility                                                                                                                                                     | Requirements                                         |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| `domain/task/`, `domain/options.ts`               | Metadata schema, parsed view, option readers, scoped command parsing/matching, gate functions, finding/intake rules, citation verification, and generation patches | R1.9–10, R2.3, R5, R7, R9.6, R9.17–19, R10, R12, R16 |
-| `git/`                                            | Runner abstraction; worktree create/config; diff assembly; hunk-range parser; `git push` matcher; merge implementation                                             | R1.6, R2, R9.2, R9.16–17, R11.2, R12.3–10, R16       |
-| `domain/handoff.ts`                               | Prompt composition and task-reference formatting                                                                                                                   | R6.2, R11.2, R13                                     |
-| `server.ts`                                       | Event lifecycle; helper failure funnel; tools; permission-wait tracking; reference resolution; report capture; remote-push guard                                   | R4, R6, R7.3, R8, R9, R13, R15–17                    |
-| `server/intake.ts`                                | `spawnIntake` read-only child                                                                                                                                      | R4                                                   |
-| `server/validator/`                               | `spawnValidator` read-only child, diff+context prompt, validator model rotation                                                                                    | R9                                                   |
-| `checks/runner.ts`                                | Setup/check command runner with timeout, skipped/ran step evidence, and output tail                                                                                | R9.11–15, R17.2–3                                    |
-| `tui.tsx`                                         | TUI composition, routes, subscriptions, automatic-update orchestration, and route-aware update toast                                                               | R3, R18.3–5, R18.9                                   |
-| `tui/session/`, `tui/tasks/`                      | TUI data ops: list/create, serialized metadata patching, send-back, merge, triage, approval, retry                                                                 | R1, R3.2, R11, R12, R17.8                            |
-| `tui/dialogs/create-task.tsx`                     | Custom OpenTUI create dialog, including configured/custom task scope selection                                                                                     | R1.1–1.4, R1.9–10                                    |
-| `tui/board/store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices, and update status                                                                 | R3, R7, R17.4–5, R18                                 |
-| `tui/board/commands.tsx`                          | Key bindings and dialog flows: create, move, triage, approve/merge, send-back, retry, task details view                                                            | R5.2, R10, R11, R12, R17.3, R17.7                    |
-| `tui/board/board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version and persistent update status                                  | R3, R3.7–8, R7.4, R18                                |
-| `tui/updates.ts`                                  | one-hour npm latest/manifest cache and `engines.opencode` classification                                                                                           | R3.8, R18.1, R18.4, R18.6–7                          |
-| `tui/update-manager.ts`                           | exact-release preparation, hostile-path validation, disposal promotion/restore, and successful-load cleanup                                                        | R18.2–3, R18.6–9                                     |
-| `tui/format.ts`                                   | Card badges, age/diff/subtask formatting                                                                                                                           | R3.6                                                 |
-| `tui/dialogs/task-details.tsx`                    | Read-only task details view from live session metadata and diff stats                                                                                              | R17.7                                                |
-| `tui/dialogs/onboarding.tsx`                      | First-run board tour and opt-out persistence                                                                                                                       | R17.6                                                |
-| `tui/routes/settings.tsx`                         | Settings route for editing plugin options and saving `opencode.json`                                                                                               | R17.10–13                                            |
+| File                                              | Responsibility                                                                                                                                                                                   | Requirements                                              |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| `domain/task/`, `domain/options.ts`               | Metadata schema, parsed view, option readers, scoped command parsing/matching, gate functions, finding/intake rules, citation verification, generation patches, and shared task-creation helpers | R1.9–10, R2.3, R5, R7, R9.6, R9.17–19, R10, R12, R16, R19 |
+| `task/create.ts`                                  | Shared worktree-first board task creation orchestrator used by the TUI and server tool                                                                                                           | R1.6–8, R2, R17.1–2, R19.7                                |
+| `git/`                                            | Runner abstraction; worktree create/config; diff assembly; hunk-range parser; `git push` matcher; merge implementation                                                                           | R1.6, R2, R9.2, R9.16–17, R11.2, R12.3–10, R16            |
+| `domain/handoff.ts`                               | Prompt composition and task-reference formatting                                                                                                                                                 | R6.2, R11.2, R13                                          |
+| `server.ts`                                       | Event lifecycle; helper failure funnel; tools; `/kagan-task` command registration; permission-wait tracking; reference resolution; report capture; remote-push guard                             | R4, R6, R7.3, R8, R9, R13, R15–17, R19                    |
+| `server/command.ts`                               | `/kagan-task` command template builder                                                                                                                                                           | R19.1                                                     |
+| `server/create-tasks.ts`                          | `kagan_create_tasks` execution: caller guard, scope validation, sequential resilient creation                                                                                                    | R19.2–7                                                   |
+| `server/intake.ts`                                | `spawnIntake` read-only child                                                                                                                                                                    | R4                                                        |
+| `server/validator/`                               | `spawnValidator` read-only child, diff+context prompt, validator model rotation                                                                                                                  | R9                                                        |
+| `checks/runner.ts`                                | Setup/check command runner with timeout, skipped/ran step evidence, and output tail                                                                                                              | R9.11–15, R17.2–3                                         |
+| `tui.tsx`                                         | TUI composition, routes, subscriptions, automatic-update orchestration, and route-aware update toast                                                                                             | R3, R18.3–5, R18.9                                        |
+| `tui/session/`, `tui/tasks/`                      | TUI data ops: list/create, serialized metadata patching, send-back, merge, triage, approval, helper restart                                                                                      | R1, R3.2, R4.9, R9.10, R11, R12, R17.8                    |
+| `tui/dialogs/create-task.tsx`                     | Custom OpenTUI create dialog, including configured/custom task scope selection                                                                                                                   | R1.1–1.4, R1.9–10                                         |
+| `tui/board/store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices, and update status                                                                                               | R3, R7, R17.4–5, R18                                      |
+| `tui/board/commands.tsx`                          | Key bindings and dialog flows: create, move, triage, approve/merge, send-back, helper restart, task details view                                                                                 | R5.2, R4.9, R9.10, R10, R11, R12, R17.3, R17.7            |
+| `tui/board/board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version and persistent update status                                                                | R3, R3.7–8, R7.4, R18                                     |
+| `tui/updates.ts`                                  | one-hour npm latest/manifest cache and `engines.opencode` classification                                                                                                                         | R3.8, R18.1, R18.4, R18.6–7                               |
+| `tui/update-manager.ts`                           | exact-release preparation, hostile-path validation, disposal promotion/restore, and successful-load cleanup                                                                                      | R18.2–3, R18.6–9                                          |
+| `tui/format.ts`                                   | Card badges, age/diff/subtask formatting                                                                                                                                                         | R3.6                                                      |
+| `tui/dialogs/task-details.tsx`                    | Read-only task details view from live session metadata and diff stats                                                                                                                            | R17.7                                                     |
+| `tui/dialogs/onboarding.tsx`                      | First-run board tour and opt-out persistence                                                                                                                                                     | R17.6                                                     |
+| `tui/routes/settings.tsx`                         | Settings route for editing plugin options and saving `opencode.json`                                                                                                                             | R17.10–13                                                 |
 
 ## Key flows
 
-**Creation (R1, R2, R17.2–3).** `createTask` lists project sessions to compute the next task number, creates
-the worktree (`git worktree add -b kagan/<slug> <dir> <base>`), then creates the session with
-`directory = worktree` and the initial `kagan` metadata. The dialog persists field state in the
-opener's closure so opening a filterable dropdown and returning preserves entries. The task scope is
-stored as configured `cwd` values plus optional custom text. Configured setup commands run only when
-their `cwd` is included in the selected scope; custom text is passed to intake as context but does
-not trigger shell commands unless it exactly matches a configured `cwd`.
+**Creation (R1, R2, R17.2–3, R19).** `createBoardTask` in `task/create.ts` is the shared orchestrator:
+slug → worktree → worktree plugin config → scoped setup commands → session create with the `kagan`
+metadata patch from `buildTaskMetadata`. The TUI `createTask` wrapper lists project sessions for the
+next task number then delegates here. The `/kagan-task` command (R19) guides conversational bulk
+creation in regular sessions; `kagan_create_tasks` confirms through the tool permission prompt, then
+calls the same orchestrator sequentially with per-ticket isolation. Because the command runs inline
+in the current session, the template performs adaptive source selection (formalize the session vs.
+plan from arguments), asking the user once when the session already holds context. The board dialog persists field
+state in the opener's closure so opening a filterable dropdown and returning preserves entries. The
+task scope is stored as configured `cwd` values plus optional custom text. Configured setup commands
+run only when their `cwd` is included in the selected scope; custom text is passed to intake as
+context but does not trigger shell commands unless it exactly matches a configured `cwd`.
 
 **Intake (R4).** A Backlog board task with `intakeOutcome === undefined` and `intakeSessionID ===
 undefined` spawns the intake child (`role: "intake"`, read-only tools + `kagan_intake`), recording
@@ -125,7 +133,9 @@ funnel only after the claim is released: OpenCode notifies event listeners of a 
 patch call resolves, and the funnel's clear-state patch event is itself the respawn trigger — run
 inside the claim it would be swallowed and the auto-retry lost. The child calls `kagan_intake`,
 which patches the parent's understanding, sanitized decisions, refined prompt, sets outcome `ran`,
-and clears any stale `helperError`.
+and clears any stale `helperError`. Because a restart can supersede a live intake while recording is
+in flight, `kagan_intake` re-reads the parent just before writing and is a no-op when the calling
+session is no longer the recorded `intakeSessionID` (R4.13).
 
 **Start (R6).** On the gated transition into In Progress, the server records `startedAt`, composes
 the start prompt (refined prompt with the human's original description appended under `## Original
@@ -160,7 +170,7 @@ reset the review while that recomputation is in flight, `kagan_findings` re-read
 before writing and is a no-op when the calling session is no longer the recorded
 `validatorSessionID` (R9.20) — the same stale-write guard the helper-failure detectors use.
 
-**Helper failure and retry (R4.7–9, R9.7–9).** Two detectors feed one shared funnel,
+**Helper failure and restart (R4.7–9, R4.13, R9.7–10).** Two detectors feed one shared funnel,
 `handleHelperEvent`: a `session.error` event for the helper's session (turn never ran — e.g. an
 invalid model), and `session.idle` on the helper with its outcome still `"pending"` (turn ran but
 never called its tool). Because both `spawnIntake` and `spawnValidator` record `"pending"` before
@@ -171,11 +181,33 @@ helper already superseded by a retry), confirm the outcome is still `"pending"`,
 — the caller's `errorMessage()` already normalizes non-`Error` throws — so a synchronous prompt
 error reaches the same handler. On a detected failure the handler reads
 `intakeAttempts`/`validatorAttempts` (spawns so far): while at or below `helperRetries`, it clears
-the session id and outcome (letting the state-based spawn above respawn it) and logs a line; once
-exhausted, it sets the outcome to `failed` and records `helperError: { role, message }`. Failed
-intake stays intake-ready (R4.6) and failed validator stays approvable (R12.7) by the pre-existing
-semantics — the handler never invents a new stuck state. Same-session-id guards on both detectors
-ignore a stale event from a helper already superseded by a retry.
+the session id and outcome (letting the state-based spawn above respawn it); once exhausted, it sets
+the outcome to `failed` and records `helperError: { role, message }`. Failed intake stays
+intake-ready (R4.6) and failed validator stays approvable (R12.7) by the pre-existing semantics — the
+handler never invents a new stuck state. Same-session-id guards on both detectors ignore a stale
+event from a helper already superseded by a retry. The funnel surfaces failures to the human only
+through metadata the board reads (`helperError` badge, board notice on newly-observed failure,
+R17.5); the server writes no `console.*` output, which would otherwise render over the TUI board.
+
+**Read-only helper permission auto-allow (R4.14).** Intake and validator children run headless with
+no human to answer a permission prompt, so a prompt (which some user permission configs raise even
+for read-only tools) would strand them — never idle, never errored, so the failure funnel never
+fires. The `permission.ask` hook looks up the asking session's `kagan.role`; if it is a read-only
+helper role (`isReadOnlyHelperRole`, i.e. `intake` or `validator`) it sets `output.status = "allow"`,
+and otherwise leaves the status untouched so board tasks, workers, and plain sessions keep the user's
+normal permission flow (R17.4). This is safe because both helper roles are already tool-restricted to
+`read` plus their single recording tool (`kagan_intake` / `kagan_findings`) with edit/write/bash
+denied, so auto-allow cannot widen what they can do.
+
+**Manual helper restart (R4.9, R9.10).** `canRestartHelper` exposes restart whenever a role's helper
+has ever spawned — including after success or mid-run, not only on failure. `retryHelper` applies
+`helperRestartPatch` first (for validators also clearing findings, check evidence, and approval
+without bumping generation), and only then aborts any live helper session id (best-effort). Ordering
+matters: aborting a live helper fires a stale `session.error`/`session.idle`; if the parent still
+recorded that session id, the failure funnel's same-session-id guard would pass and clear+respawn a
+second helper on top of the restart's own respawn (a double spawn). Clearing the recorded id before
+the abort makes the guard reject the stale event, so exactly one respawn happens — driven by the next
+`session.updated` state-based spawn.
 
 **Send-back (R11).** `sendBack` reads the previous iteration's report and the changed-file list,
 creates a worker child in the worktree, prompts it with `composeHandoffPrompt`, and applies one root

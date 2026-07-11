@@ -39,7 +39,7 @@
     "plugin:install": "bun scripts/install-plugin.ts dev",
     "plugin:install:prod": "bun scripts/install-plugin.ts prod",
     "plugin:reset": "bun scripts/install-plugin.ts reset",
-    "test": "bun test ./test --conditions browser",
+    "test": "bun test ./test/checks ./test/domain ./test/git ./test/guards ./test/server ./test/tui --conditions browser && bun test ./test/integration/create-tasks.test.ts --conditions browser",
     "build": "bun scripts/build.ts",
     "prepack": "bun scripts/build.ts",
     "verify": "verifyx all",

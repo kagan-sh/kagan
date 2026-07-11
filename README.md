@@ -36,6 +36,8 @@ Or add a local clone to both OpenCode config files:
 
 Open the board with `/kagan` from the command palette, the `kagan` palette command, or `<leader>k` (the leader key defaults to `ctrl+x`).
 
+From any regular OpenCode session, run `/kagan-task` to create board tasks conversationally — useful when planning several tickets at once without opening the board create dialog for each one.
+
 For bare `@kagan-sh/kagan` and explicit `@latest` installs, Kagan prepares compatible `latest`
 releases automatically. Ready or blocked updates appear once as a host toast on home/session routes
 and persist in the board footer. Restart OpenCode when an update is ready; if `latest` needs a newer

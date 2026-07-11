@@ -1,6 +1,7 @@
 import { z } from "zod"
-import { COLUMNS, type ColumnType } from "./types"
-import { sanitizeTaskScope } from "./commands"
+import type { CheckResult } from "../../checks/runner"
+import { COLUMNS, type ColumnType, type ModelRef } from "./types"
+import { sanitizeTaskScope, type TaskScope } from "./commands"
 import { isSubstantive, type Intake, type IntakeDecision, type IntakeMode } from "./intake"
 import type { Finding } from "./findings"
 
@@ -136,4 +137,33 @@ export function getStatus(metadata?: Record<string, unknown>): ColumnType {
 
 export function validMode(raw: unknown): IntakeMode | undefined {
   return IntakeModeSchema.parse(raw)
+}
+
+export function nextTaskNumber(sessions: readonly { metadata?: Record<string, unknown> }[]): number {
+  const max = sessions.reduce((highest, session) => Math.max(highest, kagan(session.metadata).taskNumber ?? 0), 0)
+  return max + 1
+}
+
+export function buildTaskMetadata(input: {
+  taskNumber: number
+  baseBranch: string
+  worktree: string
+  description?: string
+  model?: ModelRef
+  scope?: TaskScope
+  setup?: CheckResult
+}): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    status: "backlog",
+    boardTask: true,
+    taskNumber: input.taskNumber,
+    baseBranch: input.baseBranch,
+    worktree: input.worktree,
+  }
+  const description = input.description?.trim()
+  if (description) patch.description = description
+  if (input.model) patch.model = input.model
+  if (input.scope) patch.scope = input.scope
+  if (input.setup) patch.setup = input.setup
+  return patch
 }

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { mockSessionClient, mockTuiApi } from "../../fixtures/api"
+
+const realRunner = await import("../../../src/git/runner")
 import { getStatus, kagan } from "../../../src/domain/task/metadata"
 
 const sequence: string[] = []
@@ -16,6 +18,7 @@ type MockCommandStep = {
 }
 
 mock.module("../../../src/git/runner", () => ({
+  ...realRunner,
   bunGitRunner: () => async () => ({ code: 0, stdout: "", stderr: "" }),
   uniqueTaskSlug: (title: string) => `${title}-slug`,
   createTaskWorktree: async () => {
@@ -26,10 +29,6 @@ mock.module("../../../src/git/runner", () => ({
     sequence.push(`plugin-config:${directory}`)
   },
   currentBranch: async () => currentBranchValue,
-  // mock.module replaces the whole module namespace process-wide, so unlisted exports vanish and break
-  // any other file whose import binds while this mock is active. Stub every runner export this suite uses.
-  listLocalBranches: async () => [] as string[],
-  baseBranchFreshness: async () => ({ ahead: 0 }),
 }))
 
 mock.module("../../../src/git/merge", () => ({
@@ -695,13 +694,27 @@ describe("retryHelper", () => {
     const api = { client } as unknown as TuiPluginApi
     await retryHelper(api, "s1", session, "backlog")
     const kagan = (capture.updateArg!.metadata as { kagan: Record<string, unknown> }).kagan
-    expect(kagan).toMatchObject({ intakeSessionID: undefined, intakeOutcome: undefined, intakeAttempts: 0 })
+    expect(kagan).toMatchObject({
+      intakeSessionID: undefined,
+      intakeOutcome: undefined,
+      intakeAttempts: 0,
+      intake: undefined,
+    })
     expect(kagan.helperError).toBeUndefined()
   })
 
   test("clears validator state on a review task", async () => {
     const session = {
-      metadata: { kagan: { status: "review", boardTask: true, validatorOutcome: "failed", validatorAttempts: 2 } },
+      metadata: {
+        kagan: {
+          status: "review",
+          boardTask: true,
+          validatorOutcome: "ran",
+          validatorAttempts: 1,
+          findings: [{ id: "f1", summary: "issue" }],
+          approved: true,
+        },
+      },
     } as never
     const { client, capture } = mockSessionClient({
       metadata: (session as { metadata: Record<string, unknown> }).metadata,
@@ -709,14 +722,42 @@ describe("retryHelper", () => {
     const api = { client } as unknown as TuiPluginApi
     await retryHelper(api, "s1", session, "review")
     const kagan = (capture.updateArg!.metadata as { kagan: Record<string, unknown> }).kagan
-    expect(kagan).toMatchObject({ validatorSessionID: undefined, validatorOutcome: undefined, validatorAttempts: 0 })
+    expect(kagan).toMatchObject({
+      validatorSessionID: undefined,
+      validatorOutcome: undefined,
+      validatorAttempts: 0,
+      findings: undefined,
+      approved: undefined,
+    })
     expect(kagan.helperError).toBeUndefined()
+  })
+
+  test("clears recorded helper state before aborting the live session", async () => {
+    const calls: string[] = []
+    const session = {
+      metadata: { kagan: { intakeSessionID: "intake-live", intakeOutcome: "pending" } },
+    } as never
+    const api = {
+      client: {
+        session: {
+          get: async () => ({ data: { metadata: (session as { metadata: Record<string, unknown> }).metadata } }),
+          abort: async ({ sessionID }: { sessionID: string }) => {
+            calls.push(`abort:${sessionID}`)
+          },
+          update: async () => {
+            calls.push("clear")
+          },
+        },
+      },
+    } as unknown as TuiPluginApi
+    await retryHelper(api, "s1", session, "backlog")
+    expect(calls).toEqual(["clear", "abort:intake-live"])
   })
 
   test("rejects any other column", async () => {
     const api = { client: { session: { update: async () => {} } } } as unknown as TuiPluginApi
     await expect(retryHelper(api, "s1", { metadata: {} } as never, "in_progress")).rejects.toThrow(
-      "Retry only applies to backlog or review tasks",
+      "Restart only applies to backlog or review tasks",
     )
   })
 })

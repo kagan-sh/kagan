@@ -1,5 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
 
@@ -131,6 +131,9 @@ export async function createTaskWorktree(
   await mkdir(join(directory, ".."), { recursive: true })
   const result = await run(["worktree", "add", "-b", branch, directory, baseBranch], mainWorktree)
   if (result.code !== 0) {
+    await run(["worktree", "remove", "--force", directory], mainWorktree)
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+    await run(["branch", "-D", branch], mainWorktree)
     throw new Error(result.stderr.trim() || result.stdout.trim() || "git worktree add failed")
   }
   return { directory, branch }

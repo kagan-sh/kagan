@@ -8,6 +8,7 @@ import { helper } from "../domain/task/policy"
 import { kagan, validMode } from "../domain/task/metadata"
 import { getSessionData } from "./data"
 import { patchKagan } from "./session/patch"
+import { createTasksTool } from "./create-tasks-tool"
 
 const intakeArgs = {
   understanding: tool.schema.string().describe("A short summary of what this task means and how you would approach it"),
@@ -58,7 +59,7 @@ const findingsArgs = {
     .describe("Findings from the diff review"),
 }
 
-export function createServerTools(input: PluginInput) {
+export function createServerTools(input: PluginInput, options?: Record<string, unknown>) {
   return {
     kagan_intake: tool({
       description: "Record the read-only intake assessment for the parent kagan task",
@@ -74,6 +75,9 @@ export function createServerTools(input: PluginInput) {
           refinedPrompt: args.refinedPrompt,
         }
         if (mode) intake.mode = mode
+        if (helper((await getSessionData(input, parentID))?.metadata, "intake").sessionID !== ctx.sessionID) {
+          return { output: "Intake not recorded — this prep session was superseded by a newer one." }
+        }
         await patchKagan(input.client, parentID, { intake, intakeOutcome: "ran", helperError: undefined })
         return { output: `Recorded intake with ${decisions.length} decision(s).` }
       },
@@ -102,5 +106,6 @@ export function createServerTools(input: PluginInput) {
         return { output: `Recorded ${args.findings.length} finding(s).` }
       },
     }),
+    kagan_create_tasks: createTasksTool(input, options),
   }
 }

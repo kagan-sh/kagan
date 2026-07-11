@@ -6,7 +6,6 @@ import { getStatus, kagan } from "../domain/task/metadata"
 import type { ColumnType } from "../domain/task/types"
 import { patchKagan } from "./session/patch"
 import {
-  errorMessage,
   extractErrorMessage,
   getSessionData,
   listSessions,
@@ -52,8 +51,7 @@ async function startTask(input: PluginInput, info: EventInfo): Promise<void> {
       body,
       throwOnError: true,
     } as Parameters<typeof input.client.session.promptAsync>[0])
-  } catch (error) {
-    console.error(`[kagan] auto-start prompt failed for ${info.id}, reverting to backlog: ${errorMessage(error)}`)
+  } catch {
     await patchKagan(input.client, info.id, { startedAt: undefined, status: "backlog", lastGatedStatus: "backlog" })
   }
 }

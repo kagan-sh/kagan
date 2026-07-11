@@ -1,9 +1,12 @@
 import type { Plugin, PluginModule } from "@opencode-ai/plugin"
-import { isSupervisedSession } from "./domain/task/policy"
+import type { Permission } from "@opencode-ai/sdk"
+import { isReadOnlyHelperRole, isSupervisedSession } from "./domain/task/policy"
+import { kagan } from "./domain/task/metadata"
 import { isGitPushCommand } from "./git/runner"
 import { getSessionData } from "./server/data"
 import { createServerEvents } from "./server/events"
 import { createServerTools } from "./server/tools"
+import { buildKaganTaskTemplate } from "./server/command"
 
 const PUSH_DENIED_MESSAGE =
   "kagan task sandboxes cannot push to a remote — merging happens through the board's merge dialog after review."
@@ -21,10 +24,27 @@ async function guardGitPush(
   }
 }
 
+async function allowReadOnlyHelper(
+  input: Parameters<Plugin>[0],
+  permission: Permission,
+  output: { status: "ask" | "deny" | "allow" },
+): Promise<void> {
+  const role = kagan((await getSessionData(input, permission.sessionID))?.metadata).role
+  if (isReadOnlyHelperRole(role)) output.status = "allow"
+}
+
 const server: Plugin = async (input, options) => ({
   "tool.execute.before": (hookInput, output) => guardGitPush(input, hookInput, output),
+  "permission.ask": (permission, output) => allowReadOnlyHelper(input, permission, output),
   event: createServerEvents(input, options),
-  tool: createServerTools(input),
+  tool: createServerTools(input, options),
+  config: async (cfg) => {
+    cfg.command ??= {}
+    cfg.command["kagan-task"] = {
+      description: "Create Kagan board tasks through a conversational ticket workflow",
+      template: buildKaganTaskTemplate(options),
+    }
+  },
 })
 
 const plugin: PluginModule = {

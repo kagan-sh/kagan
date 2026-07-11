@@ -105,6 +105,9 @@ export function getRefinedPrompt(metadata?: Record<string, unknown>) {
 export function pendingFindingCount(metadata?: Record<string, unknown>) {
   return (kagan(metadata).findings ?? []).filter((finding) => !isResolvedFinding(finding)).length
 }
+export function isReadOnlyHelperRole(role: string | undefined): role is HelperRole {
+  return role === "intake" || role === "validator"
+}
 export function isSupervisedSession(metadata?: Record<string, unknown>) {
   const view = kagan(metadata)
   return (
@@ -115,18 +118,23 @@ export function isSupervisedSession(metadata?: Record<string, unknown>) {
     view.workerParent !== undefined
   )
 }
-function canRetryHelper(metadata: Record<string, unknown> | undefined, role: HelperRole) {
-  const { outcome, sessionID } = helper(metadata, role)
+function helperEverSpawned(metadata: Record<string, unknown> | undefined, role: HelperRole) {
+  const view = kagan(metadata)
+  const { outcome, sessionID, attempts } = helper(metadata, role)
+  if (sessionID !== undefined || outcome !== undefined || attempts > 0) return true
+  if (role === "intake" && view.intake !== undefined) return true
+  if (role === "validator" && (view.findings !== undefined || view.check !== undefined)) return true
+  return view.helperError?.role === role
+}
+export function canRestartHelper(status: ColumnType, metadata: Record<string, unknown> | undefined) {
   return (
-    outcome !== "ran" &&
-    (kagan(metadata).helperError?.role === role || outcome !== undefined || sessionID !== undefined)
+    (status === "backlog" && helperEverSpawned(metadata, "intake")) ||
+    (status === "review" && helperEverSpawned(metadata, "validator"))
   )
 }
+/** @deprecated Use canRestartHelper */
 export function canRetrySession(status: ColumnType, metadata: Record<string, unknown> | undefined) {
-  return (
-    (status === "backlog" && canRetryHelper(metadata, "intake")) ||
-    (status === "review" && canRetryHelper(metadata, "validator"))
-  )
+  return canRestartHelper(status, metadata)
 }
 export function needsHuman(status: ColumnType, metadata: Record<string, unknown> | undefined) {
   return kagan(metadata).awaitingInput !== undefined || (status === "review" && kagan(metadata).approved !== true)
@@ -157,6 +165,21 @@ export function approveDenyReason(metadata?: Record<string, unknown>) {
   if (outcome !== "ran" && outcome !== "failed") return "Review hasn't finished — no validator outcome yet"
   const pending = pendingFindingCount(metadata)
   return pending > 0 ? `${pending} finding(s) need triage` : undefined
+}
+export function helperRestartPatch(role: HelperRole): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    [`${role}SessionID`]: undefined,
+    [`${role}Outcome`]: undefined,
+    [`${role}Attempts`]: 0,
+    helperError: undefined,
+  }
+  if (role === "intake") patch.intake = undefined
+  else {
+    patch.findings = undefined
+    patch.check = undefined
+    patch.approved = undefined
+  }
+  return patch
 }
 export function nextGenerationPatch(metadata?: Record<string, unknown>): Record<string, unknown> {
   const view = kagan(metadata)

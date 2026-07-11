@@ -40,7 +40,8 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
 - OpenCode entrypoints: `src/server.ts` for events, tools, and push protection; `src/tui.tsx` for the
   board and settings routes.
 - `src/domain/` owns metadata parsing, policy, options, prompts, findings, and pure task logic.
-- `src/server/` owns the v1 plugin lifecycle, intake/validator helpers, and serialized server-side
+- `src/task/` owns the shared worktree-first board task creation orchestrator.
+- `src/server/` owns the v1 plugin lifecycle, intake/validator helpers, conversational task creation, and serialized server-side
   metadata patches.
 - `src/tui/` owns the v2 TUI client, board store/components, dialogs, routes, and user actions.
 - `src/git/` owns worktrees, canonical diffs, merges, and the git runner abstraction.

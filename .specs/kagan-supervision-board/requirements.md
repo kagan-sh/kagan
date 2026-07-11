@@ -125,10 +125,12 @@ code is written, so that the agent's understanding and my own are tested and ali
    Kagan SHALL clear the intake session and automatically respawn it without user action; WHEN
    retries are exhausted, Kagan SHALL set the intake outcome to `failed` and SHALL record the
    failure's message.
-9. WHILE a Backlog task's intake has started but not succeeded (failed, or spawned without an
-   outcome), Kagan SHALL offer a manual retry that clears the recorded intake session, outcome, and
-   attempt count so the state-based spawn respawns it — without affecting the task's worktree — so
-   recovery does not depend on a failure having been auto-detected first.
+9. WHILE a Backlog task's intake has ever spawned (failed, succeeded, mid-run, or stuck without an
+   outcome), Kagan SHALL offer a manual restart that first clears the recorded intake session,
+   outcome, attempt count, and intake payload — so the state-based spawn respawns it — and only then
+   aborts any live intake session, so the abort's stale error/idle events cannot pass the failure
+   funnel's guard and trigger a duplicate spawn; the restart SHALL NOT affect the task's worktree or
+   generation, so recovery does not depend on a failure having been auto-detected first.
 10. WHEN duplicate or concurrent session lifecycle events are delivered for a task THEN Kagan SHALL
     spawn at most one intake session for it (a new spawn SHALL occur only after the recorded intake
     state is cleared).
@@ -138,6 +140,15 @@ code is written, so that the agent's understanding and my own are tested and ali
 12. WHEN the intake session records its assessment THEN Kagan SHALL persist an advisory mode
     recommendation (autonomous, assisted, or manual) with a one-line rationale. This recommendation
     SHALL be informational only and SHALL NOT appear in move-gating or approval-gating logic.
+13. WHEN duplicate intake helper sessions race to record on the parent THEN Kagan SHALL ignore writes
+    from a superseded helper session whose id no longer matches the parent's recorded
+    `intakeSessionID`.
+14. WHEN a read-only helper session (intake or validator) triggers a permission request THEN Kagan
+    SHALL auto-approve it, since these headless children have no human to answer the prompt and are
+    already tool-restricted to read plus their own recording tool; a permission prompt SHALL NOT be
+    able to strand a helper mid-run. This auto-approval SHALL apply only to read-only helper roles
+    and SHALL NOT cover board tasks, workers, or plain sessions, which follow the user's normal
+    permission flow (R17.4).
 
 ---
 
@@ -253,10 +264,13 @@ ranked before I decide.
    `helperRetries`, Kagan SHALL clear the validator session and automatically respawn it without
    user action; WHEN retries are exhausted, Kagan SHALL set the validator outcome to `failed` and
    SHALL record the failure's message.
-10. WHILE a Review task's validator has started but not succeeded (failed, or spawned without an
-    outcome), Kagan SHALL offer a manual retry that clears the recorded validator session, outcome,
-    and attempt count so the state-based spawn respawns it — without affecting the task's worktree —
-    so recovery does not depend on a failure having been auto-detected first.
+10. WHILE a Review task's validator has ever spawned (failed, succeeded, mid-run, or stuck without an
+    outcome), Kagan SHALL offer a manual restart that first clears the recorded validator session,
+    outcome, attempt count, findings, check evidence, and approval stamp — so the state-based spawn
+    respawns it — and only then aborts any live validator session, so the abort's stale error/idle
+    events cannot pass the failure funnel's guard and trigger a duplicate spawn; the restart SHALL
+    NOT affect the task's worktree or generation, so recovery does not depend on a failure having
+    been auto-detected first.
 11. WHERE the plugin options set `commands.check`, Kagan SHALL run each configured check whose `cwd` contains at least one changed file, or whose optional repo-relative `scope` regex matches at least one changed file, when the task enters Review.
 12. WHEN scoped checks are evaluated THEN Kagan SHALL record every configured check as `ran` or `skipped`; a failed, timed-out, or unspawnable ran check SHALL be recorded honestly and SHALL NOT block review entry or validator spawn.
 13. WHERE check evidence is recorded, the board card SHALL display `check ok` when every configured check ran and passed, `check failed` when any ran check failed, `check skipped` when every configured check skipped, and `check partial` when some checks ran and passed while others skipped.
@@ -432,9 +446,11 @@ so that failures, handoffs, and supervision evidence are visible instead of hidd
    the same `setup ok` / `setup failed` / `setup skipped` / `setup partial` badge rules as checks.
 3. WHERE a Review task is sent back at or above the configured `sendBackStopThreshold`, Kagan SHALL
    ask whether to iterate again, let the human take over, or leave the task in Review.
-4. WHEN a board task or its active iteration waits on a permission reply THEN Kagan SHALL record an
-   awaiting-input marker on the root task and surface a `needs you` badge until the permission is
-   answered.
+4. WHEN a board task or its active iteration (worker) waits on a permission reply THEN Kagan SHALL
+   record an awaiting-input marker on the root task and surface a `needs you` badge until the
+   permission is answered. This applies to board-task and worker sessions; read-only helper sessions
+   (intake/validator) never reach this state because their permission requests are auto-approved
+   (R4.14).
 5. WHEN a helper failure is newly observed THEN Kagan SHALL surface a board notice once for that
    failure and keep the persistent failure badge until retry or success clears it.
 6. WHEN the board opens for the first time in a run THEN Kagan SHALL offer the onboarding dialog,
@@ -489,3 +505,34 @@ me when OpenCode blocks one, so that updating requires only a restart and no com
 8. WHEN promotion of the prepared wrapper fails in-process after the current wrapper was moved to backup THEN Kagan SHALL restore the current wrapper immediately; WHEN promotion was interrupted by process exit THEN the host SHALL re-download `latest` on the next launch (requiring network) and Kagan's cleanup SHALL then remove the leftover backup, marker, and prepared directory.
 9. WHEN the prepared version loads successfully after restart THEN Kagan SHALL remove its validated
    backup and marker without deleting any broader OpenCode cache path.
+
+---
+
+## Requirement 19 — Conversational task creation
+
+**User Story:** As a developer, I want to create one or more board tasks from a regular OpenCode
+session through conversation, so that I can bulk-plan work without opening the board dialog for
+each task.
+
+#### Acceptance Criteria
+
+1. Kagan SHALL register a `/kagan-task` command whose template guides the agent to refine tickets
+   with the user, confirm the final list, call `kagan_create_tasks` once, and report the result.
+   The template SHALL end with `$ARGUMENTS` and SHALL list configured scope `cwd` values when
+   present. Because the command runs inline in the user's current session, the template SHALL guide
+   the agent to base tickets on the current session when it contains relevant prior work — asking
+   the user exactly once which source to use when the session already holds substantial context —
+   and to plan from the command arguments otherwise.
+2. Kagan SHALL expose a `kagan_create_tasks` tool available only in regular (non-supervised)
+   sessions.
+3. WHEN `kagan_create_tasks` is invoked THEN Kagan SHALL request user confirmation through the tool
+   permission prompt before creating any task; IF the user denies THEN Kagan SHALL fail the tool and
+   SHALL create nothing.
+4. THE tool SHALL accept between 1 and 10 tickets, each with a non-blank title and description,
+   optional base branch, and optional scope validated against configured scope `cwd` values.
+5. WHEN a ticket omits `baseBranch` THEN Kagan SHALL default it to the repository's current branch.
+6. WHEN creating multiple tickets THEN Kagan SHALL compute the starting task number once from project
+   sessions and SHALL create tickets sequentially, continuing after per-ticket failures and
+   returning a markdown summary.
+7. Each created ticket SHALL follow the same worktree-first creation order and metadata shape as the
+   board create dialog (R1.6–8, R2, R17.1–2).

@@ -20,9 +20,6 @@ export async function handleHelperFailure(
       [`${role}Outcome`]: undefined,
       [`${role}Attempts`]: attemptsUsed,
     })
-    console.error(
-      `[kagan] ${role} helper failed for ${parentSessionID} (attempt ${attemptsUsed}/${retries + 1}), retrying: ${message}`,
-    )
     return
   }
   await patchKagan(input.client, parentSessionID, {

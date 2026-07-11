@@ -112,19 +112,19 @@ describe("footerHints", () => {
     expect(hints).not.toContainEqual({ key: "s", label: "send back" })
   })
 
-  test("adds a retry hint for a retryable backlog intake", () => {
+  test("adds a restart hint for a backlog task with intake history", () => {
     const hints = footerHints(hintSession("backlog", { kagan: { intakeOutcome: "failed" } }), false)
-    expect(hints).toContainEqual({ key: "r", label: "retry" })
+    expect(hints).toContainEqual({ key: "r", label: "restart intake" })
   })
 
-  test("adds a retry hint for a retryable review validator", () => {
+  test("adds a restart hint for a review task with validator history", () => {
     const hints = footerHints(hintSession("review", { kagan: { validatorOutcome: "failed" } }), false)
-    expect(hints).toContainEqual({ key: "r", label: "retry" })
+    expect(hints).toContainEqual({ key: "r", label: "restart review" })
   })
 
-  test("omits the retry hint when nothing is retryable", () => {
+  test("omits the restart hint when nothing has spawned", () => {
     const hints = footerHints(hintSession("backlog", { kagan: {} }), false)
-    expect(hints).not.toContainEqual({ key: "r", label: "retry" })
+    expect(hints).not.toContainEqual({ key: "r", label: "restart intake" })
   })
 
   test("adds an esc-clears hint only when a filter is active", () => {
@@ -854,7 +854,7 @@ describe("createBoardCommands", () => {
     expect(capture.createCalls).toBe(1)
   })
 
-  test("kagan.retry warns when nothing has failed", async () => {
+  test("kagan.retry warns when nothing has spawned", async () => {
     const session = { id: "s1", kaganStatus: "backlog" as const, metadata: { kagan: {} } }
     const notices: unknown[] = []
     const store = mockStore({
@@ -865,7 +865,7 @@ describe("createBoardCommands", () => {
     await createBoardCommands({} as TuiPluginApi, store, () => {})
       .find((command) => command.name === "kagan.retry")
       ?.run()
-    expect(notices).toContainEqual({ variant: "warning", title: "Kagan", message: "Nothing to retry" })
+    expect(notices).toContainEqual({ variant: "warning", title: "Kagan", message: "Nothing to restart" })
   })
 
   test("kagan.retry clears a failed intake and notifies success", async () => {
@@ -888,7 +888,7 @@ describe("createBoardCommands", () => {
       ?.run()
     const kagan = (capture.updateArg!.metadata as { kagan: Record<string, unknown> }).kagan
     expect(kagan).toMatchObject({ intakeSessionID: undefined, intakeOutcome: undefined, intakeAttempts: 0 })
-    expect(notices).toContainEqual({ variant: "success", title: "Kagan", message: "Retrying intake" })
+    expect(notices).toContainEqual({ variant: "success", title: "Kagan", message: "Restarting intake" })
   })
 
   test("kagan.retry clears a validator helperError and notifies success even before the outcome flips to failed", async () => {
@@ -911,7 +911,7 @@ describe("createBoardCommands", () => {
       ?.run()
     const kagan = (capture.updateArg!.metadata as { kagan: Record<string, unknown> }).kagan
     expect(kagan).toMatchObject({ validatorSessionID: undefined, validatorOutcome: undefined, validatorAttempts: 0 })
-    expect(notices).toContainEqual({ variant: "success", title: "Kagan", message: "Retrying review" })
+    expect(notices).toContainEqual({ variant: "success", title: "Kagan", message: "Restarting review" })
   })
 
   test("kagan.retry recovers a validator stuck running with no outcome and no failure event", async () => {
@@ -934,25 +934,43 @@ describe("createBoardCommands", () => {
       ?.run()
     const kagan = (capture.updateArg!.metadata as { kagan: Record<string, unknown> }).kagan
     expect(kagan).toMatchObject({ validatorSessionID: undefined, validatorOutcome: undefined, validatorAttempts: 0 })
-    expect(notices).toContainEqual({ variant: "success", title: "Kagan", message: "Retrying review" })
+    expect(notices).toContainEqual({ variant: "success", title: "Kagan", message: "Restarting review" })
   })
 
-  test("kagan.retry warns for a validator that already ran and is awaiting triage", async () => {
+  test("kagan.retry restarts a validator that already ran and is awaiting triage", async () => {
     const session = {
       id: "s1",
       kaganStatus: "review" as const,
-      metadata: { kagan: { boardTask: true, validatorSessionID: "v1", validatorOutcome: "ran" } },
+      metadata: {
+        kagan: {
+          boardTask: true,
+          validatorSessionID: "v1",
+          validatorOutcome: "ran",
+          findings: [{ id: "f1", summary: "issue" }],
+          approved: true,
+        },
+      },
     }
     const notices: unknown[] = []
     const store = mockStore({
       selected: () => "s1",
       sessions: () => [session],
       notify: (options: unknown) => notices.push(options),
+      refresh: async () => {},
     })
-    await createBoardCommands({} as TuiPluginApi, store, () => {})
+    const { client, capture } = mockSessionClient({ metadata: session.metadata })
+    const api = { client } as unknown as TuiPluginApi
+    await createBoardCommands(api, store, () => {})
       .find((command) => command.name === "kagan.retry")
       ?.run()
-    expect(notices).toContainEqual({ variant: "warning", title: "Kagan", message: "Nothing to retry" })
+    const kagan = (capture.updateArg!.metadata as { kagan: Record<string, unknown> }).kagan
+    expect(kagan).toMatchObject({
+      validatorSessionID: undefined,
+      validatorOutcome: undefined,
+      findings: undefined,
+      approved: undefined,
+    })
+    expect(notices).toContainEqual({ variant: "success", title: "Kagan", message: "Restarting review" })
   })
 
   test("kagan.open_session selects and focuses the selected session", async () => {

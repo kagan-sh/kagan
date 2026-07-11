@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
   approveDenyReason,
+  canRestartHelper,
   canRetrySession,
   columnMoveDenyReason,
   countInProgressForMove,
   getRefinedPrompt,
   helper,
+  helperRestartPatch,
   helperRetries,
   inProgressCap,
   intakeReady,
@@ -942,36 +944,62 @@ describe("verifyFindingCitations", () => {
   })
 })
 
-describe("canRetrySession", () => {
-  test("true in backlog when intake can retry", () => {
-    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
+describe("canRestartHelper", () => {
+  test("true in backlog when intake has ever run or spawned", () => {
+    expect(canRestartHelper("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
+    expect(canRestartHelper("backlog", { kagan: { intakeOutcome: "ran" } })).toBe(true)
+    expect(canRestartHelper("backlog", { kagan: { intakeSessionID: "i1" } })).toBe(true)
   })
 
-  test("true in review when validator can retry", () => {
-    expect(canRetrySession("review", { kagan: { validatorOutcome: "failed" } })).toBe(true)
+  test("true in review when validator has ever run or spawned", () => {
+    expect(canRestartHelper("review", { kagan: { validatorOutcome: "failed" } })).toBe(true)
+    expect(canRestartHelper("review", { kagan: { validatorOutcome: "ran" } })).toBe(true)
+    expect(canRestartHelper("review", { kagan: { validatorSessionID: "v1" } })).toBe(true)
   })
 
-  test("false once the helper has succeeded", () => {
-    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "ran" } })).toBe(false)
-    expect(canRetrySession("review", { kagan: { validatorOutcome: "ran" } })).toBe(false)
-  })
-
-  test("true when a helperError is recorded for the role, even before the outcome flips", () => {
-    expect(canRetrySession("review", { kagan: { helperError: { role: "validator", message: "boom" } } })).toBe(true)
-  })
-
-  test("true when spawned and stuck without an outcome", () => {
-    expect(canRetrySession("review", { kagan: { validatorSessionID: "v1" } })).toBe(true)
+  test("true when helperError is recorded for the role", () => {
+    expect(canRestartHelper("review", { kagan: { helperError: { role: "validator", message: "boom" } } })).toBe(true)
   })
 
   test("false when nothing has started", () => {
-    expect(canRetrySession("backlog", { kagan: {} })).toBe(false)
-    expect(canRetrySession("review", undefined)).toBe(false)
+    expect(canRestartHelper("backlog", { kagan: {} })).toBe(false)
+    expect(canRestartHelper("review", undefined)).toBe(false)
   })
 
   test("false when the column and helper role do not match", () => {
-    expect(canRetrySession("backlog", { kagan: { validatorOutcome: "failed" } })).toBe(false)
-    expect(canRetrySession("review", { kagan: { intakeOutcome: "failed" } })).toBe(false)
-    expect(canRetrySession("review", { kagan: { helperError: { role: "intake", message: "boom" } } })).toBe(false)
+    expect(canRestartHelper("backlog", { kagan: { validatorOutcome: "failed" } })).toBe(false)
+    expect(canRestartHelper("review", { kagan: { intakeOutcome: "failed" } })).toBe(false)
+    expect(canRestartHelper("review", { kagan: { helperError: { role: "intake", message: "boom" } } })).toBe(false)
+  })
+})
+
+describe("canRetrySession", () => {
+  test("aliases canRestartHelper", () => {
+    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
+    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "ran" } })).toBe(true)
+  })
+})
+
+describe("helperRestartPatch", () => {
+  test("clears intake helper state including the stale intake blob", () => {
+    expect(helperRestartPatch("intake")).toEqual({
+      intakeSessionID: undefined,
+      intakeOutcome: undefined,
+      intakeAttempts: 0,
+      helperError: undefined,
+      intake: undefined,
+    })
+  })
+
+  test("clears validator state and review artifacts without a generation bump", () => {
+    expect(helperRestartPatch("validator")).toEqual({
+      validatorSessionID: undefined,
+      validatorOutcome: undefined,
+      validatorAttempts: 0,
+      helperError: undefined,
+      findings: undefined,
+      check: undefined,
+      approved: undefined,
+    })
   })
 })
