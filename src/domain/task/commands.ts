@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../../checks/runner"
+import type { CommandSpec } from "./types"
 
 export type TaskScope = { values: string[]; custom?: string }
 

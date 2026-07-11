@@ -1,14 +1,15 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { TextAttributes, type TextareaRenderable } from "@opentui/core"
+import type { TextareaRenderable } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
-import { createTask } from "../tasks/create"
+import { createTask } from "../tasks"
 import { getOrder, setOrder } from "../session/preferences"
 import { bunGitRunner, listLocalBranches } from "../../git/runner"
 import type { ModelRef } from "../../domain/task/types"
 import type { TaskScope } from "../../domain/task/commands"
 import type { createBoardStore } from "../board/store"
 import { useKeyIntercept } from "../renderer"
+import { DialogFilter, DialogFrame } from "./chrome"
 
 type BoardStore = ReturnType<typeof createBoardStore>
 
@@ -31,6 +32,19 @@ type FormState = {
   branchIndex: number
   branchFilter: string
   focusIndex: number
+}
+
+function PickerRow(props: { api: TuiPluginApi; label: string; value: string; focused: boolean }) {
+  const theme = () => props.api.theme.current
+  return (
+    <box flexDirection="row" justifyContent="space-between">
+      <box flexDirection="row" gap={1}>
+        <text fg={props.focused ? theme().primary : theme().textMuted}>{props.label}</text>
+        <text fg={theme().text}>{props.value}</text>
+      </box>
+      <text fg={theme().textMuted}>›</text>
+    </box>
+  )
 }
 
 function hasScope(scope: TaskScope): boolean {
@@ -188,13 +202,7 @@ function CreateTaskForm(props: {
   const labelColor = (index: number) => (focusIndex() === index ? theme().primary : theme().textMuted)
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme().text} attributes={TextAttributes.BOLD}>
-          New task
-        </text>
-        <text fg={theme().textMuted}>esc</text>
-      </box>
+    <DialogFrame api={props.api} title="New task">
       <box flexDirection="column">
         <text fg={labelColor(0)}>Title</text>
         <input
@@ -218,27 +226,19 @@ function CreateTaskForm(props: {
           }}
         />
       </box>
-      <box flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1}>
-          <text fg={labelColor(2)}>Scope</text>
-          <text fg={theme().text}>{scopeLabel(state.scope)}</text>
-        </box>
-        <text fg={theme().textMuted}>›</text>
-      </box>
-      <box flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1}>
-          <text fg={labelColor(3)}>Model</text>
-          <text fg={theme().text}>{props.models[state.modelIndex]?.label ?? "Auto (session default)"}</text>
-        </box>
-        <text fg={theme().textMuted}>›</text>
-      </box>
-      <box flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1}>
-          <text fg={labelColor(4)}>Base branch</text>
-          <text fg={theme().text}>{props.branches[state.branchIndex] ?? "HEAD"}</text>
-        </box>
-        <text fg={theme().textMuted}>›</text>
-      </box>
+      <PickerRow api={props.api} label="Scope" value={scopeLabel(state.scope)} focused={focusIndex() === 2} />
+      <PickerRow
+        api={props.api}
+        label="Model"
+        value={props.models[state.modelIndex]?.label ?? "Auto (session default)"}
+        focused={focusIndex() === 3}
+      />
+      <PickerRow
+        api={props.api}
+        label="Base branch"
+        value={props.branches[state.branchIndex] ?? "HEAD"}
+        focused={focusIndex() === 4}
+      />
       <box paddingBottom={1} flexDirection="row" gap={2}>
         <text fg={theme().text}>
           tab <span style={{ fg: theme().textMuted }}>move</span>
@@ -255,7 +255,7 @@ function CreateTaskForm(props: {
           esc <span style={{ fg: theme().textMuted }}>cancel</span>
         </text>
       </box>
-    </box>
+    </DialogFrame>
   )
 }
 
@@ -372,17 +372,8 @@ function ScopePicker(props: {
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme().text} attributes={TextAttributes.BOLD}>
-          Scope
-        </text>
-        <text fg={theme().textMuted}>esc</text>
-      </box>
-      <box flexDirection="column">
-        <text fg={theme().textMuted}>filter</text>
-        <input focused={true} value={filter()} onInput={setFilter} placeholder="Filter configured scopes" />
-      </box>
+    <DialogFrame api={props.api} title="Scope">
+      <DialogFilter api={props.api} value={filter()} onInput={setFilter} placeholder="Filter configured scopes" />
       <box flexDirection="column">
         <For each={options()}>
           {(scope, i) => {
@@ -410,7 +401,7 @@ function ScopePicker(props: {
           enter <span style={{ fg: theme().textMuted }}>apply</span>
         </text>
       </box>
-    </box>
+    </DialogFrame>
   )
 }
 
@@ -484,17 +475,8 @@ function FilterableSelectPicker(props: {
   })
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme().text} attributes={TextAttributes.BOLD}>
-          {props.title}
-        </text>
-        <text fg={theme().textMuted}>esc</text>
-      </box>
-      <box flexDirection="column">
-        <text fg={theme().textMuted}>filter</text>
-        <input focused={true} value={filter()} onInput={setFilter} placeholder={props.filterPlaceholder} />
-      </box>
+    <DialogFrame api={props.api} title={props.title}>
+      <DialogFilter api={props.api} value={filter()} onInput={setFilter} placeholder={props.filterPlaceholder} />
       <box flexDirection="column">
         <For each={options()}>
           {(option, i) => (
@@ -509,7 +491,7 @@ function FilterableSelectPicker(props: {
           enter <span style={{ fg: theme().textMuted }}>select</span>
         </text>
       </box>
-    </box>
+    </DialogFrame>
   )
 }
 

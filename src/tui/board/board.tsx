@@ -5,6 +5,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show }
 import { maybeShowOnboarding } from "../dialogs/onboarding"
 import { Column } from "./column"
 import { BOARD_BINDINGS, createBoardCommands, footerHints, HelpOverlay, type BoardStore } from "./commands"
+import { SIDE_BORDER_CHARS } from "./borders"
 import { COLUMNS, type ColumnType } from "../../domain/task/types"
 import { version } from "../../../package.json"
 import { useRendererDimensions } from "../renderer"
@@ -101,9 +102,11 @@ function Main(props: {
 }
 
 function updateFooter(status: Exclude<UpdateStatus, undefined>) {
-  return status.kind === "ready"
-    ? ` · v${status.version} ready — restart OpenCode`
-    : ` · update OpenCode to ${status.requiredOpenCode} for Kagan v${status.version}`
+  if (status.kind === "ready") return ` · v${status.version} ready — restart OpenCode`
+  if (status.kind === "blocked") {
+    return ` · update OpenCode to ${status.requiredOpenCode} for Kagan v${status.version}`
+  }
+  return " · updates unavailable"
 }
 
 function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () => { key: string; label: string }[] }) {
@@ -135,20 +138,6 @@ function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () => { ke
       </box>
     </box>
   )
-}
-
-const SIDE_BORDER_CHARS: BorderCharacters = {
-  topLeft: "",
-  topRight: "",
-  bottomLeft: "",
-  bottomRight: "",
-  horizontal: " ",
-  vertical: "┃",
-  topT: "",
-  bottomT: "",
-  leftT: "",
-  rightT: "",
-  cross: "",
 }
 
 // api.ui.toast doesn't render on plugin routes — see the Notice rationale in store.ts.

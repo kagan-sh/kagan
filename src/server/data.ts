@@ -1,7 +1,6 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import { formatTaskRef, parseTaskRefs } from "../domain/handoff"
-import { kagan } from "../domain/task/metadata"
-import type { ColumnType } from "../domain/task/types"
+import { getStatus, kagan } from "../domain/task/metadata"
 
 type SessionData = {
   title?: string
@@ -12,10 +11,6 @@ type SessionData = {
 export type EventInfo = SessionData & { id: string }
 
 type ListedSession = SessionData & { id: string }
-
-export function getStatus(metadata?: Record<string, unknown>): ColumnType {
-  return kagan(metadata).status ?? "backlog"
-}
 
 export async function getSessionData(input: PluginInput, sessionID: string): Promise<SessionData | undefined> {
   const result = await input.client.session.get({ path: { id: sessionID }, throwOnError: true })

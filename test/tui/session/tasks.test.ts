@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { mockSessionClient, mockTuiApi } from "../../fixtures/api"
-import { kagan } from "../../../src/domain/task/metadata"
+import { getStatus, kagan } from "../../../src/domain/task/metadata"
 
 const sequence: string[] = []
 let mergeResult = { ok: true, message: "Merged kagan/x" }
 let currentBranchValue: string | undefined = "kagan/x"
-let worktreeDiffResult: { file: string }[] = []
 type MockCommandStep = {
   name: string
   cwd: string
@@ -27,10 +26,10 @@ mock.module("../../../src/git/runner", () => ({
     sequence.push(`plugin-config:${directory}`)
   },
   currentBranch: async () => currentBranchValue,
-}))
-
-mock.module("../../../src/git/diffs", () => ({
-  worktreeDiffs: async () => worktreeDiffResult,
+  // mock.module replaces the whole module namespace process-wide, so unlisted exports vanish and break
+  // any other file whose import binds while this mock is active. Stub every runner export this suite uses.
+  listLocalBranches: async () => [] as string[],
+  baseBranchFreshness: async () => ({ ahead: 0 }),
 }))
 
 mock.module("../../../src/git/merge", () => ({
@@ -49,6 +48,7 @@ mock.module("../../../src/git/merge", () => ({
 }))
 
 mock.module("../../../src/checks/runner", () => ({
+  truncateCheckResultForMetadata: <T>(result: T) => result,
   runCheckCommand: async (command: string) => {
     if (command === 'echo "installed"') return { command, exitCode: 0, output: "installed\n" }
     if (command === "exit 1") return { command, exitCode: 1, output: "" }
@@ -99,17 +99,13 @@ mock.module("../../../src/checks/runner", () => ({
 
 const { approveSession, archiveSession, resolveSessionFinding, resolveSessionIntakeDecision, retryHelper } =
   await import("../../../src/tui/session/tasks")
-const { createTask } = await import("../../../src/tui/tasks/create")
-const { deleteSession } = await import("../../../src/tui/tasks/delete")
+const { createTask, deleteSession, mergeTask, sendBack } = await import("../../../src/tui/tasks")
 const { getFilter, setFilter } = await import("../../../src/tui/session/preferences")
-const { mergeTask, sendBack } = await import("../../../src/tui/tasks/iteration")
-const getStatus = (metadata?: Record<string, unknown>) => kagan(metadata).status ?? "backlog"
 
 beforeEach(() => {
   sequence.length = 0
   mergeResult = { ok: true, message: "Merged kagan/x" }
   currentBranchValue = "kagan/x"
-  worktreeDiffResult = []
 })
 
 describe("getStatus", () => {

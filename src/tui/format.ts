@@ -1,10 +1,6 @@
 import { helper, intakeReady, pendingFindingCount, sendBackStopThreshold } from "../domain/task/policy"
-import { kagan } from "../domain/task/metadata"
+import { getStatus, kagan } from "../domain/task/metadata"
 import type { HelperRole, ColumnType } from "../domain/task/types"
-
-function getStatus(metadata?: Record<string, unknown>): ColumnType {
-  return kagan(metadata).status ?? "backlog"
-}
 
 export function formatAge(updated: number, now: number): string {
   const diff = Math.max(0, now - updated)

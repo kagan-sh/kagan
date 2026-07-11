@@ -44,6 +44,11 @@ apply it.
 That Kagan release does not support the running OpenCode version. The footer names the required
 range; the current Kagan release remains active until OpenCode is compatible.
 
+**The footer says updates unavailable.**
+Automatic update cleanup or preparation failed — usually stale cache state after an interrupted
+restart. Restart OpenCode once more; if the footer persists, remove the Kagan plugin cache under
+OpenCode's cache directory and reinstall.
+
 **My existing sessions don't appear on the board.**
 By design — the board shows only tasks created through it. Chat sessions stay in OpenCode's
 native session list.

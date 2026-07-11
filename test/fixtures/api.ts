@@ -21,7 +21,7 @@ export const mockTheme = {
   error: "red",
 }
 
-export function mockKv(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function mockKv(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const kv: Record<string, unknown> = { ...overrides }
   for (const column of COLUMNS) {
     kv[`kagan:order:${column}`] ??= []

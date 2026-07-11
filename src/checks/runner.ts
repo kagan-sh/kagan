@@ -1,11 +1,5 @@
 import { join } from "node:path"
-
-export type CommandSpec = {
-  name: string
-  cwd: string
-  command: string
-  scope?: string[]
-}
+import type { CommandSpec } from "../domain/task/types"
 
 type CommandStepResult = {
   name: string

@@ -2,14 +2,13 @@ import type { PluginInput } from "@opencode-ai/plugin"
 import { composeStartPrompt } from "../domain/handoff"
 import { lastAssistantText } from "../domain/session/messages"
 import { countInProgressForMove, columnMoveDenyReason, inProgressCap } from "../domain/task/policy"
-import { kagan } from "../domain/task/metadata"
+import { getStatus, kagan } from "../domain/task/metadata"
 import type { ColumnType } from "../domain/task/types"
 import { patchKagan } from "./session/patch"
 import {
   errorMessage,
   extractErrorMessage,
   getSessionData,
-  getStatus,
   listSessions,
   resolveTaskRefs,
   sessionMessages,

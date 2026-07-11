@@ -10,4 +10,4 @@ exclude = ["references/**"]
 # automatic JSX runtime evaluates every JSX expression exactly once and nothing on
 # the board ever repaints. The opencode host applies this same transform itself when
 # importing raw plugin .tsx; bun test has no host, so tests opt in here.
-preload = ["@opentui/solid/preload"]
+preload = ["@opentui/solid/preload", "./test/preload/git-isolation.ts"]

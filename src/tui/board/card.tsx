@@ -1,7 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { BorderCharacters, Renderable } from "@opentui/core"
-import { TextAttributes } from "@opentui/core"
+import type { Renderable } from "@opentui/core"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { For, Show, createSignal, onCleanup } from "solid-js"
 import {
@@ -13,23 +12,11 @@ import {
   shortSubtaskTitle,
   summarizeSubtasks,
 } from "../format"
+import { TextAttributes } from "@opentui/core"
+import { SIDE_BORDER_CHARS } from "./borders"
 import { intakeReady } from "../../domain/task/policy"
 import { kagan } from "../../domain/task/metadata"
 import type { BoardSession } from "../types"
-
-const LEFT_BORDER_CHARS: BorderCharacters = {
-  topLeft: "",
-  topRight: "",
-  bottomLeft: "",
-  bottomRight: "",
-  horizontal: " ",
-  vertical: "┃",
-  topT: "",
-  bottomT: "",
-  leftT: "",
-  rightT: "",
-  cross: "",
-}
 
 function isReady(session: BoardSession): boolean {
   return (
@@ -159,7 +146,7 @@ export function Card(props: {
       ref={(node) => props.onCardRef?.(props.session.id, node)}
       flexDirection="column"
       border={["left"]}
-      customBorderChars={LEFT_BORDER_CHARS}
+      customBorderChars={SIDE_BORDER_CHARS}
       borderColor={barColor()}
     >
       <box flexDirection="column" onMouseDown={() => props.onSelect(props.session.id)}>

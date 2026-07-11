@@ -1,27 +1,45 @@
 /** @jsxImportSource @opentui/solid */
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { TestRendererSetup } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
 import type { BoardSession } from "../../../src/tui/types"
 import { SETTINGS_ROUTE } from "../../../src/tui/types"
 import type { BoardStore } from "../../../src/tui/board/commands"
-import { hermeticGitRunner } from "../../fixtures/git"
 import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "../../fixtures/api"
 
 import { BOARD_BINDINGS, createBoardCommands, footerHints } from "../../../src/tui/board/commands"
 
+// bun's mock.module is process-global; sibling test files mock git/runner + git/merge and those mocks
+// leak across files in load order. Establish this file's own git mocks so the merge-dialog tests below
+// are deterministic regardless of which file ran first, and drive their behavior through these vars.
+let currentBranchValue: string | undefined = "kagan/task"
+let localBranches: string[] = ["kagan/task"]
+let mergeResult: { ok: boolean; message: string } = { ok: true, message: "Merged" }
+
+mock.module("../../../src/git/runner", () => ({
+  bunGitRunner: () => async () => ({ code: 0, stdout: "", stderr: "" }),
+  currentBranch: async () => currentBranchValue,
+  listLocalBranches: async () => localBranches,
+  baseBranchFreshness: async () => ({ ahead: 0 }),
+}))
+
+mock.module("../../../src/git/merge", () => ({
+  mergeTaskBranch: async () => mergeResult,
+}))
+
 let renderSetup: TestRendererSetup | undefined
-const tempDirs: string[] = []
+
+beforeEach(() => {
+  currentBranchValue = "kagan/task"
+  localBranches = ["kagan/task"]
+  mergeResult = { ok: true, message: "Merged" }
+})
 
 afterEach(async () => {
   await renderSetup?.renderer.destroy()
   renderSetup = undefined
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
 function mockStore(
@@ -1112,7 +1130,10 @@ describe("createBoardCommands", () => {
     api: TuiPluginApi,
     store: BoardStore,
     renders: Array<() => unknown>,
-  ): Promise<{ options: { title: string; value: string }[]; onSelect: (option: { value: string }) => void }> {
+  ): Promise<{
+    options: { title: string; value: string }[]
+    onSelect: (option: { value: string }) => Promise<void> | void
+  }> {
     await createBoardCommands(api, store, () => {})
       .find((command) => command.name === "kagan.approve")
       ?.run()
@@ -1120,29 +1141,41 @@ describe("createBoardCommands", () => {
     attachRendererMockInput(api, renderSetup)
     await renderSetup.flush()
     renderSetup.mockInput.pressKey("a")
-    await waitFor(() => renders.length === 2)
-    return renders.at(-1)!() as {
+    const asMergeDialog = (render: (() => unknown) | undefined) => {
+      if (!render) return undefined
+      try {
+        const props = render() as { options?: { title: string; value: string }[]; onSelect?: unknown }
+        return typeof props.onSelect === "function" && Array.isArray(props.options) ? props : undefined
+      } catch {
+        return undefined
+      }
+    }
+    // The findings dialog's approve handler runs fire-and-forget and may re-render before it opens the
+    // merge dialog, so wait for the merge DialogSelect itself rather than a fixed render count.
+    const latestMergeDialog = () => {
+      let found: ReturnType<typeof asMergeDialog>
+      for (const render of renders) {
+        const props = asMergeDialog(render)
+        if (props) found = props
+      }
+      return found
+    }
+    await waitFor(() => latestMergeDialog() !== undefined)
+    return latestMergeDialog() as {
       options: { title: string; value: string }[]
-      onSelect: (option: { value: string }) => void
+      onSelect: (option: { value: string }) => Promise<void> | void
     }
   }
 
   test("approving reaches promptAnotherBranch, which warns when the task's own branch is the only local branch", async () => {
-    const run = hermeticGitRunner()
-    const repoDir = await mkdtemp(join(tmpdir(), "kagan-cmd-repo-"))
-    tempDirs.push(repoDir)
-    await run(["init", "-q", "-b", "main"], repoDir)
-    await run(["config", "user.email", "test@kagan.dev"], repoDir)
-    await run(["config", "user.name", "Kagan Test"], repoDir)
-    await writeFile(join(repoDir, "file.txt"), "hello\n")
-    await run(["add", "-A"], repoDir)
-    await run(["commit", "-q", "-m", "initial"], repoDir)
-
+    // The only local branch is the task's own branch, so filtering it out leaves nothing to merge into.
+    currentBranchValue = "kagan/task"
+    localBranches = ["kagan/task"]
     const session = {
       id: "s1",
       title: "Task",
       kaganStatus: "review" as const,
-      metadata: { kagan: { boardTask: true, validatorOutcome: "ran", worktree: repoDir, baseBranch: "main" } },
+      metadata: { kagan: { boardTask: true, validatorOutcome: "ran", worktree: "/task", baseBranch: "main" } },
     }
     const notices: unknown[] = []
     const store = mockStore({
@@ -1152,7 +1185,7 @@ describe("createBoardCommands", () => {
     })
     const renders: Array<() => unknown> = []
     const api = mockTuiApi({
-      state: { path: { worktree: repoDir }, vcs: { branch: "main" } },
+      state: { path: { worktree: "/main" }, vcs: { branch: "main" } },
       ui: {
         toast: () => {},
         dialog: {
@@ -1166,8 +1199,7 @@ describe("createBoardCommands", () => {
     } as unknown as Partial<TuiPluginApi>)
 
     const mergeProps = await driveApproveToMergeDialog(api, store, renders)
-    mergeProps.onSelect({ value: "another" })
-    await waitFor(() => notices.length > 0)
+    await mergeProps.onSelect({ value: "another" })
     expect(notices).toContainEqual({
       variant: "warning",
       title: "Kagan",
@@ -1176,11 +1208,13 @@ describe("createBoardCommands", () => {
   })
 
   test("approving and merging into the current branch surfaces the merge failure without approving", async () => {
+    // The merge into the current branch reports a conflict.
+    mergeResult = { ok: false, message: "CONFLICT (content): Merge conflict in shared.txt" }
     const session = {
       id: "s1",
       title: "Task",
       kaganStatus: "review" as const,
-      metadata: { kagan: { boardTask: true, validatorOutcome: "ran" } },
+      metadata: { kagan: { boardTask: true, validatorOutcome: "ran", worktree: "/task", baseBranch: "main" } },
     }
     const notices: unknown[] = []
     let refreshCalls = 0
@@ -1195,7 +1229,7 @@ describe("createBoardCommands", () => {
     })
     const renders: Array<() => unknown> = []
     const api = mockTuiApi({
-      state: { path: { worktree: "/repo" }, vcs: { branch: "main" } },
+      state: { path: { worktree: "/main" }, vcs: { branch: "main" } },
       ui: {
         toast: () => {},
         dialog: {
@@ -1209,9 +1243,10 @@ describe("createBoardCommands", () => {
     } as unknown as Partial<TuiPluginApi>)
 
     const mergeProps = await driveApproveToMergeDialog(api, store, renders)
-    mergeProps.onSelect({ value: "current" })
-    await waitFor(() => notices.length > 0)
-    expect(notices).toEqual([{ variant: "error", title: "Kagan", message: "Task has no isolated worktree" }])
+    await mergeProps.onSelect({ value: "current" })
+    // Other notices may accompany the merge result, so match the conflict notice specifically.
+    const mergeFailure = notices.find((n) => /conflict/i.test((n as { message?: string }).message ?? ""))
+    expect(mergeFailure).toMatchObject({ variant: "error", title: "Kagan" })
     expect(refreshCalls).toBe(0)
   })
 
@@ -1257,8 +1292,7 @@ describe("createBoardCommands", () => {
     } as unknown as Partial<TuiPluginApi>)
 
     const mergeProps = await driveApproveToMergeDialog(api, store, renders)
-    mergeProps.onSelect({ value: "none" })
-    await waitFor(() => sequence.includes("notify:Task approved"))
+    await mergeProps.onSelect({ value: "none" })
     expect(sequence).toEqual(["approve", "refresh", "moveTo:done", "notify:Task approved"])
   })
 })

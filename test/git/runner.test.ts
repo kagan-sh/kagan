@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
-import { homedir, tmpdir } from "node:os"
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   baseBranchFreshness,
   createTaskWorktree,
   ensureWorktreePluginConfig,
+  bunGitRunner,
   type GitResult,
   type GitRunner,
   isGitPushCommand,
@@ -15,7 +16,6 @@ import {
 import { mergeTaskBranch } from "../../src/git/merge"
 import { orderDiffsByRisk, worktreeDiffs } from "../../src/git/diffs"
 import { newSideHunkRanges } from "../../src/domain/task/findings"
-import { hermeticGitRunner } from "../fixtures/git"
 
 function stubRunner(
   handler: (args: string[], cwd: string) => Partial<GitResult> | undefined,
@@ -212,7 +212,8 @@ describe("createTaskWorktree", () => {
     const calls: string[][] = []
     const run = stubRunner(() => ({ code: 0 }), calls)
     const mainWorktree = join(tmpdir(), "kagan-branch-main")
-    created.push(join(homedir(), ".kagan", "worktrees", Bun.hash(mainWorktree).toString(16)))
+    const worktreeRoot = process.env.KAGAN_WORKTREE_ROOT!
+    created.push(join(worktreeRoot, Bun.hash(mainWorktree).toString(16)))
     const slug = uniqueTaskSlug("Implement a really long feature title that clearly exceeds forty characters")
 
     await createTaskWorktree(run, mainWorktree, slug, "main")
@@ -220,6 +221,7 @@ describe("createTaskWorktree", () => {
     const addCall = calls.find((c) => c[0] === "worktree" && c[1] === "add")!
     const branch = addCall[addCall.indexOf("-b") + 1]!
     expect(branch.startsWith("kagan/")).toBe(true)
+    expect(addCall.at(-2)).toMatch(new RegExp(`^${worktreeRoot.replaceAll("/", "\\/")}/`))
     const slugPortion = branch.slice("kagan/".length).replace(/-[a-z0-9]{4}$/, "")
     expect(slugPortion.length).toBeLessThanOrEqual(40)
     expect(slugPortion.length).toBeGreaterThan(30)
@@ -336,7 +338,7 @@ describe("mergeTaskBranch", () => {
 })
 
 describe("mergeTaskBranch (real repo)", () => {
-  const run = hermeticGitRunner()
+  const run = bunGitRunner()
   const tempDirs: string[] = []
 
   afterEach(async () => {

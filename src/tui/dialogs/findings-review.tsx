@@ -13,6 +13,7 @@ import { approveDenyReason } from "../../domain/task/policy"
 import { isSubstantive } from "../../domain/task/intake"
 import { kagan } from "../../domain/task/metadata"
 import { confidenceBar, formatModeRationale } from "../format"
+import { DialogFrame } from "./chrome"
 import type { createBoardStore } from "../board/store"
 import type { BoardSession } from "../types"
 import { useKeyIntercept } from "../renderer"
@@ -195,14 +196,7 @@ function FindingsReview(props: {
   }
 
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme().text} attributes={TextAttributes.BOLD}>
-          {title()}
-        </text>
-        <text fg={theme().textMuted}>esc</text>
-      </box>
-
+    <DialogFrame api={props.api} title={title()}>
       <Show when={modeText()}>
         <text fg={theme().textMuted} wrapMode="word">
           {modeText()}
@@ -350,7 +344,7 @@ function FindingsReview(props: {
           </box>
         </Show>
       </box>
-    </box>
+    </DialogFrame>
   )
 }
 

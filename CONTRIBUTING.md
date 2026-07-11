@@ -32,8 +32,10 @@ update checks; only a published bare/`@latest` npm install exercises that path. 
 bun run verify
 ```
 
-This runs every built-in `verifyx` check plus formatting, linting, type-checking, tests, build, and
-package validation — the exact same thing CI runs. If it passes, your change is ready. One helper:
+This runs every built-in `verifyx` check (including unused-code, circular-deps, and duplicate-code)
+plus formatting, linting, type-checking, tests, build, and package validation — the exact same
+thing CI runs. The pre-commit hook runs `bun run verify -- --check` so it fails on dirty staged
+content instead of rewriting files mid-commit. If it passes, your change is ready. One helper:
 
 - `bun run test` — just the tests (use this, not a bare `bun test`).
 
