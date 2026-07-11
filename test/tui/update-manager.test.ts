@@ -167,6 +167,46 @@ describe("prepareUpdate", () => {
     expect(JSON.parse(await readFile(join(layout.target, "package.json"), "utf8")).version).toBe("0.1.0")
   })
 
+  test("a failed restore surfaces both the promotion and restore errors", async () => {
+    const layout = await fixture()
+    const preparedTarget = wrapperTarget(join(layout.scope, "kagan@0.2.0"))
+    const mock = api(async () => {
+      await writePackage(preparedTarget, "0.2.0")
+      return true
+    })
+    let renames = 0
+    const fs = {
+      ...nodeFs,
+      rename: async (from: Parameters<typeof rename>[0], to: Parameters<typeof rename>[1]) => {
+        renames++
+        if (renames === 2) throw new Error("promotion failed")
+        if (renames === 3) throw new Error("restore failed")
+        await rename(from, to)
+      },
+    }
+
+    expect(
+      await prepareUpdate({
+        api: mock.value,
+        meta: meta(layout.target),
+        currentVersion: "0.1.0",
+        status: { kind: "ready", version: "0.2.0" },
+        fs,
+      }),
+    ).toBe(true)
+    let thrown: unknown
+    try {
+      await mock.disposers[0]!()
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(AggregateError)
+    expect((thrown as AggregateError).errors.map((entry) => (entry as Error).message)).toEqual([
+      "promotion failed",
+      "restore failed",
+    ])
+  })
+
   test("successful next startup removes the marker and backup", async () => {
     const layout = await fixture()
     const preparedTarget = join(layout.scope, "kagan@0.2.0", "node_modules", "@kagan-sh", "kagan")

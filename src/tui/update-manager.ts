@@ -25,7 +25,11 @@ async function promotePreparedUpdate(
   try {
     await fs.rename(paths.prepared, paths.current)
   } catch (error) {
-    await fs.rename(paths.backup, paths.current).catch(() => {})
+    try {
+      await fs.rename(paths.backup, paths.current)
+    } catch (restoreError) {
+      throw new AggregateError([error, restoreError], "Kagan update promotion and restore failed")
+    }
     throw error
   }
 }
