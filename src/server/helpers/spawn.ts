@@ -119,7 +119,8 @@ export async function onEnterReview(
     },
     async (session) => {
       const view = kagan(session?.metadata)
-      const { diffs, check } = await collectCheck(input, sessionID, view.worktree!, view.baseBranch, options)
+      if (!view.worktree) return undefined
+      const { diffs, check } = await collectCheck(input, sessionID, view.worktree, view.baseBranch, options)
       return spawnValidator(
         input,
         sessionID,

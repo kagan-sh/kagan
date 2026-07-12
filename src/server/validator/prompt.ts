@@ -5,7 +5,7 @@ import type { Finding } from "../../domain/task/findings"
 import type { Intake } from "../../domain/task/intake"
 import { orderDiffsByRisk } from "../../git/diffs"
 
-export interface ValidatorContext {
+export type ValidatorContext = {
   title: string
   description?: string
   intake?: Intake

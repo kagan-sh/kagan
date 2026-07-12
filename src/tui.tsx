@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createRoot } from "solid-js"
 import { Board } from "./tui/board/board"
 import { Settings } from "./tui/routes/settings"

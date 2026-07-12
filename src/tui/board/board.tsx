@@ -46,7 +46,7 @@ function Main(props: {
     const viewport = scroll.viewport
     const left = target.x - viewport.x
     const right = left + target.width
-    // scrollBy/scrollLeft are unusable here: this scrollbox's content never measures wider than
+    // context: scrollBy/scrollLeft are unusable here: this scrollbox's content never measures wider than
     // its viewport (a cross-axis auto-sizing gap in the underlying ScrollBox), which pins
     // scrollWidth === viewportWidth and clamps every scrollBy to a no-op. translateX is the same
     // primitive the scrollbar itself drives (see ScrollBox's onChange), so drive it directly.

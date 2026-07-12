@@ -7,8 +7,7 @@ import { join } from "node:path"
 import { OptionBoundsSchema } from "../../domain/options"
 import { commandPlan, commandSpec } from "../../domain/task/commands"
 import { helperRetries, inProgressCap, sendBackStopThreshold, squashMerge } from "../../domain/task/policy"
-import type { ModelRef } from "../../domain/task/types"
-import type { CommandSpec } from "../../domain/task/types"
+import type { CommandSpec, ModelRef } from "../../domain/task/types"
 import { SETTINGS_ROUTE, ROUTE } from "../types"
 import { useKeyIntercept } from "../renderer"
 import { DialogFrame } from "../dialogs/chrome"
@@ -456,8 +455,8 @@ function CommandListEditor(props: {
         return
       }
 
-      const field = fields[0]!
-      const rest = fields.slice(1)
+      const [field, ...rest] = fields
+      if (!field) return
       const title = field === "scope" ? "scope (comma-separated regexes)" : field
       prompt(title, values[field] ?? "", (next) => {
         values[field] = next
@@ -525,8 +524,10 @@ function CommandListEditor(props: {
     if (target < 0 || target >= current.length) return
     const next = [...current]
     const temp = next[index]
-    next[index] = next[target]!
-    next[target] = temp!
+    const replacement = next[target]
+    if (!temp || !replacement) return
+    next[index] = replacement
+    next[target] = temp
     setCommands(next)
     setRowIndex(target)
   }
@@ -636,8 +637,8 @@ function ValidatorModelListEditor(props: {
         return
       }
 
-      const field = fields[0]!
-      const rest = fields.slice(1)
+      const [field, ...rest] = fields
+      if (!field) return
       prompt(field, values[field] ?? "", (next) => {
         values[field] = next
         ask(rest)

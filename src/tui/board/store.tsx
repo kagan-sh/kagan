@@ -11,7 +11,7 @@ import {
   squashMerge,
 } from "../../domain/task/policy"
 import { getStatus, kagan } from "../../domain/task/metadata"
-import { commandInTaskScope, commandPlan, configuredScopes } from "../../domain/task/commands"
+import { commandPlan, configuredScopes } from "../../domain/task/commands"
 import { deleteSession } from "../tasks"
 import { getFilter, getOrder, setFilter as persistFilter, setOrder } from "../session/preferences"
 import { COLUMNS, type ColumnType } from "../../domain/task/types"
@@ -46,7 +46,7 @@ function filterSessions(sessions: readonly BoardSession[], filter: string): Boar
   return sessions.filter((session) => included.has(session.id))
 }
 
-// The project-scoped session.list route (session/session.ts's listByProject, unlike the
+// context: the project-scoped session.list route (session/session.ts's listByProject, unlike the
 // Experimental global list) applies no archived filter, so archived cards would otherwise
 // linger on the board after archiveSession stamps time.archived.
 function rootSessions(sessions: readonly BoardSession[]): BoardSession[] {
@@ -77,7 +77,7 @@ function sortSessionsByOrder(sessions: readonly BoardSession[], order: readonly 
   const inOrder = sessions.filter((session) => orderIndex.has(session.id))
   const remaining = sessions.filter((session) => !orderIndex.has(session.id))
   return [
-    ...inOrder.sort((left, right) => orderIndex.get(left.id)! - orderIndex.get(right.id)!),
+    ...inOrder.sort((left, right) => (orderIndex.get(left.id) ?? 0) - (orderIndex.get(right.id) ?? 0)),
     ...remaining.sort((left, right) => right.time.updated - left.time.updated),
   ]
 }
@@ -296,7 +296,10 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     const key = `notice-${++noticeSeq}`
     setNotices((current) => {
       const next = [...current, { ...toast, key }]
-      while (next.length > NOTICE_CAP) clearNoticeTimer(next.shift()!.key)
+      while (next.length > NOTICE_CAP) {
+        const expired = next.shift()
+        if (expired) clearNoticeTimer(expired.key)
+      }
       return next
     })
     noticeTimers.set(
@@ -422,8 +425,10 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     const index = order.indexOf(session.id)
     const swapIndex = index + direction
     if (index === -1 || swapIndex < 0 || swapIndex >= order.length) return
-    const neighbor = order[swapIndex]!
-    order[swapIndex] = order[index]!
+    const neighbor = order[swapIndex]
+    const current = order[index]
+    if (neighbor === undefined || current === undefined) return
+    order[swapIndex] = current
     order[index] = neighbor
     setOrder(api, column, order)
     setOrders((current) => ({ ...current, [column]: order }))
@@ -596,7 +601,7 @@ export function createSessionEventSubscription(api: TuiPluginApi, refresh: () =>
   }
 }
 
-// Independent of the debounced session refresh above: session.status fires far more often than
+// context: independent of the debounced session refresh above: session.status fires far more often than
 // the session lifecycle events that trigger a refetch, and the working indicator needs to react
 // immediately rather than wait for the next debounced poll.
 export function createSessionStatusSubscription(

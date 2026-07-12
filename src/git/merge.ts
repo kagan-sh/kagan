@@ -29,8 +29,8 @@ function hasUserWorkDuringMerge(porcelain: string): boolean {
   for (const line of porcelain.split("\n")) {
     const entry = line.trimEnd()
     if (entry.length < 3 || entry[2] !== " ") continue
-    const index = entry[0]!
-    const worktree = entry[1]!
+    const index = entry.charAt(0)
+    const worktree = entry.charAt(1)
     if (index === "?" || worktree === "?") return true
     if (worktree === "M" && index !== "U") return true
     if (worktree === "D" && index !== "U" && index !== "D") return true

@@ -14,7 +14,7 @@ const PUSH_DENIED_MESSAGE =
 async function guardGitPush(
   input: Parameters<Plugin>[0],
   hookInput: { tool: string; sessionID: string; callID: string },
-  output: { args: any },
+  output: { args: { command?: unknown } },
 ): Promise<void> {
   if (hookInput.tool !== "bash") return
   const command = output.args?.command

@@ -68,7 +68,8 @@ function isGitPushSegment(segment: string): boolean {
   const start = tokens.findIndex(isGitToken)
   if (start === -1) return false
   for (let i = start + 1; i < tokens.length; i++) {
-    const token = tokens[i]!
+    const token = tokens[i]
+    if (token === undefined) continue
     if (token === "push") return true
     if (token === "-C" || token === "-c") {
       i++

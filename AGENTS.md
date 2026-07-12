@@ -8,12 +8,13 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
 
 - Use Bun 1.3 or newer; CI pins 1.3.14. Run `bun install`, then `bun run setup` once after cloning to
   enable the `.githooks/pre-commit` hook.
-- `bun run verify` is the merge gate and the exact CI command. It runs all built-in `verifyx`
-  checks (lint, format, type-check, unused-code, circular-deps, duplicate-code, and native gates),
-  project overrides, tests, and package validation in parallel. Local pre-commit runs check-only via
-  `bun run verify -- --check`; CI runs the same gate under `CI`, which also selects check-only.
-- Run one built-in check with `bunx verifyx lint`, `bunx verifyx check-types`, or `bunx verifyx duplicate-code`.
-  Use `bun run verify:format` or `bun run verify:package` for project checks.
+- `bun run verify` is the agent-facing curated gate. It runs the declared source complexity, comment,
+  and circular-dependency checks, plus the local `test` script.
+- `bun run check` is the full check-only gate used by pre-commit and CI. It runs `verifyx all --check`,
+  including its automatic test step, then package validation. CI checkout fetches full history so the
+  new-comment check compares against the PR merge base.
+- Run one built-in check with `bunx verifyx lint`, `bunx verifyx format`, `bunx verifyx check-types`, or
+  `bunx verifyx duplicate-code`. Use `bun run package` for package checks.
 - Run the full suite with `bun run test`, not bare `bun test`. The script supplies
   `--conditions browser`; `bunfig.toml` supplies the Solid preload. Bun positional test filters can
   also match a local gitignored `references/` checkout because its exclude applies only to test
@@ -29,7 +30,7 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
 - `bun run build` recreates gitignored `dist/` from every `src/**/*.ts` and `src/**/*.tsx` file,
   preserving directories, compiling Solid JSX, changing relative imports to `.js`, and mapping
   host OpenTUI/Solid imports to runtime module IDs. Do not edit `dist/`.
-- The published package contains compiled `dist/`, not `src/`. `bun run verify:package` rebuilds,
+- The published package contains compiled `dist/`, not `src/`. `bun run package` rebuilds,
   checks compiled Solid output and the exact tarball file list, installs the tarball in a clean
   consumer, rejects bundled OpenTUI/Solid copies, and imports both public exports.
 - The development installer deliberately copies raw `src/` and the full local `node_modules` into

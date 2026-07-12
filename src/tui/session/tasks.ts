@@ -1,12 +1,10 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { approveDenyReason, helperRestartPatch } from "../../domain/task/policy"
+import { approveDenyReason, helper, helperRestartPatch } from "../../domain/task/policy"
 import { kagan } from "../../domain/task/metadata"
-import { resolveFinding } from "../../domain/task/findings"
+import { resolveFinding, type FindingResolution } from "../../domain/task/findings"
 import { resolveIntakeDecision } from "../../domain/task/intake"
-import { helper } from "../../domain/task/policy"
-import type { FindingResolution } from "../../domain/task/findings"
-import type { HelperRole, ColumnType } from "../../domain/task/types"
+import type { ColumnType, HelperRole } from "../../domain/task/types"
 import { tuiPatchKagan } from "./patch"
 
 export async function listSessions(api: TuiPluginApi): Promise<Session[]> {

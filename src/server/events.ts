@@ -1,4 +1,4 @@
-import type { PluginInput } from "@opencode-ai/plugin"
+import type { Plugin, PluginInput } from "@opencode-ai/plugin"
 import { composeStartPrompt } from "../domain/handoff"
 import { lastAssistantText } from "../domain/session/messages"
 import { countInProgressForMove, columnMoveDenyReason, inProgressCap } from "../domain/task/policy"
@@ -136,7 +136,7 @@ async function handleSessionIdle(
 }
 
 export function createServerEvents(input: PluginInput, options: Record<string, unknown> | undefined) {
-  return async ({ event }: { event: { type: string; properties: any } }) => {
+  return async ({ event }: Parameters<NonNullable<Awaited<ReturnType<Plugin>>["event"]>>[0]) => {
     switch (event.type) {
       case "session.created":
         return handleSessionCreated(input, event)

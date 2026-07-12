@@ -273,10 +273,11 @@ export async function openCreateTaskDialog(
   const fallback = api.state.vcs?.branch ?? api.state.vcs?.default_branch ?? "HEAD"
   const branches = listed.length > 0 ? listed : [fallback]
   const models = collectModels(api)
+  const configuredScope = store.configuredScopes[0]
   const state: FormState = {
     title: "",
     description: "",
-    scope: { values: store.configuredScopes.length === 1 ? [store.configuredScopes[0]!] : [] },
+    scope: { values: store.configuredScopes.length === 1 && configuredScope !== undefined ? [configuredScope] : [] },
     scopeFilter: "",
     modelIndex: 0,
     modelFilter: "",

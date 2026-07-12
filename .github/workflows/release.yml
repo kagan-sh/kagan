@@ -31,7 +31,7 @@ jobs:
         with:
           node-version: 24.10.0
       - run: bun ci
-      - run: bun run verify
+      - run: bun run check
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

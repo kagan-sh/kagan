@@ -26,16 +26,19 @@ see your changes. Local/file installs, including `plugin:install:prod`, intentio
 update checks; only a published bare/`@latest` npm install exercises that path. Run
 `bun run plugin:reset` to undo the install.
 
-## The one command that has to pass
+## Curated validation
 
 ```sh
 bun run verify
 ```
 
-This runs every built-in `verifyx` check (including unused-code, circular-deps, and duplicate-code)
-plus formatting, linting, type-checking, tests, build, and package validation — the exact same
-thing CI runs. The pre-commit hook runs `bun run verify -- --check` so it fails on dirty staged
-content instead of rewriting files mid-commit. If it passes, your change is ready. One helper:
+This runs the declared source checks: complexity, comment policy, and circular dependencies.
+Verifyx also runs the local `test` script automatically.
+
+Pre-commit and CI run `bun run check`. That full check-only gate runs every built-in `verifyx` check,
+including its automatic test step, then validates the package. It does not rewrite files.
+
+Use this helper when running tests directly:
 
 - `bun run test` — just the tests (use this, not a bare `bun test`).
 

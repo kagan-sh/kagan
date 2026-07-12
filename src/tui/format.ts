@@ -1,6 +1,6 @@
 import { helper, intakeReady, pendingFindingCount, sendBackStopThreshold } from "../domain/task/policy"
 import { getStatus, kagan } from "../domain/task/metadata"
-import type { HelperRole, ColumnType } from "../domain/task/types"
+import type { HelperRole } from "../domain/task/types"
 
 export function formatAge(updated: number, now: number): string {
   const diff = Math.max(0, now - updated)
