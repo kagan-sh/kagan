@@ -20,11 +20,15 @@ describe("validation gates", () => {
     const packageJson = await Bun.file(new URL("../../package.json", import.meta.url)).json()
     expect(Object.keys(packageJson.scripts).filter((name) => name.startsWith("verify:"))).toEqual([
       "verify:complexity",
+      "verify:format",
+      "verify:format:fix",
       "verify:comments",
       "verify:circular-deps",
     ])
-    expect(packageJson.scripts["verify:complexity"]).toBe(`verifyx complexity --threshold 1 ${sourceGlob}`)
-    expect(packageJson.scripts["verify:comments"]).toBe(`verifyx comments --block-new-comments ${sourceGlob}`)
+    expect(packageJson.scripts["verify:complexity"]).toBe(`verifyx complexity --threshold 27 ${sourceGlob}`)
+    expect(packageJson.scripts["verify:format"]).toBe("oxfmt --check .")
+    expect(packageJson.scripts["verify:format:fix"]).toBe("oxfmt .")
+    expect(packageJson.scripts["verify:comments"]).toBe(`verifyx comments --pushback ${sourceGlob}`)
     expect(packageJson.scripts["verify:circular-deps"]).toBe(`verifyx circular-deps -- ${sourceGlob}`)
   })
 

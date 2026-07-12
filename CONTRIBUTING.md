@@ -32,8 +32,8 @@ update checks; only a published bare/`@latest` npm install exercises that path. 
 bun run verify
 ```
 
-This runs the declared source checks: complexity, comment policy, and circular dependencies.
-Verifyx also runs the local `test` script automatically.
+This runs the declared source checks: complexity, comment policy, and circular dependencies, and
+auto-formats with oxfmt. Verifyx also runs the local `test` script automatically.
 
 Pre-commit and CI run `bun run check`. That full check-only gate runs every built-in `verifyx` check,
 including its automatic test step, then validates the package. It does not rewrite files.

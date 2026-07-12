@@ -9,7 +9,7 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
 - Use Bun 1.3 or newer; CI pins 1.3.14. Run `bun install`, then `bun run setup` once after cloning to
   enable the `.githooks/pre-commit` hook.
 - `bun run verify` is the agent-facing curated gate. It runs the declared source complexity, comment,
-  and circular-dependency checks, plus the local `test` script.
+  and circular-dependency checks, auto-formats with oxfmt, plus the local `test` script.
 - `bun run check` is the full check-only gate used by pre-commit and CI. It runs `verifyx all --check`,
   including its automatic test step, then package validation. CI checkout fetches full history so the
   new-comment check compares against the PR merge base.

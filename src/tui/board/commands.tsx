@@ -199,529 +199,432 @@ export function HelpOverlay(props: { api: TuiPluginApi; visible: () => boolean }
   )
 }
 
+type BoardActions = {
+  api: TuiPluginApi
+  store: BoardStore
+  setHelpOpen: (value: boolean | ((prev: boolean) => boolean)) => void
+  notifyError: (message: string) => void
+  notifyWarning: (message: string) => void
+  notifyErrorFrom: (error: unknown) => void
+}
+
+const openSession = async (ctx: BoardActions) => {
+  const id = ctx.store.selected()
+  if (!id) return
+  try {
+    await ctx.api.client.tui.selectSession({ sessionID: id }, { throwOnError: true })
+  } catch (error) {
+    ctx.notifyErrorFrom(error)
+  }
+}
+
+const closeBoard = (ctx: BoardActions) => {
+  ctx.setHelpOpen((open) => {
+    if (!open) ctx.api.route.navigate("home")
+    return false
+  })
+}
+
+const dismissBoard = (ctx: BoardActions) => {
+  ctx.setHelpOpen((open) => {
+    if (open) return false
+    if (ctx.store.filter() !== "") ctx.store.setFilter("")
+    return open
+  })
+}
+
+const promptFilter = (ctx: BoardActions) => {
+  ctx.api.ui.dialog.replace(() => (
+    <ctx.api.ui.DialogPrompt
+      title="Filter cards"
+      placeholder="Filter by title or #N"
+      value={ctx.store.filter()}
+      onConfirm={(value) => {
+        ctx.api.ui.dialog.clear()
+        ctx.store.setFilter(value)
+      }}
+      onCancel={() => ctx.api.ui.dialog.clear()}
+    />
+  ))
+}
+
+const promptDelete = (ctx: BoardActions) => {
+  const id = ctx.store.selected()
+  if (!id) return
+  const session = ctx.store.selectedSession()
+  const label = session?.title || session?.slug || id
+  ctx.api.ui.dialog.replace(() => (
+    <ctx.api.ui.DialogConfirm
+      title="Delete session"
+      message={`Permanently delete "${label}"? This cannot be undone.`}
+      onConfirm={async () => {
+        ctx.api.ui.dialog.clear()
+        await ctx.store.deleteSelected()
+      }}
+      onCancel={() => ctx.api.ui.dialog.clear()}
+    />
+  ))
+}
+
+const finalizeApprove = async (ctx: BoardActions, session: BoardSession, mergeMessage?: string) => {
+  try {
+    await approveSession(ctx.api, session.id, session)
+    await ctx.store.refresh()
+    await ctx.store.moveTo("done")
+    ctx.store.notify({
+      variant: "success",
+      title: "Kagan",
+      message: mergeMessage ? `Task approved — ${mergeMessage}` : "Task approved",
+    })
+  } catch (error) {
+    ctx.notifyErrorFrom(error)
+  }
+}
+
+const runMerge = async (ctx: BoardActions, session: BoardSession, targetBranch: string) => {
+  const result = await mergeTask(ctx.api, session, targetBranch, ctx.store.squashMerge)
+  if (!result.ok) {
+    ctx.notifyError(result.message)
+    return
+  }
+  await finalizeApprove(ctx, session, result.message)
+}
+
+const promptAnotherBranch = async (ctx: BoardActions, session: BoardSession) => {
+  const runner = bunGitRunner()
+  const worktree = kagan(session.metadata).worktree
+  const taskBranch = worktree ? await currentBranch(runner, worktree) : undefined
+  const branches = (await listLocalBranches(runner, ctx.api.state.path.worktree)).filter(
+    (branch) => branch !== taskBranch,
+  )
+  if (branches.length === 0) {
+    ctx.notifyWarning("No other local branches to merge into")
+    return
+  }
+  ctx.api.ui.dialog.replace(() => (
+    <ctx.api.ui.DialogSelect<string>
+      title="Merge into which branch?"
+      options={branches.map((branch) => ({ title: branch, value: branch }))}
+      onSelect={(option) => {
+        ctx.api.ui.dialog.clear()
+        void runMerge(ctx, session, option.value)
+      }}
+    />
+  ))
+}
+
+const promptMerge = async (ctx: BoardActions, session: BoardSession) => {
+  const runner = bunGitRunner()
+  const view = kagan(session.metadata)
+  const freshness = await baseBranchFreshness(runner, view.worktree, view.baseBranch)
+  openMergeDialog(ctx.api, ctx.store, session, freshness, {
+    runMerge: (target, branch) => runMerge(ctx, target, branch),
+    promptAnotherBranch: (target) => promptAnotherBranch(ctx, target),
+    finalizeApprove: (target, message) => finalizeApprove(ctx, target, message),
+  })
+}
+
+const afterTriage = async (ctx: BoardActions, session: BoardSession) => {
+  const reason = approveDenyReason(session.metadata)
+  if (reason) {
+    ctx.notifyWarning(reason)
+    return
+  }
+  await promptMerge(ctx, session)
+}
+
+const approve = (ctx: BoardActions) => {
+  const session = ctx.store.selectedSession()
+  if (!session) return
+  if (session.kaganStatus !== "review") {
+    ctx.notifyWarning("Approve only applies to tasks in review")
+    return
+  }
+  openFindingsReviewDialog(ctx.api, ctx.store, session, ctx.store.checkCommand, {
+    onApprove: (approvedSession) => afterTriage(ctx, approvedSession),
+    onSendBack: () => void sendBackTask(ctx),
+  })
+}
+
+const doSendBack = async (ctx: BoardActions, session: BoardSession) => {
+  try {
+    await sendBack(ctx.api, session)
+    await ctx.store.refresh()
+    ctx.store.notify({ variant: "success", title: "Kagan", message: "Sent back for another iteration" })
+  } catch (error) {
+    ctx.notifyErrorFrom(error)
+  }
+}
+
+type SendBackChoice = "send_back" | "take_over" | "leave"
+
+const sendBackTask = async (ctx: BoardActions) => {
+  const session = ctx.store.selectedSession()
+  if (!session) return
+  if (session.kaganStatus !== "review") {
+    ctx.notifyWarning("Send back only applies to tasks in review")
+    return
+  }
+  const reason = ctx.store.moveDenyReason("in_progress", session)
+  if (reason) {
+    ctx.notifyWarning(reason)
+    return
+  }
+  const generation = kagan(session.metadata).generation
+  if (generation < ctx.store.sendBackStopThreshold) {
+    await doSendBack(ctx, session)
+    return
+  }
+  ctx.api.ui.dialog.replace(() => (
+    <ctx.api.ui.DialogSelect<SendBackChoice>
+      title={`This task has already been sent back ${generation} times. Keep iterating?`}
+      options={[
+        { title: `Send back again (iteration ${generation + 1})`, value: "send_back" },
+        { title: "Take it over yourself", value: "take_over" },
+        { title: "Leave it in Review", value: "leave" },
+      ]}
+      onSelect={(option) => {
+        ctx.api.ui.dialog.clear()
+        if (option.value === "send_back") {
+          void doSendBack(ctx, session)
+        } else if (option.value === "take_over") {
+          void ctx.api.client.tui
+            .selectSession({ sessionID: session.id }, { throwOnError: true })
+            .catch(ctx.notifyErrorFrom)
+        }
+      }}
+    />
+  ))
+}
+
+const retryHelperTask = async (ctx: BoardActions) => {
+  const session = ctx.store.selectedSession()
+  if (!session) return
+  const status = session.kaganStatus
+  if (!canRestartHelper(status, session.metadata)) {
+    ctx.notifyWarning("Nothing to restart")
+    return
+  }
+  try {
+    await retryHelper(ctx.api, session.id, session, status)
+    await ctx.store.refresh()
+    ctx.store.notify({
+      variant: "success",
+      title: "Kagan",
+      message: status === "backlog" ? "Restarting intake" : "Restarting review",
+    })
+  } catch (error) {
+    ctx.notifyErrorFrom(error)
+  }
+}
+
+const promptIntakeDecision = (ctx: BoardActions, session: BoardSession, index = 0) => {
+  const pending = pendingRequiredIntakeDecisions(session.metadata)
+  const decision = pending[index]
+  if (!decision) {
+    void moveNextWithGates(ctx)
+    return
+  }
+
+  const commitResolution = async (resolution: "approved" | "overridden", answer?: string) => {
+    ctx.api.ui.dialog.clear()
+    try {
+      await resolveSessionIntakeDecision(ctx.api, session.id, session, decision.id, resolution, answer)
+      await ctx.store.refresh()
+      const refreshed = ctx.store.sessions().find((item) => item.id === session.id)
+      if (!refreshed) return
+      if (index + 1 < pending.length) {
+        promptIntakeDecision(ctx, refreshed, index + 1)
+        return
+      }
+      await moveNextWithGates(ctx)
+    } catch (error) {
+      ctx.notifyErrorFrom(error)
+    }
+  }
+
+  ctx.api.ui.dialog.replace(() => (
+    <ctx.api.ui.DialogSelect<"approved" | "overridden">
+      title={`Intake decision (${index + 1}/${pending.length})`}
+      options={[
+        { title: "Approve assumption", value: "approved", description: decision.assumption },
+        { title: "Reject & answer", value: "overridden", description: decision.question },
+      ]}
+      onSelect={(option) => {
+        if (option.value === "overridden") {
+          ctx.api.ui.dialog.replace(() => (
+            <ctx.api.ui.DialogPrompt
+              title="Your answer"
+              placeholder="Override the assumption (required)"
+              onConfirm={async (answer) => {
+                if (!isSubstantive(answer)) {
+                  ctx.notifyWarning("Add a substantive answer to override this assumption")
+                  return
+                }
+                await commitResolution("overridden", answer)
+              }}
+              onCancel={() => ctx.api.ui.dialog.clear()}
+            />
+          ))
+          return
+        }
+        void commitResolution("approved")
+      }}
+    />
+  ))
+}
+
+const taskDetailsDiffs = async (metadata: Record<string, unknown> | undefined): Promise<Array<SnapshotFileDiff>> => {
+  const worktree = kagan(metadata).worktree
+  if (!worktree) return []
+  try {
+    return await worktreeDiffs(bunGitRunner(), worktree, kagan(metadata).baseBranch ?? "HEAD")
+  } catch {
+    return []
+  }
+}
+
+const viewDetails = async (ctx: BoardActions, session: BoardSession) => {
+  const details = buildTaskDetails(session.metadata ?? {}, await taskDetailsDiffs(session.metadata), session.title)
+  const title = details.taskNumber !== undefined ? `#${details.taskNumber} ${session.title}` : session.title
+  openTaskDetailsView(ctx.api, details, title)
+}
+
+const archiveSelected = async (ctx: BoardActions) => {
+  const session = ctx.store.selectedSession()
+  if (!session) return
+  try {
+    await archiveSession(ctx.api, session.id)
+    await ctx.store.refresh()
+    ctx.store.notify({ variant: "success", title: "Kagan", message: "Archived — still available in the session list" })
+  } catch (error) {
+    ctx.notifyErrorFrom(error)
+  }
+}
+
+const startBacklogTask = (ctx: BoardActions, before: BoardSession) => {
+  const mode = kagan(before.metadata).intake?.mode
+  if (!mode || mode.recommended === "autonomous") {
+    void ctx.store.moveNext()
+    return
+  }
+  const rationale = formatModeRationale(before.metadata, ctx.store.checkCommand) ?? mode.rationale
+  ctx.api.ui.dialog.replace(() => (
+    <ctx.api.ui.DialogConfirm
+      title="This one looks better driven by you"
+      message={`${rationale} Start the agent on it anyway?`}
+      onConfirm={async () => {
+        ctx.api.ui.dialog.clear()
+        await ctx.store.moveNext()
+      }}
+      onCancel={() => ctx.api.ui.dialog.clear()}
+    />
+  ))
+}
+
+const moveNextWithGates = async (ctx: BoardActions) => {
+  const before = ctx.store.selectedSession()
+  if (before && before.kaganStatus === "backlog" && !intakeReady(before.metadata)) {
+    if (pendingRequiredIntakeDecisions(before.metadata).length > 0) {
+      promptIntakeDecision(ctx, before)
+    } else {
+      ctx.notifyWarning("Intake is still being prepared")
+    }
+    return
+  }
+  if (before && before.kaganStatus === "review") {
+    approve(ctx)
+    return
+  }
+  if (before && before.kaganStatus === "backlog") {
+    startBacklogTask(ctx, before)
+    return
+  }
+  await ctx.store.moveNext()
+}
+
+const movePrevWithGates = async (ctx: BoardActions) => {
+  const before = ctx.store.selectedSession()
+  if (before && before.kaganStatus === "review") {
+    await sendBackTask(ctx)
+    return
+  }
+  await ctx.store.movePrevious()
+}
+
+const runMenuAction = async (ctx: BoardActions, action: MenuAction, session: BoardSession) => {
+  if (action === "view") return viewDetails(ctx, session)
+  if (action === "open") return openSession(ctx)
+  if (action === "advance") return moveNextWithGates(ctx)
+  if (action === "send_back") return sendBackTask(ctx)
+  if (action === "approve") return approve(ctx)
+  if (action === "retry") return retryHelperTask(ctx)
+  if (action === "archive") return archiveSelected(ctx)
+  promptDelete(ctx)
+}
+
+const openMenu = (ctx: BoardActions) => {
+  const session = ctx.store.selectedSession()
+  if (!session) return
+  ctx.api.ui.dialog.replace(() => (
+    <ctx.api.ui.DialogSelect<MenuAction>
+      title="Task actions"
+      options={menuOptions(session)}
+      onSelect={(option) => {
+        ctx.api.ui.dialog.clear()
+        void runMenuAction(ctx, option.value, session)
+      }}
+    />
+  ))
+}
+
 export function createBoardCommands(
   api: TuiPluginApi,
   store: BoardStore,
   setHelpOpen: (value: boolean | ((prev: boolean) => boolean)) => void,
 ) {
-  const notifyError = (message: string) => {
-    store.notify({ variant: "error", title: "Kagan", message })
-  }
-  const notifyWarning = (message: string) => {
-    store.notify({ variant: "warning", title: "Kagan", message })
-  }
-  const notifyErrorFrom = (error: unknown) => {
-    notifyError(error instanceof Error ? error.message : String(error))
-  }
-
-  const openSession = async () => {
-    const id = store.selected()
-    if (!id) return
-    try {
-      await api.client.tui.selectSession({ sessionID: id }, { throwOnError: true })
-    } catch (error) {
-      notifyErrorFrom(error)
-    }
-  }
-
-  const closeBoard = () => {
-    setHelpOpen((open) => {
-      if (!open) api.route.navigate("home")
-      return false
-    })
-  }
-
-  const dismissBoard = () => {
-    setHelpOpen((open) => {
-      if (open) return false
-      if (store.filter() !== "") store.setFilter("")
-      return open
-    })
-  }
-
-  const promptCreate = () => {
-    void openCreateTaskDialog(api, store)
-  }
-
-  const promptFilter = () => {
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogPrompt
-        title="Filter cards"
-        placeholder="Filter by title or #N"
-        value={store.filter()}
-        onConfirm={(value) => {
-          api.ui.dialog.clear()
-          store.setFilter(value)
-        }}
-        onCancel={() => api.ui.dialog.clear()}
-      />
-    ))
-  }
-
-  const showHelp = () => {
-    setHelpOpen((open) => !open)
-  }
-
-  const promptDelete = () => {
-    const id = store.selected()
-    if (!id) return
-    const session = store.selectedSession()
-    const label = session?.title || session?.slug || id
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogConfirm
-        title="Delete session"
-        message={`Permanently delete "${label}"? This cannot be undone.`}
-        onConfirm={async () => {
-          api.ui.dialog.clear()
-          await store.deleteSelected()
-        }}
-        onCancel={() => api.ui.dialog.clear()}
-      />
-    ))
-  }
-
-  const finalizeApprove = async (session: BoardSession, mergeMessage?: string) => {
-    try {
-      await approveSession(api, session.id, session)
-      await store.refresh()
-      await store.moveTo("done")
+  const ctx: BoardActions = {
+    api,
+    store,
+    setHelpOpen,
+    notifyError: (message) => store.notify({ variant: "error", title: "Kagan", message }),
+    notifyWarning: (message) => store.notify({ variant: "warning", title: "Kagan", message }),
+    notifyErrorFrom: (error) =>
       store.notify({
-        variant: "success",
+        variant: "error",
         title: "Kagan",
-        message: mergeMessage ? `Task approved — ${mergeMessage}` : "Task approved",
-      })
-    } catch (error) {
-      notifyErrorFrom(error)
-    }
+        message: error instanceof Error ? error.message : String(error),
+      }),
   }
-
-  const runMerge = async (session: BoardSession, targetBranch: string) => {
-    const result = await mergeTask(api, session, targetBranch, store.squashMerge)
-    if (!result.ok) {
-      notifyError(result.message)
-      return
-    }
-    await finalizeApprove(session, result.message)
-  }
-
-  const promptAnotherBranch = async (session: BoardSession) => {
-    const runner = bunGitRunner()
-    const worktree = kagan(session.metadata).worktree
-    const taskBranch = worktree ? await currentBranch(runner, worktree) : undefined
-    const branches = (await listLocalBranches(runner, api.state.path.worktree)).filter(
-      (branch) => branch !== taskBranch,
-    )
-    if (branches.length === 0) {
-      notifyWarning("No other local branches to merge into")
-      return
-    }
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogSelect<string>
-        title="Merge into which branch?"
-        options={branches.map((branch) => ({ title: branch, value: branch }))}
-        onSelect={(option) => {
-          api.ui.dialog.clear()
-          void runMerge(session, option.value)
-        }}
-      />
-    ))
-  }
-
-  const promptMerge = async (session: BoardSession) => {
-    const runner = bunGitRunner()
-    const view = kagan(session.metadata)
-    const freshness = await baseBranchFreshness(runner, view.worktree, view.baseBranch)
-    openMergeDialog(api, store, session, freshness, {
-      runMerge,
-      promptAnotherBranch,
-      finalizeApprove,
-    })
-  }
-
-  const afterTriage = async (session: BoardSession) => {
-    const reason = approveDenyReason(session.metadata)
-    if (reason) {
-      notifyWarning(reason)
-      return
-    }
-    await promptMerge(session)
-  }
-
-  const approve = async () => {
-    const session = store.selectedSession()
-    if (!session) return
-    if (session.kaganStatus !== "review") {
-      notifyWarning("Approve only applies to tasks in review")
-      return
-    }
-    openFindingsReviewDialog(api, store, session, store.checkCommand, {
-      onApprove: (approvedSession) => afterTriage(approvedSession),
-      onSendBack: () => void sendBackTask(),
-    })
-  }
-
-  const doSendBack = async (session: BoardSession) => {
-    try {
-      await sendBack(api, session)
-      await store.refresh()
-      store.notify({ variant: "success", title: "Kagan", message: "Sent back for another iteration" })
-    } catch (error) {
-      notifyErrorFrom(error)
-    }
-  }
-
-  type SendBackChoice = "send_back" | "take_over" | "leave"
-
-  const sendBackTask = async () => {
-    const session = store.selectedSession()
-    if (!session) return
-    if (session.kaganStatus !== "review") {
-      notifyWarning("Send back only applies to tasks in review")
-      return
-    }
-    const reason = store.moveDenyReason("in_progress", session)
-    if (reason) {
-      notifyWarning(reason)
-      return
-    }
-    const generation = kagan(session.metadata).generation
-    if (generation < store.sendBackStopThreshold) {
-      await doSendBack(session)
-      return
-    }
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogSelect<SendBackChoice>
-        title={`This task has already been sent back ${generation} times. Keep iterating?`}
-        options={[
-          { title: `Send back again (iteration ${generation + 1})`, value: "send_back" },
-          { title: "Take it over yourself", value: "take_over" },
-          { title: "Leave it in Review", value: "leave" },
-        ]}
-        onSelect={(option) => {
-          api.ui.dialog.clear()
-          if (option.value === "send_back") {
-            void doSendBack(session)
-          } else if (option.value === "take_over") {
-            void api.client.tui.selectSession({ sessionID: session.id }, { throwOnError: true }).catch(notifyErrorFrom)
-          }
-        }}
-      />
-    ))
-  }
-
-  const retryHelperTask = async () => {
-    const session = store.selectedSession()
-    if (!session) return
-    const status = session.kaganStatus
-    if (!canRestartHelper(status, session.metadata)) {
-      notifyWarning("Nothing to restart")
-      return
-    }
-    try {
-      await retryHelper(api, session.id, session, status)
-      await store.refresh()
-      store.notify({
-        variant: "success",
-        title: "Kagan",
-        message: status === "backlog" ? "Restarting intake" : "Restarting review",
-      })
-    } catch (error) {
-      notifyErrorFrom(error)
-    }
-  }
-
-  const promptIntakeDecision = (session: BoardSession, index = 0) => {
-    const pending = pendingRequiredIntakeDecisions(session.metadata)
-    const decision = pending[index]
-    if (!decision) {
-      void moveNextWithGates()
-      return
-    }
-
-    const commitResolution = async (resolution: "approved" | "overridden", answer?: string) => {
-      api.ui.dialog.clear()
-      try {
-        await resolveSessionIntakeDecision(api, session.id, session, decision.id, resolution, answer)
-        await store.refresh()
-        const refreshed = store.sessions().find((item) => item.id === session.id)
-        if (!refreshed) return
-        if (index + 1 < pending.length) {
-          promptIntakeDecision(refreshed, index + 1)
-          return
-        }
-        await moveNextWithGates()
-      } catch (error) {
-        notifyErrorFrom(error)
-      }
-    }
-
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogSelect<"approved" | "overridden">
-        title={`Intake decision (${index + 1}/${pending.length})`}
-        options={[
-          { title: "Approve assumption", value: "approved", description: decision.assumption },
-          { title: "Reject & answer", value: "overridden", description: decision.question },
-        ]}
-        onSelect={(option) => {
-          if (option.value === "overridden") {
-            api.ui.dialog.replace(() => (
-              <api.ui.DialogPrompt
-                title="Your answer"
-                placeholder="Override the assumption (required)"
-                onConfirm={async (answer) => {
-                  if (!isSubstantive(answer)) {
-                    notifyWarning("Add a substantive answer to override this assumption")
-                    return
-                  }
-                  await commitResolution("overridden", answer)
-                }}
-                onCancel={() => api.ui.dialog.clear()}
-              />
-            ))
-            return
-          }
-          void commitResolution("approved")
-        }}
-      />
-    ))
-  }
-
-  const taskDetailsDiffs = async (metadata: Record<string, unknown> | undefined): Promise<Array<SnapshotFileDiff>> => {
-    const worktree = kagan(metadata).worktree
-    if (!worktree) return []
-    try {
-      return await worktreeDiffs(bunGitRunner(), worktree, kagan(metadata).baseBranch ?? "HEAD")
-    } catch {
-      return []
-    }
-  }
-
-  const viewDetails = async (session: BoardSession) => {
-    const details = buildTaskDetails(session.metadata ?? {}, await taskDetailsDiffs(session.metadata), session.title)
-    const title = details.taskNumber !== undefined ? `#${details.taskNumber} ${session.title}` : session.title
-    openTaskDetailsView(api, details, title)
-  }
-
-  const archiveSelected = async () => {
-    const session = store.selectedSession()
-    if (!session) return
-    try {
-      await archiveSession(api, session.id)
-      await store.refresh()
-      store.notify({ variant: "success", title: "Kagan", message: "Archived — still available in the session list" })
-    } catch (error) {
-      notifyErrorFrom(error)
-    }
-  }
-
-  const startBacklogTask = (before: BoardSession) => {
-    const mode = kagan(before.metadata).intake?.mode
-    if (!mode || mode.recommended === "autonomous") {
-      void store.moveNext()
-      return
-    }
-    const rationale = formatModeRationale(before.metadata, store.checkCommand) ?? mode.rationale
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogConfirm
-        title="This one looks better driven by you"
-        message={`${rationale} Start the agent on it anyway?`}
-        onConfirm={async () => {
-          api.ui.dialog.clear()
-          await store.moveNext()
-        }}
-        onCancel={() => api.ui.dialog.clear()}
-      />
-    ))
-  }
-
-  const moveNextWithGates = async () => {
-    const before = store.selectedSession()
-    if (before && before.kaganStatus === "backlog" && !intakeReady(before.metadata)) {
-      if (pendingRequiredIntakeDecisions(before.metadata).length > 0) {
-        promptIntakeDecision(before)
-      } else {
-        notifyWarning("Intake is still being prepared")
-      }
-      return
-    }
-    if (before && before.kaganStatus === "review") {
-      await approve()
-      return
-    }
-    if (before && before.kaganStatus === "backlog") {
-      startBacklogTask(before)
-      return
-    }
-    await store.moveNext()
-  }
-
-  const movePrevWithGates = async () => {
-    const before = store.selectedSession()
-    if (before && before.kaganStatus === "review") {
-      await sendBackTask()
-      return
-    }
-    await store.movePrevious()
-  }
-
-  const runMenuAction = async (action: MenuAction, session: BoardSession) => {
-    if (action === "view") return viewDetails(session)
-    if (action === "open") return openSession()
-    if (action === "advance") return moveNextWithGates()
-    if (action === "send_back") return sendBackTask()
-    if (action === "approve") return approve()
-    if (action === "retry") return retryHelperTask()
-    if (action === "archive") return archiveSelected()
-    promptDelete()
-  }
-
-  const openMenu = () => {
-    const session = store.selectedSession()
-    if (!session) return
-    api.ui.dialog.replace(() => (
-      <api.ui.DialogSelect<MenuAction>
-        title="Task actions"
-        options={menuOptions(session)}
-        onSelect={(option) => {
-          api.ui.dialog.clear()
-          void runMenuAction(option.value, session)
-        }}
-      />
-    ))
-  }
+  const command = (name: string, title: string, run: () => void | Promise<void>) => ({
+    name,
+    title,
+    category: "Kagan",
+    run,
+  })
 
   return [
-    {
-      name: "kagan.close",
-      title: "Close Kagan",
-      category: "Kagan",
-      run: closeBoard,
-    },
-    {
-      name: "kagan.down",
-      title: "Next card",
-      category: "Kagan",
-      run: store.selectNext,
-    },
-    {
-      name: "kagan.up",
-      title: "Previous card",
-      category: "Kagan",
-      run: store.selectPrevious,
-    },
-    {
-      name: "kagan.next_column",
-      title: "Next column",
-      category: "Kagan",
-      run: store.selectNextColumn,
-    },
-    {
-      name: "kagan.prev_column",
-      title: "Previous column",
-      category: "Kagan",
-      run: store.selectPrevColumn,
-    },
-    {
-      name: "kagan.reorder_down",
-      title: "Move card down in column",
-      category: "Kagan",
-      run: () => store.reorder(1),
-    },
-    {
-      name: "kagan.reorder_up",
-      title: "Move card up in column",
-      category: "Kagan",
-      run: () => store.reorder(-1),
-    },
-    {
-      name: "kagan.first",
-      title: "Select first row in column",
-      category: "Kagan",
-      run: store.selectFirst,
-    },
-    {
-      name: "kagan.last",
-      title: "Select last row in column",
-      category: "Kagan",
-      run: store.selectLast,
-    },
-    {
-      name: "kagan.move_next",
-      title: "Move card to next column",
-      category: "Kagan",
-      run: moveNextWithGates,
-    },
-    {
-      name: "kagan.move_prev",
-      title: "Move card to previous column",
-      category: "Kagan",
-      run: movePrevWithGates,
-    },
-    {
-      name: "kagan.new",
-      title: "New task",
-      category: "Kagan",
-      run: promptCreate,
-    },
-    {
-      name: "kagan.open_session",
-      title: "Open selected session",
-      category: "Kagan",
-      run: openSession,
-    },
-    {
-      name: "kagan.menu",
-      title: "Open the card action menu",
-      category: "Kagan",
-      run: openMenu,
-    },
-    {
-      name: "kagan.delete",
-      title: "Delete selected session",
-      category: "Kagan",
-      run: promptDelete,
-    },
-    {
-      name: "kagan.filter",
-      title: "Filter cards",
-      category: "Kagan",
-      run: promptFilter,
-    },
-    {
-      name: "kagan.dismiss",
-      title: "Dismiss help or clear filter",
-      category: "Kagan",
-      run: dismissBoard,
-    },
-    {
-      name: "kagan.approve",
-      title: "Approve task",
-      category: "Kagan",
-      run: approve,
-    },
-    {
-      name: "kagan.send_back",
-      title: "Send back for another iteration",
-      category: "Kagan",
-      run: sendBackTask,
-    },
-    {
-      name: "kagan.retry",
-      title: "Restart intake or review",
-      category: "Kagan",
-      run: retryHelperTask,
-    },
-    {
-      name: "kagan.settings",
-      title: "Open settings",
-      category: "Kagan",
-      run: () => api.route.navigate(SETTINGS_ROUTE),
-    },
-    {
-      name: "kagan.help",
-      title: "Show help",
-      category: "Kagan",
-      run: showHelp,
-    },
+    command("kagan.close", "Close Kagan", () => closeBoard(ctx)),
+    command("kagan.down", "Next card", store.selectNext),
+    command("kagan.up", "Previous card", store.selectPrevious),
+    command("kagan.next_column", "Next column", store.selectNextColumn),
+    command("kagan.prev_column", "Previous column", store.selectPrevColumn),
+    command("kagan.reorder_down", "Move card down in column", () => store.reorder(1)),
+    command("kagan.reorder_up", "Move card up in column", () => store.reorder(-1)),
+    command("kagan.first", "Select first row in column", store.selectFirst),
+    command("kagan.last", "Select last row in column", store.selectLast),
+    command("kagan.move_next", "Move card to next column", () => moveNextWithGates(ctx)),
+    command("kagan.move_prev", "Move card to previous column", () => movePrevWithGates(ctx)),
+    command("kagan.new", "New task", () => void openCreateTaskDialog(api, store)),
+    command("kagan.open_session", "Open selected session", () => openSession(ctx)),
+    command("kagan.menu", "Open the card action menu", () => openMenu(ctx)),
+    command("kagan.delete", "Delete selected session", () => promptDelete(ctx)),
+    command("kagan.filter", "Filter cards", () => promptFilter(ctx)),
+    command("kagan.dismiss", "Dismiss help or clear filter", () => dismissBoard(ctx)),
+    command("kagan.approve", "Approve task", () => approve(ctx)),
+    command("kagan.send_back", "Send back for another iteration", () => sendBackTask(ctx)),
+    command("kagan.retry", "Restart intake or review", () => retryHelperTask(ctx)),
+    command("kagan.settings", "Open settings", () => api.route.navigate(SETTINGS_ROUTE)),
+    command("kagan.help", "Show help", () => setHelpOpen((open) => !open)),
   ]
 }

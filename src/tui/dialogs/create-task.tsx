@@ -1,15 +1,16 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { TextareaRenderable } from "@opentui/core"
-import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { createSignal, onMount, Show } from "solid-js"
 import { createTask } from "../tasks"
 import { getOrder, setOrder } from "../session/preferences"
 import { bunGitRunner, listLocalBranches } from "../../git/runner"
-import type { ModelRef } from "../../domain/task/types"
-import type { TaskScope } from "../../domain/task/commands"
 import type { createBoardStore } from "../board/store"
 import { useKeyIntercept } from "../renderer"
-import { DialogFilter, DialogFrame } from "./chrome"
+import { DialogFrame } from "./chrome"
+import type { FormState, ModelChoice } from "./create-task-types"
+import { openScopePicker } from "./create-task-scope"
+import { openFilterableSelectPicker } from "./create-task-select"
 
 type BoardStore = ReturnType<typeof createBoardStore>
 
@@ -18,20 +19,6 @@ type CreateTaskDependencies = {
   getOrder: typeof getOrder
   setOrder: typeof setOrder
   listBranches: (api: TuiPluginApi) => Promise<string[]>
-}
-
-type ModelChoice = { label: string; model?: ModelRef }
-
-type FormState = {
-  title: string
-  description: string
-  scope: TaskScope
-  scopeFilter: string
-  modelIndex: number
-  modelFilter: string
-  branchIndex: number
-  branchFilter: string
-  focusIndex: number
 }
 
 function PickerRow(props: { api: TuiPluginApi; label: string; value: string; focused: boolean }) {
@@ -47,11 +34,11 @@ function PickerRow(props: { api: TuiPluginApi; label: string; value: string; foc
   )
 }
 
-function hasScope(scope: TaskScope): boolean {
+function hasScope(scope: FormState["scope"]): boolean {
   return scope.values.length > 0 || !!scope.custom
 }
 
-function scopeLabel(scope: TaskScope): string {
+function scopeLabel(scope: FormState["scope"]): string {
   const parts = [...scope.values]
   if (scope.custom) parts.push(scope.custom)
   return parts.length > 0 ? parts.join(", ") : "Not set"
@@ -128,8 +115,7 @@ function CreateTaskForm(props: {
       openScopePicker(props.api, props.store.configuredScopes, state, props.reopen)
       return
     }
-    const model = focusIndex() === 3
-    if (model) {
+    if (focusIndex() === 3) {
       openFilterableSelectPicker(props.api, {
         title: "Model",
         filterPlaceholder: "Filter models",
@@ -299,215 +285,4 @@ export async function openCreateTaskDialog(
     ))
   }
   showForm()
-}
-
-function openCustomScopePrompt(api: TuiPluginApi, state: FormState, reopenScope: () => void) {
-  api.ui.dialog.replace(() => (
-    <api.ui.DialogPrompt
-      title="Custom scope"
-      placeholder="docs, infra, shared config..."
-      value={state.scope.custom ?? ""}
-      onConfirm={(value) => {
-        const custom = value.trim()
-        state.scope = { ...state.scope, ...(custom ? { custom } : { custom: undefined }) }
-        reopenScope()
-      }}
-      onCancel={reopenScope}
-    />
-  ))
-}
-
-function ScopePicker(props: {
-  api: TuiPluginApi
-  scopes: string[]
-  state: FormState
-  reopenTask: () => void
-  reopenScope: () => void
-}) {
-  const theme = () => props.api.theme.current
-  const [filter, setFilter] = createSignal(props.state.scopeFilter)
-  const [index, setIndex] = createSignal(0)
-  const options = createMemo(() => {
-    const query = filter().trim().toLowerCase()
-    const filtered = query ? props.scopes.filter((scope) => scope.toLowerCase().includes(query)) : props.scopes
-    return [...filtered, "custom..."]
-  })
-  const close = () => {
-    props.state.scopeFilter = filter()
-    props.reopenTask()
-  }
-  const toggle = (scope: string) => {
-    const values = props.state.scope.values.includes(scope)
-      ? props.state.scope.values.filter((value) => value !== scope)
-      : [...props.state.scope.values, scope]
-    props.state.scope = { ...props.state.scope, values }
-  }
-
-  onMount(() => props.api.ui.dialog.setSize("medium"))
-
-  useKeyIntercept(props.api, (key) => {
-    if (key.name === "escape") {
-      close()
-      return true
-    }
-    if (key.name === "down") {
-      setIndex((value) => Math.min(value + 1, options().length - 1))
-      return true
-    }
-    if (key.name === "up") {
-      setIndex((value) => Math.max(value - 1, 0))
-      return true
-    }
-    if (key.name === " " || key.name === "space") {
-      const scope = options()[index()]
-      if (!scope) return false
-      if (scope === "custom...") openCustomScopePrompt(props.api, props.state, props.reopenScope)
-      else toggle(scope)
-      return true
-    }
-    if (key.name === "return") {
-      close()
-      return true
-    }
-    return false
-  })
-
-  return (
-    <DialogFrame api={props.api} title="Scope">
-      <DialogFilter api={props.api} value={filter()} onInput={setFilter} placeholder="Filter configured scopes" />
-      <box flexDirection="column">
-        <For each={options()}>
-          {(scope, i) => {
-            const selected = () => i() === index()
-            const checked = () => scope !== "custom..." && props.state.scope.values.includes(scope)
-            return (
-              <box backgroundColor={selected() ? theme().primary : undefined}>
-                <text fg={selected() ? theme().selectedListItemText : theme().text}>
-                  {scope === "custom..." ? "  " : checked() ? "✓ " : "  "}
-                  {scope}
-                </text>
-              </box>
-            )
-          }}
-        </For>
-        <Show when={props.state.scope.custom}>
-          <text fg={theme().textMuted}>custom: {props.state.scope.custom}</text>
-        </Show>
-      </box>
-      <box paddingBottom={1} flexDirection="row" gap={2}>
-        <text fg={theme().text}>
-          space <span style={{ fg: theme().textMuted }}>toggle/custom</span>
-        </text>
-        <text fg={theme().text}>
-          enter <span style={{ fg: theme().textMuted }}>apply</span>
-        </text>
-      </box>
-    </DialogFrame>
-  )
-}
-
-function openScopePicker(api: TuiPluginApi, scopes: string[], state: FormState, reopenTask: () => void) {
-  if (scopes.length === 0) {
-    openCustomScopePrompt(api, state, reopenTask)
-    return
-  }
-  const reopenScope = () => openScopePicker(api, scopes, state, reopenTask)
-  api.ui.dialog.replace(() => (
-    <ScopePicker api={api} scopes={scopes} state={state} reopenTask={reopenTask} reopenScope={reopenScope} />
-  ))
-}
-
-function FilterableSelectPicker(props: {
-  api: TuiPluginApi
-  title: string
-  filterPlaceholder: string
-  labels: string[]
-  selectedIndex: number
-  filter: string
-  onFilter: (value: string) => void
-  onSelect: (index: number) => void
-  reopen: () => void
-}) {
-  const theme = () => props.api.theme.current
-  const [filter, setFilter] = createSignal(props.filter)
-  const [listIndex, setListIndex] = createSignal(0)
-  const options = createMemo(() => {
-    const query = filter().trim().toLowerCase()
-    return props.labels
-      .map((label, index) => ({ label, index }))
-      .filter(({ label }) => !query || label.toLowerCase().includes(query))
-  })
-  createEffect(() => {
-    const last = Math.max(0, options().length - 1)
-    setListIndex((value) => Math.min(value, last))
-  })
-  const close = (index?: number) => {
-    props.onFilter(filter())
-    if (index !== undefined) props.onSelect(index)
-    props.reopen()
-  }
-
-  onMount(() => {
-    props.api.ui.dialog.setSize("medium")
-    const selected = options().findIndex((option) => option.index === props.selectedIndex)
-    if (selected >= 0) setListIndex(selected)
-  })
-
-  useKeyIntercept(props.api, (key) => {
-    if (key.name === "escape") {
-      close()
-      return true
-    }
-    if (key.name === "down") {
-      setListIndex((value) => Math.min(value + 1, Math.max(0, options().length - 1)))
-      return true
-    }
-    if (key.name === "up") {
-      setListIndex((value) => Math.max(value - 1, 0))
-      return true
-    }
-    if (key.name === "return") {
-      const option = options()[listIndex()]
-      if (option) close(option.index)
-      else close()
-      return true
-    }
-    return false
-  })
-
-  return (
-    <DialogFrame api={props.api} title={props.title}>
-      <DialogFilter api={props.api} value={filter()} onInput={setFilter} placeholder={props.filterPlaceholder} />
-      <box flexDirection="column">
-        <For each={options()}>
-          {(option, i) => (
-            <box backgroundColor={i() === listIndex() ? theme().primary : undefined}>
-              <text fg={i() === listIndex() ? theme().selectedListItemText : theme().text}>{option.label}</text>
-            </box>
-          )}
-        </For>
-      </box>
-      <box paddingBottom={1} flexDirection="row" gap={2}>
-        <text fg={theme().text}>
-          enter <span style={{ fg: theme().textMuted }}>select</span>
-        </text>
-      </box>
-    </DialogFrame>
-  )
-}
-
-function openFilterableSelectPicker(
-  api: TuiPluginApi,
-  props: {
-    title: string
-    filterPlaceholder: string
-    labels: string[]
-    selectedIndex: number
-    filter: string
-    onFilter: (value: string) => void
-    onSelect: (index: number) => void
-    reopen: () => void
-  },
-) {
-  api.ui.dialog.replace(() => <FilterableSelectPicker api={api} {...props} />)
 }

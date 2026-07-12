@@ -3,7 +3,7 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { mockSessionClient, mockTuiApi } from "../../fixtures/api"
 
 const realRunner = await import("../../../src/git/runner")
-import { getStatus, kagan } from "../../../src/domain/task/metadata"
+import { getStatus } from "../../../src/domain/task/metadata"
 
 const sequence: string[] = []
 let mergeResult = { ok: true, message: "Merged kagan/x" }

@@ -1,5 +1,5 @@
 import type { TuiPluginApi, TuiToast } from "@opencode-ai/plugin/tui"
-import { createMemo, createSignal } from "solid-js"
+import { type Accessor, type Setter, createMemo, createSignal } from "solid-js"
 import type { Event, SessionStatus } from "@opencode-ai/sdk/v2"
 import { listSessions, moveSession } from "../session/tasks"
 import {
@@ -168,6 +168,57 @@ function noticeDuration(toast: TuiToast): number {
   return toast.duration ?? (toast.variant === "error" ? 10000 : 5000)
 }
 
+const NOTICE_CAP = 3
+
+// context: OpenCode mounts <Toast/> only on home/session routes, so board feedback renders through this Notice overlay state rather than api.ui.toast.
+function createNotices() {
+  const [notices, setNotices] = createSignal<BoardNotice[]>([])
+  const noticeTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  let noticeSeq = 0
+
+  const clearNoticeTimer = (key: string) => {
+    const timer = noticeTimers.get(key)
+    if (timer) clearTimeout(timer)
+    noticeTimers.delete(key)
+  }
+
+  const dismissNotice = (key: string) => {
+    clearNoticeTimer(key)
+    setNotices((current) => current.filter((notice) => notice.key !== key))
+  }
+
+  const notify = (toast: TuiToast) => {
+    const key = `notice-${++noticeSeq}`
+    setNotices((current) => {
+      const next = [...current, { ...toast, key }]
+      while (next.length > NOTICE_CAP) {
+        const expired = next.shift()
+        if (expired) clearNoticeTimer(expired.key)
+      }
+      return next
+    })
+    noticeTimers.set(
+      key,
+      setTimeout(() => dismissNotice(key), noticeDuration(toast)),
+    )
+  }
+
+  const toastError = (message: string) => {
+    notify({ variant: "error", title: "Kagan", message })
+  }
+
+  const runWithToast = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await fn()
+    } catch (error) {
+      toastError(error instanceof Error ? error.message : String(error))
+      return undefined
+    }
+  }
+
+  return { notices, notify, toastError, runWithToast }
+}
+
 type HelperFailureNotice = {
   sessionID: string
   taskNumber?: number
@@ -251,6 +302,215 @@ function reconcileOrders(
   return result
 }
 
+type StoreState = {
+  api: TuiPluginApi
+  options?: Record<string, unknown>
+  sessions: Accessor<BoardSession[]>
+  setSessions: Setter<BoardSession[]>
+  selectedID: Accessor<string | undefined>
+  setSelectedID: Setter<string | undefined>
+  selectedColumn: Accessor<ColumnType>
+  setSelectedColumn: Setter<ColumnType>
+  filter: Accessor<string>
+  setFilterSignal: Setter<string>
+  orders: Accessor<Record<ColumnType, readonly string[]>>
+  setOrders: Setter<Record<ColumnType, readonly string[]>>
+  columns: Accessor<Record<ColumnType, BoardCard[]>>
+  notify: (toast: TuiToast) => void
+  toastError: (message: string) => void
+  runWithToast: <T>(fn: () => Promise<T>) => Promise<T | undefined>
+  refreshState: {
+    started: number
+    completed: number
+    helperFailuresSeen: Map<string, string>
+    awaitingInputSeen: Set<string>
+  }
+}
+
+function selectedSession(s: StoreState): BoardSession | undefined {
+  const id = s.selectedID()
+  if (!id) return undefined
+  return s.sessions().find((item) => item.id === id)
+}
+
+function select(s: StoreState, column: ColumnType, id: string | undefined) {
+  s.setSelectedColumn(column)
+  const nav = flatNavIDs(s.columns()[column])
+  const valid = id && nav.includes(id) ? id : nav[0]
+  s.setSelectedID(valid)
+}
+
+function selectStep(s: StoreState, direction: 1 | -1) {
+  const result = nextSessionID(s.columns(), s.selectedColumn(), s.selectedID(), direction)
+  if (!result) return
+  select(s, result.column, result.id)
+}
+
+function selectColumnStep(s: StoreState, direction: 1 | -1) {
+  const target = adjacentColumn(s.selectedColumn(), direction)
+  if (!target) return
+  s.setSelectedColumn(target)
+  const id = firstSessionID(s.columns(), target)
+  if (id) s.setSelectedID(id)
+}
+
+function selectEdge(s: StoreState, edge: "first" | "last") {
+  const nav = flatNavIDs(s.columns()[s.selectedColumn()])
+  const id = edge === "first" ? nav[0] : nav.at(-1)
+  if (id) select(s, s.selectedColumn(), id)
+}
+
+function reorder(s: StoreState, direction: 1 | -1) {
+  const session = selectedSession(s)
+  if (!session || session.parentID) return
+  const column = session.kaganStatus
+  const order = [...s.orders()[column]]
+  const index = order.indexOf(session.id)
+  const swapIndex = index + direction
+  if (index === -1 || swapIndex < 0 || swapIndex >= order.length) return
+  const neighbor = order[swapIndex]
+  const current = order[index]
+  if (neighbor === undefined || current === undefined) return
+  order[swapIndex] = current
+  order[index] = neighbor
+  setOrder(s.api, column, order)
+  s.setOrders((existing) => ({ ...existing, [column]: order }))
+}
+
+function moveDenyReason(s: StoreState, status: ColumnType, session: BoardSession): string | undefined {
+  const moveCtx = {
+    inProgressCount: countInProgressForMove(
+      s.sessions().map((item) => ({ id: item.id, parentID: item.parentID, status: item.kaganStatus })),
+      session.id,
+      session.kaganStatus,
+    ),
+    source: session.kaganStatus,
+    cap: inProgressCap(s.options),
+  }
+  return columnMoveDenyReason(status, session.metadata, moveCtx)
+}
+
+async function refresh(s: StoreState) {
+  const rs = s.refreshState
+  const generation = ++rs.started
+  const result = await s.runWithToast(async () => {
+    const list = await listSessions(s.api)
+    return list.map((session) => ({ ...session, kaganStatus: getStatus(session.metadata) }))
+  })
+  if (result === undefined) return
+  if (generation <= rs.completed) return
+  rs.completed = generation
+  s.setSessions(result)
+  for (const failure of detectNewHelperFailures(result, rs.helperFailuresSeen)) {
+    const label = failure.role === "intake" ? "Intake" : "Review"
+    const ref = failure.taskNumber !== undefined ? `#${failure.taskNumber}` : failure.sessionID
+    s.notify({
+      variant: "warning",
+      title: "Kagan",
+      message: `${label} failed for ${ref} — ${failure.message} — press r to retry`,
+    })
+  }
+  for (const wait of detectNewAwaitingInput(result, rs.awaitingInputSeen)) {
+    const ref = wait.taskNumber !== undefined ? `#${wait.taskNumber}` : wait.sessionID
+    s.notify({ variant: "warning", title: "Kagan", message: `${ref} waiting on you — ${wait.title}` })
+  }
+  const loaded: Record<ColumnType, readonly string[]> = {
+    backlog: getOrder(s.api, "backlog"),
+    in_progress: getOrder(s.api, "in_progress"),
+    review: getOrder(s.api, "review"),
+    done: getOrder(s.api, "done"),
+  }
+  const reconciled = reconcileOrders(result, loaded)
+  for (const column of COLUMNS) {
+    if (reconciled[column].join() !== loaded[column].join()) setOrder(s.api, column, reconciled[column])
+  }
+  s.setOrders(reconciled)
+  s.setFilterSignal(getFilter(s.api))
+}
+
+async function moveTo(s: StoreState, status: ColumnType) {
+  const session = selectedSession(s)
+  if (!session) return
+  const id = session.id
+  if (session.parentID) {
+    s.toastError("Subtasks cannot be moved between columns")
+    return
+  }
+  const source = session.kaganStatus
+  const reason = moveDenyReason(s, status, session)
+  if (reason) {
+    s.toastError(reason)
+    return
+  }
+  const moved = await s.runWithToast(async () => {
+    await moveSession(s.api, id, status)
+    return true
+  })
+  if (!moved) return
+  setOrder(
+    s.api,
+    source,
+    getOrder(s.api, source).filter((item) => item !== id),
+  )
+  setOrder(s.api, status, [...getOrder(s.api, status), id])
+  s.setSelectedColumn(status)
+  await refresh(s)
+}
+
+async function moveByDirection(s: StoreState, direction: 1 | -1) {
+  const session = selectedSession(s)
+  if (!session) return
+  const target = adjacentColumn(session.kaganStatus, direction)
+  if (!target) return
+  await moveTo(s, target)
+}
+
+async function deleteSelected(s: StoreState) {
+  const id = s.selectedID()
+  if (!id) return
+  const session = selectedSession(s)
+  const column = s.selectedColumn()
+  const nav = flatNavIDs(s.columns()[column])
+  const index = nav.indexOf(id)
+  const nextID = nav[index + 1] ?? nav[index - 1]
+
+  const deleted = await s.runWithToast(async () => {
+    await deleteSession(s.api, id)
+    return true
+  })
+  if (!deleted) return
+
+  if (!session?.parentID) {
+    setOrder(
+      s.api,
+      column,
+      getOrder(s.api, column).filter((item) => item !== id),
+    )
+  }
+  await refresh(s)
+
+  if (nextID && s.sessions().some((item) => item.id === nextID)) {
+    select(s, column, nextID)
+    return
+  }
+
+  const sameColumn = firstSessionID(s.columns(), column)
+  if (sameColumn) {
+    select(s, column, sameColumn)
+    return
+  }
+
+  for (const status of COLUMNS) {
+    const first = firstSessionID(s.columns(), status)
+    if (first) {
+      select(s, status, first)
+      return
+    }
+  }
+
+  s.setSelectedID(undefined)
+}
+
 export function createBoardStore(api: TuiPluginApi, options?: Record<string, unknown>) {
   const squash = squashMerge(options)
   const setupCommands = commandPlan(options, "setup")
@@ -270,278 +530,35 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     review: [],
     done: [],
   })
-
   const filteredSessions = createMemo(() => filterSessions(sessions(), filter()))
   const columns = createMemo(() => groupCardsByColumn(filteredSessions(), orders()))
-
-  // Task and board-action feedback renders through the Notice overlay: OpenCode mounts <Toast/>
-  // only on home/session routes. Update status is separate persistent footer state.
-  const [notices, setNotices] = createSignal<BoardNotice[]>([])
-  const noticeTimers = new Map<string, ReturnType<typeof setTimeout>>()
-  let noticeSeq = 0
-  const NOTICE_CAP = 3
-
-  const clearNoticeTimer = (key: string) => {
-    const timer = noticeTimers.get(key)
-    if (timer) clearTimeout(timer)
-    noticeTimers.delete(key)
-  }
-
-  const dismissNotice = (key: string) => {
-    clearNoticeTimer(key)
-    setNotices((current) => current.filter((notice) => notice.key !== key))
-  }
-
-  const notify = (toast: TuiToast) => {
-    const key = `notice-${++noticeSeq}`
-    setNotices((current) => {
-      const next = [...current, { ...toast, key }]
-      while (next.length > NOTICE_CAP) {
-        const expired = next.shift()
-        if (expired) clearNoticeTimer(expired.key)
-      }
-      return next
-    })
-    noticeTimers.set(
-      key,
-      setTimeout(() => dismissNotice(key), noticeDuration(toast)),
-    )
-  }
-
-  const toastError = (message: string) => {
-    notify({ variant: "error", title: "Kagan", message })
-  }
-
-  const runWithToast = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
-    try {
-      return await fn()
-    } catch (error) {
-      toastError(error instanceof Error ? error.message : String(error))
-      return undefined
-    }
-  }
-
-  let refreshStarted = 0
-  let refreshCompleted = 0
-  const helperFailuresSeen = new Map<string, string>()
-  const awaitingInputSeen = new Set<string>()
-
-  const refresh = async () => {
-    const generation = ++refreshStarted
-    const result = await runWithToast(async () => {
-      const list = await listSessions(api)
-      return list.map((session) => ({
-        ...session,
-        kaganStatus: getStatus(session.metadata),
-      }))
-    })
-    if (result === undefined) return
-    if (generation <= refreshCompleted) return
-    refreshCompleted = generation
-    setSessions(result)
-    for (const failure of detectNewHelperFailures(result, helperFailuresSeen)) {
-      const label = failure.role === "intake" ? "Intake" : "Review"
-      const ref = failure.taskNumber !== undefined ? `#${failure.taskNumber}` : failure.sessionID
-      notify({
-        variant: "warning",
-        title: "Kagan",
-        message: `${label} failed for ${ref} — ${failure.message} — press r to retry`,
-      })
-    }
-    for (const wait of detectNewAwaitingInput(result, awaitingInputSeen)) {
-      const ref = wait.taskNumber !== undefined ? `#${wait.taskNumber}` : wait.sessionID
-      notify({ variant: "warning", title: "Kagan", message: `${ref} waiting on you — ${wait.title}` })
-    }
-    const loaded: Record<ColumnType, readonly string[]> = {
-      backlog: getOrder(api, "backlog"),
-      in_progress: getOrder(api, "in_progress"),
-      review: getOrder(api, "review"),
-      done: getOrder(api, "done"),
-    }
-    const reconciled = reconcileOrders(result, loaded)
-    for (const column of COLUMNS) {
-      if (reconciled[column].join() !== loaded[column].join()) {
-        setOrder(api, column, reconciled[column])
-      }
-    }
-    setOrders(reconciled)
-    setFilterSignal(getFilter(api))
-  }
-
-  const selectedSession = (): BoardSession | undefined => {
-    const id = selectedID()
-    if (!id) return undefined
-    return sessions().find((item) => item.id === id)
-  }
-
-  const select = (column: ColumnType, id: string | undefined) => {
-    setSelectedColumn(column)
-    const nav = flatNavIDs(columns()[column])
-    const valid = id && nav.includes(id) ? id : nav[0]
-    setSelectedID(valid)
-  }
-
-  const selectNext = () => {
-    const result = nextSessionID(columns(), selectedColumn(), selectedID(), 1)
-    if (!result) return
-    select(result.column, result.id)
-  }
-
-  const selectPrevious = () => {
-    const result = nextSessionID(columns(), selectedColumn(), selectedID(), -1)
-    if (!result) return
-    select(result.column, result.id)
-  }
-
-  const selectNextColumn = () => {
-    const next = adjacentColumn(selectedColumn(), 1)
-    if (!next) return
-    setSelectedColumn(next)
-    const id = firstSessionID(columns(), next)
-    if (id) setSelectedID(id)
-  }
-
-  const selectPrevColumn = () => {
-    const previous = adjacentColumn(selectedColumn(), -1)
-    if (!previous) return
-    setSelectedColumn(previous)
-    const id = firstSessionID(columns(), previous)
-    if (id) setSelectedID(id)
-  }
-
-  const selectEdge = (edge: "first" | "last") => {
-    const nav = flatNavIDs(columns()[selectedColumn()])
-    const id = edge === "first" ? nav[0] : nav.at(-1)
-    if (id) select(selectedColumn(), id)
-  }
-  const selectFirst = () => selectEdge("first")
-  const selectLast = () => selectEdge("last")
-
-  const reorder = (direction: 1 | -1) => {
-    const session = selectedSession()
-    if (!session || session.parentID) return
-    const column = session.kaganStatus
-    const order = [...orders()[column]]
-    const index = order.indexOf(session.id)
-    const swapIndex = index + direction
-    if (index === -1 || swapIndex < 0 || swapIndex >= order.length) return
-    const neighbor = order[swapIndex]
-    const current = order[index]
-    if (neighbor === undefined || current === undefined) return
-    order[swapIndex] = current
-    order[index] = neighbor
-    setOrder(api, column, order)
-    setOrders((current) => ({ ...current, [column]: order }))
-  }
-
+  const { notices, notify, toastError, runWithToast } = createNotices()
   const [sessionStatuses, setSessionStatuses] = createSignal<Record<string, SessionStatus["type"]>>({})
-  const setSessionStatus = (sessionID: string, status: SessionStatus["type"]) => {
-    setSessionStatuses((current) => ({ ...current, [sessionID]: status }))
-  }
-  const sessionStatus = (sessionID: string): SessionStatus["type"] | undefined => sessionStatuses()[sessionID]
 
-  const moveDenyReason = (status: ColumnType, session: BoardSession): string | undefined => {
-    const moveCtx = {
-      inProgressCount: countInProgressForMove(
-        sessions().map((item) => ({ id: item.id, parentID: item.parentID, status: item.kaganStatus })),
-        session.id,
-        session.kaganStatus,
-      ),
-      source: session.kaganStatus,
-      cap: inProgressCap(options),
-    }
-    return columnMoveDenyReason(status, session.metadata, moveCtx)
-  }
-
-  const moveTo = async (status: ColumnType) => {
-    const session = selectedSession()
-    if (!session) return
-    const id = session.id
-    if (session.parentID) {
-      toastError("Subtasks cannot be moved between columns")
-      return
-    }
-    const source = session.kaganStatus
-    const reason = moveDenyReason(status, session)
-    if (reason) {
-      toastError(reason)
-      return
-    }
-    const moved = await runWithToast(async () => {
-      await moveSession(api, id, status)
-      return true
-    })
-    if (!moved) return
-    setOrder(
-      api,
-      source,
-      getOrder(api, source).filter((item) => item !== id),
-    )
-    setOrder(api, status, [...getOrder(api, status), id])
-    setSelectedColumn(status)
-    await refresh()
-  }
-
-  const moveByDirection = async (direction: 1 | -1) => {
-    const session = selectedSession()
-    if (!session) return
-    const target = adjacentColumn(session.kaganStatus, direction)
-    if (!target) return
-    await moveTo(target)
-  }
-  const moveNext = () => moveByDirection(1)
-  const movePrevious = () => moveByDirection(-1)
-
-  const deleteSelected = async () => {
-    const id = selectedID()
-    if (!id) return
-    const session = selectedSession()
-    const column = selectedColumn()
-    const nav = flatNavIDs(columns()[column])
-    const index = nav.indexOf(id)
-    const nextID = nav[index + 1] ?? nav[index - 1]
-
-    const deleted = await runWithToast(async () => {
-      await deleteSession(api, id)
-      return true
-    })
-    if (!deleted) return
-
-    if (!session?.parentID) {
-      setOrder(
-        api,
-        column,
-        getOrder(api, column).filter((item) => item !== id),
-      )
-    }
-    await refresh()
-
-    if (nextID && sessions().some((item) => item.id === nextID)) {
-      select(column, nextID)
-      return
-    }
-
-    const sameColumn = firstSessionID(columns(), column)
-    if (sameColumn) {
-      select(column, sameColumn)
-      return
-    }
-
-    for (const status of COLUMNS) {
-      const first = firstSessionID(columns(), status)
-      if (first) {
-        select(status, first)
-        return
-      }
-    }
-
-    setSelectedID(undefined)
+  const s: StoreState = {
+    api,
+    options,
+    sessions,
+    setSessions,
+    selectedID,
+    setSelectedID,
+    selectedColumn,
+    setSelectedColumn,
+    filter,
+    setFilterSignal,
+    orders,
+    setOrders,
+    columns,
+    notify,
+    toastError,
+    runWithToast,
+    refreshState: { started: 0, completed: 0, helperFailuresSeen: new Map(), awaitingInputSeen: new Set() },
   }
 
   return {
     sessions,
     selected: selectedID,
-    selectedSession,
+    selectedSession: () => selectedSession(s),
     selectedColumn,
     filter,
     squashMerge: squash,
@@ -557,26 +574,27 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     notify,
     updateStatus,
     setUpdateStatus,
-    select,
-    selectNext,
-    selectPrevious,
-    selectNextColumn,
-    selectPrevColumn,
-    selectFirst,
-    selectLast,
-    reorder,
-    sessionStatus,
-    setSessionStatus,
-    moveNext,
-    movePrevious,
-    moveTo,
-    moveDenyReason,
-    deleteSelected,
-    refresh,
+    select: (column: ColumnType, id: string | undefined) => select(s, column, id),
+    selectNext: () => selectStep(s, 1),
+    selectPrevious: () => selectStep(s, -1),
+    selectNextColumn: () => selectColumnStep(s, 1),
+    selectPrevColumn: () => selectColumnStep(s, -1),
+    selectFirst: () => selectEdge(s, "first"),
+    selectLast: () => selectEdge(s, "last"),
+    reorder: (direction: 1 | -1) => reorder(s, direction),
+    sessionStatus: (sessionID: string): SessionStatus["type"] | undefined => sessionStatuses()[sessionID],
+    setSessionStatus: (sessionID: string, status: SessionStatus["type"]) =>
+      setSessionStatuses((current) => ({ ...current, [sessionID]: status })),
+    moveNext: () => moveByDirection(s, 1),
+    movePrevious: () => moveByDirection(s, -1),
+    moveTo: (status: ColumnType) => moveTo(s, status),
+    moveDenyReason: (status: ColumnType, session: BoardSession) => moveDenyReason(s, status, session),
+    deleteSelected: () => deleteSelected(s),
+    refresh: () => refresh(s),
     setFilter(value: string) {
       setFilterSignal(value)
       persistFilter(api, value)
-      select(selectedColumn(), selectedID())
+      select(s, selectedColumn(), selectedID())
     },
   }
 }
