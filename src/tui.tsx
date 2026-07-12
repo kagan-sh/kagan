@@ -5,7 +5,7 @@ import { Board } from "./tui/board/board"
 import { Settings } from "./tui/routes/settings"
 import { showOnboarding } from "./tui/dialogs/onboarding"
 import { createBoardStore, createSessionEventSubscription, createSessionStatusSubscription } from "./tui/board/store"
-import { runAutomaticUpdateLaunch } from "./tui/update-launch"
+import { runAutomaticUpdateLaunch } from "./tui/updates/launch"
 import { ROUTE, SETTINGS_ROUTE } from "./tui/types"
 import { version } from "../package.json"
 

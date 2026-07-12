@@ -1,7 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import { commandPlan, configuredScopes, sanitizeTaskScope, type TaskScope } from "../domain/task/commands"
 import { nextTaskNumber } from "../domain/task/metadata"
-import { createBoardTask } from "../task/create"
+import { createBoardTask, type CreateSessionPayload } from "../task/create"
 import { currentBranch, shellGitRunner } from "../git/runner"
 import { listSessions } from "./data"
 
@@ -33,6 +33,21 @@ function validateTicketScope(scope: unknown, allowed: readonly string[]): TaskSc
     throw new Error(`Custom scope "${sanitized.custom}" is not a configured command cwd`)
   }
   return sanitized
+}
+
+async function createSessionViaClient(input: PluginInput, payload: CreateSessionPayload): Promise<{ id: string }> {
+  const created = await input.client.session.create({
+    query: { directory: payload.directory },
+    body: {
+      title: payload.title,
+      ...(payload.model ? { model: { providerID: payload.model.providerID, modelID: payload.model.modelID } } : {}),
+      metadata: payload.metadata,
+    },
+    throwOnError: true,
+  } as Parameters<typeof input.client.session.create>[0])
+  const id = created.data?.id
+  if (!id) throw new Error("session.create returned no id")
+  return { id }
 }
 
 export function ticketSummary(tickets: CreateTaskTicket[]): Array<{ title: string; baseBranch?: string }> {
@@ -75,22 +90,7 @@ export async function runCreateTasks(
         taskNumber,
         scope,
         setupCommands,
-        createSession: async (payload) => {
-          const createdSession = await input.client.session.create({
-            query: { directory: payload.directory },
-            body: {
-              title: payload.title,
-              ...(payload.model
-                ? { model: { providerID: payload.model.providerID, modelID: payload.model.modelID } }
-                : {}),
-              metadata: payload.metadata,
-            },
-            throwOnError: true,
-          } as Parameters<typeof input.client.session.create>[0])
-          const id = createdSession.data?.id
-          if (!id) throw new Error("session.create returned no id")
-          return { id }
-        },
+        createSession: (payload) => createSessionViaClient(input, payload),
       })
       created++
       nextNumber++

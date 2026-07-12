@@ -1,6 +1,6 @@
 import { lstat, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { basename, dirname, isAbsolute, join, resolve } from "node:path"
-import { KAGAN_PACKAGE, parseRelease } from "./updates"
+import { KAGAN_PACKAGE, parseRelease } from "./check"
 
 export type UpdatePaths = {
   current: string

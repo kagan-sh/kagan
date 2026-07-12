@@ -35,6 +35,12 @@ bun run verify
 This runs the declared source checks: complexity, comment policy, and circular dependencies, and
 auto-formats with oxfmt. Verifyx also runs the local `test` script automatically.
 
+The maintainability-index gate is two-tier, matching the architecture split: pure logic
+(`src/{domain,server,git,checks}` plus `src/server.ts` and `src/task/`) must clear a higher bar than
+the TUI surface (`src/tui/`), whose JSX render functions are inherently lower-scoring. Raise a file's
+score by splitting genuine responsibilities into cohesive units, never by deleting comments, joining
+lines, or fragmenting a coherent function.
+
 Pre-commit and CI run `bun run check`. That full check-only gate runs every built-in `verifyx` check,
 including its automatic test step, then validates the package. It does not rewrite files.
 

@@ -56,6 +56,28 @@ async function startTask(input: PluginInput, info: EventInfo): Promise<void> {
   }
 }
 
+async function applyGatedTransition(
+  input: PluginInput,
+  info: EventInfo,
+  previous: ColumnType,
+  status: ColumnType,
+  options: Record<string, unknown> | undefined,
+): Promise<{ reverted: boolean }> {
+  const reason = columnMoveDenyReason(status, info.metadata, {
+    inProgressCount: await listInProgressCount(input, info.id, previous),
+    source: previous,
+    cap: inProgressCap(options),
+  })
+  if (reason) {
+    await patchKagan(input.client, info.id, { status: previous })
+    return { reverted: true }
+  }
+  const view = kagan(info.metadata)
+  if (view.boardTask === true) await patchKagan(input.client, info.id, { lastGatedStatus: status })
+  if (status === "in_progress" && view.startedAt === undefined && view.boardTask === true) await startTask(input, info)
+  return { reverted: false }
+}
+
 async function handleSessionUpdated(
   input: PluginInput,
   event: { properties: { info: unknown } },
@@ -69,15 +91,8 @@ async function handleSessionUpdated(
   if (previous === undefined && view.boardTask === true)
     await patchKagan(input.client, info.id, { lastGatedStatus: status })
   if (previous !== undefined && status !== previous) {
-    const reason = columnMoveDenyReason(status, info.metadata, {
-      inProgressCount: await listInProgressCount(input, info.id, previous),
-      source: previous,
-      cap: inProgressCap(options),
-    })
-    if (reason) return patchKagan(input.client, info.id, { status: previous })
-    if (view.boardTask === true) await patchKagan(input.client, info.id, { lastGatedStatus: status })
-    if (status === "in_progress" && view.startedAt === undefined && view.boardTask === true)
-      await startTask(input, info)
+    const { reverted } = await applyGatedTransition(input, info, previous, status, options)
+    if (reverted) return
   }
   if (status === "backlog") await onEnterBacklog(input, info.id, options)
   if (status === "review") await onEnterReview(input, info.id, options)
@@ -105,6 +120,21 @@ async function handlePermission(
   if (rootID) await patchKagan(input.client, rootID, { awaitingInput })
 }
 
+async function promoteFinishedRootToReview(
+  input: PluginInput,
+  session: Awaited<ReturnType<typeof getSessionData>>,
+  sessionID: string,
+): Promise<void> {
+  const rootID = owningRootTaskID(session?.metadata, sessionID, session?.parentID)
+  if (!rootID) return
+  const root = rootID === sessionID ? session : await getSessionData(input, rootID)
+  const view = kagan(root?.metadata)
+  if (getStatus(root?.metadata) !== "in_progress" || view.startedAt === undefined) return
+  if (view.activeIteration !== undefined && view.activeIteration !== sessionID) return
+  const report = lastAssistantText(await sessionMessages(input, sessionID))
+  await patchKagan(input.client, rootID, { status: "review", awaitingInput: undefined, ...(report ? { report } : {}) })
+}
+
 async function handleSessionIdle(
   input: PluginInput,
   event: { properties: { sessionID: string } },
@@ -125,14 +155,7 @@ async function handleSessionIdle(
       options,
     )
   }
-  const rootID = owningRootTaskID(session?.metadata, sessionID, session?.parentID)
-  if (!rootID) return
-  const root = rootID === sessionID ? session : await getSessionData(input, rootID)
-  const view = kagan(root?.metadata)
-  if (getStatus(root?.metadata) !== "in_progress" || view.startedAt === undefined) return
-  if (view.activeIteration !== undefined && view.activeIteration !== sessionID) return
-  const report = lastAssistantText(await sessionMessages(input, sessionID))
-  await patchKagan(input.client, rootID, { status: "review", awaitingInput: undefined, ...(report ? { report } : {}) })
+  await promoteFinishedRootToReview(input, session, sessionID)
 }
 
 export function createServerEvents(input: PluginInput, options: Record<string, unknown> | undefined) {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { checkForUpdate, isNewerRelease, parseRelease, resolveLatestManifest } from "../../src/tui/updates"
+import { checkForUpdate, isNewerRelease, parseRelease, resolveLatestManifest } from "../../src/tui/updates/check"
 
 function mockKv(initial: Record<string, unknown> = {}) {
   const store: Record<string, unknown> = { ...initial }

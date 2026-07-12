@@ -1,6 +1,6 @@
 import type { TuiPluginMeta } from "@opencode-ai/plugin/tui"
 import { dirname, join } from "node:path"
-import { isAutomaticUpdateInstall, parseRelease } from "./updates"
+import { isAutomaticUpdateInstall, parseRelease } from "./check"
 import {
   defaultFileSystem,
   type FileSystem,
@@ -10,7 +10,7 @@ import {
   updatePaths,
   validateWrapper,
   wrapperTarget,
-} from "./update-paths"
+} from "./paths"
 
 async function readMarker(fs: FileSystem, markerPath: string): Promise<UpdateMarker | undefined> {
   const info = await stat(fs, markerPath)

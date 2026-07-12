@@ -1,6 +1,6 @@
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
-import { cleanupPreparedUpdate } from "./update-cleanup"
-import { isAutomaticUpdateInstall, KAGAN_PACKAGE, parseRelease, type UpdateStatus } from "./updates"
+import { cleanupPreparedUpdate } from "./cleanup"
+import { isAutomaticUpdateInstall, KAGAN_PACKAGE, parseRelease, type UpdateStatus } from "./check"
 import {
   defaultFileSystem,
   type FileSystem,
@@ -10,7 +10,7 @@ import {
   validateWrapper,
   stat,
   wrapperTarget,
-} from "./update-paths"
+} from "./paths"
 
 async function promotePreparedUpdate(
   paths: UpdatePaths,
@@ -71,4 +71,4 @@ export async function prepareUpdate(input: {
   }
 }
 
-export { cleanupPreparedUpdate } from "./update-cleanup"
+export { cleanupPreparedUpdate } from "./cleanup"

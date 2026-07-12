@@ -132,10 +132,6 @@ export function canRestartHelper(status: ColumnType, metadata: Record<string, un
     (status === "review" && helperEverSpawned(metadata, "validator"))
   )
 }
-/** @deprecated Use canRestartHelper */
-export function canRetrySession(status: ColumnType, metadata: Record<string, unknown> | undefined) {
-  return canRestartHelper(status, metadata)
-}
 export function needsHuman(status: ColumnType, metadata: Record<string, unknown> | undefined) {
   return kagan(metadata).awaitingInput !== undefined || (status === "review" && kagan(metadata).approved !== true)
 }

@@ -13,26 +13,23 @@ export type ValidatorContext = {
   generation: number
 }
 
+function resolvedDecisionLines(decisions: Intake["decisions"]): string[] {
+  const resolved = decisions.filter((d) => d.resolution === "approved" || d.resolution === "overridden")
+  if (resolved.length === 0) return []
+  return [
+    "Resolved decisions:",
+    ...resolved.map((d) => `- ${d.question} → ${d.resolution === "approved" ? d.assumption : (d.answer ?? "")}`),
+  ]
+}
+
 function formatContext(context: ValidatorContext): string {
   const lines = [`Title: ${context.title}`]
   if (context.description) lines.push(`Description: ${context.description}`)
   const intake = context.intake
   if (!intake) return lines.join("\n")
-
-  if (intake.understanding.trim()) {
-    lines.push("", isolatedEvidenceBlock("Intake understanding", intake.understanding))
-  }
-  const resolved = intake.decisions.filter((d) => d.resolution === "approved" || d.resolution === "overridden")
-  if (resolved.length > 0) {
-    lines.push("Resolved decisions:")
-    for (const d of resolved) {
-      const answer = d.resolution === "approved" ? d.assumption : (d.answer ?? "")
-      lines.push(`- ${d.question} → ${answer}`)
-    }
-  }
-  if (intake.refinedPrompt?.trim()) {
-    lines.push("", isolatedEvidenceBlock("Refined prompt", intake.refinedPrompt))
-  }
+  if (intake.understanding.trim()) lines.push("", isolatedEvidenceBlock("Intake understanding", intake.understanding))
+  lines.push(...resolvedDecisionLines(intake.decisions))
+  if (intake.refinedPrompt?.trim()) lines.push("", isolatedEvidenceBlock("Refined prompt", intake.refinedPrompt))
   return lines.join("\n")
 }
 
@@ -92,32 +89,38 @@ function formatDiffsForPrompt(diffs: Array<SnapshotFileDiff>): string {
     .join("\n\n")
 }
 
+type CheckStep = NonNullable<CheckResult["steps"]>[number]
+
+function formatStepEvidence(steps: CheckStep[]): string {
+  const ran = steps.filter((step) => step.status === "ran")
+  const skipped = steps.filter((step) => step.status === "skipped")
+  const sections = ["Deterministic check evidence:"]
+  if (ran.length > 0) {
+    sections.push(
+      [
+        "Ran checks:",
+        ...ran.map((step) => {
+          const exit = step.exitCode === null ? "?" : step.exitCode
+          return `- ${step.name} (${step.cwd}) — \`${step.command}\` exited ${exit}:\n${step.output}`
+        }),
+      ].join("\n\n"),
+    )
+  }
+  if (skipped.length > 0) {
+    sections.push(
+      [
+        "Skipped checks:",
+        ...skipped.map((step) => `- ${step.name} (${step.cwd}): ${step.reason ?? "not in scope"}`),
+      ].join("\n"),
+    )
+  }
+  return sections.join("\n\n")
+}
+
 function formatCheck(check: CheckResult): string {
   let body: string
   if (check.steps && check.steps.length > 0) {
-    const ran = check.steps.filter((step) => step.status === "ran")
-    const skipped = check.steps.filter((step) => step.status === "skipped")
-    const sections = ["Deterministic check evidence:"]
-    if (ran.length > 0) {
-      sections.push(
-        [
-          "Ran checks:",
-          ...ran.map((step) => {
-            const exit = step.exitCode === null ? "?" : step.exitCode
-            return `- ${step.name} (${step.cwd}) — \`${step.command}\` exited ${exit}:\n${step.output}`
-          }),
-        ].join("\n\n"),
-      )
-    }
-    if (skipped.length > 0) {
-      sections.push(
-        [
-          "Skipped checks:",
-          ...skipped.map((step) => `- ${step.name} (${step.cwd}): ${step.reason ?? "not in scope"}`),
-        ].join("\n"),
-      )
-    }
-    body = sections.join("\n\n")
+    body = formatStepEvidence(check.steps)
   } else if (check.exitCode === null) {
     body = `Deterministic check \`${check.command}\` did not complete: ${check.output}`
   } else {

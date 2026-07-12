@@ -1,8 +1,8 @@
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
-import { cleanupPreparedUpdate } from "./update-cleanup"
-import { prepareUpdate } from "./update-manager"
-import { checkForUpdate, type UpdateStatus } from "./updates"
-import { defaultFileSystem, type FileSystem } from "./update-paths"
+import { cleanupPreparedUpdate } from "./cleanup"
+import { prepareUpdate } from "./manager"
+import { checkForUpdate, type UpdateStatus } from "./check"
+import { defaultFileSystem, type FileSystem } from "./paths"
 
 export function showUpdateToast(
   api: TuiPluginApi,

@@ -3,9 +3,9 @@ import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
-import type { UpdateStatus } from "../../src/tui/updates"
-import { type FileSystem, wrapperTarget } from "../../src/tui/update-paths"
-import { runAutomaticUpdateLaunch } from "../../src/tui/update-launch"
+import type { UpdateStatus } from "../../src/tui/updates/check"
+import { type FileSystem, wrapperTarget } from "../../src/tui/updates/paths"
+import { runAutomaticUpdateLaunch } from "../../src/tui/updates/launch"
 
 const roots: string[] = []
 const HOUR = 60 * 60 * 1000

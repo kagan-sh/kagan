@@ -3,8 +3,8 @@ import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
-import { cleanupPreparedUpdate, prepareUpdate } from "../../src/tui/update-manager"
-import { wrapperTarget } from "../../src/tui/update-paths"
+import { cleanupPreparedUpdate, prepareUpdate } from "../../src/tui/updates/manager"
+import { wrapperTarget } from "../../src/tui/updates/paths"
 
 const roots: string[] = []
 

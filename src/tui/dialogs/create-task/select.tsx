@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createEffect, createMemo, createSignal, For, onMount } from "solid-js"
-import { useKeyIntercept } from "../renderer"
-import { DialogFilter, DialogFrame } from "./chrome"
+import { useKeyIntercept } from "../../renderer"
+import { DialogFilter, DialogFrame } from "../chrome"
 
 export type FilterableSelectProps = {
   title: string

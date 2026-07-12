@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   approveDenyReason,
   canRestartHelper,
-  canRetrySession,
   columnMoveDenyReason,
   countInProgressForMove,
   getRefinedPrompt,
@@ -970,13 +969,6 @@ describe("canRestartHelper", () => {
     expect(canRestartHelper("backlog", { kagan: { validatorOutcome: "failed" } })).toBe(false)
     expect(canRestartHelper("review", { kagan: { intakeOutcome: "failed" } })).toBe(false)
     expect(canRestartHelper("review", { kagan: { helperError: { role: "intake", message: "boom" } } })).toBe(false)
-  })
-})
-
-describe("canRetrySession", () => {
-  test("aliases canRestartHelper", () => {
-    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
-    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "ran" } })).toBe(true)
   })
 })
 
