@@ -19,7 +19,7 @@ async function fetchBoardSessions(s: StoreState): Promise<BoardSession[] | undef
 
 function applyDetectionNotices(s: StoreState, sessions: readonly BoardSession[]) {
   notifyHelperFailures(s.notify, detectNewHelperFailures(sessions, s.refreshState.helperFailuresSeen))
-  notifyAwaitingInput(s.notify, detectNewAwaitingInput(sessions, s.refreshState.awaitingInputSeen))
+  notifyAwaitingInput(s.notify, detectNewAwaitingInput(sessions, s.refreshState.awaitingPermissionsSeen))
 }
 
 function loadColumnOrders(s: StoreState): Record<ColumnType, readonly string[]> {

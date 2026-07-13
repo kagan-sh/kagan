@@ -46,17 +46,17 @@ export function detectNewAwaitingInput(sessions: readonly BoardSession[], seen: 
   for (const session of sessions) {
     const view = kagan(session.metadata)
     if (session.parentID || view.boardTask !== true) continue
-    const awaiting = view.awaitingInput
-    if (!awaiting) continue
-    liveIDs.add(awaiting.id)
-    if (seen.has(awaiting.id)) continue
-    seen.add(awaiting.id)
-    detected.push({
-      sessionID: session.id,
-      taskNumber: view.taskNumber,
-      permissionID: awaiting.id,
-      title: awaiting.title,
-    })
+    for (const awaiting of view.awaitingPermissions ?? []) {
+      liveIDs.add(awaiting.id)
+      if (seen.has(awaiting.id)) continue
+      seen.add(awaiting.id)
+      detected.push({
+        sessionID: session.id,
+        taskNumber: view.taskNumber,
+        permissionID: awaiting.id,
+        title: awaiting.title,
+      })
+    }
   }
   for (const id of seen) {
     if (!liveIDs.has(id)) seen.delete(id)
@@ -85,6 +85,6 @@ export function notifyAwaitingInput(
 ): void {
   for (const wait of waits) {
     const ref = wait.taskNumber !== undefined ? `#${wait.taskNumber}` : wait.sessionID
-    notify({ variant: "warning", title: "Kagan", message: `${ref} waiting on you — ${wait.title}` })
+    notify({ variant: "warning", title: "Kagan", message: `${ref} waiting on you — ${wait.title} — press p` })
   }
 }

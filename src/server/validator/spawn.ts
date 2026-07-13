@@ -64,7 +64,7 @@ export async function spawnValidator(
   const promptText = buildValidatorPrompt(diffs, context)
 
   const body: Record<string, unknown> = {
-    tools: { read: true, edit: false, write: false, bash: false, kagan_findings: true },
+    tools: { read: true, edit: false, write: false, bash: false, task: false, kagan_findings: true },
     parts: [{ type: "text", text: promptText }],
   }
   if (model) body.model = { providerID: model.providerID, modelID: model.modelID }

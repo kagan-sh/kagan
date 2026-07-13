@@ -62,7 +62,7 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     notify,
     toastError,
     runWithToast,
-    refreshState: { started: 0, completed: 0, helperFailuresSeen: new Map(), awaitingInputSeen: new Set() },
+    refreshState: { started: 0, completed: 0, helperFailuresSeen: new Map(), awaitingPermissionsSeen: new Set() },
   }
 
   return {

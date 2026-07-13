@@ -67,7 +67,8 @@ function commandBadge(
 export function gateBadges(metadata?: Record<string, unknown>, threshold = sendBackStopThreshold()): Badge[] {
   const badges: Badge[] = []
   const view = kagan(metadata)
-  if (view.awaitingInput) badges.push({ text: "△ needs you", tone: "warning" })
+  const awaiting = view.awaitingPermissions?.length ?? 0
+  if (awaiting > 0) badges.push({ text: awaiting > 1 ? `△ ${awaiting} need you` : "△ needs you", tone: "warning" })
   const intakeOutcome = helper(metadata, "intake").outcome
   if (getStatus(metadata) === "backlog" && view.boardTask === true && intakeOutcome !== undefined) {
     if (intakeOutcome === "failed" || hasHelperError(metadata, "intake")) {

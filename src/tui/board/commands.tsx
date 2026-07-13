@@ -9,6 +9,7 @@ import { approve } from "./commands/merge"
 import { moveNextWithGates, movePrevWithGates } from "./commands/intake"
 import { closeBoard, dismissBoard, openSession, promptDelete, promptFilter } from "./commands/nav"
 import { openMenu } from "./commands/menu"
+import { openPermissionQueue } from "./commands/permissions"
 import { sendBackTask } from "./commands/send-back"
 import { retryHelperTask } from "./commands/task-actions"
 
@@ -54,6 +55,7 @@ export function createBoardCommands(
     command("kagan.approve", "Approve task", approveTask),
     command("kagan.send_back", "Send back for another iteration", () => sendBackTask(ctx)),
     command("kagan.retry", "Restart intake or review", () => retryHelperTask(ctx)),
+    command("kagan.permissions", "Review waiting permission requests", () => openPermissionQueue(ctx)),
     command("kagan.settings", "Open settings", () => api.route.navigate(SETTINGS_ROUTE)),
     command("kagan.help", "Show help", () => setHelpOpen((open) => !open)),
   ]

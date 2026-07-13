@@ -67,9 +67,15 @@ describe("kagan().approved / needsHuman / kagan().boardTask", () => {
     expect(needsHuman("in_progress", { kagan: {} })).toBe(false)
   })
 
-  test("needsHuman is true in any column while awaitingInput is present", () => {
-    expect(needsHuman("in_progress", { kagan: { awaitingInput: { id: "p1", title: "Run rm -rf?" } } })).toBe(true)
-    expect(needsHuman("backlog", { kagan: { awaitingInput: { id: "p1", title: "x" } } })).toBe(true)
+  test("needsHuman is true in any column while a permission is waiting", () => {
+    expect(
+      needsHuman("in_progress", {
+        kagan: { awaitingPermissions: [{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }] },
+      }),
+    ).toBe(true)
+    expect(needsHuman("backlog", { kagan: { awaitingPermissions: [{ id: "p1", title: "x", sessionID: "s1" }] } })).toBe(
+      true,
+    )
   })
 
   test("kagan().boardTask reads the boardTask flag", () => {
@@ -147,20 +153,20 @@ describe("isSupervisedSession", () => {
   })
 })
 
-describe("kagan().awaitingInput", () => {
-  test("returns a well-formed marker", () => {
-    expect(kagan({ kagan: { awaitingInput: { id: "p1", title: "Run rm -rf?" } } }).awaitingInput).toEqual({
-      id: "p1",
-      title: "Run rm -rf?",
-    })
+describe("kagan().awaitingPermissions", () => {
+  test("returns a well-formed list", () => {
+    expect(
+      kagan({ kagan: { awaitingPermissions: [{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }] } })
+        .awaitingPermissions,
+    ).toEqual([{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }])
   })
 
   test("rejects malformed shapes", () => {
-    expect(kagan({ kagan: { awaitingInput: { id: "p1" } } }).awaitingInput).toBeUndefined()
-    expect(kagan({ kagan: { awaitingInput: { id: 1, title: "x" } } }).awaitingInput).toBeUndefined()
-    expect(kagan({ kagan: { awaitingInput: null } }).awaitingInput).toBeUndefined()
-    expect(kagan({ kagan: {} }).awaitingInput).toBeUndefined()
-    expect(kagan(undefined).awaitingInput).toBeUndefined()
+    expect(kagan({ kagan: { awaitingPermissions: [{ id: "p1", title: "x" }] } }).awaitingPermissions).toBeUndefined()
+    expect(kagan({ kagan: { awaitingPermissions: { id: "p1" } } }).awaitingPermissions).toBeUndefined()
+    expect(kagan({ kagan: { awaitingPermissions: null } }).awaitingPermissions).toBeUndefined()
+    expect(kagan({ kagan: {} }).awaitingPermissions).toBeUndefined()
+    expect(kagan(undefined).awaitingPermissions).toBeUndefined()
   })
 })
 

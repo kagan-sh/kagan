@@ -13,7 +13,8 @@ import {
   sessionMessages,
   type EventInfo,
 } from "./data"
-import { handleHelperEvent, owningRootTaskID, resolveOwningBoardTask } from "./helpers/events"
+import { handleHelperEvent, owningRootTaskID } from "./helpers/events"
+import { handlePermissionRequested, handlePermissionReplied } from "./permissions"
 import { onEnterBacklog, onEnterReview } from "./helpers/spawn"
 
 async function listInProgressCount(input: PluginInput, sessionID: string, source: ColumnType): Promise<number> {
@@ -111,15 +112,6 @@ async function handleSessionError(
     await handleHelperEvent(input, role, sessionID, session?.metadata, extractErrorMessage(error), options)
 }
 
-async function handlePermission(
-  input: PluginInput,
-  sessionID: string,
-  awaitingInput: { id: string; title: string } | undefined,
-): Promise<void> {
-  const rootID = await resolveOwningBoardTask(input, sessionID)
-  if (rootID) await patchKagan(input.client, rootID, { awaitingInput })
-}
-
 async function promoteFinishedRootToReview(
   input: PluginInput,
   session: Awaited<ReturnType<typeof getSessionData>>,
@@ -132,7 +124,11 @@ async function promoteFinishedRootToReview(
   if (getStatus(root?.metadata) !== "in_progress" || view.startedAt === undefined) return
   if (view.activeIteration !== undefined && view.activeIteration !== sessionID) return
   const report = lastAssistantText(await sessionMessages(input, sessionID))
-  await patchKagan(input.client, rootID, { status: "review", awaitingInput: undefined, ...(report ? { report } : {}) })
+  await patchKagan(input.client, rootID, {
+    status: "review",
+    awaitingPermissions: undefined,
+    ...(report ? { report } : {}),
+  })
 }
 
 async function handleSessionIdle(
@@ -168,12 +164,13 @@ export function createServerEvents(input: PluginInput, options: Record<string, u
       case "session.error":
         return handleSessionError(input, event, options)
       case "permission.updated":
-        return handlePermission(input, event.properties.sessionID, {
+        return handlePermissionRequested(input, {
           id: event.properties.id,
           title: event.properties.title,
+          sessionID: event.properties.sessionID,
         })
       case "permission.replied":
-        return handlePermission(input, event.properties.sessionID, undefined)
+        return handlePermissionReplied(input, event.properties.sessionID, event.properties.permissionID)
       case "session.idle":
         return handleSessionIdle(input, event, options)
     }

@@ -16,6 +16,7 @@ export const BOARD_BINDINGS = [
   { key: "a", cmd: "kagan.approve", desc: "Approve task", short: "approve" },
   { key: "s", cmd: "kagan.send_back", desc: "Send back for another iteration", short: "send back" },
   { key: "r", cmd: "kagan.retry", desc: "Restart intake or review", short: "restart" },
+  { key: "p", cmd: "kagan.permissions", desc: "Review waiting permission requests", short: "permissions" },
   { key: "/", cmd: "kagan.filter", desc: "Filter cards", short: "filter" },
   { key: "?", cmd: "kagan.help", desc: "Show help", short: "help" },
   { key: ",", cmd: "kagan.settings", desc: "Open settings", short: "settings" },

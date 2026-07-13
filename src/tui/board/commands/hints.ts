@@ -3,12 +3,18 @@ import type { BoardSession } from "../../types"
 
 type FooterHint = { key: string; label: string }
 
-export function footerHints(selected: BoardSession | undefined, hasFilter: boolean): FooterHint[] {
+export function footerHints(
+  selected: BoardSession | undefined,
+  hasFilter: boolean,
+  waitingPermissions = 0,
+): FooterHint[] {
   const hints: FooterHint[] = [
     { key: "j/k/h/l", label: "navigate" },
     { key: "enter", label: "menu" },
     { key: "n", label: "new" },
   ]
+  if (waitingPermissions > 0)
+    hints.push({ key: "p", label: waitingPermissions > 1 ? `${waitingPermissions} permissions` : "permission" })
   if (selected) {
     if (selected.kaganStatus === "review") {
       hints.push({ key: "a", label: "approve" }, { key: "s", label: "send back" })

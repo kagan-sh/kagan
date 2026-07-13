@@ -74,7 +74,14 @@ describe("spawnValidator", () => {
     )
     expect(childID).toBe("child-1")
     const body = (options as { body?: Record<string, unknown> }).body
-    expect(body?.tools).toEqual({ read: true, edit: false, write: false, bash: false, kagan_findings: true })
+    expect(body?.tools).toEqual({
+      read: true,
+      edit: false,
+      write: false,
+      bash: false,
+      task: false,
+      kagan_findings: true,
+    })
     expect(body?.model).toBeUndefined()
     const text = promptText(options)
     expect(text).toContain("Add a cache")

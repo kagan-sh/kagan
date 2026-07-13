@@ -2,6 +2,7 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { maybeShowOnboarding } from "../dialogs/onboarding"
+import { kagan } from "../../domain/task/metadata"
 import { BOARD_BINDINGS, createBoardCommands, footerHints, HelpOverlay, type BoardStore } from "./commands"
 import { keymapKey } from "./layout/keymap"
 import { BoardMain } from "./layout/main"
@@ -31,7 +32,13 @@ export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
 
   onCleanup(() => disposeLayer?.())
 
-  const hints = createMemo(() => footerHints(store.selectedSession(), store.filter() !== ""))
+  const waitingPermissions = createMemo(() =>
+    store
+      .sessions()
+      .filter((session) => !session.parentID)
+      .reduce((sum, session) => sum + (kagan(session.metadata).awaitingPermissions?.length ?? 0), 0),
+  )
+  const hints = createMemo(() => footerHints(store.selectedSession(), store.filter() !== "", waitingPermissions()))
   return (
     <box position="absolute" left={0} top={0} width="100%" height="100%">
       <box flexDirection="column" width="100%" height="100%">

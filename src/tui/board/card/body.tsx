@@ -108,7 +108,7 @@ export function CardShell(props: CardDisplayProps & { renderedAt: number }) {
     props.session.kaganStatus === "in_progress" ? workingBadge(props.sessionStatus?.(props.session.id)) : undefined
   const barColor = () => {
     if (familyFocused()) return theme().primary
-    if (kagan(props.session.metadata).awaitingInput) return theme().warning
+    if ((kagan(props.session.metadata).awaitingPermissions?.length ?? 0) > 0) return theme().warning
     if (isReady(props.session)) return theme().success
     return theme().border
   }

@@ -133,7 +133,9 @@ export function canRestartHelper(status: ColumnType, metadata: Record<string, un
   )
 }
 export function needsHuman(status: ColumnType, metadata: Record<string, unknown> | undefined) {
-  return kagan(metadata).awaitingInput !== undefined || (status === "review" && kagan(metadata).approved !== true)
+  return (
+    (kagan(metadata).awaitingPermissions?.length ?? 0) > 0 || (status === "review" && kagan(metadata).approved !== true)
+  )
 }
 export function countInProgressForMove(
   sessions: readonly { id: string; parentID?: string | null; status: ColumnType }[],

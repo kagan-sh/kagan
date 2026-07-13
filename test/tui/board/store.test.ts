@@ -479,7 +479,11 @@ describe("createBoardStore", () => {
     const waiting = {
       ...healthy,
       metadata: {
-        kagan: { status: "in_progress", boardTask: true, awaitingInput: { id: "p1", title: "Run rm -rf?" } },
+        kagan: {
+          status: "in_progress",
+          boardTask: true,
+          awaitingPermissions: [{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }],
+        },
       },
     }
     let call = 0
@@ -495,7 +499,7 @@ describe("createBoardStore", () => {
     expect(store.notices()[0]).toMatchObject({
       variant: "warning",
       title: "Kagan",
-      message: "s1 waiting on you — Run rm -rf?",
+      message: "s1 waiting on you — Run rm -rf? — press p",
     })
   })
 

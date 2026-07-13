@@ -105,7 +105,10 @@ const MetadataSchema = z.object({
   validatorAttempts: z.number().optional().catch(undefined),
   intakeParent: z.string().min(1).optional().catch(undefined),
   validatorParent: z.string().min(1).optional().catch(undefined),
-  awaitingInput: z.object({ id: z.string(), title: z.string() }).optional().catch(undefined),
+  awaitingPermissions: z
+    .array(z.object({ id: z.string(), title: z.string(), sessionID: z.string() }))
+    .optional()
+    .catch(undefined),
   helperError: z
     .object({ role: z.enum(["intake", "validator"]), message: z.string().min(1) })
     .optional()

@@ -26,6 +26,6 @@ export type StoreState = {
     started: number
     completed: number
     helperFailuresSeen: Map<string, string>
-    awaitingInputSeen: Set<string>
+    awaitingPermissionsSeen: Set<string>
   }
 }
