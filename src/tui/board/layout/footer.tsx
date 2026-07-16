@@ -15,7 +15,7 @@ export function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () 
         kagan v{version}
         <Show when={props.store.updateStatus()}>
           {(status) => (
-            <span style={{ fg: status().kind === "ready" ? theme().info : theme().warning }}>
+            <span style={{ fg: status().kind === "restart" ? theme().success : theme().info }}>
               {updateFooter(status())}
             </span>
           )}

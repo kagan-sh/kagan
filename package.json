@@ -58,7 +58,7 @@
     "setup": "node scripts/setup.mjs"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.17.18",
+    "@opencode-ai/plugin": "1.17.20",
     "semver": "7.8.5",
     "zod": "4.1.8"
   },
@@ -66,7 +66,7 @@
     "@babel/core": "7.28.0",
     "@babel/preset-typescript": "7.27.1",
     "@makerx/verify": "1.2.0",
-    "@opencode-ai/sdk": "1.17.18",
+    "@opencode-ai/sdk": "1.17.20",
     "@opentui/core": "0.4.3",
     "@opentui/keymap": "0.4.3",
     "@opentui/solid": "0.4.3",
@@ -106,6 +106,6 @@
     }
   },
   "engines": {
-    "opencode": ">=1.17.13 <1.18.0"
+    "opencode": ">=1.17.13"
   }
 }

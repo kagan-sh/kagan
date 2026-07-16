@@ -44,18 +44,19 @@ task back with instructions to rebase onto the current base.
 Supervised sessions cannot push to a remote. Use the board's approve/merge flow, or take over the
 worktree yourself if you need a different git flow.
 
-**The footer says an update is ready.**
-Kagan has prepared that release without changing the running plugin. Restart OpenCode once to
-apply it.
+**The footer says a version is available.**
+A newer stable Kagan release exists. Press `u`, run `/kagan-update`, or use the command palette to
+review and confirm it. Nothing changes until you confirm.
 
-**The footer says to update OpenCode for a Kagan release.**
-That Kagan release does not support the running OpenCode version. The footer names the required
-range; the current Kagan release remains active until OpenCode is compatible.
+**The footer says a version is installed — restart OpenCode.**
+Kagan installed the update but the running process still uses the old version. Restart OpenCode once
+to load it.
 
-**The footer says updates unavailable.**
-Automatic update cleanup or preparation failed — usually stale cache state after an interrupted
-restart. Restart OpenCode once more; if the footer persists, remove the Kagan plugin cache under
-OpenCode's cache directory and reinstall.
+**The update failed.**
+Kagan keeps running the current version and leaves the update available to retry. This happens when
+OpenCode cannot download the release or its `plugin --global --force` install exits with an error;
+the notice shows what OpenCode reported. Automatic updates only apply to global npm installs — a
+local or file install is never updated.
 
 **My existing sessions don't appear on the board.**
 By design — the board shows only tasks created through it. Chat sessions stay in OpenCode's

@@ -26,9 +26,8 @@ Plain OpenCode chat sessions are untouched: no board card, no intake, no gating.
 Supervised task sessions cannot push to a remote — work leaves the sandbox only through the board's
 merge dialog.
 
-Bare `@kagan-sh/kagan` and explicit `@latest` installs also prepare compatible Kagan `latest`
-releases automatically; see [Updating](/quickstart#updating) for restart-to-apply and OpenCode
-compatibility behavior.
+Global npm installs surface newer stable Kagan releases in the board footer and update on your
+confirmation; see [Updating](/quickstart#updating).
 
 Start with the [Quickstart](/quickstart). The lifecycle in full detail:
 [Task lifecycle](/concepts/task-lifecycle).

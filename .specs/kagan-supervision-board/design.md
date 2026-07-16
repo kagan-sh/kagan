@@ -13,13 +13,13 @@ Kagan ships as two OpenCode plugin surfaces from one package:
   state of its own; everything authoritative lives in session metadata.
 - **TUI plugin** (`src/tui.tsx`, default export `{ id, tui }`) — renders the board route, the
   create-task dialog, and the triage/merge dialogs; owns user-initiated actions (create, move,
-  triage, approve, send-back) via a Solid store and owns automatic update checking, preparation,
-  promotion, and feedback.
+  triage, approve, send-back) via a Solid store and owns update discovery, approval, and installation
+  through OpenCode's canonical plugin command.
 
 Both receive the plugin `options` object (OpenCode config). The option reference in
 [`docs/reference/configuration.md`](../../docs/reference/configuration.md) is canonical.
 
-## Architecture constraints (verified against @opencode-ai/{plugin,sdk} 1.17.18)
+## Architecture constraints (verified against @opencode-ai/{plugin,sdk} 1.17.20)
 
 These constraints shape the design and must hold for it to be correct:
 
@@ -40,13 +40,12 @@ These constraints shape the design and must hold for it to be correct:
 - **`promptAsync`** starts an agent turn and returns immediately; used for every agent-starting
   prompt (intake, validator, auto-start, send-back).
 - **Toasts are invisible while the board route is active**, so task and board-action feedback uses
-  the board's own `Notice` overlay. Automatic update feedback is the deliberate exception: one host
-  toast on home/session routes plus persistent board footer state, never the Notice queue (R3.8,
-  R18.5).
-- **Plugin activation ends at restart.** `api.plugins.add` can resolve, compatibility-check, import,
-  and validate an exact package during the current TUI process, but server hooks already loaded by
-  OpenCode cannot be replaced safely. Compatible npm updates therefore promote only during
-  `api.lifecycle.onDispose`; restart loads the promoted wrapper (R18).
+  the board's own `Notice` overlay. Update feedback follows the same rule: the board route uses the
+  Notice overlay and other routes use a host toast, plus persistent board footer state (R3.8, R18).
+- **Plugin activation ends at restart.** `api.plugins.add` can resolve, compatibility-check, and
+  import an exact package during the current TUI process, but the already-loaded `kagan` id is
+  deduplicated and server hooks cannot be replaced safely. Approved updates therefore persist the new
+  version through OpenCode's `plugin --global --force` command and require a restart to load it (R18).
 - **The host dialog stack already centers each dialog element** in a full-screen overlay, so the
   create-task dialog renders bare content and calls `dialog.setSize`, rather than wrapping itself in
   another overlay.
@@ -76,29 +75,29 @@ same-session writes so concurrent event handlers cannot clobber each other.
 
 ## Components
 
-| File                                              | Responsibility                                                                                                                                                                                                                                                             | Requirements                                              |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `domain/task/`, `domain/options.ts`               | Metadata schema, parsed view, option readers, scoped command parsing/matching, gate functions, finding/intake rules, citation verification, generation patches, and shared task-creation helpers                                                                           | R1.9–10, R2.3, R5, R7, R9.6, R9.17–19, R10, R12, R16, R19 |
-| `task/create.ts`                                  | Shared worktree-first board task creation orchestrator used by the TUI and server tool                                                                                                                                                                                     | R1.6–8, R2, R17.1–2, R19.7                                |
-| `git/`                                            | Runner abstraction; worktree create/config; diff assembly; hunk-range parser; `git push` matcher; merge implementation                                                                                                                                                     | R1.6, R2, R9.2, R9.16–17, R11.2, R12.3–10, R16            |
-| `domain/handoff.ts`                               | Prompt composition and task-reference formatting                                                                                                                                                                                                                           | R6.2, R11.2, R13                                          |
-| `server.ts`                                       | Event lifecycle; helper failure funnel; tools; `/kagan-task` command registration; permission-wait tracking; reference resolution; report capture; remote-push guard                                                                                                       | R4, R6, R7.3, R8, R9, R13, R15–17, R19                    |
-| `server/command.ts`                               | `/kagan-task` command template builder                                                                                                                                                                                                                                     | R19.1                                                     |
-| `server/create-tasks.ts`                          | `kagan_create_tasks` execution: caller guard, scope validation, sequential resilient creation                                                                                                                                                                              | R19.2–7                                                   |
-| `server/intake.ts`                                | `spawnIntake` read-only child                                                                                                                                                                                                                                              | R4                                                        |
-| `server/validator/`                               | `spawnValidator` read-only child, diff+context prompt, validator model rotation                                                                                                                                                                                            | R9                                                        |
-| `checks/runner.ts`                                | Setup/check command runner with timeout, skipped/ran step evidence, and output tail                                                                                                                                                                                        | R9.11–15, R17.2–3                                         |
-| `tui.tsx`                                         | TUI composition, routes, subscriptions, automatic-update orchestration, and route-aware update toast                                                                                                                                                                       | R3, R18.3–5, R18.9                                        |
-| `tui/session/`, `tui/tasks/`                      | TUI data ops: list/create, serialized metadata patching, send-back, merge, triage, approval, helper restart                                                                                                                                                                | R1, R3.2, R4.9, R9.10, R11, R12, R17.8                    |
-| `tui/dialogs/create-task.tsx`                     | Custom OpenTUI create dialog, including configured/custom task scope selection                                                                                                                                                                                             | R1.1–1.4, R1.9–10                                         |
-| `tui/board/store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices, and update status                                                                                                                                                                         | R3, R7, R17.4–5, R18                                      |
-| `tui/board/commands.tsx`                          | Key bindings and dialog flows: create, move, triage, approve/merge, send-back, helper restart, task details view                                                                                                                                                           | R5.2, R4.9, R9.10, R10, R11, R12, R17.3, R17.7            |
-| `tui/board/board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version and persistent update status                                                                                                                                          | R3, R3.7–8, R7.4, R18                                     |
-| `tui/updates/`                                    | npm latest/manifest cache and `engines.opencode` classification (`check.ts`), exact-release preparation and hostile-path validation (`manager.ts`, `paths.ts`), launch orchestration (`launch.ts`), disposal promotion/restore, and successful-load cleanup (`cleanup.ts`) | R3.8, R18.1–9                                             |
-| `tui/format.ts`                                   | Card badges, age/diff/subtask formatting                                                                                                                                                                                                                                   | R3.6                                                      |
-| `tui/dialogs/task-details.tsx`                    | Read-only task details view from live session metadata and diff stats                                                                                                                                                                                                      | R17.7                                                     |
-| `tui/dialogs/onboarding.tsx`                      | First-run board tour and opt-out persistence                                                                                                                                                                                                                               | R17.6                                                     |
-| `tui/routes/settings.tsx`                         | Settings route for editing plugin options and saving `opencode.json`                                                                                                                                                                                                       | R17.10–13                                                 |
+| File                                              | Responsibility                                                                                                                                                                                                              | Requirements                                              |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `domain/task/`, `domain/options.ts`               | Metadata schema, parsed view, option readers, scoped command parsing/matching, gate functions, finding/intake rules, citation verification, generation patches, and shared task-creation helpers                            | R1.9–10, R2.3, R5, R7, R9.6, R9.17–19, R10, R12, R16, R19 |
+| `task/create.ts`                                  | Shared worktree-first board task creation orchestrator used by the TUI and server tool                                                                                                                                      | R1.6–8, R2, R17.1–2, R19.7                                |
+| `git/`                                            | Runner abstraction; worktree create/config; diff assembly; hunk-range parser; `git push` matcher; merge implementation                                                                                                      | R1.6, R2, R9.2, R9.16–17, R11.2, R12.3–10, R16            |
+| `domain/handoff.ts`                               | Prompt composition and task-reference formatting                                                                                                                                                                            | R6.2, R11.2, R13                                          |
+| `server.ts`                                       | Event lifecycle; helper failure funnel; tools; `/kagan-task` command registration; permission-wait tracking; reference resolution; report capture; remote-push guard                                                        | R4, R6, R7.3, R8, R9, R13, R15–17, R19                    |
+| `server/command.ts`                               | `/kagan-task` command template builder                                                                                                                                                                                      | R19.1                                                     |
+| `server/create-tasks.ts`                          | `kagan_create_tasks` execution: caller guard, scope validation, sequential resilient creation                                                                                                                               | R19.2–7                                                   |
+| `server/intake.ts`                                | `spawnIntake` read-only child                                                                                                                                                                                               | R4                                                        |
+| `server/validator/`                               | `spawnValidator` read-only child, diff+context prompt, validator model rotation                                                                                                                                             | R9                                                        |
+| `checks/runner.ts`                                | Setup/check command runner with timeout, skipped/ran step evidence, and output tail                                                                                                                                         | R9.11–15, R17.2–3                                         |
+| `tui.tsx`                                         | TUI composition, routes, subscriptions, update discovery at launch, and the `kagan.update` command                                                                                                                          | R3, R18.1, R18.4                                          |
+| `tui/session/`, `tui/tasks/`                      | TUI data ops: list/create, serialized metadata patching, send-back, merge, triage, approval, helper restart                                                                                                                 | R1, R3.2, R4.9, R9.10, R11, R12, R17.8                    |
+| `tui/dialogs/create-task.tsx`                     | Custom OpenTUI create dialog, including configured/custom task scope selection                                                                                                                                              | R1.1–1.4, R1.9–10                                         |
+| `tui/board/store.tsx`                             | Solid board store: grouping, ordering, selection, move gating, refresh, notices, and update status                                                                                                                          | R3, R7, R17.4–5, R18                                      |
+| `tui/board/commands.tsx`                          | Key bindings and dialog flows: create, move, triage, approve/merge, send-back, helper restart, task details view                                                                                                            | R5.2, R4.9, R9.10, R10, R11, R12, R17.3, R17.7            |
+| `tui/board/board.tsx` / `column.tsx` / `card.tsx` | Board layout, column headers with cap, cards with task number and badges; board footer shows version, persistent update status, and the conditional update hint                                                             | R3, R3.7–8, R7.4, R18                                     |
+| `tui/updates/`                                    | npm `latest` dist-tag check with eligibility and TTL cache (`check.ts`), non-mutating launch discovery (`launch.ts`), the approve→stage→install controller (`action.ts`), and the bounded no-shell CLI runner (`runner.ts`) | R3.8, R18                                                 |
+| `tui/format.ts`                                   | Card badges, age/diff/subtask formatting                                                                                                                                                                                    | R3.6                                                      |
+| `tui/dialogs/task-details.tsx`                    | Read-only task details view from live session metadata and diff stats                                                                                                                                                       | R17.7                                                     |
+| `tui/dialogs/onboarding.tsx`                      | First-run board tour and opt-out persistence                                                                                                                                                                                | R17.6                                                     |
+| `tui/routes/settings.tsx`                         | Settings route for editing plugin options and saving `opencode.json`                                                                                                                                                        | R17.10–13                                                 |
 
 ## Key flows
 
@@ -245,21 +244,22 @@ agent as a failed tool call carrying the thrown message; a generic OpenCode sess
 task, role, nor parent back-pointer) is left untouched, and non-`bash` tool calls and non-push bash
 commands are ignored.
 
-**Automatic update (R18).** Only TUI instances loaded from bare `@kagan-sh/kagan` or explicit
-`@latest` resolve npm `latest`; exact pins and file installs return before network access. A newer
-clean release is classified only after its manifest supplies a valid `engines.opencode` range.
-Compatible latest is prepared exactly through `api.plugins.add`, which independently performs the
-host compatibility check and imports the package without activating a duplicate `kagan` plugin id
-(the host dedupes by module id).
-The manager verifies that the current and prepared targets are valid
-`opencode/packages/@kagan-sh/kagan@…/node_modules/@kagan-sh/kagan` wrappers before writing one
-sibling marker. Its disposal callback renames current to one backup, promotes prepared to
-`kagan@latest`, and restores current if promotion fails in-process. If promotion was interrupted by
-process exit, the host re-downloads `latest` on the next launch (requiring network) and Kagan's
-cleanup then removes the leftover backup, marker, and prepared directory. The next successful load
-of the marker's version removes only that validated backup and marker. Ready/blocked/broken status is a dedicated store signal: home/session routes
-receive one host toast for ready/blocked, while the board renders persistent footer text and never
-consumes Notice capacity.
+**Approved update (R18).** Discovery and installation are separate. At launch `runUpdateDiscovery`
+(`launch.ts`) resolves npm's stable `latest` dist-tag only for eligible global npm installs (bare,
+`@latest`, or clean exact stable specs; file, development, and prerelease installs return before any
+network access), caches a successful result for one hour, and records an `available` store status
+without downloading anything. The footer renders that version and shows the `u` hint.
+
+Installation runs only through the `kagan.update` command (`action.ts`), which is single-flight and
+shared by the board `u` binding, the command palette, and `/kagan-update`. It force-refreshes the
+check, and when a release is available it opens a confirmation naming both versions. On approval it
+stages the exact release with `api.plugins.add` — which performs the host compatibility check and is
+deduplicated against the loaded `kagan` id, leaving the running version active — then `runner.ts`
+spawns the current `process.execPath` with `plugin <exact> --global --force` and no shell, bounding
+runtime and captured output. Success sets the `restart` footer state; staging or command failure
+returns to `available` with a transient notice. Feedback uses the board Notice overlay on the board
+route and a host toast elsewhere. Kagan never reads or mutates any OpenCode package-cache path and
+performs no migration of artifacts from earlier updater versions.
 
 ## Configuration
 

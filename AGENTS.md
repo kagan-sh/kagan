@@ -87,12 +87,13 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
   board that does not repaint. The architecture guard enforces this.
 - Use `TuiPluginApi` for renderer dimensions, keyboard input, and keymap layers; do not import
   OpenTUI/Solid context hooks for those surfaces.
-- Automatic updates are TUI-only. `src/tui/updates/check.ts` checks npm `latest` for bare/`@latest`
-  installs, prepares compatible exact releases through `api.plugins.add`, promotes only on
-  `api.lifecycle.onDispose`, and toasts only on home/session routes. Never add a server update hook
-  or touch exact pins and file installs. `src/tui/updates/manager.ts` treats cache paths as hostile:
-  it accepts only non-symlinked `@kagan-sh/kagan` wrappers and removes only its own marker and single
-  backup; never broaden that deletion.
+- Automatic updates are TUI-only and approval-gated. `src/tui/updates/check.ts` checks npm's stable
+  `latest` for global npm installs (bare, `@latest`, or exact stable specs) and only records an
+  available version. `src/tui/updates/action.ts` owns the confirmed update: it stages the exact
+  release with `api.plugins.add` (which owns the host compatibility check), then `runner.ts` runs the
+  current OpenCode executable's `plugin <exact> --global --force` with no shell. Never download or
+  change config before confirmation, never activate the new version in-process (restart applies it),
+  never add a server update hook, and never read or mutate OpenCode's package cache.
 
 ## External APIs
 

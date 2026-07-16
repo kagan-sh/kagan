@@ -7,6 +7,7 @@ export function footerHints(
   selected: BoardSession | undefined,
   hasFilter: boolean,
   waitingPermissions = 0,
+  updateAvailable = false,
 ): FooterHint[] {
   const hints: FooterHint[] = [
     { key: "j/k/h/l", label: "navigate" },
@@ -29,6 +30,7 @@ export function footerHints(
   }
   hints.push({ key: "/", label: "filter" })
   if (hasFilter) hints.push({ key: "esc", label: "clears it" })
+  if (updateAvailable) hints.push({ key: "u", label: "update" })
   hints.push({ key: ",", label: "settings" }, { key: "?", label: "help" }, { key: "q", label: "quit" })
   return hints
 }

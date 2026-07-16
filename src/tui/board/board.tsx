@@ -38,7 +38,14 @@ export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
       .filter((session) => !session.parentID)
       .reduce((sum, session) => sum + (kagan(session.metadata).awaitingPermissions?.length ?? 0), 0),
   )
-  const hints = createMemo(() => footerHints(store.selectedSession(), store.filter() !== "", waitingPermissions()))
+  const hints = createMemo(() =>
+    footerHints(
+      store.selectedSession(),
+      store.filter() !== "",
+      waitingPermissions(),
+      store.updateStatus()?.kind === "available",
+    ),
+  )
   return (
     <box position="absolute" left={0} top={0} width="100%" height="100%">
       <box flexDirection="column" width="100%" height="100%">

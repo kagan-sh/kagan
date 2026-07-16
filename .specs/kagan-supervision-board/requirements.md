@@ -80,8 +80,8 @@ status cues, so that I can see at a glance what needs my attention.
 6. WHILE a Backlog task is intake-ready, its card SHALL display a distinct border color and an
    `intake ok` badge indicating it is eligible to move to In Progress.
 7. THE board footer SHALL display the plugin name and version.
-8. WHERE automatic update status is ready or blocked, the board footer SHALL persist the prepared
-   version or the OpenCode compatibility requirement respectively (R18).
+8. WHERE an update is available, installing, or installed-pending-restart, the board footer SHALL
+   persist that state and its version (R18).
 9. WHILE a task is in Review and not yet approved, the board SHALL sort its card ahead of other
    cards in that column.
 10. WHILE a Backlog task's intake outcome is `failed`, the card SHALL display a distinct failed
@@ -478,33 +478,37 @@ so that failures, handoffs, and supervision evidence are visible instead of hidd
 
 ---
 
-## Requirement 18 — Automatic npm updates
+## Requirement 18 — Approved npm updates
 
-**User Story:** As an npm user, I want Kagan to prepare compatible releases automatically and tell
-me when OpenCode blocks one, so that updating requires only a restart and no compatibility judgment.
+**User Story:** As an npm user, I want Kagan to tell me when a newer release exists and update itself
+through OpenCode's own plugin command once I approve, so that updating is one confirmation plus a
+restart and never touches OpenCode's private cache.
 
 #### Acceptance Criteria
 
-1. WHERE Kagan was loaded from bare `@kagan-sh/kagan` or explicit `@latest`, Kagan SHALL check npm
-   `latest` no more than once per successful one-hour cache window.
-2. WHEN npm `latest` is newer and its `engines.opencode` range accepts the running OpenCode version,
-   Kagan SHALL prepare that exact release through the TUI plugin API without changing plugin config.
-3. WHEN a compatible release has been prepared THEN Kagan SHALL keep the running wrapper unchanged
-   until TUI disposal, promote the prepared wrapper during disposal, and require an OpenCode restart
-   to activate it.
-4. WHEN npm `latest` requires a different OpenCode version THEN Kagan SHALL leave the current
-   wrapper unchanged and SHALL persistently name the required OpenCode range on the board.
-5. WHERE automatic update status is ready or blocked on a home or session route, Kagan SHALL show
-   one host toast; update status SHALL NOT enter the board Notice queue.
-6. IF Kagan was loaded from an exact npm pin or a local/file source THEN Kagan SHALL NOT query npm,
-   prepare a release, or mutate its wrapper.
-7. IF a registry request, manifest validation, download, import, or cache-path validation fails THEN
-   Kagan SHALL leave the current wrapper unchanged; WHEN cleanup or preparation fails due to local cache
-   state THEN Kagan SHALL persistently show that automatic updates are unavailable on the board
-   footer.
-8. WHEN promotion of the prepared wrapper fails in-process after the current wrapper was moved to backup THEN Kagan SHALL restore the current wrapper immediately; WHEN promotion was interrupted by process exit THEN the host SHALL re-download `latest` on the next launch (requiring network) and Kagan's cleanup SHALL then remove the leftover backup, marker, and prepared directory.
-9. WHEN the prepared version loads successfully after restart THEN Kagan SHALL remove its validated
-   backup and marker without deleting any broader OpenCode cache path.
+1. WHERE Kagan was loaded as a stable npm release from a bare, `@latest`, or clean exact
+   `@kagan-sh/kagan` spec, Kagan SHALL check npm's stable `latest` no more than once per successful
+   one-hour cache window; a user-invoked update check SHALL bypass that window.
+2. IF Kagan was loaded from a local/file source, a development version, or a prerelease version THEN
+   Kagan SHALL NOT query npm or change the installation.
+3. WHEN npm `latest` is newer than the running version THEN Kagan SHALL record it as available and
+   persist that version in the board footer without downloading it or changing plugin config.
+4. Kagan SHALL expose one update action through a conditional board `u` hint and binding, the command
+   palette, and `/kagan-update`; invoking it with no cached update SHALL check on demand and report
+   whether Kagan is current or a release is available.
+5. Kagan SHALL require a confirmation naming the running and target versions before it downloads the
+   target or changes configuration; launch, discovery, and opening the board SHALL NOT be approval.
+6. WHEN the user confirms THEN Kagan SHALL stage the exact target with `api.plugins.add` (which
+   performs the host compatibility check) and, only on success, run the current OpenCode executable's
+   `plugin <exact> --global --force` command without a shell; concurrent invocations SHALL share one
+   in-flight operation.
+7. WHEN staging or the canonical command fails THEN Kagan SHALL keep the running version and existing
+   config usable, report the failure transiently, and leave the update available to retry.
+8. WHEN the canonical command succeeds THEN Kagan SHALL persist an installed-pending-restart footer
+   state for that version, keep the running version active for the rest of the process, and require an
+   OpenCode restart to load the new version.
+9. Kagan SHALL NOT read, rename, remove, or validate any OpenCode package-cache path, and SHALL NOT
+   migrate artifacts left by earlier updater versions.
 
 ---
 

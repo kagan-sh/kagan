@@ -2,12 +2,12 @@
 
 ## Install
 
-You need [OpenCode](https://opencode.ai/) 1.17.13 or newer, below 1.18.0.
+You need [OpenCode](https://opencode.ai/) 1.17.13 or newer.
 
-From npm:
+Install globally so Kagan is available in every project:
 
 ```bash
-opencode plugin @kagan-sh/kagan
+opencode plugin -g @kagan-sh/kagan
 ```
 
 Or add a local clone to both `opencode.json` and `tui.json`:
@@ -41,18 +41,23 @@ entry shown in the [configuration reference](/reference/configuration).
 
 ## Updating
 
-Bare `@kagan-sh/kagan` and explicit `@latest` installs check npm at most once per successful
-one-hour window. When `latest` supports the running OpenCode, Kagan prepares it in the background
-and shows `vX.Y.Z ready — restart OpenCode`; restart once to apply it. Ready and blocked status
-appears once as a host toast on home/session routes and persists in the board footer.
+Global npm installs check npm's stable `latest` at most once per successful one-hour window. When a
+newer release exists, the board footer shows `vX.Y.Z available`. Press `u` on the board, run
+`/kagan-update`, or pick "Update Kagan" from the command palette to check on demand and review the
+update.
 
-If `latest` requires another OpenCode version, Kagan keeps the current release and names the
-required OpenCode range. Registry and manifest failures stay silent and never disturb the working
-plugin. Local cache cleanup or preparation failures show `updates unavailable` in the board footer;
-the ready message appears only after preparation succeeds.
+After you confirm, Kagan asks OpenCode to download and compatibility-check the exact release, then
+runs OpenCode's own `plugin --global --force` command to install it. The footer shows
+`vX.Y.Z installed - restart OpenCode`; restart once to load it. Nothing is downloaded or changed
+until you confirm, and registry failures stay silent.
 
-Exact version pins and local/file installs are advanced-user choices. Kagan never checks or changes
-them automatically.
+If OpenCode rejects the release or the install fails, Kagan keeps running the current version and the
+update stays available to retry. To roll back, install a specific version yourself:
+`opencode plugin -g @kagan-sh/kagan@<version> --force`, then restart.
+
+Local, file, and development installs are never updated automatically. Existing project-local
+installs should migrate: remove the local `@kagan-sh/kagan` plugin entry, then install globally with
+`opencode plugin -g @kagan-sh/kagan`.
 
 ## Your first task
 

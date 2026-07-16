@@ -17,13 +17,13 @@ The agent never touches your checkout. It works on a `kagan/<slug>` branch in it
 
 ## Install
 
-You need [OpenCode](https://opencode.ai/) **1.17.13** or newer (below **1.18.0** — see
-`engines.opencode` in `package.json`).
+You need [OpenCode](https://opencode.ai/) **1.17.13** or newer (see `engines.opencode` in
+`package.json`).
 
-From npm:
+Install globally so Kagan is available in every project:
 
 ```bash
-opencode plugin @kagan-sh/kagan
+opencode plugin -g @kagan-sh/kagan
 ```
 
 Or add a local clone to both OpenCode config files:
@@ -38,10 +38,10 @@ Open the board with `/kagan` from the command palette, the `kagan` palette comma
 
 From any regular OpenCode session, run `/kagan-task` to create board tasks conversationally — useful when planning several tickets at once without opening the board create dialog for each one.
 
-For bare `@kagan-sh/kagan` and explicit `@latest` installs, Kagan prepares compatible `latest`
-releases automatically. Ready or blocked updates appear once as a host toast on home/session routes
-and persist in the board footer. Restart OpenCode when an update is ready; if `latest` needs a newer
-OpenCode, Kagan names the required range. Exact version pins and local installs remain unchanged. See
+For global npm installs, Kagan checks npm for newer stable releases and shows an available version in
+the board footer. Press `u`, run `/kagan-update`, or use the command palette to review and confirm the
+update; Kagan then installs the exact release and asks you to restart OpenCode. Local, file, and
+development installs are never updated automatically. See
 [Updating](https://docs.kagan.sh/quickstart/#updating).
 
 Pass options by using the array-of-array form, or open `/kagan-settings` from the project — see the [configuration reference](https://docs.kagan.sh/reference/configuration/).

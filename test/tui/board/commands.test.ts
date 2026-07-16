@@ -131,6 +131,11 @@ describe("footerHints", () => {
     expect(footerHints(undefined, true)).toContainEqual({ key: "esc", label: "clears it" })
     expect(footerHints(undefined, false)).not.toContainEqual({ key: "esc", label: "clears it" })
   })
+
+  test("adds the update hint only when a release is available", () => {
+    expect(footerHints(undefined, false, 0, true)).toContainEqual({ key: "u", label: "update" })
+    expect(footerHints(undefined, false)).not.toContainEqual({ key: "u", label: "update" })
+  })
 })
 
 describe("createBoardCommands", () => {
@@ -138,7 +143,9 @@ describe("createBoardCommands", () => {
     const names = new Set(
       createBoardCommands({} as TuiPluginApi, {} as BoardStore, () => {}).map((command) => command.name),
     )
-    expect(BOARD_BINDINGS.every((binding) => names.has(binding.cmd))).toBe(true)
+    expect(
+      BOARD_BINDINGS.filter((binding) => binding.cmd !== "kagan.update").every((binding) => names.has(binding.cmd)),
+    ).toBe(true)
   })
 
   test("kagan.settings opens the settings route", () => {

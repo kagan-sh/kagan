@@ -5,7 +5,6 @@ import { createRoot } from "solid-js"
 import type { TuiPluginApi, TuiToast } from "@opencode-ai/plugin/tui"
 import { Board } from "../../../src/tui/board/board"
 import { createBoardStore } from "../../../src/tui/board/store"
-import { showUpdateToast } from "../../../src/tui/updates/launch"
 import { ROUTE, type BoardSession } from "../../../src/tui/types"
 import type { ColumnType } from "../../../src/domain/task/types"
 import { mockSession, mockTuiApi } from "../../fixtures/api"
@@ -138,7 +137,7 @@ describe("Board", () => {
     expect(frame).not.toContain("d delete")
   })
 
-  test("shows prepared and blocked update states in the footer", async () => {
+  test("shows available, installing, and restart update states in the footer", async () => {
     const api = mockBoardApi()
     const store = createRoot(() => createBoardStore(api))
     await store.refresh()
@@ -146,31 +145,18 @@ describe("Board", () => {
     await renderSetup.flush()
     expect(renderSetup.captureCharFrame()).not.toContain("restart OpenCode")
 
-    store.setUpdateStatus({ kind: "ready", version: "9.9.9" })
+    store.setUpdateStatus({ kind: "available", version: "9.9.9" })
     await renderSetup.flush()
-    expect(renderSetup.captureCharFrame()).toContain("v9.9.9 ready — restart OpenCode")
+    expect(renderSetup.captureCharFrame()).toContain("v9.9.9 available")
+    expect(renderSetup.captureCharFrame()).toContain("u update")
 
-    store.setUpdateStatus({ kind: "blocked", version: "10.0.0", requiredOpenCode: ">=2.0.0" })
+    store.setUpdateStatus({ kind: "installing", version: "9.9.9" })
     await renderSetup.flush()
-    expect(renderSetup.captureCharFrame()).toContain("update OpenCode to >=2.0.0 for Kagan v10.0.0")
-  })
+    expect(renderSetup.captureCharFrame()).toContain("installing v9.9.9")
 
-  test("uses host toasts only off the board", () => {
-    const home = mockBoardApi({ routeName: "home" })
-    showUpdateToast(home, "0.1.0", { kind: "ready", version: "0.2.0" })
-    expect(home.toasts[0]?.message).toBe("Kagan v0.2.0 is ready. Restart OpenCode to apply.")
-
-    const sessionApi = mockBoardApi({ routeName: "session" })
-    showUpdateToast(sessionApi, "0.1.0", {
-      kind: "blocked",
-      version: "0.2.0",
-      requiredOpenCode: ">=1.18.0",
-    })
-    expect(sessionApi.toasts[0]?.message).toContain("requires OpenCode >=1.18.0")
-
-    const board = mockBoardApi()
-    showUpdateToast(board, "0.1.0", { kind: "ready", version: "0.2.0" })
-    expect(board.toasts).toHaveLength(0)
+    store.setUpdateStatus({ kind: "restart", version: "9.9.9" })
+    await renderSetup.flush()
+    expect(renderSetup.captureCharFrame()).toContain("v9.9.9 installed - restart OpenCode")
   })
 
   test("keeps the footer trimmed once a card is selected", async () => {

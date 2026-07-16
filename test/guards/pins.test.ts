@@ -10,6 +10,7 @@ describe("dependency pins", () => {
     expect(valid(sdk)).toBe(sdk)
     expect(plugin).toBe(sdk)
     expect(satisfies(plugin, root.engines.opencode)).toBe(true)
+    expect(root.engines.opencode).not.toContain("<")
   })
 
   // .opencode/ is gitignored local config, so the pin can only be enforced where it exists.

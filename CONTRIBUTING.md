@@ -22,9 +22,9 @@ bun run plugin:install
 ```
 
 This installs your local build into OpenCode. Open a project in OpenCode and launch the board to
-see your changes. Local/file installs, including `plugin:install:prod`, intentionally skip automatic
-update checks; only a published bare/`@latest` npm install exercises that path. Run
-`bun run plugin:reset` to undo the install.
+see your changes. Local/file installs, including `plugin:install:prod`, are never updated
+automatically; only a global npm install exercises the update path. Run `bun run plugin:reset` to
+undo the install.
 
 ## Curated validation
 
