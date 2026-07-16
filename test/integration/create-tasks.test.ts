@@ -1,6 +1,7 @@
 import "../preload/git-isolation.ts"
 import { describe, expect, test } from "bun:test"
 import type { PluginInput } from "@opencode-ai/plugin"
+import { existsSync } from "node:fs"
 import { gitShellForRepo, initTestRepo } from "../fixtures/git-shell"
 
 // Runs in its own `bun test` invocation (see package.json "test") so git/runner is the real module,
@@ -49,5 +50,59 @@ describe("runCreateTasks", () => {
     expect(patch.boardTask).toBe(true)
     expect(patch.worktree).toBe(call.query!.directory)
     expect(patch.status).toBe("backlog")
+  })
+
+  test("overlapping runs never mint duplicate task numbers", async () => {
+    const repo = initTestRepo()
+    const sessions: Array<{ id: string; metadata?: Record<string, unknown> }> = []
+    let seq = 0
+    const input = {
+      worktree: repo,
+      $: gitShellForRepo(repo),
+      client: {
+        session: {
+          get: async () => ({ data: { metadata: {} } }),
+          list: async () => ({ data: sessions }),
+          create: async (options: CreateCall) => {
+            const id = `task-${++seq}`
+            // Yield before recording so both runs interleave and would collide without serialization.
+            await Bun.sleep(0)
+            sessions.push({ id, metadata: { kagan: options.body?.metadata?.kagan ?? {} } })
+            return { data: { id } }
+          },
+        },
+      },
+    } as unknown as PluginInput
+    await Promise.all([
+      runCreateTasks(input, {}, [{ title: "A", description: "first batch" }]),
+      runCreateTasks(input, {}, [{ title: "B", description: "second batch" }]),
+    ])
+    const numbers = sessions.map((s) => ((s.metadata?.kagan ?? {}) as { taskNumber?: number }).taskNumber).sort()
+    expect(numbers).toEqual([1, 2])
+  })
+
+  test("rolls back the worktree and branch when session creation fails", async () => {
+    const repo = initTestRepo()
+    let directory: string | undefined
+    const input = {
+      worktree: repo,
+      $: gitShellForRepo(repo),
+      client: {
+        session: {
+          get: async () => ({ data: { metadata: {} } }),
+          list: async () => ({ data: [] }),
+          create: async (options: CreateCall) => {
+            directory = options.query?.directory
+            throw new Error("transient session-create failure")
+          },
+        },
+      },
+    } as unknown as PluginInput
+    const report = await runCreateTasks(input, {}, [{ title: "Doomed", description: "will fail at session create" }])
+    expect(report).toContain("failed")
+    expect(directory).toBeDefined()
+    expect(existsSync(directory!)).toBe(false)
+    const branches = await gitShellForRepo(repo)`${repo} ${["branch", "--list", "kagan/*"]}`.nothrow().quiet()
+    expect(branches.stdout.toString().trim()).toBe("")
   })
 })

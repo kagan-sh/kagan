@@ -140,6 +140,17 @@ export async function createTaskWorktree(
   return { directory, branch }
 }
 
+export async function removeTaskWorktree(
+  run: GitRunner,
+  mainWorktree: string,
+  directory: string,
+  branch: string,
+): Promise<void> {
+  await run(["worktree", "remove", "--force", directory], mainWorktree)
+  await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+  await run(["branch", "-D", branch], mainWorktree)
+}
+
 const kaganPackageRoot = resolve(import.meta.dir, "../..")
 
 export async function ensureWorktreePluginConfig(directory: string, pluginSpec: string = kaganPackageRoot) {

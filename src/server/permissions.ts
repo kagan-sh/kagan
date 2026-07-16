@@ -1,5 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { kagan } from "../domain/task/metadata"
+import { ownsReadOnlyHelper, readOnlyHelperClaim } from "../domain/task/policy"
 import { getSessionData } from "./data"
 import { resolveOwningBoardTask } from "./helpers/events"
 import { mutateKagan } from "./session/patch"
@@ -8,10 +8,13 @@ export async function handlePermissionRequested(
   input: PluginInput,
   permission: { id: string; title: string; sessionID: string },
 ): Promise<void> {
-  const role = kagan((await getSessionData(input, permission.sessionID))?.metadata).role
-  // Read-only helpers auto-approve their own permissions (server.ts) and cannot spawn subagents,
-  // so their asks never block — keep them out of the human queue.
-  if (role === "intake" || role === "validator") return
+  const claim = readOnlyHelperClaim((await getSessionData(input, permission.sessionID))?.metadata)
+  // Verified read-only helpers auto-approve (server.ts) and never block, so skip the human queue;
+  // a forged role the owning board task doesn't confirm falls through and gets queued.
+  if (claim) {
+    const parent = await getSessionData(input, claim.parent)
+    if (ownsReadOnlyHelper(parent?.metadata, claim.role, permission.sessionID)) return
+  }
   const rootID = await resolveOwningBoardTask(input, permission.sessionID)
   if (!rootID) return
   await mutateKagan(input.client, rootID, (view) => {

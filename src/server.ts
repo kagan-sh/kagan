@@ -1,7 +1,6 @@
 import type { Plugin, PluginModule } from "@opencode-ai/plugin"
 import type { Permission } from "@opencode-ai/sdk"
-import { isReadOnlyHelperRole, isSupervisedSession } from "./domain/task/policy"
-import { kagan } from "./domain/task/metadata"
+import { isSupervisedSession, ownsReadOnlyHelper, readOnlyHelperClaim } from "./domain/task/policy"
 import { isGitPushCommand } from "./git/runner"
 import { getSessionData } from "./server/data"
 import { createServerEvents } from "./server/events"
@@ -29,8 +28,10 @@ async function allowReadOnlyHelper(
   permission: Permission,
   output: { status: "ask" | "deny" | "allow" },
 ): Promise<void> {
-  const role = kagan((await getSessionData(input, permission.sessionID))?.metadata).role
-  if (isReadOnlyHelperRole(role)) output.status = "allow"
+  const claim = readOnlyHelperClaim((await getSessionData(input, permission.sessionID))?.metadata)
+  if (!claim) return
+  const parent = await getSessionData(input, claim.parent)
+  if (ownsReadOnlyHelper(parent?.metadata, claim.role, permission.sessionID)) output.status = "allow"
 }
 
 const server: Plugin = async (input, options) => ({

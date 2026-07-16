@@ -1,9 +1,11 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import { commandPlan, configuredScopes, sanitizeTaskScope, type TaskScope } from "../domain/task/commands"
+import type { CommandSpec } from "../domain/task/types"
 import { nextTaskNumber } from "../domain/task/metadata"
 import { createBoardTask, type CreateSessionPayload } from "../task/create"
 import { currentBranch, shellGitRunner } from "../git/runner"
 import { listSessions } from "./data"
+import { serializeByKey } from "./serialize"
 
 export type CreateTaskTicket = {
   title: string
@@ -67,9 +69,25 @@ export async function runCreateTasks(
   const allowedScopes = configuredScopes(options)
   const run = shellGitRunner(input.$)
   const defaultBranch = (await currentBranch(run, input.worktree)) ?? "HEAD"
+  const setupCommands = commandPlan(options, "setup")
+
+  // Serialize the whole run per project so overlapping bulk requests can't read the same session
+  // snapshot and mint duplicate task numbers — numbers are only unique once the prior run's sessions exist.
+  return serializeByKey(input.worktree, () =>
+    createSerially(input, run, allowedScopes, defaultBranch, setupCommands, tickets),
+  )
+}
+
+async function createSerially(
+  input: PluginInput,
+  run: ReturnType<typeof shellGitRunner>,
+  allowedScopes: readonly string[],
+  defaultBranch: string,
+  setupCommands: CommandSpec[],
+  tickets: CreateTaskTicket[],
+): Promise<string> {
   const sessions = await listSessions(input)
   let nextNumber = nextTaskNumber(sessions)
-  const setupCommands = commandPlan(options, "setup")
 
   const lines: string[] = []
   let created = 0

@@ -105,8 +105,29 @@ export function getRefinedPrompt(metadata?: Record<string, unknown>) {
 export function pendingFindingCount(metadata?: Record<string, unknown>) {
   return (kagan(metadata).findings ?? []).filter((finding) => !isResolvedFinding(finding)).length
 }
-export function isReadOnlyHelperRole(role: string | undefined): role is HelperRole {
+function isReadOnlyHelperRole(role: string | undefined): role is HelperRole {
   return role === "intake" || role === "validator"
+}
+// Role alone is attacker-controllable, so it can't prove a helper — returns the claimed role and its
+// parent only when both exist, for the caller to confirm the owning board task points back.
+export function readOnlyHelperClaim(
+  metadata: Record<string, unknown> | undefined,
+): { role: HelperRole; parent: string } | undefined {
+  const role = kagan(metadata).role
+  if (!isReadOnlyHelperRole(role)) return undefined
+  const parent = helper(metadata, role).parent
+  return parent ? { role, parent } : undefined
+}
+// Confirms the parent is a board task whose `${role}SessionID` points back at the helper session,
+// closing the loop so a forged role/parent on an unowned session cannot claim helper privileges.
+export function ownsReadOnlyHelper(
+  parentMetadata: Record<string, unknown> | undefined,
+  role: HelperRole,
+  helperSessionID: string,
+): boolean {
+  const view = kagan(parentMetadata)
+  const sessionID = role === "intake" ? view.intakeSessionID : view.validatorSessionID
+  return view.boardTask === true && sessionID === helperSessionID
 }
 export function isSupervisedSession(metadata?: Record<string, unknown>) {
   const view = kagan(metadata)

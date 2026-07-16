@@ -910,12 +910,24 @@ describe("kagan server — permission.updated / permission.replied", () => {
   test("keeps read-only helper permissions out of the queue (auto-approved)", async () => {
     const store: Record<string, SessionData> = {
       v1: { parentID: "root-1", metadata: { kagan: { role: "validator", validatorParent: "root-1" } } },
-      "root-1": { metadata: { kagan: { status: "review", boardTask: true } } },
+      "root-1": { metadata: { kagan: { status: "review", boardTask: true, validatorSessionID: "v1" } } },
     }
     const { input, captured } = makeInput({ store })
     const hooks = await plugin.server(input, {})
     await hooks.event?.(permissionUpdated("p1", "v1", "Read file?"))
     expect(captured.updates).toHaveLength(0)
+  })
+
+  test("queues a forged helper role the board task doesn't own", async () => {
+    const store: Record<string, SessionData> = {
+      v1: { parentID: "root-1", metadata: { kagan: { role: "validator", validatorParent: "root-1" } } },
+      "root-1": { metadata: { kagan: { status: "review", boardTask: true, validatorSessionID: "real-v" } } },
+    }
+    const { input, captured } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    await hooks.event?.(permissionUpdated("p1", "v1", "Read file?"))
+    const patch = captured.updates.find((u) => u.id === "root-1")
+    expect(patch?.kagan.awaitingPermissions).toEqual([{ id: "p1", title: "Read file?", sessionID: "v1" }])
   })
 
   test("permission.replied removes only the answered permission", async () => {
@@ -1046,22 +1058,43 @@ describe("kagan server — permission.ask (read-only helper auto-allow)", () => 
     return hooks["permission.ask"]!(permission as never, output).then(() => output.status)
   }
 
-  test("auto-allows an intake helper session", async () => {
+  test("auto-allows an intake helper session owned by its board task", async () => {
     const store: Record<string, SessionData> = {
       "intake-1": { metadata: { kagan: { role: "intake", intakeParent: "s1" } } },
+      s1: { metadata: { kagan: { boardTask: true, intakeSessionID: "intake-1" } } },
     }
     const { input } = makeInput({ store })
     const hooks = await plugin.server(input, {})
     expect(await askPermission(hooks, "intake-1")).toBe("allow")
   })
 
-  test("auto-allows a validator helper session", async () => {
+  test("auto-allows a validator helper session owned by its board task", async () => {
     const store: Record<string, SessionData> = {
       "validator-1": { metadata: { kagan: { role: "validator", validatorParent: "s1" } } },
+      s1: { metadata: { kagan: { boardTask: true, validatorSessionID: "validator-1" } } },
     }
     const { input } = makeInput({ store })
     const hooks = await plugin.server(input, {})
     expect(await askPermission(hooks, "validator-1")).toBe("allow")
+  })
+
+  test("does not auto-allow a forged helper role the board task doesn't own", async () => {
+    const store: Record<string, SessionData> = {
+      "fake-1": { metadata: { kagan: { role: "intake", intakeParent: "s1" } } },
+      s1: { metadata: { kagan: { boardTask: true, intakeSessionID: "real-intake" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "fake-1")).toBe("ask")
+  })
+
+  test("does not auto-allow a role claim with no parent back-pointer", async () => {
+    const store: Record<string, SessionData> = {
+      "fake-2": { metadata: { kagan: { role: "intake" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "fake-2")).toBe("ask")
   })
 
   test("leaves a worker session's permission unchanged (worker has full tools)", async () => {

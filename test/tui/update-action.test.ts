@@ -30,7 +30,7 @@ function fixture(
   const notices: TuiToast[] = []
   const toasts: TuiToast[] = []
   const staged: string[] = []
-  let confirmed: (() => void) | undefined
+  let resolveConfirm: ((ok: boolean) => void) | undefined
   const api = {
     route: { current: { name: ROUTE } },
     plugins: {
@@ -50,19 +50,28 @@ function fixture(
       notify: (toast) => notices.push(toast),
     },
     check: async () => ({ kind: "available", version: "0.2.0" }),
-    confirm: (_current, _target, onConfirm) => {
-      confirmed = onConfirm
-    },
+    confirm: (_current, _target) => new Promise<boolean>((resolve) => (resolveConfirm = resolve)),
     runCommand: async () => (input.run ? input.run() : { ok: true, output: "", exitCode: 0 }),
   })
-  return { controller, statuses, notices, toasts, staged, confirm: () => confirmed?.() }
+  return {
+    controller,
+    statuses,
+    notices,
+    toasts,
+    staged,
+    confirm: () => resolveConfirm?.(true),
+    cancel: () => resolveConfirm?.(false),
+  }
 }
 
 describe("createUpdateController", () => {
   test("declining confirmation does not stage or run an update", async () => {
     let ran = false
     const test = fixture({ run: async () => ((ran = true), { ok: true, output: "", exitCode: 0 }) })
-    await test.controller.run()
+    const done = test.controller.run()
+    await Bun.sleep(0)
+    test.cancel()
+    await done
     expect(test.statuses).toEqual([{ kind: "available", version: "0.2.0" }])
     expect(test.staged).toEqual([])
     expect(ran).toBe(false)
@@ -74,9 +83,10 @@ describe("createUpdateController", () => {
       stage: async () => false,
       run: async () => ((ran = true), { ok: true, output: "", exitCode: 0 }),
     })
-    await test.controller.run()
-    test.confirm()
+    const done = test.controller.run()
     await Bun.sleep(0)
+    test.confirm()
+    await done
     expect(ran).toBe(false)
     expect(test.statuses.at(-1)).toEqual({ kind: "available", version: "0.2.0" })
     expect(test.notices.at(-1)?.variant).toBe("error")
@@ -84,25 +94,41 @@ describe("createUpdateController", () => {
 
   test("canonical command failure remains actionable", async () => {
     const test = fixture({ run: async () => ({ ok: false, output: "config failed", exitCode: 1 }) })
-    await test.controller.run()
-    test.confirm()
+    const done = test.controller.run()
     await Bun.sleep(0)
+    test.confirm()
+    await done
     expect(test.staged).toEqual(["@kagan-sh/kagan@0.2.0"])
     expect(test.statuses.at(-1)).toEqual({ kind: "available", version: "0.2.0" })
     expect(test.notices.at(-1)?.message).toBe("config failed")
   })
 
-  test("success requests restart and duplicate confirmations share one install", async () => {
+  test("success requests restart", async () => {
     let runs = 0
     const test = fixture({ run: async () => ({ ok: true, output: String(++runs), exitCode: 0 }) })
-    await test.controller.run()
-    test.confirm()
-    test.confirm()
+    const done = test.controller.run()
     await Bun.sleep(0)
+    test.confirm()
+    await done
     expect(test.staged).toEqual(["@kagan-sh/kagan@0.2.0"])
     expect(runs).toBe(1)
     expect(test.statuses.at(-1)).toEqual({ kind: "restart", version: "0.2.0" })
     expect(test.notices.at(-1)?.message).toContain("Restart OpenCode")
+  })
+
+  test("a second update request while the confirmation is open reuses the pending flow", async () => {
+    let runs = 0
+    const test = fixture({ run: async () => ({ ok: true, output: String(++runs), exitCode: 0 }) })
+    const first = test.controller.run()
+    // Second invocation while the first confirmation dialog is still open must not open a rival
+    // dialog or start a concurrent install.
+    const second = test.controller.run()
+    expect(second).toBe(first)
+    await Bun.sleep(0)
+    test.confirm()
+    await Promise.all([first, second])
+    expect(test.staged).toEqual(["@kagan-sh/kagan@0.2.0"])
+    expect(runs).toBe(1)
   })
 })
 

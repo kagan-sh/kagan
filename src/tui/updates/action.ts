@@ -9,7 +9,7 @@ type UpdateStore = {
   notify: (toast: TuiToast) => void
 }
 
-type ConfirmUpdate = (current: string, target: string, onConfirm: () => void) => void
+type ConfirmUpdate = (current: string, target: string) => Promise<boolean>
 
 export function createUpdateController(input: {
   api: TuiPluginApi
@@ -39,19 +39,23 @@ export function createUpdateController(input: {
       }))
   const confirm: ConfirmUpdate =
     input.confirm ??
-    ((current, target, onConfirm) => {
-      api.ui.dialog.replace(() =>
-        api.ui.DialogConfirm({
-          title: "Update Kagan",
-          message: `Update Kagan from v${current} to v${target}? Restart OpenCode after installation.`,
-          onConfirm: () => {
-            api.ui.dialog.clear()
-            onConfirm()
-          },
-          onCancel: () => api.ui.dialog.clear(),
-        }),
-      )
-    })
+    ((current, target) =>
+      new Promise<boolean>((resolve) => {
+        api.ui.dialog.replace(() =>
+          api.ui.DialogConfirm({
+            title: "Update Kagan",
+            message: `Update Kagan from v${current} to v${target}? Restart OpenCode after installation.`,
+            onConfirm: () => {
+              api.ui.dialog.clear()
+              resolve(true)
+            },
+            onCancel: () => {
+              api.ui.dialog.clear()
+              resolve(false)
+            },
+          }),
+        )
+      }))
   const runCommand = input.runCommand ?? runGlobalPluginUpdate
 
   const fail = (version: string, message: string) => {
@@ -59,35 +63,31 @@ export function createUpdateController(input: {
     notify({ variant: "error", title: "Kagan update failed", message })
   }
 
-  const install = (version: string) => {
-    if (active) return active
-    active = (async () => {
-      store.setUpdateStatus({ kind: "installing", version })
-      const exact = `${KAGAN_PACKAGE}@${version}`
-      const staged = await api.plugins.add(exact).catch(() => false)
-      if (!staged) {
-        fail(version, `OpenCode could not stage ${exact}.`)
-        return
-      }
-      const result = await runCommand(version, api.state.path.directory)
-      if (!result.ok) {
-        const detail =
-          result.output || (result.exitCode === null ? "Unable to run OpenCode." : `Exited ${result.exitCode}.`)
-        fail(version, detail)
-        return
-      }
-      store.setUpdateStatus({ kind: "restart", version })
-      notify({
-        variant: "success",
-        title: "Kagan updated",
-        message: `Kagan v${version} is installed. Restart OpenCode.`,
-      })
-    })().finally(() => {
-      active = undefined
+  const install = async (version: string) => {
+    store.setUpdateStatus({ kind: "installing", version })
+    const exact = `${KAGAN_PACKAGE}@${version}`
+    const staged = await api.plugins.add(exact).catch(() => false)
+    if (!staged) {
+      fail(version, `OpenCode could not stage ${exact}.`)
+      return
+    }
+    const result = await runCommand(version, api.state.path.directory)
+    if (!result.ok) {
+      const detail =
+        result.output || (result.exitCode === null ? "Unable to run OpenCode." : `Exited ${result.exitCode}.`)
+      fail(version, detail)
+      return
+    }
+    store.setUpdateStatus({ kind: "restart", version })
+    notify({
+      variant: "success",
+      title: "Kagan updated",
+      message: `Kagan v${version} is installed. Restart OpenCode.`,
     })
-    return active
   }
 
+  // Guard spans check → confirm → install so a second update request during the open dialog can't
+  // race a concurrent global install.
   const run = () => {
     if (active) return active
     active = (async () => {
@@ -102,7 +102,7 @@ export function createUpdateController(input: {
         return
       }
       store.setUpdateStatus(result)
-      confirm(currentVersion, result.version, () => void install(result.version))
+      if (await confirm(currentVersion, result.version)) await install(result.version)
     })().finally(() => {
       active = undefined
     })
