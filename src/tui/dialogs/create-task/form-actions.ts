@@ -2,7 +2,10 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { createBoardStore } from "../../board/store"
 import type { CreateTaskDependencies, FormState, ModelChoice } from "./types"
 import { openScopePicker } from "../create-task-scope"
+import { handleCreateTaskKey } from "./form-keys"
 import { openFilterableSelectPicker } from "./select"
+
+export { handleCreateTaskKey }
 
 type BoardStore = ReturnType<typeof createBoardStore>
 
@@ -105,49 +108,4 @@ export function openCreateTaskPicker(props: {
     },
     reopen: props.reopen,
   })
-}
-
-export function handleCreateTaskKey(props: {
-  key: { name: string; ctrl?: boolean; shift?: boolean }
-  focusIndex: () => number
-  setFocusIndex: (value: number | ((index: number) => number)) => void
-  descriptionRef: DescriptionField | undefined
-  submit: () => void
-  openPicker: () => void
-}): boolean {
-  const { key } = props
-  if (key.ctrl && key.name === "return") {
-    props.submit()
-    return true
-  }
-  if (
-    props.focusIndex() === 1 &&
-    ((key.ctrl && key.name === "j") || key.name === "linefeed" || (key.shift && key.name === "return"))
-  ) {
-    props.descriptionRef?.newLine?.()
-    return true
-  }
-  if (key.name === "return") {
-    if (props.focusIndex() >= 2) props.openPicker()
-    else props.submit()
-    return true
-  }
-  if (key.name === "right" && props.focusIndex() >= 2) {
-    props.openPicker()
-    return true
-  }
-  if (key.name === "tab") {
-    props.setFocusIndex((index) => (key.shift ? (index + 4) % 5 : (index + 1) % 5))
-    return true
-  }
-  if (props.focusIndex() === 1) return false
-  if (key.name === "down") {
-    props.setFocusIndex((index) => (index + 1) % 5)
-    return true
-  }
-  if (key.name === "up") {
-    props.setFocusIndex((index) => (index + 4) % 5)
-    return true
-  }
-  return false
 }

@@ -2,7 +2,7 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TextAttributes } from "@opentui/core"
 import { createSignal, For, onMount } from "solid-js"
-import { useKeyIntercept } from "../renderer"
+import { useOnboardingKeys } from "./onboarding-keys"
 
 const SEEN_KEY = "kagan:onboarding"
 
@@ -53,26 +53,7 @@ function Onboarding(props: { api: TuiPluginApi }) {
     close()
   }
 
-  useKeyIntercept(props.api, (key) => {
-    if (key.name === "left" || key.name === "h") {
-      setStep((current) => Math.max(0, current - 1))
-      return true
-    }
-    if (key.name === "right" || key.name === "l") {
-      setStep((current) => Math.min(last, current + 1))
-      return true
-    }
-    if (key.name === "return") {
-      if (step() === last) close()
-      else setStep((current) => current + 1)
-      return true
-    }
-    if (key.name === "x") {
-      dismissForever()
-      return true
-    }
-    return false
-  })
+  useOnboardingKeys(props.api, step, setStep, last, close, dismissForever)
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>

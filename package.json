@@ -45,7 +45,7 @@
     "prepack": "bun scripts/build.ts",
     "verify": "verifyx",
     "check": "verifyx all --check && bun run package",
-    "verify:complexity": "verifyx complexity --threshold 52 --ignore \"src/tui/**\" \"src/**/*.ts\" && verifyx complexity --threshold 50 --ignore \"src/domain/**\" --ignore \"src/server/**\" --ignore \"src/git/**\" --ignore \"src/checks/**\" --ignore \"src/task/**\" --ignore \"src/server.ts\" \"src/**/*.{ts,tsx}\"",
+    "verify:complexity": "verifyx complexity --threshold 52 --ignore \"test/**\" \"src/**/*.{ts,tsx}\" && verifyx complexity --threshold 40 \"test/**/*.{ts,tsx}\"",
     "verify:format": "oxfmt --check .",
     "verify:format:fix": "oxfmt .",
     "verify:comments": "verifyx comments --pushback \"src/**/*.{ts,tsx}\"",

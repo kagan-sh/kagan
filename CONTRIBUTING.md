@@ -35,9 +35,8 @@ bun run verify
 This runs the declared source checks: complexity, comment policy, and circular dependencies, and
 auto-formats with oxfmt. Verifyx also runs the local `test` script automatically.
 
-The maintainability-index gate is two-tier, matching the architecture split: pure logic
-(`src/{domain,server,git,checks}` plus `src/server.ts` and `src/task/`) must clear a higher bar than
-the TUI surface (`src/tui/`), whose JSX render functions are inherently lower-scoring. Raise a file's
+The maintainability-index gate is two-tier: all of `src/` must clear maintainability index 52; `test/`
+support files are checked second at 40 (verifyx skips `*.test.ts` files by default). Raise a file's
 score by splitting genuine responsibilities into cohesive units, never by deleting comments, joining
 lines, or fragmenting a coherent function.
 

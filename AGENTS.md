@@ -15,11 +15,11 @@ spec authority and read order. `src/domain/task/metadata.ts` is the authoritativ
   new-comment check compares against the PR merge base.
 - Run one built-in check with `bunx verifyx lint`, `bunx verifyx format`, `bunx verifyx check-types`, or
   `bunx verifyx duplicate-code`. Use `bun run package` for package checks.
-- `verify:complexity` is two-tier: pure logic (`src/{domain,server,git,checks}`, `src/server.ts`,
-  `src/task/`) must clear maintainability index 52; the TUI surface (`src/tui/`, `src/tui.tsx`) clears
-  50 because its JSX render functions are inherently lower-scoring. Raise a score by splitting genuine
-  responsibilities into cohesive units — never by deleting comments, joining lines, or fragmenting a
-  coherent function. The exact command is pinned by `test/guards/validation.test.ts`.
+- `verify:complexity` is two-tier: all of `src/` must clear maintainability index 52; `test/` support
+  files run second at 40 (verifyx skips `**/*test.ts*` by default, so `*.test.ts` fixtures are not
+  scored). Raise a score by splitting genuine responsibilities into cohesive units — never by deleting
+  comments, joining lines, or fragmenting a coherent function. The exact command is pinned by
+  `test/guards/validation.test.ts`.
 - Run the full suite with `bun run test`, not bare `bun test`. The script supplies
   `--conditions browser`; `bunfig.toml` supplies the Solid preload. Bun positional test filters can
   also match a local gitignored `references/` checkout because its exclude applies only to test
