@@ -2,7 +2,7 @@
 name: opencode-plugin-idioms
 description: Event hook payload shapes, session lifecycle timing, toast/TUI-route render boundaries, and child-session tagging conventions for OpenCode server (@opencode-ai/plugin) and TUI (@opencode-ai/plugin/tui) plugins, grounded in the vendored OpenCode source at references/opencode.
 type: prompt
-whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/tui/board/board.tsx, src/tui/board/commands.tsx, src/tui/board/store.tsx, src/tui/updates.ts, src/tui/update-manager.ts, src/server/intake.ts, or src/server/validator/spawn.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
+whenToUse: Load before modifying src/server.ts, src/tui.tsx, src/tui/board/board.tsx, src/tui/board/commands.tsx, src/tui/board/store.tsx, src/tui/updates/, src/server/intake.ts, or src/server/validator/spawn.ts — or when debugging a missing toast, a session-creation race, a permission/gate ordering bug, or a plugin-spawned child session re-triggering its own handler.
 ---
 
 Version check: repo pins `@opencode-ai/plugin@1.17.18`; vendored copy at `references/opencode/packages/plugin/package.json` should match — verify there, never from memory.

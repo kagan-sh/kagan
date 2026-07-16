@@ -1,5 +1,6 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import { lockSessionMetadata, mergeKagan } from "../../domain/session/metadata"
+import { kagan } from "../../domain/task/metadata"
 import { helper } from "../../domain/task/policy"
 import type { HelperRole } from "../../domain/task/types"
 
@@ -21,6 +22,23 @@ export async function patchKagan(
     await client.session.update({
       path: { id: sessionID },
       body: { metadata: mergeKagan(metadata, partial) },
+      throwOnError: true,
+    } as Parameters<typeof client.session.update>[0])
+  })
+}
+
+export async function mutateKagan(
+  client: PluginInput["client"],
+  sessionID: string,
+  compute: (view: ReturnType<typeof kagan>) => Record<string, unknown> | undefined,
+): Promise<void> {
+  await lockSessionMetadata(sessionID, async () => {
+    const metadata = await readSessionMetadata(client, sessionID)
+    const patch = compute(kagan(metadata))
+    if (!patch) return
+    await client.session.update({
+      path: { id: sessionID },
+      body: { metadata: mergeKagan(metadata, patch) },
       throwOnError: true,
     } as Parameters<typeof client.session.update>[0])
   })

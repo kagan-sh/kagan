@@ -97,8 +97,8 @@ async function collectCheck(
   const check = truncateCheckResultForMetadata(result)
   try {
     await patchKagan(input.client, sessionID, { check })
-  } catch (error) {
-    console.error(`[kagan] failed to record check evidence for ${sessionID}: ${errorMessage(error)}`)
+  } catch {
+    // check evidence is best-effort; a failed write must not block validator spawn
   }
   return { diffs, check }
 }
@@ -119,7 +119,8 @@ export async function onEnterReview(
     },
     async (session) => {
       const view = kagan(session?.metadata)
-      const { diffs, check } = await collectCheck(input, sessionID, view.worktree!, view.baseBranch, options)
+      if (!view.worktree) return undefined
+      const { diffs, check } = await collectCheck(input, sessionID, view.worktree, view.baseBranch, options)
       return spawnValidator(
         input,
         sessionID,

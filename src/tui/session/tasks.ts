@@ -1,11 +1,10 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { approveDenyReason } from "../../domain/task/policy"
+import { approveDenyReason, helper, helperRestartPatch } from "../../domain/task/policy"
 import { kagan } from "../../domain/task/metadata"
-import { resolveFinding } from "../../domain/task/findings"
+import { resolveFinding, type FindingResolution } from "../../domain/task/findings"
 import { resolveIntakeDecision } from "../../domain/task/intake"
-import type { FindingResolution } from "../../domain/task/findings"
-import type { HelperRole, ColumnType } from "../../domain/task/types"
+import type { ColumnType, HelperRole } from "../../domain/task/types"
 import { tuiPatchKagan } from "./patch"
 
 export async function listSessions(api: TuiPluginApi): Promise<Session[]> {
@@ -43,20 +42,25 @@ export async function resolveSessionIntakeDecision(
   await tuiPatchKagan(api, sessionID, { intake: { ...intake, decisions } })
 }
 
+async function abortSession(api: TuiPluginApi, sessionID: string): Promise<void> {
+  try {
+    await api.client.session.abort({ sessionID }, { throwOnError: true })
+  } catch {
+    // already idle or gone
+  }
+}
+
 export async function retryHelper(
   api: TuiPluginApi,
   sessionID: string,
-  _session: Session,
+  session: Session,
   status: ColumnType,
 ): Promise<void> {
-  if (status !== "backlog" && status !== "review") throw new Error("Retry only applies to backlog or review tasks")
+  if (status !== "backlog" && status !== "review") throw new Error("Restart only applies to backlog or review tasks")
   const role: HelperRole = status === "backlog" ? "intake" : "validator"
-  await tuiPatchKagan(api, sessionID, {
-    [`${role}SessionID`]: undefined,
-    [`${role}Outcome`]: undefined,
-    [`${role}Attempts`]: 0,
-    helperError: undefined,
-  })
+  const liveID = helper(session.metadata, role).sessionID
+  await tuiPatchKagan(api, sessionID, helperRestartPatch(role))
+  if (liveID) await abortSession(api, liveID)
 }
 
 export async function approveSession(api: TuiPluginApi, sessionID: string, session: Session): Promise<void> {

@@ -22,6 +22,7 @@ describe("spawnIntake", () => {
       edit: false,
       write: false,
       bash: false,
+      task: false,
       kagan_intake: true,
     })
     const parts = capture.promptBody?.parts as Array<{ type: string; text?: string }>

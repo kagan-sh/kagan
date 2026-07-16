@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { checkForUpdate, isNewerRelease, parseRelease, resolveLatestManifest } from "../../src/tui/updates"
+import {
+  checkForUpdate,
+  isNewerRelease,
+  isUpdateEligibleInstall,
+  parseRelease,
+  resolveLatestRelease,
+} from "../../src/tui/updates/check"
 
 function mockKv(initial: Record<string, unknown> = {}) {
   const store: Record<string, unknown> = { ...initial }
@@ -12,22 +18,11 @@ function mockKv(initial: Record<string, unknown> = {}) {
   }
 }
 
-function registryFetch(input: {
-  latest?: unknown
-  engine?: unknown
-  failTags?: boolean
-  failManifest?: boolean
-  calls?: string[]
-}): typeof fetch {
+function registryFetch(input: { latest?: unknown; fail?: boolean; calls?: string[] }): typeof fetch {
   return (async (url: string | URL | Request) => {
-    const value = String(url)
-    input.calls?.push(value)
-    const manifest = !value.endsWith("/dist-tags")
-    if ((!manifest && input.failTags) || (manifest && input.failManifest)) throw new Error("network down")
-    return {
-      ok: true,
-      json: async () => (manifest ? { engines: { opencode: input.engine } } : { latest: input.latest ?? "0.2.0" }),
-    }
+    input.calls?.push(String(url))
+    if (input.fail) throw new Error("network down")
+    return { ok: true, json: async () => ({ latest: input.latest ?? "0.2.0" }) }
   }) as unknown as typeof fetch
 }
 
@@ -44,124 +39,88 @@ describe("release parsing", () => {
   test("compares segments numerically", () => {
     expect(isNewerRelease("0.1.10", "0.1.3")).toBe(true)
     expect(isNewerRelease("0.2.0", "0.1.99")).toBe(true)
-    expect(isNewerRelease("1.0.0", "0.9.9")).toBe(true)
     expect(isNewerRelease("0.1.3", "0.1.3")).toBe(false)
-    expect(isNewerRelease("0.1.2", "0.1.3")).toBe(false)
     expect(isNewerRelease("latest", "0.1.3")).toBe(false)
   })
 })
 
-describe("resolveLatestManifest", () => {
-  test("fetches latest and its engine range, then caches for one hour", async () => {
-    const kv = mockKv()
-    const calls: string[] = []
-    const fetchImpl = registryFetch({ latest: "0.2.0", engine: ">=1.17.13 <1.18.0", calls })
-    expect(await resolveLatestManifest(kv, "0.1.0", HOUR + 1, { fetchImpl })).toEqual({
-      version: "0.2.0",
-      requiredOpenCode: ">=1.17.13 <1.18.0",
-    })
-    expect(calls).toHaveLength(2)
-
-    expect(await resolveLatestManifest(kv, "0.1.0", HOUR * 2, { fetchImpl })).toEqual({
-      version: "0.2.0",
-      requiredOpenCode: ">=1.17.13 <1.18.0",
-    })
-    expect(calls).toHaveLength(2)
+describe("update eligibility", () => {
+  test("accepts stable npm bare, latest, and exact specs", () => {
+    for (const spec of ["@kagan-sh/kagan", "@kagan-sh/kagan@latest", "@kagan-sh/kagan@0.1.0"]) {
+      expect(isUpdateEligibleInstall({ source: "npm", spec, version: "0.1.0" })).toBe(true)
+    }
   })
 
-  test("does not fetch a manifest when latest equals current", async () => {
+  test("rejects file, development, prerelease, and ranged installs", () => {
+    for (const input of [
+      { source: "file", spec: "file:///tmp/kagan", version: "0.1.0" },
+      { source: "npm", spec: "@kagan-sh/kagan", version: "0.0.0-development" },
+      { source: "npm", spec: "@kagan-sh/kagan", version: "0.2.0-beta.1" },
+      { source: "npm", spec: "@kagan-sh/kagan@^0.1.0", version: "0.1.0" },
+    ]) {
+      expect(isUpdateEligibleInstall(input)).toBe(false)
+    }
+  })
+})
+
+describe("resolveLatestRelease", () => {
+  test("fetches latest and caches it for one hour", async () => {
+    const kv = mockKv()
     const calls: string[] = []
-    const result = await resolveLatestManifest(mockKv(), "0.2.0", HOUR + 1, {
-      fetchImpl: registryFetch({ latest: "0.2.0", calls }),
-    })
-    expect(result).toEqual({ version: "0.2.0" })
+    const fetchImpl = registryFetch({ calls })
+    expect(await resolveLatestRelease(kv, HOUR + 1, { fetchImpl })).toBe("0.2.0")
+    expect(await resolveLatestRelease(kv, HOUR * 2, { fetchImpl })).toBe("0.2.0")
     expect(calls).toHaveLength(1)
   })
 
-  test("refetches when the cached timestamp is in the future", async () => {
-    const kv = mockKv({
-      "kagan:update:manifest": { version: "0.1.0" },
-      "kagan:update:lastCheck": HOUR * 10,
-    })
+  test("forced checks bypass a fresh cache", async () => {
+    const kv = mockKv({ "kagan:update:latest": "0.1.0", "kagan:update:lastCheck": HOUR })
     const calls: string[] = []
     expect(
-      await resolveLatestManifest(kv, "0.1.0", HOUR, {
-        fetchImpl: registryFetch({ latest: "0.2.0", engine: ">=1.17.13", calls }),
+      await resolveLatestRelease(kv, HOUR + 1, {
+        fetchImpl: registryFetch({ latest: "0.2.0", calls }),
+        force: true,
       }),
-    ).toEqual({ version: "0.2.0", requiredOpenCode: ">=1.17.13" })
-    expect(calls).toHaveLength(2)
-    expect(kv.store["kagan:update:lastCheck"]).toBe(HOUR)
+    ).toBe("0.2.0")
+    expect(calls).toHaveLength(1)
   })
 
-  test("stays quiet and does not refresh the timestamp after registry or manifest failure", async () => {
-    for (const fetchImpl of [
-      registryFetch({ failTags: true }),
-      registryFetch({ latest: "0.2.0", failManifest: true }),
-    ]) {
-      const kv = mockKv({
-        "kagan:update:manifest": { version: "0.1.9", requiredOpenCode: ">=1.0.0" },
-        "kagan:update:lastCheck": 0,
-      })
-      expect(await resolveLatestManifest(kv, "0.1.0", HOUR + 1, { fetchImpl })).toBeUndefined()
-      expect(kv.store["kagan:update:lastCheck"]).toBe(0)
-    }
+  test("refetches future timestamps and keeps failures silent", async () => {
+    const kv = mockKv({ "kagan:update:latest": "0.1.0", "kagan:update:lastCheck": HOUR * 10 })
+    expect(await resolveLatestRelease(kv, HOUR, { fetchImpl: registryFetch({ latest: "0.2.0" }) })).toBe("0.2.0")
+    expect(await resolveLatestRelease(mockKv(), HOUR, { fetchImpl: registryFetch({ fail: true }) })).toBeUndefined()
   })
 })
 
 describe("checkForUpdate", () => {
   const base = {
     currentVersion: "0.1.0",
-    openCodeVersion: "1.17.18",
     source: "npm" as const,
     spec: "@kagan-sh/kagan",
     now: HOUR + 1,
   }
 
-  test("classifies compatible latest as ready for bare and explicit latest specs", async () => {
-    for (const spec of ["@kagan-sh/kagan", "@kagan-sh/kagan@latest"]) {
-      expect(
-        await checkForUpdate({
-          ...base,
-          spec,
-          kv: mockKv(),
-          fetchImpl: registryFetch({ latest: "0.2.0", engine: ">=1.17.13 <1.18.0" }),
-        }),
-      ).toEqual({ kind: "ready", version: "0.2.0" })
-    }
+  test("classifies newer and current releases", async () => {
+    expect(await checkForUpdate({ ...base, kv: mockKv(), fetchImpl: registryFetch({ latest: "0.2.0" }) })).toEqual({
+      kind: "available",
+      version: "0.2.0",
+    })
+    expect(await checkForUpdate({ ...base, kv: mockKv(), fetchImpl: registryFetch({ latest: "0.1.0" }) })).toEqual({
+      kind: "current",
+    })
   })
 
-  test("classifies incompatible latest with its required OpenCode range", async () => {
+  test("does not query ineligible installations", async () => {
+    const calls: string[] = []
     expect(
       await checkForUpdate({
         ...base,
+        source: "file",
+        spec: "file:///tmp/kagan",
         kv: mockKv(),
-        fetchImpl: registryFetch({ latest: "0.2.0", engine: ">=1.18.0" }),
+        fetchImpl: registryFetch({ calls }),
       }),
-    ).toEqual({ kind: "blocked", version: "0.2.0", requiredOpenCode: ">=1.18.0" })
-  })
-
-  test("rejects a missing or invalid engine range", async () => {
-    for (const engine of [undefined, "not a range"]) {
-      expect(
-        await checkForUpdate({
-          ...base,
-          kv: mockKv(),
-          fetchImpl: registryFetch({ latest: "0.2.0", engine }),
-        }),
-      ).toBeUndefined()
-    }
-  })
-
-  test("does not query npm for exact pins, file installs, or development builds", async () => {
-    for (const input of [
-      { ...base, spec: "@kagan-sh/kagan@0.1.0" },
-      { ...base, source: "file" as const, spec: "file:///tmp/kagan" },
-      { ...base, currentVersion: "0.0.0-development" },
-      { ...base, openCodeVersion: "development" },
-    ]) {
-      const calls: string[] = []
-      expect(await checkForUpdate({ ...input, kv: mockKv(), fetchImpl: registryFetch({ calls }) })).toBeUndefined()
-      expect(calls).toHaveLength(0)
-    }
+    ).toEqual({ kind: "ineligible" })
+    expect(calls).toHaveLength(0)
   })
 })

@@ -1,24 +1,17 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { runCommandPlan, truncateCheckResultForMetadata } from "../checks/runner"
-import { commandInTaskScope } from "../domain/task/commands"
-import { composeHandoffPrompt } from "../domain/handoff"
-import { kagan } from "../domain/task/metadata"
-import { nextGenerationPatch } from "../domain/task/policy"
-import { lastAssistantText } from "../domain/session/messages"
+import { kagan, nextTaskNumber } from "../domain/task/metadata"
 import type { CommandSpec, ModelRef } from "../domain/task/types"
-import { worktreeDiffs } from "../git/diffs"
-import { mergeTaskBranch, type MergeResult } from "../git/merge"
-import {
-  bunGitRunner,
-  createTaskWorktree,
-  currentBranch,
-  ensureWorktreePluginConfig,
-  uniqueTaskSlug,
-} from "../git/runner"
-import { tuiPatchKagan } from "./session/patch"
+import { bunGitRunner, currentBranch } from "../git/runner"
+import { createBoardTask } from "../task/create"
 import { listSessions } from "./session/tasks"
 import type { TaskScope } from "../domain/task/commands"
+import { composeHandoffPrompt } from "../domain/handoff"
+import { nextGenerationPatch } from "../domain/task/policy"
+import { lastAssistantText } from "../domain/session/messages"
+import { worktreeDiffs } from "../git/diffs"
+import { mergeTaskBranch, type MergeResult } from "../git/merge"
+import { tuiPatchKagan } from "./session/patch"
 import type { BoardSession } from "./types"
 
 export async function createTask(
@@ -33,39 +26,31 @@ export async function createTask(
   },
 ): Promise<Session> {
   const existing = await listSessions(api)
-  const taskNumber = existing.reduce((max, session) => Math.max(max, kagan(session.metadata).taskNumber ?? 0), 0) + 1
-  const slug = uniqueTaskSlug(input.title)
-  const { directory } = await createTaskWorktree(bunGitRunner(), api.state.path.worktree, slug, input.baseBranch)
-  await ensureWorktreePluginConfig(directory)
-  const description = input.description.trim()
-  const patch: Record<string, unknown> = {
-    status: "backlog",
-    boardTask: true,
-    taskNumber,
+  const taskNumber = nextTaskNumber(existing)
+  const result = await createBoardTask({
+    run: bunGitRunner(),
+    mainWorktree: api.state.path.worktree,
+    title: input.title,
+    description: input.description,
     baseBranch: input.baseBranch,
-    worktree: directory,
-  }
-  if (description) patch.description = description
-  if (input.model) patch.model = input.model
-  if (input.scope) patch.scope = input.scope
-  const setup = await runCommandPlan(
-    input.setupCommands ?? [],
-    directory,
-    (command) => commandInTaskScope(command, input.scope),
-    "task scope does not include this cwd",
-    false,
-  )
-  if (setup) patch.setup = truncateCheckResultForMetadata(setup)
-  const result = await api.client.session.create(
-    {
-      directory,
-      title: input.title,
-      ...(input.model ? { model: { id: input.model.modelID, providerID: input.model.providerID } } : {}),
-      metadata: { kagan: patch },
+    taskNumber,
+    model: input.model,
+    scope: input.scope,
+    setupCommands: input.setupCommands ?? [],
+    createSession: async (payload) => {
+      const created = await api.client.session.create(
+        {
+          directory: payload.directory,
+          title: payload.title,
+          ...(payload.model ? { model: { id: payload.model.modelID, providerID: payload.model.providerID } } : {}),
+          metadata: payload.metadata,
+        },
+        { throwOnError: true },
+      )
+      return { id: created.data.id }
     },
-    { throwOnError: true },
-  )
-  return result.data
+  })
+  return { id: result.id } as Session
 }
 
 async function stopSession(api: TuiPluginApi, id: string): Promise<void> {

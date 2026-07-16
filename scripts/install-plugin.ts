@@ -27,13 +27,13 @@ async function readConfig(file: string): Promise<Record<string, unknown>> {
     : defaultConfigFor(file)
 }
 
-async function prettify(files: string[]): Promise<void> {
-  const prettier = Bun.spawn(["bun", "x", "prettier", "--write", ...files], {
+async function format(files: string[]): Promise<void> {
+  const oxfmt = Bun.spawn(["bun", "x", "oxfmt", "--write", ...files], {
     cwd: repoRoot,
     stdout: "ignore",
     stderr: "inherit",
   })
-  await prettier.exited
+  await oxfmt.exited
 }
 
 async function addGlobalPluginSpec(spec: string): Promise<void> {
@@ -45,7 +45,7 @@ async function addGlobalPluginSpec(spec: string): Promise<void> {
     await writeFile(file, `${JSON.stringify(config, null, 2)}\n`)
     console.log(`${file} → plugin includes "${spec}"`)
   }
-  await prettify(globalConfigFiles)
+  await format(globalConfigFiles)
 }
 
 function pluginSpec(entry: unknown): string | undefined {
@@ -85,7 +85,7 @@ async function removeGlobalKaganPluginSpecs(): Promise<void> {
       touched.push(file)
     }
   }
-  if (touched.length > 0) await prettify(touched)
+  if (touched.length > 0) await format(touched)
 }
 
 async function run(args: string[], options?: { cwd?: string; stdout?: "pipe" | "inherit" }): Promise<string> {

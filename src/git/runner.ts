@@ -1,5 +1,5 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
 
@@ -68,7 +68,8 @@ function isGitPushSegment(segment: string): boolean {
   const start = tokens.findIndex(isGitToken)
   if (start === -1) return false
   for (let i = start + 1; i < tokens.length; i++) {
-    const token = tokens[i]!
+    const token = tokens[i]
+    if (token === undefined) continue
     if (token === "push") return true
     if (token === "-C" || token === "-c") {
       i++
@@ -131,9 +132,23 @@ export async function createTaskWorktree(
   await mkdir(join(directory, ".."), { recursive: true })
   const result = await run(["worktree", "add", "-b", branch, directory, baseBranch], mainWorktree)
   if (result.code !== 0) {
+    await run(["worktree", "remove", "--force", directory], mainWorktree)
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+    await run(["branch", "-D", branch], mainWorktree)
     throw new Error(result.stderr.trim() || result.stdout.trim() || "git worktree add failed")
   }
   return { directory, branch }
+}
+
+export async function removeTaskWorktree(
+  run: GitRunner,
+  mainWorktree: string,
+  directory: string,
+  branch: string,
+): Promise<void> {
+  await run(["worktree", "remove", "--force", directory], mainWorktree)
+  await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+  await run(["branch", "-D", branch], mainWorktree)
 }
 
 const kaganPackageRoot = resolve(import.meta.dir, "../..")

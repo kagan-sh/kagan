@@ -29,13 +29,19 @@ function hasUserWorkDuringMerge(porcelain: string): boolean {
   for (const line of porcelain.split("\n")) {
     const entry = line.trimEnd()
     if (entry.length < 3 || entry[2] !== " ") continue
-    const index = entry[0]!
-    const worktree = entry[1]!
+    const index = entry.charAt(0)
+    const worktree = entry.charAt(1)
     if (index === "?" || worktree === "?") return true
     if (worktree === "M" && index !== "U") return true
     if (worktree === "D" && index !== "U" && index !== "D") return true
   }
   return false
+}
+
+async function rollbackCleanMain(run: GitRunner, checkoutDir: string): Promise<void> {
+  const current = await run(["status", "--porcelain"], checkoutDir)
+  const out = current.stdout.trimEnd()
+  if (!out.trim() || !hasUserWorkDuringMerge(out)) await run(["reset", "--hard", "HEAD"], checkoutDir)
 }
 
 async function mergeSquash(
@@ -46,20 +52,12 @@ async function mergeSquash(
   commitMessage: string,
   isMainWorktree: boolean,
 ): Promise<MergeResult> {
-  let mergeStartedOnCleanMain = false
   if (isMainWorktree) {
-    const status = await run(["status", "--porcelain"], checkoutDir)
-    if (status.stdout.trim()) {
-      return { ok: false, message: `Commit or stash changes on ${targetBranch} before merging` }
-    }
-    mergeStartedOnCleanMain = true
+    const dirty = await dirtyMainWorktreeMessage(run, checkoutDir, targetBranch)
+    if (dirty) return dirty
   }
   const fail = async (message: string): Promise<MergeResult> => {
-    if (isMainWorktree && mergeStartedOnCleanMain) {
-      const current = await run(["status", "--porcelain"], checkoutDir)
-      const out = current.stdout.trimEnd()
-      if (!out.trim() || !hasUserWorkDuringMerge(out)) await run(["reset", "--hard", "HEAD"], checkoutDir)
-    }
+    if (isMainWorktree) await rollbackCleanMain(run, checkoutDir)
     return { ok: false, message }
   }
   const squashed = await run(["merge", "--squash", branch], checkoutDir)

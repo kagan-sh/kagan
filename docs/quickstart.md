@@ -2,12 +2,12 @@
 
 ## Install
 
-You need [OpenCode](https://opencode.ai/) 1.17.13 or newer, below 1.18.0.
+You need [OpenCode](https://opencode.ai/) 1.17.13 or newer.
 
-From npm:
+Install globally so Kagan is available in every project:
 
 ```bash
-opencode plugin @kagan-sh/kagan
+opencode plugin -g @kagan-sh/kagan
 ```
 
 Or add a local clone to both `opencode.json` and `tui.json`:
@@ -21,23 +21,43 @@ Or add a local clone to both `opencode.json` and `tui.json`:
 Open the board with `/kagan`, the `kagan` palette command, or `<leader>k` (leader defaults to
 `ctrl+x`). Run `/kagan-tutorial` anytime to replay the guided tour.
 
+From any regular OpenCode session, run `/kagan-task` to create one or more board tasks
+conversationally. The agent refines tickets with you, confirms the list, then calls
+`kagan_create_tasks` once after you approve the permission prompt.
+
+### Formalize a session into tasks
+
+Because `/kagan-task` runs inside your current session, you can run it after working or discussing
+for a while and it will turn that conversation into tickets:
+
+- When the session already has context, the agent asks once whether to base tickets on the
+  conversation so far or only on what you type after the command.
+- When the session is empty, it plans straight from what you type — no question asked.
+- For a guaranteed clean slate, run `/kagan-task` in a fresh OpenCode session, which has no prior
+  context by construction.
+
 To configure options such as `commands.check` or `inProgressLimit`, use the array-of-array plugin
 entry shown in the [configuration reference](/reference/configuration).
 
 ## Updating
 
-Bare `@kagan-sh/kagan` and explicit `@latest` installs check npm at most once per successful
-one-hour window. When `latest` supports the running OpenCode, Kagan prepares it in the background
-and shows `vX.Y.Z ready — restart OpenCode`; restart once to apply it. Ready and blocked status
-appears once as a host toast on home/session routes and persists in the board footer.
+Global npm installs check npm's stable `latest` at most once per successful one-hour window. When a
+newer release exists, the board footer shows `vX.Y.Z available`. Press `u` on the board, run
+`/kagan-update`, or pick "Update Kagan" from the command palette to check on demand and review the
+update.
 
-If `latest` requires another OpenCode version, Kagan keeps the current release and names the
-required OpenCode range. Registry and manifest failures stay silent and never disturb the working
-plugin. Local cache cleanup or preparation failures show `updates unavailable` in the board footer;
-the ready message appears only after preparation succeeds.
+After you confirm, Kagan asks OpenCode to download and compatibility-check the exact release, then
+runs OpenCode's own `plugin --global --force` command to install it. The footer shows
+`vX.Y.Z installed - restart OpenCode`; restart once to load it. Nothing is downloaded or changed
+until you confirm, and registry failures stay silent.
 
-Exact version pins and local/file installs are advanced-user choices. Kagan never checks or changes
-them automatically.
+If OpenCode rejects the release or the install fails, Kagan keeps running the current version and the
+update stays available to retry. To roll back, install a specific version yourself:
+`opencode plugin -g @kagan-sh/kagan@<version> --force`, then restart.
+
+Local, file, and development installs are never updated automatically. Existing project-local
+installs should migrate: remove the local `@kagan-sh/kagan` plugin entry, then install globally with
+`opencode plugin -g @kagan-sh/kagan`.
 
 ## Your first task
 

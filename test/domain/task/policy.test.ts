@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   approveDenyReason,
-  canRetrySession,
+  canRestartHelper,
   columnMoveDenyReason,
   countInProgressForMove,
   getRefinedPrompt,
   helper,
+  helperRestartPatch,
   helperRetries,
   inProgressCap,
   intakeReady,
@@ -66,9 +67,15 @@ describe("kagan().approved / needsHuman / kagan().boardTask", () => {
     expect(needsHuman("in_progress", { kagan: {} })).toBe(false)
   })
 
-  test("needsHuman is true in any column while awaitingInput is present", () => {
-    expect(needsHuman("in_progress", { kagan: { awaitingInput: { id: "p1", title: "Run rm -rf?" } } })).toBe(true)
-    expect(needsHuman("backlog", { kagan: { awaitingInput: { id: "p1", title: "x" } } })).toBe(true)
+  test("needsHuman is true in any column while a permission is waiting", () => {
+    expect(
+      needsHuman("in_progress", {
+        kagan: { awaitingPermissions: [{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }] },
+      }),
+    ).toBe(true)
+    expect(needsHuman("backlog", { kagan: { awaitingPermissions: [{ id: "p1", title: "x", sessionID: "s1" }] } })).toBe(
+      true,
+    )
   })
 
   test("kagan().boardTask reads the boardTask flag", () => {
@@ -146,20 +153,20 @@ describe("isSupervisedSession", () => {
   })
 })
 
-describe("kagan().awaitingInput", () => {
-  test("returns a well-formed marker", () => {
-    expect(kagan({ kagan: { awaitingInput: { id: "p1", title: "Run rm -rf?" } } }).awaitingInput).toEqual({
-      id: "p1",
-      title: "Run rm -rf?",
-    })
+describe("kagan().awaitingPermissions", () => {
+  test("returns a well-formed list", () => {
+    expect(
+      kagan({ kagan: { awaitingPermissions: [{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }] } })
+        .awaitingPermissions,
+    ).toEqual([{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }])
   })
 
   test("rejects malformed shapes", () => {
-    expect(kagan({ kagan: { awaitingInput: { id: "p1" } } }).awaitingInput).toBeUndefined()
-    expect(kagan({ kagan: { awaitingInput: { id: 1, title: "x" } } }).awaitingInput).toBeUndefined()
-    expect(kagan({ kagan: { awaitingInput: null } }).awaitingInput).toBeUndefined()
-    expect(kagan({ kagan: {} }).awaitingInput).toBeUndefined()
-    expect(kagan(undefined).awaitingInput).toBeUndefined()
+    expect(kagan({ kagan: { awaitingPermissions: [{ id: "p1", title: "x" }] } }).awaitingPermissions).toBeUndefined()
+    expect(kagan({ kagan: { awaitingPermissions: { id: "p1" } } }).awaitingPermissions).toBeUndefined()
+    expect(kagan({ kagan: { awaitingPermissions: null } }).awaitingPermissions).toBeUndefined()
+    expect(kagan({ kagan: {} }).awaitingPermissions).toBeUndefined()
+    expect(kagan(undefined).awaitingPermissions).toBeUndefined()
   })
 })
 
@@ -942,36 +949,55 @@ describe("verifyFindingCitations", () => {
   })
 })
 
-describe("canRetrySession", () => {
-  test("true in backlog when intake can retry", () => {
-    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
+describe("canRestartHelper", () => {
+  test("true in backlog when intake has ever run or spawned", () => {
+    expect(canRestartHelper("backlog", { kagan: { intakeOutcome: "failed" } })).toBe(true)
+    expect(canRestartHelper("backlog", { kagan: { intakeOutcome: "ran" } })).toBe(true)
+    expect(canRestartHelper("backlog", { kagan: { intakeSessionID: "i1" } })).toBe(true)
   })
 
-  test("true in review when validator can retry", () => {
-    expect(canRetrySession("review", { kagan: { validatorOutcome: "failed" } })).toBe(true)
+  test("true in review when validator has ever run or spawned", () => {
+    expect(canRestartHelper("review", { kagan: { validatorOutcome: "failed" } })).toBe(true)
+    expect(canRestartHelper("review", { kagan: { validatorOutcome: "ran" } })).toBe(true)
+    expect(canRestartHelper("review", { kagan: { validatorSessionID: "v1" } })).toBe(true)
   })
 
-  test("false once the helper has succeeded", () => {
-    expect(canRetrySession("backlog", { kagan: { intakeOutcome: "ran" } })).toBe(false)
-    expect(canRetrySession("review", { kagan: { validatorOutcome: "ran" } })).toBe(false)
-  })
-
-  test("true when a helperError is recorded for the role, even before the outcome flips", () => {
-    expect(canRetrySession("review", { kagan: { helperError: { role: "validator", message: "boom" } } })).toBe(true)
-  })
-
-  test("true when spawned and stuck without an outcome", () => {
-    expect(canRetrySession("review", { kagan: { validatorSessionID: "v1" } })).toBe(true)
+  test("true when helperError is recorded for the role", () => {
+    expect(canRestartHelper("review", { kagan: { helperError: { role: "validator", message: "boom" } } })).toBe(true)
   })
 
   test("false when nothing has started", () => {
-    expect(canRetrySession("backlog", { kagan: {} })).toBe(false)
-    expect(canRetrySession("review", undefined)).toBe(false)
+    expect(canRestartHelper("backlog", { kagan: {} })).toBe(false)
+    expect(canRestartHelper("review", undefined)).toBe(false)
   })
 
   test("false when the column and helper role do not match", () => {
-    expect(canRetrySession("backlog", { kagan: { validatorOutcome: "failed" } })).toBe(false)
-    expect(canRetrySession("review", { kagan: { intakeOutcome: "failed" } })).toBe(false)
-    expect(canRetrySession("review", { kagan: { helperError: { role: "intake", message: "boom" } } })).toBe(false)
+    expect(canRestartHelper("backlog", { kagan: { validatorOutcome: "failed" } })).toBe(false)
+    expect(canRestartHelper("review", { kagan: { intakeOutcome: "failed" } })).toBe(false)
+    expect(canRestartHelper("review", { kagan: { helperError: { role: "intake", message: "boom" } } })).toBe(false)
+  })
+})
+
+describe("helperRestartPatch", () => {
+  test("clears intake helper state including the stale intake blob", () => {
+    expect(helperRestartPatch("intake")).toEqual({
+      intakeSessionID: undefined,
+      intakeOutcome: undefined,
+      intakeAttempts: 0,
+      helperError: undefined,
+      intake: undefined,
+    })
+  })
+
+  test("clears validator state and review artifacts without a generation bump", () => {
+    expect(helperRestartPatch("validator")).toEqual({
+      validatorSessionID: undefined,
+      validatorOutcome: undefined,
+      validatorAttempts: 0,
+      helperError: undefined,
+      findings: undefined,
+      check: undefined,
+      approved: undefined,
+    })
   })
 })

@@ -1,10 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 import { afterEach, describe, expect, test } from "bun:test"
-import { testRender } from "@opentui/solid"
 import type { TestRendererSetup } from "@opentui/core/testing"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { maybeShowOnboarding, showOnboarding } from "../../../src/tui/dialogs/onboarding"
-import { attachRendererMockInput, mockTuiApi } from "../../fixtures/api"
+import { mockTuiApi } from "../../fixtures/api"
 
 let renderSetup: TestRendererSetup | undefined
 

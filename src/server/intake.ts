@@ -45,7 +45,7 @@ export async function spawnIntake(
   ].join("\n")
 
   const body: Record<string, unknown> = {
-    tools: { read: true, edit: false, write: false, bash: false, kagan_intake: true },
+    tools: { read: true, edit: false, write: false, bash: false, task: false, kagan_intake: true },
     parts: [{ type: "text", text: promptText }],
   }
   const intakeAgent = parseOptions(options).intakeAgent

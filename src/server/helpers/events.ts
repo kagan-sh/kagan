@@ -20,9 +20,6 @@ export async function handleHelperFailure(
       [`${role}Outcome`]: undefined,
       [`${role}Attempts`]: attemptsUsed,
     })
-    console.error(
-      `[kagan] ${role} helper failed for ${parentSessionID} (attempt ${attemptsUsed}/${retries + 1}), retrying: ${message}`,
-    )
     return
   }
   await patchKagan(input.client, parentSessionID, {
@@ -57,7 +54,16 @@ export function owningRootTaskID(
   return view.boardTask === true && !parentID ? sessionID : undefined
 }
 
+// Walks the parent chain (subagents can nest arbitrarily deep) to the root board task
+// that owns a permission request, so nested worker sessions still surface on the board.
 export async function resolveOwningBoardTask(input: PluginInput, sessionID: string): Promise<string | undefined> {
-  const session = await getSessionData(input, sessionID)
-  return owningRootTaskID(session?.metadata, sessionID, session?.parentID)
+  let currentID: string | undefined = sessionID
+  for (let depth = 0; currentID && depth < 16; depth++) {
+    const session = await getSessionData(input, currentID)
+    if (!session) return undefined
+    const direct = owningRootTaskID(session.metadata, currentID, session.parentID)
+    if (direct) return direct
+    currentID = session.parentID ?? undefined
+  }
+  return undefined
 }

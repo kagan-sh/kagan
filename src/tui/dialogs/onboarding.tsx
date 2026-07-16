@@ -43,6 +43,7 @@ function Onboarding(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const [step, setStep] = createSignal(0)
   const last = STEPS.length - 1
+  const currentStep = () => STEPS[step()] ?? { title: "", lines: [] }
 
   onMount(() => props.api.ui.dialog.setSize("medium"))
 
@@ -85,9 +86,9 @@ function Onboarding(props: { api: TuiPluginApi }) {
       </box>
       <box flexDirection="column" gap={1}>
         <text fg={theme().accent} attributes={TextAttributes.BOLD}>
-          {STEPS[step()]!.title}
+          {currentStep().title}
         </text>
-        <For each={STEPS[step()]!.lines}>
+        <For each={currentStep().lines}>
           {(line) => (
             <text fg={theme().text} wrapMode="word">
               {line}

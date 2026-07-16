@@ -6,9 +6,11 @@ function parseNumstat(text: string): Map<string, { additions: number; deletions:
   for (const line of text.split("\n")) {
     const match = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/)
     if (!match) continue
-    result.set(match[3]!, {
-      additions: match[1] === "-" ? 0 : Number(match[1]),
-      deletions: match[2] === "-" ? 0 : Number(match[2]),
+    const [, additions, deletions, file] = match
+    if (!additions || !deletions || !file) continue
+    result.set(file, {
+      additions: additions === "-" ? 0 : Number(additions),
+      deletions: deletions === "-" ? 0 : Number(deletions),
     })
   }
   return result
@@ -20,7 +22,9 @@ function parseNameStatus(text: string): Map<string, SnapshotFileDiff["status"]> 
   for (const line of text.split("\n")) {
     const match = line.match(/^([A-Z])\t(.+)$/)
     if (!match) continue
-    result.set(match[2]!, statusByCode[match[1]!] ?? "modified")
+    const [, code, file] = match
+    if (!code || !file) continue
+    result.set(file, statusByCode[code] ?? "modified")
   }
   return result
 }
@@ -31,7 +35,8 @@ function splitPatchByFile(text: string): Map<string, string> {
   for (const section of sections) {
     const header = section.match(/^diff --git a\/.+? b\/(.+)$/m)
     if (!header) continue
-    result.set(header[1]!, section)
+    const [, file] = header
+    if (file) result.set(file, section)
   }
   return result
 }

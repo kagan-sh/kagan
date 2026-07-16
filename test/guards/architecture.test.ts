@@ -77,4 +77,17 @@ describe("source architecture", () => {
     )
     expect(offenders).toEqual([])
   })
+
+  test("shared task orchestrator is independent of plugin surfaces", () => {
+    const taskDir = join(srcDir.pathname, "task")
+    if (!statSync(taskDir).isDirectory()) return
+    const offenders = sourceFiles(taskDir).filter((file) =>
+      imports(readFileSync(file, "utf8")).some((specifier) => {
+        if (!specifier.startsWith(".")) return false
+        const target = relative(srcDir.pathname, resolve(dirname(file), specifier))
+        return target === "server" || target.startsWith("server/") || target === "tui" || target.startsWith("tui/")
+      }),
+    )
+    expect(offenders).toEqual([])
+  })
 })

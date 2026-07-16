@@ -75,16 +75,32 @@ describe("gateBadges", () => {
   test.each<[string, Record<string, unknown>, Badge[]]>([
     [
       "needs-you badge when a permission is pending",
-      { status: "in_progress", awaitingInput: { id: "p1", title: "Run rm -rf?" } },
+      { status: "in_progress", awaitingPermissions: [{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }] },
       [{ text: "△ needs you", tone: "warning" }],
     ],
     [
       "needs-you badge is placed first, ahead of other badges",
-      { status: "backlog", boardTask: true, intakeOutcome: "ran", awaitingInput: { id: "p1", title: "x" } },
+      {
+        status: "backlog",
+        boardTask: true,
+        intakeOutcome: "ran",
+        awaitingPermissions: [{ id: "p1", title: "x", sessionID: "s1" }],
+      },
       [
         { text: "△ needs you", tone: "warning" },
         { text: "intake ok", tone: "success" },
       ],
+    ],
+    [
+      "needs-you badge counts multiple waiting permissions",
+      {
+        status: "in_progress",
+        awaitingPermissions: [
+          { id: "p1", title: "a", sessionID: "s1" },
+          { id: "p2", title: "b", sessionID: "s2" },
+        ],
+      },
+      [{ text: "△ 2 need you", tone: "warning" }],
     ],
     [
       "intake ok once a backlog board task is intake-ready",

@@ -146,6 +146,7 @@ describe("kagan server — session.created", () => {
       edit: false,
       write: false,
       bash: false,
+      task: false,
       kagan_intake: true,
     })
     const claim = captured.updates.find((u) => u.id === "s1" && u.kagan.intakeOutcome === "pending")
@@ -800,9 +801,9 @@ describe("kagan server — session.idle", () => {
     expect(patch?.id).toBe("root-1")
   })
 
-  test("clears awaitingInput as a backstop when the active iteration goes idle", async () => {
+  test("clears awaitingPermissions as a backstop when the active iteration goes idle", async () => {
     const withWait = {
-      kagan: { ...activeRoot.kagan, awaitingInput: { id: "p1", title: "Run rm -rf?" } },
+      kagan: { ...activeRoot.kagan, awaitingPermissions: [{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }] },
     }
     const store: Record<string, SessionData> = { s1: { metadata: withWait } }
     const { input, captured } = makeInput({ store })
@@ -810,8 +811,8 @@ describe("kagan server — session.idle", () => {
     await hooks.event?.({ event: { type: "session.idle", properties: { sessionID: "s1" } } } as never)
     const patch = captured.updates.find((u) => u.id === "s1")
     expect(patch?.kagan.status).toBe("review")
-    expect(patch?.kagan.awaitingInput).toBeUndefined()
-    expect("awaitingInput" in (patch?.kagan ?? {})).toBe(true)
+    expect(patch?.kagan.awaitingPermissions).toBeUndefined()
+    expect("awaitingPermissions" in (patch?.kagan ?? {})).toBe(true)
   })
 
   test("does not move when the idle session is not the active iteration", async () => {
@@ -846,20 +847,24 @@ describe("kagan server — session.idle", () => {
 })
 
 describe("kagan server — permission.updated / permission.replied", () => {
-  test("stamps awaitingInput on a board-task session that owns the permission itself", async () => {
+  function permissionUpdated(id: string, sessionID: string, title: string) {
+    return {
+      event: {
+        type: "permission.updated",
+        properties: { id, type: "bash", sessionID, messageID: "m1", title, metadata: {} },
+      },
+    } as never
+  }
+
+  test("stamps awaitingPermissions on a board-task session that owns the permission itself", async () => {
     const store: Record<string, SessionData> = {
       s1: { metadata: { kagan: { status: "in_progress", boardTask: true } } },
     }
     const { input, captured } = makeInput({ store })
     const hooks = await plugin.server(input, {})
-    await hooks.event?.({
-      event: {
-        type: "permission.updated",
-        properties: { id: "p1", type: "bash", sessionID: "s1", messageID: "m1", title: "Run rm -rf?", metadata: {} },
-      },
-    } as never)
+    await hooks.event?.(permissionUpdated("p1", "s1", "Run rm -rf?"))
     const patch = captured.updates.find((u) => u.id === "s1")
-    expect(patch?.kagan.awaitingInput).toEqual({ id: "p1", title: "Run rm -rf?" })
+    expect(patch?.kagan.awaitingPermissions).toEqual([{ id: "p1", title: "Run rm -rf?", sessionID: "s1" }])
   })
 
   test("resolves a worker child session's permission to the board-task parent", async () => {
@@ -869,38 +874,106 @@ describe("kagan server — permission.updated / permission.replied", () => {
     }
     const { input, captured } = makeInput({ store })
     const hooks = await plugin.server(input, {})
-    await hooks.event?.({
-      event: {
-        type: "permission.updated",
-        properties: {
-          id: "p2",
-          type: "bash",
-          sessionID: "worker-1",
-          messageID: "m1",
-          title: "Delete branch?",
-          metadata: {},
-        },
-      },
-    } as never)
+    await hooks.event?.(permissionUpdated("p2", "worker-1", "Delete branch?"))
     const patch = captured.updates.find((u) => u.id === "root-1")
-    expect(patch?.kagan.awaitingInput).toEqual({ id: "p2", title: "Delete branch?" })
+    expect(patch?.kagan.awaitingPermissions).toEqual([{ id: "p2", title: "Delete branch?", sessionID: "worker-1" }])
   })
 
-  test("permission.replied clears awaitingInput on the owning board task", async () => {
+  test("resolves a deeply nested subagent's permission by walking the parent chain", async () => {
     const store: Record<string, SessionData> = {
-      s1: { metadata: { kagan: { status: "in_progress", boardTask: true, awaitingInput: { id: "p1", title: "x" } } } },
+      "sub-1": { parentID: "worker-1", metadata: { kagan: {} } },
+      "worker-1": { parentID: "root-1", metadata: { kagan: { role: "worker", workerParent: "root-1" } } },
+      "root-1": { metadata: { kagan: { status: "in_progress", boardTask: true } } },
+    }
+    const { input, captured } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    await hooks.event?.(permissionUpdated("p3", "sub-1", "Write file?"))
+    const patch = captured.updates.find((u) => u.id === "root-1")
+    expect(patch?.kagan.awaitingPermissions).toEqual([{ id: "p3", title: "Write file?", sessionID: "sub-1" }])
+  })
+
+  test("accumulates multiple pending permissions on the owning board task", async () => {
+    const store: Record<string, SessionData> = {
+      s1: { metadata: { kagan: { status: "in_progress", boardTask: true } } },
+    }
+    const { input, captured } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    await hooks.event?.(permissionUpdated("p1", "s1", "First?"))
+    await hooks.event?.(permissionUpdated("p2", "s1", "Second?"))
+    const patch = captured.updates.filter((u) => u.id === "s1").at(-1)
+    expect(patch?.kagan.awaitingPermissions).toEqual([
+      { id: "p1", title: "First?", sessionID: "s1" },
+      { id: "p2", title: "Second?", sessionID: "s1" },
+    ])
+  })
+
+  test("keeps read-only helper permissions out of the queue (auto-approved)", async () => {
+    const store: Record<string, SessionData> = {
+      v1: { parentID: "root-1", metadata: { kagan: { role: "validator", validatorParent: "root-1" } } },
+      "root-1": { metadata: { kagan: { status: "review", boardTask: true, validatorSessionID: "v1" } } },
+    }
+    const { input, captured } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    await hooks.event?.(permissionUpdated("p1", "v1", "Read file?"))
+    expect(captured.updates).toHaveLength(0)
+  })
+
+  test("queues a forged helper role the board task doesn't own", async () => {
+    const store: Record<string, SessionData> = {
+      v1: { parentID: "root-1", metadata: { kagan: { role: "validator", validatorParent: "root-1" } } },
+      "root-1": { metadata: { kagan: { status: "review", boardTask: true, validatorSessionID: "real-v" } } },
+    }
+    const { input, captured } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    await hooks.event?.(permissionUpdated("p1", "v1", "Read file?"))
+    const patch = captured.updates.find((u) => u.id === "root-1")
+    expect(patch?.kagan.awaitingPermissions).toEqual([{ id: "p1", title: "Read file?", sessionID: "v1" }])
+  })
+
+  test("permission.replied removes only the answered permission", async () => {
+    const store: Record<string, SessionData> = {
+      s1: {
+        metadata: {
+          kagan: {
+            status: "in_progress",
+            boardTask: true,
+            awaitingPermissions: [
+              { id: "p1", title: "x", sessionID: "s1" },
+              { id: "p2", title: "y", sessionID: "s1" },
+            ],
+          },
+        },
+      },
     }
     const { input, captured } = makeInput({ store })
     const hooks = await plugin.server(input, {})
     await hooks.event?.({
-      event: {
-        type: "permission.replied",
-        properties: { sessionID: "s1", permissionID: "p1", response: "once" },
-      },
+      event: { type: "permission.replied", properties: { sessionID: "s1", permissionID: "p1", response: "once" } },
     } as never)
     const patch = captured.updates.find((u) => u.id === "s1")
-    expect(patch?.kagan.awaitingInput).toBeUndefined()
-    expect("awaitingInput" in (patch?.kagan ?? {})).toBe(true)
+    expect(patch?.kagan.awaitingPermissions).toEqual([{ id: "p2", title: "y", sessionID: "s1" }])
+  })
+
+  test("permission.replied clears awaitingPermissions when the last one is answered", async () => {
+    const store: Record<string, SessionData> = {
+      s1: {
+        metadata: {
+          kagan: {
+            status: "in_progress",
+            boardTask: true,
+            awaitingPermissions: [{ id: "p1", title: "x", sessionID: "s1" }],
+          },
+        },
+      },
+    }
+    const { input, captured } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    await hooks.event?.({
+      event: { type: "permission.replied", properties: { sessionID: "s1", permissionID: "p1", response: "once" } },
+    } as never)
+    const patch = captured.updates.find((u) => u.id === "s1")
+    expect(patch?.kagan.awaitingPermissions).toBeUndefined()
+    expect("awaitingPermissions" in (patch?.kagan ?? {})).toBe(true)
   })
 
   test("an unresolvable session is a no-op, not a throw", async () => {
@@ -978,9 +1051,82 @@ describe("kagan server — tool.execute.before (git push guard)", () => {
   })
 })
 
+describe("kagan server — permission.ask (read-only helper auto-allow)", () => {
+  function askPermission(hooks: Awaited<ReturnType<typeof plugin.server>>, sessionID: string) {
+    const output: { status: "ask" | "deny" | "allow" } = { status: "ask" }
+    const permission = { id: "p1", type: "read", sessionID, messageID: "m1", title: "Read file", metadata: {} }
+    return hooks["permission.ask"]!(permission as never, output).then(() => output.status)
+  }
+
+  test("auto-allows an intake helper session owned by its board task", async () => {
+    const store: Record<string, SessionData> = {
+      "intake-1": { metadata: { kagan: { role: "intake", intakeParent: "s1" } } },
+      s1: { metadata: { kagan: { boardTask: true, intakeSessionID: "intake-1" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "intake-1")).toBe("allow")
+  })
+
+  test("auto-allows a validator helper session owned by its board task", async () => {
+    const store: Record<string, SessionData> = {
+      "validator-1": { metadata: { kagan: { role: "validator", validatorParent: "s1" } } },
+      s1: { metadata: { kagan: { boardTask: true, validatorSessionID: "validator-1" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "validator-1")).toBe("allow")
+  })
+
+  test("does not auto-allow a forged helper role the board task doesn't own", async () => {
+    const store: Record<string, SessionData> = {
+      "fake-1": { metadata: { kagan: { role: "intake", intakeParent: "s1" } } },
+      s1: { metadata: { kagan: { boardTask: true, intakeSessionID: "real-intake" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "fake-1")).toBe("ask")
+  })
+
+  test("does not auto-allow a role claim with no parent back-pointer", async () => {
+    const store: Record<string, SessionData> = {
+      "fake-2": { metadata: { kagan: { role: "intake" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "fake-2")).toBe("ask")
+  })
+
+  test("leaves a worker session's permission unchanged (worker has full tools)", async () => {
+    const store: Record<string, SessionData> = {
+      "worker-1": { parentID: "root-1", metadata: { kagan: { role: "worker", workerParent: "root-1" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "worker-1")).toBe("ask")
+  })
+
+  test("leaves a board-task session's permission unchanged", async () => {
+    const store: Record<string, SessionData> = {
+      s1: { metadata: { kagan: { boardTask: true, status: "in_progress" } } },
+    }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "s1")).toBe("ask")
+  })
+
+  test("leaves a plain session's permission unchanged", async () => {
+    const store: Record<string, SessionData> = { s1: { metadata: {} } }
+    const { input } = makeInput({ store })
+    const hooks = await plugin.server(input, {})
+    expect(await askPermission(hooks, "s1")).toBe("ask")
+  })
+})
+
 describe("kagan server — tools", () => {
   test("kagan_intake writes intake with refinedPrompt and ran outcome to the parent", async () => {
     const store: Record<string, SessionData> = {
+      "parent-1": { metadata: { kagan: { boardTask: true, intakeSessionID: "child-1" } } },
       "child-1": { metadata: { kagan: { role: "intake", intakeParent: "parent-1" } } },
     }
     const { input, captured } = makeInput({ store })
@@ -1006,6 +1152,7 @@ describe("kagan server — tools", () => {
 
   test("kagan_intake persists a sanitized mode recommendation", async () => {
     const store: Record<string, SessionData> = {
+      "parent-1": { metadata: { kagan: { boardTask: true, intakeSessionID: "child-1" } } },
       "child-1": { metadata: { kagan: { role: "intake", intakeParent: "parent-1" } } },
     }
     const { input, captured } = makeInput({ store })
@@ -1030,6 +1177,7 @@ describe("kagan server — tools", () => {
 
   test("kagan_intake drops a malformed mode before persisting", async () => {
     const store: Record<string, SessionData> = {
+      "parent-1": { metadata: { kagan: { boardTask: true, intakeSessionID: "child-1" } } },
       "child-1": { metadata: { kagan: { role: "intake", intakeParent: "parent-1" } } },
     }
     const { input, captured } = makeInput({ store })
@@ -1440,6 +1588,26 @@ describe("kagan server — helper failure: session.error event", () => {
     } as never)
     await hooks.event?.({ event: { type: "session.error", properties: {} } } as never)
     expect(captured.updates).toHaveLength(0)
+  })
+
+  // Manual restart clears the recorded validatorSessionID before aborting the live session, so the
+  // abort's stale session.error no longer matches the parent's record — the funnel must ignore it
+  // (otherwise it would clear/respawn a second helper on top of the restart's own respawn).
+  test("ignores an aborted helper's error once the parent no longer records that session", async () => {
+    const store: Record<string, SessionData> = {
+      s1: {
+        metadata: {
+          kagan: { status: "review", boardTask: true, worktree: "/wt", validatorSessionID: undefined },
+        },
+      },
+      v1: { parentID: "s1", metadata: { kagan: { role: "validator", validatorParent: "s1" } } },
+    }
+    const { input, captured } = makeInput({ store })
+    const hooks = await plugin.server(input, { helperRetries: 0 })
+    await hooks.event?.({
+      event: { type: "session.error", properties: { sessionID: "v1", error: { name: "Aborted" } } },
+    } as never)
+    expect(captured.updates.find((u) => u.id === "s1")).toBeUndefined()
   })
 })
 

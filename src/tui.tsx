@@ -1,11 +1,12 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createRoot } from "solid-js"
 import { Board } from "./tui/board/board"
 import { Settings } from "./tui/routes/settings"
 import { showOnboarding } from "./tui/dialogs/onboarding"
 import { createBoardStore, createSessionEventSubscription, createSessionStatusSubscription } from "./tui/board/store"
-import { runAutomaticUpdateLaunch } from "./tui/update-launch"
+import { createUpdateController } from "./tui/updates/action"
+import { runUpdateDiscovery } from "./tui/updates/launch"
 import { ROUTE, SETTINGS_ROUTE } from "./tui/types"
 import { version } from "../package.json"
 
@@ -16,13 +17,15 @@ const tui: TuiPlugin = async (api, options, meta) => {
   api.lifecycle.onDispose(() => disposeEvents())
   api.lifecycle.onDispose(() => disposeStatusEvents())
 
-  runAutomaticUpdateLaunch({
+  runUpdateDiscovery({
     api,
     meta,
     currentVersion: version,
     now: Date.now(),
     setUpdateStatus: store.setUpdateStatus,
   }).catch(() => {})
+
+  const updates = createUpdateController({ api, meta, store })
 
   api.route.register([
     {
@@ -47,6 +50,14 @@ const tui: TuiPlugin = async (api, options, meta) => {
           api.route.navigate(ROUTE)
           store.refresh()
         },
+      },
+      {
+        name: "kagan.update",
+        title: "Update Kagan",
+        category: "Kagan",
+        namespace: "palette",
+        slashName: "kagan-update",
+        run: updates.run,
       },
       {
         name: "kagan.settings",

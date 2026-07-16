@@ -20,7 +20,7 @@ help, or run `/kagan-tutorial` to replay the guided tour.
 | `d`       | Delete the selected session                                                            |
 | `a`       | Approve: triage findings, then the merge dialog                                        |
 | `s`       | Send back for another iteration (Review only)                                          |
-| `r`       | Retry a failed or stuck intake/review helper                                           |
+| `r`       | Restart intake (Backlog) or review (Review) after any prior helper run                 |
 | `/`       | Filter cards by title, slug, or an exact `#N` task number                              |
 | `,`       | Open Kagan settings                                                                    |
 | `?`       | Toggle help                                                                            |

@@ -22,20 +22,29 @@ bun run plugin:install
 ```
 
 This installs your local build into OpenCode. Open a project in OpenCode and launch the board to
-see your changes. Local/file installs, including `plugin:install:prod`, intentionally skip automatic
-update checks; only a published bare/`@latest` npm install exercises that path. Run
-`bun run plugin:reset` to undo the install.
+see your changes. Local/file installs, including `plugin:install:prod`, are never updated
+automatically; only a global npm install exercises the update path. Run `bun run plugin:reset` to
+undo the install.
 
-## The one command that has to pass
+## Curated validation
 
 ```sh
 bun run verify
 ```
 
-This runs every built-in `verifyx` check (including unused-code, circular-deps, and duplicate-code)
-plus formatting, linting, type-checking, tests, build, and package validation — the exact same
-thing CI runs. The pre-commit hook runs `bun run verify -- --check` so it fails on dirty staged
-content instead of rewriting files mid-commit. If it passes, your change is ready. One helper:
+This runs the declared source checks: complexity, comment policy, and circular dependencies, and
+auto-formats with oxfmt. Verifyx also runs the local `test` script automatically.
+
+The maintainability-index gate is two-tier, matching the architecture split: pure logic
+(`src/{domain,server,git,checks}` plus `src/server.ts` and `src/task/`) must clear a higher bar than
+the TUI surface (`src/tui/`), whose JSX render functions are inherently lower-scoring. Raise a file's
+score by splitting genuine responsibilities into cohesive units, never by deleting comments, joining
+lines, or fragmenting a coherent function.
+
+Pre-commit and CI run `bun run check`. That full check-only gate runs every built-in `verifyx` check,
+including its automatic test step, then validates the package. It does not rewrite files.
+
+Use this helper when running tests directly:
 
 - `bun run test` — just the tests (use this, not a bare `bun test`).
 
