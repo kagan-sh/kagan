@@ -1,12 +1,9 @@
-/** @jsxImportSource @opentui/solid */
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { getStatus, kagan } from "../../domain/task/metadata"
 import type { Finding } from "../../domain/task/findings"
 import type { Intake } from "../../domain/task/intake"
 import type { ColumnType } from "../../domain/task/types"
 import type { CheckResult } from "../../checks/runner"
-import { TaskDetailsDialog } from "./task-details-view"
 
 export type TaskDetails = {
   title?: string
@@ -52,8 +49,4 @@ export function buildTaskDetails(
       status: diff.status,
     })),
   }
-}
-
-export function openTaskDetailsView(api: TuiPluginApi, details: TaskDetails, title = "Task details"): void {
-  api.ui.dialog.replace(() => <TaskDetailsDialog api={api} details={details} title={title} />)
 }

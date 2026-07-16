@@ -5,7 +5,11 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { CheckEvidence, FindingList, IntakeView } from "./task-details-sections"
 import type { TaskDetails } from "./task-details"
 
-export function TaskDetailsDialog(props: { api: TuiPluginApi; details: TaskDetails; title: string }) {
+export function openTaskDetailsView(api: TuiPluginApi, details: TaskDetails, title = "Task details"): void {
+  api.ui.dialog.replace(() => <TaskDetailsDialog api={api} details={details} title={title} />)
+}
+
+function TaskDetailsDialog(props: { api: TuiPluginApi; details: TaskDetails; title: string }) {
   const muted = props.api.theme.current.textMuted
   return (
     <box flexDirection="column" paddingLeft={1} paddingRight={1} gap={1}>

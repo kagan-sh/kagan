@@ -49,7 +49,7 @@
     "verify:format": "oxfmt --check .",
     "verify:format:fix": "oxfmt .",
     "verify:comments": "verifyx comments --pushback \"src/**/*.{ts,tsx}\"",
-    "verify:circular-deps": "verifyx circular-deps -- \"src/**/*.{ts,tsx}\"",
+    "verify:circular-deps": "verifyx circular-deps -- -w src",
     "package": "bun scripts/package-check.ts",
     "test:ci": "bun run test",
     "docs:dev": "vitepress dev docs",

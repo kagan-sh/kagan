@@ -34,7 +34,7 @@ describe("validation gates", () => {
     expect(packageJson.scripts["verify:format"]).toBe("oxfmt --check .")
     expect(packageJson.scripts["verify:format:fix"]).toBe("oxfmt .")
     expect(packageJson.scripts["verify:comments"]).toBe(`verifyx comments --pushback ${sourceGlob}`)
-    expect(packageJson.scripts["verify:circular-deps"]).toBe(`verifyx circular-deps -- ${sourceGlob}`)
+    expect(packageJson.scripts["verify:circular-deps"]).toBe("verifyx circular-deps -- -w src")
   })
 
   test("uses the full check gate in the commit hook and validation workflows", async () => {
