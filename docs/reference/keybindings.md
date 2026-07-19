@@ -43,7 +43,8 @@ In the create dialog: `Tab` moves between fields, `↑`/`↓` move outside the d
 View details, intake notes, and archive live in the card action menu (`Enter`) rather than on
 dedicated keys. On Review cards the menu leads with **Approve** and **Send back**. **View
 details** opens a read-only summary of the task's title, status, intake, findings, prior triage,
-reports, check/setup evidence, and diff stats. **View intake notes** opens just the intake
-understanding and resolved decisions when intake has run. Archiving a Done task removes it from
-the board — it stays reachable through OpenCode's own session list, with no unarchive path back
-onto the board.
+reports, check/setup evidence, and diff stats; long content scrolls with `↑`/`↓` while the title
+and status stay pinned. **View intake notes** opens just the intake understanding and resolved
+decisions when intake has run (same scroll rule). Archiving a Done task removes it from the board
+— it stays reachable through OpenCode's own session list, with no unarchive path back onto the
+board.

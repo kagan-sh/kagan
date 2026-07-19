@@ -95,13 +95,13 @@ export function FindingList(props: { api: TuiPluginApi; title: string; findings:
       <For each={props.findings}>
         {(finding) => (
           <box flexDirection="column" paddingLeft={2}>
-            <text>
+            <text wrapMode="word">
               {finding.category ? `[${finding.category}] ` : ""}
               {finding.summary}
               {finding.resolution ? ` — ${finding.resolution}` : ""}
             </text>
             {finding.note ? (
-              <text fg={props.api.theme.current.textMuted} paddingLeft={2}>
+              <text fg={props.api.theme.current.textMuted} paddingLeft={2} wrapMode="word">
                 {finding.note}
               </text>
             ) : null}
@@ -118,13 +118,17 @@ export function IntakeView(props: { intake?: Intake }) {
   return (
     <box flexDirection="column" gap={1}>
       <text attributes={TextAttributes.BOLD}>Intake</text>
-      {props.intake.understanding ? <text paddingLeft={2}>{props.intake.understanding}</text> : null}
+      {props.intake.understanding ? (
+        <text paddingLeft={2} wrapMode="word">
+          {props.intake.understanding}
+        </text>
+      ) : null}
       {resolved.length > 0 ? (
-        <box flexDirection="column" paddingLeft={2}>
+        <box flexDirection="column" paddingLeft={2} gap={0}>
           <text>Resolved decisions:</text>
           <For each={resolved}>
             {(d) => (
-              <text>
+              <text wrapMode="word">
                 - {d.question} → {d.resolution === "approved" ? d.assumption : (d.answer ?? "")}
               </text>
             )}

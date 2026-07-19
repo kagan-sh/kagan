@@ -1142,8 +1142,13 @@ describe("createBoardCommands", () => {
     const renders: Array<() => JSX.Element> = []
     const api = {
       theme: { current: mockTheme },
+      renderer: { width: 100, height: 30, on: () => {}, off: () => {} },
       ui: {
-        dialog: { replace: (render: () => JSX.Element) => renders.push(render), clear: () => {} },
+        dialog: {
+          replace: (render: () => JSX.Element) => renders.push(render),
+          clear: () => {},
+          setSize: () => {},
+        },
         DialogSelect: (props: unknown) => props,
       },
     } as unknown as TuiPluginApi
@@ -1158,7 +1163,9 @@ describe("createBoardCommands", () => {
     await waitFor(() => renders.length === 2)
     renderSetup = await testRender(renders[1]!, { width: 100, height: 30 })
     await renderSetup.flush()
-    expect(renderSetup.captureCharFrame()).toContain("#4 Add retry")
+    const frame = renderSetup.captureCharFrame()
+    expect(frame).toContain("#4 Add retry")
+    expect(frame).toContain("↑↓ scroll")
   })
 
   test("kagan.menu 'Archive' archives a done task and refreshes the board", async () => {

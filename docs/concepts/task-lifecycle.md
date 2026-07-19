@@ -68,7 +68,8 @@ rejected before they are saved.
   is denied; create a follow-up task instead. Done tasks can be archived from the card action menu;
   archiving removes them from the board but the session remains reachable through OpenCode's own
   session list. Intake understanding and resolved decisions are also reachable from the card menu
-  as **View intake notes**.
+  as **View intake notes**. Both details views keep the header pinned and scroll long bodies with
+  `↑`/`↓`.
 
 If an intake or review helper fails, the card shows `intake failed` or `review failed`. Kagan
 retries automatically up to `helperRetries` times; after that, press `r` on the card to retry
