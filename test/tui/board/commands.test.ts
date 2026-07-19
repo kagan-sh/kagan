@@ -11,6 +11,7 @@ import { configureIntakeMarkdownTreeSitter } from "../../../src/tui/dialogs/inta
 import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "../../fixtures/api"
 
 import { BOARD_BINDINGS, createBoardCommands, footerHints } from "../../../src/tui/board/commands"
+import { menuOptions } from "../../../src/tui/board/commands/hints"
 
 // bun's mock.module is process-global; sibling test files mock git/runner + git/merge and those mocks
 // leak across files in load order. Establish this file's own git mocks so the merge-dialog tests below
@@ -143,6 +144,31 @@ describe("footerHints", () => {
   test("adds the update hint only when a release is available", () => {
     expect(footerHints(undefined, false, 0, true)).toContainEqual({ key: "u", label: "update" })
     expect(footerHints(undefined, false)).not.toContainEqual({ key: "u", label: "update" })
+  })
+})
+
+describe("menuOptions", () => {
+  test("leads Review cards with Approve and Send back, and offers intake notes when present", () => {
+    const options = menuOptions({
+      id: "s1",
+      kaganStatus: "review",
+      metadata: {
+        kagan: {
+          intake: { understanding: "Ship the calc", decisions: [], mode: { recommended: "assisted", rationale: "x" } },
+        },
+      },
+    } as unknown as BoardSession)
+    expect(options.map((o) => o.value).slice(0, 4)).toEqual(["approve", "send_back", "view", "intake"])
+  })
+
+  test("omits intake notes when intake has not run", () => {
+    const options = menuOptions({
+      id: "s1",
+      kaganStatus: "backlog",
+      metadata: { kagan: {} },
+    } as unknown as BoardSession)
+    expect(options.map((o) => o.value)).not.toContain("intake")
+    expect(options.map((o) => o.value)[0]).toBe("view")
   })
 })
 
@@ -1057,11 +1083,11 @@ describe("createBoardCommands", () => {
       .find((command) => command.name === "kagan.menu")
       ?.run()
     expect(dialogRendered!().options.map((option) => option.value)).toEqual([
+      "approve",
+      "send_back",
       "view",
       "open",
       "advance",
-      "send_back",
-      "approve",
       "retry",
       "delete",
     ])

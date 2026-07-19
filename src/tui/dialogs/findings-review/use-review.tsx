@@ -83,7 +83,8 @@ export function useFindingsReviewState(props: {
 
   const title = () => {
     const number = kagan(session().metadata).taskNumber
-    return number !== undefined ? `Approve #${number} — triage findings first` : "Approve — triage findings first"
+    const prefix = number !== undefined ? `Approve #${number}` : "Approve"
+    return reason() ? `${prefix} — triage findings first` : `${prefix} — ready to merge`
   }
 
   return { mode, index, focus, note, error, findings, clean, current, reason, title, setNote }

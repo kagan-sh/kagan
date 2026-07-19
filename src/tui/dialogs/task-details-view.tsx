@@ -2,11 +2,24 @@
 import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { Intake } from "../../domain/task/intake"
 import { CheckEvidence, FindingList, IntakeView } from "./task-details-sections"
 import type { TaskDetails } from "./task-details-sections"
 
 export function openTaskDetailsView(api: TuiPluginApi, details: TaskDetails, title = "Task details"): void {
   api.ui.dialog.replace(() => <TaskDetailsDialog api={api} details={details} title={title} />)
+}
+
+export function openIntakeNotesView(api: TuiPluginApi, intake: Intake, title = "Intake notes"): void {
+  api.ui.dialog.replace(() => (
+    <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD}>{title}</text>
+        <text fg={api.theme.current.textMuted}>esc close</text>
+      </box>
+      <IntakeView intake={intake} />
+    </box>
+  ))
 }
 
 function TaskDetailsDialog(props: { api: TuiPluginApi; details: TaskDetails; title: string }) {

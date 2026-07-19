@@ -6,7 +6,7 @@ import { menuOptions } from "./hints"
 import { moveNextWithGates } from "./intake"
 import { openSession, promptDelete } from "./nav"
 import { sendBackTask } from "./send-back"
-import { archiveSelected, retryHelperTask, viewDetails } from "./task-actions"
+import { archiveSelected, retryHelperTask, viewDetails, viewIntakeNotes } from "./task-actions"
 
 const runMenuAction = async (
   ctx: BoardCommandContext,
@@ -16,6 +16,7 @@ const runMenuAction = async (
   approveTask: () => void,
 ) => {
   if (action === "view") return viewDetails(ctx, session)
+  if (action === "intake") return viewIntakeNotes(ctx, session)
   if (action === "open") return openSession(ctx)
   if (action === "advance") return moveNextWithGates(ctx, approveTask, moveNext)
   if (action === "send_back") return sendBackTask(ctx)

@@ -93,7 +93,7 @@ describe("openFindingsReviewDialog", () => {
     await renderSetup.flush()
     const frame = renderSetup.captureCharFrame()
     expect(frame).toContain("Approve — triage findings first")
-    expect(frame).toContain("(1 finding(s) need triage)")
+    expect(frame).toContain("1 finding(s) need triage — enter opens a finding")
   })
 
   test("shows a clean state with approve enabled when there are no findings", async () => {
@@ -102,7 +102,8 @@ describe("openFindingsReviewDialog", () => {
     await renderSetup.flush()
     const frame = renderSetup.captureCharFrame()
     expect(frame).toContain("No findings — review is clean.")
-    expect(frame).toContain("a approve & merge")
+    expect(frame).toContain("Approve — ready to merge")
+    expect(frame).toContain("▸ Approve & merge — a")
   })
 
   test("escape closes the dialog", async () => {

@@ -462,7 +462,10 @@ so that failures, handoffs, and supervision evidence are visible instead of hidd
    `kagan.tutorial` palette command (`/kagan-tutorial`), regardless of the opt-out.
 7. WHEN the user views task details from the card action menu THEN Kagan SHALL display a read-only
    summary of the task's title, status, intake, findings, prior triage, reports, check/setup
-   evidence, and diff stats without mutating task state.
+   evidence, and diff stats without mutating task state. WHEN intake has completed THEN the card
+   action menu SHALL also offer a read-only intake-notes view of the understanding and resolved
+   decisions. WHEN the selected task is in Review THEN the card action menu SHALL lead with Approve
+   and Send back.
 8. WHEN concurrent handlers patch the same session's `kagan` metadata THEN Kagan SHALL serialize the
    read-modify-write operations per session so one patch cannot clobber another, and a failed patch
    SHALL NOT block later patches for that session.
