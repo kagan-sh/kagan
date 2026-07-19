@@ -7,7 +7,17 @@ import { DialogFrame } from "./chrome"
 import { MarkdownBody } from "./intake-gate-content"
 
 const WIDE_MIN_WIDTH = 72
-const ACTION_MIN_WIDTH = 20
+const ACTION_MIN_WIDTH = 24
+const COLUMN_GAP = 2
+/** Matches OpenCode host Dialog panel widths (`packages/tui/src/ui/dialog.tsx`). */
+const HOST_DIALOG_WIDTH = { medium: 60, large: 88, xlarge: 116 } as const
+/** DialogFrame paddingLeft + paddingRight */
+const FRAME_PAD = 4
+
+export function dialogContentWidth(terminalWidth: number, size: keyof typeof HOST_DIALOG_WIDTH = "large"): number {
+  const panel = Math.min(HOST_DIALOG_WIDTH[size], Math.max(2, terminalWidth - 2))
+  return Math.max(20, panel - FRAME_PAD)
+}
 
 function ActionList(props: { theme: TuiThemeCurrent; labels: string[]; index: number; footer?: string }) {
   return (
@@ -72,10 +82,10 @@ export function TwoColumnGate(props: {
 }) {
   const theme = () => props.api.theme.current
   const dimensions = useRendererDimensions(props.api)
-  const wide = () => dimensions().width >= WIDE_MIN_WIDTH
+  const bodyWidth = () => dialogContentWidth(dimensions().width, "large")
+  const wide = () => bodyWidth() >= WIDE_MIN_WIDTH
   const [index, setIndex] = createSignal(0)
-  const bodyWidth = () => Math.max(40, dimensions().width - 8)
-  const leftWidth = () => Math.max(36, bodyWidth() - ACTION_MIN_WIDTH - 3)
+  const leftWidth = () => Math.max(24, bodyWidth() - ACTION_MIN_WIDTH - COLUMN_GAP)
 
   onMount(() => props.api.ui.dialog.setSize("large"))
   useKeyIntercept(props.api, (key) =>
@@ -93,7 +103,7 @@ export function TwoColumnGate(props: {
           </box>
         }
       >
-        <box flexDirection="row" gap={2} width={bodyWidth()} alignItems="flex-start">
+        <box flexDirection="row" gap={COLUMN_GAP} width={bodyWidth()} alignItems="flex-start">
           <box width={leftWidth()} flexShrink={0}>
             <MarkdownBody api={props.api} content={props.markdown} width={leftWidth()} />
           </box>
@@ -116,7 +126,7 @@ export function IntakeAnswerGate(props: {
   const theme = () => props.api.theme.current
   const [answer, setAnswer] = createSignal("")
   const dimensions = useRendererDimensions(props.api)
-  const bodyWidth = () => Math.max(40, dimensions().width - 8)
+  const bodyWidth = () => dialogContentWidth(dimensions().width, "large")
 
   onMount(() => props.api.ui.dialog.setSize("large"))
   useKeyIntercept(props.api, (key) => {
@@ -129,7 +139,7 @@ export function IntakeAnswerGate(props: {
 
   return (
     <DialogFrame api={props.api} title={props.title}>
-      <box flexDirection="column" gap={1}>
+      <box flexDirection="column" gap={1} width={bodyWidth()}>
         <MarkdownBody api={props.api} content={props.markdown} width={bodyWidth()} />
         <box flexDirection="column" gap={1} width={bodyWidth()}>
           <text fg={theme().text} attributes={TextAttributes.BOLD}>

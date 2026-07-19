@@ -14,7 +14,7 @@ denied with the reason, on the board and server-side.
 
 Creating a task spawns a read-only **task prep** child session. It reads the codebase at your
 chosen base branch and returns three things: an understanding of the task, clarifying decisions
-(each an assumption you must approve or override with an answer), and a refined final instruction
+(each an assumption you must accept or override with an answer), and a refined final instruction
 for the implementing agent. It also returns an advisory mode recommendation (`autonomous`,
 `assisted`, or `manual`) with a one-line rationale. The recommendation is informational only and
 never gates a move or approval.

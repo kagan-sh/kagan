@@ -31,7 +31,7 @@ export function openIntakeDecisionDialog(
       api={api}
       title={title}
       markdown={decisionMarkdown(props.decision)}
-      labels={["Approve", "Reject & answer"]}
+      labels={["Accept assumption", "Override with answer"]}
       onCancel={props.onCancel}
       onChoose={(choice) => {
         if (choice === 0) props.onApprove()

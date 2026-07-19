@@ -11,6 +11,7 @@ import {
   openIntakeDecisionDialog,
   taskRef,
 } from "../../../src/tui/dialogs/intake-gate"
+import { dialogContentWidth } from "../../../src/tui/dialogs/intake-gate-views"
 import { attachRendererMockInput, mockSession, mockTuiApi } from "../../fixtures/api"
 
 let renderSetup: TestRendererSetup | undefined
@@ -38,6 +39,12 @@ describe("intake gate markdown helpers", () => {
     expect(decisionMarkdown(decision)).toContain("## Question")
     expect(answerMarkdown(decision)).toContain("### Overriding assumption")
     expect(modeMarkdown("Needs a human.", "assisted")).toBe("## Why assisted\n\nNeeds a human.")
+  })
+
+  test("dialogContentWidth follows host large panel, not terminal width", () => {
+    expect(dialogContentWidth(120, "large")).toBe(84)
+    expect(dialogContentWidth(70, "large")).toBe(64)
+    expect(dialogContentWidth(200, "medium")).toBe(56)
   })
 
   test("taskRef prefers task number", () => {
@@ -79,7 +86,6 @@ describe("openIntakeDecisionDialog", () => {
       onReject: () => {},
       onCancel: () => {},
     })
-    // Stacked layout (width < 72): row+markdown clipping is a harness quirk; production host dialogs size differently.
     renderSetup = await testRender(rendered!, { width: 60, height: 28 })
     await renderSetup.flush()
     await Bun.sleep(40)
@@ -91,8 +97,55 @@ describe("openIntakeDecisionDialog", () => {
     expect(frame).toContain("Assumption")
     expect(frame).toContain("canonical name")
     expect(frame).toContain("Which name should the README use?")
-    expect(frame).toContain("Approve")
-    expect(frame).toContain("Reject & answer")
+    expect(frame).toContain("Accept assumption")
+    expect(frame).toContain("Override with answer")
+  })
+
+  test("wraps long question inside the host large dialog width", async () => {
+    let rendered: (() => JSX.Element) | undefined
+    const question =
+      'Should "refine docs" be limited to replacing the root README with end-user documentation for the current calculator, or should it also introduce a docs directory?'
+    const api = mockTuiApi({
+      renderer: { width: 120, height: 32 },
+      ui: {
+        dialog: {
+          open: true,
+          setSize: () => {},
+          clear: () => {},
+          replace: (render: () => unknown) => {
+            rendered = render as () => JSX.Element
+          },
+        },
+      },
+    })
+    openIntakeDecisionDialog(api, {
+      session: mockSession("s1", "backlog", "refine docs", 0, undefined, {
+        metadata: { kagan: { taskNumber: 1, boardTask: true } },
+      }),
+      index: 0,
+      total: 1,
+      decision: {
+        id: "d1",
+        question,
+        assumption: "Limit this focused task to the root README.",
+        required: true,
+      },
+      onApprove: () => {},
+      onReject: () => {},
+      onCancel: () => {},
+    })
+    renderSetup = await testRender(rendered!, { width: 120, height: 32 })
+    await renderSetup.flush()
+    await Bun.sleep(40)
+    treeSitter?.resolveAllHighlightOnce()
+    await renderSetup.flush()
+    const frame = renderSetup.captureCharFrame()
+    expect(frame).toContain("docs directory")
+    expect(frame).toContain("Accept assumption")
+    // Without dialog-sized wrap, this question stays on one ~160-char line and clips at the panel edge.
+    expect(frame.includes('Should "refine docs"') && frame.includes("docs directory")).toBe(true)
+    const startLine = frame.split("\n").find((line) => line.includes('Should "refine docs"'))
+    expect(startLine?.includes("docs directory")).toBe(false)
   })
 
   test("enter approves the selected action", async () => {

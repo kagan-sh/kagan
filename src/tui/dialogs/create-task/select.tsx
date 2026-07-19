@@ -75,7 +75,7 @@ function FilterableSelectPicker(props: { api: TuiPluginApi } & FilterableSelectP
           )}
         </For>
       </box>
-      <box paddingBottom={1} flexDirection="row" gap={2}>
+      <box flexDirection="row" gap={2}>
         <text fg={theme().text}>
           enter <span style={{ fg: theme().textMuted }}>select</span>
         </text>

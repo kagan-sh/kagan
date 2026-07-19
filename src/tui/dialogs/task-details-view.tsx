@@ -12,7 +12,7 @@ export function openTaskDetailsView(api: TuiPluginApi, details: TaskDetails, tit
 function TaskDetailsDialog(props: { api: TuiPluginApi; details: TaskDetails; title: string }) {
   const muted = props.api.theme.current.textMuted
   return (
-    <box flexDirection="column" paddingLeft={1} paddingRight={1} gap={1}>
+    <box flexDirection="column" paddingLeft={1} paddingRight={1} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD}>{props.title}</text>
         <text fg={muted}>esc close</text>

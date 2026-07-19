@@ -116,7 +116,7 @@ export function CreateTaskForm(props: {
         value={props.branches[state.branchIndex] ?? "HEAD"}
         focused={focusIndex() === 4}
       />
-      <box paddingBottom={1} flexDirection="row" gap={2}>
+      <box flexDirection="row" gap={2}>
         <text fg={theme().text}>
           tab <span style={{ fg: theme().textMuted }}>move</span>
         </text>

@@ -20,7 +20,7 @@ const STEPS = [
     title: "Create & intake",
     lines: [
       "Press n to create a task: title, description, model, and base branch.",
-      "A read-only task-prep agent analyzes it first. Approve or override its assumptions; the card shows intake ok once it's ready to start.",
+      "A read-only task-prep agent analyzes it first. Accept or override its assumptions; the card shows intake ok once it's ready to start.",
     ],
   },
   {
