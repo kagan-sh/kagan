@@ -89,7 +89,7 @@ const runMerge = async (ctx: BoardCommandContext, session: BoardSession, targetB
 }
 
 const promptAnotherBranch = async (ctx: BoardCommandContext, session: BoardSession) => {
-  const runner = bunGitRunner()
+  const runner = bunGitRunner
   const worktree = kagan(session.metadata).worktree
   const taskBranch = worktree ? await currentBranch(runner, worktree) : undefined
   const branches = (await listLocalBranches(runner, ctx.api.state.path.worktree)).filter(
@@ -112,7 +112,7 @@ const promptAnotherBranch = async (ctx: BoardCommandContext, session: BoardSessi
 }
 
 const promptMerge = async (ctx: BoardCommandContext, session: BoardSession) => {
-  const runner = bunGitRunner()
+  const runner = bunGitRunner
   const view = kagan(session.metadata)
   const freshness = await baseBranchFreshness(runner, view.worktree, view.baseBranch)
   openMergeDialog(ctx.api, ctx.store, session, freshness, {

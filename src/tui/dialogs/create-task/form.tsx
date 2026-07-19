@@ -5,14 +5,8 @@ import { createSignal, onMount, Show } from "solid-js"
 import type { BoardStore } from "../../board/store"
 import { useKeyIntercept } from "../../renderer"
 import { DialogFrame } from "../chrome"
-import {
-  handleCreateTaskKey,
-  openCreateTaskPicker,
-  submitCreateTask,
-  type CreateTaskDependencies,
-  type FormState,
-  type ModelChoice,
-} from "./form-actions"
+import { handleCreateTaskKey, openCreateTaskPicker, submitCreateTask } from "./form-actions"
+import type { FormState, ModelChoice } from "./types"
 
 function PickerRow(props: { api: TuiPluginApi; label: string; value: string; focused: boolean }) {
   const theme = () => props.api.theme.current
@@ -40,7 +34,6 @@ export function CreateTaskForm(props: {
   models: ModelChoice[]
   state: FormState
   reopen: () => void
-  dependencies: CreateTaskDependencies
 }) {
   const theme = () => props.api.theme.current
   const state = props.state
@@ -57,7 +50,6 @@ export function CreateTaskForm(props: {
       models: props.models,
       branches: props.branches,
       descriptionRef,
-      dependencies: props.dependencies,
     })
 
   const openPicker = () =>

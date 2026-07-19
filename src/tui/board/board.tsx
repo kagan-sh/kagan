@@ -61,13 +61,7 @@ export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
     <box position="absolute" left={0} top={0} width="100%" height="100%">
       <box flexDirection="column" width="100%" height="100%">
         <box flexGrow={1} minHeight={0}>
-          <BoardMain
-            api={props.api}
-            store={store}
-            cap={store.inProgressCap}
-            sendBackStopThreshold={store.sendBackStopThreshold}
-            checkCommand={store.checkCommand}
-          />
+          <BoardMain api={props.api} store={store} />
         </box>
         <Footer api={props.api} store={store} hints={hints} />
       </box>

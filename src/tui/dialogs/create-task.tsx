@@ -1,11 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { createTask } from "../tasks"
-import { getOrder, setOrder } from "../session/preferences"
 import { bunGitRunner, listLocalBranches } from "../../git/runner"
 import type { BoardStore } from "../board/store"
-import type { CreateTaskDependencies, FormState, ModelChoice } from "./create-task/form-actions"
 import { CreateTaskForm } from "./create-task/form"
+import type { FormState, ModelChoice } from "./create-task/types"
 
 function collectModels(api: TuiPluginApi): ModelChoice[] {
   const choices: ModelChoice[] = [{ label: "Auto (session default)" }]
@@ -17,17 +15,8 @@ function collectModels(api: TuiPluginApi): ModelChoice[] {
   return choices
 }
 
-export async function openCreateTaskDialog(
-  api: TuiPluginApi,
-  store: BoardStore,
-  dependencies: CreateTaskDependencies = {
-    createTask,
-    getOrder,
-    setOrder,
-    listBranches: (currentApi) => listLocalBranches(bunGitRunner(), currentApi.state.path.worktree),
-  },
-): Promise<void> {
-  const listed = await dependencies.listBranches(api)
+export async function openCreateTaskDialog(api: TuiPluginApi, store: BoardStore): Promise<void> {
+  const listed = await listLocalBranches(bunGitRunner, api.state.path.worktree)
   const fallback = api.state.vcs?.branch ?? api.state.vcs?.default_branch ?? "HEAD"
   const branches = listed.length > 0 ? listed : [fallback]
   const models = collectModels(api)
@@ -45,15 +34,7 @@ export async function openCreateTaskDialog(
   }
   const showForm = () => {
     api.ui.dialog.replace(() => (
-      <CreateTaskForm
-        api={api}
-        store={store}
-        branches={branches}
-        models={models}
-        state={state}
-        reopen={showForm}
-        dependencies={dependencies}
-      />
+      <CreateTaskForm api={api} store={store} branches={branches} models={models} state={state} reopen={showForm} />
     ))
   }
   showForm()

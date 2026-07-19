@@ -21,7 +21,7 @@ let localBranches: string[] = ["kagan/task"]
 let mergeResult: { ok: boolean; message: string } = { ok: true, message: "Merged" }
 
 mock.module("../../../src/git/runner", () => ({
-  bunGitRunner: () => async () => ({ code: 0, stdout: "", stderr: "" }),
+  bunGitRunner: async () => ({ code: 0, stdout: "", stderr: "" }),
   currentBranch: async () => currentBranchValue,
   listLocalBranches: async () => localBranches,
   baseBranchFreshness: async () => ({ ahead: 0 }),

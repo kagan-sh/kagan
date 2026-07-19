@@ -338,7 +338,7 @@ describe("mergeTaskBranch", () => {
 })
 
 describe("mergeTaskBranch (real repo)", () => {
-  const run = bunGitRunner()
+  const run = bunGitRunner
   const tempDirs: string[] = []
 
   afterEach(async () => {

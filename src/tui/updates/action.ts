@@ -1,62 +1,47 @@
 import type { TuiPluginApi, TuiPluginMeta, TuiToast } from "@opencode-ai/plugin/tui"
 import { version as currentVersion } from "../../../package.json"
 import { ROUTE } from "../types"
-import { checkForUpdate, KAGAN_PACKAGE, type UpdateCheck, type UpdateStatus } from "./check"
-import { runGlobalPluginUpdate, type UpdateCommandResult } from "./runner"
+import { checkForUpdate, KAGAN_PACKAGE, type UpdateStatus } from "./check"
+import { runGlobalPluginUpdate } from "./runner"
 
 type UpdateStore = {
   setUpdateStatus: (status: UpdateStatus) => void
   notify: (toast: TuiToast) => void
 }
 
-type ConfirmUpdate = (current: string, target: string) => Promise<boolean>
-
-export function createUpdateController(input: {
-  api: TuiPluginApi
-  meta: TuiPluginMeta
-  store: UpdateStore
-  now?: () => number
-  check?: (force: boolean) => Promise<UpdateCheck>
-  confirm?: ConfirmUpdate
-  runCommand?: (version: string, cwd: string) => Promise<UpdateCommandResult>
-}) {
+export function createUpdateController(input: { api: TuiPluginApi; meta: TuiPluginMeta; store: UpdateStore }) {
   const { api, meta, store } = input
   let active: Promise<void> | undefined
   const notify = (toast: TuiToast) => {
     if (api.route.current.name === ROUTE) store.notify(toast)
     else api.ui.toast(toast)
   }
-  const check =
-    input.check ??
-    ((force) =>
-      checkForUpdate({
-        kv: api.kv,
-        currentVersion,
-        source: meta.source,
-        spec: meta.spec,
-        now: (input.now ?? Date.now)(),
-        force,
-      }))
-  const confirm: ConfirmUpdate =
-    input.confirm ??
-    ((current, target) =>
-      new Promise<boolean>((resolve) => {
-        api.ui.dialog.replace(() =>
-          api.ui.DialogConfirm({
-            title: "Update Kagan",
-            message: `Update Kagan from v${current} to v${target}? Restart OpenCode after installation.`,
-            onConfirm: () => {
-              api.ui.dialog.clear()
-              resolve(true)
-            },
-            onCancel: () => {
-              api.ui.dialog.clear()
-              resolve(false)
-            },
-          }),
-        )
-      }))
-  const runCommand = input.runCommand ?? runGlobalPluginUpdate
+  const check = (force: boolean) =>
+    checkForUpdate({
+      kv: api.kv,
+      currentVersion,
+      source: meta.source,
+      spec: meta.spec,
+      now: Date.now(),
+      force,
+    })
+  const confirm = (current: string, target: string) =>
+    new Promise<boolean>((resolve) => {
+      api.ui.dialog.replace(() =>
+        api.ui.DialogConfirm({
+          title: "Update Kagan",
+          message: `Update Kagan from v${current} to v${target}? Restart OpenCode after installation.`,
+          onConfirm: () => {
+            api.ui.dialog.clear()
+            resolve(true)
+          },
+          onCancel: () => {
+            api.ui.dialog.clear()
+            resolve(false)
+          },
+        }),
+      )
+    })
 
   const fail = (version: string, message: string) => {
     store.setUpdateStatus({ kind: "available", version })
@@ -71,7 +56,7 @@ export function createUpdateController(input: {
       fail(version, `OpenCode could not stage ${exact}.`)
       return
     }
-    const result = await runCommand(version, api.state.path.directory)
+    const result = await runGlobalPluginUpdate(version, api.state.path.directory)
     if (!result.ok) {
       const detail =
         result.output || (result.exitCode === null ? "Unable to run OpenCode." : `Exited ${result.exitCode}.`)

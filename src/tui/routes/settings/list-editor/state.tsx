@@ -1,7 +1,4 @@
-/** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-import type { Accessor, Setter } from "solid-js"
-import { createSignal } from "solid-js"
 
 type SignalRead<T> = () => T
 type SignalWrite<T> = (value: T | ((previous: T) => T)) => void
@@ -30,16 +27,6 @@ export type EditorContext<T> = {
   setMessage: SignalWrite<string | undefined>
   reopenWithSnapshot: () => void
   prompt: (title: string, value: string, onConfirm: (value: string) => void) => void
-}
-
-export type ListEditorDialogProps<T> = {
-  api: TuiPluginApi
-  state: ListEditorState<T>
-  items: SignalRead<T[]>
-  selectedRow: SignalRead<number>
-  fieldIndex: SignalRead<number>
-  message: SignalRead<string | undefined>
-  reopen: () => void
 }
 
 export type ListEditorKeyProps = {
@@ -78,40 +65,6 @@ export type UseListEditorProps<T> = {
   move?: (ctx: EditorContext<T>, delta: number) => void
 }
 
-export function listEditorDialogControls<T>(props: ListEditorDialogProps<T>) {
-  const snapshot = () => ({
-    items: props.items(),
-    row: props.selectedRow(),
-    field: props.fieldIndex(),
-    message: props.message(),
-  })
-  const reopenWithSnapshot = () => {
-    Object.assign(props.state, snapshot())
-    props.reopen()
-  }
-  const prompt = (title: string, value: string, onConfirm: (value: string) => void) => {
-    Object.assign(props.state, snapshot())
-    props.api.ui.dialog.replace(() => (
-      <props.api.ui.DialogPrompt
-        title={title}
-        value={value}
-        placeholder={title}
-        onConfirm={onConfirm}
-        onCancel={props.reopen}
-      />
-    ))
-  }
-  return { reopenWithSnapshot, prompt }
-}
-
-export function listEditorSignals<T>(state: ListEditorState<T>) {
-  const [items, setItems] = createSignal(state.items)
-  const [rowIndex, setRowIndex] = createSignal(Math.min(state.row, Math.max(state.items.length - 1, 0)))
-  const [fieldIndex, setFieldIndex] = createSignal(state.field)
-  const [message, setMessage] = createSignal(state.message)
-  return { items, setItems, rowIndex, setRowIndex, fieldIndex, setFieldIndex, message, setMessage }
-}
-
 export function deleteItem<T>(ctx: EditorContext<T>) {
   const index = ctx.selectedRow()
   const current = ctx.items()
@@ -144,28 +97,4 @@ export function moveItem<T>(ctx: EditorContext<T>, delta: number) {
   next[target] = temp
   ctx.setItems(next)
   ctx.setRowIndex(target)
-}
-
-export function buildEditorContext<T>(props: {
-  items: Accessor<T[]>
-  setItems: Setter<T[]>
-  selectedRow: Accessor<number>
-  setRowIndex: Setter<number>
-  setFieldIndex: Setter<number>
-  focusedField: Accessor<string>
-  setMessage: Setter<string | undefined>
-  reopenWithSnapshot: () => void
-  prompt: (title: string, value: string, onConfirm: (value: string) => void) => void
-}): EditorContext<T> {
-  return {
-    items: props.items,
-    setItems: props.setItems,
-    selectedRow: props.selectedRow,
-    setRowIndex: props.setRowIndex,
-    setFieldIndex: props.setFieldIndex,
-    focusedField: props.focusedField,
-    setMessage: props.setMessage,
-    reopenWithSnapshot: props.reopenWithSnapshot,
-    prompt: props.prompt,
-  }
 }

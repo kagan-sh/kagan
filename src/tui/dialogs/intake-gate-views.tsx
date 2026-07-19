@@ -9,13 +9,13 @@ import { MarkdownBody } from "./intake-gate-content"
 const WIDE_MIN_WIDTH = 72
 const ACTION_MIN_WIDTH = 24
 const COLUMN_GAP = 2
-/** Matches OpenCode host Dialog panel widths (`packages/tui/src/ui/dialog.tsx`). */
-const HOST_DIALOG_WIDTH = { medium: 60, large: 88, xlarge: 116 } as const
+/** Host Dialog "large" panel width (`packages/tui/src/ui/dialog.tsx`). */
+const HOST_DIALOG_WIDTH = 88
 /** DialogFrame paddingLeft + paddingRight */
 const FRAME_PAD = 4
 
-export function dialogContentWidth(terminalWidth: number, size: keyof typeof HOST_DIALOG_WIDTH = "large"): number {
-  const panel = Math.min(HOST_DIALOG_WIDTH[size], Math.max(2, terminalWidth - 2))
+export function dialogContentWidth(terminalWidth: number): number {
+  const panel = Math.min(HOST_DIALOG_WIDTH, Math.max(2, terminalWidth - 2))
   return Math.max(20, panel - FRAME_PAD)
 }
 
@@ -82,7 +82,7 @@ export function TwoColumnGate(props: {
 }) {
   const theme = () => props.api.theme.current
   const dimensions = useRendererDimensions(props.api)
-  const bodyWidth = () => dialogContentWidth(dimensions().width, "large")
+  const bodyWidth = () => dialogContentWidth(dimensions().width)
   const wide = () => bodyWidth() >= WIDE_MIN_WIDTH
   const [index, setIndex] = createSignal(0)
   const leftWidth = () => Math.max(24, bodyWidth() - ACTION_MIN_WIDTH - COLUMN_GAP)
@@ -126,7 +126,7 @@ export function IntakeAnswerGate(props: {
   const theme = () => props.api.theme.current
   const [answer, setAnswer] = createSignal("")
   const dimensions = useRendererDimensions(props.api)
-  const bodyWidth = () => dialogContentWidth(dimensions().width, "large")
+  const bodyWidth = () => dialogContentWidth(dimensions().width)
 
   onMount(() => props.api.ui.dialog.setSize("large"))
   useKeyIntercept(props.api, (key) => {

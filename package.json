@@ -51,7 +51,6 @@
     "verify:comments": "verifyx comments --pushback \"src/**/*.{ts,tsx}\"",
     "verify:circular-deps": "verifyx circular-deps -- -w src",
     "package": "bun scripts/package-check.ts",
-    "test:ci": "bun run test",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

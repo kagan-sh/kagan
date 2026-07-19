@@ -42,9 +42,9 @@ describe("intake gate markdown helpers", () => {
   })
 
   test("dialogContentWidth follows host large panel, not terminal width", () => {
-    expect(dialogContentWidth(120, "large")).toBe(84)
-    expect(dialogContentWidth(70, "large")).toBe(64)
-    expect(dialogContentWidth(200, "medium")).toBe(56)
+    expect(dialogContentWidth(120)).toBe(84)
+    expect(dialogContentWidth(70)).toBe(64)
+    expect(dialogContentWidth(40)).toBe(34)
   })
 
   test("taskRef prefers task number", () => {

@@ -12,19 +12,32 @@ async function readSessionMetadata(client: PluginInput["client"], sessionID: str
   >
 }
 
+async function withKaganUpdate(
+  client: PluginInput["client"],
+  sessionID: string,
+  compute: (metadata: Record<string, unknown>) => Record<string, unknown> | undefined,
+): Promise<boolean> {
+  let updated = false
+  await lockSessionMetadata(sessionID, async () => {
+    const metadata = await readSessionMetadata(client, sessionID)
+    const patch = compute(metadata)
+    if (!patch) return
+    updated = true
+    await client.session.update({
+      path: { id: sessionID },
+      body: { metadata: mergeKagan(metadata, patch) },
+      throwOnError: true,
+    } as Parameters<typeof client.session.update>[0])
+  })
+  return updated
+}
+
 export async function patchKagan(
   client: PluginInput["client"],
   sessionID: string,
   partial: Record<string, unknown>,
 ): Promise<void> {
-  await lockSessionMetadata(sessionID, async () => {
-    const metadata = await readSessionMetadata(client, sessionID)
-    await client.session.update({
-      path: { id: sessionID },
-      body: { metadata: mergeKagan(metadata, partial) },
-      throwOnError: true,
-    } as Parameters<typeof client.session.update>[0])
-  })
+  await withKaganUpdate(client, sessionID, () => partial)
 }
 
 export async function mutateKagan(
@@ -32,16 +45,7 @@ export async function mutateKagan(
   sessionID: string,
   compute: (view: ReturnType<typeof kagan>) => Record<string, unknown> | undefined,
 ): Promise<void> {
-  await lockSessionMetadata(sessionID, async () => {
-    const metadata = await readSessionMetadata(client, sessionID)
-    const patch = compute(kagan(metadata))
-    if (!patch) return
-    await client.session.update({
-      path: { id: sessionID },
-      body: { metadata: mergeKagan(metadata, patch) },
-      throwOnError: true,
-    } as Parameters<typeof client.session.update>[0])
-  })
+  await withKaganUpdate(client, sessionID, (metadata) => compute(kagan(metadata)))
 }
 
 export async function claimHelperSpawn(
@@ -49,17 +53,9 @@ export async function claimHelperSpawn(
   sessionID: string,
   role: HelperRole,
 ): Promise<boolean> {
-  let claimed = false
-  await lockSessionMetadata(sessionID, async () => {
-    const metadata = await readSessionMetadata(client, sessionID)
+  return withKaganUpdate(client, sessionID, (metadata) => {
     const before = helper(metadata, role)
     if (before.outcome !== undefined || before.sessionID !== undefined) return
-    claimed = true
-    await client.session.update({
-      path: { id: sessionID },
-      body: { metadata: mergeKagan(metadata, { [`${role}Outcome`]: "pending" }) },
-      throwOnError: true,
-    } as Parameters<typeof client.session.update>[0])
+    return { [`${role}Outcome`]: "pending" }
   })
-  return claimed
 }

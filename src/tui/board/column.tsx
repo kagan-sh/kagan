@@ -7,6 +7,7 @@ import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { CardShell, type CardDisplayProps } from "./card/body"
 import type { ColumnType } from "../../domain/task/types"
 import type { BoardCard } from "../types"
+import type { BoardStore } from "./store"
 
 function columnLabel(column: ColumnType): string {
   if (column === "in_progress") return "In Progress"
@@ -22,20 +23,23 @@ function Card(props: CardDisplayProps) {
 
 export function Column(props: {
   api: TuiPluginApi
+  store: BoardStore
   column: ColumnType
   cards: BoardCard[]
   selectedID?: string
   onSelect: (id: string) => void
-  cap?: number
-  sendBackStopThreshold?: number
-  checkCommand?: string
   sessionStatus?: (id: string) => SessionStatus["type"] | undefined
   ref?: (node: Renderable) => void
 }) {
   const theme = () => props.api.theme.current
-  const atCap = () => props.cap !== undefined && props.cards.length >= props.cap
+  const cap = () => (props.column === "in_progress" ? props.store.inProgressCap : undefined)
+  const atCap = () => {
+    const limit = cap()
+    return limit !== undefined && props.cards.length >= limit
+  }
   const countText = () => {
-    const raw = props.cap !== undefined ? `${props.cards.length}/${props.cap}` : `${props.cards.length}`
+    const limit = cap()
+    const raw = limit !== undefined ? `${props.cards.length}/${limit}` : `${props.cards.length}`
     return atCap() ? `△ ${raw}` : raw
   }
   const headerColor = () => (atCap() ? theme().warning : theme().text)
@@ -89,11 +93,10 @@ export function Column(props: {
           {(boardCard) => (
             <Card
               api={props.api}
+              store={props.store}
               session={boardCard.session}
               children={boardCard.children}
               selectedID={props.selectedID}
-              sendBackStopThreshold={props.sendBackStopThreshold}
-              checkCommand={props.checkCommand}
               sessionStatus={props.sessionStatus}
               onSelect={props.onSelect}
               onCardRef={registerCardRef}

@@ -1,10 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BoardStore } from "../../board/store"
+import { createTask } from "../../tasks"
+import { getOrder, setOrder } from "../../session/preferences"
 import { openFilterableSelectPicker, openScopePicker } from "./pickers"
-import type { CreateTaskDependencies, FormState, ModelChoice } from "./types"
+import type { FormState, ModelChoice } from "./types"
 
-export type { CreateTaskDependencies, FormState, ModelChoice } from "./types"
 type DescriptionField = { plainText?: string; newLine?: () => void }
 
 function hasScope(scope: FormState["scope"]): boolean {
@@ -18,7 +19,6 @@ export async function submitCreateTask(props: {
   models: ModelChoice[]
   branches: string[]
   descriptionRef: DescriptionField | undefined
-  dependencies: CreateTaskDependencies
 }): Promise<void> {
   const trimmed = props.state.title.trim()
   if (!trimmed) {
@@ -41,11 +41,8 @@ export async function submitCreateTask(props: {
       setupCommands: props.store.setupCommands,
       ...(scope ? { scope } : {}),
     }
-    const session = await props.dependencies.createTask(props.api, input)
-    props.dependencies.setOrder(props.api, "backlog", [
-      ...props.dependencies.getOrder(props.api, "backlog"),
-      session.id,
-    ])
+    const session = await createTask(props.api, input)
+    setOrder(props.api, "backlog", [...getOrder(props.api, "backlog"), session.id])
     await props.store.refresh()
     props.store.notify({ variant: "success", title: "Kagan", message: `Created "${trimmed}"` })
   } catch (error) {

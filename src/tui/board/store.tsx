@@ -1,8 +1,8 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, createSignal } from "solid-js"
 import type { Event, SessionStatus } from "@opencode-ai/sdk/v2"
+import { parseOptions } from "../../domain/options"
 import { commandPlan, configuredScopes } from "../../domain/task/commands"
-import { inProgressCap, sendBackStopThreshold, squashMerge } from "../../domain/task/policy"
 import { getFilter, setFilter as persistFilter } from "../session/preferences"
 import type { ColumnType } from "../../domain/task/types"
 import { ROUTE, type BoardSession } from "../types"
@@ -23,13 +23,11 @@ import {
 import { deleteSelected, moveByDirection, moveTo, refresh } from "./store/refresh"
 
 export function createBoardStore(api: TuiPluginApi, options?: Record<string, unknown>) {
-  const squash = squashMerge(options)
+  const parsed = parseOptions(options)
   const setupCommands = commandPlan(options, "setup")
   const checkCommands = commandPlan(options, "check")
-  const setup = setupCommands.map((command) => command.command).join(" && ") || undefined
   const check = checkCommands.map((command) => command.command).join(" && ") || undefined
   const scopes = configuredScopes(options)
-  const sendBackThreshold = sendBackStopThreshold(options)
   const [sessions, setSessions] = createSignal<BoardSession[]>([])
   const [updateStatus, setUpdateStatus] = createSignal<UpdateStatus>()
   const [selectedID, setSelectedID] = createSignal<string | undefined>()
@@ -72,14 +70,13 @@ export function createBoardStore(api: TuiPluginApi, options?: Record<string, unk
     selectedSession: () => selectedSession(s),
     selectedColumn,
     filter,
-    squashMerge: squash,
-    setupCommand: setup,
+    squashMerge: parsed.squashMerge,
     checkCommand: check,
     setupCommands,
     checkCommands,
     configuredScopes: scopes,
-    sendBackStopThreshold: sendBackThreshold,
-    inProgressCap: inProgressCap(options),
+    sendBackStopThreshold: parsed.sendBackStopThreshold,
+    inProgressCap: parsed.inProgressLimit,
     columns,
     notices,
     notify,

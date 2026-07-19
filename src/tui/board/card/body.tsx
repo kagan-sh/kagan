@@ -6,6 +6,7 @@ import { TextAttributes } from "@opentui/core"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { formatModeRationale, summarizeSubtasks } from "../../format"
 import type { BoardSession } from "../../types"
+import type { BoardStore } from "../store"
 import { SIDE_BORDER_CHARS } from "../borders"
 import { taskLabel, workingBadge, cardBorderColor } from "./helpers"
 import { DetailLine } from "./detail"
@@ -13,11 +14,10 @@ import { SubtaskLine } from "./subtask"
 
 export type CardDisplayProps = {
   api: TuiPluginApi
+  store: BoardStore
   session: BoardSession
   children?: BoardSession[]
   selectedID?: string
-  sendBackStopThreshold?: number
-  checkCommand?: string
   sessionStatus?: (id: string) => SessionStatus["type"] | undefined
   onSelect: (id: string) => void
   onCardRef?: (id: string, node: Renderable | undefined) => void
@@ -25,16 +25,15 @@ export type CardDisplayProps = {
 
 function CardHeader(props: {
   api: TuiPluginApi
+  store: BoardStore
   session: BoardSession
   parentSelected: boolean
   renderedAt: number
-  sendBackStopThreshold?: number
-  checkCommand?: string
   working?: { text: string; tone: "success" | "warning" }
   onSelect: () => void
 }) {
   const theme = () => props.api.theme.current
-  const modeText = () => formatModeRationale(props.session.metadata, props.checkCommand)
+  const modeText = () => formatModeRationale(props.session.metadata, props.store.checkCommand)
 
   return (
     <box flexDirection="column" onMouseDown={props.onSelect}>
@@ -56,7 +55,7 @@ function CardHeader(props: {
           session={props.session}
           selected={props.parentSelected}
           now={props.renderedAt}
-          sendBackStopThreshold={props.sendBackStopThreshold}
+          sendBackStopThreshold={props.store.sendBackStopThreshold}
         />
         <Show when={props.working}>
           {(badge) => (
@@ -128,11 +127,10 @@ export function CardShell(props: CardDisplayProps & { renderedAt: number }) {
     >
       <CardHeader
         api={props.api}
+        store={props.store}
         session={props.session}
         parentSelected={parentSelected()}
         renderedAt={props.renderedAt}
-        sendBackStopThreshold={props.sendBackStopThreshold}
-        checkCommand={props.checkCommand}
         working={working()}
         onSelect={() => props.onSelect(props.session.id)}
       />

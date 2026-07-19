@@ -39,15 +39,6 @@ async function readConfig(file: string): Promise<Record<string, unknown>> {
   return parseConfigJson(await Bun.file(file).text(), file)
 }
 
-async function format(files: string[]): Promise<void> {
-  const oxfmt = Bun.spawn(["bun", "x", "oxfmt", "--write", ...files], {
-    cwd: repoRoot,
-    stdout: "ignore",
-    stderr: "inherit",
-  })
-  await oxfmt.exited
-}
-
 async function addGlobalPluginSpec(spec: string): Promise<void> {
   await mkdir(globalConfigDir, { recursive: true })
   for (const file of globalConfigFiles) {
@@ -57,7 +48,6 @@ async function addGlobalPluginSpec(spec: string): Promise<void> {
     await writeFile(file, `${JSON.stringify(config, null, 2)}\n`)
     console.log(`${file} → plugin includes "${spec}"`)
   }
-  await format(globalConfigFiles)
 }
 
 function pluginSpec(entry: unknown): string | undefined {
@@ -76,7 +66,6 @@ function isKaganSpec(spec: string): boolean {
 }
 
 async function removeGlobalKaganPluginSpecs(): Promise<void> {
-  const touched: string[] = []
   for (const file of globalConfigFiles) {
     if (!(await Bun.file(file).exists())) continue
     const config = await readConfig(file)
@@ -94,10 +83,8 @@ async function removeGlobalKaganPluginSpecs(): Promise<void> {
     } else {
       await writeFile(file, `${JSON.stringify(config, null, 2)}\n`)
       console.log(`${file} → dropped kagan plugin entries`)
-      touched.push(file)
     }
   }
-  if (touched.length > 0) await format(touched)
 }
 
 async function run(args: string[], options?: { cwd?: string; stdout?: "pipe" | "inherit" }): Promise<string> {

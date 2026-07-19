@@ -13,7 +13,7 @@ const taskDetailsDiffs = async (metadata: Record<string, unknown> | undefined): 
   const worktree = kagan(metadata).worktree
   if (!worktree) return []
   try {
-    return await worktreeDiffs(bunGitRunner(), worktree, kagan(metadata).baseBranch ?? "HEAD")
+    return await worktreeDiffs(bunGitRunner, worktree, kagan(metadata).baseBranch ?? "HEAD")
   } catch {
     return []
   }

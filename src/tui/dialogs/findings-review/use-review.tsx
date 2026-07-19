@@ -13,7 +13,6 @@ export function useFindingsReviewState(props: {
   api: TuiPluginApi
   store: BoardStore
   session: BoardSession
-  checkCommand?: string
   onApprove: (session: BoardSession) => void
   onSendBack: () => void
 }) {

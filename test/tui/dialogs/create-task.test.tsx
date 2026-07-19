@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { EditBufferRenderable } from "@opentui/core"
 import type { TestRendererSetup } from "@opentui/core/testing"
@@ -12,37 +12,60 @@ let createInput: Record<string, unknown> | undefined
 let createError: Error | undefined
 let backlogOrder = ["old"]
 let writtenOrder: string[] | undefined
+let mockCreateTask = false
 
-const { openCreateTaskDialog: createDialog } = await import("../../../src/tui/dialogs/create-task")
+const realGit = await import("../../../src/git/runner")
+const realTasks = await import("../../../src/tui/tasks")
+const realPreferences = await import("../../../src/tui/session/preferences")
+const realCreateTask = realTasks.createTask
+const realGetOrder = realPreferences.getOrder
+const realSetOrder = realPreferences.setOrder
+const realListLocalBranches = realGit.listLocalBranches
 
-const dependencies: NonNullable<Parameters<typeof createDialog>[2]> = {
-  createTask: async (_api: TuiPluginApi, input: Record<string, unknown>) => {
+mock.module("../../../src/git/runner", () => ({
+  ...realGit,
+  listLocalBranches: async (...args: Parameters<typeof realListLocalBranches>) =>
+    mockCreateTask ? branches : realListLocalBranches(...args),
+}))
+
+mock.module("../../../src/tui/tasks", () => ({
+  ...realTasks,
+  createTask: async (...args: Parameters<typeof realCreateTask>) => {
+    if (!mockCreateTask) return realCreateTask(...args)
     if (createError) throw createError
-    createInput = input
+    createInput = args[1] as Record<string, unknown>
     return { id: "new1" } as never
   },
-  getOrder: () => backlogOrder,
-  setOrder: (_api: TuiPluginApi, _column: string, order: readonly string[]) => {
-    writtenOrder = [...order]
-  },
-  listBranches: async () => branches,
-}
+}))
 
-const openCreateTaskDialog = (api: TuiPluginApi, store: Parameters<typeof createDialog>[1]) =>
-  createDialog(api, store, dependencies)
+mock.module("../../../src/tui/session/preferences", () => ({
+  ...realPreferences,
+  getOrder: (...args: Parameters<typeof realGetOrder>) => (mockCreateTask ? backlogOrder : realGetOrder(...args)),
+  setOrder: (...args: Parameters<typeof realSetOrder>) => {
+    if (!mockCreateTask) return realSetOrder(...args)
+    writtenOrder = [...args[2]]
+  },
+}))
+
+const { openCreateTaskDialog } = await import("../../../src/tui/dialogs/create-task")
 
 type Notice = { variant: string; title: string; message: string }
 
 let renderSetup: TestRendererSetup | undefined
 
-afterEach(async () => {
-  await renderSetup?.renderer.destroy()
-  renderSetup = undefined
+beforeEach(() => {
+  mockCreateTask = true
   branches = ["main", "feature"]
   createInput = undefined
   createError = undefined
   backlogOrder = ["old"]
   writtenOrder = undefined
+})
+
+afterEach(async () => {
+  mockCreateTask = false
+  await renderSetup?.renderer.destroy()
+  renderSetup = undefined
 })
 
 function harness(scopes: string[] = []) {
