@@ -18,6 +18,8 @@ export { footerHints } from "./commands/hints"
 export const BOARD_BINDINGS = [
   { key: "j,down", cmd: "kagan.down", desc: "Next row (card or subtask)", short: "down" },
   { key: "k,up", cmd: "kagan.up", desc: "Previous row (card or subtask)", short: "up" },
+  { key: "tab", cmd: "kagan.next_root", desc: "Next root task across columns", short: "next task" },
+  { key: "shift+tab", cmd: "kagan.prev_root", desc: "Previous root task across columns", short: "prev task" },
   { key: "shift+j", cmd: "kagan.reorder_down", desc: "Move card down in column", short: "reorder down" },
   { key: "shift+k", cmd: "kagan.reorder_up", desc: "Move card up in column", short: "reorder up" },
   { key: "g", cmd: "kagan.first", desc: "Select first row in column", short: "first" },
@@ -65,6 +67,8 @@ export function createBoardCommands(
     command("kagan.close", "Close Kagan", () => closeBoard(ctx)),
     command("kagan.down", "Next card", store.selectNext),
     command("kagan.up", "Previous card", store.selectPrevious),
+    command("kagan.next_root", "Next root task", store.selectNextRoot),
+    command("kagan.prev_root", "Previous root task", store.selectPrevRoot),
     command("kagan.next_column", "Next column", store.selectNextColumn),
     command("kagan.prev_column", "Previous column", store.selectPrevColumn),
     command("kagan.reorder_down", "Move card down in column", () => store.reorder(1)),

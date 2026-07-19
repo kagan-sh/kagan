@@ -6,7 +6,14 @@ import { getFilter, getOrder, setOrder } from "../../session/preferences"
 import type { BoardSession } from "../../types"
 import type { StoreState } from "./selection"
 import { reconcileOrders } from "./sessions"
-import { adjacentColumn, flatNavIDs, moveDenyReason, selectAfterDelete, selectedSession } from "./selection"
+import {
+  adjacentColumn,
+  ensureSelection,
+  flatNavIDs,
+  moveDenyReason,
+  selectAfterDelete,
+  selectedSession,
+} from "./selection"
 
 type HelperFailureNotice = {
   sessionID: string
@@ -139,6 +146,7 @@ export async function refresh(s: StoreState) {
   persistReconciledOrders(s, reconciled, loaded)
   s.setOrders(reconciled)
   s.setFilterSignal(getFilter(s.api))
+  ensureSelection(s)
 }
 
 export async function moveTo(s: StoreState, status: ColumnType) {

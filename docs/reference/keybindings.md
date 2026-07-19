@@ -6,26 +6,27 @@ the same as running `/kagan` or the `kagan` palette command.
 The keys below are active while the board route is open. Press `?` on the board for the inline
 help, or run `/kagan-tutorial` to replay the guided tour.
 
-| Key       | Action                                                                                 |
-| --------- | -------------------------------------------------------------------------------------- |
-| `j` / `k` | Next / previous row (card or subtask)                                                  |
-| `J` / `K` | Move the selected card down / up within its column                                     |
-| `g` / `G` | Jump to the first / last row in the current column                                     |
-| `l` / `h` | Next / previous column (also `→` / `←`)                                                |
-| `m`       | Move card to the next column (runs the gates)                                          |
-| `b`       | Move card to the previous column; from Review this sends it back instead               |
-| `n`       | New task (create dialog)                                                               |
-| `o`       | Open the selected session                                                              |
-| `Enter`   | Open the card action menu — options list only what applies, each with its own shortcut |
-| `d`       | Delete the selected session                                                            |
-| `a`       | Approve: triage findings, then the merge dialog                                        |
-| `s`       | Send back for another iteration (Review only)                                          |
-| `r`       | Restart intake (Backlog) or review (Review) after any prior helper run                 |
-| `/`       | Filter cards by title, slug, or an exact `#N` task number                              |
-| `,`       | Open Kagan settings                                                                    |
-| `?`       | Toggle help                                                                            |
-| `q`       | Close the board                                                                        |
-| `Esc`     | Dismiss: close the help overlay, else clear an active filter                           |
+| Key                 | Action                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| `j` / `k`           | Next / previous row (card or subtask)                                                  |
+| `Tab` / `Shift+Tab` | Next / previous root task across columns (skips intake/reviewer children; wraps)       |
+| `J` / `K`           | Move the selected card down / up within its column                                     |
+| `g` / `G`           | Jump to the first / last row in the current column                                     |
+| `l` / `h`           | Next / previous column (also `→` / `←`)                                                |
+| `m`                 | Move card to the next column (runs the gates)                                          |
+| `b`                 | Move card to the previous column; from Review this sends it back instead               |
+| `n`                 | New task (create dialog)                                                               |
+| `o`                 | Open the selected session                                                              |
+| `Enter`             | Open the card action menu — options list only what applies, each with its own shortcut |
+| `d`                 | Delete the selected session                                                            |
+| `a`                 | Approve: triage findings, then the merge dialog                                        |
+| `s`                 | Send back for another iteration (Review only)                                          |
+| `r`                 | Restart intake (Backlog) or review (Review) after any prior helper run                 |
+| `/`                 | Filter cards by title, slug, or an exact `#N` task number                              |
+| `,`                 | Open Kagan settings                                                                    |
+| `?`                 | Toggle help                                                                            |
+| `q`                 | Close the board                                                                        |
+| `Esc`               | Dismiss: close the help overlay, else clear an active filter                           |
 
 Moving a task backward is gated too: a started In Progress task can't drop back to Backlog (send
 it back from Review, or delete it instead), and Done tasks stay put — create a follow-up task

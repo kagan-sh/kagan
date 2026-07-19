@@ -54,6 +54,14 @@ function firstSessionID(columns: Record<ColumnType, BoardCard[]>, column: Column
   return flatNavIDs(columns[column])[0]
 }
 
+function columnContaining(columns: Record<ColumnType, BoardCard[]>, id: string | undefined): ColumnType | undefined {
+  if (!id) return undefined
+  for (const column of COLUMNS) {
+    if (flatNavIDs(columns[column]).includes(id)) return column
+  }
+  return undefined
+}
+
 function nextSessionID(
   columns: Record<ColumnType, BoardCard[]>,
   column: ColumnType,
@@ -87,24 +95,81 @@ export function select(s: StoreState, column: ColumnType, id: string | undefined
   s.setSelectedID(valid)
 }
 
+export function ensureSelection(s: StoreState) {
+  const columns = s.columns()
+  const column = columnContaining(columns, s.selectedID())
+  if (column) {
+    if (s.selectedColumn() !== column) s.setSelectedColumn(column)
+    return
+  }
+  const fallback = firstSessionID(columns, s.selectedColumn())
+  if (fallback) {
+    select(s, s.selectedColumn(), fallback)
+    return
+  }
+  for (const status of COLUMNS) {
+    const first = firstSessionID(columns, status)
+    if (first) {
+      select(s, status, first)
+      return
+    }
+  }
+  s.setSelectedID(undefined)
+}
+
 export function selectStep(s: StoreState, direction: 1 | -1) {
-  const result = nextSessionID(s.columns(), s.selectedColumn(), s.selectedID(), direction)
+  const id = s.selectedID()
+  const column = columnContaining(s.columns(), id) ?? s.selectedColumn()
+  const result = nextSessionID(s.columns(), column, id, direction)
   if (!result) return
   select(s, result.column, result.id)
+}
+
+function rootNavEntries(columns: Record<ColumnType, BoardCard[]>): { column: ColumnType; id: string }[] {
+  const entries: { column: ColumnType; id: string }[] = []
+  for (const column of COLUMNS) {
+    for (const card of columns[column]) {
+      entries.push({ column, id: card.session.id })
+    }
+  }
+  return entries
+}
+
+function rootNavIndex(columns: Record<ColumnType, BoardCard[]>, id: string | undefined): number {
+  const entries = rootNavEntries(columns)
+  if (!id) return -1
+  const exact = entries.findIndex((entry) => entry.id === id)
+  if (exact !== -1) return exact
+  return entries.findIndex((entry) => {
+    const card = columns[entry.column].find((item) => item.session.id === entry.id)
+    return card?.children.some((child) => child.id === id) ?? false
+  })
+}
+
+export function selectRootStep(s: StoreState, direction: 1 | -1) {
+  const columns = s.columns()
+  const entries = rootNavEntries(columns)
+  if (entries.length === 0) return
+  const index = rootNavIndex(columns, s.selectedID())
+  const nextIndex =
+    index === -1 ? (direction === 1 ? 0 : entries.length - 1) : (index + direction + entries.length) % entries.length
+  const next = entries[nextIndex]
+  if (!next) return
+  select(s, next.column, next.id)
 }
 
 export function selectColumnStep(s: StoreState, direction: 1 | -1) {
   const target = adjacentColumn(s.selectedColumn(), direction)
   if (!target) return
-  s.setSelectedColumn(target)
-  const id = firstSessionID(s.columns(), target)
-  if (id) s.setSelectedID(id)
+  select(s, target, firstSessionID(s.columns(), target))
 }
 
 export function selectEdge(s: StoreState, edge: "first" | "last") {
-  const nav = flatNavIDs(s.columns()[s.selectedColumn()])
-  const id = edge === "first" ? nav[0] : nav.at(-1)
-  if (id) select(s, s.selectedColumn(), id)
+  const id = s.selectedID()
+  const column = columnContaining(s.columns(), id) ?? s.selectedColumn()
+  const nav = flatNavIDs(s.columns()[column])
+  const next = edge === "first" ? nav[0] : nav.at(-1)
+  if (next) select(s, column, next)
 }
 
 export function reorder(s: StoreState, direction: 1 | -1) {

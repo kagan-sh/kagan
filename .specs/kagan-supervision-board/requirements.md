@@ -96,6 +96,10 @@ status cues, so that I can see at a glance what needs my attention.
 13. WHERE the user filters cards with a query of the form `#N`, the board SHALL match only the
     card whose task number equals `N` exactly, in addition to the existing title/slug substring
     match.
+14. WHEN the user presses Tab or Shift+Tab on the board THEN selection SHALL cycle forward or
+    backward across root board cards in column order (Backlog → In Progress → Review → Done),
+    wrapping at the ends, and SHALL land only on root cards — never on child sessions such as
+    intake or reviewer helpers; row-wise navigation into children remains available via j/k.
 
 ---
 

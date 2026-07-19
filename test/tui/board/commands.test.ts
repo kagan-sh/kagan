@@ -90,7 +90,7 @@ describe("footerHints", () => {
 
   test("shows the baseline hints when nothing is selected", () => {
     expect(footerHints(undefined, false)).toEqual([
-      { key: "j/k/h/l", label: "navigate" },
+      { key: "j/k/tab", label: "navigate" },
       { key: "enter", label: "menu" },
       { key: "n", label: "new" },
       { key: "/", label: "filter" },

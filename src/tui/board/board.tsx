@@ -23,7 +23,11 @@ export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
 
   let disposeLayer: (() => void) | undefined
 
-  onMount(() => maybeShowOnboarding(props.api))
+  onMount(() => {
+    // Host prompt/dialog focus can survive into this route and swallow hjkl.
+    props.api.renderer.currentFocusedRenderable?.blur()
+    maybeShowOnboarding(props.api)
+  })
 
   const updateAvailable = createMemo(() => store.updateStatus()?.kind === "available")
 

@@ -10,7 +10,7 @@ export function footerHints(
   updateAvailable = false,
 ): FooterHint[] {
   const hints: FooterHint[] = [
-    { key: "j/k/h/l", label: "navigate" },
+    { key: "j/k/tab", label: "navigate" },
     { key: "enter", label: "menu" },
     { key: "n", label: "new" },
   ]
