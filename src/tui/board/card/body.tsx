@@ -67,7 +67,7 @@ function CardHeader(props: {
         </Show>
       </box>
       <Show when={props.parentSelected && modeText()}>
-        <text paddingLeft={1} flexShrink={1} wrapMode="word" fg={theme().textMuted}>
+        <text paddingLeft={1} flexShrink={1} wrapMode="word" fg={theme().text}>
           {modeText()}
         </text>
       </Show>

@@ -19,6 +19,29 @@ export const mockTheme = {
   success: "green",
   warning: "yellow",
   error: "red",
+  markdownText: "white",
+  markdownHeading: "magenta",
+  markdownLink: "cyan",
+  markdownLinkText: "cyan",
+  markdownCode: "cyan",
+  markdownBlockQuote: "gray",
+  markdownEmph: "white",
+  markdownStrong: "white",
+  markdownHorizontalRule: "gray",
+  markdownListItem: "white",
+  markdownListEnumeration: "white",
+  markdownImage: "cyan",
+  markdownImageText: "cyan",
+  markdownCodeBlock: "cyan",
+  syntaxComment: "gray",
+  syntaxKeyword: "magenta",
+  syntaxFunction: "cyan",
+  syntaxVariable: "white",
+  syntaxString: "green",
+  syntaxNumber: "yellow",
+  syntaxType: "cyan",
+  syntaxOperator: "gray",
+  syntaxPunctuation: "gray",
 }
 
 function mockKv(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -29,8 +52,21 @@ function mockKv(overrides: Record<string, unknown> = {}): Record<string, unknown
   return kv
 }
 
-export function mockTuiApi(overrides: Partial<TuiPluginApi> & { kvMap?: Record<string, unknown> } = {}): TuiPluginApi {
-  const kvMap = mockKv(overrides.kvMap)
+export function mockTuiApi(overrides: object = {}): TuiPluginApi {
+  const {
+    kvMap: kvOverrides,
+    ui: uiOverride,
+    renderer: rendererOverride,
+    keymap: keymapOverride,
+    ...rest
+  } = overrides as {
+    kvMap?: Record<string, unknown>
+    ui?: Record<string, unknown>
+    renderer?: Record<string, unknown>
+    keymap?: Record<string, unknown>
+    [key: string]: unknown
+  }
+  const kvMap = mockKv(kvOverrides)
   const keyHandlers = new Set<(key: KeyEvent) => void>()
   const interceptHandlers = new Set<(ctx: KeyInputContext) => void>()
   const keyInput: {
@@ -60,6 +96,14 @@ export function mockTuiApi(overrides: Partial<TuiPluginApi> & { kvMap?: Record<s
       keyInput.lastConsumed = consumed
     },
   }
+  const keymap = {
+    registerLayer: () => {},
+    intercept: (name: "key", handler: (ctx: KeyInputContext) => void) => {
+      interceptHandlers.add(handler)
+      return () => interceptHandlers.delete(handler)
+    },
+    ...(keymapOverride as object | undefined),
+  }
   return {
     kv: {
       get: (key: string, defaultValue: unknown) => (key in kvMap ? kvMap[key] : defaultValue),
@@ -70,24 +114,20 @@ export function mockTuiApi(overrides: Partial<TuiPluginApi> & { kvMap?: Record<s
     ui: {
       toast: () => {},
       dialog: { open: false },
+      ...(uiOverride as object | undefined),
     },
     route: { current: { name: ROUTE } },
     theme: { current: mockTheme },
-    keymap: {
-      registerLayer: () => {},
-      intercept: (name: "key", handler: (ctx: KeyInputContext) => void) => {
-        interceptHandlers.add(handler)
-        return () => interceptHandlers.delete(handler)
-      },
-    },
+    keymap,
     renderer: {
       width: 120,
       height: 40,
       on: () => {},
       off: () => {},
-      keyInput,
+      ...(rendererOverride as object | undefined),
+      keyInput: (rendererOverride as { keyInput?: typeof keyInput } | undefined)?.keyInput ?? keyInput,
     },
-    ...overrides,
+    ...rest,
   } as unknown as TuiPluginApi
 }
 

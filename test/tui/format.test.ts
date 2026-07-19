@@ -110,7 +110,7 @@ describe("gateBadges", () => {
     [
       "intake… while a backlog board task is still preparing intake",
       { status: "backlog", boardTask: true, intakeOutcome: "pending" },
-      [{ text: "intake…", tone: "muted" }],
+      [{ text: "intake…", tone: "warning" }],
     ],
     ["no intake badge for a non-board backlog session", { status: "backlog", intakeOutcome: "pending" }, []],
     [
