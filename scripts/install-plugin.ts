@@ -21,10 +21,22 @@ function defaultConfigFor(file: string): Record<string, unknown> {
     : { $schema: "https://opencode.ai/config.json" }
 }
 
+function parseConfigJson(text: string, file: string): Record<string, unknown> {
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    // hand-edited OpenCode configs often keep a trailing comma
+    try {
+      return JSON.parse(text.replace(/,\s*([}\]])/g, "$1")) as Record<string, unknown>
+    } catch (error) {
+      throw new Error(`Failed to parse ${file}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
 async function readConfig(file: string): Promise<Record<string, unknown>> {
-  return (await Bun.file(file).exists())
-    ? ((await Bun.file(file).json()) as Record<string, unknown>)
-    : defaultConfigFor(file)
+  if (!(await Bun.file(file).exists())) return defaultConfigFor(file)
+  return parseConfigJson(await Bun.file(file).text(), file)
 }
 
 async function format(files: string[]): Promise<void> {
