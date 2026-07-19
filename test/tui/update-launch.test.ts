@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { TuiPluginApi, TuiPluginMeta } from "@opencode-ai/plugin/tui"
-import type { UpdateStatus } from "../../src/tui/updates/check"
-import { runUpdateDiscovery } from "../../src/tui/updates/launch"
+import { checkForUpdate, type UpdateStatus } from "../../src/tui/updates/check"
 
 function mockKv() {
   const store: Record<string, unknown> = {}
@@ -33,7 +32,26 @@ function registryFetch(latest: string): typeof fetch {
   return (async () => ({ ok: true, json: async () => ({ latest }) })) as unknown as typeof fetch
 }
 
-describe("runUpdateDiscovery", () => {
+async function discoverUpdate(input: {
+  api: TuiPluginApi
+  meta: TuiPluginMeta
+  currentVersion: string
+  now: number
+  setUpdateStatus: (status: UpdateStatus) => void
+  fetchImpl?: typeof fetch
+}): Promise<void> {
+  const result = await checkForUpdate({
+    kv: input.api.kv,
+    currentVersion: input.currentVersion,
+    source: input.meta.source,
+    spec: input.meta.spec,
+    now: input.now,
+    fetchImpl: input.fetchImpl,
+  })
+  if (result?.kind === "available" && !input.api.lifecycle.signal.aborted) input.setUpdateStatus(result)
+}
+
+describe("update discovery at launch", () => {
   test("records availability without staging or config mutation", async () => {
     const statuses: UpdateStatus[] = []
     let staged = false
@@ -42,7 +60,7 @@ describe("runUpdateDiscovery", () => {
       lifecycle: { signal: new AbortController().signal },
       plugins: { add: async () => ((staged = true), true) },
     } as unknown as TuiPluginApi
-    await runUpdateDiscovery({
+    await discoverUpdate({
       api,
       meta: meta(),
       currentVersion: "0.1.0",
@@ -57,7 +75,7 @@ describe("runUpdateDiscovery", () => {
   test("does nothing for current and file installs", async () => {
     for (const candidate of [meta(), meta({ source: "file", spec: "file:///tmp/kagan" })]) {
       const statuses: UpdateStatus[] = []
-      await runUpdateDiscovery({
+      await discoverUpdate({
         api: { kv: mockKv(), lifecycle: { signal: new AbortController().signal } } as unknown as TuiPluginApi,
         meta: candidate,
         currentVersion: "0.1.0",

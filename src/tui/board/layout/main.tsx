@@ -4,7 +4,7 @@ import type { BorderCharacters, Renderable, ScrollBoxRenderable } from "@opentui
 import { createEffect, For, Show } from "solid-js"
 import { Column } from "../column"
 import { COLUMNS, type ColumnType } from "../../../domain/task/types"
-import type { BoardStore } from "../commands/context"
+import type { BoardStore } from "../store"
 
 // Light │ so the rule stays subordinate to the heavy ┃ state bars on cards.
 const COLUMN_RULE_CHARS: BorderCharacters = {

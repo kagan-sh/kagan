@@ -1,13 +1,97 @@
-import { getStatus } from "../../../domain/task/metadata"
+import { kagan, getStatus } from "../../../domain/task/metadata"
 import { COLUMNS, type ColumnType } from "../../../domain/task/types"
 import { listSessions, moveSession } from "../../session/tasks"
 import { deleteSession } from "../../tasks"
 import { getFilter, getOrder, setOrder } from "../../session/preferences"
 import type { BoardSession } from "../../types"
-import { detectNewAwaitingInput, detectNewHelperFailures, notifyAwaitingInput, notifyHelperFailures } from "./detection"
+import type { StoreState } from "./selection"
 import { reconcileOrders } from "./sessions"
-import { adjacentColumn, firstSessionID, flatNavIDs } from "./navigation"
-import { moveDenyReason, select, selectedSession, type StoreState } from "./selection"
+import { adjacentColumn, flatNavIDs, moveDenyReason, selectAfterDelete, selectedSession } from "./selection"
+
+type HelperFailureNotice = {
+  sessionID: string
+  taskNumber?: number
+  role: "intake" | "validator"
+  message: string
+}
+
+/** `seen` is mutated in place to dedupe across polls. */
+function detectNewHelperFailures(sessions: readonly BoardSession[], seen: Map<string, string>): HelperFailureNotice[] {
+  const detected: HelperFailureNotice[] = []
+  const liveIDs = new Set<string>()
+  for (const session of sessions) {
+    const view = kagan(session.metadata)
+    if (session.parentID || view.boardTask !== true) continue
+    const error = view.helperError
+    if (!error) continue
+    liveIDs.add(session.id)
+    const signature = `${error.role}:${error.message}`
+    if (seen.get(session.id) === signature) continue
+    seen.set(session.id, signature)
+    detected.push({ sessionID: session.id, taskNumber: view.taskNumber, ...error })
+  }
+  for (const id of seen.keys()) {
+    if (!liveIDs.has(id)) seen.delete(id)
+  }
+  return detected
+}
+
+type AwaitingInputNotice = {
+  sessionID: string
+  taskNumber?: number
+  permissionID: string
+  title: string
+}
+
+/** `seen` is mutated in place to dedupe across polls. */
+function detectNewAwaitingInput(sessions: readonly BoardSession[], seen: Set<string>): AwaitingInputNotice[] {
+  const detected: AwaitingInputNotice[] = []
+  const liveIDs = new Set<string>()
+  for (const session of sessions) {
+    const view = kagan(session.metadata)
+    if (session.parentID || view.boardTask !== true) continue
+    for (const awaiting of view.awaitingPermissions ?? []) {
+      liveIDs.add(awaiting.id)
+      if (seen.has(awaiting.id)) continue
+      seen.add(awaiting.id)
+      detected.push({
+        sessionID: session.id,
+        taskNumber: view.taskNumber,
+        permissionID: awaiting.id,
+        title: awaiting.title,
+      })
+    }
+  }
+  for (const id of seen) {
+    if (!liveIDs.has(id)) seen.delete(id)
+  }
+  return detected
+}
+
+function notifyHelperFailures(
+  notify: (toast: { variant: "warning"; title: string; message: string }) => void,
+  failures: readonly HelperFailureNotice[],
+): void {
+  for (const failure of failures) {
+    const label = failure.role === "intake" ? "Intake" : "Review"
+    const ref = failure.taskNumber !== undefined ? `#${failure.taskNumber}` : failure.sessionID
+    notify({
+      variant: "warning",
+      title: "Kagan",
+      message: `${label} failed for ${ref} — ${failure.message} — press r to retry`,
+    })
+  }
+}
+
+function notifyAwaitingInput(
+  notify: (toast: { variant: "warning"; title: string; message: string }) => void,
+  waits: readonly AwaitingInputNotice[],
+): void {
+  for (const wait of waits) {
+    const ref = wait.taskNumber !== undefined ? `#${wait.taskNumber}` : wait.sessionID
+    notify({ variant: "warning", title: "Kagan", message: `${ref} waiting on you — ${wait.title} — press p` })
+  }
+}
 
 async function fetchBoardSessions(s: StoreState): Promise<BoardSession[] | undefined> {
   const list = await s.runWithToast(async () => {
@@ -92,26 +176,6 @@ export async function moveByDirection(s: StoreState, direction: 1 | -1) {
   const target = adjacentColumn(session.kaganStatus, direction)
   if (!target) return
   await moveTo(s, target)
-}
-
-function selectAfterDelete(s: StoreState, column: ColumnType, nextID: string | undefined) {
-  if (nextID && s.sessions().some((item) => item.id === nextID)) {
-    select(s, column, nextID)
-    return
-  }
-  const sameColumn = firstSessionID(s.columns(), column)
-  if (sameColumn) {
-    select(s, column, sameColumn)
-    return
-  }
-  for (const status of COLUMNS) {
-    const first = firstSessionID(s.columns(), status)
-    if (first) {
-      select(s, status, first)
-      return
-    }
-  }
-  s.setSelectedID(undefined)
 }
 
 export async function deleteSelected(s: StoreState) {

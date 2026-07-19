@@ -2,7 +2,7 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TextAttributes } from "@opentui/core"
 import { type Accessor, For, Show } from "solid-js"
-import { boardBindings } from "./bindings"
+import { boardBindings } from "../commands.tsx"
 
 export function HelpOverlay(props: { api: TuiPluginApi; visible: () => boolean; updateAvailable: Accessor<boolean> }) {
   const theme = () => props.api.theme.current

@@ -5,7 +5,22 @@ import { nextTaskNumber } from "../domain/task/metadata"
 import { createBoardTask, type CreateSessionPayload } from "../task/create"
 import { currentBranch, shellGitRunner } from "../git/runner"
 import { listSessions } from "./data"
-import { serializeByKey } from "./serialize"
+
+const serializeTails = new Map<string, Promise<unknown>>()
+
+function serializeByKey<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const prior = serializeTails.get(key) ?? Promise.resolve()
+  const run = prior.then(task, task)
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  serializeTails.set(key, settled)
+  void settled.then(() => {
+    if (serializeTails.get(key) === settled) serializeTails.delete(key)
+  })
+  return run
+}
 
 export type CreateTaskTicket = {
   title: string

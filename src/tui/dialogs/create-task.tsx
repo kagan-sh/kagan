@@ -3,11 +3,9 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createTask } from "../tasks"
 import { getOrder, setOrder } from "../session/preferences"
 import { bunGitRunner, listLocalBranches } from "../../git/runner"
-import type { createBoardStore } from "../board/store"
-import type { CreateTaskDependencies, FormState, ModelChoice } from "./create-task/types"
+import type { BoardStore } from "../board/store"
+import type { CreateTaskDependencies, FormState, ModelChoice } from "./create-task/form-actions"
 import { CreateTaskForm } from "./create-task/form"
-
-type BoardStore = ReturnType<typeof createBoardStore>
 
 function collectModels(api: TuiPluginApi): ModelChoice[] {
   const choices: ModelChoice[] = [{ label: "Auto (session default)" }]

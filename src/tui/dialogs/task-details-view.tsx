@@ -3,7 +3,7 @@ import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { CheckEvidence, FindingList, IntakeView } from "./task-details-sections"
-import type { TaskDetails } from "./task-details"
+import type { TaskDetails } from "./task-details-sections"
 
 export function openTaskDetailsView(api: TuiPluginApi, details: TaskDetails, title = "Task details"): void {
   api.ui.dialog.replace(() => <TaskDetailsDialog api={api} details={details} title={title} />)

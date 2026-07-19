@@ -1,12 +1,15 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import { commandSpec } from "../../../../domain/task/commands"
 import type { CommandSpec } from "../../../../domain/task/types"
 import { DialogFrame } from "../../../dialogs/chrome"
-import { addCommand, COMMAND_FIELDS, editCommandField } from "./command-edit"
 import { ListEditorContents } from "./contents"
 import { useListEditor } from "./hook"
-import { moveItem } from "./state"
-import type { ListEditorColumn, ListEditorState } from "./types"
+import { appendItem, moveItem, type EditorContext, type ListEditorColumn, type ListEditorState } from "./state"
+
+const COMMAND_FIELDS = ["name", "cwd", "command", "scope"] as const
+
+type CommandField = (typeof COMMAND_FIELDS)[number]
 
 const COMMAND_COLUMNS: ListEditorColumn<CommandSpec>[] = [
   { field: "name", width: 16, value: (command) => command.name },
@@ -14,6 +17,100 @@ const COMMAND_COLUMNS: ListEditorColumn<CommandSpec>[] = [
   { field: "command", flexGrow: 1, value: (command) => command.command },
   { field: "scope", width: 20, value: (command) => (command.scope ?? []).join(", ") },
 ]
+
+function parseScope(text?: string): string[] | undefined {
+  const trimmed = text?.trim()
+  return trimmed
+    ? trimmed
+        .split(",")
+        .map((pattern) => pattern.trim())
+        .filter(Boolean)
+    : undefined
+}
+
+function finalizeCommand(
+  ctx: EditorContext<CommandSpec>,
+  values: Partial<Record<CommandField, string>>,
+  fallbackName: string,
+) {
+  const name = values.name?.trim()
+  const cwd = values.cwd?.trim()
+  const command = values.command?.trim()
+  if (!name || !command || cwd === undefined) {
+    ctx.setMessage("Name, cwd, and command are required")
+    ctx.reopenWithSnapshot()
+    return
+  }
+  if (!cwd) {
+    ctx.setMessage("cwd cannot be empty")
+    ctx.reopenWithSnapshot()
+    return
+  }
+  const parsed = commandSpec({ name, cwd, command, scope: parseScope(values.scope) }, fallbackName)
+  if (!parsed) {
+    ctx.setMessage("Invalid command: unsafe cwd or invalid scope regex")
+    ctx.reopenWithSnapshot()
+    return
+  }
+  appendItem(ctx, parsed)
+}
+
+function addCommand(ctx: EditorContext<CommandSpec>, kind: "setup" | "check") {
+  const values: Partial<Record<CommandField, string>> = {}
+
+  const ask = (fields: CommandField[]) => {
+    if (fields.length === 0) {
+      finalizeCommand(ctx, values, `${kind} ${ctx.items().length + 1}`)
+      return
+    }
+
+    const [field, ...rest] = fields
+    if (!field) return
+    const title = field === "scope" ? "scope (comma-separated regexes)" : field
+    ctx.prompt(title, values[field] ?? "", (next) => {
+      values[field] = next
+      ask(rest)
+    })
+  }
+
+  ask(["name", "cwd", "command", "scope"])
+}
+
+function parseEditedCommand(command: CommandSpec, field: CommandField, next: string): CommandSpec | string {
+  const updated = { ...command }
+  if (field === "scope") {
+    updated.scope = parseScope(next)
+  } else {
+    updated[field] = next.trim()
+  }
+  if (!updated.name || !updated.command || !updated.cwd) {
+    return "Name, cwd, and command are required"
+  }
+  const parsed = commandSpec(updated, command.name)
+  if (!parsed) return "Invalid command: unsafe cwd or invalid scope regex"
+  return parsed
+}
+
+function editCommandField(ctx: EditorContext<CommandSpec>) {
+  const command = ctx.items()[ctx.selectedRow()]
+  if (!command) return
+  const field = ctx.focusedField() as CommandField
+  const value = field === "scope" ? (command.scope ?? []).join(", ") : command[field]
+  const title = field === "scope" ? "scope (comma-separated regexes)" : field
+  ctx.prompt(title, value, (next) => {
+    const parsed = parseEditedCommand(command, field, next)
+    if (typeof parsed === "string") {
+      ctx.setMessage(parsed)
+      ctx.reopenWithSnapshot()
+      return
+    }
+    const nextCommands = [...ctx.items()]
+    nextCommands[ctx.selectedRow()] = parsed
+    ctx.setItems(nextCommands)
+    ctx.setMessage(undefined)
+    ctx.reopenWithSnapshot()
+  })
+}
 
 export function openCommandListEditor(
   api: TuiPluginApi,

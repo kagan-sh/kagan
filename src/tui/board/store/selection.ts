@@ -1,11 +1,78 @@
+import type { TuiPluginApi, TuiToast } from "@opencode-ai/plugin/tui"
 import { columnMoveDenyReason, countInProgressForMove, inProgressCap } from "../../../domain/task/policy"
-import type { ColumnType } from "../../../domain/task/types"
+import { COLUMNS, type ColumnType } from "../../../domain/task/types"
 import { setOrder } from "../../session/preferences"
-import type { BoardSession } from "../../types"
-import { adjacentColumn, firstSessionID, flatNavIDs, nextSessionID } from "./navigation"
-import type { StoreState } from "./state"
+import type { BoardCard, BoardSession } from "../../types"
 
-export type { StoreState } from "./state"
+type SignalRead<T> = () => T
+type SignalWrite<T> = (value: T | ((prev: T) => T)) => void
+
+export type StoreState = {
+  api: TuiPluginApi
+  options?: Record<string, unknown>
+  sessions: SignalRead<BoardSession[]>
+  setSessions: SignalWrite<BoardSession[]>
+  selectedID: SignalRead<string | undefined>
+  setSelectedID: SignalWrite<string | undefined>
+  selectedColumn: SignalRead<ColumnType>
+  setSelectedColumn: SignalWrite<ColumnType>
+  filter: SignalRead<string>
+  setFilterSignal: SignalWrite<string>
+  orders: SignalRead<Record<ColumnType, readonly string[]>>
+  setOrders: SignalWrite<Record<ColumnType, readonly string[]>>
+  columns: SignalRead<Record<ColumnType, BoardCard[]>>
+  notify: (toast: TuiToast) => void
+  toastError: (message: string) => void
+  runWithToast: <T>(fn: () => Promise<T>) => Promise<T | undefined>
+  refreshState: {
+    started: number
+    completed: number
+    helperFailuresSeen: Map<string, string>
+    awaitingPermissionsSeen: Set<string>
+  }
+}
+
+export function adjacentColumn(column: ColumnType, direction: 1 | -1): ColumnType | undefined {
+  const index = COLUMNS.indexOf(column)
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= COLUMNS.length) return undefined
+  return COLUMNS[nextIndex]
+}
+
+export function flatNavIDs(cards: readonly BoardCard[]): string[] {
+  const ids: string[] = []
+  for (const card of cards) {
+    ids.push(card.session.id)
+    for (const child of card.children) {
+      ids.push(child.id)
+    }
+  }
+  return ids
+}
+
+function firstSessionID(columns: Record<ColumnType, BoardCard[]>, column: ColumnType): string | undefined {
+  return flatNavIDs(columns[column])[0]
+}
+
+function nextSessionID(
+  columns: Record<ColumnType, BoardCard[]>,
+  column: ColumnType,
+  currentID: string | undefined,
+  direction: 1 | -1,
+): { column: ColumnType; id: string } | undefined {
+  const list = flatNavIDs(columns[column])
+  if (list.length === 0) return undefined
+  const first = list[0]
+  if (!first) return undefined
+  if (!currentID) return { column, id: first }
+  const index = list.indexOf(currentID)
+  if (index === -1) return { column, id: first }
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= list.length) return undefined
+  const next = list[nextIndex]
+  if (!next) return undefined
+  return { column, id: next }
+}
 
 export function selectedSession(s: StoreState): BoardSession | undefined {
   const id = s.selectedID()
@@ -68,4 +135,24 @@ export function moveDenyReason(s: StoreState, status: ColumnType, session: Board
     cap: inProgressCap(s.options),
   }
   return columnMoveDenyReason(status, session.metadata, moveCtx)
+}
+
+export function selectAfterDelete(s: StoreState, column: ColumnType, nextID: string | undefined) {
+  if (nextID && s.sessions().some((item) => item.id === nextID)) {
+    select(s, column, nextID)
+    return
+  }
+  const sameColumn = firstSessionID(s.columns(), column)
+  if (sameColumn) {
+    select(s, column, sameColumn)
+    return
+  }
+  for (const status of COLUMNS) {
+    const first = firstSessionID(s.columns(), status)
+    if (first) {
+      select(s, status, first)
+      return
+    }
+  }
+  s.setSelectedID(undefined)
 }

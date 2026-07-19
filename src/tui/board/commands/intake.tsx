@@ -5,9 +5,9 @@ import { isSubstantive } from "../../../domain/task/intake"
 import { kagan } from "../../../domain/task/metadata"
 import { formatModeRationale } from "../../format"
 import type { BoardSession } from "../../types"
-import type { BoardActions } from "./context"
+import type { BoardCommandContext } from "./types"
 
-const startBacklogTask = (ctx: BoardActions, before: BoardSession, moveNext: () => Promise<void>) => {
+const startBacklogTask = (ctx: BoardCommandContext, before: BoardSession, moveNext: () => Promise<void>) => {
   const mode = kagan(before.metadata).intake?.mode
   if (!mode || mode.recommended === "autonomous") {
     void moveNext()
@@ -27,7 +27,12 @@ const startBacklogTask = (ctx: BoardActions, before: BoardSession, moveNext: () 
   ))
 }
 
-const promptIntakeDecision = (ctx: BoardActions, session: BoardSession, moveNext: () => Promise<void>, index = 0) => {
+const promptIntakeDecision = (
+  ctx: BoardCommandContext,
+  session: BoardSession,
+  moveNext: () => Promise<void>,
+  index = 0,
+) => {
   const pending = pendingRequiredIntakeDecisions(session.metadata)
   const decision = pending[index]
   if (!decision) {
@@ -48,7 +53,11 @@ const promptIntakeDecision = (ctx: BoardActions, session: BoardSession, moveNext
       }
       await moveNext()
     } catch (error) {
-      ctx.notifyErrorFrom(error)
+      ctx.store.notify({
+        variant: "error",
+        title: "Kagan",
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -67,7 +76,11 @@ const promptIntakeDecision = (ctx: BoardActions, session: BoardSession, moveNext
               placeholder="Override the assumption (required)"
               onConfirm={async (answer) => {
                 if (!isSubstantive(answer)) {
-                  ctx.notifyWarning("Add a substantive answer to override this assumption")
+                  ctx.store.notify({
+                    variant: "warning",
+                    title: "Kagan",
+                    message: "Add a substantive answer to override this assumption",
+                  })
                   return
                 }
                 await commitResolution("overridden", answer)
@@ -83,13 +96,17 @@ const promptIntakeDecision = (ctx: BoardActions, session: BoardSession, moveNext
   ))
 }
 
-export const moveNextWithGates = async (ctx: BoardActions, approve: () => void, moveNext: () => Promise<void>) => {
+export const moveNextWithGates = async (
+  ctx: BoardCommandContext,
+  approve: () => void,
+  moveNext: () => Promise<void>,
+) => {
   const before = ctx.store.selectedSession()
   if (before && before.kaganStatus === "backlog" && !intakeReady(before.metadata)) {
     if (pendingRequiredIntakeDecisions(before.metadata).length > 0) {
       promptIntakeDecision(ctx, before, moveNext)
     } else {
-      ctx.notifyWarning("Intake is still being prepared")
+      ctx.store.notify({ variant: "warning", title: "Kagan", message: "Intake is still being prepared" })
     }
     return
   }
@@ -104,7 +121,7 @@ export const moveNextWithGates = async (ctx: BoardActions, approve: () => void, 
   await moveNext()
 }
 
-export const movePrevWithGates = async (ctx: BoardActions, sendBack: () => Promise<void>) => {
+export const movePrevWithGates = async (ctx: BoardCommandContext, sendBack: () => Promise<void>) => {
   const before = ctx.store.selectedSession()
   if (before && before.kaganStatus === "review") {
     await sendBack()

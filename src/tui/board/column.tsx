@@ -1,16 +1,23 @@
 /** @jsxImportSource @opentui/solid */
-import { For, createEffect } from "solid-js"
+import { For, createEffect, createSignal, onCleanup } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { TextAttributes } from "@opentui/core"
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
-import { Card } from "./card"
+import { CardShell, type CardDisplayProps } from "./card/body"
 import type { ColumnType } from "../../domain/task/types"
 import type { BoardCard } from "../types"
 
 function columnLabel(column: ColumnType): string {
   if (column === "in_progress") return "In Progress"
   return column.charAt(0).toUpperCase() + column.slice(1)
+}
+
+function Card(props: CardDisplayProps) {
+  const [renderedAt] = createSignal(Date.now())
+  onCleanup(() => props.onCardRef?.(props.session.id, undefined))
+
+  return <CardShell {...props} renderedAt={renderedAt()} />
 }
 
 export function Column(props: {

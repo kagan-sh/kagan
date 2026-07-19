@@ -1,16 +1,14 @@
 /** @jsxImportSource @opentui/solid */
-import { Show } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import { Show } from "solid-js"
 import { formatModeRationale } from "../../format"
 import { DialogFrame } from "../chrome"
-import { FindingDetail, FindingsFooter, FindingsList } from "./views"
-import type { createBoardStore } from "../../board/store"
+import type { BoardStore } from "../../board/store"
 import type { BoardSession } from "../../types"
+import { FindingDetail, FindingsFooter, FindingsList } from "./views"
 import { useFindingsReviewState } from "./use-review"
 
-type BoardStore = ReturnType<typeof createBoardStore>
-
-export function FindingsReview(props: {
+function FindingsReview(props: {
   api: TuiPluginApi
   store: BoardStore
   session: BoardSession
@@ -19,36 +17,48 @@ export function FindingsReview(props: {
   onSendBack: () => void
 }) {
   const theme = () => props.api.theme.current
-  const review = useFindingsReviewState(props)
-  const modeText = () => formatModeRationale(review.session().metadata, props.checkCommand)
+  const state = useFindingsReviewState(props)
+  const modeText = () => formatModeRationale(props.session.metadata, props.checkCommand)
 
   return (
-    <DialogFrame api={props.api} title={review.title()}>
+    <DialogFrame api={props.api} title={state.title()}>
       <Show when={modeText()}>
         <text fg={theme().textMuted} wrapMode="word">
           {modeText()}
         </text>
       </Show>
-      <Show when={review.mode() === "list"}>
-        <Show when={!review.clean()} fallback={<text fg={theme().textMuted}>No findings — review is clean.</text>}>
-          <FindingsList theme={theme()} findings={review.findings()} index={review.index()} />
+      <Show when={state.mode() === "list"}>
+        <Show when={!state.clean()} fallback={<text fg={theme().textMuted}>No findings — review is clean.</text>}>
+          <FindingsList theme={theme()} findings={state.findings()} index={state.index()} />
         </Show>
       </Show>
-      <Show when={review.mode() === "detail" && review.current()}>
+      <Show when={state.mode() === "detail" && state.current()}>
         {(finding) => (
           <FindingDetail
             theme={theme()}
             finding={finding()}
-            index={review.index()}
-            total={review.findings().length}
-            note={review.note()}
-            setNote={review.setNote}
-            focus={review.focus()}
-            error={review.error()}
+            index={state.index()}
+            total={state.findings().length}
+            note={state.note()}
+            setNote={state.setNote}
+            focus={state.focus()}
+            error={state.error()}
           />
         )}
       </Show>
-      <FindingsFooter theme={theme()} mode={review.mode()} clean={review.clean()} reason={review.reason()} />
+      <FindingsFooter theme={theme()} mode={state.mode()} clean={state.clean()} reason={state.reason()} />
     </DialogFrame>
   )
+}
+
+export function openFindingsReviewDialog(
+  api: TuiPluginApi,
+  store: BoardStore,
+  session: BoardSession,
+  checkCommand: string | undefined,
+  callbacks: { onApprove: (session: BoardSession) => void; onSendBack: () => void },
+): void {
+  api.ui.dialog.replace(() => (
+    <FindingsReview api={api} store={store} session={session} checkCommand={checkCommand} {...callbacks} />
+  ))
 }

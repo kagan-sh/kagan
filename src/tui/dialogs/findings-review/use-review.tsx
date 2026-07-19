@@ -1,16 +1,13 @@
-/** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createSignal, onMount } from "solid-js"
 import type { FindingResolution } from "../../../domain/task/findings"
-import { approveDenyReason } from "../../../domain/task/policy"
 import { kagan } from "../../../domain/task/metadata"
+import { approveDenyReason } from "../../../domain/task/policy"
+import type { BoardStore } from "../../board/store"
 import type { BoardSession } from "../../types"
 import { useKeyIntercept } from "../../renderer"
 import { commitFindingResolution, handleFindingsDetailKey, handleFindingsListKey, sortedFindings } from "./actions"
-import type { createBoardStore } from "../../board/store"
-
-type BoardStore = ReturnType<typeof createBoardStore>
-type Mode = "list" | "detail"
+import type { FindingsMode } from "./views"
 
 export function useFindingsReviewState(props: {
   api: TuiPluginApi
@@ -21,7 +18,7 @@ export function useFindingsReviewState(props: {
   onSendBack: () => void
 }) {
   const [session, setSession] = createSignal(props.session)
-  const [mode, setMode] = createSignal<Mode>("list")
+  const [mode, setMode] = createSignal<FindingsMode>("list")
   const [index, setIndex] = createSignal(0)
   const [focus, setFocus] = createSignal(0)
   const [note, setNote] = createSignal("")
@@ -89,5 +86,5 @@ export function useFindingsReviewState(props: {
     return number !== undefined ? `Approve #${number} — triage findings first` : "Approve — triage findings first"
   }
 
-  return { session, mode, index, focus, note, error, findings, clean, current, reason, title, setNote }
+  return { mode, index, focus, note, error, findings, clean, current, reason, title, setNote }
 }

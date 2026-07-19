@@ -1,10 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 import { kagan } from "../../../domain/task/metadata"
-import type { BoardActions } from "./context"
+import { selectSessionOrNotify, type BoardCommandContext } from "./types"
 
 type PendingPermission = { sessionID: string; label: string; description?: string }
 
-function collectPending(ctx: BoardActions): PendingPermission[] {
+function collectPending(ctx: BoardCommandContext): PendingPermission[] {
   const pending: PendingPermission[] = []
   for (const session of ctx.store.sessions()) {
     if (session.parentID) continue
@@ -23,10 +23,10 @@ function collectPending(ctx: BoardActions): PendingPermission[] {
   return pending
 }
 
-export const openPermissionQueue = (ctx: BoardActions) => {
+export const openPermissionQueue = (ctx: BoardCommandContext) => {
   const pending = collectPending(ctx)
   if (pending.length === 0) {
-    ctx.notifyWarning("No permission requests waiting")
+    ctx.store.notify({ variant: "warning", title: "Kagan", message: "No permission requests waiting" })
     return
   }
   ctx.api.ui.dialog.replace(() => (
@@ -40,9 +40,7 @@ export const openPermissionQueue = (ctx: BoardActions) => {
       }))}
       onSelect={(option) => {
         ctx.api.ui.dialog.clear()
-        void ctx.api.client.tui
-          .selectSession({ sessionID: option.value }, { throwOnError: true })
-          .catch(ctx.notifyErrorFrom)
+        void selectSessionOrNotify(ctx, option.value)
       }}
     />
   ))

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildKaganTaskTemplate } from "../../src/server/command"
+import { buildKaganTaskTemplate } from "../../src/server"
 
 describe("buildKaganTaskTemplate", () => {
   test("ends with $ARGUMENTS", () => {

@@ -1,7 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { FormState } from "./create-task/types"
-import { ScopePicker } from "./create-task/scope-picker"
+import type { FormState } from "./types"
+import { ScopePicker } from "./scope-picker"
+export { openFilterableSelectPicker } from "./select"
 
 function openCustomScopePrompt(api: TuiPluginApi, state: FormState, reopenScope: () => void) {
   api.ui.dialog.replace(() => (

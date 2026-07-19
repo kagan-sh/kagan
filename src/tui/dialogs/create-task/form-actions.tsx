@@ -1,14 +1,10 @@
+/** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { createBoardStore } from "../../board/store"
+import type { BoardStore } from "../../board/store"
+import { openFilterableSelectPicker, openScopePicker } from "./pickers"
 import type { CreateTaskDependencies, FormState, ModelChoice } from "./types"
-import { openScopePicker } from "../create-task-scope"
-import { handleCreateTaskKey } from "./form-keys"
-import { openFilterableSelectPicker } from "./select"
 
-export { handleCreateTaskKey }
-
-type BoardStore = ReturnType<typeof createBoardStore>
-
+export type { CreateTaskDependencies, FormState, ModelChoice } from "./types"
 type DescriptionField = { plainText?: string; newLine?: () => void }
 
 function hasScope(scope: FormState["scope"]): boolean {
@@ -109,3 +105,5 @@ export function openCreateTaskPicker(props: {
     reopen: props.reopen,
   })
 }
+
+export { handleCreateTaskKey } from "./form-keys"

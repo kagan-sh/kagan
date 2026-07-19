@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { BoardSession } from "../../types"
-import type { BoardActions } from "./context"
+import type { BoardCommandContext } from "./types"
 import type { MenuAction } from "./hints"
 import { menuOptions } from "./hints"
 import { moveNextWithGates } from "./intake"
@@ -9,7 +9,7 @@ import { sendBackTask } from "./send-back"
 import { archiveSelected, retryHelperTask, viewDetails } from "./task-actions"
 
 const runMenuAction = async (
-  ctx: BoardActions,
+  ctx: BoardCommandContext,
   action: MenuAction,
   session: BoardSession,
   moveNext: () => Promise<void>,
@@ -25,7 +25,7 @@ const runMenuAction = async (
   promptDelete(ctx)
 }
 
-export const openMenu = (ctx: BoardActions, moveNext: () => Promise<void>, approveTask: () => void) => {
+export const openMenu = (ctx: BoardCommandContext, moveNext: () => Promise<void>, approveTask: () => void) => {
   const session = ctx.store.selectedSession()
   if (!session) return
   ctx.api.ui.dialog.replace(() => (

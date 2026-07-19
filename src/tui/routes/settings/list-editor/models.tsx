@@ -5,7 +5,7 @@ import { DialogFrame } from "../../../dialogs/chrome"
 import { ListEditorContents } from "./contents"
 import { useListEditor } from "./hook"
 import { appendItem } from "./state"
-import type { EditorContext, ListEditorColumn, ListEditorState } from "./types"
+import type { EditorContext, ListEditorColumn, ListEditorState } from "./state"
 
 const VALIDATOR_MODEL_FIELDS = ["providerID", "modelID"] as const
 

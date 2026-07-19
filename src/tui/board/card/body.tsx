@@ -3,14 +3,25 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Renderable } from "@opentui/core"
 import { For, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
+import type { SessionStatus } from "@opencode-ai/sdk/v2"
 import { formatModeRationale, summarizeSubtasks } from "../../format"
 import type { BoardSession } from "../../types"
-import { kagan } from "../../../domain/task/metadata"
-import { isReady, taskLabel, workingBadge } from "./helpers"
+import { SIDE_BORDER_CHARS } from "../borders"
+import { taskLabel, workingBadge, cardBorderColor } from "./helpers"
 import { DetailLine } from "./detail"
 import { SubtaskLine } from "./subtask"
-import { SIDE_BORDER_CHARS } from "../borders"
-import type { CardDisplayProps } from "./shell-props"
+
+export type CardDisplayProps = {
+  api: TuiPluginApi
+  session: BoardSession
+  children?: BoardSession[]
+  selectedID?: string
+  sendBackStopThreshold?: number
+  checkCommand?: string
+  sessionStatus?: (id: string) => SessionStatus["type"] | undefined
+  onSelect: (id: string) => void
+  onCardRef?: (id: string, node: Renderable | undefined) => void
+}
 
 function CardHeader(props: {
   api: TuiPluginApi
@@ -106,12 +117,6 @@ export function CardShell(props: CardDisplayProps & { renderedAt: number }) {
   const expanded = () => familyFocused() && childSessions().length > 0
   const working = () =>
     props.session.kaganStatus === "in_progress" ? workingBadge(props.sessionStatus?.(props.session.id)) : undefined
-  const barColor = () => {
-    if (familyFocused()) return theme().primary
-    if ((kagan(props.session.metadata).awaitingPermissions?.length ?? 0) > 0) return theme().warning
-    if (isReady(props.session)) return theme().success
-    return theme().border
-  }
 
   return (
     <box
@@ -119,7 +124,7 @@ export function CardShell(props: CardDisplayProps & { renderedAt: number }) {
       flexDirection="column"
       border={["left"]}
       customBorderChars={SIDE_BORDER_CHARS}
-      borderColor={barColor()}
+      borderColor={cardBorderColor(theme(), props.session, familyFocused())}
     >
       <CardHeader
         api={props.api}

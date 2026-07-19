@@ -3,11 +3,18 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { maybeShowOnboarding } from "../dialogs/onboarding"
 import { kagan } from "../../domain/task/metadata"
-import { boardBindings, createBoardCommands, footerHints, HelpOverlay, type BoardStore } from "./commands"
-import { keymapKey } from "./layout/keymap"
+import { boardBindings, createBoardCommands, footerHints, type BoardStore } from "./commands"
+import { HelpOverlay } from "./commands/help"
 import { BoardMain } from "./layout/main"
 import { Footer } from "./layout/footer"
 import { Notice } from "./layout/notice"
+
+function keymapKey(key: string): string | { name: string } {
+  if (key === ",") return { name: "," }
+  if (key === "?") return "?,shift+/"
+  if (key === "return") return "return,enter"
+  return key
+}
 
 export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
   const store = props.store

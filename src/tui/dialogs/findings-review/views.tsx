@@ -5,6 +5,8 @@ import type { Finding } from "../../../domain/task/findings"
 import { FindingRow } from "./row"
 export { FindingDetail } from "./detail"
 
+export type FindingsMode = "list" | "detail"
+
 export function FindingsList(props: { theme: TuiThemeCurrent; findings: Finding[]; index: number }) {
   return (
     <scrollbox flexGrow={1} scrollY={true} verticalScrollbarOptions={{ visible: false }}>
@@ -17,12 +19,7 @@ export function FindingsList(props: { theme: TuiThemeCurrent; findings: Finding[
   )
 }
 
-export function FindingsFooter(props: {
-  theme: TuiThemeCurrent
-  mode: "list" | "detail"
-  clean: boolean
-  reason?: string
-}) {
+export function FindingsFooter(props: { theme: TuiThemeCurrent; mode: FindingsMode; clean: boolean; reason?: string }) {
   return (
     <box paddingTop={1} flexDirection="row" gap={2}>
       <Show when={props.mode === "list"}>
