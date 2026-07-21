@@ -26,10 +26,8 @@ describe("validation gates", () => {
       "verify:circular-deps",
     ])
     expect(packageJson.scripts["verify:complexity"]).toBe(
-      'verifyx complexity --threshold 52 --ignore "src/tui/**" "src/**/*.ts" && ' +
-        'verifyx complexity --threshold 50 --ignore "src/domain/**" --ignore "src/server/**" ' +
-        '--ignore "src/git/**" --ignore "src/checks/**" --ignore "src/task/**" --ignore "src/server.ts" ' +
-        '"src/**/*.{ts,tsx}"',
+      'verifyx complexity --threshold 52 --ignore "src/tui/**" --ignore "src/tui.tsx" "src/**/*.ts" && ' +
+        'verifyx complexity --threshold 50 "{src/tui.tsx,src/tui/**/*.{ts,tsx}}"',
     )
     expect(packageJson.scripts["verify:format"]).toBe("oxfmt --check .")
     expect(packageJson.scripts["verify:format:fix"]).toBe("oxfmt .")

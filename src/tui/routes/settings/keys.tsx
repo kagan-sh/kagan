@@ -1,9 +1,8 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { Accessor, Setter } from "solid-js"
 import { useKeyIntercept } from "../../renderer"
-import { SETTINGS_ROUTE, ROUTE } from "../../types"
-import type { Draft } from "./draft"
-import { SECTIONS, saveOptions } from "./draft"
+import { ROUTE, SETTINGS_ROUTE } from "../../types"
+import { SECTIONS, saveOptions, type Draft } from "./draft"
 import type { Row } from "./rows"
 
 export function useSettingsKeys(props: {

@@ -3,8 +3,13 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import type { TestRendererSetup } from "@opentui/core/testing"
 import { Column } from "../../../src/tui/board/column"
+import type { BoardStore } from "../../../src/tui/board/store"
 import type { BoardCard, BoardSession } from "../../../src/tui/types"
 import { mockSession, mockTuiApi } from "../../fixtures/api"
+
+function store(overrides: Partial<BoardStore> = {}): BoardStore {
+  return { inProgressCap: 2, sendBackStopThreshold: 3, checkCommand: undefined, ...overrides } as BoardStore
+}
 
 let renderSetup: TestRendererSetup | undefined
 
@@ -27,11 +32,11 @@ describe("Column", () => {
       () => (
         <Column
           api={mockTuiApi()}
+          store={store()}
           column="in_progress"
           cards={[card(session("a", "A")), card(session("b", "B"))]}
           selectedID="a"
           onSelect={() => {}}
-          cap={2}
         />
       ),
       { width: 30, height: 10 },
@@ -45,11 +50,11 @@ describe("Column", () => {
       () => (
         <Column
           api={mockTuiApi()}
+          store={store()}
           column="in_progress"
           cards={[card(session("a", "A")), card(session("b", "B"))]}
           selectedID="a"
           onSelect={() => {}}
-          cap={2}
         />
       ),
       { width: 30, height: 10 },
@@ -69,6 +74,7 @@ describe("Column", () => {
       () => (
         <Column
           api={mockTuiApi()}
+          store={store()}
           column="backlog"
           cards={[card(session("parent", "Parent task"), [session("child", "Review i18n a11y", "parent")])]}
           selectedID="parent"
@@ -88,6 +94,7 @@ describe("Column", () => {
       () => (
         <Column
           api={mockTuiApi()}
+          store={store()}
           column="backlog"
           cards={[
             card(session("parent", "Parent task"), [
@@ -117,6 +124,7 @@ describe("Column", () => {
       () => (
         <Column
           api={mockTuiApi()}
+          store={store()}
           column="backlog"
           cards={[
             card(session("parent", "Parent task"), [session("child", "Review i18n a11y", "parent")]),

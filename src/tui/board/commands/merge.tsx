@@ -5,9 +5,10 @@ import { approveDenyReason } from "../../../domain/task/policy"
 import { kagan } from "../../../domain/task/metadata"
 import { mergeTask } from "../../tasks"
 import { baseBranchFreshness, bunGitRunner, currentBranch, listLocalBranches } from "../../../git/runner"
-import { openFindingsReviewDialog } from "../../dialogs/findings-review"
+import { openFindingsReviewDialog } from "../../dialogs/findings-review/panel"
 import type { BoardSession } from "../../types"
-import type { BoardActions, BoardStore } from "./context"
+import type { BoardCommandContext } from "./types"
+import type { BoardStore } from "../store"
 
 type MergeChoice = "current" | "another" | "none"
 
@@ -59,7 +60,7 @@ function openMergeDialog(
   ))
 }
 
-const finalizeApprove = async (ctx: BoardActions, session: BoardSession, mergeMessage?: string) => {
+const finalizeApprove = async (ctx: BoardCommandContext, session: BoardSession, mergeMessage?: string) => {
   try {
     await approveSession(ctx.api, session.id, session)
     await ctx.store.refresh()
@@ -70,28 +71,32 @@ const finalizeApprove = async (ctx: BoardActions, session: BoardSession, mergeMe
       message: mergeMessage ? `Task approved — ${mergeMessage}` : "Task approved",
     })
   } catch (error) {
-    ctx.notifyErrorFrom(error)
+    ctx.store.notify({
+      variant: "error",
+      title: "Kagan",
+      message: error instanceof Error ? error.message : String(error),
+    })
   }
 }
 
-const runMerge = async (ctx: BoardActions, session: BoardSession, targetBranch: string) => {
+const runMerge = async (ctx: BoardCommandContext, session: BoardSession, targetBranch: string) => {
   const result = await mergeTask(ctx.api, session, targetBranch, ctx.store.squashMerge)
   if (!result.ok) {
-    ctx.notifyError(result.message)
+    ctx.store.notify({ variant: "error", title: "Kagan", message: result.message })
     return
   }
   await finalizeApprove(ctx, session, result.message)
 }
 
-const promptAnotherBranch = async (ctx: BoardActions, session: BoardSession) => {
-  const runner = bunGitRunner()
+const promptAnotherBranch = async (ctx: BoardCommandContext, session: BoardSession) => {
+  const runner = bunGitRunner
   const worktree = kagan(session.metadata).worktree
   const taskBranch = worktree ? await currentBranch(runner, worktree) : undefined
   const branches = (await listLocalBranches(runner, ctx.api.state.path.worktree)).filter(
     (branch) => branch !== taskBranch,
   )
   if (branches.length === 0) {
-    ctx.notifyWarning("No other local branches to merge into")
+    ctx.store.notify({ variant: "warning", title: "Kagan", message: "No other local branches to merge into" })
     return
   }
   ctx.api.ui.dialog.replace(() => (
@@ -106,8 +111,8 @@ const promptAnotherBranch = async (ctx: BoardActions, session: BoardSession) => 
   ))
 }
 
-const promptMerge = async (ctx: BoardActions, session: BoardSession) => {
-  const runner = bunGitRunner()
+const promptMerge = async (ctx: BoardCommandContext, session: BoardSession) => {
+  const runner = bunGitRunner
   const view = kagan(session.metadata)
   const freshness = await baseBranchFreshness(runner, view.worktree, view.baseBranch)
   openMergeDialog(ctx.api, ctx.store, session, freshness, {
@@ -117,20 +122,20 @@ const promptMerge = async (ctx: BoardActions, session: BoardSession) => {
   })
 }
 
-const afterTriage = async (ctx: BoardActions, session: BoardSession) => {
+const afterTriage = async (ctx: BoardCommandContext, session: BoardSession) => {
   const reason = approveDenyReason(session.metadata)
   if (reason) {
-    ctx.notifyWarning(reason)
+    ctx.store.notify({ variant: "warning", title: "Kagan", message: reason })
     return
   }
   await promptMerge(ctx, session)
 }
 
-export const approve = (ctx: BoardActions, onSendBack: () => void) => {
+export const approve = (ctx: BoardCommandContext, onSendBack: () => void) => {
   const session = ctx.store.selectedSession()
   if (!session) return
   if (session.kaganStatus !== "review") {
-    ctx.notifyWarning("Approve only applies to tasks in review")
+    ctx.store.notify({ variant: "warning", title: "Kagan", message: "Approve only applies to tasks in review" })
     return
   }
   openFindingsReviewDialog(ctx.api, ctx.store, session, ctx.store.checkCommand, {

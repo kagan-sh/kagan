@@ -4,30 +4,40 @@ import { intakeReady, pendingRequiredIntakeDecisions } from "../../../domain/tas
 import { isSubstantive } from "../../../domain/task/intake"
 import { kagan } from "../../../domain/task/metadata"
 import { formatModeRationale } from "../../format"
+import {
+  openIntakeAnswerDialog,
+  openIntakeDecisionDialog,
+  openIntakeModeConfirmDialog,
+} from "../../dialogs/intake-gate"
 import type { BoardSession } from "../../types"
-import type { BoardActions } from "./context"
+import type { BoardCommandContext } from "./types"
 
-const startBacklogTask = (ctx: BoardActions, before: BoardSession, moveNext: () => Promise<void>) => {
+const startBacklogTask = (ctx: BoardCommandContext, before: BoardSession, moveNext: () => Promise<void>) => {
   const mode = kagan(before.metadata).intake?.mode
   if (!mode || mode.recommended === "autonomous") {
     void moveNext()
     return
   }
   const rationale = formatModeRationale(before.metadata, ctx.store.checkCommand) ?? mode.rationale
-  ctx.api.ui.dialog.replace(() => (
-    <ctx.api.ui.DialogConfirm
-      title="This one looks better driven by you"
-      message={`${rationale} Start the agent on it anyway?`}
-      onConfirm={async () => {
-        ctx.api.ui.dialog.clear()
-        await moveNext()
-      }}
-      onCancel={() => ctx.api.ui.dialog.clear()}
-    />
-  ))
+  const recommended = mode.recommended === "manual" ? "manual" : "assisted"
+  openIntakeModeConfirmDialog(ctx.api, {
+    session: before,
+    rationale,
+    recommended,
+    onConfirm: () => {
+      ctx.api.ui.dialog.clear()
+      void moveNext()
+    },
+    onCancel: () => ctx.api.ui.dialog.clear(),
+  })
 }
 
-const promptIntakeDecision = (ctx: BoardActions, session: BoardSession, moveNext: () => Promise<void>, index = 0) => {
+const promptIntakeDecision = (
+  ctx: BoardCommandContext,
+  session: BoardSession,
+  moveNext: () => Promise<void>,
+  index = 0,
+) => {
   const pending = pendingRequiredIntakeDecisions(session.metadata)
   const decision = pending[index]
   if (!decision) {
@@ -48,48 +58,61 @@ const promptIntakeDecision = (ctx: BoardActions, session: BoardSession, moveNext
       }
       await moveNext()
     } catch (error) {
-      ctx.notifyErrorFrom(error)
+      ctx.store.notify({
+        variant: "error",
+        title: "Kagan",
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
-  ctx.api.ui.dialog.replace(() => (
-    <ctx.api.ui.DialogSelect<"approved" | "overridden">
-      title={`Intake decision (${index + 1}/${pending.length})`}
-      options={[
-        { title: "Approve assumption", value: "approved", description: decision.assumption },
-        { title: "Reject & answer", value: "overridden", description: decision.question },
-      ]}
-      onSelect={(option) => {
-        if (option.value === "overridden") {
-          ctx.api.ui.dialog.replace(() => (
-            <ctx.api.ui.DialogPrompt
-              title="Your answer"
-              placeholder="Override the assumption (required)"
-              onConfirm={async (answer) => {
-                if (!isSubstantive(answer)) {
-                  ctx.notifyWarning("Add a substantive answer to override this assumption")
-                  return
-                }
-                await commitResolution("overridden", answer)
-              }}
-              onCancel={() => ctx.api.ui.dialog.clear()}
-            />
-          ))
-          return
-        }
+  const openDecision = () => {
+    openIntakeDecisionDialog(ctx.api, {
+      session,
+      index,
+      total: pending.length,
+      decision,
+      onCancel: () => ctx.api.ui.dialog.clear(),
+      onApprove: () => {
         void commitResolution("approved")
-      }}
-    />
-  ))
+      },
+      onReject: () => {
+        openIntakeAnswerDialog(ctx.api, {
+          session,
+          index,
+          total: pending.length,
+          decision,
+          onBack: openDecision,
+          onSubmit: (answer) => {
+            if (!isSubstantive(answer)) {
+              ctx.store.notify({
+                variant: "warning",
+                title: "Kagan",
+                message: "Add a substantive answer to override this assumption",
+              })
+              return
+            }
+            void commitResolution("overridden", answer)
+          },
+        })
+      },
+    })
+  }
+
+  openDecision()
 }
 
-export const moveNextWithGates = async (ctx: BoardActions, approve: () => void, moveNext: () => Promise<void>) => {
+export const moveNextWithGates = async (
+  ctx: BoardCommandContext,
+  approve: () => void,
+  moveNext: () => Promise<void>,
+) => {
   const before = ctx.store.selectedSession()
   if (before && before.kaganStatus === "backlog" && !intakeReady(before.metadata)) {
     if (pendingRequiredIntakeDecisions(before.metadata).length > 0) {
       promptIntakeDecision(ctx, before, moveNext)
     } else {
-      ctx.notifyWarning("Intake is still being prepared")
+      ctx.store.notify({ variant: "warning", title: "Kagan", message: "Intake is still being prepared" })
     }
     return
   }
@@ -104,7 +127,7 @@ export const moveNextWithGates = async (ctx: BoardActions, approve: () => void, 
   await moveNext()
 }
 
-export const movePrevWithGates = async (ctx: BoardActions, sendBack: () => Promise<void>) => {
+export const movePrevWithGates = async (ctx: BoardCommandContext, sendBack: () => Promise<void>) => {
   const before = ctx.store.selectedSession()
   if (before && before.kaganStatus === "review") {
     await sendBack()

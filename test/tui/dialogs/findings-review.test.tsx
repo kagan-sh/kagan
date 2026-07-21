@@ -4,7 +4,7 @@ import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
 import type { TestRendererSetup } from "@opentui/core/testing"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { openFindingsReviewDialog } from "../../../src/tui/dialogs/findings-review"
+import { openFindingsReviewDialog } from "../../../src/tui/dialogs/findings-review/panel"
 import type { Finding } from "../../../src/domain/task/findings"
 import type { BoardSession } from "../../../src/tui/types"
 import { attachRendererMockInput, mockSession, mockTuiApi } from "../../fixtures/api"
@@ -93,7 +93,7 @@ describe("openFindingsReviewDialog", () => {
     await renderSetup.flush()
     const frame = renderSetup.captureCharFrame()
     expect(frame).toContain("Approve — triage findings first")
-    expect(frame).toContain("(1 finding(s) need triage)")
+    expect(frame).toContain("1 finding(s) need triage — enter opens a finding")
   })
 
   test("shows a clean state with approve enabled when there are no findings", async () => {
@@ -102,7 +102,8 @@ describe("openFindingsReviewDialog", () => {
     await renderSetup.flush()
     const frame = renderSetup.captureCharFrame()
     expect(frame).toContain("No findings — review is clean.")
-    expect(frame).toContain("a approve & merge")
+    expect(frame).toContain("Approve — ready to merge")
+    expect(frame).toContain("▸ Approve & merge — a")
   })
 
   test("escape closes the dialog", async () => {

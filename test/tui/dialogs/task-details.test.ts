@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import { buildTaskDetails } from "../../../src/tui/dialogs/task-details"
+import { buildTaskDetails, dialogScrollMaxHeight } from "../../../src/tui/dialogs/task-details"
 import type { Finding } from "../../../src/domain/task/findings"
 import type { Intake } from "../../../src/domain/task/intake"
 
@@ -61,5 +61,16 @@ describe("buildTaskDetails", () => {
     expect(details.findings).toEqual([])
     expect(details.priorTriage).toEqual([])
     expect(details.diffStats).toEqual([])
+  })
+})
+
+describe("dialogScrollMaxHeight", () => {
+  test("leaves room below the host dialog top pad", () => {
+    expect(dialogScrollMaxHeight(40)).toBe(20)
+    expect(dialogScrollMaxHeight(24)).toBe(8)
+  })
+
+  test("never collapses below six rows", () => {
+    expect(dialogScrollMaxHeight(10)).toBe(6)
   })
 })

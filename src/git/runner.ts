@@ -1,4 +1,3 @@
-import type { PluginInput } from "@opencode-ai/plugin"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
@@ -6,29 +5,20 @@ import { join, resolve } from "node:path"
 export type GitResult = { code: number; stdout: string; stderr: string }
 export type GitRunner = (args: string[], cwd: string) => Promise<GitResult>
 
-export function bunGitRunner(): GitRunner {
-  return async (args, cwd) => {
-    const proc = Bun.spawn(["git", ...args], {
-      cwd,
-      env: process.env,
-      stdout: "pipe",
-      stderr: "pipe",
-      stdin: "ignore",
-    })
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    return { code, stdout, stderr }
-  }
-}
-
-export function shellGitRunner($: PluginInput["$"]): GitRunner {
-  return async (args, cwd) => {
-    const result = await $`git -C ${cwd} ${args}`.nothrow().quiet()
-    return { code: result.exitCode, stdout: result.stdout.toString(), stderr: result.stderr.toString() }
-  }
+export const bunGitRunner: GitRunner = async (args, cwd) => {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    env: process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
+  })
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  return { code, stdout, stderr }
 }
 
 function slugifyTitle(title: string): string {

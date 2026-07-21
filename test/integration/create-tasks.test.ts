@@ -2,7 +2,7 @@ import "../preload/git-isolation.ts"
 import { describe, expect, test } from "bun:test"
 import type { PluginInput } from "@opencode-ai/plugin"
 import { existsSync } from "node:fs"
-import { gitShellForRepo, initTestRepo } from "../fixtures/git-shell"
+import { initTestRepo, listBranches } from "../fixtures/git-shell"
 
 // Runs in its own `bun test` invocation (see package.json "test") so git/runner is the real module,
 // not the stub the TUI unit tests register globally. This is the only guard on the worktree-isolation
@@ -21,7 +21,6 @@ function mockInput(repo: string): { input: PluginInput; createCalls: CreateCall[
   const createCalls: CreateCall[] = []
   const input = {
     worktree: repo,
-    $: gitShellForRepo(repo),
     client: {
       session: {
         get: async () => ({ data: { metadata: {} } }),
@@ -58,7 +57,6 @@ describe("runCreateTasks", () => {
     let seq = 0
     const input = {
       worktree: repo,
-      $: gitShellForRepo(repo),
       client: {
         session: {
           get: async () => ({ data: { metadata: {} } }),
@@ -86,7 +84,6 @@ describe("runCreateTasks", () => {
     let directory: string | undefined
     const input = {
       worktree: repo,
-      $: gitShellForRepo(repo),
       client: {
         session: {
           get: async () => ({ data: { metadata: {} } }),
@@ -102,7 +99,6 @@ describe("runCreateTasks", () => {
     expect(report).toContain("failed")
     expect(directory).toBeDefined()
     expect(existsSync(directory!)).toBe(false)
-    const branches = await gitShellForRepo(repo)`${repo} ${["branch", "--list", "kagan/*"]}`.nothrow().quiet()
-    expect(branches.stdout.toString().trim()).toBe("")
+    expect(await listBranches(repo, "kagan/*")).toBe("")
   })
 })

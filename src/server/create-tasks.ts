@@ -3,9 +3,24 @@ import { commandPlan, configuredScopes, sanitizeTaskScope, type TaskScope } from
 import type { CommandSpec } from "../domain/task/types"
 import { nextTaskNumber } from "../domain/task/metadata"
 import { createBoardTask, type CreateSessionPayload } from "../task/create"
-import { currentBranch, shellGitRunner } from "../git/runner"
+import { bunGitRunner, currentBranch, type GitRunner } from "../git/runner"
 import { listSessions } from "./data"
-import { serializeByKey } from "./serialize"
+
+const serializeTails = new Map<string, Promise<unknown>>()
+
+function serializeByKey<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const prior = serializeTails.get(key) ?? Promise.resolve()
+  const run = prior.then(task, task)
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  serializeTails.set(key, settled)
+  void settled.then(() => {
+    if (serializeTails.get(key) === settled) serializeTails.delete(key)
+  })
+  return run
+}
 
 export type CreateTaskTicket = {
   title: string
@@ -67,7 +82,7 @@ export async function runCreateTasks(
   if (tickets.length < 1 || tickets.length > 10) throw new Error("Provide between 1 and 10 tickets")
 
   const allowedScopes = configuredScopes(options)
-  const run = shellGitRunner(input.$)
+  const run = bunGitRunner
   const defaultBranch = (await currentBranch(run, input.worktree)) ?? "HEAD"
   const setupCommands = commandPlan(options, "setup")
 
@@ -80,7 +95,7 @@ export async function runCreateTasks(
 
 async function createSerially(
   input: PluginInput,
-  run: ReturnType<typeof shellGitRunner>,
+  run: GitRunner,
   allowedScopes: readonly string[],
   defaultBranch: string,
   setupCommands: CommandSpec[],

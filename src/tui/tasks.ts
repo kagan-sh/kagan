@@ -28,7 +28,7 @@ export async function createTask(
   const existing = await listSessions(api)
   const taskNumber = nextTaskNumber(existing)
   const result = await createBoardTask({
-    run: bunGitRunner(),
+    run: bunGitRunner,
     mainWorktree: api.state.path.worktree,
     title: input.title,
     description: input.description,
@@ -106,7 +106,7 @@ export async function sendBack(api: TuiPluginApi, session: BoardSession): Promis
   const previousID = view.activeIteration ?? session.id
   const messages = await api.client.session.messages({ sessionID: previousID }, { throwOnError: true })
   const previousReport = lastAssistantText(messages.data ?? [])
-  const changedFiles = (await worktreeDiffs(bunGitRunner(), worktree, baseBranch))
+  const changedFiles = (await worktreeDiffs(bunGitRunner, worktree, baseBranch))
     .map((diff) => diff.file)
     .filter((file): file is string => typeof file === "string")
   const worker = await api.client.session.create(
@@ -143,7 +143,7 @@ export async function mergeTask(
 ): Promise<MergeResult> {
   const worktree = kagan(session.metadata as Record<string, unknown> | undefined).worktree
   if (!worktree) return { ok: false, message: "Task has no isolated worktree" }
-  const runner = bunGitRunner()
+  const runner = bunGitRunner
   const branch = await currentBranch(runner, worktree)
   if (!branch) return { ok: false, message: "Cannot determine the task branch" }
   return mergeTaskBranch(

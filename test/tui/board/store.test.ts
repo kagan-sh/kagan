@@ -181,8 +181,11 @@ function mockStoreApi(
         get: async ({ sessionID }: { sessionID: string }) => ({
           data: sessionList.find((s) => s.id === sessionID) ?? { metadata: {} },
         }),
-        update: async () => {
+        update: async ({ sessionID, metadata }: { sessionID: string; metadata?: BoardSession["metadata"] }) => {
           if (options.moveError) throw options.moveError
+          if (metadata) {
+            sessionList = sessionList.map((item) => (item.id === sessionID ? { ...item, metadata } : item))
+          }
           return { data: undefined }
         },
         abort: async () => ({ data: undefined }),
@@ -626,6 +629,43 @@ describe("createBoardStore", () => {
     store.selectNext()
     expect(store.selected()).toBe("child")
     expect(store.selectedColumn()).toBe("backlog")
+  })
+
+  test("refresh selects the first available card when nothing is selected", async () => {
+    const api = mockStoreApi({
+      sessions: [session("wip", "in_progress", "Wip")],
+      orders: { ...emptyOrders, in_progress: ["wip"] },
+    })
+    const store = createRoot(() => createBoardStore(api))
+    await store.refresh()
+    expect(store.selected()).toBe("wip")
+    expect(store.selectedColumn()).toBe("in_progress")
+  })
+
+  test("selectNextColumn into an empty column clears the previous selection", async () => {
+    const api = mockStoreApi({
+      sessions: [session("a", "review", "A")],
+      orders: { ...emptyOrders, review: ["a"] },
+    })
+    const store = createRoot(() => createBoardStore(api))
+    await store.refresh()
+    store.select("review", "a")
+    store.selectNextColumn()
+    expect(store.selectedColumn()).toBe("done")
+    expect(store.selected()).toBeUndefined()
+  })
+
+  test("refresh keeps selection when the selected card is still on the board", async () => {
+    const api = mockStoreApi({
+      sessions: [session("a", "review", "A")],
+      orders: { ...emptyOrders, review: ["a"] },
+    })
+    const store = createRoot(() => createBoardStore(api))
+    await store.refresh()
+    store.select("review", "a")
+    await store.refresh()
+    expect(store.selected()).toBe("a")
+    expect(store.selectedColumn()).toBe("review")
   })
 
   test("reorder swaps the selected card down and persists the order", async () => {

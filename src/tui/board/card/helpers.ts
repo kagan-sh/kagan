@@ -1,11 +1,12 @@
 import type { SessionStatus } from "@opencode-ai/sdk/v2"
+import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import { intakeReady } from "../../../domain/task/policy"
 import { kagan } from "../../../domain/task/metadata"
 import type { Badge } from "../../format"
 import { formatAge, formatDiff, gateBadges } from "../../format"
 import type { BoardSession } from "../../types"
 
-export function isReady(session: BoardSession): boolean {
+function isReady(session: BoardSession): boolean {
   return (
     session.kaganStatus === "backlog" && kagan(session.metadata).boardTask === true && intakeReady(session.metadata)
   )
@@ -38,4 +39,11 @@ export function workingBadge(
   if (status === "busy") return { text: " · ● working", tone: "success" }
   if (status === "retry") return { text: " · ↻ retrying", tone: "warning" }
   return undefined
+}
+
+export function cardBorderColor(theme: TuiThemeCurrent, session: BoardSession, familyFocused: boolean) {
+  if (familyFocused) return theme.primary
+  if ((kagan(session.metadata).awaitingPermissions?.length ?? 0) > 0) return theme.warning
+  if (isReady(session)) return theme.success
+  return theme.border
 }

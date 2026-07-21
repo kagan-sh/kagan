@@ -36,10 +36,12 @@ This runs the declared source checks: complexity, comment policy, and circular d
 auto-formats with oxfmt. Verifyx also runs the local `test` script automatically.
 
 The maintainability-index gate is two-tier, matching the architecture split: pure logic
-(`src/{domain,server,git,checks}` plus `src/server.ts` and `src/task/`) must clear a higher bar than
-the TUI surface (`src/tui/`), whose JSX render functions are inherently lower-scoring. Raise a file's
-score by splitting genuine responsibilities into cohesive units, never by deleting comments, joining
-lines, or fragmenting a coherent function.
+(`src/**/*.ts` excluding `src/tui/**` and `src/tui.tsx`) must clear maintainability index 52; the TUI
+surface (`src/tui/**/*.{ts,tsx}`, `src/tui.tsx`) clears 50 because its JSX render functions are
+inherently lower-scoring. Simplify the failing function first; split only when responsibilities
+genuinely diverge. Merging or unsplitting is valid when cohesion beats MI churn from artificial file
+boundaries. Never game the metric by deleting comments, joining lines, or fragmenting a coherent
+function. The exact command is pinned by `test/guards/validation.test.ts`.
 
 Pre-commit and CI run `bun run check`. That full check-only gate runs every built-in `verifyx` check,
 including its automatic test step, then validates the package. It does not rewrite files.

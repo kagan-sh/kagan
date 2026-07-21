@@ -4,7 +4,7 @@ import type { BorderCharacters, Renderable, ScrollBoxRenderable } from "@opentui
 import { createEffect, For, Show } from "solid-js"
 import { Column } from "../column"
 import { COLUMNS, type ColumnType } from "../../../domain/task/types"
-import type { BoardStore } from "../commands/context"
+import type { BoardStore } from "../store"
 
 // Light │ so the rule stays subordinate to the heavy ┃ state bars on cards.
 const COLUMN_RULE_CHARS: BorderCharacters = {
@@ -21,13 +21,7 @@ const COLUMN_RULE_CHARS: BorderCharacters = {
   cross: "",
 }
 
-export function BoardMain(props: {
-  api: TuiPluginApi
-  store: BoardStore
-  cap: number
-  sendBackStopThreshold: number
-  checkCommand?: string
-}) {
+export function BoardMain(props: { api: TuiPluginApi; store: BoardStore }) {
   const theme = () => props.api.theme.current
 
   let hScrollRef: ScrollBoxRenderable | undefined
@@ -77,12 +71,10 @@ export function BoardMain(props: {
                 </Show>
                 <Column
                   api={props.api}
+                  store={props.store}
                   column={column}
                   cards={props.store.columns()[column]}
                   selectedID={props.store.selected()}
-                  cap={column === "in_progress" ? props.cap : undefined}
-                  sendBackStopThreshold={props.sendBackStopThreshold}
-                  checkCommand={props.checkCommand}
                   sessionStatus={props.store.sessionStatus}
                   onSelect={(id) => props.store.select(column, id)}
                   ref={(node) => columnRefs.set(column, node)}

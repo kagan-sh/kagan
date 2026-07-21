@@ -1,8 +1,21 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
 import type { PluginInput } from "@opencode-ai/plugin"
-import plugin from "../../src/server"
 import { approveDenyReason, helper, intakeReady } from "../../src/domain/task/policy"
 
+type GitStdout = (args: string[]) => string
+let activeGitStdout: GitStdout | undefined
+let activeShellStdout = ""
+
+const realGit = await import("../../src/git/runner")
+mock.module("../../src/git/runner", () => ({
+  ...realGit,
+  bunGitRunner: async (args: string[]) => {
+    const stdout = activeGitStdout ? activeGitStdout(args) : activeShellStdout
+    return { code: 0, stdout, stderr: "" }
+  },
+}))
+
+const plugin = (await import("../../src/server")).default
 const serverModuleUrl = new URL("../../src/server.ts", import.meta.url).href
 
 async function loadServerCopy(suffix: string) {
@@ -32,6 +45,8 @@ function makeInput(
     onUpdate?: (id: string) => Promise<void> | void
   } = {},
 ): { input: PluginInput; captured: Captured } {
+  activeGitStdout = config.gitStdout
+  activeShellStdout = config.shellStdout ?? ""
   const captured: Captured = { updates: [], creates: [], prompts: [], listCalls: [] }
   const store = config.store ?? {}
   const createId = "createId" in config ? config.createId : "child-1"
@@ -79,16 +94,6 @@ function makeInput(
         }) as never,
       },
     },
-    $: ((_s: TemplateStringsArray, ..._e: unknown[]) => {
-      const last = _e.at(-1)
-      const args = Array.isArray(last) ? last : typeof last === "string" ? last.split(/\s+/).filter(Boolean) : []
-      const stdout = config.gitStdout ? config.gitStdout(args) : (config.shellStdout ?? "")
-      return {
-        nothrow: () => ({
-          quiet: async () => ({ stdout: Buffer.from(stdout), stderr: Buffer.from(""), exitCode: 0 }),
-        }),
-      }
-    }) as PluginInput["$"],
     worktree: "/tmp/worktree",
   } as unknown as PluginInput
   return { input, captured }
@@ -1934,11 +1939,6 @@ describe("kagan server — duplicate helper spawn regression", () => {
           messages: (async () => ({ data: [] })) as never,
         },
       },
-      $: ((_s: TemplateStringsArray, ..._e: unknown[]) => ({
-        nothrow: () => ({
-          quiet: async () => ({ stdout: Buffer.from(""), stderr: Buffer.from(""), exitCode: 0 }),
-        }),
-      })) as PluginInput["$"],
       worktree: "/tmp/worktree",
     } as unknown as PluginInput
 
@@ -1996,11 +1996,6 @@ describe("kagan server — duplicate helper spawn regression", () => {
           messages: (async () => ({ data: [] })) as never,
         },
       },
-      $: ((_s: TemplateStringsArray, ..._e: unknown[]) => ({
-        nothrow: () => ({
-          quiet: async () => ({ stdout: Buffer.from(""), stderr: Buffer.from(""), exitCode: 0 }),
-        }),
-      })) as PluginInput["$"],
       worktree: "/tmp/worktree",
     } as unknown as PluginInput
 
@@ -2069,11 +2064,6 @@ describe("kagan server — duplicate helper spawn regression", () => {
           messages: (async () => ({ data: [] })) as never,
         },
       },
-      $: ((_s: TemplateStringsArray, ..._e: unknown[]) => ({
-        nothrow: () => ({
-          quiet: async () => ({ stdout: Buffer.from(""), stderr: Buffer.from(""), exitCode: 0 }),
-        }),
-      })) as PluginInput["$"],
       worktree: "/tmp/worktree",
     } as unknown as PluginInput
 

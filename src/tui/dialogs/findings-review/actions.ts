@@ -3,10 +3,9 @@ import { sortFindingsByConfidence, type Finding, type FindingResolution } from "
 import { isSubstantive } from "../../../domain/task/intake"
 import { kagan } from "../../../domain/task/metadata"
 import { resolveSessionFinding } from "../../session/tasks"
-import type { createBoardStore } from "../../board/store"
+import type { BoardStore } from "../../board/store"
 import type { BoardSession } from "../../types"
-
-type BoardStore = ReturnType<typeof createBoardStore>
+import type { FindingsMode } from "./views"
 
 const SLOT_RESOLUTIONS = [undefined, "ignored", "intended", "clarified"] as const satisfies readonly (
   | FindingResolution
@@ -27,7 +26,7 @@ export async function commitFindingResolution(props: {
   resolution: FindingResolution
   note: string
   setSession: (value: BoardSession | ((prev: BoardSession) => BoardSession)) => BoardSession
-  setMode: (value: "list" | "detail" | ((prev: "list" | "detail") => "list" | "detail")) => "list" | "detail"
+  setMode: (value: FindingsMode | ((prev: FindingsMode) => FindingsMode)) => FindingsMode
   setError: (value: string | undefined | ((prev: string | undefined) => string | undefined)) => string | undefined
 }): Promise<void> {
   const noteValue = props.note.trim()
@@ -97,7 +96,7 @@ export function handleFindingsDetailKey(props: {
   focus: () => number
   setFocus: (value: number | ((prev: number) => number)) => number
   setError: (value: string | undefined | ((prev: string | undefined) => string | undefined)) => string | undefined
-  setMode: (value: "list" | "detail" | ((prev: "list" | "detail") => "list" | "detail")) => "list" | "detail"
+  setMode: (value: FindingsMode | ((prev: FindingsMode) => FindingsMode)) => FindingsMode
   commit: (resolution: FindingResolution) => void
 }): boolean {
   if (props.key.name === "escape") {

@@ -19,7 +19,7 @@ type MockCommandStep = {
 
 mock.module("../../../src/git/runner", () => ({
   ...realRunner,
-  bunGitRunner: () => async () => ({ code: 0, stdout: "", stderr: "" }),
+  bunGitRunner: async () => ({ code: 0, stdout: "", stderr: "" }),
   uniqueTaskSlug: (title: string) => `${title}-slug`,
   createTaskWorktree: async () => {
     sequence.push("worktree")

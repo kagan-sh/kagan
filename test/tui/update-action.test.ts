@@ -1,11 +1,31 @@
-import { describe, expect, mock, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { TuiPluginApi, TuiPluginMeta, TuiToast } from "@opencode-ai/plugin/tui"
-import { createUpdateController } from "../../src/tui/updates/action"
 import type { UpdateCheck, UpdateStatus } from "../../src/tui/updates/check"
-import { runGlobalPluginUpdate } from "../../src/tui/updates/runner"
 import { ROUTE } from "../../src/tui/types"
 
 mock.module("../../../package.json", () => ({ version: "0.1.0" }))
+
+const realRunner = await import("../../src/tui/updates/runner")
+const realCheck = await import("../../src/tui/updates/check")
+const realCheckForUpdate = realCheck.checkForUpdate
+const realRunGlobalPluginUpdate = realRunner.runGlobalPluginUpdate
+
+let checkOverride: (() => Promise<UpdateCheck>) | undefined
+let runOverride: (() => Promise<{ ok: boolean; output: string; exitCode: number | null }>) | undefined
+
+mock.module("../../src/tui/updates/check", () => ({
+  ...realCheck,
+  checkForUpdate: async (...args: Parameters<typeof realCheckForUpdate>) =>
+    checkOverride ? checkOverride() : realCheckForUpdate(...args),
+}))
+
+mock.module("../../src/tui/updates/runner", () => ({
+  ...realRunner,
+  runGlobalPluginUpdate: async (...args: Parameters<typeof realRunGlobalPluginUpdate>) =>
+    runOverride ? runOverride() : realRunGlobalPluginUpdate(...args),
+}))
+
+const { createUpdateController } = await import("../../src/tui/updates/action")
 
 function meta(overrides: Partial<TuiPluginMeta> = {}): TuiPluginMeta {
   return {
@@ -26,9 +46,7 @@ function meta(overrides: Partial<TuiPluginMeta> = {}): TuiPluginMeta {
 function fixture(
   input: {
     stage?: () => Promise<boolean>
-    run?: () => Promise<{ ok: boolean; output: string; exitCode: number | null }>
     meta?: TuiPluginMeta
-    check?: (force: boolean) => Promise<UpdateCheck>
   } = {},
 ) {
   const statuses: UpdateStatus[] = []
@@ -45,7 +63,19 @@ function fixture(
       },
     },
     state: { path: { directory: "/repo" } },
-    ui: { toast: (toast: TuiToast) => toasts.push(toast) },
+    ui: {
+      toast: (toast: TuiToast) => toasts.push(toast),
+      dialog: {
+        clear: () => {},
+        replace: (render: () => unknown) => {
+          render()
+        },
+      },
+      DialogConfirm: (props: { onConfirm: () => void; onCancel: () => void }) => {
+        resolveConfirm = (ok) => (ok ? props.onConfirm() : props.onCancel())
+        return null
+      },
+    },
   } as unknown as TuiPluginApi
   const controller = createUpdateController({
     api,
@@ -54,9 +84,6 @@ function fixture(
       setUpdateStatus: (status) => statuses.push(status),
       notify: (toast) => notices.push(toast),
     },
-    check: input.check ?? (async () => ({ kind: "available", version: "0.2.0" })),
-    confirm: (_current, _target) => new Promise<boolean>((resolve) => (resolveConfirm = resolve)),
-    runCommand: async () => (input.run ? input.run() : { ok: true, output: "", exitCode: 0 }),
   })
   return {
     controller,
@@ -70,35 +97,50 @@ function fixture(
 }
 
 describe("createUpdateController", () => {
+  let runCalls = 0
+
+  beforeEach(() => {
+    runCalls = 0
+    checkOverride = async () => ({ kind: "available", version: "0.2.0" })
+    runOverride = async () => {
+      runCalls++
+      return { ok: true, output: "", exitCode: 0 }
+    }
+  })
+
+  afterEach(() => {
+    checkOverride = undefined
+    runOverride = undefined
+  })
+
   test("declining confirmation does not stage or run an update", async () => {
-    let ran = false
-    const test = fixture({ run: async () => ((ran = true), { ok: true, output: "", exitCode: 0 }) })
+    const test = fixture()
     const done = test.controller.run()
     await Bun.sleep(0)
     test.cancel()
     await done
     expect(test.statuses).toEqual([{ kind: "available", version: "0.2.0" }])
     expect(test.staged).toEqual([])
-    expect(ran).toBe(false)
+    expect(runCalls).toBe(0)
   })
 
   test("staging failure skips the canonical command and remains actionable", async () => {
-    let ran = false
-    const test = fixture({
-      stage: async () => false,
-      run: async () => ((ran = true), { ok: true, output: "", exitCode: 0 }),
-    })
+    const test = fixture({ stage: async () => false })
     const done = test.controller.run()
     await Bun.sleep(0)
     test.confirm()
     await done
-    expect(ran).toBe(false)
+    expect(runCalls).toBe(0)
     expect(test.statuses.at(-1)).toEqual({ kind: "available", version: "0.2.0" })
     expect(test.notices.at(-1)?.variant).toBe("error")
   })
 
   test("canonical command failure remains actionable", async () => {
-    const test = fixture({ run: async () => ({ ok: false, output: "config failed", exitCode: 1 }) })
+    runOverride = async () => {
+      runCalls++
+      return { ok: false, output: "config failed", exitCode: 1 }
+    }
+    const test = fixture()
     const done = test.controller.run()
     await Bun.sleep(0)
     test.confirm()
@@ -109,22 +151,21 @@ describe("createUpdateController", () => {
   })
 
   test("success requests restart", async () => {
-    let runs = 0
-    const test = fixture({ run: async () => ({ ok: true, output: String(++runs), exitCode: 0 }) })
+    const test = fixture()
     const done = test.controller.run()
     await Bun.sleep(0)
     test.confirm()
     await done
     expect(test.staged).toEqual(["@kagan-sh/kagan@0.2.0"])
-    expect(runs).toBe(1)
+    expect(runCalls).toBe(1)
     expect(test.statuses.at(-1)).toEqual({ kind: "restart", version: "0.2.0" })
     expect(test.notices.at(-1)?.message).toContain("Restart OpenCode")
   })
 
   test("ineligible installs explain npm-only updates instead of reporting a check failure", async () => {
+    checkOverride = async () => ({ kind: "ineligible" })
     const test = fixture({
       meta: meta({ source: "file", spec: "file:///tmp/kagan-pinned" }),
-      check: async () => ({ kind: "ineligible" }),
     })
     await test.controller.run()
     expect(test.notices.at(-1)).toEqual({
@@ -135,8 +176,7 @@ describe("createUpdateController", () => {
   })
 
   test("a second update request while the confirmation is open reuses the pending flow", async () => {
-    let runs = 0
-    const test = fixture({ run: async () => ({ ok: true, output: String(++runs), exitCode: 0 }) })
+    const test = fixture()
     const first = test.controller.run()
     // Second invocation while the first confirmation dialog is still open must not open a rival
     // dialog or start a concurrent install.
@@ -146,7 +186,7 @@ describe("createUpdateController", () => {
     test.confirm()
     await Promise.all([first, second])
     expect(test.staged).toEqual(["@kagan-sh/kagan@0.2.0"])
-    expect(runs).toBe(1)
+    expect(runCalls).toBe(1)
   })
 })
 
@@ -154,7 +194,7 @@ describe("runGlobalPluginUpdate", () => {
   test("runs the current executable with exact global force arguments and bounds output", async () => {
     let command: string[] = []
     let cwd = ""
-    const result = await runGlobalPluginUpdate("0.2.0", "/repo", {
+    const result = await realRunGlobalPluginUpdate("0.2.0", "/repo", {
       execPath: "/bin/opencode",
       spawn: (args, options) => {
         command = args
@@ -175,7 +215,7 @@ describe("runGlobalPluginUpdate", () => {
 
   test("rejects invalid versions without spawning", async () => {
     let spawned = false
-    const result = await runGlobalPluginUpdate("latest", "/repo", {
+    const result = await realRunGlobalPluginUpdate("latest", "/repo", {
       spawn: () => {
         spawned = true
         throw new Error("unreachable")

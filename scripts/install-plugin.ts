@@ -21,19 +21,45 @@ function defaultConfigFor(file: string): Record<string, unknown> {
     : { $schema: "https://opencode.ai/config.json" }
 }
 
-async function readConfig(file: string): Promise<Record<string, unknown>> {
-  return (await Bun.file(file).exists())
-    ? ((await Bun.file(file).json()) as Record<string, unknown>)
-    : defaultConfigFor(file)
+// string-aware so a `, }` inside a quoted value is never touched
+function stripTrailingCommas(text: string): string {
+  let out = ""
+  let inString = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charAt(i)
+    if (inString) {
+      out += ch
+      if (ch === "\\") out += text[++i] ?? ""
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === ",") {
+      let j = i + 1
+      while (j < text.length && /\s/.test(text.charAt(j))) j++
+      if (text[j] === "}" || text[j] === "]") continue
+    }
+    out += ch
+  }
+  return out
 }
 
-async function format(files: string[]): Promise<void> {
-  const oxfmt = Bun.spawn(["bun", "x", "oxfmt", "--write", ...files], {
-    cwd: repoRoot,
-    stdout: "ignore",
-    stderr: "inherit",
-  })
-  await oxfmt.exited
+function parseConfigJson(text: string, file: string): Record<string, unknown> {
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    // hand-edited OpenCode configs often keep a trailing comma
+    try {
+      return JSON.parse(stripTrailingCommas(text)) as Record<string, unknown>
+    } catch (error) {
+      throw new Error(`Failed to parse ${file}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+}
+
+async function readConfig(file: string): Promise<Record<string, unknown>> {
+  if (!(await Bun.file(file).exists())) return defaultConfigFor(file)
+  return parseConfigJson(await Bun.file(file).text(), file)
 }
 
 async function addGlobalPluginSpec(spec: string): Promise<void> {
@@ -45,7 +71,6 @@ async function addGlobalPluginSpec(spec: string): Promise<void> {
     await writeFile(file, `${JSON.stringify(config, null, 2)}\n`)
     console.log(`${file} → plugin includes "${spec}"`)
   }
-  await format(globalConfigFiles)
 }
 
 function pluginSpec(entry: unknown): string | undefined {
@@ -64,7 +89,6 @@ function isKaganSpec(spec: string): boolean {
 }
 
 async function removeGlobalKaganPluginSpecs(): Promise<void> {
-  const touched: string[] = []
   for (const file of globalConfigFiles) {
     if (!(await Bun.file(file).exists())) continue
     const config = await readConfig(file)
@@ -82,10 +106,8 @@ async function removeGlobalKaganPluginSpecs(): Promise<void> {
     } else {
       await writeFile(file, `${JSON.stringify(config, null, 2)}\n`)
       console.log(`${file} → dropped kagan plugin entries`)
-      touched.push(file)
     }
   }
-  if (touched.length > 0) await format(touched)
 }
 
 async function run(args: string[], options?: { cwd?: string; stdout?: "pipe" | "inherit" }): Promise<string> {

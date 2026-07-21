@@ -2,8 +2,8 @@
 import type { TuiPluginApi, TuiThemeCurrent, TuiToast } from "@opencode-ai/plugin/tui"
 import { For } from "solid-js"
 import { useRendererDimensions } from "../../renderer"
-import type { BoardStore } from "../commands/context"
 import { SIDE_BORDER_CHARS } from "../borders"
+import type { BoardStore } from "../store"
 
 function noticeBorderColor(theme: TuiThemeCurrent, variant?: TuiToast["variant"]) {
   if (variant === "error") return theme.error

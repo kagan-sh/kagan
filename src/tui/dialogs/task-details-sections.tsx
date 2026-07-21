@@ -1,10 +1,59 @@
 /** @jsxImportSource @opentui/solid */
+import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
 import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import { getStatus, kagan } from "../../domain/task/metadata"
 import type { Finding } from "../../domain/task/findings"
 import type { Intake } from "../../domain/task/intake"
+import type { ColumnType } from "../../domain/task/types"
 import type { CheckResult } from "../../checks/runner"
+
+export type TaskDetails = {
+  title?: string
+  status?: ColumnType
+  taskNumber?: number
+  report?: string
+  description?: string
+  baseBranch?: string
+  generation: number
+  approved: boolean
+  findings: Finding[]
+  priorTriage: Finding[]
+  intake?: Intake
+  check?: CheckResult
+  setup?: CheckResult
+  diffStats: Array<{ file: string; additions: number; deletions: number; status?: string }>
+}
+
+export function buildTaskDetails(
+  metadata: Record<string, unknown>,
+  diffs: Array<SnapshotFileDiff>,
+  title?: string,
+): TaskDetails {
+  const view = kagan(metadata)
+  return {
+    title,
+    status: getStatus(metadata),
+    taskNumber: view.taskNumber,
+    report: view.report,
+    description: view.description,
+    baseBranch: view.baseBranch,
+    generation: view.generation,
+    approved: view.approved === true,
+    findings: view.findings ?? [],
+    priorTriage: view.priorTriage ?? [],
+    intake: view.intake,
+    check: view.check,
+    setup: view.setup,
+    diffStats: diffs.map((diff) => ({
+      file: diff.file ?? "unknown",
+      additions: diff.additions ?? 0,
+      deletions: diff.deletions ?? 0,
+      status: diff.status,
+    })),
+  }
+}
 
 export function CheckEvidence(props: { api: TuiPluginApi; label: string; result?: CheckResult }) {
   if (!props.result) return null
@@ -46,13 +95,13 @@ export function FindingList(props: { api: TuiPluginApi; title: string; findings:
       <For each={props.findings}>
         {(finding) => (
           <box flexDirection="column" paddingLeft={2}>
-            <text>
+            <text wrapMode="word">
               {finding.category ? `[${finding.category}] ` : ""}
               {finding.summary}
               {finding.resolution ? ` — ${finding.resolution}` : ""}
             </text>
             {finding.note ? (
-              <text fg={props.api.theme.current.textMuted} paddingLeft={2}>
+              <text fg={props.api.theme.current.textMuted} paddingLeft={2} wrapMode="word">
                 {finding.note}
               </text>
             ) : null}
@@ -69,13 +118,17 @@ export function IntakeView(props: { intake?: Intake }) {
   return (
     <box flexDirection="column" gap={1}>
       <text attributes={TextAttributes.BOLD}>Intake</text>
-      {props.intake.understanding ? <text paddingLeft={2}>{props.intake.understanding}</text> : null}
+      {props.intake.understanding ? (
+        <text paddingLeft={2} wrapMode="word">
+          {props.intake.understanding}
+        </text>
+      ) : null}
       {resolved.length > 0 ? (
-        <box flexDirection="column" paddingLeft={2}>
+        <box flexDirection="column" paddingLeft={2} gap={0}>
           <text>Resolved decisions:</text>
           <For each={resolved}>
             {(d) => (
-              <text>
+              <text wrapMode="word">
                 - {d.question} → {d.resolution === "approved" ? d.assumption : (d.answer ?? "")}
               </text>
             )}
