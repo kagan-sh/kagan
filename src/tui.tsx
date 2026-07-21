@@ -6,7 +6,7 @@ import { Settings } from "./tui/routes/settings"
 import { showOnboarding } from "./tui/dialogs/onboarding"
 import { createBoardStore, createSessionEventSubscription, createSessionStatusSubscription } from "./tui/board/store"
 import { createUpdateController } from "./tui/updates/action"
-import { runUpdateDiscovery } from "./tui/updates/launch"
+import { checkForUpdate } from "./tui/updates/check"
 import { ROUTE, SETTINGS_ROUTE } from "./tui/types"
 import { version } from "../package.json"
 
@@ -17,13 +17,17 @@ const tui: TuiPlugin = async (api, options, meta) => {
   api.lifecycle.onDispose(() => disposeEvents())
   api.lifecycle.onDispose(() => disposeStatusEvents())
 
-  runUpdateDiscovery({
-    api,
-    meta,
+  checkForUpdate({
+    kv: api.kv,
     currentVersion: version,
+    source: meta.source,
+    spec: meta.spec,
     now: Date.now(),
-    setUpdateStatus: store.setUpdateStatus,
-  }).catch(() => {})
+  })
+    .then((result) => {
+      if (result?.kind === "available" && !api.lifecycle.signal.aborted) store.setUpdateStatus(result)
+    })
+    .catch(() => {})
 
   const updates = createUpdateController({ api, meta, store })
 

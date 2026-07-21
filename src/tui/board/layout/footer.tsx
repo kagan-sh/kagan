@@ -2,8 +2,14 @@
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { For, Show } from "solid-js"
 import { version } from "../../../../package.json"
-import type { BoardStore } from "../commands/context"
-import { updateFooter } from "./footer-text"
+import type { BoardStore } from "../store"
+import type { UpdateStatus } from "../../updates/check"
+
+function updateFooter(status: Exclude<UpdateStatus, undefined>) {
+  if (status.kind === "available") return ` · v${status.version} available`
+  if (status.kind === "installing") return ` · installing v${status.version}`
+  return ` · v${status.version} installed - restart OpenCode`
+}
 
 export function Footer(props: { api: TuiPluginApi; store: BoardStore; hints: () => { key: string; label: string }[] }) {
   const theme = () => props.api.theme.current

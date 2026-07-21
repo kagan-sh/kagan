@@ -5,8 +5,7 @@ import type { CommandSpec } from "../../../../domain/task/types"
 import { DialogFrame } from "../../../dialogs/chrome"
 import { ListEditorContents } from "./contents"
 import { useListEditor } from "./hook"
-import { appendItem, moveItem } from "./state"
-import type { EditorContext, ListEditorColumn, ListEditorState } from "./types"
+import { appendItem, moveItem, type EditorContext, type ListEditorColumn, type ListEditorState } from "./state"
 
 const COMMAND_FIELDS = ["name", "cwd", "command", "scope"] as const
 
@@ -77,6 +76,21 @@ function addCommand(ctx: EditorContext<CommandSpec>, kind: "setup" | "check") {
   ask(["name", "cwd", "command", "scope"])
 }
 
+function parseEditedCommand(command: CommandSpec, field: CommandField, next: string): CommandSpec | string {
+  const updated = { ...command }
+  if (field === "scope") {
+    updated.scope = parseScope(next)
+  } else {
+    updated[field] = next.trim()
+  }
+  if (!updated.name || !updated.command || !updated.cwd) {
+    return "Name, cwd, and command are required"
+  }
+  const parsed = commandSpec(updated, command.name)
+  if (!parsed) return "Invalid command: unsafe cwd or invalid scope regex"
+  return parsed
+}
+
 function editCommandField(ctx: EditorContext<CommandSpec>) {
   const command = ctx.items()[ctx.selectedRow()]
   if (!command) return
@@ -84,25 +98,9 @@ function editCommandField(ctx: EditorContext<CommandSpec>) {
   const value = field === "scope" ? (command.scope ?? []).join(", ") : command[field]
   const title = field === "scope" ? "scope (comma-separated regexes)" : field
   ctx.prompt(title, value, (next) => {
-    const updated = { ...command }
-    if (field === "scope") {
-      updated.scope = next
-        ? next
-            .split(",")
-            .map((pattern) => pattern.trim())
-            .filter(Boolean)
-        : undefined
-    } else {
-      updated[field] = next.trim()
-    }
-    if (!updated.name || !updated.command || !updated.cwd) {
-      ctx.setMessage("Name, cwd, and command are required")
-      ctx.reopenWithSnapshot()
-      return
-    }
-    const parsed = commandSpec(updated, command.name)
-    if (!parsed) {
-      ctx.setMessage("Invalid command: unsafe cwd or invalid scope regex")
+    const parsed = parseEditedCommand(command, field, next)
+    if (typeof parsed === "string") {
+      ctx.setMessage(parsed)
       ctx.reopenWithSnapshot()
       return
     }

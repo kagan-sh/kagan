@@ -3,11 +3,18 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { maybeShowOnboarding } from "../dialogs/onboarding"
 import { kagan } from "../../domain/task/metadata"
-import { boardBindings, createBoardCommands, footerHints, HelpOverlay, type BoardStore } from "./commands"
-import { keymapKey } from "./layout/keymap"
+import { boardBindings, createBoardCommands, footerHints, type BoardStore } from "./commands"
+import { HelpOverlay } from "./commands/help"
 import { BoardMain } from "./layout/main"
 import { Footer } from "./layout/footer"
 import { Notice } from "./layout/notice"
+
+function keymapKey(key: string): string | { name: string } {
+  if (key === ",") return { name: "," }
+  if (key === "?") return "?,shift+/"
+  if (key === "return") return "return,enter"
+  return key
+}
 
 export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
   const store = props.store
@@ -16,7 +23,11 @@ export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
 
   let disposeLayer: (() => void) | undefined
 
-  onMount(() => maybeShowOnboarding(props.api))
+  onMount(() => {
+    // Host prompt/dialog focus can survive into this route and swallow hjkl.
+    props.api.renderer.currentFocusedRenderable?.blur()
+    maybeShowOnboarding(props.api)
+  })
 
   const updateAvailable = createMemo(() => store.updateStatus()?.kind === "available")
 
@@ -50,13 +61,7 @@ export function Board(props: { api: TuiPluginApi; store: BoardStore }) {
     <box position="absolute" left={0} top={0} width="100%" height="100%">
       <box flexDirection="column" width="100%" height="100%">
         <box flexGrow={1} minHeight={0}>
-          <BoardMain
-            api={props.api}
-            store={store}
-            cap={store.inProgressCap}
-            sendBackStopThreshold={store.sendBackStopThreshold}
-            checkCommand={store.checkCommand}
-          />
+          <BoardMain api={props.api} store={store} />
         </box>
         <Footer api={props.api} store={store} hints={hints} />
       </box>

@@ -2,7 +2,7 @@
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
 import type { Accessor } from "solid-js"
 import { For, Show } from "solid-js"
-import type { ListEditorColumn, ListEditorContentsProps } from "./types"
+import type { ListEditorColumn, ListEditorContentsProps } from "./state"
 
 function fieldColor(theme: TuiThemeCurrent, selected: boolean, focused: boolean) {
   return selected && focused ? theme.text : selected ? theme.selectedListItemText : theme.text

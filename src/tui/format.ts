@@ -74,7 +74,7 @@ export function gateBadges(metadata?: Record<string, unknown>, threshold = sendB
     if (intakeOutcome === "failed" || hasHelperError(metadata, "intake")) {
       badges.push({ text: "intake failed", tone: "error" })
     } else {
-      badges.push(intakeReady(metadata) ? { text: "intake ok", tone: "success" } : { text: "intake…", tone: "muted" })
+      badges.push(intakeReady(metadata) ? { text: "intake ok", tone: "success" } : { text: "intake…", tone: "warning" })
     }
   }
   const mode = view.intake?.mode

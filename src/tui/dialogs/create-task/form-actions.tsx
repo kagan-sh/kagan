@@ -1,10 +1,10 @@
+/** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { createBoardStore } from "../../board/store"
-import type { CreateTaskDependencies, FormState, ModelChoice } from "./types"
-import { openScopePicker } from "../create-task-scope"
-import { openFilterableSelectPicker } from "./select"
-
-type BoardStore = ReturnType<typeof createBoardStore>
+import type { BoardStore } from "../../board/store"
+import { createTask } from "../../tasks"
+import { getOrder, setOrder } from "../../session/preferences"
+import { openFilterableSelectPicker, openScopePicker } from "./pickers"
+import type { FormState, ModelChoice } from "./types"
 
 type DescriptionField = { plainText?: string; newLine?: () => void }
 
@@ -19,7 +19,6 @@ export async function submitCreateTask(props: {
   models: ModelChoice[]
   branches: string[]
   descriptionRef: DescriptionField | undefined
-  dependencies: CreateTaskDependencies
 }): Promise<void> {
   const trimmed = props.state.title.trim()
   if (!trimmed) {
@@ -42,11 +41,8 @@ export async function submitCreateTask(props: {
       setupCommands: props.store.setupCommands,
       ...(scope ? { scope } : {}),
     }
-    const session = await props.dependencies.createTask(props.api, input)
-    props.dependencies.setOrder(props.api, "backlog", [
-      ...props.dependencies.getOrder(props.api, "backlog"),
-      session.id,
-    ])
+    const session = await createTask(props.api, input)
+    setOrder(props.api, "backlog", [...getOrder(props.api, "backlog"), session.id])
     await props.store.refresh()
     props.store.notify({ variant: "success", title: "Kagan", message: `Created "${trimmed}"` })
   } catch (error) {
@@ -107,47 +103,4 @@ export function openCreateTaskPicker(props: {
   })
 }
 
-export function handleCreateTaskKey(props: {
-  key: { name: string; ctrl?: boolean; shift?: boolean }
-  focusIndex: () => number
-  setFocusIndex: (value: number | ((index: number) => number)) => void
-  descriptionRef: DescriptionField | undefined
-  submit: () => void
-  openPicker: () => void
-}): boolean {
-  const { key } = props
-  if (key.ctrl && key.name === "return") {
-    props.submit()
-    return true
-  }
-  if (
-    props.focusIndex() === 1 &&
-    ((key.ctrl && key.name === "j") || key.name === "linefeed" || (key.shift && key.name === "return"))
-  ) {
-    props.descriptionRef?.newLine?.()
-    return true
-  }
-  if (key.name === "return") {
-    if (props.focusIndex() >= 2) props.openPicker()
-    else props.submit()
-    return true
-  }
-  if (key.name === "right" && props.focusIndex() >= 2) {
-    props.openPicker()
-    return true
-  }
-  if (key.name === "tab") {
-    props.setFocusIndex((index) => (key.shift ? (index + 4) % 5 : (index + 1) % 5))
-    return true
-  }
-  if (props.focusIndex() === 1) return false
-  if (key.name === "down") {
-    props.setFocusIndex((index) => (index + 1) % 5)
-    return true
-  }
-  if (key.name === "up") {
-    props.setFocusIndex((index) => (index + 4) % 5)
-    return true
-  }
-  return false
-}
+export { handleCreateTaskKey } from "./form-keys"

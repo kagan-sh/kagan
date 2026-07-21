@@ -2,9 +2,14 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import type { TestRendererSetup } from "@opentui/core/testing"
-import { Card } from "../../../src/tui/board/card"
+import { CardShell } from "../../../src/tui/board/card/body"
+import type { BoardStore } from "../../../src/tui/board/store"
 import type { BoardSession } from "../../../src/tui/types"
 import { mockSession as buildSession, mockTuiApi } from "../../fixtures/api"
+
+function boardStore(overrides: Partial<BoardStore> = {}): BoardStore {
+  return { inProgressCap: 2, sendBackStopThreshold: 3, checkCommand: undefined, ...overrides } as BoardStore
+}
 
 let renderSetup: TestRendererSetup | undefined
 
@@ -26,6 +31,10 @@ function session(
     summary: props.summary,
     metadata: props.metadata,
   })
+}
+
+function Card(props: Omit<Parameters<typeof CardShell>[0], "renderedAt" | "store"> & { store?: BoardStore }) {
+  return <CardShell {...props} store={props.store ?? boardStore()} renderedAt={Date.now()} />
 }
 
 describe("Card", () => {
@@ -195,7 +204,6 @@ describe("Card", () => {
             },
           })}
           selectedID="s1"
-          checkCommand={undefined}
           onSelect={() => {}}
         />
       ),
@@ -229,7 +237,6 @@ describe("Card", () => {
             },
           })}
           selectedID="other"
-          checkCommand={undefined}
           onSelect={() => {}}
         />
       ),

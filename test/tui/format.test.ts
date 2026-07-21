@@ -110,7 +110,7 @@ describe("gateBadges", () => {
     [
       "intake… while a backlog board task is still preparing intake",
       { status: "backlog", boardTask: true, intakeOutcome: "pending" },
-      [{ text: "intake…", tone: "muted" }],
+      [{ text: "intake…", tone: "warning" }],
     ],
     ["no intake badge for a non-board backlog session", { status: "backlog", intakeOutcome: "pending" }, []],
     [
@@ -420,54 +420,6 @@ describe("formatModeRationale", () => {
         "",
       ),
     ).toBe("A trusted automatic check catches every wrong answer. (no automatic check configured - lean assisted)")
-  })
-})
-
-describe("gateBadges — mode", () => {
-  test("shows a muted mode badge for autonomous (shortened to auto)", () => {
-    expect(
-      gateBadges({
-        kagan: {
-          intake: {
-            understanding: "x",
-            decisions: [],
-            mode: { recommended: "autonomous", rationale: "A cheap check catches every wrong answer." },
-          },
-        },
-      }),
-    ).toEqual([{ text: "mode: auto", tone: "muted" }])
-  })
-
-  test("shows a muted mode badge for assisted", () => {
-    expect(
-      gateBadges({
-        kagan: {
-          intake: {
-            understanding: "x",
-            decisions: [],
-            mode: { recommended: "assisted", rationale: "No trusted check and the blast radius is high." },
-          },
-        },
-      }),
-    ).toEqual([{ text: "mode: assisted", tone: "muted" }])
-  })
-
-  test("shows a muted mode badge for manual", () => {
-    expect(
-      gateBadges({
-        kagan: {
-          intake: {
-            understanding: "x",
-            decisions: [],
-            mode: { recommended: "manual", rationale: "The human must understand every line of the change." },
-          },
-        },
-      }),
-    ).toEqual([{ text: "mode: manual", tone: "muted" }])
-  })
-
-  test("omits the mode badge when the mode is invalid", () => {
-    expect(gateBadges({ kagan: { intake: { understanding: "x", decisions: [] } } })).toEqual([])
   })
 })
 

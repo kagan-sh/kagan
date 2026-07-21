@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import plugin from "../../src/server"
-import { buildKaganTaskTemplate } from "../../src/server/command"
+import plugin, { buildKaganTaskTemplate } from "../../src/server"
 
 describe("server config hook", () => {
   test("injects the kagan-task command with a template ending in $ARGUMENTS", async () => {

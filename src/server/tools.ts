@@ -1,7 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin/tool"
 import { worktreeDiffs } from "../git/diffs"
-import { shellGitRunner } from "../git/runner"
+import { bunGitRunner } from "../git/runner"
 import { sanitizeIntakeDecisions } from "../domain/task/intake"
 import { verifyFindingCitations, type Finding } from "../domain/task/findings"
 import { helper } from "../domain/task/policy"
@@ -95,7 +95,7 @@ export function createServerTools(input: PluginInput, options?: Record<string, u
           try {
             findings = verifyFindingCitations(
               findings,
-              await worktreeDiffs(shellGitRunner(input.$), view.worktree, view.baseBranch ?? "HEAD"),
+              await worktreeDiffs(bunGitRunner, view.worktree, view.baseBranch ?? "HEAD"),
             )
           } catch {}
         }

@@ -96,6 +96,10 @@ status cues, so that I can see at a glance what needs my attention.
 13. WHERE the user filters cards with a query of the form `#N`, the board SHALL match only the
     card whose task number equals `N` exactly, in addition to the existing title/slug substring
     match.
+14. WHEN the user presses Tab or Shift+Tab on the board THEN selection SHALL cycle forward or
+    backward across root board cards in column order (Backlog → In Progress → Review → Done),
+    wrapping at the ends, and SHALL land only on root cards — never on child sessions such as
+    intake or reviewer helpers; row-wise navigation into children remains available via j/k.
 
 ---
 
@@ -458,7 +462,12 @@ so that failures, handoffs, and supervision evidence are visible instead of hidd
    `kagan.tutorial` palette command (`/kagan-tutorial`), regardless of the opt-out.
 7. WHEN the user views task details from the card action menu THEN Kagan SHALL display a read-only
    summary of the task's title, status, intake, findings, prior triage, reports, check/setup
-   evidence, and diff stats without mutating task state.
+   evidence, and diff stats without mutating task state. WHEN that content exceeds the dialog
+   viewport THEN Kagan SHALL keep the title and status summary pinned and scroll the body so no
+   section is clipped. WHEN intake has completed THEN the card action menu SHALL also offer a
+   read-only intake-notes view of the understanding and resolved decisions with the same scroll
+   rule. WHEN the selected task is in Review THEN the card action menu SHALL lead with Approve and
+   Send back.
 8. WHEN concurrent handlers patch the same session's `kagan` metadata THEN Kagan SHALL serialize the
    read-modify-write operations per session so one patch cannot clobber another, and a failed patch
    SHALL NOT block later patches for that session.

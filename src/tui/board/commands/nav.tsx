@@ -1,24 +1,20 @@
 /** @jsxImportSource @opentui/solid */
-import type { BoardActions } from "./context"
+import { selectSessionOrNotify, type BoardCommandContext } from "./types"
 
-export const openSession = async (ctx: BoardActions) => {
+export const openSession = async (ctx: BoardCommandContext) => {
   const id = ctx.store.selected()
   if (!id) return
-  try {
-    await ctx.api.client.tui.selectSession({ sessionID: id }, { throwOnError: true })
-  } catch (error) {
-    ctx.notifyErrorFrom(error)
-  }
+  await selectSessionOrNotify(ctx, id)
 }
 
-export const closeBoard = (ctx: BoardActions) => {
+export const closeBoard = (ctx: BoardCommandContext) => {
   ctx.setHelpOpen((open) => {
     if (!open) ctx.api.route.navigate("home")
     return false
   })
 }
 
-export const dismissBoard = (ctx: BoardActions) => {
+export const dismissBoard = (ctx: BoardCommandContext) => {
   ctx.setHelpOpen((open) => {
     if (open) return false
     if (ctx.store.filter() !== "") ctx.store.setFilter("")
@@ -26,7 +22,7 @@ export const dismissBoard = (ctx: BoardActions) => {
   })
 }
 
-export const promptFilter = (ctx: BoardActions) => {
+export const promptFilter = (ctx: BoardCommandContext) => {
   ctx.api.ui.dialog.replace(() => (
     <ctx.api.ui.DialogPrompt
       title="Filter cards"
@@ -41,7 +37,7 @@ export const promptFilter = (ctx: BoardActions) => {
   ))
 }
 
-export const promptDelete = (ctx: BoardActions) => {
+export const promptDelete = (ctx: BoardCommandContext) => {
   const id = ctx.store.selected()
   if (!id) return
   const session = ctx.store.selectedSession()

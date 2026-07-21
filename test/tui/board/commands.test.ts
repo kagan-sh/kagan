@@ -1,15 +1,17 @@
 /** @jsxImportSource @opentui/solid */
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import type { TestRendererSetup } from "@opentui/core/testing"
+import { MockTreeSitterClient, type TestRendererSetup } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
 import type { BoardSession } from "../../../src/tui/types"
 import { SETTINGS_ROUTE } from "../../../src/tui/types"
 import type { BoardStore } from "../../../src/tui/board/commands"
+import { configureIntakeMarkdownTreeSitter } from "../../../src/tui/dialogs/intake-gate"
 import { attachRendererMockInput, mockSessionClient, mockTheme, mockTuiApi } from "../../fixtures/api"
 
 import { BOARD_BINDINGS, createBoardCommands, footerHints } from "../../../src/tui/board/commands"
+import { menuOptions } from "../../../src/tui/board/commands/hints"
 
 // bun's mock.module is process-global; sibling test files mock git/runner + git/merge and those mocks
 // leak across files in load order. Establish this file's own git mocks so the merge-dialog tests below
@@ -19,7 +21,7 @@ let localBranches: string[] = ["kagan/task"]
 let mergeResult: { ok: boolean; message: string } = { ok: true, message: "Merged" }
 
 mock.module("../../../src/git/runner", () => ({
-  bunGitRunner: () => async () => ({ code: 0, stdout: "", stderr: "" }),
+  bunGitRunner: async () => ({ code: 0, stdout: "", stderr: "" }),
   currentBranch: async () => currentBranchValue,
   listLocalBranches: async () => localBranches,
   baseBranchFreshness: async () => ({ ahead: 0 }),
@@ -30,16 +32,23 @@ mock.module("../../../src/git/merge", () => ({
 }))
 
 let renderSetup: TestRendererSetup | undefined
+let intakeTreeSitter: MockTreeSitterClient | undefined
 
 beforeEach(() => {
   currentBranchValue = "kagan/task"
   localBranches = ["kagan/task"]
   mergeResult = { ok: true, message: "Merged" }
+  intakeTreeSitter = new MockTreeSitterClient({ autoResolveTimeout: 0 })
+  intakeTreeSitter.setMockResult({ highlights: [] })
+  configureIntakeMarkdownTreeSitter(intakeTreeSitter)
 })
 
 afterEach(async () => {
   await renderSetup?.renderer.destroy()
   renderSetup = undefined
+  configureIntakeMarkdownTreeSitter(undefined)
+  await intakeTreeSitter?.destroy()
+  intakeTreeSitter = undefined
 })
 
 function mockStore(
@@ -82,7 +91,7 @@ describe("footerHints", () => {
 
   test("shows the baseline hints when nothing is selected", () => {
     expect(footerHints(undefined, false)).toEqual([
-      { key: "j/k/h/l", label: "navigate" },
+      { key: "j/k/tab", label: "navigate" },
       { key: "enter", label: "menu" },
       { key: "n", label: "new" },
       { key: "/", label: "filter" },
@@ -135,6 +144,31 @@ describe("footerHints", () => {
   test("adds the update hint only when a release is available", () => {
     expect(footerHints(undefined, false, 0, true)).toContainEqual({ key: "u", label: "update" })
     expect(footerHints(undefined, false)).not.toContainEqual({ key: "u", label: "update" })
+  })
+})
+
+describe("menuOptions", () => {
+  test("leads Review cards with Approve and Send back, and offers intake notes when present", () => {
+    const options = menuOptions({
+      id: "s1",
+      kaganStatus: "review",
+      metadata: {
+        kagan: {
+          intake: { understanding: "Ship the calc", decisions: [], mode: { recommended: "assisted", rationale: "x" } },
+        },
+      },
+    } as unknown as BoardSession)
+    expect(options.map((o) => o.value).slice(0, 4)).toEqual(["approve", "send_back", "view", "intake"])
+  })
+
+  test("omits intake notes when intake has not run", () => {
+    const options = menuOptions({
+      id: "s1",
+      kaganStatus: "backlog",
+      metadata: { kagan: {} },
+    } as unknown as BoardSession)
+    expect(options.map((o) => o.value)).not.toContain("intake")
+    expect(options.map((o) => o.value)[0]).toBe("view")
   })
 })
 
@@ -313,10 +347,13 @@ describe("createBoardCommands", () => {
   test("kagan.move_next surfaces an advisory confirm before starting a non-autonomous task", async () => {
     const session = {
       id: "s1",
+      title: "Task",
+      slug: "task",
       kaganStatus: "backlog" as const,
       metadata: {
         kagan: {
           intakeOutcome: "ran",
+          taskNumber: 1,
           intake: {
             understanding: "x",
             decisions: [],
@@ -334,49 +371,47 @@ describe("createBoardCommands", () => {
         moveNextCalls++
       },
     })
-    let dialogRendered: (() => { title: string; message: string; onConfirm: () => Promise<void> }) | undefined
-    const api = {
+    let dialogRendered: (() => JSX.Element) | undefined
+    const api = mockTuiApi({
+      renderer: { width: 60, height: 28 },
       ui: {
-        DialogConfirm: (props: { title: string; message: string; onConfirm: () => Promise<void> }) => props,
         dialog: {
-          replace: (render: () => { title: string; message: string; onConfirm: () => Promise<void> }) =>
-            (dialogRendered = render),
+          open: true,
+          setSize: () => {},
           clear: () => {},
+          replace: (render: () => unknown) => {
+            dialogRendered = render as () => JSX.Element
+          },
         },
       },
-    } as unknown as TuiPluginApi
+    })
     await createBoardCommands(api, store, () => {})
       .find((command) => command.name === "kagan.move_next")
       ?.run()
     expect(dialogRendered).toBeDefined()
     expect(moveNextCalls).toBe(0)
-    const props = dialogRendered!()
-    expect(props.title).toBe("This one looks better driven by you")
-    expect(props.message).toBe("No trusted check and the blast radius is high. Start the agent on it anyway?")
-    await props.onConfirm()
-    expect(moveNextCalls).toBe(1)
+    renderSetup = await testRender(dialogRendered!, { width: 60, height: 28, kittyKeyboard: true })
+    attachRendererMockInput(api, renderSetup)
+    await renderSetup.flush()
+    await waitFor(() => renderSetup!.captureCharFrame().includes("No trusted check and the blast radius is high."))
+    const frame = renderSetup.captureCharFrame()
+    expect(frame).toContain("Assisted mode")
+    expect(frame).toContain("Start agent anyway")
+    renderSetup.mockInput.pressEnter()
+    await waitFor(() => moveNextCalls === 1)
   })
-
-  type DecisionSelectProps = {
-    title: string
-    options: { title: string; value: string; description?: string }[]
-    onSelect: (option: { value: string }) => void
-  }
-  type AnswerPromptProps = {
-    title: string
-    placeholder: string
-    onConfirm: (answer: string) => Promise<void>
-    onCancel: () => void
-  }
 
   test("kagan.move_next intake decision chain advances through multiple decisions and enforces a substantive override answer (R5.4)", async () => {
     const session = {
       id: "s1",
+      title: "Retry",
+      slug: "retry",
       kaganStatus: "backlog" as const,
       metadata: {
         kagan: {
           intakeOutcome: "ran",
           worktree: "/wt",
+          taskNumber: 1,
           intake: {
             understanding: "Adds a retry wrapper.",
             decisions: [
@@ -390,8 +425,7 @@ describe("createBoardCommands", () => {
     const notices: unknown[] = []
     let moveNextCalls = 0
     let updateCalls = 0
-    let clearCalls = 0
-    let latest: (() => DecisionSelectProps | AnswerPromptProps) | undefined
+    let currentRender: (() => JSX.Element) | undefined
     const store = mockStore({
       selected: () => "s1",
       sessions: () => [session],
@@ -401,7 +435,8 @@ describe("createBoardCommands", () => {
         moveNextCalls++
       },
     })
-    const api = {
+    const api = mockTuiApi({
+      renderer: { width: 60, height: 30 },
       client: {
         session: {
           get: async () => ({ data: { metadata: session.metadata } }),
@@ -413,50 +448,55 @@ describe("createBoardCommands", () => {
       },
       ui: {
         dialog: {
+          open: true,
+          setSize: () => {},
+          clear: () => {},
           replace: (render: () => unknown) => {
-            latest = render as () => DecisionSelectProps | AnswerPromptProps
-          },
-          clear: () => {
-            clearCalls++
+            currentRender = render as () => JSX.Element
           },
         },
-        DialogSelect: (props: unknown) => props,
-        DialogPrompt: (props: unknown) => props,
       },
-    } as unknown as TuiPluginApi
+    })
+
+    const remount = async () => {
+      if (!currentRender) throw new Error("expected dialog render")
+      if (renderSetup) {
+        await renderSetup.renderer.destroy()
+        renderSetup = undefined
+      }
+      renderSetup = await testRender(currentRender, { width: 60, height: 30, kittyKeyboard: true })
+      attachRendererMockInput(api, renderSetup)
+      await renderSetup.flush()
+      await Bun.sleep(40)
+      intakeTreeSitter?.resolveAllHighlightOnce()
+      await renderSetup.flush()
+    }
 
     await createBoardCommands(api, store, () => {})
       .find((command) => command.name === "kagan.move_next")
       ?.run()
+    await remount()
+    expect(renderSetup!.captureCharFrame()).toContain("Intake decision (1/2)")
+    expect(renderSetup!.captureCharFrame()).toContain("Max retries?")
+    renderSetup!.mockInput.pressEnter()
+    await waitFor(() => updateCalls === 1)
+    await remount()
+    expect(renderSetup!.captureCharFrame()).toContain("Intake decision (1/1)")
+    expect(renderSetup!.captureCharFrame()).toContain("Backoff strategy?")
+    renderSetup!.mockInput.pressKey("j")
+    await renderSetup!.flush()
+    renderSetup!.mockInput.pressEnter()
+    await remount()
+    expect(renderSetup!.captureCharFrame()).toContain("Your answer")
+    expect(renderSetup!.captureCharFrame()).toContain("Backoff strategy?")
 
-    let selectProps = latest!() as DecisionSelectProps
-    expect(selectProps.title).toBe("Intake decision (1/2)")
-    selectProps.onSelect({ value: "approved" })
-    await waitFor(() => (latest!() as DecisionSelectProps).title === "Intake decision (1/1)")
-
-    selectProps = latest!() as DecisionSelectProps
-    expect(selectProps.options.map((option) => option.value)).toEqual(["approved", "overridden"])
-    selectProps.onSelect({ value: "overridden" })
-    let promptProps = latest!() as AnswerPromptProps
-    expect(promptProps.title).toBe("Your answer")
-
-    const clearsBeforeOverride = clearCalls
     const updatesBeforeOverride = updateCalls
-    await promptProps.onConfirm("ok")
-    expect(notices).toContainEqual({
-      variant: "warning",
-      title: "Kagan",
-      message: "Add a substantive answer to override this assumption",
-    })
-    expect(clearCalls).toBe(clearsBeforeOverride)
-    expect(updateCalls).toBe(updatesBeforeOverride)
-    promptProps = latest!() as AnswerPromptProps
-    expect(promptProps.title).toBe("Your answer")
-
-    await promptProps.onConfirm("Use exponential backoff to avoid overwhelming the dependency during retries.")
-    expect(clearCalls).toBe(clearsBeforeOverride + 1)
-    expect(updateCalls).toBe(updatesBeforeOverride + 1)
+    await renderSetup!.mockInput.typeText(
+      "Use exponential backoff to avoid overwhelming the dependency during retries.",
+    )
+    renderSetup!.mockInput.pressEnter()
     await waitFor(() => moveNextCalls === 1)
+    expect(updateCalls).toBe(updatesBeforeOverride + 1)
     const kagan = (session.metadata as { kagan: { intake: { decisions: Record<string, unknown>[] } } }).kagan
     expect(kagan.intake.decisions[1]).toMatchObject({
       resolution: "overridden",
@@ -467,6 +507,8 @@ describe("createBoardCommands", () => {
   test("kagan.move_next intake override leaves the prompt open and does not resolve on a placeholder answer", async () => {
     const session = {
       id: "s1",
+      title: "Retry",
+      slug: "retry",
       kaganStatus: "backlog" as const,
       metadata: {
         kagan: {
@@ -481,15 +523,15 @@ describe("createBoardCommands", () => {
     }
     const notices: unknown[] = []
     let updateCalls = 0
-    let clearCalls = 0
-    let latest: (() => DecisionSelectProps | AnswerPromptProps) | undefined
+    let currentRender: (() => JSX.Element) | undefined
     const store = mockStore({
       selected: () => "s1",
       sessions: () => [session],
       notify: (options: unknown) => notices.push(options),
       refresh: async () => {},
     })
-    const api = {
+    const api = mockTuiApi({
+      renderer: { width: 60, height: 30 },
       client: {
         session: {
           get: async () => ({ data: { metadata: session.metadata } }),
@@ -501,32 +543,42 @@ describe("createBoardCommands", () => {
       },
       ui: {
         dialog: {
+          open: true,
+          setSize: () => {},
+          clear: () => {},
           replace: (render: () => unknown) => {
-            latest = render as () => DecisionSelectProps | AnswerPromptProps
-          },
-          clear: () => {
-            clearCalls++
+            currentRender = render as () => JSX.Element
           },
         },
-        DialogSelect: (props: unknown) => props,
-        DialogPrompt: (props: unknown) => props,
       },
-    } as unknown as TuiPluginApi
+    })
 
     await createBoardCommands(api, store, () => {})
       .find((command) => command.name === "kagan.move_next")
       ?.run()
-    ;(latest!() as DecisionSelectProps).onSelect({ value: "overridden" })
-    const promptRender = latest
-    const promptProps = latest!() as AnswerPromptProps
+    renderSetup = await testRender(currentRender!, { width: 60, height: 30, kittyKeyboard: true })
+    attachRendererMockInput(api, renderSetup)
+    await renderSetup.flush()
+    renderSetup.mockInput.pressKey("j")
+    await renderSetup.flush()
+    renderSetup.mockInput.pressEnter()
+    if (renderSetup) {
+      await renderSetup.renderer.destroy()
+      renderSetup = undefined
+    }
+    renderSetup = await testRender(currentRender!, { width: 60, height: 30, kittyKeyboard: true })
+    attachRendererMockInput(api, renderSetup)
+    await renderSetup.flush()
+    expect(renderSetup.captureCharFrame()).toContain("Your answer")
 
-    await promptProps.onConfirm("ok")
+    await renderSetup.mockInput.typeText("ok")
+    renderSetup.mockInput.pressEnter()
+    await renderSetup.flush()
     expect(notices).toEqual([
       { variant: "warning", title: "Kagan", message: "Add a substantive answer to override this assumption" },
     ])
-    expect(clearCalls).toBe(0)
     expect(updateCalls).toBe(0)
-    expect(latest).toBe(promptRender)
+    expect(renderSetup.captureCharFrame()).toContain("Your answer")
   })
 
   test("kagan.approve opens the findings review popup when the review is clean and approvable", async () => {
@@ -1031,11 +1083,11 @@ describe("createBoardCommands", () => {
       .find((command) => command.name === "kagan.menu")
       ?.run()
     expect(dialogRendered!().options.map((option) => option.value)).toEqual([
+      "approve",
+      "send_back",
       "view",
       "open",
       "advance",
-      "send_back",
-      "approve",
       "retry",
       "delete",
     ])
@@ -1090,8 +1142,13 @@ describe("createBoardCommands", () => {
     const renders: Array<() => JSX.Element> = []
     const api = {
       theme: { current: mockTheme },
+      renderer: { width: 100, height: 30, on: () => {}, off: () => {} },
       ui: {
-        dialog: { replace: (render: () => JSX.Element) => renders.push(render), clear: () => {} },
+        dialog: {
+          replace: (render: () => JSX.Element) => renders.push(render),
+          clear: () => {},
+          setSize: () => {},
+        },
         DialogSelect: (props: unknown) => props,
       },
     } as unknown as TuiPluginApi
@@ -1106,7 +1163,9 @@ describe("createBoardCommands", () => {
     await waitFor(() => renders.length === 2)
     renderSetup = await testRender(renders[1]!, { width: 100, height: 30 })
     await renderSetup.flush()
-    expect(renderSetup.captureCharFrame()).toContain("#4 Add retry")
+    const frame = renderSetup.captureCharFrame()
+    expect(frame).toContain("#4 Add retry")
+    expect(frame).toContain("↑↓ scroll")
   })
 
   test("kagan.menu 'Archive' archives a done task and refreshes the board", async () => {

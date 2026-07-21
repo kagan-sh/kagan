@@ -1,4 +1,5 @@
 import { canRestartHelper } from "../../../domain/task/policy"
+import { kagan } from "../../../domain/task/metadata"
 import type { BoardSession } from "../../types"
 
 type FooterHint = { key: string; label: string }
@@ -10,7 +11,7 @@ export function footerHints(
   updateAvailable = false,
 ): FooterHint[] {
   const hints: FooterHint[] = [
-    { key: "j/k/h/l", label: "navigate" },
+    { key: "j/k/tab", label: "navigate" },
     { key: "enter", label: "menu" },
     { key: "n", label: "new" },
   ]
@@ -35,22 +36,30 @@ export function footerHints(
   return hints
 }
 
-export type MenuAction = "view" | "open" | "advance" | "send_back" | "approve" | "retry" | "archive" | "delete"
+export type MenuAction =
+  | "view"
+  | "intake"
+  | "open"
+  | "advance"
+  | "send_back"
+  | "approve"
+  | "retry"
+  | "archive"
+  | "delete"
 
 type MenuOption = { title: string; value: MenuAction }
 
-// Mirrors the direct shortcuts (o/m/s/a/r/d) in each title so the menu teaches the fast path;
-// options with no dedicated key (view/archive) stay plain.
+// Review leads with approve/send-back; other options mirror o/m/r/d shortcuts where they exist.
 export function menuOptions(session: BoardSession): MenuOption[] {
   const status = session.kaganStatus
-  const options: MenuOption[] = [
-    { title: "View details", value: "view" },
-    { title: "Open session — o", value: "open" },
-  ]
-  if (status !== "done") options.push({ title: "Advance — m", value: "advance" })
+  const options: MenuOption[] = []
   if (status === "review") {
-    options.push({ title: "Send back — s", value: "send_back" }, { title: "Approve — a", value: "approve" })
+    options.push({ title: "Approve — a", value: "approve" }, { title: "Send back — s", value: "send_back" })
   }
+  options.push({ title: "View details", value: "view" })
+  if (kagan(session.metadata).intake) options.push({ title: "View intake notes", value: "intake" })
+  options.push({ title: "Open session — o", value: "open" })
+  if (status !== "done") options.push({ title: "Advance — m", value: "advance" })
   const restartable = canRestartHelper(status, session.metadata)
   if (restartable) {
     options.push({

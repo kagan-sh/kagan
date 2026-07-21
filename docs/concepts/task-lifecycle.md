@@ -14,7 +14,7 @@ denied with the reason, on the board and server-side.
 
 Creating a task spawns a read-only **task prep** child session. It reads the codebase at your
 chosen base branch and returns three things: an understanding of the task, clarifying decisions
-(each an assumption you must approve or override with an answer), and a refined final instruction
+(each an assumption you must accept or override with an answer), and a refined final instruction
 for the implementing agent. It also returns an advisory mode recommendation (`autonomous`,
 `assisted`, or `manual`) with a one-line rationale. The recommendation is informational only and
 never gates a move or approval.
@@ -59,14 +59,17 @@ rejected before they are saved.
   the same worktree, prompted with the previous iteration's report, the files already changed, the
   findings to address, and the intended-behavior findings to leave alone. Review state resets; the
   card returns to In Progress.
-- **Approve** (`a`) is unlocked once the reviewer has run and every finding is triaged. It opens
-  the merge dialog: merge the task branch into the checked-out branch, into another branch, or
-  take no action (right for investigative tasks). If the base branch has advanced since the task
-  was created, the dialog warns that the reviewed diff may be stale. A failed merge aborts the
-  approval — nothing moves to Done on an error. Once a task reaches Done it stays there — moving it
-  back out is denied; create a follow-up task instead. Done tasks can be archived from the card
-  action menu; archiving removes them from the board but the session remains reachable through
-  OpenCode's own session list.
+- **Approve** (`a`, or Enter → Approve on a Review card) opens the triage dialog first. Approve &
+  merge unlocks once every finding is ruled; until then the dialog states how many remain. After
+  unlock it opens the merge dialog: merge into the checked-out branch, into another branch, or take
+  no action (right for investigative tasks). If the base branch has advanced since the task was
+  created, the dialog warns that the reviewed diff may be stale. A failed merge aborts the approval
+  — nothing moves to Done on an error. Once a task reaches Done it stays there — moving it back out
+  is denied; create a follow-up task instead. Done tasks can be archived from the card action menu;
+  archiving removes them from the board but the session remains reachable through OpenCode's own
+  session list. Intake understanding and resolved decisions are also reachable from the card menu
+  as **View intake notes**. Both details views keep the header pinned and scroll long bodies with
+  `↑`/`↓`.
 
 If an intake or review helper fails, the card shows `intake failed` or `review failed`. Kagan
 retries automatically up to `helperRetries` times; after that, press `r` on the card to retry

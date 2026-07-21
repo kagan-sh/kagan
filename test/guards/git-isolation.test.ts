@@ -6,7 +6,7 @@ import { bunGitRunner } from "../../src/git/runner"
 
 describe("git isolation", () => {
   test("production bunGitRunner ignores the user's real global git identity", async () => {
-    const run = bunGitRunner()
+    const run = bunGitRunner
     const repoDir = await mkdtemp(join(tmpdir(), "kagan-isolation-guard-"))
     try {
       expect((await run(["init", "-q", "-b", "main"], repoDir)).code).toBe(0)
@@ -26,7 +26,7 @@ describe("git isolation", () => {
     await mkdir(gitConfigDir, { recursive: true })
     await writeFile(join(gitConfigDir, "ignore"), "*.secret\n")
 
-    const run = bunGitRunner()
+    const run = bunGitRunner
     const repoDir = await mkdtemp(join(tmpdir(), "kagan-isolation-xdg-"))
     try {
       await run(["init", "-q", "-b", "main"], repoDir)

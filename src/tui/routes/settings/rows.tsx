@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
-import { openCommandListEditor, openValidatorModelListEditor } from "./list-editor"
+import { openCommandListEditor } from "./list-editor/commands"
+import { openValidatorModelListEditor } from "./list-editor/models"
 import type { Draft, Section } from "./draft"
 import { pluginOptionsJson } from "./draft"
 

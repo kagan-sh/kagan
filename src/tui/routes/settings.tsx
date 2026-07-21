@@ -3,8 +3,8 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { TextAttributes } from "@opentui/core"
 import { For, Show, createMemo, createSignal } from "solid-js"
 import { draftFromOptions, pluginOptionsJson, SECTIONS } from "./settings/draft"
-import { useSettingsKeys } from "./settings/keys"
 import { rowsFor } from "./settings/rows"
+import { useSettingsKeys } from "./settings/keys"
 
 export function Settings(props: { api: TuiPluginApi; options?: Record<string, unknown> }) {
   const theme = () => props.api.theme.current

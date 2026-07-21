@@ -2,30 +2,34 @@
 import { kagan } from "../../../domain/task/metadata"
 import { sendBack } from "../../tasks"
 import type { BoardSession } from "../../types"
-import type { BoardActions } from "./context"
+import { selectSessionOrNotify, type BoardCommandContext } from "./types"
 
 type SendBackChoice = "send_back" | "take_over" | "leave"
 
-const doSendBack = async (ctx: BoardActions, session: BoardSession) => {
+const doSendBack = async (ctx: BoardCommandContext, session: BoardSession) => {
   try {
     await sendBack(ctx.api, session)
     await ctx.store.refresh()
     ctx.store.notify({ variant: "success", title: "Kagan", message: "Sent back for another iteration" })
   } catch (error) {
-    ctx.notifyErrorFrom(error)
+    ctx.store.notify({
+      variant: "error",
+      title: "Kagan",
+      message: error instanceof Error ? error.message : String(error),
+    })
   }
 }
 
-export const sendBackTask = async (ctx: BoardActions) => {
+export const sendBackTask = async (ctx: BoardCommandContext) => {
   const session = ctx.store.selectedSession()
   if (!session) return
   if (session.kaganStatus !== "review") {
-    ctx.notifyWarning("Send back only applies to tasks in review")
+    ctx.store.notify({ variant: "warning", title: "Kagan", message: "Send back only applies to tasks in review" })
     return
   }
   const reason = ctx.store.moveDenyReason("in_progress", session)
   if (reason) {
-    ctx.notifyWarning(reason)
+    ctx.store.notify({ variant: "warning", title: "Kagan", message: reason })
     return
   }
   const generation = kagan(session.metadata).generation
@@ -46,9 +50,7 @@ export const sendBackTask = async (ctx: BoardActions) => {
         if (option.value === "send_back") {
           void doSendBack(ctx, session)
         } else if (option.value === "take_over") {
-          void ctx.api.client.tui
-            .selectSession({ sessionID: session.id }, { throwOnError: true })
-            .catch(ctx.notifyErrorFrom)
+          void selectSessionOrNotify(ctx, session.id)
         }
       }}
     />

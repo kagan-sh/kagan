@@ -6,7 +6,7 @@ import type { ParentProps } from "solid-js"
 export function DialogFrame(props: ParentProps<{ api: TuiPluginApi; title: string; closeLabel?: string }>) {
   const theme = () => props.api.theme.current
   return (
-    <box paddingLeft={2} paddingRight={2} gap={1}>
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme().text} attributes={TextAttributes.BOLD}>
           {props.title}

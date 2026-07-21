@@ -83,7 +83,7 @@ export function ScopePicker(props: {
           <text fg={theme().textMuted}>custom: {props.state.scope.custom}</text>
         </Show>
       </box>
-      <box paddingBottom={1} flexDirection="row" gap={2}>
+      <box flexDirection="row" gap={2}>
         <text fg={theme().text}>
           space <span style={{ fg: theme().textMuted }}>toggle/custom</span>
         </text>
