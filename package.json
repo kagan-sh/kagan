@@ -59,7 +59,7 @@
   "dependencies": {
     "@opencode-ai/plugin": "1.17.20",
     "semver": "7.8.5",
-    "zod": "4.1.8"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@babel/core": "7.28.0",
