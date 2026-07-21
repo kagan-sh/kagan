@@ -21,13 +21,36 @@ function defaultConfigFor(file: string): Record<string, unknown> {
     : { $schema: "https://opencode.ai/config.json" }
 }
 
+// string-aware so a `, }` inside a quoted value is never touched
+function stripTrailingCommas(text: string): string {
+  let out = ""
+  let inString = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charAt(i)
+    if (inString) {
+      out += ch
+      if (ch === "\\") out += text[++i] ?? ""
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === ",") {
+      let j = i + 1
+      while (j < text.length && /\s/.test(text.charAt(j))) j++
+      if (text[j] === "}" || text[j] === "]") continue
+    }
+    out += ch
+  }
+  return out
+}
+
 function parseConfigJson(text: string, file: string): Record<string, unknown> {
   try {
     return JSON.parse(text) as Record<string, unknown>
   } catch {
     // hand-edited OpenCode configs often keep a trailing comma
     try {
-      return JSON.parse(text.replace(/,\s*([}\]])/g, "$1")) as Record<string, unknown>
+      return JSON.parse(stripTrailingCommas(text)) as Record<string, unknown>
     } catch (error) {
       throw new Error(`Failed to parse ${file}: ${error instanceof Error ? error.message : String(error)}`)
     }
