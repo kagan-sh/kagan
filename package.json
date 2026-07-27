@@ -77,7 +77,7 @@
     "jscpd": "5.0.12",
     "knip": "6.25.0",
     "oxfmt": "0.58.0",
-    "oxlint": "1.60.0",
+    "oxlint": "1.74.0",
     "semantic-release": "25.0.5",
     "skott": "0.35.11",
     "solid-js": "1.9.14",
