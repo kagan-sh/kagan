@@ -80,7 +80,7 @@
     "oxlint": "1.60.0",
     "semantic-release": "25.0.5",
     "skott": "0.35.11",
-    "solid-js": "1.9.10",
+    "solid-js": "1.9.14",
     "typescript": "5.8.2",
     "vitepress": "1.6.4"
   },
