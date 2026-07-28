@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.0",
-    "@babel/preset-typescript": "7.27.1",
+    "@babel/preset-typescript": "8.0.1",
     "@makerx/verify": "1.2.0",
     "@opencode-ai/sdk": "1.17.20",
     "@opentui/core": "0.4.3",
