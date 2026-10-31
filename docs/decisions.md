@@ -131,9 +131,9 @@ Exception, by design: `abandon_worktree` does force, only when `git worktree add
 
 ## Platforms and release
 
-**30. Linux, macOS and Windows run on every pull request.** `.github/workflows/ci.yml` runs the checks on Linux, and clippy and the tests on macOS and Windows, for every pull request and every push to `main`. A diff of only docs, the book and markdown skips the Rust jobs. Mutation testing runs only on a manual dispatch. `.circleci/config.yml` stays while the repository is private, because GitHub Actions is blocked there; it goes when the repository is public.
+**30. Linux, macOS and Windows run on every pull request.** `.github/workflows/ci.yml` runs the checks on Linux, and clippy and the tests on macOS and Windows, for every pull request and every push to `main`. A diff of only docs, the book and markdown skips the Rust jobs. Mutation testing runs only on a manual dispatch. The repository is public, so this is the only CI; CircleCI is gone.
 Why: GitHub Actions is free for public repositories, and code behind `cfg(windows)` or `cfg(target_os = "macos")` needs a run on that system before it merges.
-Rules out: a label or a `full` parameter for macOS and Windows, and CircleCI once the repository is public.
+Rules out: a label or a `full` parameter for macOS and Windows, and a second CI service.
 
 **31. The in-app browser is removed.** It was unused. The window never showed a browser view (32, 47), every driving command failed before it could reach a page, and no plugin called the host function that opened one. `kg browser` is not a command. `openUrl` still opens the system browser.
 Why: a command that cannot show a page is surface with no user.
