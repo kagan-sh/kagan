@@ -1,0 +1,79 @@
+use std::ffi::OsStr;
+use std::path::Path;
+
+use kg_domain::{IndexEntry, OpError, OpResult};
+
+use crate::source::git;
+use crate::{Result, discover};
+
+/// Checks a plugin that is committed and pushed, and returns its index entry and the line a
+/// teammate runs. The entry pins the commit that was checked.
+pub(crate) fn share(path: &Path, data_dir: &Path) -> Result<OpResult> {
+    crate::development::check(path, data_dir)?;
+    let manifest = discover(path, data_dir)?.manifest;
+    let (_keep, never) = async_channel::bounded::<()>(1);
+    let run = |args: &[&str]| git(Some(path), args.iter().map(OsStr::new), &never);
+    let top = run(&["rev-parse", "--show-toplevel"]).map_err(|error| match error {
+        OpError::Failed(message) if message.contains("not a git repository") => {
+            OpError::Invalid(format!("{} is not in a git repository", path.display()))
+        }
+        other => other,
+    })?;
+    if !run(&["status", "--porcelain", "--", "."])?.is_empty() {
+        return Err(OpError::Invalid(format!(
+            "commit the changes in {} first; a teammate gets the commit, not your files",
+            path.display()
+        )));
+    }
+    let commit = run(&["rev-parse", "HEAD"])?;
+    let branches = run(&[
+        "branch",
+        "-r",
+        "--contains",
+        "HEAD",
+        "--format=%(refname:short)",
+    ])?;
+    let remote = branches
+        .lines()
+        .filter_map(|branch| branch.split_once('/').map(|(remote, _)| remote))
+        .min_by_key(|remote| *remote != "origin")
+        .ok_or_else(|| {
+            OpError::Invalid(format!(
+                "push commit {commit} first; no remote branch holds it"
+            ))
+        })?;
+    let url = crate::index::public(&run(&["remote", "get-url", remote])?);
+    let folder = dunce::canonicalize(path)?;
+    let plugin = folder
+        .strip_prefix(dunce::canonicalize(top)?)
+        .ok()
+        .filter(|relative| !relative.as_os_str().is_empty())
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"));
+    let source = format!("git:{url}@{commit}");
+    let name = manifest
+        .id
+        .0
+        .rsplit('.')
+        .next()
+        .unwrap_or(&manifest.id.0)
+        .to_owned();
+    let description = manifest
+        .instructions
+        .as_deref()
+        .and_then(|text| text.lines().next())
+        .unwrap_or(&manifest.name)
+        .chars()
+        .take(300)
+        .collect();
+    let install = match &plugin {
+        Some(plugin) => format!("kg plugin install {source} --plugin {plugin}"),
+        None => format!("kg plugin install {source}"),
+    };
+    let entry = IndexEntry {
+        name,
+        description,
+        source,
+        plugin,
+    };
+    Ok(OpResult::Shared { entry, install })
+}

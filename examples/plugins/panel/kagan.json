@@ -1,0 +1,15 @@
+{
+  "id": "dev.kagan.panel",
+  "name": "Panel",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Adds a hello tool under the threads.",
+  "powers": {},
+  "ui": {
+    "panels": [
+      { "id": "hello", "title": "Hello", "view": "Panel", "placement": "left" }
+    ]
+  }
+}

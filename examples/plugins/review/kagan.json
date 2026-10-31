@@ -1,0 +1,15 @@
+{
+  "id": "dev.kagan.plain-diff",
+  "name": "Plain diff",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Offers a replaceable review: the file under review as a plain unified diff.",
+  "powers": { "areas": ["threads"] },
+  "ui": {
+    "panels": [
+      { "id": "diff", "title": "Plain diff", "view": "Diff", "placement": "center", "replaces": "review" }
+    ]
+  }
+}

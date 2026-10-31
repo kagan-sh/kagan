@@ -1,0 +1,16 @@
+{
+  "id": "dev.kagan.overlay",
+  "name": "Overlay",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Floats a bubble over the terminal. Turn it off with the Show bubble setting.",
+  "powers": {},
+  "settings": {
+    "shown": { "type": "boolean", "title": "Show bubble", "default": true }
+  },
+  "ui": {
+    "overlay": "Bubble"
+  }
+}

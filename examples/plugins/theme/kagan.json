@@ -1,0 +1,11 @@
+{
+  "id": "dev.kagan.theme",
+  "name": "Midnight",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Adds the Midnight theme to Settings → Appearance.",
+  "powers": {},
+  "themes": [{ "id": "midnight", "file": "themes/midnight.json" }]
+}

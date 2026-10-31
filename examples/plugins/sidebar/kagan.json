@@ -1,0 +1,15 @@
+{
+  "id": "dev.kagan.plain-list",
+  "name": "Plain list",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Offers a replaceable sidebar: a plain list of threads by project.",
+  "powers": { "areas": ["threads"] },
+  "ui": {
+    "panels": [
+      { "id": "list", "title": "Plain list", "view": "List", "placement": "left", "replaces": "threads" }
+    ]
+  }
+}

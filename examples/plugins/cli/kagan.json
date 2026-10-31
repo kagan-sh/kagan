@@ -1,0 +1,11 @@
+{
+  "id": "dev.kagan.cli",
+  "name": "CLI",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Adds a hello command you can run from the terminal.",
+  "powers": {},
+  "cli": [{ "name": "hello", "commands": [{ "name": "hi" }] }]
+}
