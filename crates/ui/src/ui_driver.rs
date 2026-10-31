@@ -1,0 +1,491 @@
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+use gpui_kit::{AnyWindowHandle, App, AppContext as _, ElementId, ScrollDelta, point, px};
+use kg_core::{UiJob, Workspace};
+use kg_domain::{OpError, OpResult, SurfaceOp, UI_PERSON_ONLY, UI_UNAVAILABLE};
+
+pub(crate) fn install(cx: &mut App) {
+    Workspace::global(cx).update(cx, |workspace, _| {
+        workspace.set_ui_driver(Rc::new(|job, cx| match job {
+            UiJob::NewTheme { id, from } => crate::theme::new_theme(&id, from.as_deref(), cx),
+            job => cx.spawn(async |cx| match job {
+                UiJob::Screenshot { window, path } => capture_after_present(window, path, cx).await,
+                job => drive(job, cx),
+            }),
+        }));
+    });
+}
+
+fn drive(job: UiJob, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
+    if let UiJob::Surface(op) = job {
+        return drive_surface(op, cx);
+    }
+    let _armed = crate::synthetic::arm();
+    let index = window_index(&job);
+    let handle = cx
+        .update(|cx| window_at(cx, index))
+        .ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
+    let result = cx
+        .update_window(handle, |_, window, cx| {
+            crate::synthetic::with_active(|| run_job(job, window, cx))
+        })
+        .map_err(|_| OpError::Failed("window closed".into()))?;
+    if crate::synthetic::take_person_blocked() {
+        return Err(OpError::Invalid(UI_PERSON_ONLY.into()));
+    }
+    result
+}
+
+fn drive_surface(op: SurfaceOp, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
+    cx.update(|cx| {
+        let Some((handle, kagan)) = crate::kagan::front(cx) else {
+            return Err(OpError::Failed(UI_UNAVAILABLE.into()));
+        };
+        match cx.update_window(handle, |_, window, cx| {
+            let step = kagan.update(cx, |kagan, cx| kagan.commit(op, None, window, cx))?;
+            match step {
+                crate::kagan::SurfaceCommit::Ready(result) => Ok(*result),
+                crate::kagan::SurfaceCommit::Paint => {
+                    crate::kagan::paint_then_settle(&kagan, window, cx)
+                }
+            }
+        }) {
+            Ok(inner) => inner,
+            Err(_) => Err(OpError::Failed("window closed".into())),
+        }
+    })
+}
+
+fn publish(
+    claimed: &AtomicBool,
+    sender: &async_channel::Sender<Result<OpResult, OpError>>,
+    window: &gpui_kit::Window,
+    path: &Path,
+) {
+    if claimed.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let result = captured(window, path, true);
+    let _ = sender.try_send(result);
+}
+
+/// Draws a fresh frame, then captures it.
+///
+/// A covered, minimized, or sleeping window stops its display link, so
+/// `on_next_frame` never runs. Capture the last presented buffer instead of
+/// waiting for a frame that will not come. If a visible window still does not
+/// present, capture that buffer rather than failing the screenshot.
+async fn capture_after_present(
+    index: u32,
+    path: PathBuf,
+    cx: &mut gpui_kit::AsyncApp,
+) -> Result<OpResult, OpError> {
+    let handle = cx
+        .update(|cx| window_at(cx, index))
+        .ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
+    let visible = cx
+        .update_window(handle, |_, window, cx| {
+            window.refresh();
+            crate::ui_dispatch::render_frame(window, cx);
+            window.is_visible()
+        })
+        .map_err(|_| OpError::Failed("window closed".into()))?;
+    if !visible {
+        return cx
+            .update_window(handle, |_, window, _| captured(window, &path, false))
+            .map_err(|_| OpError::Failed("window closed".into()))?;
+    }
+    let (sender, receiver) = async_channel::bounded(1);
+    let claimed = Arc::new(AtomicBool::new(false));
+    cx.update_window(handle, {
+        let sender = sender.clone();
+        let claimed = Arc::clone(&claimed);
+        let path = path.clone();
+        move |_, window, _| {
+            window.refresh();
+            window.on_next_frame(move |window, _| {
+                window.refresh();
+                let sender = sender.clone();
+                let claimed = Arc::clone(&claimed);
+                window.on_next_frame(move |window, _| {
+                    publish(&claimed, &sender, window, &path);
+                });
+            });
+        }
+    })
+    .map_err(|_| OpError::Failed("window closed".into()))?;
+    cx.spawn({
+        let sender = sender.clone();
+        let claimed = Arc::clone(&claimed);
+        async move |cx| {
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            if claimed.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            let result = cx
+                .update_window(handle, |_, window, _| captured(window, &path, false))
+                .unwrap_or_else(|_| Err(OpError::Failed("window closed".into())));
+            let _ = sender.try_send(result);
+        }
+    })
+    .detach();
+    receiver
+        .recv()
+        .await
+        .map_err(|_| OpError::Failed("screenshot cancelled".into()))?
+}
+
+fn captured(window: &gpui_kit::Window, path: &Path, current: bool) -> Result<OpResult, OpError> {
+    capture_window(window, path).map(|()| OpResult::Capture {
+        path: path.display().to_string(),
+        current,
+    })
+}
+
+fn window_index(job: &UiJob) -> u32 {
+    match job {
+        UiJob::Snapshot { window }
+        | UiJob::Click { window, .. }
+        | UiJob::Type { window, .. }
+        | UiJob::Key { window, .. }
+        | UiJob::Scroll { window, .. }
+        | UiJob::Screenshot { window, .. } => *window,
+        UiJob::Surface(_) | UiJob::NewTheme { .. } => 0,
+    }
+}
+
+fn window_at(cx: &App, index: u32) -> Option<AnyWindowHandle> {
+    let mut handles = cx.windows();
+    handles.sort_by_key(AnyWindowHandle::window_id);
+    handles.get(index as usize).copied()
+}
+
+fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpResult, OpError> {
+    crate::ui_dispatch::render_frame(window, cx);
+    match job {
+        UiJob::Snapshot { window: index } => {
+            Ok(OpResult::Ui(crate::ui_dispatch::snapshot(window, index)))
+        }
+        UiJob::Click {
+            element_id, within, ..
+        } => {
+            let element_id = ElementId::from(element_id);
+            let within = within.map(ElementId::from);
+            crate::ui_dispatch::click_within(window, &element_id, within.as_ref(), cx)?;
+            flush(window, cx);
+            Ok(OpResult::Done)
+        }
+        UiJob::Type { text, .. } => {
+            crate::ui_dispatch::input(window, &text, cx)?;
+            Ok(OpResult::Done)
+        }
+        UiJob::Key { keystroke, .. } => {
+            crate::ui_dispatch::press(window, &keystroke, cx)?;
+            flush(window, cx);
+            Ok(OpResult::Done)
+        }
+        UiJob::Scroll {
+            element_id,
+            within,
+            dy,
+            ..
+        } => {
+            let delta = ScrollDelta::Pixels(point(px(0.), px(dy)));
+            let element_id = ElementId::from(element_id);
+            let within = within.map(ElementId::from);
+            crate::ui_dispatch::scroll_within(window, &element_id, within.as_ref(), delta, cx)?;
+            Ok(OpResult::Done)
+        }
+        UiJob::Surface(_) | UiJob::Screenshot { .. } | UiJob::NewTheme { .. } => {
+            Err(OpError::Failed(UI_UNAVAILABLE.into()))
+        }
+    }
+}
+
+fn flush(window: &mut gpui_kit::Window, cx: &mut App) {
+    for _ in 0..8 {
+        crate::ui_dispatch::render_frame(window, cx);
+    }
+}
+
+fn capture_window(window: &gpui_kit::Window, path: &Path) -> Result<(), OpError> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::capture(window, path)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows::capture(window, path)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (window, path);
+        Err(OpError::Failed(kg_domain::UI_SCREENSHOT_UNAVAILABLE.into()))
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod macos {
+    use std::ffi::OsStr;
+    use std::path::Path;
+    use std::process::{Command, ExitStatus, Output};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use gpui_kit::Window;
+    use kg_domain::OpError;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    pub(super) fn capture(window: &Window, path: &Path) -> Result<(), OpError> {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::NSView;
+
+        let _marker = MainThreadMarker::new()
+            .ok_or_else(|| OpError::Failed("screenshot must run on the main thread".into()))?;
+        let handle = HasWindowHandle::window_handle(window)
+            .map_err(|error| OpError::Failed(error.to_string()))?;
+        let number = match handle.as_raw() {
+            RawWindowHandle::AppKit(appkit) => {
+                // SAFETY: GPUI's AppKit handle points at the content NSView for this window.
+                let view: &NSView = unsafe { &*appkit.ns_view.as_ptr().cast() };
+                view.window()
+                    .ok_or_else(|| OpError::Failed("window has no NSWindow".into()))?
+                    .windowNumber()
+            }
+            _ => return Err(OpError::Failed("not an AppKit window".into())),
+        };
+        run(OsStr::new("screencapture"), number, path)
+    }
+
+    /// Captures window `number` with `program` into a new file beside `path`, then moves it over
+    /// `path`. A destination that already holds an image is only replaced by a capture that wrote
+    /// one in this run.
+    fn run(program: &OsStr, number: isize, path: &Path) -> Result<(), OpError> {
+        let folder = match path.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent,
+            _ => Path::new("."),
+        };
+        std::fs::create_dir_all(folder).map_err(|error| OpError::Failed(error.to_string()))?;
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let staged = folder.join(format!("kg-capture-{}-{nanos}.png", std::process::id()));
+        let output = Command::new(program)
+            .args(["-x", "-o", "-l", &number.to_string()])
+            .arg(&staged)
+            .output()
+            .map_err(|error| OpError::Failed(error.to_string()));
+        let finished = output.and_then(|output| finish(&output, &staged, path));
+        if finished.is_err() {
+            let _ = std::fs::remove_file(&staged);
+        }
+        finished
+    }
+
+    fn finish(output: &Output, staged: &Path, path: &Path) -> Result<(), OpError> {
+        if !output.status.success() {
+            return Err(OpError::Failed(failure(&output.stderr, output.status)));
+        }
+        if !staged.is_file() {
+            return Err(OpError::Failed(format!(
+                "screencapture wrote no image to {}",
+                path.display()
+            )));
+        }
+        std::fs::rename(staged, path).map_err(|error| OpError::Failed(error.to_string()))
+    }
+
+    /// The reason `screencapture` gave in its own words, or its exit status when it gave none.
+    fn failure(stderr: &[u8], status: ExitStatus) -> String {
+        let reason = String::from_utf8_lossy(stderr);
+        let reason = reason.trim();
+        if reason.is_empty() {
+            format!("screencapture failed: {status}")
+        } else {
+            format!("screencapture failed: {reason}")
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::{Path, PathBuf};
+        use std::process::Command;
+
+        use kg_domain::OpError;
+
+        use super::{failure, run};
+
+        /// A stand-in for `screencapture`: `body` runs with the capture path as its last argument.
+        fn program(folder: &Path, body: &str) -> PathBuf {
+            let script = folder.join("screencapture");
+            std::fs::write(&script, format!("#!/bin/sh\n{body}\n")).expect("script is written");
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+                .expect("script is executable");
+            script
+        }
+
+        fn staged_left_behind(folder: &Path) -> usize {
+            std::fs::read_dir(folder)
+                .expect("folder reads")
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    entry
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("kg-capture-")
+                })
+                .count()
+        }
+
+        #[test]
+        fn a_capture_that_writes_nothing_leaves_an_existing_image_alone() {
+            let folder = tempfile::tempdir().expect("folder");
+            let destination = folder.path().join("shot.png");
+            std::fs::write(&destination, "OLD").expect("old image");
+            let fake = program(folder.path(), "exit 0");
+
+            assert_eq!(
+                run(fake.as_os_str(), 1, &destination),
+                Err(OpError::Failed(format!(
+                    "screencapture wrote no image to {}",
+                    destination.display()
+                )))
+            );
+            assert_eq!(
+                std::fs::read_to_string(&destination).expect("old image"),
+                "OLD"
+            );
+            assert_eq!(staged_left_behind(folder.path()), 0);
+        }
+
+        #[test]
+        fn a_capture_that_writes_replaces_the_image() {
+            let folder = tempfile::tempdir().expect("folder");
+            let destination = folder.path().join("shot.png");
+            std::fs::write(&destination, "OLD").expect("old image");
+            // `last` is the capture path, which screencapture receives as its final argument.
+            let fake = program(
+                folder.path(),
+                "for last; do :; done\nprintf NEW > \"$last\"",
+            );
+
+            assert_eq!(run(fake.as_os_str(), 1, &destination), Ok(()));
+            assert_eq!(
+                std::fs::read_to_string(&destination).expect("new image"),
+                "NEW"
+            );
+            assert_eq!(staged_left_behind(folder.path()), 0);
+        }
+
+        #[test]
+        fn a_failed_capture_keeps_the_reason_macos_gave() {
+            let output = Command::new("sh")
+                .args([
+                    "-c",
+                    "printf 'could not create image from window\\n' >&2; exit 1",
+                ])
+                .output()
+                .expect("sh runs");
+            assert_eq!(
+                failure(&output.stderr, output.status),
+                "screencapture failed: could not create image from window"
+            );
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::path::Path;
+
+    use gpui_kit::Window;
+    use kg_domain::OpError;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    pub(super) fn capture(window: &Window, path: &Path) -> Result<(), OpError> {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::Graphics::Gdi::{
+            BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleBitmap, CreateCompatibleDC,
+            DeleteDC, DeleteObject, GetDIBits, GetWindowDC, HGDIOBJ, ReleaseDC, SelectObject,
+        };
+        use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, PW_RENDERFULLCONTENT};
+
+        let handle = HasWindowHandle::window_handle(window)
+            .map_err(|error| OpError::Failed(error.to_string()))?;
+        let hwnd = match handle.as_raw() {
+            RawWindowHandle::Win32(win32) => HWND(win32.hwnd.get() as _),
+            _ => return Err(OpError::Failed("not a Win32 window".into())),
+        };
+        let mut rect = windows::Win32::Foundation::RECT::default();
+        unsafe { GetWindowRect(hwnd, &raw mut rect) }
+            .map_err(|error| OpError::Failed(error.to_string()))?;
+        let width = rect.right - rect.left;
+        let height = rect.bottom - rect.top;
+        if width <= 0 || height <= 0 {
+            return Err(OpError::Failed("window has no size".into()));
+        }
+        let hdc = unsafe { GetWindowDC(Some(hwnd)) };
+        if hdc.is_invalid() {
+            return Err(OpError::Failed("GetWindowDC failed".into()));
+        }
+        let mem_dc = unsafe { CreateCompatibleDC(Some(hdc)) };
+        let bitmap = unsafe { CreateCompatibleBitmap(hdc, width, height) };
+        let _ = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) };
+        let printed =
+            unsafe { PrintWindow(hwnd, mem_dc, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)) };
+        let header = BITMAPINFOHEADER {
+            biSize: u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>())
+                .map_err(|_| OpError::Failed("bitmap header is too large".into()))?,
+            biWidth: width,
+            biHeight: -height,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        };
+        let mut info = BITMAPINFO {
+            bmiHeader: header,
+            ..Default::default()
+        };
+        let stride = (width.cast_unsigned() as usize) * 4;
+        let mut pixels = vec![0u8; stride * (height.cast_unsigned() as usize)];
+        let lines = unsafe {
+            GetDIBits(
+                mem_dc,
+                bitmap,
+                0,
+                height.cast_unsigned(),
+                Some(pixels.as_mut_ptr().cast()),
+                &raw mut info,
+                windows::Win32::Graphics::Gdi::DIB_RGB_COLORS,
+            )
+        };
+        let _ = unsafe { DeleteObject(HGDIOBJ(bitmap.0)) };
+        let _ = unsafe { DeleteDC(mem_dc) };
+        let _ = unsafe { ReleaseDC(Some(hwnd), hdc) };
+        printed
+            .ok()
+            .map_err(|error| OpError::Failed(error.to_string()))?;
+        if lines == 0 {
+            return Err(OpError::Failed("GetDIBits failed".into()));
+        }
+        for chunk in pixels.chunks_mut(4) {
+            chunk.swap(0, 2);
+        }
+        let image =
+            image::RgbaImage::from_raw(width.cast_unsigned(), height.cast_unsigned(), pixels)
+                .ok_or_else(|| OpError::Failed("screenshot buffer is invalid".into()))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| OpError::Failed(error.to_string()))?;
+        }
+        image
+            .save(path)
+            .map_err(|error| OpError::Failed(error.to_string()))?;
+        Ok(())
+    }
+}

@@ -1,0 +1,11 @@
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+too-many-lines-threshold = 100
+too-many-arguments-threshold = 7
+cognitive-complexity-threshold = 25
+# AGENTS.md: shared UI state lives in GPUI entities, not Arc<Mutex<T>>.
+# Clippy matches the type, so this is std::sync::Mutex. This file replaces the
+# workspace clippy.toml for kg-ui; the keys above stay in step with it.
+disallowed-types = [
+    { path = "std::sync::Mutex", reason = "Shared UI state lives in GPUI entities (Entity<T>, cx.notify(), events), not Arc<Mutex<T>>" },
+]
