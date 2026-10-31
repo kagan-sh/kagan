@@ -1,0 +1,33 @@
+accepted = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-1-Clause",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "bzip2-1.0.6",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+workarounds = ["ring"]
+
+# gpui-kit's shell crates are publish = false and carry no license file of their own; the repo's LICENSE-APACHE covers them.
+[gpui-shell.clarify]
+license = "Apache-2.0"
+[[gpui-shell.clarify.git]]
+path = "LICENSE-APACHE"
+checksum = "d1b0449e5478c574ba4f686c2656df7fe77d66821a61f8b6ed3378a58ed9a811"
+

@@ -1,0 +1,16 @@
+/target
+/.bin/
+/.metrics/
+*.profraw
+/.plans/
+/book/book/
+examples/plugins/**/gpui-kit.d.ts
+examples/plugins/**/jsconfig.json
+plugins/**/gpui-kit.d.ts
+plugins/**/kagan.d.ts
+plugins/**/jsconfig.json
+/AGENTS.local.md
+/.claude/
+/.playwright-mcp/
+
+.superpowers/

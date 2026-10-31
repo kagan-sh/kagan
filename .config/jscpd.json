@@ -1,0 +1,15 @@
+{
+  "threshold": 0.57,
+  "minTokens": 50,
+  "minLines": 10,
+  "formats": ["rust", "javascript"],
+  "ignore": [
+    "**/target/**",
+    "**/node_modules/**",
+    "**/tests/**",
+    "**/tests.rs",
+    "**/*_test.rs",
+    "**/*.test.js",
+    "**/test/**"
+  ]
+}

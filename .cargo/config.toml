@@ -1,0 +1,14 @@
+# ld64.lld is on PATH here (Homebrew). Ubuntu CI already sets the same flag.
+# macOS CI and release install lld before they build. Dev profiles stay
+# line-tables-only in Cargo.toml; this only changes the linker.
+[target.'cfg(target_os = "macos")']
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# cc stamps C objects with the host SDK when this is unset. rustc links
+# arm64 macOS for 11.0, and ld64.lld warns about the mismatch. CI denies that
+# warning. 11.0 is rustc's arm64 default, so the object and the link agree.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "11.0"
+
+[alias]
+t = "bin cargo-nextest run"

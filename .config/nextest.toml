@@ -1,0 +1,4 @@
+# ClosePseudoConsole on Windows before build 26100 can block forever.
+# Stop a stuck test after two minutes instead of the CI job cap.
+[profile.default]
+slow-timeout = { period = "60s", terminate-after = 2 }

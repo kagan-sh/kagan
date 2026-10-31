@@ -1,0 +1,43 @@
+mod diff;
+mod event;
+mod id;
+mod op;
+mod program;
+mod record;
+mod review;
+#[cfg(test)]
+mod review_test;
+#[cfg(test)]
+mod tests;
+mod theme;
+
+pub use diff::{
+    DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList, DiffNote,
+    DiffSide, DiffStatus, format_notes, parse_notes,
+};
+pub use event::{Attachment, Event, EventKind, NoticeSeverity, Role, ToolStatus, TurnOutcome};
+pub use id::{
+    EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId, Timestamp,
+    plain_identifier,
+};
+pub use op::{
+    Appearance, BranchList, ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, EnvironmentOp,
+    EnvironmentSpec, GuideChapter, IndexOp, KeyPlatform, Keymap, KeymapAction, KeymapOp, Metadata,
+    Op, OpError, OpResult, Order, PluginOp, PreferenceOp, ProgramOp, ProjectOp, Run,
+    SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp, SelectMode, SettingsOp,
+    Shortcut, Skill, SkillOp, SkillSource, Slot, SlotChoice, SurfaceItem, SurfaceOp,
+    SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, ThemeOp, ThemeSettings, ThreadOp,
+    UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
+    UiSnapshot, WindowOp, branch_slug, check, effective_chord, expand_secondary, invalid_json,
+    valid_theme_choice, valid_theme_id,
+};
+pub use program::{
+    KNOWN_PROGRAMS, LISTED_WHEN_MISSING, Program, ProgramList, ProgramSource, split_program,
+};
+pub use record::{
+    AgentTool, Environment, EnvironmentProvider, EnvironmentStatus, Found, IndexEntry,
+    InteractionOption, Listing, PendingInteraction, Plugin, Project, ProjectKind, Section, Sidebar,
+    Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span, order_sidebar_projects,
+};
+pub use review::{ReviewRow, review_rows};
+pub use theme::{Color, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError};

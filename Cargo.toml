@@ -1,0 +1,78 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+publish = false
+repository = "https://github.com/kagan-sh/kagan"
+
+[workspace.dependencies]
+kg-core = { path = "crates/core" }
+kg-domain = { path = "crates/domain" }
+kg-process = { path = "crates/process" }
+kg-plugins = { path = "crates/plugins" }
+kg-store = { path = "crates/store" }
+kg-terminal = { path = "crates/terminal" }
+kg-ui = { path = "crates/ui" }
+
+anyhow = "=1.0.104"
+async-channel = "=2.5.0"
+clap = { version = "=4.6.7", features = ["derive", "env"] }
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "8f2cc96df2377ee9e4384fa72e9e7e339e947761", features = ["tree-sitter-diff"] }
+gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "8f2cc96df2377ee9e4384fa72e9e7e339e947761", default-features = false, features = ["quickjs", "components"] }
+interprocess = "=2.4.4"
+keyring-core = "=1.0.1"
+rusqlite = { version = "=0.40.2", features = ["bundled", "fallible_uint"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+thiserror = "=2.0.21"
+widestring = "=1.2.1"
+raw-window-handle = "=0.6.2"
+windows-sys = { version = "=0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Threading",
+] }
+
+[workspace.lints.rust]
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+cognitive_complexity = "warn"
+dbg_macro = "deny"
+expect_used = "deny"
+pedantic = { level = "warn", priority = -1 }
+print_stdout = "deny"
+todo = "deny"
+too_many_arguments = "warn"
+too_many_lines = "warn"
+unwrap_used = "deny"
+disallowed_types = "deny"
+
+[workspace.metadata.bin]
+cargo-nextest = { version = "=0.9.148", locked = true }
+
+# Line tables keep panic locations. Full debug info dominates link time and the target directory.
+# unpacked skips dsymutil on macOS. Cargo ignores this value on MSVC, which only supports packed.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+# At opt-level 0, gpui-shell and its component catalog push a binary's unwind tables past
+# the 16 MB the macOS linker can index.
+[profile.dev.package."*"]
+opt-level = 1
+
+# Panics stay unwinding: gpui-shell and `ui` catch a plugin's panic instead of losing the app.
+[profile.release]
+codegen-units = 1
+lto = "fat"
+strip = "symbols"
+
+# rustc's strip (llvm-objcopy) misaligns a proc-macro dylib's LINKEDIT string pool.
+# macOS 27 dyld refuses to load it. The app binary stays stripped.
+[profile.release.build-override]
+strip = "none"

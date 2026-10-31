@@ -1,0 +1,73 @@
+[advisories]
+version = 2
+unmaintained = "workspace"
+ignore = [
+    {
+        id = "RUSTSEC-2023-0071",
+        reason = "rsa (Marvin timing attack, no fixed release) comes only through gpui-shell's plugin JS crypto (LLRT's crypto module, vendored in quickjs-jit-stdlib); kagan does no RSA decryption itself. Drop when rsa ships a fix.",
+    },
+]
+
+[licenses]
+version = 2
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-1-Clause",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "bzip2-1.0.6",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+# docs/architecture.md: GPUI's own executors only. No tokio.
+# Wrappers are the third-party crates that already depend on tokio directly.
+# A kagan crate that adds tokio is not a wrapper, so the ban fails.
+deny = [
+    {
+        crate = "tokio",
+        use-instead = "cx.spawn / cx.background_spawn",
+        reason = "GPUI's own executors only (cx.spawn on the foreground, cx.background_spawn for blocking work). No tokio.",
+        wrappers = [
+            "gpui-pre-reqwest",
+            "h2",
+            "hyper",
+            "hyper-rustls",
+            "hyper-util",
+            "quickjs-jit-stdlib",
+            "tokio-rustls",
+            "tokio-socks",
+            "tokio-util",
+            "tower",
+            "wasm-bindgen-futures",
+        ],
+    },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    "https://github.com/kagan-sh/gpui-kit",
+    "https://github.com/awslabs/llrt",
+    "https://github.com/longbridge/quickjs-jit",
+]

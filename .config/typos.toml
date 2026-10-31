@@ -1,0 +1,19 @@
+[files]
+# Generated upstream license texts. Crate names and copyright lines are not ours to correct.
+extend-exclude = ["assets/THIRD-PARTY-NOTICES.txt"]
+
+[default]
+extend-ignore-re = ["thr_[a-z0-9_]+"]
+
+[default.extend-identifiers]
+projcts = "projcts"
+thr = "thr"
+
+[default.extend-words]
+PNAS = "PNAS"
+PNG = "PNG"
+PNGs = "PNGs"
+thr = "thr"
+
+[type.css]
+extend-ignore-re = ["non-existant"]
