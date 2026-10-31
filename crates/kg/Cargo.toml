@@ -1,0 +1,74 @@
+[package]
+name = "kg"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-channel.workspace = true
+clap.workspace = true
+gpui-kit.workspace = true
+gpui-shell.workspace = true
+interprocess.workspace = true
+kg-domain.workspace = true
+kg-core.workspace = true
+kg-plugins.workspace = true
+kg-process.workspace = true
+kg-ui.workspace = true
+keyring-core.workspace = true
+rpassword = "=7.5.4"
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"] }
+objc2 = "=0.6.4"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
+    "NSApplication",
+    "NSImage",
+    "NSResponder",
+] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSData"] }
+
+[target.'cfg(windows)'.dependencies]
+widestring.workspace = true
+windows-sys.workspace = true
+windows-native-keyring-store = { version = "=1.1.0", default-features = false }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["rt-async-io-crypto-rust"] }
+
+[build-dependencies]
+embed-resource = "=3.0.11"
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints]
+workspace = true
+
+# cargo-packager runs from this folder, so its paths start at ../..
+[package.metadata.packager]
+product-name = "kagan"
+identifier = "kagan.kg"
+description = "kagan"
+homepage = "https://github.com/kagan-sh/kagan"
+before-packaging-command = "cargo build --release -p kg"
+out-dir = "../../target/packager"
+icons = [
+    "../../assets/brand/png/kagan-app-icon-32.png",
+    "../../assets/brand/png/kagan-app-icon-128.png",
+    "../../assets/brand/png/kagan-app-icon-256.png",
+    "../../assets/brand/png/kagan-app-icon-512.png",
+    "../../assets/brand/png/kagan-app-icon-1024.png",
+    "../../assets/brand/kagan.ico",
+    # cargo-packager rejects a 1024 px PNG not named @2x when it builds an .icns; a ready one is copied as is.
+    "../../assets/brand/kagan.icns",
+]
+resources = ["../../assets/THIRD-PARTY-NOTICES.txt"]
+
+# Keep this last. Release signing appends its keys to this table.
+[package.metadata.packager.macos]
+info-plist-path = "../../assets/macos/Info.plist"
