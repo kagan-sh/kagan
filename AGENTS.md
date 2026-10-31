@@ -1,0 +1,78 @@
+# kagan: rules for every change
+
+If AGENTS.local.md exists, read it too: a maintainer's local rules.
+
+The spec on this branch wins over everything below: `docs/CONTEXT.md`, `docs/architecture.md`, `docs/plugin-api.md`, `docs/look.md`.
+
+At every step, make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX), without breaking or degrading anything.
+
+## Skills
+
+Agent skills on these topics help, and are optional for contributors:
+
+- GPUI Kit coding guides: state ownership, entities, public API, naming and tests.
+- GPUI Kit design guides: for any UI.
+- Idiomatic Rust: ownership, errors, traits and concurrency.
+
+Both GPUI Kit skills are in the `skills/` folder of [gpui-kit](https://github.com/aorumbayev/gpui-kit).
+
+Where a skill disagrees with the spec, the spec wins. Known overrides:
+
+- No tokio in kagan's own code. Async runs on GPUI's executors (`cx.spawn`, `cx.background_spawn`); see decision 90.
+- Shared UI state lives in GPUI entities (`Entity<T>`, `cx.notify()`, events), not `Arc<Mutex<T>>`.
+
+## Laconic
+
+- Write the smallest code that does the ticket. No speculative options, no trait with one implementor, no builder for three fields, no wrapper that only forwards.
+- Delete what you replace. No shims, no dead code, no `#[allow(dead_code)]`.
+- No comments except where the code would surprise a reader. No doc comments on private items.
+- Names come from `docs/CONTEXT.md`. One word per concept.
+- Before adding to the host or UI core, ask: Does kagan itself act on it, beyond how it looks? Can only the host see it? Can a plugin not do it correctly even with care? If all three answers are no, it belongs in a plugin, even if that means some repetition.
+
+## Idiomatic Rust
+
+- Errors: `Result` and `?`; `thiserror` in library crates, `anyhow` only in the `kg` binary. No `unwrap`/`expect` outside tests unless the invariant is stated in the message.
+- States are enums, matched exhaustively. Parse at the boundary, pass typed values inside.
+- Borrow before you clone; iterators before index loops; `impl Trait` in argument position for single-use generics.
+- Visibility is the smallest that compiles: `pub(crate)` by default, `pub` only for the crate's interface in `docs/architecture.md`.
+
+## GPUI
+
+- Views implement `Render`; stateless pieces implement `RenderOnce`. No I/O and no heavy work in `render`.
+- Retained state (inputs, lists, subscriptions, tasks) is owned by an entity and kept alive by a field; drop a `Task` or `Subscription` only to cancel it.
+- Commands are GPUI actions with keybindings, and every user-facing one is also an `Op`.
+- `ElementId`s are stable across renders.
+- Colors and spacing come from the Workbench theme tokens (`docs/look.md`), never literals in views.
+- UI behavior is tested with GPUI's test context through the view's interface.
+
+## Attribution
+
+Commit messages and pull requests carry the change, not the tooling. Never add a `Co-authored-by`, `Generated with`, `Assisted-by`, `Created-by`, or `Made-with` line that names an AI tool, and never bypass `.githooks/commit-msg`. The hook is only a backstop.
+
+A fresh clone turns it on with `git config core.hooksPath .githooks`.
+`.githooks/pre-commit` runs only `cargo fmt --check` for both workspaces, so a commit takes about a second. `.githooks/pre-push-test` fails if it gains any other cargo command.
+`.githooks/pre-push` runs checks that do not compile: attribution, typos, the glossary, the plugin tests, the size budget, crate boundaries, view colors, and `cargo fmt --check`. Fetch `origin/main` first. Install the pinned `typos` (`scripts/typos-version`).
+
+## Agent loop
+
+1. Commit each working step, and push.
+2. Read the CI run: `gh run list --branch <branch>`, then `gh run view <id> --log-failed`.
+3. Fix what failed, and push again.
+
+Before you open a pull request, run from the repo root, one at a time:
+
+```bash
+cargo fmt --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo t --workspace --locked
+```
+
+Then push with the hooks on, so `.githooks/pre-push` runs. `cargo t` runs cargo-nextest at the version pinned in `Cargo.toml`; install `cargo-run-bin` once. Mutation testing (`scripts/mutants-diff.sh`) is slow: it runs only when CI is started by hand with `mutants`.
+
+## Enforced
+
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, the plugin tests, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear and crate boundaries; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
+- Workspace lints in the root `Cargo.toml` (`[workspace.lints]`) deny `unwrap_used`, `expect_used` (tests excepted), `dbg_macro`, `todo`, `print_stdout` outside `kg`, and warn on `clippy::pedantic`.
+- Every pull request into `main` is reviewed against this file, and anything that breaks it is sent back.
+
+Product Rust — `.rs` files under `crates/*/src`, excluding `tests.rs`, `*_test.rs`, and anything in a `tests/` directory — is measured in physical lines (`wc -l`). `.config/size-budget.txt` records the total ceiling and a ceiling for every product file already over 600 lines; `scripts/size-budget.sh` fails unless each of those numbers equals the tree, so a shrink cannot be given back later. The PR that shrinks code sets `total` to the new count, and sets a listed file's ceiling to its new length while the file stays over 600. An unlisted file over 600 fails, and a listed file that drops to 600 lines or disappears must be removed from the budget. The end target in that file is 35,000 lines.

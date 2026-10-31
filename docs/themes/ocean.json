@@ -1,0 +1,31 @@
+{
+  "name": "Ocean",
+  "light": {
+    "bg": "#f2f2f2",
+    "surface": "#e7eaf2",
+    "raised": "#dae0ef",
+    "ink": "#0f1c57",
+    "muted": "#4c5775",
+    "line": "#b4bdd3",
+    "accent": "#1b2f86",
+    "primaryForeground": "#f2f2f2",
+    "working": "#1b2f86",
+    "needs": "#755200",
+    "failed": "#a32938",
+    "idle": "#4c5775"
+  },
+  "dark": {
+    "bg": "#0a1238",
+    "surface": "#0f1c57",
+    "raised": "#1b2f86",
+    "ink": "#c5cde3",
+    "muted": "#a4b2d6",
+    "line": "#384b82",
+    "accent": "#9bb5ff",
+    "primaryForeground": "#0a1238",
+    "working": "#9bb5ff",
+    "needs": "#e8cf80",
+    "failed": "#ffa1ad",
+    "idle": "#a4b2d6"
+  }
+}

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Formatting only, so a commit takes seconds. CI compiles.
+set -eu
+cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+cargo fmt --check

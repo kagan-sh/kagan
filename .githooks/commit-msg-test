@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+hook="$root/.githooks/commit-msg"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+cat > "$work/in" << 'EOF'
+fix the thing
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Co-authored-by: Jane Doe <jane@example.com>
+🤖 Generated with Claude
+Assisted-by: Anthropic
+Created-by: Grok
+Made with Gemini
+Generated-with: Codex
+A sentence that mentions an agent stays.
+EOF
+
+cat > "$work/expect" << 'EOF'
+fix the thing
+
+Co-authored-by: Jane Doe <jane@example.com>
+A sentence that mentions an agent stays.
+EOF
+
+cp "$work/in" "$work/out"
+"$hook" "$work/out"
+if ! cmp -s "$work/expect" "$work/out"; then
+  echo "commit-msg hook changed the wrong lines" >&2
+  diff -u "$work/expect" "$work/out" >&2 || true
+  exit 1
+fi
+
+printf '%s\n' 'Co-authored-by: Cursor <cursoragent@cursor.com>' > "$work/only"
+"$hook" "$work/only"
+if [ -s "$work/only" ]; then
+  echo "commit-msg hook left an AI attribution line" >&2
+  cat "$work/only" >&2
+  exit 1
+fi
+
+echo "commit-msg hook ok"

@@ -1,0 +1,32 @@
+# In-app UI driver (`kg ui`)
+
+QA and agents drive the native kagan window without OS mouse or keyboard. Input goes through the window's own event dispatch (`Window::dispatch_event` / `dispatch_keystroke`). It works while the window stays in the background.
+
+## Commands
+
+- `kg ui snapshot [--window N]` — observed element tree: stable ids (from `ui_observe_as` for controls and `ui_container` for containers), role, label, value, bounds, focused, disabled, visible. Plain text on stdout; `--json` returns `OpResult::ui`.
+- `kg ui click <element-id> [--within <id>]` — left-click the element center. When two observed elements have the same id, the click is refused and names both paths; `--within <id>` picks the one inside the element with that id.
+- `kg ui type <text>` — text to the current focus.
+- `kg ui key <keystroke>` — key down/up (for example `escape`, `secondary-,`, `enter`).
+- `kg ui scroll <element-id> <dy>` — wheel delta in pixels at the element.
+- `kg ui screenshot <path> [--window N]` — PNG without focusing the window (macOS: `screencapture -l`, and a failure returns its reason as `screencapture failed: <reason>`, and a run that exits 0 without writing a file is a failure too (`screencapture wrote no image to <path>`). The capture goes to a new file beside the destination and replaces it only when that run wrote one, so an older image is never reported as the new capture; Windows: `PrintWindow`). A covered window is not presenting frames, so the capture is the last presented buffer.
+
+`--window` is a zero-based index into open windows sorted by `WindowId`. Default `0`.
+
+A screenshot's JSON is `{"capture": {"path": ..., "current": true|false}}`. `current` is false when the window did not draw a new frame before the capture (it was hidden, or no frame came within two seconds), so the image may show an earlier state. The plain output prints the path and, when `current` is false, a note on stderr.
+
+## What `kg ui` can find
+
+`kg ui` finds the controls kagan states with `ui_observe_as`. Its `Facts` are all required: role, name, value, disabled, selected and focus, so a control cannot leave one out. A container uses `ui_container` and states nothing. A control found this way reports its role, name, value, disabled, selected and focus. The thread header buttons, the title-bar sidebar toggles, the start button, the program rows and the thread actions menu state theirs. A plugin's `KgButton` states its own (see decision 55). A snapshot line also reports `selected`, which a control states itself. A plugin's plain `Button`, and any built-in control that has not stated its name, is not found.
+
+## Person-only approvals
+
+Synthetic `kg ui` input sets a marker for the duration of dispatch. Person-only answer handlers ignore any click or key that carries it, and the Op returns `person-only approvals cannot be answered with kg ui`. Renaming a button does not bypass this. A person must answer in the app.
+
+Only input that reaches an answer button is refused. An unrelated click or key succeeds and runs once while an approval waits, so a caller that gets success does not retry it. The approval stays pending either way.
+
+## Requirements
+
+The `kg` app must be running with a window open. If the UI driver is not installed yet, open a window once (`kg open`). Drive the instance `kg status --json` confirmed. Leave `KG_DATA_DIR` and `KG_SOCKET` unset. A command that starts a second headless app is the wrong window.
+
+`kg plugin install` waits until a person approves powers in the app. This driver cannot answer that. The Op returns `person-only approvals cannot be answered with kg ui`.

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+set -e
+# Commit messages carry the change, not the tooling: drop AI attribution trailers.
+grep -viE '^[^[:alpha:]]*(co-authored-by|generated[ -]with|assisted-by|created-by|made[ -]with)[[:space:]]*:?.*(cursor|claude|anthropic|copilot|codex|openai|gpt|grok|xai|kimi|moonshot|opencode|gemini|agent|noreply|[^[:alpha:]]ai[^[:alpha:]]|[^[:alpha:]]ai$)' "$1" > "$1.tmp" || true
+mv "$1.tmp" "$1"

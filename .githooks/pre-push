@@ -1,0 +1,104 @@
+#!/bin/sh
+# Refuse a push that would fail CI for a mechanical reason. Nothing here compiles:
+# clippy, tests and mutants run in CI. The tree must be the commit being pushed.
+set -eu
+
+cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+
+# A hook inherits GIT_DIR. Tests that run git would then lock this repo
+# instead of the temporary one they created.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR \
+  GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_QUARANTINE_PATH \
+  GIT_NAMESPACE
+
+updates=0
+head=$(git rev-parse HEAD)
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [ -n "${local_sha:-}" ] || continue
+  case $local_sha in
+    *[!0]*) ;;
+    *) continue ;;
+  esac
+  if [ "$local_sha" != "$head" ]; then
+    echo "pre-push: refusing $local_sha; HEAD is $head. Check out the commit you are pushing." >&2
+    exit 1
+  fi
+  updates=1
+done
+[ "$updates" -eq 1 ] || exit 0
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "pre-push: commit or stash tracked changes first. The checks have to match the tree CI builds." >&2
+  exit 1
+fi
+
+if ! base=$(git rev-parse --verify --quiet origin/main); then
+  echo "pre-push: origin/main is missing. Fetch it, then push again." >&2
+  exit 1
+fi
+
+# A rewritten main shares no history with the old one; diff the trees then.
+from=$(git merge-base "$base" HEAD) || from=$base
+
+files=$(git diff --name-only "$from" HEAD)
+scope=$(printf '%s\n' "$files" | sh scripts/ci-changes.sh)
+skip=0
+printf '%s\n' "$scope" | grep -qx skip && skip=1 || true
+
+fail_attribution() {
+  sha=$1
+  msg=$(mktemp)
+  dst=$(mktemp)
+  git log -1 --format=%B "$sha" > "$msg"
+  cp "$msg" "$dst"
+  sh .githooks/commit-msg "$dst"
+  if ! cmp -s "$msg" "$dst"; then
+    echo "pre-push: commit $sha has an AI attribution line" >&2
+    diff -u "$msg" "$dst" >&2 || true
+    rm -f "$msg" "$dst"
+    exit 1
+  fi
+  rm -f "$msg" "$dst"
+}
+
+for sha in $(git rev-list "$base..HEAD"); do
+  fail_attribution "$sha"
+done
+
+want=$(tr -d '[:space:]' < scripts/typos-version)
+if ! command -v typos >/dev/null 2>&1; then
+  echo "pre-push: need typos $want: cargo install typos-cli --version $want --locked" >&2
+  exit 1
+fi
+have=$(typos --version 2>/dev/null | awk '{ print $NF }') || have=
+if [ "$have" != "$want" ]; then
+  echo "pre-push: need typos $want, found ${have:-none}: cargo install typos-cli --version $want --locked" >&2
+  exit 1
+fi
+echo "pre-push: typos" >&2
+typos --config .config/typos.toml
+
+echo "pre-push: glossary" >&2
+sh scripts/glossary-check.sh
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-push: node is not on PATH" >&2
+  exit 1
+fi
+echo "pre-push: plugin tests" >&2
+node --test plugins/canvas/*.test.js
+
+if [ "$skip" -eq 1 ]; then
+  echo "pre-push: docs-only diff; rust checks left to match CI" >&2
+  exit 0
+fi
+
+echo "pre-push: size budget" >&2
+sh scripts/size-budget.sh
+echo "pre-push: crate boundaries" >&2
+sh scripts/crate-boundaries.sh
+echo "pre-push: view colors" >&2
+sh scripts/view-colors.sh
+
+echo "pre-push: fmt" >&2
+cargo fmt --check

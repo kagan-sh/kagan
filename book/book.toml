@@ -1,0 +1,21 @@
+[book]
+title = "kagan"
+description = "A desktop workspace where you and an agent do coding work together."
+language = "en"
+src = "src"
+
+[rust]
+edition = "2024"
+
+[build]
+create-missing = false
+extra-watch-dirs = ["../docs"]
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "coal"
+additional-css = ["theme/kagan.css"]
+site-url = "/"
+git-repository-url = "https://github.com/kagan-sh/kagan"
+no-section-label = true
+smart-punctuation = false

@@ -1,0 +1,386 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+tmp=$(mktemp -d)
+mkdir -p "$tmp/home"
+trap 'rm -rf "$tmp"' EXIT
+
+fail() {
+  echo "pre-push-test: $*" >&2
+  exit 1
+}
+
+scope=$(printf '%s\n' 'README.md' 'docs/a.rs' 'book/a.txt' | sh "$root/scripts/ci-changes.sh")
+printf '%s\n' "$scope" | grep -qx skip || fail "docs diff should skip"
+
+scope=$(printf '%s\n' 'crates/ui/src/lib.rs' | sh "$root/scripts/ci-changes.sh")
+[ -z "$scope" ] || fail "a ui change is not docs-only: $scope"
+
+scope=$(printf '%s\n' 'README.md' 'crates/ui/src/lib.rs' | sh "$root/scripts/ci-changes.sh")
+[ -z "$scope" ] || fail "a mixed diff should run the rust jobs: $scope"
+
+scope=$(printf '%s\n' | sh "$root/scripts/ci-changes.sh")
+[ -z "$scope" ] || fail "an empty diff should run the rust jobs: $scope"
+
+scope=$(printf '%s\n' 'foo.md.bak' | sh "$root/scripts/ci-changes.sh")
+[ -z "$scope" ] || fail "a non-markdown file should run the rust jobs: $scope"
+
+for path in Cargo.toml clippy.toml .cargo/config.toml rust-toolchain.toml crates/domain/src/lib.rs crates/store/src/lib.rs; do
+  scope=$(printf '%s\n' "$path" | sh "$root/scripts/ci-changes.sh")
+  [ -z "$scope" ] || fail "$path should run the rust jobs: $scope"
+done
+
+cfg=$root/.circleci/config.yml
+grep -q 'scripts/ci-changes.sh' "$cfg" || fail "the CircleCI config does not call ci-changes.sh"
+grep -q 'scripts/typos-version' "$cfg" || fail "the CircleCI config does not pin typos from scripts/typos-version"
+grep -q 'scripts/mutants-diff.sh' "$cfg" || fail "the CircleCI config does not run mutants-diff.sh"
+if grep -q 'grep -qvE' "$cfg"; then
+  fail "the CircleCI config still classifies the diff inline"
+fi
+
+status=0
+KAGAN_BOT_APP_ID= KAGAN_BOT_KEY= sh "$root/scripts/ci-pr.sh" 2> "$tmp/pr-err" || status=$?
+[ "$status" -eq 2 ] || fail "ci-pr.sh without the app variables should exit 2, got $status"
+grep -q KAGAN_BOT_KEY "$tmp/pr-err" || fail "ci-pr.sh should name the missing KAGAN_BOT_KEY"
+
+# A fake curl stands in for GitHub: FAKE_FAIL picks the call that is refused.
+mkdir -p "$tmp/fake"
+cat > "$tmp/fake/curl" << 'EOF'
+#!/bin/sh
+case " $* " in
+  */installation\ *) [ "${FAKE_FAIL:-}" = find ] && exit 22; echo '{"id":1}' ;;
+  *access_tokens*) [ "${FAKE_FAIL:-}" = mint ] && exit 22; echo '{"token":"fake-installation-token"}' ;;
+  *) [ "${FAKE_FAIL:-}" = lookup ] && exit 22; echo '[{"title":"A title","base":{"ref":"main"}}]' ;;
+esac
+EOF
+chmod +x "$tmp/fake/curl"
+openssl genrsa -out "$tmp/app.pem" 2048 2> /dev/null
+bot_key=$(openssl base64 -A < "$tmp/app.pem")
+run_pr() {
+  PATH="$tmp/fake:$PATH" KAGAN_BOT_APP_ID=1 KAGAN_BOT_KEY=$bot_key FAKE_FAIL=${1:-} \
+    CIRCLE_PROJECT_USERNAME=o CIRCLE_PROJECT_REPONAME=r CIRCLE_BRANCH=b \
+    sh "$root/scripts/ci-pr.sh" > "$tmp/pr-out" 2> "$tmp/pr-err"
+}
+run_pr || fail "ci-pr.sh should print the pull request when GitHub answers"
+grep -q '"title":"A title"' "$tmp/pr-out" || fail "ci-pr.sh printed the wrong pull request: $(cat "$tmp/pr-out")"
+for refused in find mint lookup; do
+  status=0
+  run_pr "$refused" || status=$?
+  [ "$status" -ne 0 ] || fail "ci-pr.sh should fail when the $refused call is refused"
+  [ ! -s "$tmp/pr-out" ] || fail "ci-pr.sh should print nothing when the $refused call is refused"
+done
+if grep -qF -e "$bot_key" -e fake-installation-token "$tmp/pr-out" "$tmp/pr-err"; then
+  fail "ci-pr.sh leaked the key or the token"
+fi
+
+bindir=$tmp/bin
+mkdir -p "$bindir"
+LOG=$tmp/log
+cat > "$bindir/cargo" << 'EOF'
+#!/bin/sh
+printf '%s\n' "cargo $*" >> "$LOG"
+if [ "$1" = mutants ] && [ "$2" = --version ]; then
+  echo "cargo-mutants 27.1.0"
+  exit 0
+fi
+if [ "$1" = mutants ]; then
+  prev=
+  dir=
+  pkg=
+  for arg in "$@"; do
+    if [ "$prev" = --output ]; then
+      dir=$arg
+    fi
+    if [ "$prev" = -p ]; then
+      pkg=$arg
+    fi
+    if [ "$prev" = --in-diff ]; then
+      cp "$arg" "$DIFF_SAVE"
+    fi
+    prev=$arg
+  done
+  miss=${MUTANTS_MISSED:-0}
+  if [ -n "${MUTANTS_MISS_PKG:-}" ] && [ "$pkg" = "$MUTANTS_MISS_PKG" ]; then
+    miss=1
+  fi
+  if [ -n "$dir" ] && [ "$miss" = 1 ]; then
+    mkdir -p "$dir/mutants.out"
+    echo 'replace x with y' > "$dir/mutants.out/missed.txt"
+  fi
+  exit "${MUTANTS_EXIT:-0}"
+fi
+exit 0
+EOF
+cat > "$bindir/typos" << 'EOF'
+#!/bin/sh
+printf '%s\n' "typos $*" >> "$LOG"
+echo "typos-cli ${TYPOS_VERSION:-1.51.1}"
+exit 0
+EOF
+cat > "$bindir/node" << 'EOF'
+#!/bin/sh
+printf '%s\n' "node $*" >> "$LOG"
+exit 0
+EOF
+chmod +x "$bindir/cargo" "$bindir/typos" "$bindir/node"
+
+MUTANTS_EXIT=0
+MUTANTS_MISSED=0
+TYPOS_VERSION=1.51.1
+
+new_repo() {
+  repo=$tmp/repo
+  rm -rf "$repo"
+  mkdir -p "$repo/.githooks" "$repo/scripts" \
+    "$repo/crates/ui/src" "$repo/crates/domain/src" \
+    "$repo/plugins/canvas"
+  cp "$root/.githooks/pre-push" "$repo/.githooks/pre-push"
+  cp "$root/.githooks/pre-commit" "$repo/.githooks/pre-commit"
+  cp "$root/.githooks/commit-msg" "$repo/.githooks/commit-msg"
+  cp "$root/scripts/ci-changes.sh" "$repo/scripts/ci-changes.sh"
+  cp "$root/scripts/mutants-diff.sh" "$repo/scripts/mutants-diff.sh"
+  cp "$root/scripts/typos-version" "$repo/scripts/typos-version"
+  cp "$root/scripts/cargo-mutants-version" "$repo/scripts/cargo-mutants-version"
+  for name in glossary-check size-budget crate-boundaries view-colors; do
+    cat > "$repo/scripts/$name.sh" << EOF
+#!/bin/sh
+printf '%s\\n' "sh scripts/$name.sh" >> "\$LOG"
+exit 0
+EOF
+  done
+  printf '%s\n' 'fn main() {}' > "$repo/crates/ui/src/lib.rs"
+  printf '%s\n' 'fn main() {}' > "$repo/crates/domain/src/lib.rs"
+  printf '%s\n' '[package]' 'name = "kg-ui"' 'version = "0.0.0"' 'edition = "2024"' > "$repo/crates/ui/Cargo.toml"
+  printf '%s\n' '[package]' 'name = "kg-domain"' 'version = "0.0.0"' 'edition = "2024"' > "$repo/crates/domain/Cargo.toml"
+  printf '%s\n' '# base' > "$repo/README.md"
+  : > "$repo/plugins/canvas/page.test.js"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email t@example.com
+  git -C "$repo" config user.name t
+  git -C "$repo" config commit.gpgsign false
+  git -C "$repo" add .
+  git -C "$repo" commit -q -m 'base'
+  git -C "$repo" update-ref refs/remotes/origin/main HEAD
+}
+
+commit() {
+  git -C "$repo" add .
+  git -C "$repo" commit -q -m "$1"
+}
+
+line_for_head() {
+  sha=$(git -C "$repo" rev-parse HEAD)
+  remote=$(git -C "$repo" rev-parse origin/main)
+  printf 'refs/heads/main %s refs/heads/main %s\n' "$sha" "$remote"
+}
+
+run_hook() {
+  : > "$LOG"
+  set +e
+  printf '%s\n' "$1" | (
+    cd "$repo" || exit 1
+    if [ -n "${GIT_DIR_OVERRIDE:-}" ]; then
+      export GIT_DIR="$GIT_DIR_OVERRIDE"
+    fi
+    HOME="$tmp/home" LOG="$LOG" PATH="$bindir:$PATH" TYPOS_VERSION="$TYPOS_VERSION" \
+      sh .githooks/pre-push > "$LOG.out" 2> "$LOG.err"
+  )
+  hook_rc=$?
+  set -e
+}
+
+run_mutants() {
+  : > "$LOG"
+  set +e
+  (
+    cd "$repo" || exit 1
+    LOG="$LOG" DIFF_SAVE="$LOG.diff" PATH="$bindir:$PATH" \
+      MUTANTS_EXIT="$MUTANTS_EXIT" MUTANTS_MISSED="$MUTANTS_MISSED" \
+      MUTANTS_MISS_PKG="${MUTANTS_MISS_PKG:-}" \
+      sh scripts/mutants-diff.sh origin/main > "$LOG.out" 2> "$LOG.err"
+  )
+  hook_rc=$?
+  set -e
+}
+
+expect() {
+  [ "$hook_rc" -eq "$1" ] || fail "$2: exit $hook_rc, err=$(cat "$LOG.err")"
+}
+
+logged() {
+  grep -F -q -- "$1" "$LOG" || fail "$2: log missing $1, log=$(cat "$LOG")"
+}
+
+not_logged() {
+  if grep -F -q -- "$1" "$LOG"; then
+    fail "$2: log has $1, log=$(cat "$LOG")"
+  fi
+}
+
+# Hooks must not compile, so a commit and a push take seconds: CI compiles.
+only_fmt() {
+  if grep '^cargo ' "$LOG" | grep -qv '^cargo fmt --check'; then
+    fail "$1 ran cargo beyond fmt: $(grep '^cargo ' "$LOG")"
+  fi
+}
+
+new_repo
+run_hook "refs/heads/main 0000000000000000000000000000000000000000 refs/heads/main $(git -C "$repo" rev-parse HEAD)"
+expect 0 "a delete is not a build"
+[ ! -s "$LOG" ] || fail "a delete ran checks: $(cat "$LOG")"
+
+printf '%s\n' 'fn changed() {}' >> "$repo/crates/ui/src/lib.rs"
+commit 'fix: ui'
+run_hook "$(git -C "$repo" rev-parse origin/main | awk '{ printf "refs/heads/main %s refs/heads/main %s\n", $1, $1 }')"
+expect 1 "a commit that is not HEAD"
+grep -q 'refusing' "$LOG.err" || fail "missing refusing message"
+
+run_hook "$(line_for_head)"
+expect 0 "a ui change"
+logged 'typos' "ui"
+logged 'sh scripts/glossary-check.sh' "ui"
+logged 'sh scripts/size-budget.sh' "ui"
+logged 'sh scripts/crate-boundaries.sh' "ui"
+logged 'sh scripts/view-colors.sh' "ui"
+logged 'cargo fmt --check' "ui"
+only_fmt "the push hook"
+
+: > "$LOG"
+(cd "$repo" && LOG="$LOG" PATH="$bindir:$PATH" sh .githooks/pre-commit) || fail "the commit hook failed"
+logged 'cargo fmt --check' "commit"
+only_fmt "the commit hook"
+
+run_mutants
+expect 0 "ui mutants"
+logged '-p kg-ui' "ui mutants"
+logged '--manifest-path ./Cargo.toml' "ui mutants"
+logged '--in-place' "ui mutants"
+not_logged '-j' "ui mutants"
+logged --in-diff "ui mutants"
+grep -q 'crates/ui/src/lib.rs' "$LOG.diff" || fail "root diff missed the ui file"
+
+echo scratch > "$repo/notes.txt"
+run_hook "$(line_for_head)"
+expect 0 "an untracked file is not in the commit"
+rm -f "$repo/notes.txt"
+
+printf '%s\n' 'dirty' >> "$repo/README.md"
+run_hook "$(line_for_head)"
+expect 1 "tracked edits"
+grep -q 'commit or stash' "$LOG.err" || fail "missing dirty message"
+git -C "$repo" checkout -q -- README.md
+
+new_repo
+printf '%s\n' 'more' >> "$repo/README.md"
+commit 'docs: readme'
+run_hook "$(line_for_head)"
+expect 0 "docs-only"
+logged 'typos' "docs"
+logged 'node --test' "docs"
+not_logged 'cargo ' "docs"
+not_logged 'view-colors' "docs"
+
+new_repo
+printf '%s\n' 'fn domain() {}' >> "$repo/crates/domain/src/lib.rs"
+commit 'fix: domain'
+run_mutants
+expect 0 "domain mutants"
+logged '-p kg-domain' "domain"
+
+new_repo
+printf '%s\n' 'fn missed() {}' >> "$repo/crates/ui/src/lib.rs"
+commit 'fix: missed'
+MUTANTS_EXIT=2
+run_mutants
+expect 2 "missed mutants"
+MUTANTS_EXIT=0
+
+new_repo
+printf '%s\n' 'fn hung() {}' >> "$repo/crates/ui/src/lib.rs"
+commit 'fix: timeout'
+MUTANTS_EXIT=3
+run_mutants
+expect 0 "a timeout means a test hung"
+grep -q 'timed out' "$LOG.err" || fail "missing timeout note"
+MUTANTS_EXIT=3
+MUTANTS_MISSED=1
+run_mutants
+expect 1 "a timeout does not hide a miss"
+MUTANTS_EXIT=0
+MUTANTS_MISSED=0
+
+new_repo
+printf '%s\n' 'fn first() {}' >> "$repo/crates/ui/src/lib.rs"
+printf '%s\n' 'fn second() {}' >> "$repo/crates/domain/src/lib.rs"
+commit 'fix: two packages'
+MUTANTS_MISS_PKG=kg-domain
+run_mutants
+MUTANTS_MISS_PKG=
+expect 1 "a miss in the first package"
+logged '-p kg-ui' "the second package still runs after a miss"
+grep -q 'missed: kg-domain: replace x with y' "$LOG.err" || fail "the miss is not listed with its package: $(cat "$LOG.err")"
+
+new_repo
+printf '%s\n' 'more' >> "$repo/README.md"
+commit 'docs: no rust'
+run_mutants
+expect 0 "no rust, no mutants"
+not_logged 'cargo ' "no rust"
+grep -q 'no Rust changed' "$LOG.err" || fail "missing no-rust note"
+
+run_mutants_base() {
+  : > "$LOG"
+  set +e
+  (cd "$repo" && LOG="$LOG" PATH="$bindir:$PATH" sh scripts/mutants-diff.sh "$1" > "$LOG.out" 2> "$LOG.err")
+  hook_rc=$?
+  set -e
+}
+run_mutants_base origin/does-not-exist
+expect 1 "a missing base"
+grep -q 'is not a commit' "$LOG.err" || fail "missing base message"
+
+new_repo
+printf '%s\n' 'fn spell() {}' >> "$repo/crates/ui/src/lib.rs"
+commit 'fix: typos'
+TYPOS_VERSION=0
+run_hook "$(line_for_head)"
+expect 1 "wrong typos"
+not_logged 'cargo ' "wrong typos"
+grep -q 'need typos' "$LOG.err" || fail "missing typos message"
+TYPOS_VERSION=1.51.1
+
+new_repo
+git -C "$repo" update-ref -d refs/remotes/origin/main
+sha=$(git -C "$repo" rev-parse HEAD)
+run_hook "refs/heads/main $sha refs/heads/main $sha"
+expect 1 "missing origin/main"
+grep -q 'origin/main is missing' "$LOG.err" || fail "missing origin message"
+
+new_repo
+printf '%s\n' 'fn attr() {}' >> "$repo/crates/ui/src/lib.rs"
+git -C "$repo" add .
+git -C "$repo" commit -q -m 'fix: attr' -m 'Co-authored-by: Cursor <cursoragent@cursor.com>'
+run_hook "$(line_for_head)"
+expect 1 "attribution"
+grep -q 'AI attribution' "$LOG.err" || fail "missing attribution message"
+
+new_repo
+printf '%s\n' 'more' >> "$repo/README.md"
+commit 'docs: readme'
+other=$tmp/other-repo
+mkdir -p "$other"
+git -C "$other" init -q -b otherbranch
+git -C "$other" config user.email t@example.com
+git -C "$other" config user.name t
+git -C "$other" config commit.gpgsign false
+echo other > "$other/f"
+git -C "$other" add f
+git -C "$other" commit -q -m other
+GIT_DIR_OVERRIDE=$other/.git
+run_hook "$(line_for_head)"
+expect 0 "GIT_DIR from the surrounding hook is ignored"
+logged 'typos' "GIT_DIR"
+GIT_DIR_OVERRIDE=
+
+echo "pre-push hook ok"

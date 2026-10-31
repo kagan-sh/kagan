@@ -1,0 +1,35 @@
+{
+  "name": "Ember",
+  "light": {
+    "bg": "#fbfaf7",
+    "surface": "#f4f2ed",
+    "raised": "#e9e5dd",
+    "ink": "#1c1a17",
+    "muted": "#6a645a",
+    "line": "#e6e1d7",
+    "accent": "#b83a06",
+    "primaryForeground": "#fbfaf7",
+    "working": "#1c1a17",
+    "needs": "#b83a06",
+    "failed": "#b4233a",
+    "idle": "#6a645a",
+    "hover": "#efece6",
+    "added": "#2f6d33"
+  },
+  "dark": {
+    "bg": "#171614",
+    "surface": "#121110",
+    "raised": "#24221f",
+    "ink": "#ece8e0",
+    "muted": "#958f84",
+    "line": "#2a2825",
+    "accent": "#ff8a4c",
+    "primaryForeground": "#171614",
+    "working": "#ece8e0",
+    "needs": "#ff8a4c",
+    "failed": "#ff9aa6",
+    "idle": "#958f84",
+    "hover": "#1c1b18",
+    "added": "#8bc58e"
+  }
+}

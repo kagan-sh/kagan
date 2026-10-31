@@ -1,0 +1,81 @@
+# kagan self-extend: guide, skills, plugin loop
+
+Status: in progress. Terms follow [CONTEXT.md](CONTEXT.md). Builds on [architecture.md](architecture.md) (`kg`, `Op`) and [plugin-api.md](plugin-api.md) (manifest, `skills`, install).
+
+An agent in a thread can learn kagan, find and load skills, and build, install, reload and debug a plugin, all through `kg`. The tool teaches itself, and the agent never guesses the API.
+
+## Rules
+
+- Everything here is an `Op`, so the app, `kg` and plugins get it alike.
+- Every `kg` command takes `--json`. A failure prints the `OpError` envelope `{ "error": { "kind", "message" } }` and exits non-zero.
+- An agent-built plugin is installed like any other: a local path, the same manifest, the same powers screen. There is no trust shortcut for agents.
+
+## Thread context
+
+Every thread's program gets `KG_THREAD_ID`, `KG_PROJECT_ID`, `KG_ENVIRONMENT_ID`, `KG_CLI` (the absolute path of the running `kg`), `KG_SOCKET` (the app's socket), and a `PATH` with `kg`'s folder first, so `kg` works by name. `kg status` prints the ids, plus warnings such as a plugin that failed to load. Commands that take a thread, project or environment default to these.
+
+## Guide
+
+`kg guide` prints the concepts (the `CONTEXT.md` terms) and the chapter list. `kg guide <chapter>` prints one chapter: `threads`, `projects`, `environments`, `plugins`, `skills`, `json`. The text ships in the binary, so it always matches the running version. Plugin CLI commands document themselves through `kg <name> --help`.
+
+## Instructions
+
+Kagan does not inject `<dataDir>/AGENTS.md` or `<project>/.kagan/AGENTS.md` into a prompt. The person's program reads its own instructions. Agent integration (decision 49) adds one fixed note and the `kg mcp` server to `claude` and `codex`. Only `claude` also gets kagan's skills.
+
+## Skills
+
+A skill is a folder with a `SKILL.md`: YAML frontmatter `name` (lowercase, hyphenated, same as the folder) and `description`, then the instructions.
+
+Sources, lowest precedence first:
+
+| source | where |
+|---|---|
+| bundled | inside the `kg` binary |
+| plugin | each enabled plugin's manifest `skills` |
+| user | `<dataDir>/skills` |
+| project | `<project>/.kagan/skills` |
+
+A higher source overrides a lower one with the same name. Two skills with the same name in one source are both dropped and shown as an error in `kg skill list`.
+
+**Reaching the agent.** `kg mcp` offers the agent tool `skill_load { name }`. The tool list names each skill and its description. The tool returns the body and the skill's absolute file paths. `kg skill files <name>` lists the same paths; the agent reads them with its own file tools. Bundled skills have no supporting files and return an empty list.
+
+**Native skills for `claude`.** The bundled skills and the enabled plugins' skills are also copied, one folder each, to `<dataDir>/agent/skills`. That folder is the plugin `kagan` that `claude` loads, so its skills appear as `kagan:<name>`. kagan rebuilds it beside the folder and swaps it in, each time a `claude` thread starts while `agent-integration` is on. Folders that no longer apply are removed. User and project skills stay where they are.
+
+**Commands:** `kg skill list`, `kg skill show <name>`, `kg skill files <name>`, `kg skill new <name> [--project]` (scaffold into user or project skills), `kg skill add <path> [--project]` (copy a skill folder in), `kg skill remove <name>` (user and project skills only).
+
+## Bundled skills
+
+Short, and each points at `kg guide` chapters and the generated `.d.ts` files instead of copying the API, so they do not go stale.
+
+- `kg-cli`: thread context, threads, projects, environments, `--json`.
+- `kg-plugin-authoring`: manifest, job loop, HostModule areas, panels and spots, Workbench tokens, the dev loop below.
+- `kg-skill-creator`: writing and testing a skill.
+- `kg-ui`: drive the open window with `kg ui`. It cannot approve powers.
+
+## Plugin dev loop
+
+- `kg plugin new <name> [--dir <path>]`: scaffolds `kagan.json`, `main.js` with the job loop, `jsconfig.json`, `kagan.d.ts` and `gpui-kit.d.ts`.
+- `kg plugin check [path]`: checks the manifest (unknown keys, schemas, declared views exported) without loading it.
+- `kg plugin install <path>`: a local path is linked, not copied, so edits take effect on reload.
+- `kg plugin reload <id>`, and `kg plugin dev [path]`: watches the folder and reloads on every change. There is no build step.
+- `kg plugin logs <id> [--follow]`: `host.log` output, crashes, slow marks.
+- `kg plugin types [path]`: rewrites the `.d.ts` files for the running version.
+- `kg plugin list`, `kg plugin remove <id>`.
+
+**Approval.** Installing, or reloading a local plugin whose powers grew, raises a pending interaction on the thread that ran the command. The person approves the powers screen; the command waits and fails if they decline. A `downloads` key or `powers.spawn` is refused.
+
+**An agent building a plugin:** `kg plugin new` → edit → `kg plugin check` → `kg plugin install ./<name>` (person approves) → `kg plugin dev` → call its tools and commands → read `kg plugin logs`.
+
+## Ops added
+
+`Status`, `Guide { chapter? }`, `Skill(SkillOp)` (`List`, `Show`, `Files`, `New`, `Add`, `Remove`), and on `PluginOp`: `New`, `Check`, `Reload`, `Logs`, `Types`, `List`, `Remove`. `kg plugin dev` is a client-side loop over `Reload`.
+
+## Not in v1
+
+A skill registry or search. The plugin marketplace is decision 3 in [decisions.md](decisions.md).
+
+## Themes
+
+Themes ship with the app: `fjord`, the default. `kg theme get` and `kg theme set` choose a theme id and a mode: `light`, `dark`, or `system` (the default, which follows the operating system). `ember` and `grey` ship with the app too. A custom theme is a JSON file in `<dataDir>/themes`; `kg theme new <id>` writes a copy of the theme in use there, and `kg theme folder` prints the folder. A plugin ships themes as files it declares under `themes` (decision 101). The tokens and the file rules are in [look.md](look.md).
+
+Plugin logs use a byte cursor and bounded read batches. The writer keeps `logs.jsonl` and one previous `logs.1.jsonl`, each at most 10 MiB. A cursor beyond the current file returns `reset: true` and starts at 0. A record larger than 10 MiB is rejected.

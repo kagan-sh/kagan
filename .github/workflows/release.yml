@@ -1,0 +1,249 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (for example, 0.2.0)"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+      version: ${{ steps.next.outputs.version }}
+      sha: ${{ steps.next.outputs.sha }}
+      previous: ${{ steps.next.outputs.previous }}
+      prerelease: ${{ steps.next.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: next
+        name: Check the version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          bash scripts/release-version.sh check "$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: tag
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+            size-budget: 78643200
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.tag.outputs.sha }}
+      - name: Stamp version
+        shell: bash
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          set -eu
+          stamp() {
+            file=$1
+            awk -v v="$VERSION" '
+              !done && $0 ~ /^version[[:space:]]*=[[:space:]]*"/ {
+                sub(/"[^"]*"/, "\"" v "\"")
+                done = 1
+              }
+              { print }
+              END { if (!done) exit 1 }
+            ' "$file" > "$file.tmp"
+            mv "$file.tmp" "$file"
+          }
+          stamp crates/kg/Cargo.toml
+      - name: macOS linker
+        if: runner.os == 'macOS'
+        run: brew install lld
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libfuse2 lld
+      - if: runner.os != 'Windows'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.18.0
+      - if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          {
+            echo "CARGO_INCREMENTAL=0"
+            echo "RUSTC_WRAPPER=sccache"
+            echo "SCCACHE_GHA_ENABLED=true"
+            echo "CMAKE_C_COMPILER_LAUNCHER=sccache"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          } >> "$GITHUB_ENV"
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+        with:
+          cache: false
+      - name: Prepare cargo-packager cache directory
+        shell: bash
+        run: mkdir -p "$RUNNER_TEMP/cargo-packager"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: packager
+        with:
+          path: ${{ runner.temp }}/cargo-packager
+          key: cargo-packager-0.11.8-${{ runner.os }}-${{ runner.arch }}
+      - name: Install cargo-packager
+        if: steps.packager.outputs.cache-hit != 'true'
+        shell: bash
+        run: cargo install cargo-packager --version 0.11.8 --locked --root "$RUNNER_TEMP/cargo-packager"
+      - name: Put cargo-packager on PATH
+        shell: bash
+        run: echo "$RUNNER_TEMP/cargo-packager/bin" >> "$GITHUB_PATH"
+      - name: Apple signing
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "Apple signing secrets unset; the dmg will be unsigned"
+            exit 0
+          fi
+          cert="$RUNNER_TEMP/kagan.p12"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -d > "$cert"
+          table=""
+          if ! grep -q '^\[package\.metadata\.packager\.macos\]$' crates/kg/Cargo.toml; then
+            table="[package.metadata.packager.macos]"
+          fi
+          {
+            echo
+            if [ -n "$table" ]; then
+              echo "$table"
+            fi
+            echo "signing-identity = \"$APPLE_SIGNING_IDENTITY\""
+            echo "signing-certificate = \"$cert\""
+            echo "signing-certificate-password = \"$APPLE_CERTIFICATE_PASSWORD\""
+          } >> crates/kg/Cargo.toml
+          if [ -n "$APPLE_ID" ]; then
+            {
+              echo
+              echo "[package.metadata.packager.macos.notarization-credentials]"
+              echo "apple-id = \"$APPLE_ID\""
+              echo "password = \"$APPLE_PASSWORD\""
+              echo "team-id = \"$APPLE_TEAM_ID\""
+            } >> crates/kg/Cargo.toml
+          fi
+      - name: Windows signing
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERTIFICATE)) {
+            Write-Host "Windows signing secret unset; the exe will be unsigned"
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "kagan.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $secure = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $imported = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
+          @"
+
+          [package.metadata.packager.windows]
+          digest-algorithm = "sha256"
+          certificate-thumbprint = "$($imported.Thumbprint)"
+          timestamp-url = "http://timestamp.digicert.com"
+          "@ | Add-Content -Path crates/kg/Cargo.toml
+      - name: Package
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              formats=deb,appimage
+              export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
+              ;;
+            macOS) formats=dmg ;;
+            Windows) formats=nsis ;;
+            *) echo "no installer for $RUNNER_OS" >&2; exit 1 ;;
+          esac
+          cargo packager --release --formats "$formats"
+      - name: Size budget
+        shell: bash
+        env:
+          BUDGET: ${{ matrix.size-budget }}
+        run: |
+          set -eu
+          bin=target/release/kg
+          if [ "$RUNNER_OS" = Windows ]; then bin=$bin.exe; fi
+          size=$(wc -c < "$bin" | tr -d ' ')
+          echo "\`kg\` on $RUNNER_OS: $size bytes, budget ${BUDGET:-none}" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$BUDGET" ] && [ "$size" -gt "$BUDGET" ]; then
+            echo "::error::kg is $size bytes, over its $BUDGET byte budget"
+            exit 1
+          fi
+      - if: runner.os != 'Windows'
+        shell: bash
+        run: ${SCCACHE_PATH:-sccache} --show-stats
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            target/packager/*.dmg
+            target/packager/*.exe
+            target/packager/*.deb
+            target/packager/*.AppImage
+          if-no-files-found: error
+
+  publish:
+    needs: [tag, package]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: dist
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.tag.outputs.tag }}
+          SHA: ${{ needs.tag.outputs.sha }}
+          PREVIOUS: ${{ needs.tag.outputs.previous }}
+          PRERELEASE: ${{ needs.tag.outputs.prerelease }}
+        run: |
+          set -eu
+          if [ -z "$(ls -A dist)" ]; then
+            echo "no installers" >&2
+            exit 1
+          fi
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          mapfile -t files < <(find dist -type f | sort)
+          args=(--target "$SHA" --title "$TAG" --generate-notes)
+          if [ -n "$PREVIOUS" ]; then args+=(--notes-start-tag "$PREVIOUS"); fi
+          if [ "$PRERELEASE" = true ]; then args+=(--prerelease); fi
+          gh release create "$TAG" "${args[@]}" "${files[@]}"

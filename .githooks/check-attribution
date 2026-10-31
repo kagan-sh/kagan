@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+hook="$PWD/.githooks/commit-msg"
+
+if [ -z "${BASE_REF:-}" ]; then
+  echo "BASE_REF is unset" >&2
+  exit 2
+fi
+
+git fetch --no-tags origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+fail=0
+
+scan() {
+  label=$1
+  src=$2
+  dst=$(mktemp)
+  cp "$src" "$dst"
+  "$hook" "$dst"
+  if ! cmp -s "$src" "$dst"; then
+    echo "::error::AI attribution in ${label}. Remove lines that attribute the change to an AI tool." >&2
+    diff -u "$src" "$dst" >&2 || true
+    fail=1
+  fi
+  rm -f "$dst"
+}
+
+for sha in $(git rev-list "origin/${BASE_REF}..HEAD"); do
+  msg=$(mktemp)
+  git log -1 --format=%B "$sha" > "$msg"
+  scan "commit ${sha}" "$msg"
+  rm -f "$msg"
+done
+
+title=$(mktemp)
+body=$(mktemp)
+printf '%s\n' "${PR_TITLE-}" > "$title"
+printf '%s\n' "${PR_BODY-}" > "$body"
+scan "pull request title" "$title"
+scan "pull request body" "$body"
+rm -f "$title" "$body"
+
+if [ "$fail" -ne 0 ]; then
+  echo "Remove AI attribution from the pull request title, body, and commits." >&2
+  echo "Do not add Co-authored-by, Generated with, Assisted-by, Created-by, or Made-with lines that name an AI tool." >&2
+  echo "Do not bypass .githooks/commit-msg. The hook is only a backstop." >&2
+  exit 1
+fi
