@@ -125,7 +125,7 @@ impl Kagan {
     }
 }
 
-/// One labeled value. `kg ui` reads the value from the element's facts.
+// `kg ui` reads the value from the element's facts.
 fn fact(id: &'static str, label: &'static str, value: String, cx: &App) -> AnyElement {
     v_flex()
         .id(id)
