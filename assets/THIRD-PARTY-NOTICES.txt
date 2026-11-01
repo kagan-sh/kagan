@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock f63209bb575054d3019fe1a6d415bd55a919c0cf2af2cd72b7e23656aaf1b6b8
+cargo-lock b7d8cc88a047c4ff34eaa11723836c4d5613e1f9731286ea89e91940ea0d088d
 
 kagan itself is MIT. See LICENSE.
 
@@ -8603,6 +8603,7 @@ uuid 1.26.1
 version_check 0.9.5
 wait-timeout 0.2.1
 waker-fn 1.2.0
+xattr 1.6.1
 xml5ever 0.18.1
 zed-font-kit 0.14.1-zed
 
@@ -17893,6 +17894,7 @@ jsonschema-regex 0.58.3
 jsonschema-value 0.58.3
 libm 0.2.16
 malloc_buf 0.0.6
+minisign-verify 0.3.0
 objc-sys 0.3.5
 objc2-app-kit 0.2.2
 objc2-encode 4.1.0
