@@ -115,22 +115,17 @@ jobs:
       - name: Put cargo-packager on PATH
         shell: bash
         run: echo "$RUNNER_TEMP/cargo-packager/bin" >> "$GITHUB_PATH"
-      - name: Apple signing
+      - name: Apple signing identity
         if: runner.os == 'macOS'
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # cargo-packager reads the certificate and notarization login from the Package step's
+        # environment; the signing identity has no environment variable, so it goes in Cargo.toml.
         run: |
-          if [ -z "$APPLE_CERTIFICATE" ]; then
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
             echo "Apple signing secrets unset; the dmg will be unsigned"
             exit 0
           fi
-          cert="$RUNNER_TEMP/kagan.p12"
-          printf '%s' "$APPLE_CERTIFICATE" | base64 -d > "$cert"
           table=""
           if ! grep -q '^\[package\.metadata\.packager\.macos\]$' crates/kg/Cargo.toml; then
             table="[package.metadata.packager.macos]"
@@ -141,18 +136,7 @@ jobs:
               echo "$table"
             fi
             echo "signing-identity = \"$APPLE_SIGNING_IDENTITY\""
-            echo "signing-certificate = \"$cert\""
-            echo "signing-certificate-password = \"$APPLE_CERTIFICATE_PASSWORD\""
           } >> crates/kg/Cargo.toml
-          if [ -n "$APPLE_ID" ]; then
-            {
-              echo
-              echo "[package.metadata.packager.macos.notarization-credentials]"
-              echo "apple-id = \"$APPLE_ID\""
-              echo "password = \"$APPLE_PASSWORD\""
-              echo "team-id = \"$APPLE_TEAM_ID\""
-            } >> crates/kg/Cargo.toml
-          fi
       - name: Windows signing
         if: runner.os == 'Windows'
         shell: pwsh
@@ -177,6 +161,12 @@ jobs:
           "@ | Add-Content -Path crates/kg/Cargo.toml
       - name: Package
         shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           case "$RUNNER_OS" in
             Linux)
