@@ -139,9 +139,32 @@ jobs:
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
+      - name: Watch disk and memory
+        run: |
+          df -h / ; free -m ; nproc
+          du -sh target ~/.cargo 2>/dev/null; ls target 2>/dev/null; du -sh target/* 2>/dev/null
+          cat > "$RUNNER_TEMP/watch.sh" <<'EOF'
+          while sleep 15; do
+            { echo "=== $(date -u +%T)"; df -h / | tail -1; free -m | sed -n 2,3p; cat /proc/loadavg; echo "procs $(ps -e --no-headers | wc -l)"
+              ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args --sort=-rss | head -8 | cut -c1-220; } >> "$RUNNER_TEMP/watch.log"
+            disk=$(df --output=avail -k / | tail -1); mem=$(awk '/MemAvailable/{print $2}' /proc/meminfo)
+            if [ "$disk" -lt 1500000 ] || [ "$mem" -lt 700000 ]; then
+              { echo "!!! low disk=${disk}k mem=${mem}k"; ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args --sort=-rss | head -60 | cut -c1-300; du -sh target/* 2>/dev/null; } >> "$RUNNER_TEMP/watch.log"
+              pkill -INT -f cargo-nextest; sleep 5; pkill -KILL -f 'rustc|cargo|nextest'; sleep 60
+            fi
+          done
+          EOF
+          nohup bash "$RUNNER_TEMP/watch.sh" > /dev/null 2>&1 &
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Build tests
+        run: |
+          cargo nextest run --workspace --all-targets --locked --profile ci --no-run
+          df -h / ; du -sh target target/* 2>/dev/null
       - name: Tests
         run: cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
+      - name: Watch log
+        if: always()
+        run: cat "$RUNNER_TEMP/watch.log"; df -h /; ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args | cut -c1-200
 
   macos:
     needs: scope
