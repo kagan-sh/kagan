@@ -36,6 +36,7 @@ mod sidebar;
 mod start;
 mod surface;
 mod tabs;
+mod update;
 
 use changes::Changes;
 use kg_domain::ProjectOp;
@@ -175,6 +176,7 @@ pub(crate) struct Kagan {
     _questions_watch: Subscription,
     note: Option<SharedString>,
     plugin_prompt_notice: Option<ThreadId>,
+    update_hidden: Option<String>,
     focus: FocusHandle,
     surface_close_focus: FocusHandle,
     // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
@@ -200,7 +202,7 @@ pub(crate) struct Kagan {
     layout: Layout,
     viewport: gpui_kit::Pixels,
     prefs: Entity<settings::Prefs>,
-    _settings_watch: [Subscription; 2],
+    _settings_watch: [Subscription; 3],
     panes: layout::Panes,
     right_toggle_focus: FocusHandle,
     left_overlay_focus: FocusHandle,
@@ -466,6 +468,7 @@ impl Kagan {
             ),
             note: None,
             plugin_prompt_notice: None,
+            update_hidden: None,
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
             surface_hold: false,
@@ -1576,6 +1579,7 @@ impl Kagan {
                                 .child(note),
                         )
                     })
+                    .children(update::notice(self, cx))
                     .children(
                         self.plugin_prompt_visible(cx)
                             .then(|| Self::plugin_prompt_notice(cx)),

@@ -15,6 +15,7 @@ mod skill;
 mod tests;
 mod thread;
 mod ui;
+mod update;
 mod workspace;
 
 pub use approval::{Approval, Requester};
@@ -22,5 +23,6 @@ pub use entity::{Environment, Project, Thread};
 pub use keys::{host_os, parse_key};
 pub use kg_terminal::{Ansi, Cell, Color, Cursor, Grid, Motion, Mouse, Weight};
 pub use ui::{UiDispatch, UiJob};
+pub use update::{Target, Updater};
 
 pub use workspace::{PluginDispatch, PluginRequest, SocketLocation, Workspace, WorkspaceEvent};

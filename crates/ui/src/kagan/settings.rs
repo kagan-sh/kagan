@@ -8,6 +8,7 @@ mod keyboard;
 mod pages;
 mod plugins;
 mod slots;
+mod updates;
 
 use crate::ui_registry::Facts;
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -60,17 +61,20 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
 pub(super) struct Prefs {
     pub(super) agent_integration: bool,
     pub(super) notify: bool,
+    pub(super) update_check: bool,
 }
 
 pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
     cx.new(|_| Prefs {
         agent_integration: true,
         notify: true,
+        update_check: false,
     })
 }
 
-pub(super) fn watch(prefs: &Entity<Prefs>, cx: &mut Context<Kagan>) -> [Subscription; 2] {
+pub(super) fn watch(prefs: &Entity<Prefs>, cx: &mut Context<Kagan>) -> [Subscription; 3] {
     [
+        cx.observe(&kg_core::Updater::global(cx), |_, _, cx| cx.notify()),
         cx.observe(prefs, |_, _, cx| cx.notify()),
         cx.observe(&ThemeState::global(cx), |_, _, cx| cx.notify()),
     ]
@@ -111,7 +115,7 @@ impl Kagan {
         window.defer(cx, move |_, cx| {
             kagan.update(cx, |this, cx| {
                 this.settings_scroll
-                    .scroll_to_top_of_item(4 + keyboard::count(cx));
+                    .scroll_to_top_of_item(5 + keyboard::count(cx));
                 cx.notify();
             });
         });
@@ -214,13 +218,16 @@ impl Kagan {
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
         let agent = super::layout::read::<bool>("agent-integration", cx);
         let notify = super::layout::read::<bool>("notify", cx);
+        let update = super::layout::read::<bool>("update-check", cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.unwrap_or(true);
             let notifications = notify.await.unwrap_or(true);
+            let update_check = update.await.unwrap_or(false);
             prefs.update(cx, |prefs, cx| {
                 prefs.agent_integration = on;
                 prefs.notify = notifications;
+                prefs.update_check = update_check;
                 cx.notify();
             });
         })

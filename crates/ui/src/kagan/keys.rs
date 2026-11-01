@@ -147,6 +147,7 @@ impl Global for ChordWatch {}
 /// a saved shortcut takes effect at once. Call after `Workspace::open`.
 pub(crate) fn install_keys(cx: &mut App) {
     super::menus::bind(cx);
+    super::update::bind(cx);
     cx.bind_keys(terminal_bindings());
     cx.bind_keys(tree_bindings());
     cx.bind_keys(sidebar::bindings());

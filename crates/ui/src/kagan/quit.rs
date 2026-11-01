@@ -143,7 +143,7 @@ pub(crate) fn quit_requests() -> usize {
     REQUESTS.with(Cell::get)
 }
 
-fn accept(cx: &mut App) {
+pub(super) fn accept(cx: &mut App) {
     cx.set_global(Quitting);
     let stop = kg_core::Workspace::stop_for_quit(cx);
     cx.spawn(async move |cx| {

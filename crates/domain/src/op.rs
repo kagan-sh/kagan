@@ -68,7 +68,7 @@ pub enum Op {
     /// Keyboard shortcuts: built-in ones and plugin commands
     #[command(subcommand)]
     Keymap(KeymapOp),
-    /// Read or save a preference: confirm-archive, agent-integration, notify, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
+    /// Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
     #[command(subcommand)]
     Preference(PreferenceOp),
     /// Native window for QA and agents
@@ -80,6 +80,9 @@ pub enum Op {
     /// Write a local diagnostics file
     #[command(subcommand)]
     Diagnostics(DiagnosticsOp),
+    /// Check for a newer kagan
+    #[command(subcommand)]
+    Update(crate::UpdateOp),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
@@ -1713,6 +1716,7 @@ pub enum OpResult {
     Terminals(Vec<ExtraTerminal>),
     Details(crate::ThreadDetails),
     Links(Vec<String>),
+    Update(crate::UpdateStatus),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2009,7 +2013,8 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
         | Op::Window(_)
         | Op::Sidebar
         | Op::Ui(_)
-        | Op::Diagnostics(_) => Ok(()),
+        | Op::Diagnostics(_)
+        | Op::Update(_) => Ok(()),
         Op::Surface(op) => match op {
             SurfaceOp::List | SurfaceOp::Threads => Ok(()),
             SurfaceOp::Open { id, .. } | SurfaceOp::Close { id, .. } => {

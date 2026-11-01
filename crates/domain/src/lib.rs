@@ -10,6 +10,7 @@ mod review_test;
 #[cfg(test)]
 mod tests;
 mod theme;
+mod update;
 
 pub use diff::{
     BaseBranch, DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList,
@@ -41,3 +42,4 @@ pub use record::{
 };
 pub use review::{ReviewRow, review_rows};
 pub use theme::{Color, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError};
+pub use update::{Install, UpdateOp, UpdateState, UpdateStatus};
