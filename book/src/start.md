@@ -7,8 +7,8 @@ On an Apple silicon Mac, download the app or use Homebrew. Otherwise, build kaga
 ### Download
 
 1. Download the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases).
-2. Open it and drag `kagan.app` to `/Applications`.
-3. The `kg` command is at `/Applications/kagan.app/Contents/MacOS/kg`. It is not on your `PATH` by itself. Link it into `/usr/local/bin`, which is on the macOS `PATH`:
+2. Open the file and drag `kagan.app` to `/Applications`.
+3. Add `kg` to your `PATH`:
 
    ```bash
    sudo mkdir -p /usr/local/bin
@@ -21,7 +21,7 @@ On an Apple silicon Mac, download the app or use Homebrew. Otherwise, build kaga
 brew install --cask kagan-sh/tap/kagan
 ```
 
-This puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
+Homebrew puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
 
 ### Build from source
 
@@ -46,30 +46,31 @@ This puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
    ```
 
    The first build takes several minutes. Then the window opens.
-4. Add the `kg` command to your `PATH`. On macOS and Linux, add this line to your shell profile, such as `~/.zshrc`. If you cloned kagan to a different folder, change `$HOME/kagan` to that folder:
+4. Add the `kg` command to your `PATH`. On macOS and Linux, add this line to your shell profile:
 
    ```bash
    export PATH="$HOME/kagan/target/release:$PATH"
    ```
 
-   On Windows, add the `target\release` folder, which has `kg.exe`, to your `Path`.
+   If you cloned kagan to a different folder, change `$HOME/kagan` to that folder. On Windows, add the `target\release` folder to your `Path`.
 
-To open kagan later, run `kg`.
-
-On the first start, kagan makes its data folder, `~/.kagan`, and a project named Personal. Personal is for work that is not in a git repository. [Your data](data.md) lists all the places where kagan writes.
+Run `kg` to open kagan later. On first start, kagan makes its default data folder, `~/.kagan`.
 
 ## First thread
 
-1. Click **Add project** in the left sidebar. Select a folder, usually a git repository.
-2. The New thread screen opens. Select Claude Code, Codex, or another program, and press Enter.
-3. The program starts in a new thread. Type to it as you do in any terminal.
-4. Open **Changes** in the right sidebar to see what the program changed. On a narrow window, press Cmd+Backslash to show the right sidebar. [Review changes](window.md#review-changes) tells you how to send comments back.
+1. Click **Add project** in the left sidebar and select a folder.
+2. Select Claude Code, Codex, or another program on the New thread screen.
+3. Press Enter.
+4. Type to the program as you do in any terminal.
+5. Click **Changes** in the right sidebar to see the changed files.
 
-For a git repository, the thread gets its own git worktree by default. [Threads](threads.md#folders) tells you about the folder choices.
+For a git repository, the thread gets its own git worktree by default. Your project folder does not change. [Threads](threads.md#folders) explains the folder choices.
+
+[Review changes](review.md) shows how to send comments to the program. On a narrow window, press Cmd+Backslash to show the right sidebar.
 
 ## Use `kg` from a terminal
 
-`kg` controls the open kagan window. Open kagan first, then try these commands:
+Open kagan, then run:
 
 ```bash
 # Check that kg works
@@ -78,15 +79,13 @@ kg guide
 kg help
 ```
 
-- `kg project list` shows your projects and their ids. Personal is always there.
-- `kg guide` explains the words that kagan uses.
-- `kg help` lists all commands. [`kg` command](cli.md) has the full list.
+`kg project list` shows your projects and their ids. `kg guide` explains kagan's terms. `kg help` lists all commands.
 
-To add a project and start a thread in it:
+To add a project and start a thread:
 
 ```bash
 kg project add ~/code/my-app
 kg thread run --project-id <project-id> --program claude
 ```
 
-`kg project add` shows the id of the new project. If the program is not installed, the command fails with `program claude was not found`.
+`kg project add` shows the id of the new project. If your computer does not have the program, the command fails with `program claude was not found`.
