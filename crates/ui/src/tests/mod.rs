@@ -1,8 +1,12 @@
 mod about;
 mod brand;
 mod commands;
+#[cfg(unix)]
+mod details;
 mod identities;
 mod kagan;
+#[cfg(unix)]
+mod links;
 mod menus;
 mod navigation;
 #[cfg(unix)]
@@ -15,3 +19,5 @@ mod secret;
 mod settings;
 mod sidebars;
 mod surfaces;
+#[cfg(unix)]
+mod tabs;

@@ -100,7 +100,7 @@ fn first_run_commands() -> Vec<Vec<String>> {
             take = false;
             continue;
         }
-        if fence && line == "# first-run" {
+        if fence && line == "# Check that kg works" {
             take = true;
             continue;
         }

@@ -829,7 +829,7 @@ async fn follow_plugin_prompt(
         cx.background_executor()
             .timer(Duration::from_millis(100))
             .await;
-        let grid = cx.update(|cx| Workspace::global(cx).read(cx).grid(&id));
+        let grid = cx.update(|cx| Workspace::global(cx).read(cx).grid(&id, None));
         if let Some(grid) = grid
             && grid
                 .lines
@@ -847,6 +847,7 @@ async fn follow_plugin_prompt(
                             id: id.clone(),
                             text: Some(PLUGIN_PROMPT.into()),
                             file: None,
+                            terminal: None,
                         }),
                         cx,
                     )

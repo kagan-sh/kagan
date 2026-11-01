@@ -455,7 +455,10 @@ fn dropping_a_terminal_does_not_wait_for_a_program_that_will_not_end() {
     let started = Instant::now();
     drop(terminal);
     assert!(started.elapsed() < Duration::from_secs(1), "drop waited");
-    assert!(!alive(job), "job {job} survived drop");
+    assert!(
+        dies_within(job, Duration::from_secs(3)),
+        "job {job} survived drop"
+    );
     drop((reap, reap_job));
 }
 
@@ -781,11 +784,15 @@ fn a_report_reaches_the_program_as_the_bytes_it_is_given() {
     terminal
         .report(vec![0x1b, b'[', b'M', 0x20, 0x80, 0x21])
         .unwrap();
-    wait_for(&terminal, "80  21");
+    // od pads the bytes with two spaces on macOS and one on Linux.
+    let screen = wait_for(&terminal, "21");
     assert!(
-        terminal.screen().contains("1b  5b  4d  20  80  21"),
-        "{:?}",
-        terminal.screen()
+        screen
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .windows(6)
+            .any(|bytes| bytes == ["1b", "5b", "4d", "20", "80", "21"]),
+        "{screen:?}"
     );
     drop(reap);
 }

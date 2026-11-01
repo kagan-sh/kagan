@@ -1,38 +1,54 @@
 # Skills
 
-A skill is a folder with a `SKILL.md` file. The top of the file is YAML with `name` and `description`. The name is lowercase and hyphenated, and it matches the folder name. The rest is instructions for the agent.
+A skill is a folder of instructions that an agent can load for one kind of task. The folder has a `SKILL.md` file:
 
-Four places supply skills. A later place overrides an earlier one with the same name:
+```markdown
+---
+name: release-notes
+description: Write release notes from the git log.
+---
 
-| Place | Where |
-| --- | --- |
-| Bundled | Inside the `kg` binary |
-| Plugin | An enabled plugin's manifest |
-| User | `<dataDir>/skills` |
-| Project | `<project>/.kagan/skills` |
+Read the commits since the last tag. Group them by feature and fix.
+```
 
-Two skills with the same name in one place are both dropped. `kg skill list` shows that error.
+The lines between the `---` lines give the `name` and the `description`. The name uses lowercase letters and hyphens, and it is the same as the folder name. The rest of the file is the instructions.
 
-The agent does not see the instructions until it asks. The tool list names each skill and its description. The agent loads one with the `skill_load` tool. `kg skill files <name>` prints the same paths, so the agent can read them with its own file tools.
+## Where skills come from
+
+kagan reads skills from four places. If two places have a skill with the same name, the later place wins:
+
+1. Built into `kg`.
+2. An enabled plugin.
+3. Your skills: `<data folder>/skills`.
+4. The project: `<project>/.kagan/skills`.
+
+If one place has two skills with the same name, kagan uses neither. `kg skill list` shows the error.
+
+> [!WARNING]
+> A repository that you clone can have skills in `.kagan/skills`. Your agent can load them and obey them. Read them before you start an agent in a repository that you do not trust.
+
+## How an agent uses skills
+
+The agent sees the name and the description of each skill. It loads the instructions only when it needs them.
+
+## Commands
 
 ```bash
 kg skill list
 kg skill show kg-plugin-authoring
-kg skill files kg-plugin-authoring
 kg skill new my-skill
 kg skill new my-skill --project
 kg skill add <path>
-kg skill add <path> --project
 kg skill remove my-skill
 ```
 
-`new` writes a folder into your user skills, or into the project when you pass `--project`. `add` copies a folder you already have. `remove` deletes a user or project skill. Bundled skills and plugin skills stay.
+- `new` makes a skill folder in your skills. With `--project`, it makes the folder in the project.
+- `add` copies a skill folder that you have.
+- `remove` deletes one of your skills or a project skill. You cannot remove a built-in skill or a plugin skill.
 
-Four skills ship in the binary:
+## Built-in skills
 
-- `kg-cli` for threads, projects, and environments
-- `kg-plugin-authoring` for building a plugin
-- `kg-skill-creator` for writing a skill
-- `kg-ui` for driving the open window without the operating system's mouse or keyboard
-
-`kg guide skills` prints the same rules.
+- `kg-cli`: threads, projects, and folders.
+- `kg-plugin-authoring`: make a plugin.
+- `kg-skill-creator`: write a skill.
+- `kg-ui`: operate the open window from `kg`.

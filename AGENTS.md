@@ -51,7 +51,7 @@ Commit messages and pull requests carry the change, not the tooling. Never add a
 
 A fresh clone turns it on with `git config core.hooksPath .githooks`.
 `.githooks/pre-commit` runs only `cargo fmt --check` for both workspaces, so a commit takes about a second. `.githooks/pre-push-test` fails if it gains any other cargo command.
-`.githooks/pre-push` runs checks that do not compile: attribution, typos, the glossary, the plugin tests, the size budget, crate boundaries, view colors, and `cargo fmt --check`. Fetch `origin/main` first. Install the pinned `typos` (`scripts/typos-version`).
+`.githooks/pre-push` runs checks that do not compile: attribution, typos, the glossary, the size budget, crate boundaries, view colors, and `cargo fmt --check`. Fetch `origin/main` first. Install the pinned `typos` (`scripts/typos-version`).
 
 ## Agent loop
 
@@ -71,7 +71,7 @@ Then push with the hooks on, so `.githooks/pre-push` runs. `cargo t` runs cargo-
 
 ## Enforced
 
-- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, the plugin tests, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear and crate boundaries; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear and crate boundaries; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
 - Workspace lints in the root `Cargo.toml` (`[workspace.lints]`) deny `unwrap_used`, `expect_used` (tests excepted), `dbg_macro`, `todo`, `print_stdout` outside `kg`, and warn on `clippy::pedantic`.
 - Every pull request into `main` is reviewed against this file, and anything that breaks it is sent back.
 

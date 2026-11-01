@@ -7,17 +7,3 @@ impl ComponentError {
         Self(message.to_string())
     }
 }
-
-macro_rules! fail {
-    ($($arg:tt)*) => {
-        return Err($crate::components::fail::ComponentError::new(format!($($arg)*)).into())
-    };
-}
-
-macro_rules! ensure {
-    ($cond:expr, $($arg:tt)*) => {
-        if !$cond {
-            fail!($($arg)*);
-        }
-    };
-}

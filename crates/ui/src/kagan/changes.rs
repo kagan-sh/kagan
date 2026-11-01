@@ -162,6 +162,10 @@ pub(super) fn poll_open_changes(cx: &mut Context<Kagan>) -> Task<()> {
             let open = this.update(cx, |this, cx| {
                 if this.right_mounted() || this.thread_visible(cx) {
                     this.load_changes(cx);
+                    if this.details_open() {
+                        this.load_details(cx);
+                    }
+                    this.load_local_link(cx);
                 }
             });
             if open.is_err() {

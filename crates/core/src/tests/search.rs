@@ -196,6 +196,7 @@ async fn a_match_across_a_wrapped_row_is_found_and_scrolled_to_its_first_row(
         Op::Thread(ThreadOp::Scroll {
             id: ThreadId("thr_long".into()),
             lines: i32::try_from(snippet.scroll).unwrap(),
+            terminal: None,
         }),
         cx,
     )
@@ -204,7 +205,7 @@ async fn a_match_across_a_wrapped_row_is_found_and_scrolled_to_its_first_row(
     let grid = fixture
         .workspace
         .read_with(cx, |workspace, _| {
-            workspace.grid(&ThreadId("thr_long".into()))
+            workspace.grid(&ThreadId("thr_long".into()), None)
         })
         .unwrap();
     let rows: Vec<String> = grid

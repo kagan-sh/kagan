@@ -17,6 +17,7 @@ actions!(
 
 pub(crate) fn bind(cx: &mut App) {
     super::navigation::bind(cx);
+    super::tabs::bind(cx);
     cx.bind_keys([
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-h", Hide, None),
@@ -58,6 +59,9 @@ fn perform(op: WindowOp, cx: &mut App) {
         | WindowOp::Thread { .. }
         | WindowOp::NextThreadNeedingYou => super::navigation::perform(op, cx),
         WindowOp::CommandList | WindowOp::SearchThreads => super::commands::perform(op, cx),
+        WindowOp::NextTerminal | WindowOp::PreviousTerminal | WindowOp::OpenLocalLink => {
+            super::tabs::perform(op, cx);
+        }
         WindowOp::Quit => super::quit::finish(cx),
         WindowOp::Hide => cx.hide(),
         WindowOp::HideOthers => cx.hide_other_apps(),

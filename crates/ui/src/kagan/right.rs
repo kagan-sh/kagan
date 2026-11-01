@@ -45,6 +45,7 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
 pub(super) enum Body {
     Needs,
     Changes,
+    Details,
 }
 
 #[derive(Clone)]
@@ -59,6 +60,7 @@ pub(super) fn built_in() -> Vec<Panel> {
     [
         ("needs-you", "Questions", Body::Needs),
         ("changes", "Changes", Body::Changes),
+        ("details", "Details", Body::Details),
     ]
     .into_iter()
     .map(|(id, title, body)| Panel {
@@ -90,6 +92,12 @@ pub(super) fn render(
         .find(|panel| matches!(panel.body, Body::Changes))
         .filter(|_| thread)
         .map(|panel| frame(panel, kagan, window, cx));
+    let details = kagan
+        .panels
+        .iter()
+        .find(|panel| matches!(panel.body, Body::Details))
+        .filter(|_| thread)
+        .map(|panel| frame(panel, kagan, window, cx));
     let needs = kagan
         .panels
         .iter()
@@ -104,6 +112,7 @@ pub(super) fn render(
         .bg(cx.theme().sidebar)
         .children(needs)
         .children(changes)
+        .children(details)
 }
 
 impl Kagan {
@@ -190,6 +199,7 @@ fn frame(panel: &Panel, kagan: &Kagan, window: &mut Window, cx: &mut Context<Kag
         let body = match &panel.body {
             Body::Needs => kagan.render_needs(window, cx).into_any_element(),
             Body::Changes => kagan.render_changes(cx).into_any_element(),
+            Body::Details => kagan.render_details(cx),
         };
         frame = frame.child(
             div()

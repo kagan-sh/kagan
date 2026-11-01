@@ -657,7 +657,7 @@ impl Kagan {
                     h_flex()
                         .absolute()
                         .inset_0()
-                        .px_32()
+                        .px_40()
                         .justify_center()
                         .child(label)
                 }))

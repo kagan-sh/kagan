@@ -1,29 +1,43 @@
 # Plugins
 
-A plugin is a folder of JavaScript that adds screens, commands, agent tools, or skills. kagan reads its manifest, `kagan.json`, before it runs any plugin code.
+A plugin is a folder of JavaScript. It can add a tool below the threads, a page in the center, commands, agent tools, skills, or themes. kagan has no plugins when you install it. The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has small plugins that you can install and read.
 
-Installed plugins appear as icons on the rail at the left edge. A tool's icon shows its body below the threads in the list, and clicking that icon again closes it. A page's icon opens the page in the center. Choosing that icon again, or Close, returns to the terminal. Manage plugins opens Settings → Installed.
+Each installed plugin with a tool or a page has an icon on the rail. [The window](window.md#rail) tells you how the icons work.
 
 ## Install
 
-From git, or from a folder on disk:
+Install a plugin from git, or from a folder on your computer:
 
 ```bash
 kg plugin install git:<url>@<ref> --plugin <name>
-kg plugin install <path>
+kg plugin install ./<folder>
 ```
 
-A local folder is linked, not copied, so edits apply on reload. Install records the git commit. The same code runs until you update.
+kagan reads the plugin manifest, `kagan.json`, before it runs any plugin code. Then the window shows an install card in Questions. The card lists the powers of the plugin. Nothing runs before you click **Install**. Each plugin runs in its own JavaScript engine, and kagan gives it only the powers that you approve. Only a person in the window can click it. An agent cannot approve a plugin.
 
-The window asks you to approve the install. A card in the right panel lists what the plugin wants to do, with **Install** and **Cancel** buttons. Only a person in the app can answer. An agent cannot approve its own plugin. Cancel makes the command fail.
+A plugin can ask for these powers:
 
-A plugin can ask to run named programs, make network requests, use the clipboard, read named folders under your home, and access kagan's threads or its own database. It can also read its own folder and read and write its own data folder; its key-value storage is always available. Folder settings can grant read access to folders you choose. Running a program can be granted the full environment. The [plugin API](spec/plugin-api.md) describes the limits and all available powers. A `downloads` key or `powers.spawn` is refused.
+- Run programs that it names.
+- Use the network.
+- Use the clipboard.
+- Read folders in your home folder that it names, or folders that you select in its settings.
+- Read and change your threads, or use its own database.
 
-A plugin allowed to run git can use your git credentials, including SSH keys, your credential helper, and a GitHub token.
+Each plugin can always read its own folder, and read and write its own data folder. A plugin that can run `git` can use your git credentials, such as SSH keys and a GitHub token.
 
-## Find plugins in an index
+A plugin from git stays at the commit that you installed. A plugin from a folder is linked, not copied, so your changes apply when it loads again.
 
-A team can publish its plugins in an index: a list of names, each with its git address. Add your team's index once, then install by name:
+## Update
+
+```bash
+kg plugin update <id>
+```
+
+If the new version asks for more powers, kagan asks you again.
+
+## Install from an index
+
+A team can publish its plugins in an index. An index is a list of plugin names and their git addresses, in the file `.kagan/index.json`. Add the index one time, then install by name:
 
 ```bash
 kg plugin index add git:<url>@<ref>
@@ -31,35 +45,16 @@ kg plugin search <text>
 kg plugin install <name>
 ```
 
-An index is the file `.kagan/index.json` in a git repository, or a file or folder on this computer. A private repository uses your own git sign-in. `kg plugin index list` shows your indexes, first searched first, and `kg plugin index remove <address>` drops one. Settings → Indexes does the same: add an index, search, and press Install.
+- `kg plugin index list` shows your indexes. kagan searches the first index first.
+- `kg plugin index remove <address>` removes an index.
+- `kg plugin install <index>/<name>` installs from one index.
+- Settings → Plugins → Indexes does the same in the window.
 
-`kg plugin install <index>/<name>` picks one index. Two indexes cannot share a name. Install by name is the same install. The window asks you to approve. The card names the git address, the ref, the full commit and the index. It adds a caution when the code is a folder on your computer, or comes from a host and owner, such as `github.com/acme`, where you added no index. kagan keeps the git address and commit, not the name, so a later change to the index does not change what you installed. Update follows the ref you installed. If an index cannot be reached, search says so and still shows the others.
+The install card shows the git address, the commit, and the index. It shows a caution when the code is a folder on your computer, or comes from an owner whose index you did not add. kagan saves the git address and the commit, not the name. A later change to the index does not change your plugin.
 
-Update asks again when the powers grew:
+## Turn on, turn off, remove
 
-```bash
-kg plugin update <id>
-```
-
-## Replaceable sidebar and review
-
-A plugin can offer to draw the thread list, the review, or both. Nothing changes until you pick it: Settings → Appearance → Sidebar or Review, or
-
-```bash
-kg plugin use threads <id>
-kg plugin use review <id>
-kg plugin use threads kagan
-```
-
-`kagan` is the built-in. From a terminal, choosing a plugin asks you in the window first. Installing, updating or reloading a plugin never switches it. The rail, New thread, questions, approvals and counts stay kagan's, and so does the review footer: only kagan sends your review notes to the agent or discards them.
-
-If the plugin stops working, is turned off or removed, or draws something that floats above the window, the built-in comes back at once and the plugin's log says why. Press Cmd+Alt+B (Use built-in sidebar) or Cmd+Alt+V (Use built-in review) any time, even while the plugin holds the keyboard. Off macOS the keys are Ctrl+Shift+Alt+B and Ctrl+Shift+Alt+V.
-
-A plugin with the threads power can read your threads' changed files and start programs in their folders. Choose a replacement you trust as you would any plugin with that power.
-
-## Enable and disable
-
-Settings → Installed has a switch on each plugin. Off means the plugin is not loaded.
+Settings → Plugins has a switch for each plugin. A plugin that is off does not load.
 
 ```bash
 kg plugin list
@@ -68,11 +63,25 @@ kg plugin disable <id>
 kg plugin remove <id>
 ```
 
-The id looks like `dev.kagan.hello`.
+A plugin id looks like `dev.kagan.hello`.
+
+## Replace the thread list or the review
+
+A plugin can offer to draw the thread list, the review, or both. Nothing changes until you select it in Settings → Appearance → Sidebar or Review. From a terminal:
+
+```bash
+kg plugin use threads <id>
+kg plugin use review <id>
+kg plugin use threads kagan
+```
+
+`kagan` is the built-in version. kagan always keeps the rail, New thread, Questions, and the review buttons. Only kagan sends your review comments to the agent.
+
+If the plugin fails or is turned off, kagan goes back to the built-in version immediately. To go back yourself, press Cmd+Alt+B for the thread list or Cmd+Alt+V for the review.
 
 ## Keys
 
-A plugin's commands are listed in Settings → Keyboard under the plugin's name, with a key or Not set, and Bind, Change and Remove. Disabling or removing the plugin takes its rows away.
+Settings → Keyboard lists the commands of each plugin under the plugin name. Click **Bind** or **Change** to set a key.
 
 ```bash
 kg keymap get
@@ -82,11 +91,11 @@ kg keymap remove <id>:<command>
 
 ## Logs
 
-Each plugin card has a Logs button. From a terminal:
+Each plugin card has a **Logs** button. From a terminal:
 
 ```bash
 kg plugin logs <id>
 kg plugin logs <id> --follow
 ```
 
-`--follow` keeps printing. A rotated log starts again at the beginning and says so.
+`--follow` keeps the log open and prints new lines.

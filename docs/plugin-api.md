@@ -178,7 +178,6 @@ Plugins contribute **panels** (a View class the entry exports) placed `left` or 
 
 **kagan components**, registered through gpui-shell's `ComponentRegistry`:
 
-- `Sketch`: native drawing from shape data (boxes, arrows, text, freehand; hand-drawn or clean strokes), painted in Rust. Takes a typed `SketchScene` state entity, edited incrementally through registered methods and cached per element `key`. See [the component API and drag measurement](components.md).
 - `ThreadTitle`, `ThreadStatus`: a thread's title and its status bar.
 - `Markdown`: rendered message text.
 - `KgButton`: a command button with the calls of `Button`: `label`, `tooltip`, `loading`, `size`, `primary`, `secondary`, `danger`, `success`, `warning`, `outline`, `ghost`, `link`, `compact`, `disabled`, `selected`, `on_click`, and children, which sit inside the button. `kg ui` finds, clicks and reads it by its id, with its role, name, state and focus. Two panels that use the same id are refused by `kg ui click` unless `--within` names one. `kg plugin check` warns on a plain `Button` in any plugin script. `kg plugin new` writes a starter panel that uses `KgButton`.
@@ -195,7 +194,7 @@ Manifest form:
 }
 ```
 
-A left tool's body sits below the threads in the list column. A center page fills the center. Questions and Changes, the built-in right panels, hide or show with their header chevron; that choice is saved as `panel.<id>.collapsed`. A surface open writes the sidebar open flags only after the target is on screen. A second open or close while one is waiting for its frame is refused, and the first one finishes. A failed open leaves the flags as they were. Left tools and center pages close through `kg surface close` or their own controls, and that does not write a collapse preference. `openPanel` for a panel placed `right` fails with `{plugin} has no panel {id} in this window: right panels are no longer drawn`. Reload, disable, and removal move focus to Close, the tool's row, or the terminal when the removed view held it, and leave focus where it was otherwise. The tool row is used only when it is on screen; otherwise focus goes to the terminal, or to Settings when it is open. Choosing a thread, opening or leaving Settings, or a plugin reload, disable, or removal while a request is waiting replaces that request: it fails, and the newer change stays. `kg surface list` reports a surface as visible only when its body is in the drawn frame. A request that is still waiting does not count, and a body with no height does not count.
+A left tool's body sits below the threads in the list column. A center page fills the center. Questions, Changes and Details, the built-in right panels, hide or show with their header chevron; that choice is saved as `panel.<id>.collapsed`. A surface open writes the sidebar open flags only after the target is on screen. A second open or close while one is waiting for its frame is refused, and the first one finishes. A failed open leaves the flags as they were. Left tools and center pages close through `kg surface close` or their own controls, and that does not write a collapse preference. `openPanel` for a panel placed `right` fails with `{plugin} has no panel {id} in this window: right panels are no longer drawn`. Reload, disable, and removal move focus to Close, the tool's row, or the terminal when the removed view held it, and leave focus where it was otherwise. The tool row is used only when it is on screen; otherwise focus goes to the terminal, or to Settings when it is open. Choosing a thread, opening or leaving Settings, or a plugin reload, disable, or removal while a request is waiting replaces that request: it fails, and the newer change stays. `kg surface list` reports a surface as visible only when its body is in the drawn frame. A request that is still waiting does not count, and a body with no height does not count.
 
 ## Replaceable sidebar and review
 
@@ -237,4 +236,4 @@ A `secret` setting (decision 104):
 
 ## Measured by the spike
 
-An earlier spike measured a job round trip at p50 16 µs, each plugin after the first at +3.2 MiB and 15 ms to load (runtime once: +30 MiB), and JS-described drawing at about 3.5 µs per path segment, so large scenes use a native kagan drawing component.
+An earlier spike measured a job round trip at p50 16 µs, each plugin after the first at +3.2 MiB and 15 ms to load (runtime once: +30 MiB), and JS-described drawing at about 3.5 µs per path segment; a plugin that draws large scenes should keep its paths few.

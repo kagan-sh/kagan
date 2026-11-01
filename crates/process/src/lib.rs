@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 
 use async_process::Child;
 
+#[cfg(windows)]
+pub use job::Job;
+
 /// Owns a child and kills its entire tree on drop, including after the child exits.
 pub struct Process {
     child: Child,
@@ -247,17 +250,23 @@ mod job {
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-        SetInformationJobObject,
+        SetInformationJobObject, TerminateJobObject,
     };
     use windows_sys::Win32::System::Threading::{
         OpenProcess, OpenThread, PROCESS_SET_QUOTA, PROCESS_TERMINATE, ResumeThread,
         THREAD_SUSPEND_RESUME,
     };
 
-    pub(crate) struct Job(OwnedHandle);
+    /// A Windows Job Object that kills every process in it when it is terminated or dropped.
+    #[derive(Debug)]
+    pub struct Job(OwnedHandle);
 
     impl Job {
-        pub(crate) fn assign(pid: u32) -> io::Result<Self> {
+        /// Puts a running process, and every process it starts from now on, in a new job.
+        ///
+        /// # Errors
+        /// If the job cannot be made or the process cannot be opened or assigned.
+        pub fn assign(pid: u32) -> io::Result<Self> {
             // SAFETY: null attributes and name create an anonymous job.
             let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
             if handle.is_null() {
@@ -296,6 +305,12 @@ mod job {
                 return Err(io::Error::last_os_error());
             }
             Ok(job)
+        }
+
+        /// Kills every process in the job now.
+        pub fn terminate(&self) {
+            // SAFETY: the job handle is owned and open.
+            unsafe { TerminateJobObject(self.0.as_raw_handle(), 1) };
         }
     }
 

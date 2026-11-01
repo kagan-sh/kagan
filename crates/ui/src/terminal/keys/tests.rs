@@ -41,7 +41,6 @@ fn control_sends_control_characters() {
         ("ctrl-a", "\x01"),
         ("ctrl-c", "\x03"),
         ("ctrl-z", "\x1a"),
-        ("ctrl-shift-c", "\x03"),
         ("ctrl-@", "\0"),
         ("ctrl-2", "\0"),
         ("ctrl-[", "\x1b"),
@@ -63,6 +62,14 @@ fn control_sends_control_characters() {
     }
     assert_eq!(sent("ctrl-1"), None);
     assert_eq!(sent("ctrl-é"), None);
+    // Off macOS, Ctrl+Shift+C is the window's copy.
+    let shifted = kg_core::parse_key("ctrl-shift-c")
+        .unwrap()
+        .with_simulated_ime();
+    assert_eq!(
+        bytes_on(&shifted, false, KeyPlatform::Mac).as_deref(),
+        Some("\x03")
+    );
 }
 
 #[test]
@@ -257,8 +264,11 @@ fn altgr_types_the_character_it_makes_on_windows() {
     );
     // Ctrl and Alt together without a character is a control code, not text.
     let ctrl_alt = kg_core::parse_key("ctrl-alt-q").unwrap();
-    assert_eq!(
-        bytes_on(&ctrl_alt, false, KeyPlatform::Linux).as_deref(),
-        Some("\x1b\x11")
-    );
+    for platform in [KeyPlatform::Linux, KeyPlatform::Windows] {
+        assert_eq!(
+            bytes_on(&ctrl_alt, false, platform).as_deref(),
+            Some("\x1b\x11"),
+            "{platform:?}"
+        );
+    }
 }

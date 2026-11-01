@@ -1,7 +1,5 @@
-#[macro_use]
-mod fail;
 mod button;
-mod sketch;
+mod fail;
 #[cfg(test)]
 mod tests;
 mod thread;
@@ -18,7 +16,6 @@ use gpui_shell::{
 
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     button::register(registry)?;
-    sketch::register(registry)?;
     thread::register(registry)?;
     registry.register(
         ComponentDescriptor::new("Markdown", Arc::new(Markdown))

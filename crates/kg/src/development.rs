@@ -201,7 +201,13 @@ pub(crate) fn take_paste(op: Op) -> Result<Op, OpError> {
 }
 
 pub(crate) fn take_paste_from(op: Op, stdin: impl std::io::Read) -> Result<Op, OpError> {
-    let Op::Thread(ThreadOp::Paste { id, text, file }) = op else {
+    let Op::Thread(ThreadOp::Paste {
+        id,
+        text,
+        file,
+        terminal,
+    }) = op
+    else {
         return Ok(op);
     };
     let Some(path) = file else {
@@ -209,6 +215,7 @@ pub(crate) fn take_paste_from(op: Op, stdin: impl std::io::Read) -> Result<Op, O
             id,
             text,
             file: None,
+            terminal,
         }));
     };
     if text.is_some() {
@@ -225,6 +232,7 @@ pub(crate) fn take_paste_from(op: Op, stdin: impl std::io::Read) -> Result<Op, O
         id,
         text: Some(text),
         file: None,
+        terminal,
     }))
 }
 

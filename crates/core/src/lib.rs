@@ -1,6 +1,7 @@
 mod approval;
 mod changes;
 mod database;
+mod details;
 mod diagnostics;
 mod diff;
 mod end;

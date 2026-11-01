@@ -1,72 +1,52 @@
 # Build a plugin
 
-There is no build step. The files in the folder are what runs.
+A plugin is a folder of JavaScript files. There is no build step. kagan runs the files in the folder.
+
+## Make a starter plugin
 
 ```bash
 kg plugin new hello
-kg plugin check hello
-kg plugin install hello
-kg plugin dev hello
-kg plugin logs dev.kagan.hello --follow
-kg plugin types hello
+kg plugin check ./hello
+kg plugin install ./hello
+kg plugin dev ./hello
 ```
 
-`new` writes a folder named `hello`. `check` reads the manifest and the entry file. It does not run the plugin. `install` links that folder and waits for you to approve it in the app. `dev` reloads the plugin when a file changes. `types` rewrites the `.d.ts` files for this version of kagan. `logs --follow` shows crashes and its own log lines.
+1. `new` makes the folder `hello` with a manifest and a starter view.
+2. `check` reads the manifest and the entry file. It does not run the plugin.
+3. `install` links the folder. Click **Install** on the card in the window.
+4. `dev` loads the plugin again each time that you save a file. It keeps running, so use a second terminal for other commands. A **Hello** tool shows below the threads.
 
-`new` writes this manifest:
+To see errors and log lines, run `kg plugin logs dev.kagan.hello --follow`. To get type files for your editor, run `kg plugin types ./hello`.
 
-```json
-{
-  "id": "dev.kagan.hello",
-  "name": "hello",
-  "version": "0.1.0",
-  "kagan": ">=0.1.0",
-  "entry": "main.js",
-  "instructions": "A starter plugin: a hello tool under the threads. A panel may also be a center page. Right and bottom are refused. A hello command writes to its log; a person binds its key in Settings, Keyboard.",
-  "powers": {},
-  "commands": [
-    {
-      "id": "hello",
-      "title": "Say hello"
-    }
-  ],
-  "ui": {
-    "panels": [
-      {
-        "id": "hello",
-        "title": "Hello",
-        "view": "HelloPanel",
-        "placement": "left"
-      }
-    ]
-  },
-  "tools": [],
-  "skills": []
-}
-```
+To let an agent do the work, click **New plugin…** on the rail. The agent can read the `kg-plugin-authoring` skill.
 
-`id` is the plugin's name in commands and on disk. `kagan` is the oldest app version that can load it. `entry` is the script. The starter adds a left sidebar tool and a command that writes to its log. A panel can instead be a center page; right and bottom panels are not supported. `"ui": { "overlay": "<View>" }` draws a view over the terminal that may only paint, so it takes no clicks, keys or focus; `examples/plugins/overlay` shows one. A panel can also offer to replace the thread list or the review; see [Plugins](plugins.md#replaceable-sidebar-and-review). `secondary` means Command on macOS and Control plus Shift on other platforms; an extra `shift` does not add another key. Unknown manifest keys are an error.
+## The manifest
 
-The entry file contains the `HelloPanel` view and a job loop that handles the hello command. See the [plugin API](spec/plugin-api.md) for the available powers and jobs.
+`kagan.json` tells kagan what the plugin is and what it can do. The starter manifest has these keys:
 
-Choose New plugin… on the rail to start a Personal thread with a prompt ready to finish. The agent can read the instructions with `kg skill show kg-plugin-authoring`.
+- `id`: the plugin id, for example `dev.kagan.hello`.
+- `name`: the plugin name.
+- `version`: the plugin version.
+- `kagan`: the oldest kagan version that can load the plugin.
+- `entry`: the main script, `main.js`.
+- `instructions`: a short text for agents.
+- `powers`: what the plugin can do. The starter asks for none.
+- `commands`: commands that a person can bind to a key.
+- `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center.
+- `tools` and `skills`: agent tools and skills. The starter has none.
+
+kagan refuses a manifest with a key that it does not know. The [plugin API](spec/plugin-api.md) lists all the keys and powers. The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has small plugins: a panel, a sidebar, a review, an overlay, a `kg` command, and a theme.
 
 ## Share it
 
-Commit the plugin and push it. Then, from its folder:
+1. Commit the plugin and push it.
+2. In the plugin folder, run `kg plugin share`.
 
-```bash
-kg plugin share
-```
+`share` checks the plugin, and makes sure that the remote has the commit. Then it prints two lines:
 
-`share` checks the plugin, makes sure the folder has no changes and that a remote branch holds the commit, and prints two things:
+- An entry for your team index, `.kagan/index.json`.
+- A command that a teammate can run without an index: `kg plugin install git:<url>@<commit> --plugin <folder>`.
 
-- an entry to paste into `plugins` in your team's index, `.kagan/index.json`
-- a line a teammate can run without an index: `kg plugin install git:<url>@<commit> --plugin <folder>`
+The entry has the exact commit. To let updates follow a branch, change the commit in the entry to the branch name.
 
-The entry pins the exact commit you checked. A password in the remote address is left out. Teammates who added the index run `kg plugin install <name>`, or `kg plugin install <index>/<name>` to pick one index.
-
-Each teammate still approves the plugin. The card names the address, the ref, the full commit and the powers in plain words. It adds a caution when the code is a folder on their computer, or comes from a host and owner, such as `github.com/acme`, where they added no index. Nothing runs before they press Install. An update asks again when the powers grew.
-
-`kg plugin update` follows the ref in the entry. A commit pins the plugin; to let updates follow a release branch, change the entry's ref to that branch.
-
+Each teammate approves the plugin on their own computer. [Plugins](plugins.md#install) tells what the install card shows.

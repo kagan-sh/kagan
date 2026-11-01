@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
+*.ttf binary
+# Generated; upstream license texts keep their own line endings.
+assets/THIRD-PARTY-NOTICES.txt -text

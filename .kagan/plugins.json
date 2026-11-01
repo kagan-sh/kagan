@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "name": "kagan",
-  "plugins": [
-    { "name": "canvas", "source": "plugins/canvas" }
-  ]
-}

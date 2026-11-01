@@ -381,6 +381,7 @@ fn the_edit_menu_copy_and_paste_reach_the_terminal(cx: &mut TestAppContext) {
                 column: u16::try_from(column).unwrap(),
                 row: u16::try_from(row).unwrap(),
                 right: false,
+                terminal: None,
             }),
             cx,
         )

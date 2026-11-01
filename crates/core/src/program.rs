@@ -150,6 +150,15 @@ fn shell_variable() -> &'static str {
     if cfg!(windows) { "COMSPEC" } else { "SHELL" }
 }
 
+/// The person's login shell: the one `environment` names, else `SHELL` (`COMSPEC` on Windows).
+pub(crate) fn login_shell(environment: Option<&Environment>) -> OsString {
+    environment
+        .map(|environment| environment.shell.clone())
+        .or_else(|| std::env::var_os(shell_variable()))
+        .filter(|shell| !shell.is_empty())
+        .unwrap_or_else(|| if cfg!(windows) { "cmd.exe" } else { "/bin/sh" }.into())
+}
+
 /// The login PATH, the executable extensions, and the shell, as the list reads them.
 /// Where one workspace finds its programs: a PATH and a shell. A test sets them, so the list does
 /// not depend on what the machine has. The app leaves them unset and reads the login PATH.

@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::Path;
-use std::process::Command;
 
 #[test]
 fn third_party_notices_match_the_lock_and_the_packager() {
@@ -32,22 +31,6 @@ fn third_party_notices_match_the_lock_and_the_packager() {
 }
 
 fn lock_hash(path: &Path) -> String {
-    let shasum = Command::new("shasum")
-        .args(["-a", "256"])
-        .arg(path)
-        .output();
-    let output = match shasum {
-        Ok(output) if output.status.success() => output.stdout,
-        _ => {
-            let output = Command::new("sha256sum").arg(path).output().unwrap();
-            assert!(output.status.success());
-            output.stdout
-        }
-    };
-    String::from_utf8(output)
-        .unwrap()
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_owned()
+    use sha2::{Digest as _, Sha256};
+    format!("{:x}", Sha256::digest(std::fs::read(path).unwrap()))
 }

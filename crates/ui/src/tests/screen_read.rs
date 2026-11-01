@@ -34,3 +34,25 @@ pub(crate) fn terminal_grid(kagan: &Kagan, cx: &App) -> Option<kg_core::Grid> {
         Shown::Nothing | Shown::Start(_) => None,
     }
 }
+
+pub(crate) fn tab_numbers(kagan: &Kagan) -> Vec<u32> {
+    kagan.tabs.numbers()
+}
+
+pub(crate) fn shown_tab(kagan: &Kagan) -> Option<u32> {
+    kagan.tabs.shown()
+}
+
+pub(crate) fn tab_grid(kagan: &Kagan, cx: &App) -> Option<kg_core::Grid> {
+    match kagan.screen.shown() {
+        Shown::Thread(view) => Some(kagan.tab_view(view).read(cx).grid().clone()),
+        Shown::Nothing | Shown::Start(_) => None,
+    }
+}
+
+pub(crate) fn tab_focused(kagan: &Kagan, window: &Window, cx: &App) -> bool {
+    match kagan.screen.shown() {
+        Shown::Thread(view) => kagan.tab_view(view).read(cx).focused(window),
+        Shown::Nothing | Shown::Start(_) => false,
+    }
+}

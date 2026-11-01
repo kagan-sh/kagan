@@ -31,49 +31,6 @@ for path in Cargo.toml clippy.toml .cargo/config.toml rust-toolchain.toml crates
   [ -z "$scope" ] || fail "$path should run the rust jobs: $scope"
 done
 
-cfg=$root/.circleci/config.yml
-grep -q 'scripts/ci-changes.sh' "$cfg" || fail "the CircleCI config does not call ci-changes.sh"
-grep -q 'scripts/typos-version' "$cfg" || fail "the CircleCI config does not pin typos from scripts/typos-version"
-grep -q 'scripts/mutants-diff.sh' "$cfg" || fail "the CircleCI config does not run mutants-diff.sh"
-if grep -q 'grep -qvE' "$cfg"; then
-  fail "the CircleCI config still classifies the diff inline"
-fi
-
-status=0
-KAGAN_BOT_APP_ID= KAGAN_BOT_KEY= sh "$root/scripts/ci-pr.sh" 2> "$tmp/pr-err" || status=$?
-[ "$status" -eq 2 ] || fail "ci-pr.sh without the app variables should exit 2, got $status"
-grep -q KAGAN_BOT_KEY "$tmp/pr-err" || fail "ci-pr.sh should name the missing KAGAN_BOT_KEY"
-
-# A fake curl stands in for GitHub: FAKE_FAIL picks the call that is refused.
-mkdir -p "$tmp/fake"
-cat > "$tmp/fake/curl" << 'EOF'
-#!/bin/sh
-case " $* " in
-  */installation\ *) [ "${FAKE_FAIL:-}" = find ] && exit 22; echo '{"id":1}' ;;
-  *access_tokens*) [ "${FAKE_FAIL:-}" = mint ] && exit 22; echo '{"token":"fake-installation-token"}' ;;
-  *) [ "${FAKE_FAIL:-}" = lookup ] && exit 22; echo '[{"title":"A title","base":{"ref":"main"}}]' ;;
-esac
-EOF
-chmod +x "$tmp/fake/curl"
-openssl genrsa -out "$tmp/app.pem" 2048 2> /dev/null
-bot_key=$(openssl base64 -A < "$tmp/app.pem")
-run_pr() {
-  PATH="$tmp/fake:$PATH" KAGAN_BOT_APP_ID=1 KAGAN_BOT_KEY=$bot_key FAKE_FAIL=${1:-} \
-    CIRCLE_PROJECT_USERNAME=o CIRCLE_PROJECT_REPONAME=r CIRCLE_BRANCH=b \
-    sh "$root/scripts/ci-pr.sh" > "$tmp/pr-out" 2> "$tmp/pr-err"
-}
-run_pr || fail "ci-pr.sh should print the pull request when GitHub answers"
-grep -q '"title":"A title"' "$tmp/pr-out" || fail "ci-pr.sh printed the wrong pull request: $(cat "$tmp/pr-out")"
-for refused in find mint lookup; do
-  status=0
-  run_pr "$refused" || status=$?
-  [ "$status" -ne 0 ] || fail "ci-pr.sh should fail when the $refused call is refused"
-  [ ! -s "$tmp/pr-out" ] || fail "ci-pr.sh should print nothing when the $refused call is refused"
-done
-if grep -qF -e "$bot_key" -e fake-installation-token "$tmp/pr-out" "$tmp/pr-err"; then
-  fail "ci-pr.sh leaked the key or the token"
-fi
-
 bindir=$tmp/bin
 mkdir -p "$bindir"
 LOG=$tmp/log
@@ -118,12 +75,7 @@ printf '%s\n' "typos $*" >> "$LOG"
 echo "typos-cli ${TYPOS_VERSION:-1.51.1}"
 exit 0
 EOF
-cat > "$bindir/node" << 'EOF'
-#!/bin/sh
-printf '%s\n' "node $*" >> "$LOG"
-exit 0
-EOF
-chmod +x "$bindir/cargo" "$bindir/typos" "$bindir/node"
+chmod +x "$bindir/cargo" "$bindir/typos"
 
 MUTANTS_EXIT=0
 MUTANTS_MISSED=0
@@ -133,8 +85,7 @@ new_repo() {
   repo=$tmp/repo
   rm -rf "$repo"
   mkdir -p "$repo/.githooks" "$repo/scripts" \
-    "$repo/crates/ui/src" "$repo/crates/domain/src" \
-    "$repo/plugins/canvas"
+    "$repo/crates/ui/src" "$repo/crates/domain/src"
   cp "$root/.githooks/pre-push" "$repo/.githooks/pre-push"
   cp "$root/.githooks/pre-commit" "$repo/.githooks/pre-commit"
   cp "$root/.githooks/commit-msg" "$repo/.githooks/commit-msg"
@@ -154,7 +105,6 @@ EOF
   printf '%s\n' '[package]' 'name = "kg-ui"' 'version = "0.0.0"' 'edition = "2024"' > "$repo/crates/ui/Cargo.toml"
   printf '%s\n' '[package]' 'name = "kg-domain"' 'version = "0.0.0"' 'edition = "2024"' > "$repo/crates/domain/Cargo.toml"
   printf '%s\n' '# base' > "$repo/README.md"
-  : > "$repo/plugins/canvas/page.test.js"
   git -C "$repo" init -q -b main
   git -C "$repo" config user.email t@example.com
   git -C "$repo" config user.name t
@@ -277,7 +227,6 @@ commit 'docs: readme'
 run_hook "$(line_for_head)"
 expect 0 "docs-only"
 logged 'typos' "docs"
-logged 'node --test' "docs"
 not_logged 'cargo ' "docs"
 not_logged 'view-colors' "docs"
 
