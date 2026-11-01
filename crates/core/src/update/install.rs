@@ -8,7 +8,7 @@ use kg_domain::InstallKind;
 #[derive(Clone, Debug)]
 pub struct Target {
     pub(crate) install: InstallKind,
-    /// The `.app` bundle, the AppImage file, or the running executable.
+    /// The `.app` bundle, the `AppImage` file, or the running executable.
     path: PathBuf,
     /// The staged file or folder, beside `path` so the swap is a rename.
     staged: PathBuf,
@@ -29,6 +29,7 @@ impl Target {
     }
 
     /// Reads how kagan was installed from where it runs. `brew` lists Homebrew prefixes.
+    #[must_use]
     pub fn find(os: &str, exe: &Path, appimage: Option<PathBuf>, brew: &[PathBuf]) -> Self {
         let (install, path) = match os {
             "macos" => match bundle(exe) {

@@ -112,7 +112,7 @@ async fn download(cx: &mut TestAppContext) -> Result<(), OpError> {
 }
 
 async fn replace(cx: &mut TestAppContext) -> Result<(), OpError> {
-    cx.update(|cx| Updater::global(cx).update(cx, |updater, cx| updater.replace(cx)))
+    cx.update(|cx| Updater::global(cx).update(cx, Updater::replace))
         .await
 }
 
@@ -122,8 +122,7 @@ async fn the_automatic_check_is_off_by_default(cx: &mut TestAppContext) {
     let server = Server::start();
     server.offer("99.0.0", "payload", SIGNATURE);
     source(cx, &server, KEY, appimage(fixture.dir.path()).0);
-    cx.executor()
-        .advance_clock(Duration::from_secs(25 * 60 * 60));
+    cx.executor().advance_clock(Duration::from_hours(25));
     cx.run_until_parked();
     assert_eq!(server.hits(), 0);
     let Ok(OpResult::Update(status)) = op(cx, Op::Update(UpdateOp::Status)).await else {
@@ -141,7 +140,7 @@ async fn the_automatic_check_is_off_by_default(cx: &mut TestAppContext) {
     )
     .await
     .unwrap();
-    cx.executor().advance_clock(Duration::from_secs(60 * 60));
+    cx.executor().advance_clock(Duration::from_hours(1));
     cx.run_until_parked();
     assert_eq!(server.hits(), 1);
     assert!(matches!(state(cx), UpdateState::Available { .. }));

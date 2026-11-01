@@ -21,7 +21,7 @@ pub enum InstallKind {
     Homebrew,
     /// The Windows installer: kagan runs the new installer after it quits.
     Installer,
-    /// The Linux AppImage: kagan replaces it and restarts.
+    /// A Linux `AppImage`: kagan replaces it and restarts.
     AppImage,
     /// A .deb package or a source build: the person updates it.
     Other,

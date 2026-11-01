@@ -24,8 +24,8 @@ const KEY: &str = match option_env!("KG_UPDATE_KEY") {
     None => "RWSUEdbT8kzFInVNdQBN8fW1I4JQT5JiTj3TBCWZOlDbV7Pttvn2cEKu",
 };
 const MANIFEST: &str = "https://github.com/kagan-sh/kagan/releases/latest/download/update.json";
-const DAY: Duration = Duration::from_secs(24 * 60 * 60);
-const TICK: Duration = Duration::from_secs(60 * 60);
+const DAY: Duration = Duration::from_hours(24);
+const TICK: Duration = Duration::from_hours(1);
 
 #[derive(Deserialize)]
 struct Manifest {
@@ -264,7 +264,7 @@ impl Updater {
 pub(crate) async fn run(database: &Database, op: UpdateOp, cx: &mut AsyncApp) -> Result<OpResult> {
     let updater = cx.update(|cx| Updater::global(cx));
     if op == UpdateOp::Check {
-        updater.update(cx, |updater, cx| updater.check(cx)).await?;
+        updater.update(cx, Updater::check).await?;
     }
     let automatic = automatic_on(database).await;
     Ok(OpResult::Update(

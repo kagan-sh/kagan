@@ -4,7 +4,7 @@ use gpui_kit::component::button::Button;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, WindowExt as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ClipboardItem, Context, InteractiveElement as _, IntoElement,
+    AnyElement, App, ClipboardItem, Context, Global, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     actions,
 };
@@ -20,13 +20,17 @@ actions!(kagan, [CheckForUpdates]);
 
 pub(super) const BREW: &str = "brew upgrade --cask kagan";
 
+/// The version the person put off with Not now, until the next Check for updates.
+struct Hidden(String);
+impl Global for Hidden {}
+
 pub(super) fn bind(cx: &mut App) {
     cx.on_action(|_: &CheckForUpdates, cx| check(cx));
 }
 
 pub(super) fn check(cx: &mut App) {
-    if let Some((_, kagan)) = super::front(cx) {
-        kagan.update(cx, |kagan, _| kagan.update_hidden = None);
+    if cx.has_global::<Hidden>() {
+        cx.remove_global::<Hidden>();
     }
     let task = Workspace::dispatch(Op::Update(UpdateOp::Check), cx);
     cx.spawn(async move |cx| {
@@ -49,13 +53,12 @@ fn say(message: String, cx: &mut App) {
 }
 
 /// The quiet line over the center while a newer kagan waits.
-pub(super) fn notice(kagan: &Kagan, cx: &mut Context<Kagan>) -> Option<AnyElement> {
+pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
+    let hidden = cx.try_global::<Hidden>().map(|hidden| hidden.0.clone());
     let updater = Updater::global(cx);
     let updater = updater.read(cx);
     let text = match updater.state() {
-        UpdateState::Available { version, .. }
-            if kagan.update_hidden.as_deref() != Some(version.as_str()) =>
-        {
+        UpdateState::Available { version, .. } if hidden.as_deref() != Some(version.as_str()) => {
             match updater.kind() {
                 InstallKind::Homebrew => format!("kagan {version} is available. Run {BREW}."),
                 _ => format!("kagan {version} is available."),
@@ -85,11 +88,9 @@ pub(super) fn notice(kagan: &Kagan, cx: &mut Context<Kagan>) -> Option<AnyElemen
                 matches!(updater.state(), UpdateState::Available { .. }),
                 |row| {
                     row.child(button("update-hide", "Not now", |_, cx| {
-                        if let Some((_, kagan)) = super::front(cx) {
-                            kagan.update(cx, |kagan, cx| {
-                                kagan.update_hidden = available(cx);
-                                cx.notify();
-                            });
+                        if let Some(version) = available(cx) {
+                            cx.set_global(Hidden(version));
+                            cx.refresh_windows();
                         }
                     }))
                 },
@@ -220,7 +221,7 @@ fn install(cx: &mut App) {
     cx.spawn(async move |cx| {
         let installed = async {
             download.await?;
-            updater.update(cx, |updater, cx| updater.replace(cx)).await
+            updater.update(cx, Updater::replace).await
         }
         .await;
         cx.update(|cx| match installed {
