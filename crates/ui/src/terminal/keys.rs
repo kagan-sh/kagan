@@ -24,7 +24,13 @@ pub(crate) fn bytes_on(
         return Some(sent);
     }
     if types_text(mods, platform) {
-        return keystroke.key_char.clone();
+        if let Some(text) = &keystroke.key_char {
+            return Some(text.clone());
+        }
+        // Windows reports AltGr as Ctrl and Alt. With no character, the chord is a control code.
+        if platform != KeyPlatform::Windows {
+            return None;
+        }
     }
     let text = if mods.control {
         control(key)?.to_string()

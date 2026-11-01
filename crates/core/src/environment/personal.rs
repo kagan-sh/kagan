@@ -61,3 +61,19 @@ fn contents(path: &Path) -> String {
         count => format!("{} and {} more", names[..5].join(", "), count - 5),
     }
 }
+
+/// Removes a Personal folder. Windows refuses while the program that was just killed still has
+/// the folder open, so the removal tries again for up to five seconds.
+pub(crate) fn remove(path: &Path) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match std::fs::remove_dir_all(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) if tries < 50 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            outcome => return outcome,
+        }
+    }
+}

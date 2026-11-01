@@ -582,7 +582,12 @@ fn shift_page_up_scrolls_back_and_the_program_gets_no_keys(cx: &mut TestAppConte
     let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
-    cx.simulate_input(window, &line("for i in $(seq 1 200); do echo row$i; done"));
+    let rows = if cfg!(windows) {
+        "for /l %i in (1,1,200) do @echo row%i"
+    } else {
+        "for i in $(seq 1 200); do echo row$i; done"
+    };
+    cx.simulate_input(window, &line(rows));
     wait_until(cx, |cx| grid_text(cx, &kagan).contains("row200"));
 
     cx.simulate_keystrokes(window, "shift-pageup");
@@ -1421,7 +1426,7 @@ fn a_folder_that_is_not_git_starts_a_thread_in_itself(cx: &mut TestAppContext) {
     let started = shown(cx, &kagan).unwrap();
     let environment = environment_of(cx, &started);
     assert_eq!(environment.provider, EnvironmentProvider::Project);
-    assert_eq!(environment.path, std::fs::canonicalize(&folder).unwrap());
+    assert_eq!(environment.path, dunce::canonicalize(&folder).unwrap());
 }
 
 #[gpui_kit::test]
@@ -1451,7 +1456,7 @@ fn the_project_folder_choice_runs_in_the_git_folder(cx: &mut TestAppContext) {
     let started = shown(cx, &kagan).unwrap();
     let environment = environment_of(cx, &started);
     assert_eq!(environment.provider, EnvironmentProvider::Project);
-    assert_eq!(environment.path, std::fs::canonicalize(&repo).unwrap());
+    assert_eq!(environment.path, dunce::canonicalize(&repo).unwrap());
 }
 
 /// Whether the element named `name` is checked, and whether it has focus.
@@ -1548,7 +1553,7 @@ fn the_folder_choice_takes_the_keyboard(cx: &mut TestAppContext) {
     let started = shown(cx, &kagan).unwrap();
     let environment = environment_of(cx, &started);
     assert_eq!(environment.provider, EnvironmentProvider::Project);
-    assert_eq!(environment.path, std::fs::canonicalize(&repo).unwrap());
+    assert_eq!(environment.path, dunce::canonicalize(&repo).unwrap());
 }
 
 #[gpui_kit::test]
@@ -1796,8 +1801,15 @@ fn the_title_bar_names_the_thread_and_the_terminal_starts_below_it(cx: &mut Test
             f32::from(window.viewport_size().width)
         })
         .unwrap();
+    // Windows draws minimize, maximize and close at the right end of the bar, each one bar
+    // high and wide, and the heading centers in the space left of them.
+    let controls = if cfg!(windows) {
+        3. * f32::from(gpui_kit::component::TITLE_BAR_HEIGHT)
+    } else {
+        0.
+    };
     assert!(
-        (x + width / 2. - viewport / 2.).abs() < 1.,
+        (x + width / 2. - (viewport - controls) / 2.).abs() < 1.,
         "heading {x}+{width}, window {viewport}"
     );
     cx.update_window(window, |_, window, _| {
@@ -3161,7 +3173,7 @@ export class PanelB extends View {
         .insert_plugin(&Plugin {
             id: PluginId("dev.kagan.twin".into()),
             source: root.display().to_string(),
-            root: root.canonicalize().unwrap(),
+            root: dunce::canonicalize(root).unwrap(),
             commit: None,
             enabled: true,
             approved: serde_json::json!({ "powers": {}, "downloads": {}, "folders": {} }),
@@ -3476,7 +3488,7 @@ fn installing_from_the_plugins_box_asks_for_approval_in_needs_you(cx: &mut TestA
         "export default class Plugin {}\n",
     )
     .unwrap();
-    let root = plugin.path().canonicalize().unwrap();
+    let root = dunce::canonicalize(plugin.path()).unwrap();
 
     // Type the folder into the install form on the Installed page and press its Install button.
     click(cx, window, "settings-gear");
@@ -3758,6 +3770,12 @@ fn git(path: &Path, args: &[&str]) {
     let output = std::process::Command::new("git")
         .arg("-C")
         .arg(path)
+        .args([
+            "-c",
+            "user.name=Kagan",
+            "-c",
+            "user.email=kagan@example.com",
+        ])
         .args(args)
         .output()
         .unwrap();
@@ -4187,7 +4205,7 @@ pub(super) fn install_navigator(data: &Path) {
         .insert_plugin(&Plugin {
             id: PluginId("dev.kagan.navigator".into()),
             source: root.display().to_string(),
-            root: root.canonicalize().unwrap(),
+            root: dunce::canonicalize(root).unwrap(),
             commit: None,
             enabled: true,
             approved: serde_json::json!({
@@ -5393,7 +5411,10 @@ fn a_saved_diagnostics_notice_keeps_dismiss_on_screen(cx: &mut TestAppContext) {
         "dismiss {dismiss_x}+{dismiss_w} window {width}"
     );
     let message = value_of(cx, window, "toast-message").unwrap_or_default();
-    let saved = data.path().join("diagnostics");
+    // Windows can hand out the temp folder by its short 8.3 name; kagan shows the full one.
+    let saved = dunce::canonicalize(data.path())
+        .unwrap()
+        .join("diagnostics");
     assert!(
         message.starts_with("Saved diagnostics to ")
             && message.contains(saved.to_str().unwrap_or("")),
@@ -6068,8 +6089,9 @@ fn review_comments_are_pasted_without_submitting(cx: &mut TestAppContext) {
     );
     cx.executor().advance_clock(POLL);
     cx.run_until_parked();
-    let screen = grid_text(cx, &kagan);
-    assert!(screen.contains("check"), "{screen}");
+    // The terminal wraps the pasted line at its width.
+    let screen = grid_text(cx, &kagan).replace('\n', "");
+    assert!(screen.contains("Please check this"), "{screen}");
     assert!(!screen.contains("command not found"));
 }
 

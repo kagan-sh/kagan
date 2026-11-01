@@ -142,10 +142,16 @@ fn plain_buttons(root: &Path) -> Result<Vec<String>> {
     for script in plugin_scripts(root)? {
         let source = std::fs::read_to_string(&script)?;
         if constructs_button(&source) {
-            let shown = script.strip_prefix(root).unwrap_or(&script);
+            // Plugin paths use `/` on every platform, as in the manifest.
+            let shown = script
+                .strip_prefix(root)
+                .unwrap_or(&script)
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("/");
             warnings.push(format!(
-                "{} uses Button, which kg ui cannot find or click; use KgButton",
-                shown.display()
+                "{shown} uses Button, which kg ui cannot find or click; use KgButton"
             ));
         }
     }

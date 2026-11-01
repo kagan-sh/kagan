@@ -100,7 +100,7 @@ Quit ends all programs that run. If a program runs, kagan asks first. To keep th
 
 ## Keys
 
-On Linux and Windows, Cmd in this book means Ctrl+Shift. For example, Cmd+N is Ctrl+Shift+N. Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. Ctrl alone always goes to the terminal program. On macOS, Alt is the Option key.
+On Linux and Windows, Cmd in this book means Ctrl+Shift. For example, Cmd+N is Ctrl+Shift+N. Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. In the terminal on Linux and Windows, Ctrl+Shift+C copies and Ctrl+Shift+V pastes. Ctrl alone always goes to the terminal program. On macOS, Alt is the Option key.
 
 | Key | Action |
 | --- | --- |

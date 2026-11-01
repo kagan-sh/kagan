@@ -33,6 +33,7 @@ image = { version = "=0.25.10", default-features = false, features = ["png"] }
 windows = { version = "=0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_Xps", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
+dunce = "=1.0.5"
 kg-core = { workspace = true, features = ["test-support"] }
 kg-store.workspace = true
 tempfile = "=3.27.0"

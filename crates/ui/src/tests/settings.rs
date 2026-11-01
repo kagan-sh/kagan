@@ -529,7 +529,7 @@ fn a_folder_approval_shows_in_settings(cx: &mut TestAppContext) {
     cx.run_until_parked();
     click(cx, window, "settings-gear");
 
-    let folder = std::fs::canonicalize(data.path())
+    let folder = dunce::canonicalize(data.path())
         .unwrap()
         .display()
         .to_string();
@@ -1967,7 +1967,7 @@ fn until_saved(cx: &mut TestAppContext, key: &str, want: &Value) {
 }
 
 fn canonical(path: &Path) -> String {
-    std::fs::canonicalize(path).unwrap().display().to_string()
+    dunce::canonicalize(path).unwrap().display().to_string()
 }
 
 fn approve_waiting(cx: &mut TestAppContext) {
@@ -2136,7 +2136,10 @@ fn an_index_added_in_settings_finds_a_plugin_and_install_asks_for_approval(
     )
     .unwrap();
     std::fs::write(echo.join("main.js"), "export default class Plugin {}\n").unwrap();
-    let location = team.path().canonicalize().unwrap().display().to_string();
+    let location = dunce::canonicalize(team.path())
+        .unwrap()
+        .display()
+        .to_string();
 
     click(cx, window, "settings-gear");
     assert!(!shows(cx, window, "plugin-search"), "no index, no search");
@@ -2245,7 +2248,7 @@ fn install_twin(data: &Path) {
         .insert_plugin(&Plugin {
             id: PluginId(TWIN.into()),
             source: root.display().to_string(),
-            root: root.canonicalize().unwrap(),
+            root: dunce::canonicalize(root).unwrap(),
             commit: None,
             enabled: true,
             approved: json!({ "powers": {}, "downloads": {}, "folders": {} }),
@@ -2500,7 +2503,7 @@ fn install_tool(data: &Path, id: &str, key: Option<&str>, enabled: bool) {
         .insert_plugin(&Plugin {
             id: PluginId(id.into()),
             source: root.display().to_string(),
-            root: root.canonicalize().unwrap(),
+            root: dunce::canonicalize(root).unwrap(),
             commit: None,
             enabled,
             approved: json!({ "powers": {}, "downloads": {}, "folders": {} }),

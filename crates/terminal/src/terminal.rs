@@ -383,11 +383,8 @@ impl Terminal {
 
     #[must_use]
     pub fn exited(&self) -> bool {
-        #[cfg(unix)]
-        if crate::tree::ended(self.process_id) {
-            return true;
-        }
-        self.ended.load(Ordering::Acquire)
+        // ConPTY keeps the output open after the program exits, so ask the process too.
+        self.observe().is_some() || self.ended.load(Ordering::Acquire)
     }
 }
 
