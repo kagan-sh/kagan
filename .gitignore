@@ -1,7 +1,5 @@
 /target
 /.bin/
-/.metrics/
-*.profraw
 /.plans/
 /book/book/
 examples/plugins/**/gpui-kit.d.ts
