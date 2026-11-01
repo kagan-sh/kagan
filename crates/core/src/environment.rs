@@ -848,7 +848,7 @@ pub(crate) async fn remove_folder(
             let mut notices = Vec::new();
             let outcome = match provider {
                 Provider::Personal if path.exists() => {
-                    std::fs::remove_dir_all(&path).map_err(OpError::from)
+                    personal::remove(&path).map_err(OpError::from)
                 }
                 Provider::Worktree if path.exists() => {
                     // A teardown failure still attempts removal, and never with --force.

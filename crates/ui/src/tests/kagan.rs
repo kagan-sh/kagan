@@ -3751,6 +3751,12 @@ fn git(path: &Path, args: &[&str]) {
     let output = std::process::Command::new("git")
         .arg("-C")
         .arg(path)
+        .args([
+            "-c",
+            "user.name=Kagan",
+            "-c",
+            "user.email=kagan@example.com",
+        ])
         .args(args)
         .output()
         .unwrap();
