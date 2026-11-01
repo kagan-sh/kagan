@@ -89,7 +89,7 @@ Press Cmd+Shift+A, click the search icon on the rail, or run `kg window command-
 
 ## Settings
 
-Press Cmd+, or click the gear at the bottom of the rail. Settings has Appearance, Agents, Keyboard, and Plugins. Press Escape or click **Close** to close Settings.
+Press Cmd+, or click the gear at the bottom of the rail. Settings has Appearance, Agents, Updates, Keyboard, and Plugins. Updates shows the kagan version, **Check now**, what the last check found, and **Check automatically**, which is off until you turn it on. Press Escape or click **Close** to close Settings.
 
 ## Quit
 

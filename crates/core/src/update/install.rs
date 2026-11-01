@@ -2,12 +2,12 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use kg_domain::Install;
+use kg_domain::InstallKind;
 
 /// The copy of kagan that runs, and where it lives on disk.
 #[derive(Clone, Debug)]
 pub struct Target {
-    pub(crate) install: Install,
+    pub(crate) install: InstallKind,
     /// The `.app` bundle, the AppImage file, or the running executable.
     path: PathBuf,
     /// The staged file or folder, beside `path` so the swap is a rename.
@@ -32,22 +32,22 @@ impl Target {
     pub fn find(os: &str, exe: &Path, appimage: Option<PathBuf>, brew: &[PathBuf]) -> Self {
         let (install, path) = match os {
             "macos" => match bundle(exe) {
-                Some(app) if cask(&app, brew) => (Install::Homebrew, app),
-                Some(app) => (Install::App, app),
-                None => (Install::Other, exe.to_path_buf()),
+                Some(app) if cask(&app, brew) => (InstallKind::Homebrew, app),
+                Some(app) => (InstallKind::App, app),
+                None => (InstallKind::Other, exe.to_path_buf()),
             },
             "windows" if exe.with_file_name("uninstall.exe").is_file() => {
-                (Install::Installer, exe.to_path_buf())
+                (InstallKind::Installer, exe.to_path_buf())
             }
             "linux" => match appimage {
-                Some(image) => (Install::AppImage, image),
-                None => (Install::Other, exe.to_path_buf()),
+                Some(image) => (InstallKind::AppImage, image),
+                None => (InstallKind::Other, exe.to_path_buf()),
             },
-            _ => (Install::Other, exe.to_path_buf()),
+            _ => (InstallKind::Other, exe.to_path_buf()),
         };
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         let (staged, old) = match install {
-            Install::Installer => (
+            InstallKind::Installer => (
                 std::env::temp_dir().join("kagan-update-setup.exe"),
                 PathBuf::new(),
             ),
@@ -66,7 +66,7 @@ impl Target {
 
     /// Removes what an earlier update left beside this copy.
     pub(super) fn clean(&self) {
-        if matches!(self.install, Install::App | Install::AppImage) {
+        if matches!(self.install, InstallKind::App | InstallKind::AppImage) {
             remove(&self.staged);
             remove(&self.old);
         }
@@ -76,7 +76,7 @@ impl Target {
     pub(super) fn stage(&self, bytes: &[u8]) -> io::Result<PathBuf> {
         remove(&self.staged);
         match self.install {
-            Install::App => {
+            InstallKind::App => {
                 std::fs::create_dir_all(&self.staged)?;
                 unpack(bytes, &self.staged)?;
                 let app = std::fs::read_dir(&self.staged)?
@@ -86,12 +86,12 @@ impl Target {
                     .ok_or_else(|| io::Error::other("the download holds no .app"))?;
                 Ok(app)
             }
-            Install::AppImage | Install::Installer => {
+            InstallKind::AppImage | InstallKind::Installer => {
                 std::fs::write(&self.staged, bytes)?;
                 executable(&self.staged)?;
                 Ok(self.staged.clone())
             }
-            Install::Homebrew | Install::Other => Err(io::Error::other(
+            InstallKind::Homebrew | InstallKind::Other => Err(io::Error::other(
                 "this copy of kagan is updated outside kagan",
             )),
         }
@@ -99,7 +99,7 @@ impl Target {
 
     /// Moves `staged` in place of this copy. On Windows it starts the installer instead.
     pub(super) fn replace(&self, staged: &Path) -> io::Result<()> {
-        if self.install == Install::Installer {
+        if self.install == InstallKind::Installer {
             return Command::new(staged)
                 .arg("/P")
                 .stdin(Stdio::null())
@@ -112,7 +112,7 @@ impl Target {
             std::fs::rename(&self.old, &self.path)?;
             return Err(error);
         }
-        if self.install == Install::App {
+        if self.install == InstallKind::App {
             remove(&self.staged);
         }
         Ok(())
@@ -120,7 +120,7 @@ impl Target {
 
     /// Starts the new copy once this process has ended.
     pub(super) fn relaunch(&self) -> io::Result<()> {
-        if self.install == Install::Installer {
+        if self.install == InstallKind::Installer {
             return Command::new(&self.staged)
                 .args(["/P", "/R"])
                 .stdin(Stdio::null())
@@ -128,7 +128,7 @@ impl Target {
                 .map(drop);
         }
         let exe = match self.install {
-            Install::App => std::env::current_exe()?,
+            InstallKind::App => std::env::current_exe()?,
             _ => self.path.clone(),
         };
         let mut command = Command::new("/bin/sh");

@@ -14,7 +14,7 @@ pub enum UpdateOp {
 /// How this copy of kagan was installed, which decides how it updates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum Install {
+pub enum InstallKind {
     /// The macOS app from the dmg: kagan replaces it and restarts.
     App,
     /// The macOS app from the Homebrew cask: brew updates it.
@@ -27,7 +27,7 @@ pub enum Install {
     Other,
 }
 
-impl Install {
+impl InstallKind {
     #[must_use]
     pub fn replaces_itself(self) -> bool {
         matches!(self, Self::App | Self::Installer | Self::AppImage)
@@ -61,7 +61,7 @@ pub enum UpdateState {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateStatus {
     pub version: String,
-    pub install: Install,
+    pub install: InstallKind,
     pub automatic: bool,
     #[serde(flatten)]
     pub state: UpdateState,

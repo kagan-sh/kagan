@@ -42,4 +42,4 @@ pub use record::{
 };
 pub use review::{ReviewRow, review_rows};
 pub use theme::{Color, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError};
-pub use update::{Install, UpdateOp, UpdateState, UpdateStatus};
+pub use update::{InstallKind, UpdateOp, UpdateState, UpdateStatus};

@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gpui_kit::TestAppContext;
-use kg_domain::{Install, Op, OpError, OpResult, PreferenceOp, UpdateOp, UpdateState};
+use kg_domain::{InstallKind, Op, OpError, OpResult, PreferenceOp, UpdateOp, UpdateState};
 use serde_json::json;
 
 use super::Fixture;
@@ -265,35 +265,47 @@ fn each_install_kind_updates_its_own_way() {
     let plain = root.join("target/release/kg");
 
     for (os, exe, appimage, prefixes, kind) in [
-        ("macos", &dmg, None, vec![brew.clone()], Install::App),
-        ("macos", &cask, None, vec![brew.clone()], Install::Homebrew),
+        ("macos", &dmg, None, vec![brew.clone()], InstallKind::App),
+        (
+            "macos",
+            &cask,
+            None,
+            vec![brew.clone()],
+            InstallKind::Homebrew,
+        ),
         (
             "macos",
             &cask,
             None,
             vec![root.join("nobrew")],
-            Install::App,
+            InstallKind::App,
         ),
-        ("macos", &plain, None, vec![brew.clone()], Install::Other),
-        ("windows", &windows, None, vec![], Install::Installer),
-        ("windows", &plain, None, vec![], Install::Other),
+        (
+            "macos",
+            &plain,
+            None,
+            vec![brew.clone()],
+            InstallKind::Other,
+        ),
+        ("windows", &windows, None, vec![], InstallKind::Installer),
+        ("windows", &plain, None, vec![], InstallKind::Other),
         (
             "linux",
             &plain,
             Some(image.clone()),
             vec![],
-            Install::AppImage,
+            InstallKind::AppImage,
         ),
-        ("linux", &plain, None, vec![], Install::Other),
+        ("linux", &plain, None, vec![], InstallKind::Other),
     ] {
         let target = Target::find(os, exe, appimage, &prefixes);
         assert_eq!(target.install, kind, "{os} {}", exe.display());
     }
-    assert!(Install::App.replaces_itself());
-    assert!(Install::Installer.replaces_itself());
-    assert!(Install::AppImage.replaces_itself());
-    assert!(!Install::Homebrew.replaces_itself());
-    assert!(!Install::Other.replaces_itself());
+    assert!(InstallKind::App.replaces_itself());
+    assert!(InstallKind::Installer.replaces_itself());
+    assert!(InstallKind::AppImage.replaces_itself());
+    assert!(!InstallKind::Homebrew.replaces_itself());
+    assert!(!InstallKind::Other.replaces_itself());
 }
 
 #[gpui_kit::test]

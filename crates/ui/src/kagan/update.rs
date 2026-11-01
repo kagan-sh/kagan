@@ -9,7 +9,7 @@ use gpui_kit::{
     actions,
 };
 use kg_core::{Updater, Workspace};
-use kg_domain::{Install, Op, OpResult, UpdateOp, UpdateState};
+use kg_domain::{InstallKind, Op, OpResult, UpdateOp, UpdateState};
 
 use super::{Kagan, Toast};
 use crate::theme::TypeScale as _;
@@ -57,7 +57,7 @@ pub(super) fn notice(kagan: &Kagan, cx: &mut Context<Kagan>) -> Option<AnyElemen
             if kagan.update_hidden.as_deref() != Some(version.as_str()) =>
         {
             match updater.kind() {
-                Install::Homebrew => format!("kagan {version} is available. Run {BREW}."),
+                InstallKind::Homebrew => format!("kagan {version} is available. Run {BREW}."),
                 _ => format!("kagan {version} is available."),
             }
         }
@@ -111,7 +111,7 @@ fn actions(cx: &App) -> AnyElement {
             cx.open_url(&notes);
         }))
         .map(|row| match updater.kind() {
-            Install::Homebrew => row.child(button("update-copy", "Copy command", |_, cx| {
+            InstallKind::Homebrew => row.child(button("update-copy", "Copy command", |_, cx| {
                 cx.write_to_clipboard(ClipboardItem::new_string(BREW.into()));
                 say("Copied.".into(), cx);
             })),
@@ -119,7 +119,7 @@ fn actions(cx: &App) -> AnyElement {
                 .when(!ready, |row| {
                     row.child(button(
                         "update-later",
-                        "Install when kagan quits",
+                        "InstallKind when kagan quits",
                         |_, cx| {
                             later(cx);
                         },
@@ -193,7 +193,7 @@ fn ask(window: &mut Window, cx: &mut App) {
     };
     window.open_alert_dialog(cx, move |dialog, _, _| {
         dialog
-            .title(format!("Install kagan {version}?"))
+            .title(format!("InstallKind kagan {version}?"))
             .description(description.clone())
             .ok_text("Restart and install")
             .on_ok(|_, _, cx| {

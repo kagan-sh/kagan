@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use gpui_kit::{App, AppContext as _, AsyncApp, Context, Entity, Global, Subscription, Task};
-use kg_domain::{Install, OpError, OpResult, UpdateOp, UpdateState, UpdateStatus};
+use kg_domain::{InstallKind, OpError, OpResult, UpdateOp, UpdateState, UpdateStatus};
 use minisign_verify::{PublicKey, Signature};
 use semver::Version;
 use serde::Deserialize;
@@ -93,7 +93,7 @@ impl Updater {
     }
 
     #[must_use]
-    pub fn kind(&self) -> Install {
+    pub fn kind(&self) -> InstallKind {
         self.target.install
     }
 
@@ -209,7 +209,7 @@ impl Updater {
         };
         let target = self.target.clone();
         let work = cx.background_spawn(async move {
-            if target.install == Install::Installer {
+            if target.install == InstallKind::Installer {
                 return Ok(());
             }
             target.replace(&staged)
