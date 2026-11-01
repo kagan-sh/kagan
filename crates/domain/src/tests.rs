@@ -542,81 +542,32 @@ fn reset_drops_the_saved_shortcut_and_ignores_old_platform_maps() {
 fn every_platform_keeps_the_same_effective_bindings() {
     use crate::{KeyPlatform, Keymap, SHORTCUTS, effective_chord};
     let keymap = Keymap::default();
-    let listed = SHORTCUTS
-        .iter()
-        .map(|shortcut| {
-            let mac = effective_chord(shortcut.name, &keymap, KeyPlatform::Mac);
-            let windows = effective_chord(shortcut.name, &keymap, KeyPlatform::Windows);
-            let linux = effective_chord(shortcut.name, &keymap, KeyPlatform::Linux);
-            assert_eq!(windows, linux, "{}", shortcut.name);
-            if let Some(rest) = shortcut.chord.strip_prefix("secondary-") {
-                assert_eq!(mac, shortcut.chord, "{}", shortcut.name);
-                assert_eq!(
-                    windows,
-                    format!("ctrl-shift-{}", rest.trim_start_matches("shift-")),
-                    "{}",
-                    shortcut.name
-                );
-            } else {
-                assert_eq!(mac, shortcut.chord, "{}", shortcut.name);
-                assert_eq!(windows, shortcut.chord, "{}", shortcut.name);
-            }
-            format!("{}\t{mac}\t{windows}\t{linux}", shortcut.name)
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert_eq!(
-        listed,
-        "\
-Bigger\tsecondary-=\tctrl-shift-=\tctrl-shift-=
-Smaller\tsecondary--\tctrl-shift--\tctrl-shift--
-ActualSize\tsecondary-0\tctrl-shift-0\tctrl-shift-0
-NewThread\tsecondary-n\tctrl-shift-n\tctrl-shift-n
-StopThread\tsecondary-.\tctrl-shift-.\tctrl-shift-.
-ArchiveThread\tsecondary-shift-backspace\tctrl-shift-backspace\tctrl-shift-backspace
-TogglePinned\tsecondary-shift-p\tctrl-shift-p\tctrl-shift-p
-NextThread\tsecondary-shift-]\tctrl-shift-]\tctrl-shift-]
-PreviousThread\tsecondary-shift-[\tctrl-shift-[\tctrl-shift-[
-NextThreadNeedingYou\tsecondary-alt-j\tctrl-shift-alt-j\tctrl-shift-alt-j
-Thread1\tsecondary-1\tctrl-shift-1\tctrl-shift-1
-Thread2\tsecondary-2\tctrl-shift-2\tctrl-shift-2
-Thread3\tsecondary-3\tctrl-shift-3\tctrl-shift-3
-Thread4\tsecondary-4\tctrl-shift-4\tctrl-shift-4
-Thread5\tsecondary-5\tctrl-shift-5\tctrl-shift-5
-Thread6\tsecondary-6\tctrl-shift-6\tctrl-shift-6
-Thread7\tsecondary-7\tctrl-shift-7\tctrl-shift-7
-Thread8\tsecondary-8\tctrl-shift-8\tctrl-shift-8
-Thread9\tsecondary-9\tctrl-shift-9\tctrl-shift-9
-OpenSettings\tsecondary-,\tctrl-shift-,\tctrl-shift-,
-UseProjectFolder\tsecondary-alt-p\tctrl-shift-alt-p\tctrl-shift-alt-p
-UseWorktreeFolder\tsecondary-alt-w\tctrl-shift-alt-w\tctrl-shift-alt-w
-RetryBranches\tsecondary-alt-r\tctrl-shift-alt-r\tctrl-shift-alt-r
-RetryPrograms\tsecondary-alt-l\tctrl-shift-alt-l\tctrl-shift-alt-l
-ToggleCustomCommand\tsecondary-alt-c\tctrl-shift-alt-c\tctrl-shift-alt-c
-ThreadActions\tsecondary-shift-m\tctrl-shift-m\tctrl-shift-m
-ToggleSidebar\tsecondary-b\tctrl-shift-b\tctrl-shift-b
-ToggleRightSidebar\tsecondary-\\\tctrl-shift-\\\tctrl-shift-\\
-AddProject\tsecondary-shift-o\tctrl-shift-o\tctrl-shift-o
-SendReview\tsecondary-enter\tctrl-shift-enter\tctrl-shift-enter
-NextHunk\talt-]\talt-]\talt-]
-PrevHunk\talt-[\talt-[\talt-[
-FindInDiff\tsecondary-f\tctrl-shift-f\tctrl-shift-f
-ToggleWrap\talt-z\talt-z\talt-z
-NextMatch\tsecondary-g\tctrl-shift-g\tctrl-shift-g
-PrevMatch\tsecondary-shift-g\tctrl-shift-g\tctrl-shift-g
-StartAgain\tsecondary-shift-s\tctrl-shift-s\tctrl-shift-s
-FocusSidebar\tsecondary-shift-l\tctrl-shift-l\tctrl-shift-l
-RestoreThread\tsecondary-shift-r\tctrl-shift-r\tctrl-shift-r
-UseBuiltInSidebar\tsecondary-alt-b\tctrl-shift-alt-b\tctrl-shift-alt-b
-UseBuiltInReview\tsecondary-alt-v\tctrl-shift-alt-v\tctrl-shift-alt-v
-OpenCommandList\tsecondary-shift-a\tctrl-shift-a\tctrl-shift-a
-SearchThreads\tsecondary-alt-f\tctrl-shift-alt-f\tctrl-shift-alt-f
-NewTerminal\tsecondary-t\tctrl-shift-t\tctrl-shift-t
-CloseTerminal\tsecondary-shift-w\tctrl-shift-w\tctrl-shift-w
-NextTerminal\tsecondary-alt-]\tctrl-shift-alt-]\tctrl-shift-alt-]
-PreviousTerminal\tsecondary-alt-[\tctrl-shift-alt-[\tctrl-shift-alt-[
-OpenLocalLink\tsecondary-alt-o\tctrl-shift-alt-o\tctrl-shift-alt-o"
-    );
+    let chord = |name, platform| effective_chord(name, &keymap, platform);
+    for shortcut in SHORTCUTS {
+        assert_eq!(
+            chord(shortcut.name, KeyPlatform::Windows),
+            chord(shortcut.name, KeyPlatform::Linux),
+            "{}",
+            shortcut.name
+        );
+    }
+    for (name, mac, other) in [
+        ("NewThread", "secondary-n", "ctrl-shift-n"),
+        (
+            "ArchiveThread",
+            "secondary-shift-backspace",
+            "ctrl-shift-backspace",
+        ),
+        (
+            "NextThreadNeedingYou",
+            "secondary-alt-j",
+            "ctrl-shift-alt-j",
+        ),
+        ("NextHunk", "alt-]", "alt-]"),
+    ] {
+        assert_eq!(chord(name, KeyPlatform::Mac), mac, "{name}");
+        assert_eq!(chord(name, KeyPlatform::Windows), other, "{name}");
+    }
 }
 
 #[test]

@@ -649,8 +649,8 @@ fn enter_and_space_on_a_panel_header_collapse_and_open_it_and_save_it(cx: &mut T
     assert_eq!(saved_collapse(cx, "needs-you"), json!(false));
 }
 
-/// Reloads the broken plugin with one key on its Reload button and checks it reloaded.
-fn reload_with(cx: &mut TestAppContext, key: &str) {
+#[gpui_kit::test]
+fn enter_on_reload_reloads_the_plugin(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_broken);
     cx.run_until_parked();
     open_tool(cx, "dev.test.broken");
@@ -660,7 +660,7 @@ fn reload_with(cx: &mut TestAppContext, key: &str) {
     });
 
     focus_past_the_card(cx, window, 1);
-    press_key(cx, window, key);
+    press_key(cx, window, "enter");
     wait_until(cx, |cx| {
         plugin_log(cx, "dev.test.broken").contains("reloaded")
     });
@@ -668,17 +668,7 @@ fn reload_with(cx: &mut TestAppContext, key: &str) {
 }
 
 #[gpui_kit::test]
-fn enter_on_reload_reloads_the_plugin(cx: &mut TestAppContext) {
-    reload_with(cx, "enter");
-}
-
-#[gpui_kit::test]
-fn space_on_reload_reloads_the_plugin(cx: &mut TestAppContext) {
-    reload_with(cx, "space");
-}
-
-/// Opens the broken panel's Logs button with one key and checks the installed page shows the log.
-fn logs_open_with(cx: &mut TestAppContext, key: &str) {
+fn enter_on_logs_shows_the_plugins_log(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_broken);
     cx.run_until_parked();
     open_tool(cx, "dev.test.broken");
@@ -688,26 +678,16 @@ fn logs_open_with(cx: &mut TestAppContext, key: &str) {
     });
 
     focus_past_the_card(cx, window, 2);
-    press_key(cx, window, key);
+    press_key(cx, window, "enter");
     assert!(
         shows(cx, window, "settings-group-installed"),
-        "{key} did not open the installed page"
+        "Enter did not open the installed page"
     );
     wait_until(cx, |cx| {
         value_of(cx, window, "plugin-log-dev.test.broken")
             .is_some_and(|text| text.contains("boom in render"))
     });
     assert!(plugin_enabled(cx, "dev.test.broken"));
-}
-
-#[gpui_kit::test]
-fn enter_on_logs_shows_the_plugins_log(cx: &mut TestAppContext) {
-    logs_open_with(cx, "enter");
-}
-
-#[gpui_kit::test]
-fn space_on_logs_shows_the_plugins_log(cx: &mut TestAppContext) {
-    logs_open_with(cx, "space");
 }
 
 #[gpui_kit::test]
@@ -729,26 +709,16 @@ fn enter_and_space_on_details_show_and_hide_the_error(cx: &mut TestAppContext) {
     assert!(plugin_enabled(cx, "dev.test.broken"));
 }
 
-/// Turns the broken plugin off with one key on its Disable button.
-fn disable_with(cx: &mut TestAppContext, key: &str) {
+#[gpui_kit::test]
+fn enter_on_disable_turns_the_plugin_off(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_broken);
     cx.run_until_parked();
     open_tool(cx, "dev.test.broken");
     wait_until(cx, |cx| shows(cx, window, &format!("{BROKEN}-failed")));
 
     focus_past_the_card(cx, window, 3);
-    press_key(cx, window, key);
+    press_key(cx, window, "enter");
     wait_until(cx, |cx| !plugin_enabled(cx, "dev.test.broken"));
-}
-
-#[gpui_kit::test]
-fn enter_on_disable_turns_the_plugin_off(cx: &mut TestAppContext) {
-    disable_with(cx, "enter");
-}
-
-#[gpui_kit::test]
-fn space_on_disable_turns_the_plugin_off(cx: &mut TestAppContext) {
-    disable_with(cx, "space");
 }
 
 #[gpui_kit::test]

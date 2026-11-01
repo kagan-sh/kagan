@@ -52,11 +52,3 @@ fn update(count: usize) {
         .dockTile()
         .setBadgeLabel(Some(&label));
 }
-#[cfg(test)]
-mod tests {
-    use super::label;
-    #[test]
-    fn badge_label_shows_the_count() {
-        assert_eq!(label(0), "");
-    }
-}

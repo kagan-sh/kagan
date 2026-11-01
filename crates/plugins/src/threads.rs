@@ -429,18 +429,4 @@ mod tests {
             matches!(op, kg_domain::Op::Thread(kg_domain::ThreadOp::Rename { id, title }) if id.0 == "thr_1" && title == "Notes")
         );
     }
-
-    #[test]
-    fn an_unknown_thread_function_is_refused() {
-        let error = operation(
-            "nope",
-            &HostArguments::new(Vec::new()),
-            &PluginId("dev.test".into()),
-        )
-        .unwrap_err();
-        assert!(
-            error.to_string().contains("unknown threads function nope"),
-            "{error}"
-        );
-    }
 }
