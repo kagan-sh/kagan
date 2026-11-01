@@ -61,8 +61,6 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-      - name: Plugin tests
-        run: node --test plugins/canvas/*.test.js
       - name: Test commit-msg hook
         run: sh .githooks/commit-msg-test
       - name: Test pre-push hook
@@ -144,6 +142,9 @@ jobs:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }},cargo-llvm-cov@0.9.1
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests and coverage
+        # In llvm-cov, --profile is the cargo build profile.
+        env:
+          NEXTEST_PROFILE: ci
         run: |
           mkdir -p target/coverage/rust
           cargo llvm-cov nextest --workspace --locked --lcov --output-path target/coverage/rust/lcov.info
@@ -172,7 +173,7 @@ jobs:
       - name: Tests
         # a_saved_shortcut_is_kept_and_announced has failed on macOS only; it does not block a merge.
         run: >-
-          cargo nextest run --workspace --all-targets --locked --failure-output=immediate --status-level=all
+          cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
           -E 'not test(a_saved_shortcut_is_kept_and_announced)'
 
   windows:
@@ -202,7 +203,7 @@ jobs:
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
       - name: Tests
-        run: cargo nextest run --workspace --all-targets --locked --failure-output=immediate --status-level=all
+        run: cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
 
   mutants:
     if: github.event_name == 'workflow_dispatch' && inputs.mutants

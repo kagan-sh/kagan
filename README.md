@@ -1,51 +1,77 @@
-# kagan
+<h3 align="center">
+  <img src="assets/brand/kagan-app-icon.svg" width="80" alt="kagan" /><br />
+  kagan
+</h3>
 
-kagan is a desktop app for coding with agents. Each thread is a real terminal that runs the agent you already use, such as Claude Code or Codex, in its own folder or git worktree.
+<p align="center">A desktop app for coding with agents</p>
 
-<!-- Screenshot: replace with a current capture of the window, light and dark. -->
-<p align="center"><em>Screenshot coming soon.</em></p>
+<p align="center">
+  <a href="#install">Install</a> · <a href="https://docs.kagan.sh/">Guide</a> · <a href="https://docs.kagan.sh/plugins.html">Plugins</a>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/kagan-dark.png" />
+    <img src="assets/readme/kagan-light.png" alt="The kagan window: threads on the left, a terminal in the center, and changed files on the right" width="900" />
+  </picture>
+</p>
+
+kagan is a desktop app for coding with agents. Each thread is a real terminal. The thread runs the agent you already use, such as Claude Code or Codex, in its own folder.
 
 > [!WARNING]
-> kagan is early (0.1.0). Expect rough edges. It is built and tested mostly on macOS; Linux and Windows builds exist and get less testing.
+> kagan is early (0.1.0). CI tests it on macOS, Linux, and Windows, but most daily use is on macOS.
 
 ## Install
 
-There are no published releases yet. Build from source.
+There is no release yet. Build kagan from source.
 
-You need Rust; `rust-toolchain.toml` picks the version. The first build takes several minutes.
+1. Install Rust from [rustup.rs](https://rustup.rs). The file `rust-toolchain.toml` sets the version.
+2. Install the build tools for your system:
+   - macOS: `brew install lld`
+   - Debian or Ubuntu:
 
-- **macOS:** `brew install lld`. The build links with `ld64.lld`.
-- **Linux (Debian, Ubuntu):** `sudo apt-get install build-essential pkg-config libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev`
+     ```bash
+     sudo apt-get install build-essential pkg-config \
+       libfontconfig-dev libwayland-dev libxkbcommon-x11-dev \
+       libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev
+     ```
 
-```bash
-git clone https://github.com/kagan-sh/kagan.git
-cd kagan
-cargo run -p kg --release
-```
+   - Windows: Visual Studio Build Tools with C++, and MinGW for `dlltool` (`choco install mingw`).
+3. Build kagan and open it:
 
-That opens the window. The binary is `target/release/kg`. Put it on your `PATH` to use `kg` from a terminal.
+   ```bash
+   git clone https://github.com/kagan-sh/kagan.git
+   cd kagan
+   cargo run -p kg --release
+   ```
+
+   The first build takes several minutes. Then the window opens.
+4. Add the `kg` command to your `PATH`. [Get started](book/src/start.md#install) shows how. To open kagan later, run `kg`.
 
 ## First run
 
-1. Push **Add project** and pick a folder, usually a git repository.
-2. Pick a program: Claude Code, Codex, or any command. Push Enter.
-3. The program starts in a new thread, in a real terminal. Type to it as you always do.
-4. Open **Changes** on the right to see what it changed. Comment on a line, then send the review back to the terminal.
+1. Click **Add project** in the left sidebar. Select a folder, usually a git repository.
+2. The New thread screen opens. Select Claude Code, Codex, or another program, and press Enter.
+3. The program starts in a new thread. Type to it as you do in any terminal.
+4. Open **Changes** in the right sidebar. Comment on a line, then click **Send review to terminal**. On a narrow window, press Cmd+Backslash to show the right sidebar.
 
-The same works from a terminal. `kg help` lists every command, and `kg guide` explains the terms.
+For a git repository, each thread gets its own git worktree by default. A worktree is a second checkout of the repository, so your own folder does not change. [Review changes](book/src/window.md#review-changes) and [Threads](book/src/threads.md) give more.
 
 ## What is different
 
-- **Your agent, unchanged.** kagan does not wrap or replace the agent. It runs the program you pick in a terminal and keeps the threads, folders, and changes in one window.
-- **Only a person approves.** A program in a thread can drive kagan through `kg`, but it cannot answer an approval. Installing a plugin, granting it more powers, and deleting a thread wait for a person in the window.
-- **Plugins declare their powers.** A plugin is a folder of JavaScript with a manifest. The manifest lists what it may do, such as run named programs, use the network, or read named folders. kagan reads it before it runs any plugin code, and asks again when an update wants more.
-- **No account, no telemetry.** Your data stays on your computer, in `~/.kagan` (`%USERPROFILE%\.kagan` on Windows). kagan uses the network itself only to fetch a git plugin you install or update. The agents you run, and plugins you allow, may use the network on their own.
+- **Your agent, unchanged.** kagan runs the program you select in a terminal. For Claude Code and Codex, kagan also adds its `kg` tools and a short note, so that the agent can use kagan. Settings → Agents turns this off.
+- **Only a person approves.** A program in a thread can use `kg` to start, stop, and archive threads, and to operate the window. It cannot answer an approval. A plugin install, more powers for a plugin, and a thread delete wait for you in the window.
+- **Plugins declare their powers.** A plugin is a folder of JavaScript with a manifest. The manifest lists what the plugin can do, such as run named programs or use the network. Each plugin runs in its own JavaScript engine, and kagan gives it only the powers that you approve.
+- **No account, no telemetry, no update check.** Your data stays on your computer in `~/.kagan`. kagan itself uses the network only to fetch a git plugin or a plugin index that you add or update. [Your data](book/src/data.md) tells what programs and plugins can do.
+
+A program in a thread runs with your user access and gets your environment variables. Run only programs that you trust.
 
 ## Learn more
 
-The [book](https://docs.kagan.sh/) covers daily use, plugins, and the spec. Its source is in [`book/src`](book/src/index.md).
+The [book](https://docs.kagan.sh/) is the user guide. Its source is in [`book/src`](book/src/index.md).
 
 - [Get started](book/src/start.md)
+- [Threads](book/src/threads.md) and [The window](book/src/window.md)
 - [Your data](book/src/data.md)
 - [Plugins](book/src/plugins.md) and [Build a plugin](book/src/build-plugin.md)
 - [The `kg` command](book/src/cli.md)
@@ -59,10 +85,10 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo t --workspace --locked
 ```
 
-`cargo t` runs the tests with the cargo-nextest version pinned in `Cargo.toml`; it needs `cargo install cargo-run-bin` once. Read [`AGENTS.md`](AGENTS.md) for the rules every change follows.
+`cargo t` runs the tests with the cargo-nextest version in `Cargo.toml`. Run `cargo install cargo-run-bin` one time first. [`AGENTS.md`](AGENTS.md) has the rules for every change. The spec is in [`docs`](docs/architecture.md).
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
 
-The mark is a KG monogram drawn for kagan. The wordmark sets "kagan" beside it in outlines of [Inter](assets/fonts/Inter-OFL.txt). The window uses Inter, and the terminal uses [JetBrains Mono](assets/fonts/JetBrainsMono-OFL.txt). Both fonts are under the SIL Open Font License 1.1. [`assets/THIRD-PARTY-NOTICES.txt`](assets/THIRD-PARTY-NOTICES.txt) holds those texts and the licenses of every dependency, and ships inside the app.
+The window uses [Inter](assets/fonts/Inter-OFL.txt), and the terminal uses [JetBrains Mono](assets/fonts/JetBrainsMono-OFL.txt). Both fonts use the SIL Open Font License 1.1. The wordmark sets "kagan" in outlines of Inter. [`assets/THIRD-PARTY-NOTICES.txt`](assets/THIRD-PARTY-NOTICES.txt) has the license of each dependency and ships inside the app.

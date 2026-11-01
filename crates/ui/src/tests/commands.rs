@@ -75,6 +75,7 @@ fn type_line(cx: &mut TestAppContext, id: &ThreadId, text: &str) {
         Op::Thread(ThreadOp::Input {
             id: id.clone(),
             text: format!("{text}\n"),
+            terminal: None,
         }),
     );
 }
@@ -189,7 +190,7 @@ fn thread_search_finds_a_title_and_terminal_text_without_escape_codes(cx: &mut T
     let printed = run_shell(cx);
     type_line(cx, &printed, "printf '\\033[31mRED\\033[0mTEXT-%s\\n' done");
     wait_until(cx, |cx| {
-        cx.update(|cx| Workspace::global(cx).read(cx).grid(&printed))
+        cx.update(|cx| Workspace::global(cx).read(cx).grid(&printed, None))
             .is_some_and(|grid| {
                 grid.lines.iter().any(|line| {
                     line.iter()
@@ -244,7 +245,7 @@ fn enter_opens_the_thread_at_the_matched_line(cx: &mut TestAppContext) {
     let id = run_shell(cx);
     type_line(cx, &id, "echo FIRST-''MARK; seq 1 300");
     wait_until(cx, |cx| {
-        cx.update(|cx| Workspace::global(cx).read(cx).grid(&id))
+        cx.update(|cx| Workspace::global(cx).read(cx).grid(&id, None))
             .is_some_and(|grid| {
                 grid.lines
                     .iter()

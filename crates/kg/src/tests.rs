@@ -3,7 +3,7 @@ use clap::{CommandFactory, Parser};
 use interprocess::local_socket::Name;
 use kg_domain::{
     AgentTool, ConfigOp, DiffOp, DiffQuery, DiffScope, EnvironmentSpec, IndexOp, Metadata, Op,
-    OpError, OpResult, PluginId, PluginOp, ProjectId, ThreadId, ThreadOp,
+    OpError, OpResult, PluginId, PluginOp, ProjectId, TerminalOp, ThreadId, ThreadOp,
 };
 use serde_json::{Value, json};
 
@@ -40,6 +40,34 @@ fn guide_names_every_command() {
         &Cli::command(),
         "kg",
         include_str!("../../core/src/guide-map.md"),
+    );
+}
+
+#[test]
+fn cli_thread_terminal_parses_its_verbs() {
+    let id = ThreadId("thr_1".into());
+    assert_eq!(
+        parse(&["thread", "terminal", "new", "thr_1"]),
+        Op::Thread(ThreadOp::Terminal(TerminalOp::New { id: id.clone() }))
+    );
+    assert_eq!(
+        parse(&["thread", "terminal", "close", "--id", "thr_1", "2"]),
+        Op::Thread(ThreadOp::Terminal(TerminalOp::Close {
+            id: id.clone(),
+            number: 2
+        }))
+    );
+    assert_eq!(
+        parse(&["thread", "links", "thr_1"]),
+        Op::Thread(ThreadOp::Links { id: id.clone() })
+    );
+    assert_eq!(
+        parse(&["thread", "input", "thr_1", "ls", "--terminal", "2"]),
+        Op::Thread(ThreadOp::Input {
+            id,
+            text: "ls".into(),
+            terminal: Some(2),
+        })
     );
 }
 
@@ -780,6 +808,7 @@ fn cli_talks_to_a_threads_terminal() {
         Op::Thread(ThreadOp::Input {
             id: id.clone(),
             text: "ls\r".into(),
+            terminal: None,
         })
     );
     assert_eq!(
@@ -788,6 +817,7 @@ fn cli_talks_to_a_threads_terminal() {
             id: id.clone(),
             cols: 100,
             rows: 40,
+            terminal: None,
         })
     );
     assert_eq!(
@@ -803,6 +833,7 @@ fn cli_talks_to_a_threads_terminal() {
             id: id.clone(),
             scrollback: false,
             lines: None,
+            terminal: None,
         })
     );
     assert_eq!(
@@ -811,6 +842,7 @@ fn cli_talks_to_a_threads_terminal() {
             id,
             scrollback: true,
             lines: Some(20),
+            terminal: None,
         })
     );
 }
@@ -920,6 +952,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
             id: id.clone(),
             text: None,
             file: Some(path.display().to_string()),
+            terminal: None,
         }),
         std::io::empty(),
     )
@@ -928,6 +961,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
         id: id.clone(),
         text: Some(body.into()),
         file: None,
+        terminal: None,
     });
     assert_eq!(from_file, sent);
     assert_eq!(
@@ -936,6 +970,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
                 id: id.clone(),
                 text: None,
                 file: Some("-".into()),
+                terminal: None,
             }),
             std::io::Cursor::new(body),
         )
@@ -946,6 +981,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
         id: id.clone(),
         text: Some("hello".into()),
         file: None,
+        terminal: None,
     });
     assert_eq!(
         take_paste_from(unchanged.clone(), std::io::empty()).unwrap(),
@@ -957,6 +993,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
             id: id.clone(),
             text: Some("hello".into()),
             file: None,
+            terminal: None,
         })
     );
     assert_eq!(
@@ -965,6 +1002,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
             id: id.clone(),
             text: None,
             file: Some("-".into()),
+            terminal: None,
         })
     );
     assert!(
@@ -980,6 +1018,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
             id,
             text: None,
             file: Some(big.display().to_string()),
+            terminal: None,
         }),
         std::io::empty(),
     )
@@ -1000,6 +1039,7 @@ fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
         id: ThreadId("thr_1".into()),
         text: None,
         file: Some(path.display().to_string()),
+        terminal: None,
     });
     let from_file = take_paste_from(pasted, std::io::empty()).unwrap_err();
     assert!(from_file.to_string().contains("UTF-8"), "{from_file}");
@@ -1008,6 +1048,7 @@ fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
             id: ThreadId("thr_1".into()),
             text: None,
             file: Some("-".into()),
+            terminal: None,
         }),
         std::io::Cursor::new([0xff, 0xfe]),
     )
@@ -1049,6 +1090,7 @@ fn paste_rejects_a_fifo_past_the_cap() {
             id: ThreadId("thr_1".into()),
             text: None,
             file: Some(fifo.display().to_string()),
+            terminal: None,
         }),
         std::io::empty(),
     )

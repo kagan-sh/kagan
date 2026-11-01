@@ -12,8 +12,8 @@ mod tests;
 mod theme;
 
 pub use diff::{
-    DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList, DiffNote,
-    DiffSide, DiffStatus, format_notes, parse_notes,
+    BaseBranch, DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList,
+    DiffNote, DiffSide, DiffStatus, GitDetails, ThreadDetails, format_notes, parse_notes,
 };
 pub use event::{Attachment, Event, EventKind, NoticeSeverity, Role, ToolStatus, TurnOutcome};
 pub use id::{
@@ -22,11 +22,11 @@ pub use id::{
 };
 pub use op::{
     Appearance, BranchList, ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, EnvironmentOp,
-    EnvironmentSpec, GuideChapter, IndexOp, KeyPlatform, Keymap, KeymapAction, KeymapOp, Metadata,
-    Op, OpError, OpResult, Order, PluginOp, PreferenceOp, ProgramOp, ProjectOp, Run,
-    SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp, SelectMode, SettingsOp,
-    Shortcut, Skill, SkillOp, SkillSource, Slot, SlotChoice, SurfaceItem, SurfaceOp,
-    SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, ThemeOp, ThemeSettings, ThreadOp,
+    EnvironmentSpec, ExtraTerminal, GuideChapter, IndexOp, KeyPlatform, Keymap, KeymapAction,
+    KeymapOp, Metadata, Op, OpError, OpResult, Order, PluginOp, PreferenceOp, ProgramOp, ProjectOp,
+    Run, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp, SelectMode,
+    SettingsOp, Shortcut, Skill, SkillOp, SkillSource, Slot, SlotChoice, SurfaceItem, SurfaceOp,
+    SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThemeOp, ThemeSettings, ThreadOp,
     UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
     UiSnapshot, WindowOp, branch_slug, check, effective_chord, expand_secondary, invalid_json,
     valid_theme_choice, valid_theme_id,

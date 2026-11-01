@@ -582,7 +582,12 @@ fn shift_page_up_scrolls_back_and_the_program_gets_no_keys(cx: &mut TestAppConte
     let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
-    cx.simulate_input(window, &line("for i in $(seq 1 200); do echo row$i; done"));
+    let rows = if cfg!(windows) {
+        "for /l %i in (1,1,200) do @echo row%i"
+    } else {
+        "for i in $(seq 1 200); do echo row$i; done"
+    };
+    cx.simulate_input(window, &line(rows));
     wait_until(cx, |cx| grid_text(cx, &kagan).contains("row200"));
 
     cx.simulate_keystrokes(window, "shift-pageup");
@@ -621,6 +626,7 @@ fn the_copy_key_copies_the_selected_word(cx: &mut TestAppContext) {
         column: u16::try_from(column).unwrap(),
         row: u16::try_from(row).unwrap(),
         right: false,
+        terminal: None,
     };
     cx.update(|cx| Workspace::dispatch(Op::Thread(select), cx))
         .detach();
@@ -779,7 +785,11 @@ fn selection(
 }
 
 /// The row and column of the first line that is exactly `text`, on the shown terminal.
-fn shown_row(cx: &mut TestAppContext, kagan: &Entity<Kagan>, text: &str) -> (usize, usize) {
+pub(super) fn shown_row(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    text: &str,
+) -> (usize, usize) {
     let grid = cx
         .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
         .expect("a grid");
@@ -794,7 +804,7 @@ fn shown_row(cx: &mut TestAppContext, kagan: &Entity<Kagan>, text: &str) -> (usi
 }
 
 /// The pixel at the middle of a cell of the shown terminal, from its bounds and its grid's size.
-fn cell_point(
+pub(super) fn cell_point(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
     kagan: &Entity<Kagan>,
@@ -1142,7 +1152,9 @@ fn a_screen_for_another_thread_does_not_repaint_the_shown_one(cx: &mut TestAppCo
     let reads = cx.update(|cx| view.read(cx).reads());
 
     cx.update(|cx| {
-        Workspace::global(cx).update(cx, |_, cx| cx.emit(WorkspaceEvent::Screen(other.clone())));
+        Workspace::global(cx).update(cx, |_, cx| {
+            cx.emit(WorkspaceEvent::Screen(other.clone(), None));
+        });
     });
     cx.run_until_parked();
 
@@ -1414,7 +1426,7 @@ fn a_folder_that_is_not_git_starts_a_thread_in_itself(cx: &mut TestAppContext) {
     let started = shown(cx, &kagan).unwrap();
     let environment = environment_of(cx, &started);
     assert_eq!(environment.provider, EnvironmentProvider::Project);
-    assert_eq!(environment.path, std::fs::canonicalize(&folder).unwrap());
+    assert_eq!(environment.path, dunce::canonicalize(&folder).unwrap());
 }
 
 #[gpui_kit::test]
@@ -1444,7 +1456,7 @@ fn the_project_folder_choice_runs_in_the_git_folder(cx: &mut TestAppContext) {
     let started = shown(cx, &kagan).unwrap();
     let environment = environment_of(cx, &started);
     assert_eq!(environment.provider, EnvironmentProvider::Project);
-    assert_eq!(environment.path, std::fs::canonicalize(&repo).unwrap());
+    assert_eq!(environment.path, dunce::canonicalize(&repo).unwrap());
 }
 
 /// Whether the element named `name` is checked, and whether it has focus.
@@ -1541,7 +1553,7 @@ fn the_folder_choice_takes_the_keyboard(cx: &mut TestAppContext) {
     let started = shown(cx, &kagan).unwrap();
     let environment = environment_of(cx, &started);
     assert_eq!(environment.provider, EnvironmentProvider::Project);
-    assert_eq!(environment.path, std::fs::canonicalize(&repo).unwrap());
+    assert_eq!(environment.path, dunce::canonicalize(&repo).unwrap());
 }
 
 #[gpui_kit::test]
@@ -1789,8 +1801,15 @@ fn the_title_bar_names_the_thread_and_the_terminal_starts_below_it(cx: &mut Test
             f32::from(window.viewport_size().width)
         })
         .unwrap();
+    // Windows draws minimize, maximize and close at the right end of the bar, each one bar
+    // high and wide, and the heading centers in the space left of them.
+    let controls = if cfg!(windows) {
+        3. * f32::from(gpui_kit::component::TITLE_BAR_HEIGHT)
+    } else {
+        0.
+    };
     assert!(
-        (x + width / 2. - viewport / 2.).abs() < 1.,
+        (x + width / 2. - (viewport - controls) / 2.).abs() < 1.,
         "heading {x}+{width}, window {viewport}"
     );
     cx.update_window(window, |_, window, _| {
@@ -2694,22 +2713,22 @@ fn disabling_a_plugin_takes_its_panel_away(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open_with_plugins(cx, true);
     cx.simulate_window_resize(window, size(px(1400.), px(900.)));
     cx.run_until_parked();
-    open_surface(cx, &PluginId("dev.kagan.canvas".into()), "canvas");
-    wait_until(cx, |cx| shows(cx, window, "canvas-undo"));
+    open_surface(cx, &PluginId(PAGE.into()), "page");
+    wait_until(cx, |cx| shows(cx, window, "page-button"));
 
     let off = cx.update(|cx| {
         Workspace::dispatch(
             Op::Plugin(PluginOp::Disable {
-                id: PluginId("dev.kagan.canvas".into()),
+                id: PluginId(PAGE.into()),
             }),
             cx,
         )
     });
     cx.foreground_executor().block_test(off).unwrap();
-    wait_until(cx, |cx| !shows(cx, window, "canvas-undo"));
+    wait_until(cx, |cx| !shows(cx, window, "page-button"));
     assert_eq!(
         cx.update(|cx| kagan.read(cx).panel_titles()),
-        ["Questions", "Changes"]
+        ["Questions", "Changes", "Details"]
     );
 }
 
@@ -2941,21 +2960,21 @@ fn reloading_a_plugin_mounts_its_panel_again(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins(cx, true);
     cx.simulate_window_resize(window, size(px(1400.), px(900.)));
     cx.run_until_parked();
-    let id = PluginId("dev.kagan.canvas".into());
+    let id = PluginId(PAGE.into());
     let opened = cx.update(|cx| {
         Workspace::dispatch(
             Op::Surface(kg_domain::SurfaceOp::Open {
                 plugin: id.clone(),
-                id: "canvas".into(),
+                id: "page".into(),
             }),
             cx,
         )
     });
     cx.foreground_executor().block_test(opened).unwrap();
-    wait_until(cx, |cx| shows(cx, window, "canvas-undo"));
+    wait_until(cx, |cx| shows(cx, window, "page-button"));
     let before = cx
         .update(|cx| PluginHost::global(cx).read(cx).generation(&id))
-        .expect("the canvas plugin has loaded");
+        .expect("the page plugin has loaded");
 
     let reload = cx.update(|cx| {
         Workspace::dispatch(
@@ -2971,10 +2990,10 @@ fn reloading_a_plugin_mounts_its_panel_again(cx: &mut TestAppContext) {
 
     let after = cx
         .update(|cx| PluginHost::global(cx).read(cx).generation(&id))
-        .expect("the canvas plugin is still loaded");
+        .expect("the page plugin is still loaded");
     assert!(after > before, "the reload did not load the plugin again");
-    wait_until(cx, |cx| shows(cx, window, "canvas-undo"));
-    assert!(!shows(cx, window, "panel-dev.kagan.canvas-canvas"));
+    wait_until(cx, |cx| shows(cx, window, "page-button"));
+    assert!(!shows(cx, window, PAGE_FRAME));
 }
 
 /// Installs a plugin whose only contribution is the overlay `Cover`, exported by `source`.
@@ -3154,7 +3173,7 @@ export class PanelB extends View {
         .insert_plugin(&Plugin {
             id: PluginId("dev.kagan.twin".into()),
             source: root.display().to_string(),
-            root: root.canonicalize().unwrap(),
+            root: dunce::canonicalize(root).unwrap(),
             commit: None,
             enabled: true,
             approved: serde_json::json!({ "powers": {}, "downloads": {}, "folders": {} }),
@@ -3469,7 +3488,7 @@ fn installing_from_the_plugins_box_asks_for_approval_in_needs_you(cx: &mut TestA
         "export default class Plugin {}\n",
     )
     .unwrap();
-    let root = plugin.path().canonicalize().unwrap();
+    let root = dunce::canonicalize(plugin.path()).unwrap();
 
     // Type the folder into the install form on the Installed page and press its Install button.
     click(cx, window, "settings-gear");
@@ -3649,46 +3668,64 @@ fn a_plugin_panel_shows_beside_the_built_in_panels(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "changes"));
     assert!(!shows(cx, window, "plugins"));
     assert!(shows(cx, window, "plugins-manage"));
-    assert!(!shows(cx, window, "panel-dev.kagan.canvas-canvas"));
+    assert!(!shows(cx, window, PAGE_FRAME));
     assert_eq!(
         cx.update(|cx| kagan.read(cx).panel_titles()),
-        ["Questions", "Changes"]
+        ["Questions", "Changes", "Details"]
     );
 }
 
-/// Writes the bundled canvas plugin into the store, installed and enabled.
-fn install_canvas(data: &Path) {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../plugins/canvas")
-        .canonicalize()
-        .unwrap();
+pub(super) const PAGE: &str = "dev.test.page";
+pub(super) const PAGE_FRAME: &str = "panel-dev.test.page-page";
+
+/// Writes a plugin with one center page that follows the thread, installed and enabled.
+pub(super) fn install_page(data: &Path) {
+    let root = data.join("page");
+    std::fs::create_dir(&root).unwrap();
+    let manifest = serde_json::json!({
+        "id": PAGE,
+        "name": "Page",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "instructions": "A test page.",
+        "powers": {},
+        "ui": {"panels": [{"id": "page", "title": "Page", "view": "Page", "placement": "center", "follows": "thread"}]}
+    });
+    std::fs::write(root.join("kagan.json"), manifest.to_string()).unwrap();
+    std::fs::write(
+        root.join("main.js"),
+        r#"import { View, div } from "gpui-kit";
+import { KgButton } from "gpui-component";
+export default class Plugin extends View {}
+export class Page extends View {
+  render() { return div().child(new KgButton("page-button").label("Page")); }
+}
+"#,
+    )
+    .unwrap();
     let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
     store
         .insert_plugin(&Plugin {
-            id: PluginId("dev.kagan.canvas".into()),
+            id: PluginId(PAGE.into()),
             source: root.display().to_string(),
             root,
             commit: None,
             enabled: true,
-            approved: serde_json::json!({
-                "powers": {"clipboard": {"read": true, "write": true}, "areas": ["database", "threads"]},
-                "downloads": {}, "folders": {}
-            }),
+            approved: serde_json::json!({"powers": {}, "downloads": {}, "folders": {}}),
             error: None,
         })
         .unwrap();
-    drop(store);
 }
 
-/// Opens the window with the plugin host running. `canvas` also installs and enables the bundled
-/// canvas plugin, which declares a right panel.
+/// Opens the window with the plugin host running. `page` also installs a plugin with a center page.
 pub(super) fn open_with_plugins(
     cx: &mut TestAppContext,
-    canvas: bool,
+    page: bool,
 ) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
     open_with_plugins_then(cx, |data| {
-        if canvas {
-            install_canvas(data);
+        if page {
+            install_page(data);
         }
     })
 }
@@ -3733,6 +3770,12 @@ fn git(path: &Path, args: &[&str]) {
     let output = std::process::Command::new("git")
         .arg("-C")
         .arg(path)
+        .args([
+            "-c",
+            "user.name=Kagan",
+            "-c",
+            "user.email=kagan@example.com",
+        ])
         .args(args)
         .output()
         .unwrap();
@@ -3838,6 +3881,7 @@ fn input(id: &ThreadId, text: &str) -> Op {
     Op::Thread(ThreadOp::Input {
         id: id.clone(),
         text: text.into(),
+        terminal: None,
     })
 }
 
@@ -3878,7 +3922,7 @@ fn count_repaints(
 }
 
 fn host_grid(cx: &mut TestAppContext, id: &ThreadId) -> Grid {
-    cx.update(|cx| Workspace::global(cx).read(cx).grid(id))
+    cx.update(|cx| Workspace::global(cx).read(cx).grid(id, None))
         .expect("the host holds a screen")
 }
 
@@ -4161,7 +4205,7 @@ pub(super) fn install_navigator(data: &Path) {
         .insert_plugin(&Plugin {
             id: PluginId("dev.kagan.navigator".into()),
             source: root.display().to_string(),
-            root: root.canonicalize().unwrap(),
+            root: dunce::canonicalize(root).unwrap(),
             commit: None,
             enabled: true,
             approved: serde_json::json!({
@@ -5367,7 +5411,10 @@ fn a_saved_diagnostics_notice_keeps_dismiss_on_screen(cx: &mut TestAppContext) {
         "dismiss {dismiss_x}+{dismiss_w} window {width}"
     );
     let message = value_of(cx, window, "toast-message").unwrap_or_default();
-    let saved = data.path().join("diagnostics");
+    // Windows can hand out the temp folder by its short 8.3 name; kagan shows the full one.
+    let saved = dunce::canonicalize(data.path())
+        .unwrap()
+        .join("diagnostics");
     assert!(
         message.starts_with("Saved diagnostics to ")
             && message.contains(saved.to_str().unwrap_or("")),
@@ -6027,23 +6074,12 @@ fn review_comments_are_pasted_without_submitting(cx: &mut TestAppContext) {
     );
     cx.executor().advance_clock(POLL);
     cx.run_until_parked();
-    assert!(
-        !shows(cx, window, "review"),
-        "send state {:?}, elements {:?}",
-        cx.update(|cx| review_read::review_send_state(kagan.read(cx))),
-        cx.update_window(window, |_, window, _| crate::ui_registry::snapshots(window)
-            .into_iter()
-            .filter(
-                |entry| format!("{:?}", entry.path()).contains("review-send")
-                    || format!("{:?}", entry.path()).contains("review-line-New-2")
-            )
-            .collect::<Vec<_>>())
-            .unwrap()
-    );
+    assert!(!shows(cx, window, "review"));
     cx.executor().advance_clock(POLL);
     cx.run_until_parked();
-    let screen = grid_text(cx, &kagan);
-    assert!(screen.contains("check"), "{screen}");
+    // The terminal wraps the pasted line at its width.
+    let screen = grid_text(cx, &kagan).replace('\n', "");
+    assert!(screen.contains("Please check this"), "{screen}");
     assert!(!screen.contains("command not found"));
 }
 
@@ -6184,6 +6220,77 @@ fn review_draft_keeps_its_file_and_survives_closing(cx: &mut TestAppContext) {
     let screen = grid_text(cx, &kagan);
     assert!(screen.contains("file: notes.txt"), "{screen}");
     assert!(screen.contains("scope: uncommitted"), "{screen}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_review_the_program_cannot_take_keeps_its_notes(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (thread, _repo) = repo_thread(cx, window, data.path());
+    wait_until(cx, |cx| shows(cx, window, "change-notes.txt"));
+    click(cx, window, "change-notes.txt");
+    wait_until(cx, |cx| shows(cx, window, "comment-New-2"));
+    click(cx, window, "comment-New-2");
+    cx.simulate_input(window, "kept");
+    click(cx, window, "review-add-comment");
+    let exit = ThreadOp::Input {
+        id: thread.clone(),
+        text: line("exit"),
+        terminal: None,
+    };
+    let exited = cx.update(|cx| Workspace::dispatch(Op::Thread(exit), cx));
+    cx.foreground_executor().block_test(exited).unwrap();
+    wait_until(cx, |cx| thread_status(cx, &thread) == ThreadStatus::Idle);
+    click(cx, window, "review-send");
+    wait_until(cx, |cx| {
+        notice_of(cx, &kagan).is_some_and(|notice| notice.contains("ended"))
+    });
+    click(cx, window, "change-notes.txt");
+    wait_until(cx, |cx| shows(cx, window, "review"));
+    assert_eq!(
+        cx.update(|cx| review_read::review_note_count(kagan.read(cx))),
+        1
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_held_paste_reaches_the_program_after_its_new_size(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_program(
+        cx,
+        "/bin/sh -c \"stty -icanon -echo min 1; echo ready; dd bs=1 count=1 2>/dev/null >/dev/null; echo size $(stty size) end; exec sleep 60\"",
+    );
+    click(cx, window, &format!("thread-{}", id.0));
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("ready"));
+    cx.simulate_keystrokes(window, &chord("OpenSettings"));
+    cx.run_until_parked();
+    assert!(shows(cx, window, "settings-page"));
+    let view = cx
+        .update(|cx| screen_read::terminal_view(kagan.read(cx)))
+        .unwrap();
+    let sent = view.update(cx, |view, cx| view.paste_after_fit("x".into(), cx));
+    cx.simulate_window_resize(window, size(px(900.), px(720.)));
+    // Long enough for the program to answer a paste that was not held.
+    for _ in 0..10 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    assert!(
+        !grid_text(cx, &kagan).contains("size"),
+        "pasted before the terminal was drawn"
+    );
+    cx.simulate_keystrokes(window, "escape");
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("end"));
+    assert!(cx.foreground_executor().block_test(sent));
+    let cols = cx
+        .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
+        .unwrap()
+        .lines[0]
+        .len();
+    let screen = grid_text(cx, &kagan);
+    assert!(screen.contains(&format!(" {cols} end")), "{cols}: {screen}");
 }
 
 #[gpui_kit::test]

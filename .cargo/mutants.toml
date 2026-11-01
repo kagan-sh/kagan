@@ -1,11 +1,6 @@
 # cargo-mutants skips these. Each entry names the mutant it skips and why no test can catch it.
 
-# Sketch's text painting. Tried: HeadlessAppContext with render_to_image (spike in the Linux container,
-# gpui-pre 0.3.7). It needs a workspace opened first, and the spike failed there, so no glyph pixels were
-# confirmed. Not verified that no test can see a glyph.
-# Other entries are below.
 exclude_re = [
-    'sketch\.rs:\d+:\d+: replace paint_text with \(\)',
     # Required by gpui-kit Collapsible for SidebarItem; nothing reads it.
     'sidebar\.rs:\d+:\d+: replace <impl Collapsible for Row>::is_collapsed -> bool with true',
 ]

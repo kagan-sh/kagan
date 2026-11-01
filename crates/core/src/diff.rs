@@ -816,7 +816,11 @@ fn empty_tree(root: &Path) -> Result<String> {
     git_text(root, &["mktree"], None)
 }
 
-fn resolve_base(root: &Path, requested: Option<&str>, hint: Option<&str>) -> Result<String> {
+pub(crate) fn resolve_base(
+    root: &Path,
+    requested: Option<&str>,
+    hint: Option<&str>,
+) -> Result<String> {
     if let Some(base) = requested.or(hint).filter(|base| !base.is_empty()) {
         return Ok(base.to_owned());
     }

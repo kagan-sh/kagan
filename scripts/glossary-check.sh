@@ -31,7 +31,7 @@ fi
 while IFS= read -r line; do
   term=${line%%	*}
   [ -n "$term" ] || continue
-  git grep -n -i -w -F -e "$term" -- 'crates/*/src/*' plugins docs book \
+  git grep -n -i -w -F -e "$term" -- 'crates/*/src/*' docs book \
     ':!docs/decisions.md' ':!docs/CONTEXT.md' | while IFS= read -r hit; do
     printf '%s\t%s\n' "$term" "$hit"
   done

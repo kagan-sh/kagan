@@ -7,11 +7,11 @@ use std::rc::Rc;
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
-    App, BorderStyle, Bounds, ClipboardItem, Context, EventEmitter, FocusHandle, Focusable, Font,
-    FontStyle, FontWeight, InteractiveElement as _, IntoElement, KeyDownEvent, MouseButton,
-    ParentElement as _, Pixels, Render, SharedString, StrikethroughStyle, Styled as _,
-    Subscription, TextAlign, TextRun, UnderlineStyle, Window, actions, canvas, div, fill, outline,
-    point, px, size,
+    App, AppContext as _, BorderStyle, Bounds, ClipboardItem, Context, EventEmitter, FocusHandle,
+    Focusable, Font, FontStyle, FontWeight, InteractiveElement as _, IntoElement, KeyDownEvent,
+    MouseButton, ParentElement as _, Pixels, Render, SharedString, StrikethroughStyle, Styled as _,
+    Subscription, Task, TextAlign, TextRun, UnderlineStyle, Window, actions, canvas, div, fill,
+    outline, point, px, size,
 };
 use kg_core::{Cell, Color, Grid, Weight, Workspace, WorkspaceEvent};
 use kg_domain::{Op, OpResult, TERMINAL_COLS, TERMINAL_ROWS, ThreadId, ThreadOp};
@@ -49,6 +49,8 @@ fn is_new_fit(sent: Option<(u16, u16)>, cols: u16, rows: u16) -> bool {
 /// One running thread's screen. It draws the host's grid and sends keys, pointer and size back.
 pub(crate) struct TerminalView {
     thread: ThreadId,
+    /// An extra terminal's number; `None` is the program's terminal.
+    terminal: Option<u32>,
     grid: Rc<Grid>,
     size: Option<(u16, u16)>,
     font_size: u8,
@@ -57,6 +59,8 @@ pub(crate) struct TerminalView {
     _screens: Subscription,
     /// Why the last input or paste was not sent, until one is sent.
     notice: Option<String>,
+    /// A paste held for the next fit, and where to say whether it was sent.
+    held: Option<(String, async_channel::Sender<bool>)>,
     #[cfg(test)]
     reads: usize,
 }
@@ -64,16 +68,23 @@ pub(crate) struct TerminalView {
 impl EventEmitter<Typed> for TerminalView {}
 
 impl TerminalView {
-    pub(crate) fn new(thread: ThreadId, font_size: u8, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        thread: ThreadId,
+        terminal: Option<u32>,
+        font_size: u8,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let screens = cx.subscribe(&Workspace::global(cx), |this, _, event, cx| {
-            if let WorkspaceEvent::Screen(id) = event
+            if let WorkspaceEvent::Screen(id, terminal) = event
                 && *id == this.thread
+                && *terminal == this.terminal
             {
                 this.refresh(cx);
             }
         });
         let mut this = Self {
             thread,
+            terminal,
             grid: Rc::default(),
             size: None,
             font_size,
@@ -87,6 +98,7 @@ impl TerminalView {
             },
             _screens: screens,
             notice: None,
+            held: None,
             #[cfg(test)]
             reads: 0,
         };
@@ -132,7 +144,10 @@ impl TerminalView {
         {
             self.reads += 1;
         }
-        let Some(grid) = Workspace::global(cx).read(cx).grid(&self.thread) else {
+        let Some(grid) = Workspace::global(cx)
+            .read(cx)
+            .grid(&self.thread, self.terminal)
+        else {
             return;
         };
         if *self.grid != grid {
@@ -159,15 +174,25 @@ impl TerminalView {
 
     fn paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            Self::submit(
-                ThreadOp::Paste {
-                    id: self.thread.clone(),
-                    text: Some(text),
-                    file: None,
-                },
-                cx,
-            );
+            Self::submit(self.paste_op(text), cx).detach();
             cx.emit(Typed);
+        }
+    }
+
+    /// Pastes once the view has its shown size, so the program wraps the text where it is seen.
+    pub(crate) fn paste_after_fit(&mut self, text: String, cx: &mut Context<Self>) -> Task<bool> {
+        let (sent, received) = async_channel::bounded(1);
+        self.held = Some((text, sent));
+        cx.notify();
+        cx.background_spawn(async move { received.recv().await.unwrap_or(false) })
+    }
+
+    fn paste_op(&self, text: String) -> ThreadOp {
+        ThreadOp::Paste {
+            id: self.thread.clone(),
+            text: Some(text),
+            file: None,
+            terminal: self.terminal,
         }
     }
 
@@ -184,6 +209,7 @@ impl TerminalView {
         let copied = Workspace::dispatch(
             Op::Thread(ThreadOp::Copy {
                 id: self.thread.clone(),
+                terminal: self.terminal,
             }),
             cx,
         );
@@ -211,6 +237,7 @@ impl TerminalView {
             ThreadOp::Scroll {
                 id: self.thread.clone(),
                 lines,
+                terminal: self.terminal,
             },
             cx,
         );
@@ -221,24 +248,27 @@ impl TerminalView {
             ThreadOp::Input {
                 id: self.thread.clone(),
                 text,
+                terminal: self.terminal,
             },
             cx,
-        );
+        )
+        .detach();
         cx.emit(Typed);
     }
 
     // Input and paste can be refused, for example by a program that has ended. The person is told why.
-    fn submit(op: ThreadOp, cx: &mut Context<Self>) {
+    fn submit(op: ThreadOp, cx: &mut Context<Self>) -> Task<bool> {
         let sent = Workspace::dispatch(Op::Thread(op), cx);
         cx.spawn(async move |view, cx| {
             let notice = sent.await.err().map(|error| error.to_string());
+            let sent = notice.is_none();
             view.update(cx, |view, cx| {
                 view.notice = notice;
                 cx.notify();
             })
             .ok();
+            sent
         })
-        .detach();
     }
 
     #[cfg(test)]
@@ -248,16 +278,34 @@ impl TerminalView {
 
     // The last client to resize sets the size, so a newly shown terminal always sends its own.
     fn fit(&mut self, cols: u16, rows: u16, cx: &mut Context<Self>) {
-        if !is_new_fit(self.size, cols, rows) {
+        let resized = is_new_fit(self.size, cols, rows).then(|| {
+            self.size = Some((cols, rows));
+            let resize = ThreadOp::Resize {
+                id: self.thread.clone(),
+                cols,
+                rows,
+                terminal: self.terminal,
+            };
+            Workspace::dispatch(Op::Thread(resize), cx)
+        });
+        let Some((text, reply)) = self.held.take() else {
+            if let Some(resized) = resized {
+                resized.detach();
+            }
             return;
-        }
-        self.size = Some((cols, rows));
-        let resize = ThreadOp::Resize {
-            id: self.thread.clone(),
-            cols,
-            rows,
         };
-        Workspace::dispatch(Op::Thread(resize), cx).detach();
+        // A program resized while it echoes a paste can draw the text at the old width.
+        let paste = self.paste_op(text);
+        cx.spawn(async move |view, cx| {
+            if let Some(resized) = resized {
+                _ = resized.await;
+            }
+            let Ok(sent) = view.update(cx, |_, cx| Self::submit(paste, cx)) else {
+                return;
+            };
+            _ = reply.try_send(sent.await);
+        })
+        .detach();
     }
 }
 
@@ -272,10 +320,12 @@ impl Render for TerminalView {
         let view = cx.entity();
         let grid = self.grid.clone();
         let focus = self.focus.clone();
-        let live = Workspace::global(cx)
-            .read(cx)
-            .thread(&self.thread)
-            .is_some_and(|thread| thread.read(cx).running());
+        // An extra terminal closes when its shell ends, so it is live while it is shown.
+        let live = self.terminal.is_some()
+            || Workspace::global(cx)
+                .read(cx)
+                .thread(&self.thread)
+                .is_some_and(|thread| thread.read(cx).running());
         let font = gpui_kit::font(cx.theme().mono_font_family.clone());
         let font_size = px(f32::from(self.font_size));
         div()

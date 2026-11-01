@@ -27,7 +27,7 @@ EXPECTED = {
     "kg-store": {"kg-domain"},
     "kg-domain": set(),
     "kg-process": set(),
-    "kg-terminal": set(),
+    "kg-terminal": {"kg-process"},
 }
 
 WORKSPACE = set(EXPECTED)

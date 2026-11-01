@@ -90,9 +90,6 @@ pub(super) struct Review {
     pub(super) draft: Option<usize>,
     drag: Option<(kg_domain::DiffSide, u32)>,
     scroll: ScrollHandle,
-    send: Task<()>,
-    sending: bool,
-    send_error: Option<String>,
 }
 
 struct ReadExpect {
@@ -175,9 +172,6 @@ impl Kagan {
                 draft,
                 drag: None,
                 scroll: ScrollHandle::new(),
-                send: Task::ready(()),
-                sending: false,
-                send_error: None,
             })),
             window,
             cx,
@@ -318,6 +312,10 @@ impl Kagan {
             cx.notify();
             return;
         }
+        self.leave_review(window, cx);
+    }
+
+    pub(super) fn leave_review(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.screen.review().is_none() {
             return;
         }
@@ -443,7 +441,7 @@ impl Kagan {
                 if this.draft_focused(window, cx) {
                     this.add_comment(window, cx);
                 }
-                this.send_review(cx);
+                this.send_review(window, cx);
             }))
             .on_action(cx.listener(|this, _: &CloseReview, window, cx| {
                 if this.draft_focused(window, cx) {

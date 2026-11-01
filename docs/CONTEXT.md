@@ -91,6 +91,10 @@ _Avoid_: Prompt, dialog
 What a thread's terminal shows right now, kept by the host. A client asks for it and draws it; it never reads the program's raw output.
 _Avoid_: Frame, buffer, pane
 
+**Extra terminal**:
+A login shell a person opens in a thread's folder beside its program, shown as a tab over the program's terminal and numbered in that thread. It is not part of the thread: no events, no marks, and it ends with the thread's run.
+_Avoid_: Split, pane, second thread
+
 **Scrollback**:
 The lines a program printed above its screen, kept by the host, 10,000 at most. The person scrolls back through them; typing brings the screen back into view.
 _Avoid_: History (as a synonym for the screen), log, buffer
@@ -115,7 +119,7 @@ What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_
 _Avoid_: Injection, agent setup, wrapper
 
 **Panel**:
-A titled block a plugin declares, or one of Questions and Changes. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool or a center page. A panel placed on the right or the bottom is refused. An already installed right panel is skipped and the plugin still runs.
+A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool or a center page. A panel placed on the right or the bottom is refused. An already installed right panel is skipped and the plugin still runs.
 _Avoid_: Pane, dock, tab
 
 **Page**:

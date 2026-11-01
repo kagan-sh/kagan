@@ -198,3 +198,33 @@ pub struct DiffCommit {
     pub rev: String,
     pub summary: String,
 }
+
+/// A thread's folder, program and git state, as the Details panel shows them. Read locally; nothing is fetched.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreadDetails {
+    pub folder: std::path::PathBuf,
+    pub environment: crate::EnvironmentProvider,
+    pub program: String,
+    /// `None` outside a git folder
+    pub git: Option<GitDetails>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitDetails {
+    /// `None` on a detached HEAD
+    pub branch: Option<String>,
+    /// `None` when the repository has no base branch
+    pub base: Option<BaseBranch>,
+    /// The last few commits, newest first, with short revs
+    pub commits: Vec<DiffCommit>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BaseBranch {
+    pub name: String,
+    pub ahead: u32,
+    pub behind: u32,
+}

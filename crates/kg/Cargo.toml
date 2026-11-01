@@ -44,6 +44,7 @@ zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["rt-async-
 embed-resource = "=3.0.11"
 
 [dev-dependencies]
+sha2 = "=0.10.9"
 tempfile = "=3.27.0"
 
 [lints]

@@ -392,6 +392,9 @@ impl Kagan {
         let live = running(thread);
         h_flex()
             .gap_2()
+            .when(!archived, |header| {
+                header.child(super::tabs::new_terminal_button(cx))
+            })
             .when(live, |header| {
                 let keys = bound_keys(&StopThread, cx);
                 let tip = if keys.is_empty() {
@@ -439,10 +442,13 @@ impl Kagan {
         let archived = thread.archived_at.is_some();
         let live = running(&thread);
         // The terminal stays on screen after its program ends, so the last output stays readable.
-        let ended = (!live).then(|| Self::ended_notice(&id, archived, cx));
+        let tabs = self.render_tabs(&thread, cx);
+        let agent = self.tab_view(view) == *view;
+        let ended = (!live && agent).then(|| Self::ended_notice(&id, archived, cx));
         v_flex()
             .size_full()
-            .child(div().flex_1().min_h_0().child(view.clone()))
+            .children(tabs)
+            .child(div().flex_1().min_h_0().child(self.tab_view(view)))
             .children(ended)
             .into_any_element()
     }

@@ -35,7 +35,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Stop`
 
 - **Allowed when**: the thread exists and is not archived [book:cli].
-- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A terminal program has no turn to end [docs:architecture]. The program and what it started end at once, except a process that calls `setsid` itself, and on Windows only the program is killed [decision 46]. It does not ask [decision 12].
+- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A terminal program has no turn to end [docs:architecture]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
 - **Shows**: the thread leaves the running status [book:window].
 - **Refused when**: a missing thread — `not-found` [op.rs]. An archived thread — `failed` [op.rs].
 
@@ -46,12 +46,22 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: `Screen` returns the visible rows as an ANSI redraw, with the modes that change what keys send [decision 46]. With `--scrollback` it returns every kept line as plain text. `--lines` is refused without `--scrollback`; with it, the count is from 1 to 10000 and the result is that many last rows of the same text, or the whole text when there are fewer. `Copy` returns the selected text, or nothing when no text is selected; a whole line copied has no newline at its end. `Input`, `Paste`, `Report`, `Resize`, `Scroll` and `Select` return done. `WorkspaceEvent::Screen` follows a change, at most about 30 times a second [decision 46].
 - **Refused when**: the thread has no running program — `not-found` [op.rs]. A size outside those limits — `invalid` [op.rs]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op.rs]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run.
 
+### `Terminal` (`New`, `List`, `Close`)
+
+- **Allowed when**: the thread exists. `New` also needs it not archived and its folder ready [decision 110].
+- **Changes**: `New` starts the login shell in the thread's folder with the thread's `KG_*` variables and gives it the next number; numbers are not reused while the thread lives. `Close` ends that shell and what it started: its process group on macOS and Linux, except a process that calls `setsid` itself, and its Job Object on Windows, except a process started before the shell joined the job. A shell that exits closes itself. Archive ends a thread's extra terminals when its 10-second grace ends, whether or not the program still runs; Undo within the grace keeps them. Delete and Quit end them at once. None is restored after a restart, and none writes an event or changes the thread's status or marks [decision 110].
+- **Shows**: `New` returns the new terminal; `List` returns each open one with its number and the title its shell set. The terminal Ops above reach one with `--terminal <n>` [decision 110].
+- **Refused when**: a missing thread, or a number that is not open — `not-found` [op.rs]. `New` on an archived thread or a folder that is not ready — `invalid`. A shell that cannot start — `failed` [decision 110].
+
 ### Terminal in the window
 
 - The wheel and trackpad scroll the history. Shift+PageUp and Shift+PageDown page it. Output that arrives while the view is scrolled up does not move it; typing does.
 - Drag selects, double-click selects a word, and triple-click selects a line. The selection is drawn in the theme's selection color.
 - Copy is Cmd+C, or Ctrl+Shift+C off macOS. Paste is Cmd+V, or Ctrl+Shift+V off macOS.
 - A program that asks for mouse reports (DECSET 1000, 1002 or 1003) gets clicks, drags and the wheel. It gets them in the SGR form when it asks for 1006, and in the legacy form otherwise. Shift overrides this: the press selects and the wheel scrolls in the window.
+- + in the title row opens an extra terminal and shows it. While one is open, tabs over the terminal show the program first, then each extra terminal; the shown tab is filled. A click or Cmd+Alt+] and Cmd+Alt+[ switch tabs, and focus the shown terminal. × on a tab, or Cmd+Shift+W on a shown extra terminal, closes it; the tab before it shows. A terminal opened with `kg` adds a tab and does not change the shown one. Showing another thread shows its program's tab [decision 110].
+- Cmd-click, or Ctrl-click off macOS, on an http or https link opens it in the system browser and does nothing else: no selection and no mouse report. A link the program set with OSC 8 opens its target; other links are read from the text, across wrapped rows [decision 112].
+- When the thread's terminals printed a local link (localhost, 127.0.0.1, 0.0.0.0, [::1] or [::]), the row over the terminal shows Open host:port at its right end for the newest one. The button, Cmd+Alt+O or `kg window open-local-link` opens it [decision 112].
 
 ### `Archive`
 
@@ -129,6 +139,20 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Allowed when**: the named tool is offered to that thread [book:cli]. Its input is checked against the tool's schema before the plugin runs [docs:plugin-api].
 - **Shows**: the tool's text, and whether that reply is an error [book:cli]. A tool or CLI job that runs past 120 seconds fails with an error that names the plugin [docs:plugin-api].
 - **Refused when**: an unknown tool, including when no plugin host is installed — `not-found` [docs:architecture] [op.rs]. A schema miss — `invalid` [docs:plugin-api] [op.rs]. That empty host is the contract before plugins load [person 2026-10-08].
+
+### `Details`
+
+- **Allowed when**: the thread exists and has a folder [decision 111].
+- **Changes**: nothing. It never fetches, never writes to the repository, and runs no `git status` [decision 111].
+- **Shows**: the folder, the environment kind, the program line, and, in a git folder, the branch (none on a detached HEAD), the base branch with how many commits the branch is ahead of and behind it (none when the repository has no base branch), and the last five commits with short revs, newest first. Outside git, `git` is none [decision 111].
+- **Refused when**: a missing thread — `not-found`. A thread with no folder — `invalid` [op.rs].
+
+### `Links`
+
+- **Allowed when**: the thread exists [decision 112].
+- **Changes**: nothing.
+- **Shows**: every http and https link the thread's terminals keep, as plain text, the program's terminal first and then each extra terminal in number order, each link once at the last place it was printed [decision 112].
+- **Refused when**: a missing thread — `not-found` [op.rs].
 
 ### `Search`
 

@@ -55,12 +55,38 @@ enum Known {
     Codex,
 }
 
+/// The `KG_*` variables and the PATH with `kg` on it, which every terminal of the thread gets.
+pub(super) fn variables(
+    this: &WeakEntity<Workspace>,
+    record: &kg_domain::Thread,
+    cx: &mut AsyncApp,
+) -> Result<Vec<(OsString, OsString)>> {
+    let (cli, socket) = this
+        .update(cx, |workspace, cx| {
+            (
+                workspace.cli.clone(),
+                cx.try_global::<SocketLocation>()
+                    .map(|socket| socket.0.clone()),
+            )
+        })
+        .map_err(closed)?;
+    Ok(environment(
+        record.id.0.as_str(),
+        record.project_id.0.as_str(),
+        record.environment_id.as_ref().map(|id| id.0.as_str()),
+        &cli,
+        socket.as_deref(),
+        kg_process::user_path().as_ref(),
+    ))
+}
+
 pub(crate) async fn integrate(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
     program: &ResolvedProgram,
     cx: &mut AsyncApp,
 ) -> Result<Integration> {
+    let env = variables(this, record, cx)?;
     let (cli, data_dir, database, socket) = this
         .update(cx, |workspace, cx| {
             (
@@ -73,14 +99,6 @@ pub(crate) async fn integrate(
         })
         .map_err(closed)?;
     let id = record.id.0.as_str();
-    let env = environment(
-        id,
-        record.project_id.0.as_str(),
-        record.environment_id.as_ref().map(|id| id.0.as_str()),
-        &cli,
-        socket.as_deref(),
-        kg_process::user_path().as_ref(),
-    );
     let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
     let args = match known(&program.path) {
         Some(known) if on && !subcommand(&known, &program.args) => {

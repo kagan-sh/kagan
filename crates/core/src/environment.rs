@@ -15,8 +15,10 @@ mod personal;
 mod script;
 
 pub(crate) use personal::{describe, personal_folders};
+#[cfg(all(test, unix))]
+pub(crate) use script::run_script;
 #[cfg(test)]
-pub(crate) use script::{SCRIPT_LIMIT, SetupEnd, become_ready, run_script, shell_from};
+pub(crate) use script::{SCRIPT_LIMIT, SetupEnd, become_ready, shell_from};
 
 pub(crate) enum Prepared {
     Reuse(EnvironmentId),
@@ -650,8 +652,11 @@ pub(crate) async fn sweep(
             .is_some_and(|archived| at.0 >= archived.0.saturating_add(GRACE))
         {
             let thread = this
-                .update(cx, |workspace, _| {
+                .update(cx, |workspace, cx| {
                     crate::thread::release_ended(workspace, &record.id);
+                    if crate::thread::end_extras(workspace, &record.id) {
+                        cx.emit(crate::WorkspaceEvent::Changed);
+                    }
                     drop_screens.push(record.id.clone());
                     workspace.threads.get(&record.id).cloned()
                 })
@@ -846,7 +851,7 @@ pub(crate) async fn remove_folder(
             let mut notices = Vec::new();
             let outcome = match provider {
                 Provider::Personal if path.exists() => {
-                    std::fs::remove_dir_all(&path).map_err(OpError::from)
+                    personal::remove(&path).map_err(OpError::from)
                 }
                 Provider::Worktree if path.exists() => {
                     // A teardown failure still attempts removal, and never with --force.

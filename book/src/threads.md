@@ -1,50 +1,76 @@
 # Threads
 
-A thread is one program running in one folder. The program line is what you start, such as `claude` or `codex`. The terminal in the thread is where that program runs.
+A thread is one program that runs in one folder. The program can be an agent, such as `claude` or `codex`, a shell, or any command. The terminal of the thread is where the program runs.
 
-## Start and stop
+## Start a thread
 
-In the window, pick a project and a program, then start the thread. From a terminal:
+In the window, click **+** next to a project, or press Cmd+N. The New thread screen lists:
+
+- Claude Code and Codex, also when they are not installed.
+- The other known agents that are on your `PATH`.
+- Your login shell, and the programs that you used recently.
+
+Use the arrow keys to select a program, and press Enter. To type a different command, click **Custom command…**.
+
+From a terminal:
 
 ```bash
-kg thread run --project-id personal --environment personal --program claude
-kg thread stop <id>
+kg thread run --project-id <project-id> --program claude
 ```
 
-Stop ends the program. The thread is stopping until the program has ended, then it is idle, recorded as stopped. When a program ends, its last screen and scrollback stay readable until you delete the thread or its archive grace ends, and they are kept across a restart, up to 4 MiB for the whole snapshot. Older scrollback that does not fit is left out, and the thread says so. A screen outside the geometry or that 4 MiB bound is not kept, and the thread says it was outside the geometry or the 4 MiB bound. A crash while the program was still running keeps the reason and not the screen. The thread says no output was saved for that run. A program that exits on its own with code 0 leaves the thread idle. Any other exit code, or a signal, marks the thread failed and asks for your attention. Opening the app does not start the program again. A thread left running when the app quit is marked failed. `kg diagnostics export` writes a local file. The thread actions menu has Save diagnostics. That button is also on the ended line when the program failed, was interrupted, or the screen was not kept in full. The file has no terminal contents and no environment variables. It lists each thread's id, status, and structured cause, whether a screen was kept, and each plugin's id, kind, version, and warn and error counts. Titles, end text, plugin sources, and plugin log messages are omitted.
+`kg project list` shows the project ids. The Personal project has no git repository, so add `--environment personal` for it.
 
-## Environment
+A program line splits at spaces. Single or double quotes keep spaces together, for example `'/Applications/My Tool/bin/tool' --flag "a b"`. A backslash is a usual character, so a Windows path needs no change.
 
-`--environment` picks the folder:
+## Folders
+
+Each thread runs in a folder. On the New thread screen, a git project shows **New worktree from `<branch>`** and **Project folder**. New worktree is the default.
+
+- **New worktree**: a second checkout of the repository, on a new branch. Your own folder does not change. The worktree starts from the current branch. kagan does not fetch, and the new branch has no upstream.
+- **Project folder**: the folder that you added.
+- **Personal folder**: a new folder in the data folder, for the Personal project only.
+
+A folder without a git commit always runs in the folder itself, and the screen tells you.
+
+From a terminal, `--environment` selects the folder:
 
 | Value | Folder |
 | --- | --- |
-| `worktree` or `worktree:<branch>` | A separate git checkout. This is the default. Only for a git project |
-| `project-default` | The project folder |
-| `personal` | A folder kagan creates, only for the Personal project |
-| `reuse:<id>` | An existing environment |
+| `worktree` (default) | New worktree. Add `:<base>`, or `:<base>:<branch>`, to set the start point and the branch name |
+| `project-default` | Project folder |
+| `personal` | Personal folder |
+| `reuse:<id>` | The folder of an existing environment |
 
-`worktree` on Personal returns `git worktrees need a standard project`. `worktree` on a folder that is not a git repository is refused and names `project-default`. Add a folder with `kg project add <path>`.
+### Setup scripts
 
-On the new-thread screen a git project offers **Project folder** or **New worktree from `<branch>`**, and the worktree is the default. A worktree starts from the checked-out branch, or from the commit HEAD points at when HEAD is detached. A folder with no git commit runs in the folder itself, and the screen says so. If the branches cannot be read, the screen shows the error and a Retry button, and Start waits.
+A repository can have a `.kagan/setup` script and a `.kagan/teardown` script, committed in git. kagan runs `.kagan/setup` in a new worktree before the program starts. It runs `.kagan/teardown` before it removes the worktree. A project folder and a Personal folder run neither script.
 
-On the new-thread screen the list shows Claude Code and Codex (listed even when missing), other known agents when they are on the PATH, the login shell, and recent programs. Escape closes the custom command. Enter starts the selected installed program, and the arrow keys move through the list. **Custom command…** opens a Program field and an Arguments field, and shows what will run before Start. `kg program list --json` gives the same list.
+> [!WARNING]
+> When you click **Start**, the setup script of the repository runs on your computer. Before you start a thread in a repository that you do not trust, click **Show script** and read the script.
 
-The program is split on spaces. Single or double quotes keep spaces together, so `'/Applications/My Tool/bin/tool' --flag "a b"` works. A backslash is an ordinary character, so Windows paths need no escaping. An unfinished quote is an error.
+If the setup script fails, the program does not start. The screen shows the error and **Retry**. Add the files that the script makes to `.gitignore`.
 
-A new worktree branch is created with `--no-track`. It does not track an upstream. Kagan does not fetch, and it does not set an upstream later. The only scripts are `.kagan/setup` and `.kagan/teardown`, committed in the repository, and only a git worktree runs them. They are read from the pinned base commit. On the new-thread screen, Show script opens that setup text. Files the setup script creates should be git-ignored. A project folder and a personal folder run neither.
+## Stop and start again
 
-## Start again
+- **Stop** (Cmd+.) ends the program. In a terminal: `kg thread stop <id>`.
+- **Start again** (Cmd+Shift+S) runs the same program again, in the same thread and folder. In a terminal: `kg thread start-again <id>`.
 
-A stopped thread, or one the app found running when it quit, can run its program again. Choose **Start again** on its line, or press the shortcut. It starts in the same folder, in the same thread. Nothing starts it on its own.
+kagan never starts a program again without you, also not after a restart.
 
-```bash
-kg thread start-again <id>
-```
+## When a program ends
+
+The line under the terminal tells you why the program ended. The thread keeps the last screen and its scrollback, also after a restart.
+
+- Exit code 0: the thread is idle.
+- A different exit code, or a signal: the thread fails, and it shows that it needs you.
+- kagan quit or crashed while the program ran: the thread fails, and no screen is saved for that run.
+
+If a very large screen does not fit, the thread keeps less of it and tells you.
 
 ## Archive and delete
 
-Archive retires a thread. The history stays. The run stops after 10 seconds. Unarchive in that window cancels the stop. The thread leaves the sidebar. Restore it from Archived.
+- **Archive** removes a thread from the sidebar and keeps its history. The program stops after 10 seconds. To cancel the stop, unarchive the thread in those 10 seconds. To get the thread back later, open **Archived** and click **Restore**.
+- **Delete** asks you first. Then it removes the thread and its history permanently.
 
 ```bash
 kg thread archive <id>
@@ -52,24 +78,29 @@ kg thread unarchive <id>
 kg thread delete <id>
 ```
 
-Delete asks first, then removes the thread and its history for good.
+10 seconds after the last thread of a worktree is archived, kagan removes the worktree:
 
-A git worktree kagan created is removed 10 seconds after its last thread is archived. Git deletes ignored files with the folder. If a file git would track is still there, the folder stays, the archived row names those files, and Remove again tries once more after you commit, delete, or git-ignore them. `kg environment get` includes that reason. `kg environment remove` is the same retry. A git branch is left in place, so `kg environment restore <thread-id>` can attach the folder again once it is gone. A personal folder is kept when its thread is archived, and its files stay for `kg thread unarchive`. Deleting the thread removes the folder after you approve a question that names it. The project folder itself is never removed.
+- Files that git ignores are deleted with the folder.
+- If the folder has files that git does not ignore, kagan keeps the folder and names the files. Commit, delete, or ignore them, then click **Remove again**.
+- The branch stays, with its commits. `kg environment restore <thread-id>` makes the folder again.
 
-## From the terminal
+kagan keeps a Personal folder until you delete its thread. kagan never removes a project folder.
 
-`kg thread wait` returns `waiting`, `exited` (the row is idle, including after Stop), `failed`, `not-busy`, or `timeout`.
+## Notifications
 
-`kg thread ask` raises a question. It shows in Questions, with the thread's title. Approvals are listed first. The answer arrives as `answered`.
+When a thread needs you and the thread is not on screen, kagan shows a system notification with the thread title. To turn this off, use the Notifications switch in Settings → Agents, or `kg preference set notify false`.
 
-`kg thread paste --file` reads that file, or stdin when the path is `-`, up to 1 MiB, and sends the text.
+## Use threads from a terminal
 
-`kg thread screen --scrollback` prints the kept lines as plain text. `--lines` takes the last rows, from 1 to 10000, and is refused without `--scrollback`.
+| Command | What it does |
+| --- | --- |
+| `kg thread wait <id> --timeout-ms <ms>` | Waits until a reply ends, the program ends, or the time is up |
+| `kg thread ask <id> <title> --option yes=Yes --option no=No` | Asks you a question in the Questions panel |
+| `kg thread paste <id> --file <path>` | Sends the text of a file to the program, up to 1 MiB. Use `-` for stdin |
+| `kg thread screen <id> --scrollback` | Prints the kept terminal text |
+| `kg thread terminal new <id>` | Opens a shell in the thread's folder, as a tab in the window |
+| `kg thread input <id> <text> --terminal <n>` | Types into extra terminal `n` instead of the program |
+| `kg thread rename --id <id> <title>` | Sets the title. A program can do this one time. A title that you set stays |
+| `kg diagnostics export` | Writes a diagnostics file. [Your data](data.md#diagnostics) tells what it has |
 
-The program may set the title once with `kg thread rename`. A later one says the title was kept. A name set in the window stays.
-
-When a thread needs you and that thread is not on screen, kagan posts a system notification with the thread title and an empty body. `kg preference set notify false` turns that off. It stays on when the preference is unset. The Notifications switch in Settings → Agents turns it off too.
-
-## Restart
-
-Start the app again and the database is still there. A thread that was still starting, or still running a program, is marked failed. Saved events still load. The program is not started again.
+[`kg` command](cli.md) has all the flags.

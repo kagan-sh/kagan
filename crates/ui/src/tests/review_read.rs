@@ -1,12 +1,5 @@
 use super::*;
 
-pub(crate) fn review_send_state(kagan: &Kagan) -> Option<(bool, Option<String>)> {
-    kagan
-        .screen
-        .review()
-        .map(|review| (review.sending, review.send_error.clone()))
-}
-
 pub(crate) fn review_note_count(kagan: &Kagan) -> usize {
     kagan
         .screen

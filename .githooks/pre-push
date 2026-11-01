@@ -81,13 +81,6 @@ typos --config .config/typos.toml
 echo "pre-push: glossary" >&2
 sh scripts/glossary-check.sh
 
-if ! command -v node >/dev/null 2>&1; then
-  echo "pre-push: node is not on PATH" >&2
-  exit 1
-fi
-echo "pre-push: plugin tests" >&2
-node --test plugins/canvas/*.test.js
-
 if [ "$skip" -eq 1 ]; then
   echo "pre-push: docs-only diff; rust checks left to match CI" >&2
   exit 0
