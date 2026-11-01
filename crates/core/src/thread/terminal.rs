@@ -532,7 +532,6 @@ fn keep_screen(workspace: &mut Workspace, id: &ThreadId, cx: &mut Context<Worksp
     follow_terminals(workspace, cx);
 }
 
-/// Starts the task that follows every terminal, unless it is running.
 pub(super) fn follow_terminals(workspace: &mut Workspace, cx: &mut Context<Workspace>) {
     if !workspace.watching {
         workspace.watching = true;
