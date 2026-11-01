@@ -571,6 +571,42 @@ fn every_platform_keeps_the_same_effective_bindings() {
 }
 
 #[test]
+fn no_two_default_shortcuts_share_a_key_on_any_platform() {
+    use crate::{KeyPlatform, Keymap, SHORTCUTS, effective_chord};
+    fn keys(chord: &str) -> (Vec<&str>, &str) {
+        let mut modifiers = Vec::new();
+        let mut rest = chord;
+        while let Some((modifier, key)) = rest.split_once('-')
+            && !key.is_empty()
+            && ["secondary", "ctrl", "shift", "alt", "cmd"].contains(&modifier)
+        {
+            modifiers.push(modifier);
+            rest = key;
+        }
+        modifiers.sort_unstable();
+        (modifiers, rest)
+    }
+    let keymap = Keymap::default();
+    for platform in [KeyPlatform::Mac, KeyPlatform::Windows, KeyPlatform::Linux] {
+        let chords: Vec<_> = SHORTCUTS
+            .iter()
+            .map(|shortcut| {
+                (
+                    shortcut.name,
+                    effective_chord(shortcut.name, &keymap, platform),
+                )
+            })
+            .collect();
+        let mut seen = std::collections::HashMap::new();
+        for (name, chord) in &chords {
+            if let Some(other) = seen.insert(keys(chord), name) {
+                panic!("{other} and {name} share {chord} on {platform:?}");
+            }
+        }
+    }
+}
+
+#[test]
 fn archive_span_counts_a_visible_thread_under_a_hidden_or_archived_owner() {
     use crate::archive_span;
     let owner = sample("thr_owner", None, Visibility::Visible, None);
