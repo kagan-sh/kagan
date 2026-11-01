@@ -72,6 +72,7 @@ pub(super) fn notice(kagan: &Kagan, cx: &mut Context<Kagan>) -> Option<AnyElemen
             .id("update-notice")
             .aria_label(text.clone())
             .ui_container()
+            .flex_wrap()
             .gap_2()
             .px_4()
             .py_2()
@@ -106,6 +107,7 @@ fn actions(cx: &App) -> AnyElement {
     };
     let ready = matches!(updater.state(), UpdateState::Ready { .. });
     h_flex()
+        .flex_wrap()
         .gap_1()
         .child(button("update-notes", "Release notes", move |_, cx| {
             cx.open_url(&notes);
@@ -119,7 +121,7 @@ fn actions(cx: &App) -> AnyElement {
                 .when(!ready, |row| {
                     row.child(button(
                         "update-later",
-                        "InstallKind when kagan quits",
+                        "Install when kagan quits",
                         |_, cx| {
                             later(cx);
                         },
@@ -193,7 +195,7 @@ fn ask(window: &mut Window, cx: &mut App) {
     };
     window.open_alert_dialog(cx, move |dialog, _, _| {
         dialog
-            .title(format!("InstallKind kagan {version}?"))
+            .title(format!("Install kagan {version}?"))
             .description(description.clone())
             .ok_text("Restart and install")
             .on_ok(|_, _, cx| {

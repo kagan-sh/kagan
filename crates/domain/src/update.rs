@@ -35,7 +35,7 @@ impl InstallKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case", tag = "state")]
+#[serde(rename_all = "kebab-case")]
 pub enum UpdateState {
     Unchecked,
     Checking,
@@ -63,6 +63,5 @@ pub struct UpdateStatus {
     pub version: String,
     pub install: InstallKind,
     pub automatic: bool,
-    #[serde(flatten)]
     pub state: UpdateState,
 }
