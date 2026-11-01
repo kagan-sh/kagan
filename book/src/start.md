@@ -4,7 +4,15 @@
 
 [Releases](https://github.com/kagan-sh/kagan/releases) are published when someone starts the Release workflow from `main` and types the version. Increase the middle number for features, the last number for fixes, and the first number for breaking changes. The macOS file is a `.dmg`. It is unsigned and not notarized unless the Apple secrets are set: `APPLE_CERTIFICATE` signs it, and `APPLE_ID` notarizes it. macOS will warn when you open an unsigned copy. That warning is the current preview. Removing the quarantine flag is not a finished release.
 
-Download the disk image and `SHA256SUMS`. Check the file before you open it:
+On an Apple silicon Mac, Homebrew installs the latest release:
+
+```bash
+brew install --cask kagan-sh/tap/kagan
+```
+
+It copies `kagan.app` to `/Applications` and links `kg` on your `PATH`. `brew upgrade --cask kagan` updates it. Prereleases are not in the tap.
+
+Without Homebrew, download the disk image and `SHA256SUMS`. Check the file before you open it:
 
 ```bash
 gh release download v0.1.0 --repo kagan-sh/kagan --pattern SHA256SUMS --pattern '*.dmg'
@@ -13,7 +21,7 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
 Open the disk image and copy `kagan.app` to `/Applications`. To update, download the newer disk image and replace `/Applications/kagan.app`. The app has no updater.
 
-`kg` is the binary inside the app. The preview does not put it on your `PATH`. Add it yourself:
+`kg` is the binary inside the app. The disk image does not put it on your `PATH`. Add it yourself:
 
 ```bash
 ln -sf /Applications/kagan.app/Contents/MacOS/kg /usr/local/bin/kg

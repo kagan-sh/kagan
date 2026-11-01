@@ -10,7 +10,13 @@ kagan is a desktop app for coding with agents. Each thread is a real terminal th
 
 ## Install
 
-There are no published releases yet. Build from source.
+On an Apple silicon Mac:
+
+```bash
+brew install --cask kagan-sh/tap/kagan
+```
+
+That installs `kagan.app` and puts `kg` on your `PATH`. Other installers are on the [releases](https://github.com/kagan-sh/kagan/releases) page. Or build from source.
 
 You need Rust; `rust-toolchain.toml` picks the version. The first build takes several minutes.
 
