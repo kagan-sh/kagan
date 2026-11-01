@@ -56,7 +56,7 @@ fn update(count: usize) {
 mod tests {
     use super::label;
     #[test]
-    fn badge_label_shows_the_count() {
+    fn no_count_clears_the_badge() {
         assert_eq!(label(0), "");
     }
 }
