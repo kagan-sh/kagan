@@ -1939,7 +1939,7 @@ fn a_narrow_delete_focuses_cancel(cx: &mut TestAppContext) {
     let delete = format!("answer-{}-approve", asked.id.0);
     set_preference(cx, "main.right-sidebar", serde_json::json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    super::sidebars::settle(cx);
+    cx.run_until_parked();
     click(cx, window, "right-sidebar-toggle");
     assert_eq!(focused_of(cx, window, &cancel), Some(true));
     assert_ne!(focused_of(cx, window, &delete), Some(true));
@@ -5922,7 +5922,7 @@ fn remove_project_focuses_cancel_in_the_narrow_questions_panel(cx: &mut TestAppC
     let remove = format!("answer-{}-approve", asked.id());
     set_preference(cx, "main.right-sidebar", serde_json::json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    super::sidebars::settle(cx);
+    cx.run_until_parked();
     click(cx, window, "right-sidebar-toggle");
     assert_eq!(focused_of(cx, window, &cancel), Some(true));
     assert_ne!(focused_of(cx, window, &remove), Some(true));

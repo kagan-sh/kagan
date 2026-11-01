@@ -19,7 +19,7 @@ use super::kagan::{
     plugin_log, present, press as press_at, press_key, release, run_shell, selected_of,
     set_preference, shows, value_of, wait_until,
 };
-use super::sidebars::{settle, span};
+use super::sidebars::span;
 use crate::theme::follow_system;
 
 const PREFS: &str = "dev.test.prefs";
@@ -155,7 +155,7 @@ fn the_settings_scrollbar_hugs_the_window_edge(cx: &mut TestAppContext) {
     click(cx, window, "settings-gear");
     for width in [1100., 1500.] {
         cx.simulate_window_resize(window, size(px(width), px(720.)));
-        settle(cx);
+        cx.run_until_parked();
         let (center_x, center_width) = span(cx, window, "center").unwrap();
         let edge = center_x + center_width;
         let (close_x, close_width) = span(cx, window, "settings-close").unwrap();
@@ -193,7 +193,7 @@ fn the_settings_thumb_follows_the_page_down(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     click(cx, window, "settings-gear");
     cx.simulate_window_resize(window, size(px(1100.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let (center_x, center_width) = span(cx, window, "center").unwrap();
     let x = px(center_x + center_width) - Scrollbar::width() / 2.;
     let bottom = cx
@@ -210,7 +210,7 @@ fn the_settings_thumb_follows_the_page_down(cx: &mut TestAppContext) {
     press_at(cx, window, grab, 1, Modifiers::default());
     drag_to(cx, window, drop);
     release(cx, window, drop, 1, Modifiers::default());
-    settle(cx);
+    cx.run_until_parked();
     assert!(
         top_of(cx, window, "setting-row-theme") > top + 100.,
         "the thumb is not at the bottom of the bar once the page is scrolled down"
@@ -1069,12 +1069,11 @@ fn plugin_config(cx: &mut TestAppContext, key: &str) -> Value {
 fn leaving_settings_at_480_brings_back_the_window_layout(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(480.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     cx.simulate_keystrokes(window, &chord("OpenSettings"));
     cx.run_until_parked();
-    settle(cx);
     cx.simulate_keystrokes(window, "escape");
-    settle(cx);
+    cx.run_until_parked();
     assert!(
         !shows(cx, window, "settings-page"),
         "escape kept settings open"

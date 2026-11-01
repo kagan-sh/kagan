@@ -6,7 +6,6 @@ use super::kagan::{
     chord, click, focused_of, open, repo_thread, run_shell, set_preference, shows, wait_until,
 };
 use super::picker::start_in_plain_folder;
-use super::sidebars::settle;
 
 fn install_options() -> Vec<InteractionOption> {
     vec![
@@ -61,7 +60,7 @@ fn a_person_question_opens_the_panels_and_keeps_the_typing_focus(cx: &mut TestAp
     let (kagan, window, data) = open(cx);
     start_in_plain_folder(cx, window, data.path());
     cx.simulate_window_resize(window, size(px(528.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let picker = cx.update(|cx| kagan.read(cx).picker_entity());
     cx.update_window(window, |_, window, cx| {
         picker.update(cx, |picker, cx| picker.focus(window, cx));
@@ -82,7 +81,7 @@ fn a_stopped_command_takes_its_thread_question_and_the_overlay_away(cx: &mut Tes
     let (kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     cx.simulate_window_resize(window, size(px(528.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let (present, gone) = async_channel::bounded::<()>(1);
     let deleting = cx.update(|cx| {
         Workspace::dispatch_for(
@@ -100,7 +99,7 @@ fn a_stopped_command_takes_its_thread_question_and_the_overlay_away(cx: &mut Tes
             .is_empty()
     );
     drop(present);
-    settle(cx);
+    cx.run_until_parked();
     assert!(
         cx.update(|cx| kagan.read(cx).question_titles(cx))
             .is_empty()
@@ -115,7 +114,7 @@ fn closing_the_last_question_restores_focus_from_the_panels(cx: &mut TestAppCont
     let (kagan, window, data) = open(cx);
     start_in_plain_folder(cx, window, data.path());
     cx.simulate_window_resize(window, size(px(528.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let picker = cx.update(|cx| kagan.read(cx).picker_entity());
     cx.update_window(window, |_, window, cx| {
         picker.update(cx, |picker, cx| picker.focus(window, cx));
@@ -141,7 +140,7 @@ fn a_question_replaces_the_left_overlay_and_restores_focus(cx: &mut TestAppConte
     let (kagan, window, data) = open(cx);
     start_in_plain_folder(cx, window, data.path());
     cx.simulate_window_resize(window, size(px(528.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let picker = cx.update(|cx| kagan.read(cx).picker_entity());
     cx.update_window(window, |_, window, cx| {
         picker.update(cx, |picker, cx| picker.focus(window, cx));
@@ -178,7 +177,7 @@ fn a_question_that_arrives_in_review_shows_when_the_review_closes(cx: &mut TestA
 fn a_question_that_arrives_in_settings_shows_when_settings_closes(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(528.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     click(cx, window, "settings-gear");
     let asked = ask_install(cx);
     assert!(!shows(cx, window, "needs-you-header"));
@@ -195,7 +194,7 @@ fn an_install_card_focuses_cancel(cx: &mut TestAppContext) {
     let id = first_approval(cx);
     set_preference(cx, "main.right-sidebar", serde_json::json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     click(cx, window, "right-sidebar-toggle");
     assert_eq!(
         focused_of(cx, window, &format!("answer-{}-decline", id.0)),

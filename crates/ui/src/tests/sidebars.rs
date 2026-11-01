@@ -32,7 +32,7 @@ fn empty_panels_do_not_open_from_the_button_or_shortcut(cx: &mut TestAppContext)
     let (_kagan, window, _data) = open(cx);
     for width in [800., 1492.] {
         cx.simulate_window_resize(window, size(px(width), px(720.)));
-        settle(cx);
+        cx.run_until_parked();
         let center = span(cx, window, "center").expect("center");
         assert_eq!(
             super::panels::disabled_of(cx, window, "right-sidebar-toggle"),
@@ -72,7 +72,7 @@ fn questions_appear_before_changes_and_empty_windows_have_no_column(cx: &mut Tes
 fn the_waiting_toggle_opens_questions_even_when_they_were_folded(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let _asked = cx.update(|cx| {
         Workspace::ask_for_person(None, None, "Install the plugin?".into(), vec![], cx)
     });
@@ -92,7 +92,7 @@ fn hidden_panels_say_the_shown_thread_has_changes(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     let (_thread, _repo) = repo_thread(cx, window, data.path());
     cx.simulate_window_resize(window, size(px(480.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     cx.executor().advance_clock(POLL);
     cx.run_until_parked();
     wait_until(cx, |cx| {
@@ -213,14 +213,6 @@ fn a_saved_left_width_is_shown_after_settings(cx: &mut TestAppContext) {
     assert!((width - 330.).abs() < 1., "shown {width}");
 }
 
-/// Lets the window finish its resize and the sidebars settle.
-pub(super) fn settle(cx: &mut TestAppContext) {
-    for _ in 0..50 {
-        cx.run_until_parked();
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-}
-
 /// The x, width and right edge of an element in the window, in points.
 pub(super) fn span(
     cx: &mut TestAppContext,
@@ -240,11 +232,11 @@ pub(super) fn span(
 fn widening_the_window_gives_the_center_the_extra_room(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(1100.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let left = span(cx, window, "sidebar-pane").unwrap().1;
     let center = span(cx, window, "center").unwrap().1;
     cx.simulate_window_resize(window, size(px(1500.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let wider_left = span(cx, window, "sidebar-pane").unwrap().1;
     let wider_center = span(cx, window, "center").unwrap().1;
     assert!(
@@ -272,7 +264,7 @@ fn the_center_keeps_its_room_at_every_window_size(cx: &mut TestAppContext) {
         (1492., true, true),
     ] {
         cx.simulate_window_resize(window, size(px(width), px(720.)));
-        settle(cx);
+        cx.run_until_parked();
         // The right sidebar holds the changes list, so its panel shows through that element.
         let right_shown = shows(cx, window, "changes") || shows(cx, window, "changes-none");
         assert_eq!(
@@ -318,7 +310,7 @@ fn the_center_keeps_its_room_while_a_sidebar_is_dragged(cx: &mut TestAppContext)
     click(cx, window, &format!("thread-{}", id.0));
     wait_until(cx, |cx| shows(cx, window, "thread-title"));
     cx.simulate_window_resize(window, size(px(1100.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let (left_x, left_width) = span(cx, window, "sidebar-pane").unwrap();
     let edge = left_x + left_width;
     // The same steps gpui-kit's own drag test takes. The pointer is still down when the center
@@ -360,9 +352,9 @@ fn a_hidden_sidebar_keeps_its_saved_width(cx: &mut TestAppContext) {
     set_preference(cx, "main.left-width", json!(280.));
     set_preference(cx, "main.right-width", json!(300.));
     cx.simulate_window_resize(window, size(px(1492.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     cx.simulate_window_resize(window, size(px(480.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     assert!(!left_shown(cx, window), "the left sidebar stayed at 480");
     assert!(
         !shows(cx, window, "changes"),
@@ -425,7 +417,7 @@ fn a_saved_closed_overlay_opens_the_column_on_one_toggle_when_wide(cx: &mut Test
     cx.run_until_parked();
     set_preference(cx, "main.right-sidebar", json!(false));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let narrow = viewport_width(cx, window);
     assert!((narrow - 800.).abs() < 1., "viewport {narrow}");
     click(cx, window, "right-sidebar-toggle");
@@ -433,7 +425,7 @@ fn a_saved_closed_overlay_opens_the_column_on_one_toggle_when_wide(cx: &mut Test
     assert_eq!(saved(cx, "main.right-sidebar"), json!(false));
 
     cx.simulate_window_resize(window, size(px(1492.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let wide = viewport_width(cx, window);
     assert!((wide - 1492.).abs() < 1., "viewport {wide}");
     assert!(shows(cx, window, "right-overlay-panel"));
@@ -455,7 +447,7 @@ fn a_narrow_window_draws_the_panels_without_changing_the_saved_sidebar(cx: &mut 
     cx.run_until_parked();
     set_preference(cx, "main.right-sidebar", json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let width = viewport_width(cx, window);
     assert!((width - 800.).abs() < 1., "viewport {width}");
     assert!(!shows(cx, window, "needs-you"));
@@ -496,12 +488,12 @@ fn widening_the_left_overlay_keeps_the_focused_row(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     set_preference(cx, "main.left-sidebar", json!(true));
     cx.simulate_window_resize(window, size(px(640.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     focus_row(cx, window, "project-prj_kagan");
     assert!(shows(cx, window, "left-overlay-panel"));
     assert_eq!(focused_of(cx, window, "project-prj_kagan"), Some(true));
     cx.simulate_window_resize(window, size(px(1492.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     assert!(shows(cx, window, "sidebar-pane"));
     assert!(!shows(cx, window, "left-overlay-panel"));
     assert_eq!(focused_of(cx, window, "project-prj_kagan"), Some(true));
@@ -515,12 +507,12 @@ fn widening_the_right_overlay_keeps_the_focused_header(cx: &mut TestAppContext) 
     cx.run_until_parked();
     set_preference(cx, "main.right-sidebar", json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     click(cx, window, "right-sidebar-toggle");
     assert!(shows(cx, window, "right-overlay-panel"));
     assert_eq!(focused_of(cx, window, "needs-you-header"), Some(true));
     cx.simulate_window_resize(window, size(px(1492.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     assert!(shows(cx, window, "needs-you-header"));
     assert!(!shows(cx, window, "right-overlay-panel"));
     assert_eq!(focused_of(cx, window, "needs-you-header"), Some(true));
@@ -530,7 +522,7 @@ fn widening_the_right_overlay_keeps_the_focused_header(cx: &mut TestAppContext) 
 fn opening_a_side_overlay_replaces_the_other(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(640.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let _asked =
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
@@ -552,7 +544,7 @@ fn opening_a_side_overlay_replaces_the_other(cx: &mut TestAppContext) {
 fn closing_the_panels_returns_to_the_focused_sidebar_row(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let _asked =
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
@@ -575,7 +567,7 @@ fn the_drawn_panels_close_without_the_saved_sidebar_and_return_when_wide(cx: &mu
     cx.run_until_parked();
     set_preference(cx, "main.right-sidebar", json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     click(cx, window, "right-sidebar-toggle");
     assert!(shows(cx, window, "right-overlay-panel"));
     press_key(cx, window, "escape");
@@ -591,7 +583,7 @@ fn the_drawn_panels_close_without_the_saved_sidebar_and_return_when_wide(cx: &mu
     assert_eq!(saved(cx, "main.right-sidebar"), json!(true));
 
     cx.simulate_window_resize(window, size(px(1492.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let wide = viewport_width(cx, window);
     assert!((wide - 1492.).abs() < 1., "viewport {wide}");
     assert!(shows(cx, window, "needs-you"));
@@ -608,7 +600,7 @@ fn a_hidden_sidebar_counts_what_is_waiting_and_refuses_a_synthetic_answer(cx: &m
     let (_kagan, window, _data) = open(cx);
     set_preference(cx, "main.right-sidebar", json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
@@ -692,7 +684,7 @@ fn a_hidden_sidebar_counts_what_is_waiting_and_refuses_a_synthetic_answer(cx: &m
 fn settings_hides_the_drawn_panels_and_does_not_bring_them_back(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let _asked =
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
@@ -799,7 +791,7 @@ fn duplicate_names_keep_the_suffix_at_the_minimum_width(cx: &mut TestAppContext)
     let beta = add_project(cx, &beta);
     cx.run_until_parked();
     cx.simulate_window_resize(window, size(px(1312.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let alpha_id = format!("project-suffix-{}", alpha.id.0);
     let beta_id = format!("project-suffix-{}", beta.id.0);
     for width in [200., 256.] {
@@ -807,7 +799,7 @@ fn duplicate_names_keep_the_suffix_at_the_minimum_width(cx: &mut TestAppContext)
             kagan.update(cx, |kagan, cx| kagan.resize_left(px(width), window, cx));
         })
         .unwrap();
-        settle(cx);
+        cx.run_until_parked();
         assert_eq!(label(cx, window, &alpha_id), "thr_ab12cd34-1");
         assert_eq!(label(cx, window, &beta_id), "projects");
         for id in [&alpha.id, &beta.id] {
@@ -836,9 +828,9 @@ fn duplicate_names_keep_the_suffix_at_the_minimum_width(cx: &mut TestAppContext)
 fn a_narrow_opening_grows_back_to_the_preferred_sidebar(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(760.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     cx.simulate_window_resize(window, size(px(1312.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     let width = span(cx, window, "sidebar-pane").expect("sidebar").1;
     assert!(width > 240., "sidebar {width}");
     let saved_width = saved(cx, "main.left-width");
@@ -856,15 +848,15 @@ fn the_left_width_survives_resizes_and_settings(cx: &mut TestAppContext) {
     set_preference(cx, "main.left-width", json!(300.));
     for width in [848., 1492., 948., 1312.] {
         cx.simulate_window_resize(window, size(px(width), px(720.)));
-        settle(cx);
+        cx.run_until_parked();
         let left = span(cx, window, "sidebar-pane").expect("sidebar").1;
         assert!((left - 300.).abs() < 2., "sidebar {left} at {width}");
     }
     click(cx, window, "settings-gear");
-    settle(cx);
+    cx.run_until_parked();
     assert!(!shows(cx, window, "sidebar-pane"));
     cx.simulate_keystrokes(window, "escape");
-    settle(cx);
+    cx.run_until_parked();
     let left = span(cx, window, "sidebar-pane").expect("sidebar").1;
     assert!((left - 300.).abs() < 2., "sidebar after settings {left}");
 }
@@ -873,12 +865,12 @@ fn the_left_width_survives_resizes_and_settings(cx: &mut TestAppContext) {
 fn a_chosen_minimum_width_stays_when_the_window_is_wide(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(1312.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     cx.update_window(window, |_, window, cx| {
         kagan.update(cx, |kagan, cx| kagan.resize_left(px(200.), window, cx));
     })
     .unwrap();
-    settle(cx);
+    cx.run_until_parked();
     let width = span(cx, window, "sidebar-pane").expect("sidebar").1;
     assert!((width - 200.).abs() < 8., "sidebar {width}");
     let saved_width = saved(cx, "main.left-width").as_f64().unwrap();
@@ -890,7 +882,7 @@ fn the_left_toggle_names_the_sidebar_that_is_drawn(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     set_preference(cx, "main.left-sidebar", json!(true));
     cx.simulate_window_resize(window, size(px(640.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     assert!(!shows(cx, window, "sidebar-pane"));
     assert_eq!(label(cx, window, "left-sidebar-toggle"), "Show sidebar");
     assert_eq!(
@@ -899,7 +891,7 @@ fn the_left_toggle_names_the_sidebar_that_is_drawn(cx: &mut TestAppContext) {
     );
     assert_eq!(saved(cx, "main.left-sidebar"), json!(true));
     cx.simulate_window_resize(window, size(px(1312.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     assert!(shows(cx, window, "sidebar-pane"));
     assert_eq!(label(cx, window, "left-sidebar-toggle"), "Hide sidebar");
     assert_eq!(
