@@ -1,6 +1,5 @@
-#[macro_use]
-mod fail;
 mod button;
+mod fail;
 #[cfg(test)]
 mod tests;
 mod thread;
