@@ -172,10 +172,13 @@ jobs:
         # .cargo/config.toml links macOS with ld64.lld. brew exits 1 when llvm's post-install fails, though lld is installed.
         run: brew install lld || command -v ld64.lld
       - run: rustup toolchain install --profile minimal
+      - run: rustup target add x86_64-apple-darwin
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Intel Mac build check
+        run: cargo check -p kg --target x86_64-apple-darwin --locked
 
   macos-tests:
     needs: scope

@@ -49,7 +49,9 @@ jobs:
         include:
           - os: ubuntu-22.04
           - os: macos-latest
-            size-budget: 78643200
+            # 160 MiB for the universal kg, both CPUs: about 112 MB plus the
+            # same headroom the old 75 MiB limit gave the Apple silicon one.
+            size-budget: 167772160
           - os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
@@ -247,8 +249,11 @@ jobs:
           BUDGET: ${{ matrix.size-budget }}
         run: |
           set -eu
-          bin=target/release/kg
-          if [ "$RUNNER_OS" = Windows ]; then bin=$bin.exe; fi
+          case "$RUNNER_OS" in
+            macOS) bin=target/universal-apple-darwin/release/kg ;;
+            Windows) bin=target/release/kg.exe ;;
+            *) bin=target/release/kg ;;
+          esac
           size=$(wc -c < "$bin" | tr -d ' ')
           echo "\`kg\` on $RUNNER_OS: $size bytes, budget ${BUDGET:-none}" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$BUDGET" ] && [ "$size" -gt "$BUDGET" ]; then
