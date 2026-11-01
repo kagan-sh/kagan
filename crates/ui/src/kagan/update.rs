@@ -169,7 +169,7 @@ fn later(cx: &mut App) {
     let download = Updater::global(cx).update(cx, |updater, cx| updater.download(true, cx));
     cx.spawn(async move |cx| {
         if let Err(error) = download.await {
-            cx.update(|cx| say(format!("Could not download the update: {error}"), cx));
+            cx.update(|cx| say(format!("Could not install the update: {error}"), cx));
         }
     })
     .detach();
@@ -195,6 +195,7 @@ fn ask(window: &mut Window, cx: &mut App) {
     };
     window.open_alert_dialog(cx, move |dialog, _, _| {
         dialog
+            .confirm()
             .title(format!("Install kagan {version}?"))
             .description(description.clone())
             .ok_text("Restart and install")
