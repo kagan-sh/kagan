@@ -2,7 +2,7 @@
 
 ## Install
 
-On an Apple silicon Mac, download the app or use Homebrew. Otherwise, build kagan from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage.
+On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build kagan from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage.
 
 ### Download
 
