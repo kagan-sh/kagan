@@ -384,10 +384,10 @@ fn an_overlay_that_throws_draws_nothing_and_the_terminal_still_types(cx: &mut Te
 }
 
 fn install_example_overlay(data: &Path) {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/plugins/overlay")
-        .canonicalize()
-        .unwrap();
+    let root = dunce::canonicalize(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins/overlay"),
+    )
+    .unwrap();
     let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
     store
         .insert_plugin(&Plugin {

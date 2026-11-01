@@ -264,8 +264,11 @@ fn altgr_types_the_character_it_makes_on_windows() {
     );
     // Ctrl and Alt together without a character is a control code, not text.
     let ctrl_alt = kg_core::parse_key("ctrl-alt-q").unwrap();
-    assert_eq!(
-        bytes_on(&ctrl_alt, false, KeyPlatform::Linux).as_deref(),
-        Some("\x1b\x11")
-    );
+    for platform in [KeyPlatform::Linux, KeyPlatform::Windows] {
+        assert_eq!(
+            bytes_on(&ctrl_alt, false, platform).as_deref(),
+            Some("\x1b\x11"),
+            "{platform:?}"
+        );
+    }
 }

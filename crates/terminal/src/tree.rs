@@ -12,21 +12,8 @@ pub(crate) fn pid_of(raw: u32) -> Option<Pid> {
         .and_then(Pid::from_raw)
 }
 
-// Whether the program has ended, without reaping it: its pid stays ours until the
-// tree kill has run, and a reused pid would be someone else's.
-pub(crate) fn ended(raw: u32) -> bool {
-    pid_of(raw).is_some_and(|pid| {
-        matches!(
-            waitid(
-                WaitId::Pid(pid),
-                WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG,
-            ),
-            Ok(Some(_))
-        )
-    })
-}
-
-// How the program ended, read with the same `waitid` that `ended` uses, so the pid stays ours.
+// How the program ended, without reaping it: its pid stays ours until the tree kill has
+// run, and a reused pid would be someone else's.
 pub(crate) fn exit(raw: u32) -> Option<Exit> {
     let status = waitid(
         WaitId::Pid(pid_of(raw)?),
