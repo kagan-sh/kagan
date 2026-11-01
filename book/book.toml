@@ -9,7 +9,6 @@ edition = "2024"
 
 [build]
 create-missing = false
-extra-watch-dirs = ["../docs"]
 
 [output.html]
 default-theme = "light"
@@ -19,3 +18,26 @@ site-url = "/"
 git-repository-url = "https://github.com/kagan-sh/kagan"
 no-section-label = true
 smart-punctuation = false
+
+[output.html.redirect]
+"/index.html#pages" = "/index.html"
+"/threads.html#use-threads-from-a-terminal" = "/cli.html#kg-thread"
+"/window.html#review-changes" = "/review.html"
+"/window.html#keys" = "/keys.html"
+"/plugins.html#turn-on-turn-off-remove" = "/plugins.html#enable-disable-or-remove"
+"/plugins.html#keys" = "/keys.html#change-a-key"
+"/plugins.html#logs" = "/troubleshooting.html#a-plugin-fails"
+"/skills.html#commands" = "/skills.html#manage-skills"
+"/skills.html#how-an-agent-uses-skills" = "/skills.html"
+"/data.html#your-data" = "/data.html#your-data-and-privacy"
+"/data.html#what-a-program-in-a-thread-can-do" = "/data.html#programs-in-threads"
+"/data.html#what-a-plugin-can-do" = "/data.html#plugins"
+"/data.html#update" = "/data.html#update-kagan"
+"/spec/architecture.html" = "/contributing.html"
+"/spec/decisions.html" = "/contributing.html"
+"/spec/adaptations.html" = "/contributing.html"
+"/spec/plugin-api.html" = "/build-plugin.html#the-manifest"
+"/spec/look.html" = "/themes.html#make-your-own-theme"
+"/spec/self-extend.html" = "/contributing.html"
+"/spec/components.html" = "/contributing.html"
+"/CONTEXT.html" = "/contributing.html"

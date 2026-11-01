@@ -1,1 +1,0 @@
-{{#include ../../../docs/decisions.md}}

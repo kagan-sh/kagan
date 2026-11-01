@@ -16,7 +16,7 @@
   </picture>
 </p>
 
-kagan is a desktop app for coding with agents. Each thread is a real terminal. The thread runs the agent you already use, such as Claude Code or Codex, in its own folder.
+kagan runs your coding agents in real terminals. Each thread runs one program in its own folder.
 
 > [!WARNING]
 > kagan is early (0.1.0). CI tests it on macOS, Linux, and Windows, but most daily use is on macOS.
@@ -25,72 +25,50 @@ kagan is a desktop app for coding with agents. Each thread is a real terminal. T
 
 On an Apple silicon Mac, pick one:
 
-- **Download:** get the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases). Open it and drag `kagan.app` to `/Applications`. The `kg` command is at `/Applications/kagan.app/Contents/MacOS/kg`. It is not on your `PATH` by itself. [Get started](book/src/start.md#download) shows how to add it.
-- **Homebrew:** `brew install --cask kagan-sh/tap/kagan`. This also puts `kg` on your `PATH`.
+- **Download:** get the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases). Open it and drag `kagan.app` to `/Applications`. [Add `kg` to your `PATH`](book/src/start.md#download).
+- **Homebrew:** run `brew install --cask kagan-sh/tap/kagan`. Homebrew puts `kg` on your `PATH`.
 
-Or build kagan from source. Releases also have a Windows installer, a `.deb`, and an AppImage.
-
-1. Install Rust from [rustup.rs](https://rustup.rs). The file `rust-toolchain.toml` sets the version.
-2. Install the build tools for your system:
-   - macOS: `brew install lld`
-   - Debian or Ubuntu:
-
-     ```bash
-     sudo apt-get install build-essential pkg-config \
-       libfontconfig-dev libwayland-dev libxkbcommon-x11-dev \
-       libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev
-     ```
-
-   - Windows: Visual Studio Build Tools with C++, and MinGW for `dlltool` (`choco install mingw`).
-3. Build kagan and open it:
-
-   ```bash
-   git clone https://github.com/kagan-sh/kagan.git
-   cd kagan
-   cargo run -p kg --release
-   ```
-
-   The first build takes several minutes. Then the window opens.
-4. Add the `kg` command to your `PATH`. [Get started](book/src/start.md#build-from-source) shows how. To open kagan later, run `kg`.
+Releases also have a Windows installer, a `.deb`, and an AppImage. You can also [build from source](book/src/start.md#build-from-source).
 
 ## First run
 
-1. Click **Add project** in the left sidebar. Select a folder, usually a git repository.
-2. The New thread screen opens. Select Claude Code, Codex, or another program, and press Enter.
-3. The program starts in a new thread. Type to it as you do in any terminal.
-4. Open **Changes** in the right sidebar. Comment on a line, then click **Send review to terminal**. On a narrow window, press Cmd+Backslash to show the right sidebar.
+1. Click **Add project** and select a folder, usually a git repository.
+2. Select Claude Code, Codex, or another program, then press Enter.
+3. Type to the program as you do in any terminal.
+4. Open **Changes** to review files and send comments to the program.
 
-For a git repository, each thread gets its own git worktree by default. A worktree is a second checkout of the repository, so your own folder does not change. [Review changes](book/src/window.md#review-changes) and [Threads](book/src/threads.md) give more.
+For a git repository, each thread gets its own worktree by default. Your project folder does not change. [Threads](book/src/threads.md#folders) explains the other folder choices.
 
-## What is different
+## Programs and plugins
 
-- **Your agent, unchanged.** kagan runs the program you select in a terminal. For Claude Code and Codex, kagan also adds its `kg` tools and a short note, so that the agent can use kagan. Settings → Agents turns this off.
-- **Only a person approves.** A program in a thread can use `kg` to start, stop, and archive threads, and to operate the window. It cannot answer an approval. A plugin install, more powers for a plugin, and a thread delete wait for you in the window.
-- **Plugins declare their powers.** A plugin is a folder of JavaScript with a manifest. The manifest lists what the plugin can do, such as run named programs or use the network. Each plugin runs in its own JavaScript engine, and kagan gives it only the powers that you approve.
-- **No account, no telemetry, no update check.** Your data stays on your computer in `~/.kagan`. kagan itself uses the network only to fetch a git plugin or a plugin index that you add or update. [Your data](book/src/data.md) tells what programs and plugins can do.
+A program runs with your user access and gets your environment variables. Run only programs that you trust.
 
-A program in a thread runs with your user access and gets your environment variables. Run only programs that you trust.
+For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Use Settings → Agents to disable this integration.
 
-## Learn more
+An agent can use `kg` to control threads and the window. It cannot answer an approval. Only you can approve a plugin install, more plugin powers, or a thread delete.
 
-The [book](https://docs.kagan.sh/) is the user guide. Its source is in [`book/src`](book/src/index.md).
+A plugin gets only the powers that you approve. [Plugins](book/src/plugins.md#install) lists the possible powers.
 
-- [Get started](book/src/start.md)
-- [Threads](book/src/threads.md) and [The window](book/src/window.md)
-- [Your data](book/src/data.md)
-- [Plugins](book/src/plugins.md) and [Build a plugin](book/src/build-plugin.md)
-- [The `kg` command](book/src/cli.md)
+## Your data
+
+kagan has no account, no telemetry, and no update check. Your data stays on your computer. The default folder is `~/.kagan` on macOS and Linux, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to change it.
+
+kagan uses the network only to fetch a git plugin or a plugin index that you add or update. Programs and approved plugins can use the network too.
+
+[Your data and privacy](book/src/data.md) covers terminal text, diagnostics, updates, and removal.
+
+## Guide
+
+The [user guide](https://docs.kagan.sh/) covers:
+
+- [Installation and your first thread](book/src/start.md).
+- [Threads](book/src/threads.md), [reviews](book/src/review.md), and [the window](book/src/window.md).
+- [Plugins](book/src/plugins.md), [skills](book/src/skills.md), and [themes](book/src/themes.md).
+- [The `kg` command](book/src/cli.md) and [keyboard shortcuts](book/src/keys.md).
 
 ## Develop
 
-```bash
-git config core.hooksPath .githooks
-cargo fmt --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo t --workspace --locked
-```
-
-`cargo t` runs the tests with the cargo-nextest version in `Cargo.toml`. Run `cargo install cargo-run-bin` one time first. [`AGENTS.md`](AGENTS.md) has the rules for every change. The spec is in [`docs`](docs/architecture.md).
+Read [`AGENTS.md`](AGENTS.md) for the contributor rules. The design documents are in [`docs`](docs/architecture.md).
 
 ## License
 

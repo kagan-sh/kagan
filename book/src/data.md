@@ -1,67 +1,69 @@
-# Your data
+# Your data and privacy
 
 kagan has no account, no telemetry, and no update check. Your data stays on your computer.
 
 ## Where kagan writes
 
-- **Data folder**: `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows. To use a different folder, set `KG_DATA_DIR`.
-- **Socket**: the connection that `kg` uses to talk to the window.
+- **Data folder**: `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to use a different folder.
+- **Socket**: the connection between `kg` and the window.
   - macOS and Linux: `$XDG_RUNTIME_DIR/kagan/kg.sock` when `XDG_RUNTIME_DIR` is set.
-  - Else on macOS: `~/Library/Application Support/kagan/kg.sock`
-  - Else on Linux: `$XDG_DATA_HOME/kagan/kg.sock`, or `~/.local/share/kagan/kg.sock`
+  - Else on macOS: `~/Library/Application Support/kagan/kg.sock`.
+  - Else on Linux: `$XDG_DATA_HOME/kagan/kg.sock`, or `~/.local/share/kagan/kg.sock`.
   - Windows: a named pipe, `kagan-<your user name>`. It is not a file.
-  - To use a different socket, set `KG_SOCKET`.
+  - Set `KG_SOCKET` to use a different socket.
 
 The data folder holds:
 
-- `kagan.sqlite3`: your projects, your threads, and their history.
-- `worktrees`: the git worktrees that kagan made for threads.
-- The folders of Personal threads.
+- Your projects, threads, and history.
+- The git worktrees and Personal folders.
 - Installed skills, your themes, and plugin data.
 
-> [!NOTE]
-> kagan saves the last terminal text of each thread in `kagan.sqlite3`, without encryption. If you paste a password or a token into a terminal, it can stay on disk. Delete the thread to remove its text.
+kagan saves each thread's last terminal text without encryption. A password or token that you paste can stay on disk. Delete the thread to remove its text.
 
 ## Network
 
-kagan itself uses the network only to fetch a git plugin or a plugin index that you add or update. The programs that you run in threads can use the network. A plugin can use the network only when you approve its network power.
+kagan uses the network only to fetch a git plugin or a plugin index that you add or update. Programs in threads can use the network. A plugin can use the network only after you approve its network power.
 
-To show the version of each known agent, kagan runs the agents that it finds on your `PATH` with `--version`. The known agents are `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, and `droid`. kagan does not run other programs this way.
+kagan runs each known agent on your `PATH` with `--version` to show its version. The known agents are `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, and `droid`. kagan does not run other programs this way.
 
-## What a program in a thread can do
+## Programs in threads
 
-A program in a thread runs with your user access. It gets your environment variables, which can include API keys. Run only programs that you trust.
+A program runs with your user access and gets your environment variables. These variables can include API keys. Run only programs that you trust.
 
-The program also gets the `kg` command. With `kg`, it can start, stop, and archive threads, and operate the window. It cannot answer an approval. Only a person in the window can approve a plugin install, more plugin powers, or a thread delete.
+The program also gets `kg`. With `kg`, it can control threads and the window. It cannot answer an approval. Only you can approve a plugin install, more plugin powers, or a thread delete.
 
-For Claude Code and Codex, kagan adds its `kg` tools and a short note, so that the agent knows that it runs in kagan. Claude Code also gets the kagan skills. To turn this off, go to Settings → Agents.
+For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Claude Code also gets the kagan skills. Use Settings → Agents to disable this integration.
 
-## What a plugin can do
+## Plugins
 
-A plugin can do only what you approve when you install it. Each plugin runs in its own JavaScript engine, and kagan gives it only the parts of kagan that its approved powers allow. [Plugins](plugins.md#install) lists the powers. A plugin that can run `git` can use your git credentials, such as SSH keys and a GitHub token.
+A plugin gets only the powers that you approve. [Plugins](plugins.md#install) lists the powers. A plugin that can run `git` can use your git credentials, such as SSH keys and a GitHub token.
 
 ## Diagnostics
 
-**Save diagnostics** in the thread menu, or `kg diagnostics export`, writes a file that you can attach to a bug report. The file has the status of each thread and each plugin. It has no terminal text, no titles, and no environment variables.
+**Save diagnostics** in the thread menu, or `kg diagnostics export`, writes a file for a bug report. The file has thread and plugin status. It has no terminal text, thread titles, or environment variables.
 
-## Update
+## Update kagan
 
-Before you update, quit kagan and make a copy of the data folder. Then update the way you installed:
-
-- Homebrew: `brew upgrade --cask kagan`.
-- Download: download the new `.dmg` and replace `/Applications/kagan.app`. The `kg` link still works.
-- Windows, `.deb` or AppImage: install the new file from Releases over the old one.
-- Source: run `git pull` in your `kagan` clone and build again.
+1. Quit kagan.
+2. Make a copy of the data folder.
+3. Update kagan the way you installed it:
+   - Homebrew: `brew upgrade --cask kagan`.
+   - Download: download the new `.dmg` and replace `/Applications/kagan.app`. The `kg` link still works.
+   - Windows, `.deb`, or AppImage: install the new file from Releases over the old one.
+   - Source: run `git pull` in your `kagan` clone and build again.
 
 ## Remove kagan
 
-1. Push or copy any work that you want to keep from the worktrees and Personal folders.
+1. Push or copy any work that you want to keep from worktrees and Personal folders.
 2. Quit kagan.
 3. Remove the app the way you installed it:
    - Homebrew: `brew uninstall --cask kagan`.
-   - Download: delete `/Applications/kagan.app` and the `kg` link, with `sudo rm /usr/local/bin/kg`.
-   - Windows: uninstall kagan from Settings → Apps. `.deb`: `sudo apt remove kagan`. AppImage: delete the file.
-   - Source: delete the `kagan` clone, which has the `kg` binary. Remove it from your `PATH`.
+   - Download: delete `/Applications/kagan.app` and the `kg` link with `sudo rm /usr/local/bin/kg`.
+   - Windows: uninstall kagan from Settings → Apps.
+   - `.deb`: `sudo apt remove kagan`.
+   - AppImage: delete the file.
+   - Source: delete the `kagan` clone and remove it from your `PATH`.
 4. Delete the data folder, `~/.kagan`.
-5. On macOS and Linux, delete the folder that has `kg.sock`. On Windows, there is nothing to delete.
-6. In each repository that you added, run `git worktree prune`. The git branches that kagan made for threads stay. Delete them with `git branch -D` when you do not need them.
+5. On macOS and Linux, delete the folder that has `kg.sock`.
+6. In each repository that you added, run `git worktree prune`.
+7. If you do not need the git branches that kagan made, delete them with `git branch -D`.

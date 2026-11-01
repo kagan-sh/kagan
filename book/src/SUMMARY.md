@@ -2,31 +2,27 @@
 
 [Guide](index.md)
 
-# Start
+[Get started](start.md)
 
-- [Get started](start.md)
+# Everyday use
 
-# Use
-
-- [Your data](data.md)
 - [Threads](threads.md)
+- [Review changes](review.md)
 - [The window](window.md)
+
+# Extend
+
 - [Plugins](plugins.md)
+- [Build a plugin](build-plugin.md)
 - [Skills](skills.md)
 - [Themes](themes.md)
 
-# Build
+# Reference
 
-- [Build a plugin](build-plugin.md)
 - [`kg` command](cli.md)
+- [Keyboard shortcuts](keys.md)
+- [Your data and privacy](data.md)
 
-# Spec
+[Troubleshooting](troubleshooting.md)
 
-- [Architecture](spec/architecture.md)
-- [Decisions](spec/decisions.md)
-- [Borrowed rules](spec/adaptations.md)
-- [Plugin API](spec/plugin-api.md)
-- [Look](spec/look.md)
-- [Self-extend](spec/self-extend.md)
-- [Components](spec/components.md)
-- [Terms](CONTEXT.md)
+[Contributing](contributing.md)
