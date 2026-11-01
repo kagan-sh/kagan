@@ -178,6 +178,55 @@ jobs:
             *) echo "no installer for $RUNNER_OS" >&2; exit 1 ;;
           esac
           cargo packager --release --formats "$formats"
+      - name: Notarize the dmg
+        if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # cargo-packager notarizes and staples the app inside the dmg, not the dmg itself.
+        run: |
+          set -eu
+          if [ -z "$APPLE_SIGNING_IDENTITY" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "Apple signing or notarization secrets unset; the dmg will not be notarized"
+            exit 0
+          fi
+          shopt -s nullglob
+          dmgs=(target/packager/kagan_*_aarch64.dmg)
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "expected one dmg, found ${#dmgs[@]}: ${dmgs[*]}" >&2
+            exit 1
+          fi
+          dmg=${dmgs[0]}
+          auth=(--apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID")
+          if ! out=$(xcrun notarytool submit "$dmg" "${auth[@]}" --wait --output-format json); then
+            echo "notarytool submit failed: $out" >&2
+          fi
+          id=$(jq -r '.id // empty' <<< "$out" || true)
+          status=$(jq -r '.status // empty' <<< "$out" || true)
+          if [ "$status" != Accepted ]; then
+            echo "::error::notarization of $dmg ended with status '${status:-none}': $out"
+            if [ -n "$id" ]; then
+              xcrun notarytool log "$id" "${auth[@]}" || true
+            fi
+            exit 1
+          fi
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+      - name: Name the installers
+        shell: bash
+        # cargo-packager names the exe, deb and AppImage after the binary, kg.
+        run: |
+          set -eu
+          shopt -s nullglob
+          for file in target/packager/kg_*.exe target/packager/kg_*.deb target/packager/kg_*.AppImage; do
+            name=${file##*/}
+            name=kagan_${name#kg_}
+            name=${name/-setup.exe/.exe}
+            mv -- "$file" "target/packager/$name"
+            echo "$file -> target/packager/$name"
+          done
       - name: Size budget
         shell: bash
         env:
