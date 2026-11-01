@@ -2694,19 +2694,19 @@ fn disabling_a_plugin_takes_its_panel_away(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open_with_plugins(cx, true);
     cx.simulate_window_resize(window, size(px(1400.), px(900.)));
     cx.run_until_parked();
-    open_surface(cx, &PluginId("dev.kagan.canvas".into()), "canvas");
-    wait_until(cx, |cx| shows(cx, window, "canvas-undo"));
+    open_surface(cx, &PluginId(PAGE.into()), "page");
+    wait_until(cx, |cx| shows(cx, window, "page-button"));
 
     let off = cx.update(|cx| {
         Workspace::dispatch(
             Op::Plugin(PluginOp::Disable {
-                id: PluginId("dev.kagan.canvas".into()),
+                id: PluginId(PAGE.into()),
             }),
             cx,
         )
     });
     cx.foreground_executor().block_test(off).unwrap();
-    wait_until(cx, |cx| !shows(cx, window, "canvas-undo"));
+    wait_until(cx, |cx| !shows(cx, window, "page-button"));
     assert_eq!(
         cx.update(|cx| kagan.read(cx).panel_titles()),
         ["Questions", "Changes"]
@@ -2941,21 +2941,21 @@ fn reloading_a_plugin_mounts_its_panel_again(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins(cx, true);
     cx.simulate_window_resize(window, size(px(1400.), px(900.)));
     cx.run_until_parked();
-    let id = PluginId("dev.kagan.canvas".into());
+    let id = PluginId(PAGE.into());
     let opened = cx.update(|cx| {
         Workspace::dispatch(
             Op::Surface(kg_domain::SurfaceOp::Open {
                 plugin: id.clone(),
-                id: "canvas".into(),
+                id: "page".into(),
             }),
             cx,
         )
     });
     cx.foreground_executor().block_test(opened).unwrap();
-    wait_until(cx, |cx| shows(cx, window, "canvas-undo"));
+    wait_until(cx, |cx| shows(cx, window, "page-button"));
     let before = cx
         .update(|cx| PluginHost::global(cx).read(cx).generation(&id))
-        .expect("the canvas plugin has loaded");
+        .expect("the page plugin has loaded");
 
     let reload = cx.update(|cx| {
         Workspace::dispatch(
@@ -2971,10 +2971,10 @@ fn reloading_a_plugin_mounts_its_panel_again(cx: &mut TestAppContext) {
 
     let after = cx
         .update(|cx| PluginHost::global(cx).read(cx).generation(&id))
-        .expect("the canvas plugin is still loaded");
+        .expect("the page plugin is still loaded");
     assert!(after > before, "the reload did not load the plugin again");
-    wait_until(cx, |cx| shows(cx, window, "canvas-undo"));
-    assert!(!shows(cx, window, "panel-dev.kagan.canvas-canvas"));
+    wait_until(cx, |cx| shows(cx, window, "page-button"));
+    assert!(!shows(cx, window, PAGE_FRAME));
 }
 
 /// Installs a plugin whose only contribution is the overlay `Cover`, exported by `source`.
@@ -3649,46 +3649,64 @@ fn a_plugin_panel_shows_beside_the_built_in_panels(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "changes"));
     assert!(!shows(cx, window, "plugins"));
     assert!(shows(cx, window, "plugins-manage"));
-    assert!(!shows(cx, window, "panel-dev.kagan.canvas-canvas"));
+    assert!(!shows(cx, window, PAGE_FRAME));
     assert_eq!(
         cx.update(|cx| kagan.read(cx).panel_titles()),
         ["Questions", "Changes"]
     );
 }
 
-/// Writes the bundled canvas plugin into the store, installed and enabled.
-fn install_canvas(data: &Path) {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../plugins/canvas")
-        .canonicalize()
-        .unwrap();
+pub(super) const PAGE: &str = "dev.test.page";
+pub(super) const PAGE_FRAME: &str = "panel-dev.test.page-page";
+
+/// Writes a plugin with one center page that follows the thread, installed and enabled.
+pub(super) fn install_page(data: &Path) {
+    let root = data.join("page");
+    std::fs::create_dir(&root).unwrap();
+    let manifest = serde_json::json!({
+        "id": PAGE,
+        "name": "Page",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "instructions": "A test page.",
+        "powers": {},
+        "ui": {"panels": [{"id": "page", "title": "Page", "view": "Page", "placement": "center", "follows": "thread"}]}
+    });
+    std::fs::write(root.join("kagan.json"), manifest.to_string()).unwrap();
+    std::fs::write(
+        root.join("main.js"),
+        r#"import { View, div } from "gpui-kit";
+import { KgButton } from "gpui-component";
+export default class Plugin extends View {}
+export class Page extends View {
+  render() { return div().child(new KgButton("page-button").label("Page")); }
+}
+"#,
+    )
+    .unwrap();
     let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
     store
         .insert_plugin(&Plugin {
-            id: PluginId("dev.kagan.canvas".into()),
+            id: PluginId(PAGE.into()),
             source: root.display().to_string(),
             root,
             commit: None,
             enabled: true,
-            approved: serde_json::json!({
-                "powers": {"clipboard": {"read": true, "write": true}, "areas": ["database", "threads"]},
-                "downloads": {}, "folders": {}
-            }),
+            approved: serde_json::json!({"powers": {}, "downloads": {}, "folders": {}}),
             error: None,
         })
         .unwrap();
-    drop(store);
 }
 
-/// Opens the window with the plugin host running. `canvas` also installs and enables the bundled
-/// canvas plugin, which declares a right panel.
+/// Opens the window with the plugin host running. `page` also installs a plugin with a center page.
 pub(super) fn open_with_plugins(
     cx: &mut TestAppContext,
-    canvas: bool,
+    page: bool,
 ) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
     open_with_plugins_then(cx, |data| {
-        if canvas {
-            install_canvas(data);
+        if page {
+            install_page(data);
         }
     })
 }

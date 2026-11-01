@@ -189,13 +189,7 @@ mod tests {
             .descriptors()
             .map(gpui_shell::ComponentDescriptor::name)
             .collect();
-        for name in [
-            "Spinner",
-            "Sketch",
-            "ThreadTitle",
-            "ThreadStatus",
-            "Markdown",
-        ] {
+        for name in ["Spinner", "ThreadTitle", "ThreadStatus", "Markdown"] {
             assert!(names.contains(&name), "{name} missing from {names:?}");
         }
         assert!(catalog.initializer().is_some());

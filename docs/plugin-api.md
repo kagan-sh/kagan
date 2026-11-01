@@ -178,7 +178,6 @@ Plugins contribute **panels** (a View class the entry exports) placed `left` or 
 
 **kagan components**, registered through gpui-shell's `ComponentRegistry`:
 
-- `Sketch`: native drawing from shape data (boxes, arrows, text, freehand; hand-drawn or clean strokes), painted in Rust. Takes a typed `SketchScene` state entity, edited incrementally through registered methods and cached per element `key`. See [the component API and drag measurement](components.md).
 - `ThreadTitle`, `ThreadStatus`: a thread's title and its status bar.
 - `Markdown`: rendered message text.
 - `KgButton`: a command button with the calls of `Button`: `label`, `tooltip`, `loading`, `size`, `primary`, `secondary`, `danger`, `success`, `warning`, `outline`, `ghost`, `link`, `compact`, `disabled`, `selected`, `on_click`, and children, which sit inside the button. `kg ui` finds, clicks and reads it by its id, with its role, name, state and focus. Two panels that use the same id are refused by `kg ui click` unless `--within` names one. `kg plugin check` warns on a plain `Button` in any plugin script. `kg plugin new` writes a starter panel that uses `KgButton`.

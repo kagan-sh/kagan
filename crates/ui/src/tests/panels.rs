@@ -10,7 +10,8 @@ use kg_plugins::PluginHost;
 use serde_json::json;
 
 use super::kagan::{
-    click, open, open_with_plugins_then, present, press_key, shows, value_of, wait_until,
+    PAGE, PAGE_FRAME, click, install_page, open, open_with_plugins_then, present, press_key, shows,
+    value_of, wait_until,
 };
 
 const BROKEN: &str = "panel-dev.test.broken-hello";
@@ -218,32 +219,6 @@ fn manage_plugins_opens_the_installed_page(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "plugin-install-open"));
 }
 
-/// The canvas plugin from the repository, approved for the powers it asks for.
-fn install_canvas(data: &Path) {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../plugins/canvas")
-        .canonicalize()
-        .unwrap();
-    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
-    store
-        .insert_plugin(&Plugin {
-            id: PluginId(CANVAS.into()),
-            source: root.display().to_string(),
-            root,
-            commit: None,
-            enabled: true,
-            approved: json!({
-                "powers": {"clipboard": {"read": true, "write": true}, "areas": ["database", "threads"]},
-                "downloads": {}, "folders": {}
-            }),
-            error: None,
-        })
-        .unwrap();
-}
-
-const CANVAS: &str = "dev.kagan.canvas";
-const CANVAS_FRAME: &str = "panel-dev.kagan.canvas-canvas";
-
 /// The bounds `kg ui` reports for an element: x, y, width and height, in points.
 fn bounds_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<[f32; 4]> {
     cx.update_window(window, |_, window, _| {
@@ -282,29 +257,29 @@ fn inside(inner: [f32; 4], outer: [f32; 4]) -> bool {
 }
 
 #[gpui_kit::test]
-fn the_canvas_toolbar_sits_inside_its_page(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open_with_plugins_then(cx, install_canvas);
+fn a_page_button_sits_inside_its_page(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_page);
     cx.run_until_parked();
     let task = cx.update(|cx| {
         Workspace::dispatch(
             Op::Surface(SurfaceOp::Open {
-                plugin: PluginId(CANVAS.into()),
-                id: "canvas".into(),
+                plugin: PluginId(PAGE.into()),
+                id: "page".into(),
             }),
             cx,
         )
     });
     cx.foreground_executor().block_test(task).unwrap();
-    wait_until(cx, |cx| shows(cx, window, "canvas-undo"));
+    wait_until(cx, |cx| shows(cx, window, "page-button"));
 
     let frame = bounds_of(cx, window, "surface-page").expect("the page is drawn");
-    let undo = bounds_of(cx, window, "canvas-undo").expect("undo is drawn");
-    assert!(undo[2] > 0. && undo[3] > 0.);
+    let button = bounds_of(cx, window, "page-button").expect("the button is drawn");
+    assert!(button[2] > 0. && button[3] > 0.);
     assert!(
-        inside(undo, frame),
-        "undo {undo:?} is outside the page {frame:?}"
+        inside(button, frame),
+        "button {button:?} is outside the page {frame:?}"
     );
-    assert!(!shows(cx, window, CANVAS_FRAME));
+    assert!(!shows(cx, window, PAGE_FRAME));
 }
 
 #[gpui_kit::test]

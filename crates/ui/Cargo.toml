@@ -15,8 +15,6 @@ async-channel.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-roughr = "=0.14.0"
-perfect_freehand = "=0.1.1"
 url = "=2.5.8"
 
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -11,4 +11,4 @@ Leave `KG_DATA_DIR` unset. In a thread, `KG_SOCKET` is already the open app's so
 
 `kg status --json` returns `{"status":{"threadId","projectId","environmentId","cli","dataDir","warnings"}}`. `kg project list --json` returns `{"projects":[{"id","kind","name","path","gitRemoteUrl"}]}`. `kg program list --json` returns `{"programs":{"programs":[{"command","label","source","path","version"}],"default"}}`; pass a `command` to `kg thread run --program`.
 
-Plugin install, Sketch, and powers approval are kg-plugin-authoring. Driving the open window is kg-ui.
+Plugin install and powers approval are kg-plugin-authoring. Driving the open window is kg-ui.

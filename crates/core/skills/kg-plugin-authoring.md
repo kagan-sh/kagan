@@ -76,6 +76,4 @@ Build a plugin in this order. Each step names the command to run.
 
 9. **Share it.** Commit and push the plugin, then run `kg plugin share <path>`. It checks the plugin, refuses uncommitted changes or a commit no remote branch holds, and prints an index entry that pins that commit plus a `kg plugin install git:<url>@<commit> --plugin <folder>` line. Paste the entry into `plugins` in the team index's `.kagan/index.json` (top level: `"schemaVersion": 1` and a lowercase `"name"` (`a-z 0-9 - _ .`, up to 64, as are plugin names; a description is one line); unknown keys are refused; an index in git lists only `git:` sources), then commit and push the index. Teammates run `kg plugin install <name>` or `<index>/<name>`, and each one approves the powers. `kg plugin update <id>` follows the ref in the entry: a commit pins it; a branch lets update follow.
 
-Sketch is a retained scene, not a props object. Import `Sketch` and `SketchScene` from `gpui-component`, construct `SketchScene()`, then call `rect`, `line`, `ink`, `text`, `view`, `style`, `remove`, and `clear`. Its colors are `ink`, `accent`, `muted`, `working`, `needs`, and `failed`. The signatures are in `gpui-kit.d.ts`.
-
 Unavailable host areas fail explicitly. Do not invent an API: if a call is not in `kagan.d.ts`, it does not exist in this version.
