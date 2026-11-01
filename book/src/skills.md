@@ -11,7 +11,7 @@ description: Write release notes from the git log.
 Read the commits since the last tag. Group them by feature and fix.
 ```
 
-The lines between the `---` lines give the `name` and the `description`. The name uses lowercase letters and hyphens, and it is the same as the folder name. The rest of the file is the instructions.
+The lines between the `---` lines give the `name` and the `description`. The name uses lowercase letters and hyphens, and matches the folder name. The rest of the file has the instructions.
 
 ## Where skills come from
 
@@ -24,14 +24,12 @@ kagan reads skills from four places. If two places have a skill with the same na
 
 If one place has two skills with the same name, kagan uses neither. `kg skill list` shows the error.
 
-> [!WARNING]
-> A repository that you clone can have skills in `.kagan/skills`. Your agent can load them and obey them. Read them before you start an agent in a repository that you do not trust.
+> [!CAUTION]
+> Before you start an agent in a repository that you do not trust, read the files in `.kagan/skills`. An agent can obey instructions that cause damage to your files.
 
-## How an agent uses skills
+The agent sees each skill's name and description. It loads the instructions only when it needs them.
 
-The agent sees the name and the description of each skill. It loads the instructions only when it needs them.
-
-## Commands
+## Manage skills
 
 ```bash
 kg skill list
@@ -42,7 +40,7 @@ kg skill add <path>
 kg skill remove my-skill
 ```
 
-- `new` makes a skill folder in your skills. With `--project`, it makes the folder in the project.
+- `new` makes a folder in your skills. With `--project`, it makes the folder in the project.
 - `add` copies a skill folder that you have.
 - `remove` deletes one of your skills or a project skill. You cannot remove a built-in skill or a plugin skill.
 
