@@ -43,7 +43,6 @@ pub(crate) fn shown_tab(kagan: &Kagan) -> Option<u32> {
     kagan.tabs.shown()
 }
 
-/// The grid of the tab on screen, the program's or an extra terminal's.
 pub(crate) fn tab_grid(kagan: &Kagan, cx: &App) -> Option<kg_core::Grid> {
     match kagan.screen.shown() {
         Shown::Thread(view) => Some(kagan.tab_view(view).read(cx).grid().clone()),

@@ -3,7 +3,6 @@
 [profile.default]
 slow-timeout = { period = "60s", terminate-after = 2 }
 
-# CI lists every failure in one run.
 [profile.ci]
 fail-fast = false
 slow-timeout = { period = "60s", terminate-after = 2 }
