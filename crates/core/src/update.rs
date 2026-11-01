@@ -1,4 +1,4 @@
-//! Finds, downloads, checks and installs a newer kagan (decision 113).
+//! Finds, downloads, checks and installs a newer kagan (decisions 113 to 116).
 
 mod install;
 

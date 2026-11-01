@@ -150,6 +150,16 @@ _Avoid_: Button (in plugin scripts), observed button
 A function a plugin or kagan offers to agents in threads.
 _Avoid_: MCP tool (the transport, not the concept)
 
+## Updates
+
+**Update**:
+A newer kagan release that a check found. Only the person installs it, from the window.
+_Avoid_: Upgrade (except in the `brew upgrade` command), patch
+
+**Install kind**:
+How this copy of kagan was installed: `app`, `homebrew`, `installer`, `app-image` or `other`. It decides whether kagan replaces itself or names the command or the release page.
+_Avoid_: Channel, distribution
+
 ```glossary-ban
 Add-on	Plugin
 Sandbox	Environment

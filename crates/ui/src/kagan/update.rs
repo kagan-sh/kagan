@@ -1,4 +1,4 @@
-//! The update notice, the install question, and Check for updates (decision 113).
+//! The update notice, the install question, and Check for updates (decisions 113 to 115).
 
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, WindowExt as _, h_flex};
