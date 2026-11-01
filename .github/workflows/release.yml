@@ -49,7 +49,9 @@ jobs:
         include:
           - os: ubuntu-22.04
           - os: macos-latest
-            size-budget: 78643200
+            # 160 MiB for the universal kg, both CPUs: about 112 MB plus the
+            # same headroom the old 75 MiB limit gave the Apple silicon one.
+            size-budget: 167772160
           - os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
@@ -100,6 +102,9 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
         with:
           cache: false
+      - name: Intel Mac target
+        if: runner.os == 'macOS'
+        run: rustup target add x86_64-apple-darwin
       - name: Prepare cargo-packager cache directory
         shell: bash
         run: mkdir -p "$RUNNER_TEMP/cargo-packager"
@@ -173,11 +178,22 @@ jobs:
               formats=deb,appimage
               export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
               ;;
-            macOS) formats=dmg ;;
+            macOS)
+              # One app for Intel and Apple silicon. cargo-packager reads kg from
+              # target/<target>/release and names the dmg after the target.
+              formats=dmg
+              cargo build --release -p kg
+              cargo build --release -p kg --target x86_64-apple-darwin
+              mkdir -p target/universal-apple-darwin/release
+              lipo -create -output target/universal-apple-darwin/release/kg \
+                target/release/kg target/x86_64-apple-darwin/release/kg
+              lipo -info target/universal-apple-darwin/release/kg
+              set -- --target universal-apple-darwin
+              ;;
             Windows) formats=nsis ;;
             *) echo "no installer for $RUNNER_OS" >&2; exit 1 ;;
           esac
-          cargo packager --release --formats "$formats"
+          cargo packager --release --formats "$formats" "$@"
       - name: Notarize the dmg
         if: runner.os == 'macOS'
         env:
@@ -193,7 +209,7 @@ jobs:
             exit 0
           fi
           shopt -s nullglob
-          dmgs=(target/packager/kagan_*_aarch64.dmg)
+          dmgs=(target/packager/kagan_*_universal.dmg)
           if [ "${#dmgs[@]}" -ne 1 ]; then
             echo "expected one dmg, found ${#dmgs[@]}: ${dmgs[*]}" >&2
             exit 1
@@ -233,8 +249,11 @@ jobs:
           BUDGET: ${{ matrix.size-budget }}
         run: |
           set -eu
-          bin=target/release/kg
-          if [ "$RUNNER_OS" = Windows ]; then bin=$bin.exe; fi
+          case "$RUNNER_OS" in
+            macOS) bin=target/universal-apple-darwin/release/kg ;;
+            Windows) bin=target/release/kg.exe ;;
+            *) bin=target/release/kg ;;
+          esac
           size=$(wc -c < "$bin" | tr -d ' ')
           echo "\`kg\` on $RUNNER_OS: $size bytes, budget ${BUDGET:-none}" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$BUDGET" ] && [ "$size" -gt "$BUDGET" ]; then
@@ -306,19 +325,36 @@ jobs:
           VERSION: ${{ needs.tag.outputs.version }}
         run: |
           set -eu
-          dmg="kagan_${VERSION}_aarch64.dmg"
+          dmg="kagan_${VERSION}_universal.dmg"
           sums=$(gh release download "$TAG" --pattern SHA256SUMS --output -)
           sha=$(printf '%s\n' "$sums" | awk -v f="$dmg" '$2 == f { print $1 }')
           if [ -z "$sha" ]; then
             echo "$dmg is not in SHA256SUMS" >&2
             exit 1
           fi
-          sed -i \
-            -e "s/^  version \".*\"$/  version \"$VERSION\"/" \
-            -e "s/^  sha256 \".*\"$/  sha256 \"$sha\"/" \
-            Casks/kagan.rb
-          grep -qx "  version \"$VERSION\"" Casks/kagan.rb
-          grep -qx "  sha256 \"$sha\"" Casks/kagan.rb
+          # The dmg runs on Intel and Apple silicon from macOS 11, which is
+          # Homebrew's own floor, so the cask names no arch and no macOS version.
+          cat > Casks/kagan.rb <<CASK
+          cask "kagan" do
+            version "$VERSION"
+            sha256 "$sha"
+
+            url "https://github.com/kagan-sh/kagan/releases/download/v#{version}/kagan_#{version}_universal.dmg"
+            name "kagan"
+            desc "Desktop app for coding with agents"
+            homepage "https://kagan.sh/"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            depends_on :macos
+
+            app "kagan.app"
+            binary "#{appdir}/kagan.app/Contents/MacOS/kg"
+          end
+          CASK
           if git diff --quiet; then
             echo "The cask is already at $VERSION"
             exit 0

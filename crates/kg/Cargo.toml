@@ -72,4 +72,5 @@ resources = ["../../assets/THIRD-PARTY-NOTICES.txt"]
 
 # Keep this last. Release signing appends its keys to this table.
 [package.metadata.packager.macos]
+minimum-system-version = "11.0"
 info-plist-path = "../../assets/macos/Info.plist"
