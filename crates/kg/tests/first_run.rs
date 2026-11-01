@@ -197,7 +197,7 @@ impl Drop for Server {
     fn drop(&mut self) {
         let pid = self.child.id();
         let _ = Command::new("kill")
-            // Without `--`, procps `kill -9 -1234` signals group 1: every process the user owns.
+            // Without `--`, procps reads -<pid> as an option and keeps one digit; -1 kills every process we own.
             .args(["-9", "--", &format!("-{pid}")])
             .output();
         let _ = self.child.kill();

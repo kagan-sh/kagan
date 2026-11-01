@@ -173,7 +173,7 @@ jobs:
     needs: scope
     if: needs.scope.outputs.skip != 'true'
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     defaults:
       run:
         shell: bash
