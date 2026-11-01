@@ -383,7 +383,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     Shortcut {
         name: "PrevMatch",
         action: "review::PrevMatch",
-        chord: "secondary-shift-g",
+        chord: "secondary-alt-g",
         label: "Previous match",
     },
     Shortcut {

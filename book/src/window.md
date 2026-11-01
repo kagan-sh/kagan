@@ -123,6 +123,7 @@ On Linux and Windows, Cmd in this book means Ctrl+Shift. For example, Cmd+N is C
 | Cmd+Shift+A | Command list |
 | Cmd+Alt+F | Search threads |
 | Cmd+Enter | Send review |
+| Cmd+G and Cmd+Alt+G | Next match, previous match in a review search |
 | Cmd+, | Settings |
 | Cmd+= and Cmd+- | Bigger or smaller terminal text |
 
