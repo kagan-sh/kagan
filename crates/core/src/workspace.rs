@@ -139,6 +139,8 @@ pub struct Workspace {
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
     pub(crate) program_environment: Option<crate::program::Environment>,
+    /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
+    pub(crate) claude_config: Option<std::path::PathBuf>,
     pub(crate) ui: Option<crate::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
@@ -273,6 +275,7 @@ impl Workspace {
                         keymap: kg_domain::Keymap::default(),
                         plugins: None,
                         program_environment: None,
+                        claude_config: None,
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),

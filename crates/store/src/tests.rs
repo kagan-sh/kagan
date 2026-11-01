@@ -1,7 +1,8 @@
 use kg_domain::{
-    Environment, EnvironmentId, EnvironmentStatus, EventKind, InteractionOption, Order,
-    PendingInteraction, PendingInteractionId, Plugin, PluginId, Project, ProjectId, ProjectKind,
-    Role, Section, SectionId, Thread, ThreadId, ThreadStatus, Timestamp, TurnOutcome, Visibility,
+    Conversation, Environment, EnvironmentId, EnvironmentStatus, EventKind, InteractionOption,
+    Order, PendingInteraction, PendingInteractionId, Plugin, PluginId, Project, ProjectId,
+    ProjectKind, Role, Section, SectionId, Thread, ThreadId, ThreadStatus, Timestamp, TurnOutcome,
+    Visibility,
 };
 use serde_json::json;
 
@@ -187,6 +188,54 @@ fn set_title_stores_the_title() {
         store.set_title(&id("thr_missing"), "Notes"),
         Err(Error::NotFound { what: "thread", .. })
     ));
+}
+
+#[test]
+fn a_thread_keeps_its_conversation() {
+    let store = store();
+    store.put_thread(&thread("thr_1", 1)).unwrap();
+    assert_eq!(store.conversation(&id("thr_1")).unwrap(), None);
+    let conversation = Conversation::fresh();
+    store.set_conversation(&id("thr_1"), conversation).unwrap();
+    assert_eq!(
+        store.conversation(&id("thr_1")).unwrap(),
+        Some(conversation)
+    );
+    assert!(matches!(
+        store.conversation(&id("thr_missing")),
+        Err(Error::NotFound { what: "thread", .. })
+    ));
+    assert!(matches!(
+        store.set_conversation(&id("thr_missing"), conversation),
+        Err(Error::NotFound { what: "thread", .. })
+    ));
+}
+
+#[test]
+fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
+    let path = std::env::temp_dir().join(format!("kg-store-v1-{}.sqlite3", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let mut conn = rusqlite::Connection::open(&path).unwrap();
+    crate::migrate(&mut conn, crate::store::MIGRATIONS[..1].iter().copied()).unwrap();
+    let store = Store { conn };
+    store
+        .put_project(&Project {
+            id: ProjectId("prj_1".into()),
+            kind: ProjectKind::Standard,
+            name: "kagan".into(),
+            path: "/code/kagan".into(),
+            git_remote_url: None,
+        })
+        .unwrap();
+    store.put_thread(&thread("thr_1", 1)).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 1);
+    drop(store);
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.schema_version().unwrap(), 2);
+    assert!(store.thread(&id("thr_1")).unwrap().is_some());
+    assert_eq!(store.conversation(&id("thr_1")).unwrap(), None);
+    drop(store);
+    std::fs::remove_file(&path).unwrap();
 }
 
 #[test]
@@ -946,9 +995,9 @@ fn a_future_schema_is_refused_before_anything_is_written() {
 }
 
 #[test]
-fn a_new_database_is_schema_one_and_marked_as_kagan() {
+fn a_new_database_is_schema_two_and_marked_as_kagan() {
     let store = store();
-    assert_eq!(store.schema_version().unwrap(), 1);
+    assert_eq!(store.schema_version().unwrap(), 2);
     let application: i32 = store
         .conn
         .pragma_query_value(None, "application_id", |row| row.get(0))
@@ -1020,7 +1069,7 @@ fn another_file_is_refused_unchanged_and_an_empty_one_is_built() {
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
     let empty = dir.join("empty.sqlite3");
     std::fs::write(&empty, "").unwrap();
-    assert_eq!(Store::open(&empty).unwrap().schema_version().unwrap(), 1);
+    assert_eq!(Store::open(&empty).unwrap().schema_version().unwrap(), 2);
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

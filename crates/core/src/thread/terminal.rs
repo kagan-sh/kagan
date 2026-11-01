@@ -11,7 +11,7 @@ use crate::database::Result;
 use crate::workspace::{Request, closed, missing};
 use crate::{Thread, Workspace, WorkspaceEvent};
 
-use super::agent;
+use super::agent::{self, Start};
 use super::halt::status;
 use super::resolve_program;
 
@@ -25,6 +25,7 @@ pub(crate) const ARM: Duration = Duration::from_secs(2);
 pub(crate) async fn start(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
+    start: Start,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let record = thread.read_with(cx, |thread, _| thread.record.clone());
@@ -47,7 +48,7 @@ pub(crate) async fn start(
         })
         .map_err(closed)?;
     let spawned = match folder {
-        Some(folder) => spawn(this, &record, folder, size, cx).await,
+        Some(folder) => spawn(this, &record, folder, size, start, cx).await,
         None => Err("the thread has no folder".to_owned()),
     };
     match spawned {
@@ -78,11 +79,12 @@ async fn spawn(
     record: &kg_domain::Thread,
     folder: PathBuf,
     (cols, rows): (u16, u16),
+    start: Start,
     cx: &mut AsyncApp,
 ) -> std::result::Result<Terminal, String> {
     let environment = crate::program::environment_of(this, cx);
     let program = resolve_program(&record.provider, environment.as_ref())?;
-    let integration = agent::integrate(this, record, &program, cx)
+    let integration = agent::integrate(this, record, &program, start, cx)
         .await
         .map_err(|error| error.to_string())?;
     let args = integration.args.into_iter().chain(program.args).collect();
@@ -580,7 +582,7 @@ pub(crate) async fn start_again(
         ));
     }
     status(this, &thread, ThreadStatus::Starting, cx).await?;
-    start(this, &thread, cx).await?;
+    start(this, &thread, Start::Again, cx).await?;
     Ok(OpResult::Thread(
         thread.read_with(cx, |thread, _| thread.record.clone()),
     ))

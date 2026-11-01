@@ -115,8 +115,12 @@ _Avoid_: Marketplace (the decision-3 goal, not the file), catalog, store, regist
 A packaged set of instructions an agent can load for one kind of task.
 
 **Agent integration**:
-What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, also kagan's skills. For `claude`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The person can turn the extra arguments off with the `agent-integration` preference.
+What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, also kagan's skills and the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The person can turn the extra arguments off with the `agent-integration` preference.
 _Avoid_: Injection, agent setup, wrapper
+
+**Conversation**:
+What an agent remembers of a thread's program: what was said and done. Kagan gives `claude` an id for it at the first start, so Start again resumes it.
+_Avoid_: Session, chat
 
 **Panel**:
 A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool or a center page. A panel placed on the right or the bottom is refused. An already installed right panel is skipped and the plugin still runs.
@@ -160,4 +164,6 @@ Backend	Provider
 Badge	plugin-api.md	Badge	gpui-kit component name
 Sandbox	picker.rs	sandbox	Provider permission sandbox wording
 Sandbox	tests/commands.rs	sandbox	Provider permission test copy
-Sandbox	plugins/src/files.rs	sandbox	tempdir variable in path tests```
+Sandbox	plugins/src/files.rs	sandbox	tempdir variable in path tests
+Session	thread/agent.rs	"--	Claude Code's own flag names
+Session	*	--session-id	Claude Code's own flag name```

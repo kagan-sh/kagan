@@ -1224,6 +1224,8 @@ pub enum ThreadOp {
         options: Vec<InteractionOption>,
     },
     /// Run a stopped or recovered thread's program again, in its folder. Only a request does this.
+    /// A claude thread resumes its conversation; when it cannot, the agent starts a new one and the
+    /// thread says so. Codex always starts a new one.
     StartAgain {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,

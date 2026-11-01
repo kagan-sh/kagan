@@ -45,7 +45,7 @@ A plugin icon opens its tool below the threads, or its page in the center. Click
 
 The center shows the terminal of the selected thread. The terminal has scrollback, mouse support, and copy and paste.
 
-The menu at the right of the thread header has **Pin**, **Archive**, **Rename…**, and **Save diagnostics**. When the program ends, the line under the terminal tells you why, and has **Start again**.
+The menu at the right of the thread header has **Pin**, **Archive**, **Rename…**, and **Save diagnostics**. When the program ends, the line under the terminal tells you why, and has **Start again**. Start again resumes a Claude Code conversation where you left it.
 
 To open a shell in the thread's folder, click **+** in the thread header, or press Cmd+T. Tabs appear over the terminal: the program first, then **Terminal 1**, **Terminal 2**, and so on. Click a tab, or press Cmd+Alt+] and Cmd+Alt+[, to switch. Click **×** on a tab, press Cmd+Shift+W, or type `exit` to close it. `kg thread terminal new`, `list`, and `close` do the same from a terminal, and `--terminal <n>` sends `kg thread input` and the other terminal commands to one of them.
 

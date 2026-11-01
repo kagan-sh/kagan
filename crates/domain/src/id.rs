@@ -72,6 +72,24 @@ pub fn plain_identifier(value: &str) -> bool {
         })
 }
 
+/// The id kagan gives an agent's conversation at its first start, so Start again can resume it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Conversation(uuid::Uuid);
+
+impl Conversation {
+    #[must_use]
+    pub fn fresh() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+}
+
+impl fmt::Display for Conversation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.hyphenated().fmt(f)
+    }
+}
+
 /// Milliseconds since the Unix epoch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
