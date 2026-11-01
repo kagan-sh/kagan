@@ -1503,7 +1503,7 @@ fn an_open_does_not_draw_a_right_panel(cx: &mut TestAppContext) {
     cx.run_until_parked();
     wide(cx, window);
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
-    super::sidebars::settle(cx);
+    cx.run_until_parked();
     let preference = saved_sidebar(cx);
     let refused = open_surface(cx, ALPHA, "side").unwrap_err();
     assert!(

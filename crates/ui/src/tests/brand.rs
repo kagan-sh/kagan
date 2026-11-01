@@ -4,7 +4,7 @@ use serde_json::json;
 use super::kagan::{
     click, focused_of, label, open, present, role_of, set_preference, shows, wait_until,
 };
-use super::sidebars::{focus_row, settle};
+use super::sidebars::focus_row;
 
 const ITEMS: [&str; 2] = ["kagan-about", "kagan-settings"];
 
@@ -66,7 +66,7 @@ fn the_kagan_menu_works_beside_the_narrow_sidebar(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     set_preference(cx, "main.left-sidebar", json!(true));
     cx.simulate_window_resize(window, size(px(640.), px(720.)));
-    settle(cx);
+    cx.run_until_parked();
     focus_row(cx, window, "project-prj_kagan");
     assert!(shows(cx, window, "left-overlay-panel"));
     click(cx, window, "kagan-menu");
@@ -85,7 +85,7 @@ fn the_kagan_menu_works_beside_the_narrow_sidebar(cx: &mut TestAppContext) {
 fn the_start_screen_shows_a_mark_that_takes_no_focus(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(528.), px(360.)));
-    settle(cx);
+    cx.run_until_parked();
     assert!(shows(cx, window, "welcome-mark"));
     assert_eq!(role_of(cx, window, "welcome-mark"), None);
     assert_eq!(focused_of(cx, window, "welcome-mark"), None);
