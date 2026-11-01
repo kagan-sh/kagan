@@ -1,47 +1,36 @@
 # Themes
 
-The app starts on the `fjord` theme, in system mode: it follows macOS, Windows or Linux between light and dark, and changes live when the system does. `fjord` is Ember Fjord: a cool graphite with one ember accent.
+kagan has three themes: `fjord` (the default), `ember`, and `grey`. Each theme has a light mode and a dark mode. In System mode, kagan follows the light or dark setting of your computer.
 
-The Appearance page in Settings shows the themes and the mode. Press Cmd+, (Ctrl+Shift+, off macOS), or the gear at the bottom of the rail. Each theme is a card with three of its colors and where it comes from: Built in, Your file, or a plugin's name. The one in use has a brand-accent border and a check mark. Under Mode, choose System, Light or Dark. The same choices are on the command line:
+## Change the theme
+
+Open Settings → Appearance (Cmd+,). Click a theme card, then select System, Light, or Dark. From a terminal:
 
 ```bash
 kg theme get
-kg theme set fjord light
 kg theme set fjord dark
-kg theme set fjord system
+kg theme set ember system
 ```
 
-`system` is the default. `light` and `dark` pin the mode, and then the system setting is ignored. Changes from the system and from `kg` apply at once.
+## Make your own theme
 
-`ember` and `grey` ship with the app too. Run `kg theme set ember dark` or `kg theme set grey dark` to pick one. Their files are [`docs/themes/ember.json`](https://github.com/kagan-sh/kagan/blob/main/docs/themes/ember.json) and [`docs/themes/grey.json`](https://github.com/kagan-sh/kagan/blob/main/docs/themes/grey.json).
+1. Click **New theme…** in Settings → Appearance. kagan copies the current theme to `<id>-copy.json` and opens it in your editor.
+2. Change the colors and save the file. The window changes in about one second.
 
-## Your own theme
-
-A custom theme is a JSON file at `<dataDir>/themes/<id>.json`. `KG_DATA_DIR` overrides the data directory. Otherwise it is `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows.
-
-The id is the file name without `.json`. Use lowercase letters, digits, and dashes. `fjord`, `ember` and `grey` are reserved.
-
-The quickest start is **New theme…** in the Theme row. It writes a copy of the theme in use to the themes folder, as `<id>-copy.json`, and opens it in your default editor. **Open themes folder** opens the folder. From the command line:
+From a terminal, you select the name:
 
 ```bash
-kg theme new mine              # copies the theme in use to themes/mine.json
-kg theme new mine --from ember # copies ember instead
-kg theme folder                # prints the folder
+kg theme new mine
+kg theme new mine --from ember
 kg theme set mine dark
 ```
 
-`kg theme new` never overwrites a file, and refuses a built-in id. You can also copy [`docs/themes/ocean.json`](https://github.com/kagan-sh/kagan/blob/main/docs/themes/ocean.json) yourself. The file has a `name`, a full `light` palette, and a full `dark` palette. Every token is required except `hover` and `added`. The `terminal` object is optional. Colors are `#RRGGBB`. Unknown fields, missing fields, and blank names are errors. The file can be at most 64 KiB, and the name at most 64 characters on one line.
+`kg theme folder` shows the folder of your themes, `<data folder>/themes`. The file name is the theme id. Use lowercase letters, digits, and hyphens.
 
-Saving the file updates the window within a second. A file that does not load shows its error on its card. If you break the theme you are using, the window keeps its last good colors and says so once; fix the file and it applies. If the selected theme is missing, the Appearance page says so and the window uses the default palette for the mode you picked. The id stays selected, so a restored file applies again.
+A theme file has a `name`, a `light` palette, and a `dark` palette. Colors use the `#RRGGBB` form. [`docs/themes/ocean.json`](https://github.com/kagan-sh/kagan/blob/main/docs/themes/ocean.json) is a full example. The [look spec](spec/look.md) lists all the colors.
+
+If a file has an error, its card shows the error. If you break the theme that you use, the window keeps the last good colors until you correct the file.
 
 ## Themes from plugins
 
-A plugin can ship themes. Each is a file in the plugin folder, in the same format, listed in its `kagan.json`:
-
-```json
-"themes": [{ "id": "midnight", "file": "themes/midnight.json" }]
-```
-
-Its card shows the plugin's name, and its id is the plugin id, a slash, and the theme id: `kg theme set dev.kagan.theme/midnight dark`. A theme needs no powers. `kg plugin check` reads each theme file and names the one that fails. Turning the plugin off or removing it removes its themes; if you were using one, the window says so once and uses the default. Turn the plugin on again and the theme comes back. [`examples/plugins/theme`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins/theme) is a plugin with one theme.
-
-The tokens and the window are in the [look spec](spec/look.md). The window uses Inter at 13 px.
+A plugin can add themes. Its id is the plugin id, a slash, and the theme id, for example `kg theme set dev.kagan.theme/midnight dark`. If you turn off the plugin, kagan goes back to the default theme. [`examples/plugins/theme`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins/theme) is an example.

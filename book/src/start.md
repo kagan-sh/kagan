@@ -1,60 +1,71 @@
 # Get started
 
-## The macOS developer preview
+## Install
 
-[Releases](https://github.com/kagan-sh/kagan/releases) are published when someone starts the Release workflow from `main` and types the version. Increase the middle number for features, the last number for fixes, and the first number for breaking changes. The macOS file is a `.dmg`. It is unsigned and not notarized unless the Apple secrets are set: `APPLE_CERTIFICATE` signs it, and `APPLE_ID` notarizes it. macOS will warn when you open an unsigned copy. That warning is the current preview. Removing the quarantine flag is not a finished release.
+There is no release yet. Build kagan from source.
 
-Download the disk image and `SHA256SUMS`. Check the file before you open it:
+1. Install Rust from [rustup.rs](https://rustup.rs). The file `rust-toolchain.toml` sets the version.
+2. Install the build tools for your system:
+   - macOS: `brew install lld`
+   - Debian or Ubuntu:
 
-```bash
-gh release download v0.1.0 --repo kagan-sh/kagan --pattern SHA256SUMS --pattern '*.dmg'
-shasum -a 256 -c SHA256SUMS --ignore-missing
-```
+     ```bash
+     sudo apt-get install build-essential pkg-config \
+       libfontconfig-dev libwayland-dev libxkbcommon-x11-dev \
+       libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev
+     ```
 
-Open the disk image and copy `kagan.app` to `/Applications`. To update, download the newer disk image and replace `/Applications/kagan.app`. The app has no updater.
+   - Windows: Visual Studio Build Tools with C++, and MinGW for `dlltool` (`choco install mingw`).
+3. Build kagan and open it:
 
-`kg` is the binary inside the app. The preview does not put it on your `PATH`. Add it yourself:
+   ```bash
+   git clone https://github.com/kagan-sh/kagan.git
+   cd kagan
+   cargo run -p kg --release
+   ```
 
-```bash
-ln -sf /Applications/kagan.app/Contents/MacOS/kg /usr/local/bin/kg
-```
+   The first build takes several minutes. Then the window opens.
+4. Add the `kg` command to your `PATH`. On macOS and Linux, run this in the `kagan` folder, and add the same line to your shell profile, such as `~/.zshrc`:
 
-A `kg` you run from a terminal talks to the open app. On macOS the socket is `~/Library/Application Support/kagan/kg.sock` unless `KG_SOCKET` is set.
+   ```bash
+   export PATH="$PWD/target/release:$PATH"
+   ```
 
-The app includes the license texts of its dependencies and of Inter and JetBrains Mono. In the bundle that file is `kagan.app/Contents/Resources/THIRD-PARTY-NOTICES.txt`.
+   On Windows, add the `target\release` folder, which has `kg.exe`, to your `Path`.
 
-The same workflow also builds a Windows installer, a `.deb`, and an AppImage. The Windows installer is unsigned unless `WINDOWS_CERTIFICATE` is set. The Linux packages are unsigned.
+To open kagan later, run `kg`.
 
-## Build and run
-
-Install Rust. This repo pins the compiler in `rust-toolchain.toml`.
-
-```bash
-cargo run -p kg
-```
-
-That opens the window. `cargo run -p kg --release` builds a faster binary.
-
-The app keeps its data in `~/.kagan`. Set `KG_DATA_DIR` to use another folder. On Windows the default is `%USERPROFILE%\.kagan`.
-
-The first launch creates a Personal project in that folder. Personal is for work that is not a git repository. Its id is `personal`.
+On the first start, kagan makes its data folder, `~/.kagan`, and a project named Personal. Personal is for work that is not in a git repository. [Your data](data.md) lists all the places where kagan writes.
 
 ## First thread
 
-In the window, push Add project, pick a folder, pick a program, and start the thread.
+1. Click **Add project** in the left sidebar. Select a folder, usually a git repository.
+2. The New thread screen opens. Select Claude Code, Codex, or another program, and press Enter.
+3. The program starts in a new thread. Type to it as you do in any terminal.
+4. Open **Changes** in the right sidebar to see what the program changed. On a narrow window, press Cmd+Backslash to show the right sidebar. [Review changes](window.md#review-changes) tells you how to send comments back.
 
-From a terminal, with the app running or not (the command starts it):
+For a git repository, the thread gets its own git worktree by default. [Threads](threads.md#folders) tells you about the folder choices.
+
+## Use `kg` from a terminal
+
+`kg` controls the open kagan window. Open kagan first, then try these commands:
 
 ```bash
-# first-run
+# Check that kg works
 kg project list
-kg thread run --project-id personal --environment personal --program /usr/bin/true
 kg guide
 kg help
 ```
 
-`kg project list` prints the projects. Personal has no git repository, so the thread uses `--environment personal`. `/usr/bin/true` exits at once, so you can see a thread without an agent. For Claude Code, use `--program claude`. A missing program stops with `program claude was not found`.
+- `kg project list` shows your projects and their ids. Personal is always there.
+- `kg guide` explains the words that kagan uses.
+- `kg help` lists all commands. [`kg` command](cli.md) has the full list.
 
-[Threads](threads.md) covers the folder and stop.
+To add a project and start a thread in it:
 
-`kg guide` prints the names this app uses. `kg guide threads` prints one chapter. `kg help` lists every command.
+```bash
+kg project add ~/code/my-app
+kg thread run --project-id <project-id> --program claude
+```
+
+`kg project add` shows the id of the new project. If the program is not installed, the command fails with `program claude was not found`.

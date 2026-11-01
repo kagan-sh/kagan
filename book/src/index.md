@@ -1,14 +1,24 @@
 # kagan
 
-kagan is a native, self-extending agentic coding IDE for one person on one machine. It is built on Rust and GPUI. It is designed to protect focus and keep the person understanding the code their agents write.
+kagan is a desktop app for coding with agents. Each thread is a real terminal. The thread runs the agent you already use, such as Claude Code or Codex, in its own folder.
 
-A thread is one program in one folder. A provider is the agent program kagan talks to, such as Claude Code or Codex. A plugin adds a left tool, a center page, an overlay over the terminal, a command, or a tool. A skill is a folder of instructions the agent can load.
+These words have one meaning in this book:
 
-- [Get started](start.md) covers build, run, and the first thread.
-- [Your data](data.md) explains what kagan keeps and what programs can access.
-- [Threads](threads.md) and [the window](window.md) cover daily use.
-- [Plugins](plugins.md), [skills](skills.md), and [themes](themes.md) cover what you can add.
-- [Build a plugin](build-plugin.md) is the short path. The [spec](spec/architecture.md) is the full description.
+- **Project**: a folder that you add, usually a git repository.
+- **Thread**: one program that runs in one folder of a project.
+- **Program**: what a thread runs, such as `claude`, `codex`, or a shell.
+- **Plugin**: a folder of JavaScript that adds parts to the window, commands, or agent tools.
+- **Skill**: a folder of instructions that an agent can load.
+
+## Pages
+
+- [Get started](start.md): install kagan and start your first thread.
+- [Threads](threads.md): start, stop, archive, and delete threads.
+- [The window](window.md): the sidebars, review, and keys.
+- [Your data](data.md): what kagan keeps, and what programs and plugins can do.
+- [Plugins](plugins.md), [Skills](skills.md), and [Themes](themes.md): what you can add.
+- [Build a plugin](build-plugin.md) and [`kg` command](cli.md): for authors.
+- [Terms](CONTEXT.md) and the spec pages: the full description, for contributors.
 
 > [!IMPORTANT]
-> Plugins and agents run code you choose. A plugin's powers are approved only in the app. An agent cannot approve them.
+> Plugins and agents run code that you select. Only a person in the window can approve a plugin and its powers. An agent cannot approve them.
