@@ -167,13 +167,21 @@ jobs:
           APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
           APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+          # cargo-packager writes a minisign .sig beside each package; kagan checks it before it updates.
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.UPDATER_PRIVATE_KEY_PASSWORD }}
         run: |
+          if [ -z "$CARGO_PACKAGER_SIGN_PRIVATE_KEY" ]; then
+            echo "::error::UPDATER_PRIVATE_KEY is unset; a release needs signed update files"
+            exit 1
+          fi
           case "$RUNNER_OS" in
             Linux)
               formats=deb,appimage
               export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
               ;;
-            macOS) formats=dmg ;;
+            # app keeps the bundle, which the signer packs as kagan.app.tar.gz for the updater.
+            macOS) formats=app,dmg ;;
             Windows) formats=nsis ;;
             *) echo "no installer for $RUNNER_OS" >&2; exit 1 ;;
           esac
@@ -216,11 +224,21 @@ jobs:
           xcrun stapler validate "$dmg"
       - name: Name the installers
         shell: bash
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
         # cargo-packager names the exe, deb and AppImage after the binary, kg.
+        # Stapling changed the dmg after it was signed, and the deb does not update itself,
+        # so only the app archive, the exe and the AppImage keep a .sig.
         run: |
           set -eu
           shopt -s nullglob
-          for file in target/packager/kg_*.exe target/packager/kg_*.deb target/packager/kg_*.AppImage; do
+          rm -f target/packager/*.dmg.sig target/packager/*.deb.sig
+          for file in target/packager/kagan.app.tar.gz*; do
+            name=kagan_${VERSION}_aarch64${file#target/packager/kagan}
+            mv -- "$file" "target/packager/$name"
+            echo "$file -> target/packager/$name"
+          done
+          for file in target/packager/kg_*.exe target/packager/kg_*.exe.sig target/packager/kg_*.deb target/packager/kg_*.AppImage target/packager/kg_*.AppImage.sig; do
             name=${file##*/}
             name=kagan_${name#kg_}
             name=${name/-setup.exe/.exe}
@@ -249,6 +267,8 @@ jobs:
           name: installers-${{ matrix.os }}
           path: |
             target/packager/*.dmg
+            target/packager/*.app.tar.gz
+            target/packager/*.sig
             target/packager/*.exe
             target/packager/*.deb
             target/packager/*.AppImage
@@ -275,11 +295,29 @@ jobs:
           PREVIOUS: ${{ needs.tag.outputs.previous }}
           PRERELEASE: ${{ needs.tag.outputs.prerelease }}
         run: |
-          set -eu
+          set -euo pipefail
           if [ -z "$(ls -A dist)" ]; then
             echo "no installers" >&2
             exit 1
           fi
+          # kagan reads releases/latest/download/update.json (decision 113).
+          asset() {
+            shopt -s nullglob
+            local files=(dist/$2)
+            if [ "${#files[@]}" -ne 1 ] || [ ! -f "${files[0]}.sig" ]; then
+              echo "expected one signed $2, found ${#files[@]}" >&2
+              exit 1
+            fi
+            local name=${files[0]#dist/}
+            jq -n --arg key "$1" --arg url "https://github.com/$GH_REPO/releases/download/$TAG/$name" \
+              --rawfile signature "${files[0]}.sig" '{($key): {url: $url, signature: $signature}}'
+          }
+          {
+            asset macos-aarch64 'kagan_*_aarch64.app.tar.gz'
+            asset windows-x86_64 'kagan_*_x64.exe'
+            asset linux-x86_64 'kagan_*_x86_64.AppImage'
+          } | jq -s --arg version "${TAG#v}" --arg notes "https://github.com/$GH_REPO/releases/tag/$TAG" \
+            '{version: $version, notes: $notes, platforms: add}' > dist/update.json
           (cd dist && sha256sum -- * > SHA256SUMS)
           mapfile -t files < <(find dist -type f | sort)
           args=(--target "$SHA" --title "$TAG" --generate-notes)
