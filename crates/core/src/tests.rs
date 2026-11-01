@@ -4937,13 +4937,14 @@ async fn a_thread_left_starting_says_so_and_has_no_screen(cx: &mut TestAppContex
 #[gpui_kit::test]
 async fn diagnostics_writes_a_new_file_without_the_screen(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    let line = if cfg!(windows) {
+    #[cfg(windows)]
+    let line = {
         let path = fixture.dir.path().join("quiet.cmd");
         std::fs::write(&path, "@echo SECRET-MARKER\r\n").unwrap();
         path.display().to_string()
-    } else {
-        script(fixture.dir.path(), "quiet", "printf 'SECRET-MARKER\\n'")
     };
+    #[cfg(unix)]
+    let line = script(fixture.dir.path(), "quiet", "printf 'SECRET-MARKER\\n'");
     let OpResult::Thread(started) = op(fixture.run(&line), cx).await.unwrap() else {
         panic!("thread")
     };
@@ -6616,7 +6617,6 @@ async fn stopped_worktree(
 }
 
 #[cfg(unix)]
-#[cfg(unix)]
 fn wait_until_gone(path: &Path, cx: &mut TestAppContext) {
     for _ in 0..400 {
         cx.executor()
@@ -6630,6 +6630,7 @@ fn wait_until_gone(path: &Path, cx: &mut TestAppContext) {
     panic!("{} was never removed", path.display());
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_restart_finishes_a_project_removal_cut_between_worktrees(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;

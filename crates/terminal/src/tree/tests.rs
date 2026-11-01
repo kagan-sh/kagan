@@ -37,3 +37,18 @@ fn pids_that_are_not_ours_have_not_ended() {
     assert!(!ended(0));
     assert!(!ended(1));
 }
+
+#[test]
+fn killing_a_tree_walks_every_process_and_spares_the_rest() {
+    let mut running = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .unwrap();
+    kill_tree(running.id());
+    assert!(
+        running.try_wait().unwrap().is_none(),
+        "the sleep leads no sid of its own"
+    );
+    running.kill().unwrap();
+    running.wait().unwrap();
+}

@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use rustix::process::{Pid, Signal, WaitId, WaitIdOptions, getsid, kill_process, waitid};
+use rustix::process::{Pid, Signal, WaitId, WaitIdOptions, kill_process, waitid};
 
 use crate::terminal::Exit;
 
@@ -61,14 +61,20 @@ pub(crate) fn kill_tree(leader: u32) {
         .lines()
         .filter_map(|line| line.trim().parse::<u32>().ok())
         .filter_map(pid_of)
-        .filter(|pid| getsid(Some(*pid)) == Ok(leader))
+        .filter(|pid| sid_of(*pid) == Some(leader))
         .for_each(|pid| {
-            if getsid(Some(pid))
-                .is_ok_and(|found| found.as_raw_nonzero() == leader.as_raw_nonzero())
-            {
+            if sid_of(pid) == Some(leader) {
                 let _ = kill_process(pid, Signal::KILL);
             }
         });
+}
+
+// Linux gives kernel threads and a container's init sid 0, and rustix's `getsid` turns
+// that 0 into a `Pid` unchecked, so the call goes to libc. 0 and -1 (no access) mean none.
+fn sid_of(pid: Pid) -> Option<Pid> {
+    // SAFETY: getsid takes a pid by value and reads no memory of ours.
+    let sid = unsafe { libc::getsid(pid.as_raw_nonzero().get()) };
+    (sid > 0).then_some(sid).and_then(Pid::from_raw)
 }
 
 #[cfg(test)]

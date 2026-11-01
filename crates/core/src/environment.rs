@@ -15,8 +15,10 @@ mod personal;
 mod script;
 
 pub(crate) use personal::{describe, personal_folders};
+#[cfg(all(test, unix))]
+pub(crate) use script::run_script;
 #[cfg(test)]
-pub(crate) use script::{SCRIPT_LIMIT, SetupEnd, become_ready, run_script, shell_from};
+pub(crate) use script::{SCRIPT_LIMIT, SetupEnd, become_ready, shell_from};
 
 pub(crate) enum Prepared {
     Reuse(EnvironmentId),
