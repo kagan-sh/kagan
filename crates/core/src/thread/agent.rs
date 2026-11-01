@@ -66,7 +66,6 @@ pub(crate) enum Start {
     Again,
 }
 
-/// The conversation a thread's last Claude run left.
 enum Last {
     None,
     Gone,
@@ -161,8 +160,6 @@ pub(crate) async fn integrate(
     Ok(Integration { env, args })
 }
 
-/// The arguments that resume the thread's last conversation, or begin one with an id kagan keeps,
-/// and a notice when Start again could not resume.
 async fn conversation_args(
     this: &WeakEntity<Workspace>,
     known: &Known,
@@ -239,7 +236,6 @@ fn picks_conversation(args: &[OsString]) -> bool {
     })
 }
 
-/// Where Claude Code keeps its settings and conversations: `CLAUDE_CONFIG_DIR`, else `~/.claude`.
 fn claude_config() -> Option<PathBuf> {
     std::env::var_os("CLAUDE_CONFIG_DIR")
         .filter(|dir| !dir.is_empty())
