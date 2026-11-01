@@ -283,6 +283,7 @@ Commands:
   report        Send mouse-report bytes to the program, as decimal byte values such as `27 91 77 32 128 33`. Unlike `input`, it keeps a scrolled view where it is
   paste         Paste text into the program, bracketed when the program asks for that
   terminal      Extra terminals: login shells in the thread's folder
+  details       The thread's folder, program, branch, base branch and last commits, read from git without fetching
   archive       Archive a thread
   unarchive     Bring back an archived thread
   delete        Delete a thread and its history for good
@@ -663,6 +664,22 @@ Options:
       --id <ID>
           [env: KG_THREAD_ID=]
 
+  -h, --help
+          Print help
+```
+
+## `kg thread details`
+
+```text
+The thread's folder, program, branch, base branch and last commits, read from git without fetching
+
+Usage: kg thread details <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
   -h, --help
           Print help
 ```

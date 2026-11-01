@@ -347,6 +347,7 @@ pub(super) async fn read_thread(
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }
         | ThreadOp::Terminal(_)
+        | ThreadOp::Details { .. }
         | ThreadOp::Archive { .. }
         | ThreadOp::Unarchive { .. }
         | ThreadOp::Delete { .. }

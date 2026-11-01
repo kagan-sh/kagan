@@ -10,6 +10,8 @@ use crate::Workspace;
 use crate::database::Result;
 
 #[cfg(unix)]
+mod details;
+#[cfg(unix)]
 mod extra;
 mod search;
 

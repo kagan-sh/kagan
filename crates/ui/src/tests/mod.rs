@@ -1,6 +1,8 @@
 mod about;
 mod brand;
 mod commands;
+#[cfg(unix)]
+mod details;
 mod identities;
 mod kagan;
 mod menus;

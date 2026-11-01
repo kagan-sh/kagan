@@ -2712,7 +2712,7 @@ fn disabling_a_plugin_takes_its_panel_away(cx: &mut TestAppContext) {
     wait_until(cx, |cx| !shows(cx, window, "page-button"));
     assert_eq!(
         cx.update(|cx| kagan.read(cx).panel_titles()),
-        ["Questions", "Changes"]
+        ["Questions", "Changes", "Details"]
     );
 }
 
@@ -3655,7 +3655,7 @@ fn a_plugin_panel_shows_beside_the_built_in_panels(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, PAGE_FRAME));
     assert_eq!(
         cx.update(|cx| kagan.read(cx).panel_titles()),
-        ["Questions", "Changes"]
+        ["Questions", "Changes", "Details"]
     );
 }
 

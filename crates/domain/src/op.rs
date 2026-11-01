@@ -1114,6 +1114,11 @@ pub enum ThreadOp {
     /// Extra terminals: login shells in the thread's folder
     #[command(subcommand)]
     Terminal(TerminalOp),
+    /// The thread's folder, program, branch, base branch and last commits, read from git without fetching
+    Details {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+    },
     /// Archive a thread
     Archive {
         #[arg(env = "KG_THREAD_ID")]
@@ -1689,6 +1694,7 @@ pub enum OpResult {
     Commits(Vec<crate::DiffCommit>),
     Surfaces(Vec<SurfaceItem>),
     Terminals(Vec<ExtraTerminal>),
+    Details(crate::ThreadDetails),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2078,6 +2084,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Terminal(
             TerminalOp::New { id } | TerminalOp::List { id } | TerminalOp::Close { id, .. },
         )
+        | ThreadOp::Details { id }
         | ThreadOp::Archive { id, .. }
         | ThreadOp::Unarchive { id, .. }
         | ThreadOp::SetPinned { id, .. }

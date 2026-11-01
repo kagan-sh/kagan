@@ -225,7 +225,8 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | ThreadOp::WaitEvent { .. }
             | ThreadOp::Wait { .. }
             | ThreadOp::Search { .. }
-            | ThreadOp::Terminal(TerminalOp::List { .. }) => false,
+            | ThreadOp::Terminal(TerminalOp::List { .. })
+            | ThreadOp::Details { .. } => false,
         },
     }
 }
@@ -253,6 +254,7 @@ async fn dispatch_thread(
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
+        ThreadOp::Details { id } => crate::details::read(database, id, cx).await,
         ThreadOp::Archive { id } => archive(this, database, id, cx).await,
         ThreadOp::Unarchive { id } => unarchive(this, database, id, cx).await,
         ThreadOp::Delete { id, thread_id } => {

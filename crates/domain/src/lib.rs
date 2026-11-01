@@ -12,8 +12,8 @@ mod tests;
 mod theme;
 
 pub use diff::{
-    DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList, DiffNote,
-    DiffSide, DiffStatus, format_notes, parse_notes,
+    BaseBranch, DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList,
+    DiffNote, DiffSide, DiffStatus, GitDetails, ThreadDetails, format_notes, parse_notes,
 };
 pub use event::{Attachment, Event, EventKind, NoticeSeverity, Role, ToolStatus, TurnOutcome};
 pub use id::{

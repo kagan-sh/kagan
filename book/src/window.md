@@ -5,7 +5,7 @@ kagan has one window on macOS, Windows, and Linux. From left to right, the windo
 - **Rail**: a column of icons at the left edge.
 - **Left sidebar**: your projects and their threads.
 - **Center**: the terminal of the thread that you selected.
-- **Right sidebar**: Questions and Changes.
+- **Right sidebar**: Questions, Changes, and Details.
 
 On a narrow window, the right sidebar hides first, then the left sidebar. The rail always stays. To show a hidden sidebar over the center, press its key (Cmd+B for the left, Cmd+Backslash for the right). Press Escape to close it.
 
@@ -67,6 +67,10 @@ Extra terminals are not part of the thread: they never mark it as busy or needin
 | N, P | Next change, previous change |
 | V | Mark the file as viewed |
 | Escape | Go back to the terminal |
+
+## Details
+
+**Details** in the right sidebar shows where the selected thread works: its folder (click the copy icon to copy the path), the kind of folder, and the program. In a git folder it also shows the branch, how many commits the branch is ahead of and behind its base branch, and the last five commits. kagan reads this from your folder every few seconds. It never fetches and never talks to GitHub. `kg thread details` prints the same facts.
 
 ## Questions
 

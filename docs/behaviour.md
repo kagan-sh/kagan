@@ -138,6 +138,13 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: the tool's text, and whether that reply is an error [book:cli]. A tool or CLI job that runs past 120 seconds fails with an error that names the plugin [docs:plugin-api].
 - **Refused when**: an unknown tool, including when no plugin host is installed — `not-found` [docs:architecture] [op.rs]. A schema miss — `invalid` [docs:plugin-api] [op.rs]. That empty host is the contract before plugins load [person 2026-10-08].
 
+### `Details`
+
+- **Allowed when**: the thread exists and has a folder [decision 111].
+- **Changes**: nothing. It never fetches, never writes to the repository, and runs no `git status` [decision 111].
+- **Shows**: the folder, the environment kind, the program line, and, in a git folder, the branch (none on a detached HEAD), the base branch with how many commits the branch is ahead of and behind it (none when the repository has no base branch), and the last five commits with short revs, newest first. Outside git, `git` is none [decision 111].
+- **Refused when**: a missing thread — `not-found`. A thread with no folder — `invalid` [op.rs].
+
 ### `Search`
 
 - **Allowed when**: always [op.rs].

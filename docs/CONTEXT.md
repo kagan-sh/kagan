@@ -119,7 +119,7 @@ What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_
 _Avoid_: Injection, agent setup, wrapper
 
 **Panel**:
-A titled block a plugin declares, or one of Questions and Changes. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool or a center page. A panel placed on the right or the bottom is refused. An already installed right panel is skipped and the plugin still runs.
+A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool or a center page. A panel placed on the right or the bottom is refused. An already installed right panel is skipped and the plugin still runs.
 _Avoid_: Pane, dock, tab
 
 **Page**:

@@ -3,6 +3,7 @@ mod archived;
 pub(crate) mod attention;
 pub(crate) mod changes;
 pub(crate) mod commands;
+mod details;
 #[cfg(target_os = "macos")]
 mod dock;
 mod keys;
@@ -187,6 +188,7 @@ pub(crate) struct Kagan {
     announced: BTreeSet<PendingInteractionId>,
     typed_watch: Option<Subscription>,
     changes: Changes,
+    details: details::Details,
     tabs: tabs::Tabs,
     review_drafts: review::Drafts,
     replaced: replace::Replaced,
@@ -445,7 +447,6 @@ impl Kagan {
                 },
             ),
         ];
-        let window_handle = window.window_handle();
         let mut this = Self {
             start: start::StartState::default(),
             screen: screen::Screen::new(),
@@ -475,6 +476,7 @@ impl Kagan {
             announced: BTreeSet::new(),
             typed_watch: None,
             changes: Changes::new(),
+            details: details::Details::default(),
             tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
             replaced: replace::Replaced::default(),
@@ -501,7 +503,7 @@ impl Kagan {
             settings_views: BTreeMap::new(),
             settling: false,
             columns,
-            window: window_handle,
+            window: window.window_handle(),
             actions_menu: None,
             open_thread: None,
             retired_load: Task::ready(()),
@@ -586,6 +588,7 @@ impl Kagan {
             self.load_retired(cx);
         }
         self.load_changes(cx);
+        self.load_details(cx);
         self.sync_tabs(window, cx);
         self.refresh_plugins(cx);
         self.tell_host(window, cx);
@@ -1057,6 +1060,7 @@ impl Kagan {
         self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.load_changes(cx);
+        self.load_details(cx);
         self.sync_tabs(window, cx);
         self.tell_host(window, cx);
         self.note_shown(cx);
