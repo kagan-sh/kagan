@@ -1,5 +1,5 @@
 target 35000
-total 49290
+total 49288
 allow_expect 5
 crates/core/src/diff.rs 916
 crates/core/src/environment.rs 1023
@@ -14,7 +14,7 @@ crates/terminal/src/terminal.rs 654
 crates/ui/src/kagan.rs 1787
 crates/ui/src/kagan/layout.rs 822
 crates/ui/src/kagan/picker.rs 777
-crates/ui/src/kagan/review.rs 681
+crates/ui/src/kagan/review.rs 679
 crates/ui/src/kagan/review/tree.rs 621
 crates/ui/src/kagan/settings/plugins.rs 969
 crates/ui/src/kagan/sidebar.rs 1598

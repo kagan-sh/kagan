@@ -6074,19 +6074,7 @@ fn review_comments_are_pasted_without_submitting(cx: &mut TestAppContext) {
     );
     cx.executor().advance_clock(POLL);
     cx.run_until_parked();
-    assert!(
-        !shows(cx, window, "review"),
-        "send state {:?}, elements {:?}",
-        cx.update(|cx| review_read::review_send_state(kagan.read(cx))),
-        cx.update_window(window, |_, window, _| crate::ui_registry::snapshots(window)
-            .into_iter()
-            .filter(
-                |entry| format!("{:?}", entry.path()).contains("review-send")
-                    || format!("{:?}", entry.path()).contains("review-line-New-2")
-            )
-            .collect::<Vec<_>>())
-            .unwrap()
-    );
+    assert!(!shows(cx, window, "review"));
     cx.executor().advance_clock(POLL);
     cx.run_until_parked();
     // The terminal wraps the pasted line at its width.
@@ -6232,6 +6220,37 @@ fn review_draft_keeps_its_file_and_survives_closing(cx: &mut TestAppContext) {
     let screen = grid_text(cx, &kagan);
     assert!(screen.contains("file: notes.txt"), "{screen}");
     assert!(screen.contains("scope: uncommitted"), "{screen}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_review_the_program_cannot_take_keeps_its_notes(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (thread, _repo) = repo_thread(cx, window, data.path());
+    wait_until(cx, |cx| shows(cx, window, "change-notes.txt"));
+    click(cx, window, "change-notes.txt");
+    wait_until(cx, |cx| shows(cx, window, "comment-New-2"));
+    click(cx, window, "comment-New-2");
+    cx.simulate_input(window, "kept");
+    click(cx, window, "review-add-comment");
+    let exit = ThreadOp::Input {
+        id: thread.clone(),
+        text: line("exit"),
+        terminal: None,
+    };
+    let exited = cx.update(|cx| Workspace::dispatch(Op::Thread(exit), cx));
+    cx.foreground_executor().block_test(exited).unwrap();
+    wait_until(cx, |cx| thread_status(cx, &thread) == ThreadStatus::Idle);
+    click(cx, window, "review-send");
+    wait_until(cx, |cx| {
+        notice_of(cx, &kagan).is_some_and(|notice| notice.contains("ended"))
+    });
+    click(cx, window, "change-notes.txt");
+    wait_until(cx, |cx| shows(cx, window, "review"));
+    assert_eq!(
+        cx.update(|cx| review_read::review_note_count(kagan.read(cx))),
+        1
+    );
 }
 
 #[gpui_kit::test]

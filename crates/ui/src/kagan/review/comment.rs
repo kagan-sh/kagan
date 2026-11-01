@@ -11,8 +11,7 @@ use gpui_kit::{
     AnyElement, AppContext as _, Context, Focusable as _, InteractiveElement as _, IntoElement,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
 };
-use kg_core::Workspace;
-use kg_domain::{DiffNote, DiffScope, DiffSide, Op, ThreadId, ThreadOp, format_notes};
+use kg_domain::{DiffNote, DiffScope, DiffSide, ThreadId, format_notes};
 
 use super::Kagan;
 use crate::ui_observe::UiObserveExt as _;
@@ -148,61 +147,40 @@ impl Kagan {
         cx.notify();
     }
 
-    pub(super) fn send_review(&mut self, cx: &mut Context<Self>) {
-        let Some(review) = self.screen.review_mut() else {
+    pub(super) fn send_review(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(review) = self.screen.review() else {
             return;
         };
+        let thread = review.thread.clone();
         let notes = self
             .review_drafts
             .0
-            .get(&review.thread)
+            .get(&thread)
             .map(|notes| notes.saved.clone())
             .unwrap_or_default();
-        if notes.is_empty() || review.sending {
+        if notes.is_empty() {
             return;
         }
-        review.sending = true;
-        review.send_error = None;
-        let thread = review.thread.clone();
-        let window = review.window;
-        let task = Workspace::dispatch(
-            Op::Thread(ThreadOp::Paste {
-                id: thread.clone(),
-                text: Some(clean(&format_notes(&notes))),
-                file: None,
-                terminal: None,
-            }),
-            cx,
-        );
-        review.send = cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| {
-                    let Some(review) = this.screen.review_mut() else {
-                        return;
-                    };
-                    if review.thread != thread {
-                        return;
-                    }
-                    review.sending = false;
-                    match result {
-                        Ok(_) => {
-                            if let Some(saved) = this.review_drafts.0.get_mut(&thread)
-                                && saved.saved == notes
-                            {
-                                saved.saved.clear();
-                            }
-                            this.close_review(window, cx);
-                        }
-                        Err(error) => {
-                            review.send_error = Some(format!("Could not paste review: {error}"));
-                        }
-                    }
-                    cx.notify();
-                });
+        let text = clean(&format_notes(&notes));
+        self.leave_review(window, cx);
+        let crate::kagan::Shown::Thread(agent) = self.screen.shown().clone() else {
+            return;
+        };
+        self.show_tab(None, window, cx);
+        let sent = agent.update(cx, |agent, cx| agent.paste_after_fit(text, cx));
+        cx.spawn(async move |this, cx| {
+            if !sent.await {
+                return;
+            }
+            _ = this.update(cx, |this, _| {
+                if let Some(saved) = this.review_drafts.0.get_mut(&thread)
+                    && saved.saved == notes
+                {
+                    saved.saved.clear();
+                }
             });
-        });
-        cx.notify();
+        })
+        .detach();
     }
 
     pub(super) fn inline_comments(
@@ -402,20 +380,11 @@ impl Kagan {
         let Some(review) = self.screen.review() else {
             return div().into_any_element();
         };
-        let mut panel = v_flex()
+        let panel = v_flex()
             .border_t_1()
             .border_color(cx.theme().border)
             .gap_1();
         let notes = self.review_drafts.0.get(&review.thread);
-        if let Some(error) = &review.send_error {
-            panel = panel.child(
-                div()
-                    .px_3()
-                    .pt_1()
-                    .text_color(cx.theme().danger)
-                    .child(error.clone()),
-            );
-        }
         let count = notes.map_or(0, |notes| notes.saved.len());
         let files = notes.map_or(0, |notes| {
             notes
@@ -503,7 +472,7 @@ impl Kagan {
                 })
                 .disabled(count == 0)
                 .tooltip("Paste review comments into this thread's terminal")
-                .on_click(cx.listener(|this, _, _, cx| this.send_review(cx))),
+                .on_click(cx.listener(|this, _, window, cx| this.send_review(window, cx))),
         );
         h_flex()
             .gap_2()
