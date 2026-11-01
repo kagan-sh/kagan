@@ -212,6 +212,30 @@ fn a_thread_keeps_its_conversation() {
 }
 
 #[test]
+fn last_started_is_the_newest_started_event() {
+    let mut store = store();
+    store.put_thread(&thread("thr_1", 1)).unwrap();
+    assert_eq!(store.last_started(&id("thr_1")).unwrap(), None);
+    store
+        .append_events(&id("thr_1"), Timestamp(5), [EventKind::Started])
+        .unwrap();
+    store
+        .append_events(
+            &id("thr_1"),
+            Timestamp(9),
+            [EventKind::Started, EventKind::Idle],
+        )
+        .unwrap();
+    store
+        .append_events(&id("thr_1"), Timestamp(12), [EventKind::Idle])
+        .unwrap();
+    assert_eq!(
+        store.last_started(&id("thr_1")).unwrap(),
+        Some(Timestamp(9))
+    );
+}
+
+#[test]
 fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
     let path = std::env::temp_dir().join(format!("kg-store-v1-{}.sqlite3", std::process::id()));
     let _ = std::fs::remove_file(&path);

@@ -46,7 +46,10 @@ async fn notices(id: &ThreadId, cx: &mut TestAppContext) -> Vec<String> {
         .await
         .into_iter()
         .filter_map(|event| match event.kind {
-            EventKind::Notice { text, .. } => Some(text),
+            EventKind::Notice { severity, text } => {
+                assert_eq!(severity, NoticeSeverity::Info, "{text}");
+                Some(text)
+            }
             _ => None,
         })
         .collect()
@@ -194,33 +197,138 @@ async fn a_restart_waits_for_start_again_and_then_resumes(cx: &mut TestAppContex
 async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     claude_config(&fixture, cx);
-    let run = fixture.dir.path().join("claude-run");
-    let program = fake_agent(&run, "claude");
-    let (id, _reap) = started(&fixture, &format!("{} --resume=abc", program.display()), cx).await;
-    let (args, _) = ran(&run);
-    assert!(after(&args, "--session-id").is_none(), "{args:?}");
-    assert_eq!(args.last().map(String::as_str), Some("--resume=abc"));
+    codex_home(&fixture, cx);
+    let lines = [
+        ("claude", "--resume=abc"),
+        ("claude", "-c"),
+        ("claude", "-r abc"),
+        ("claude", "-p hi"),
+        ("codex", "resume --last"),
+        ("codex", "fork --last"),
+    ];
+    for (number, (agent, rest)) in lines.into_iter().enumerate() {
+        let run = fixture.dir.path().join(format!("run-{number}"));
+        let program = fake_agent(&run, agent);
+        let (id, _reap) = started(&fixture, &format!("{} {rest}", program.display()), cx).await;
+        let (first, _) = ran(&run);
+        stop(&id, cx).await;
+        let again = start_again(&id, &run, cx).await;
+        for args in [&first, &again] {
+            assert!(after(args, "--session-id").is_none(), "{rest}: {args:?}");
+            assert!(args.ends_with(&person(rest)), "{rest}: {args:?}");
+        }
+        assert!(notices(&id, cx).await.is_empty(), "{rest}");
+    }
+}
+
+fn person(rest: &str) -> Vec<String> {
+    rest.split(' ').map(str::to_owned).collect()
+}
+
+fn codex_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    let home = fixture.dir.path().join("codex-home");
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.codex_home = Some(home.clone());
+    });
+    home
+}
+
+/// What Codex writes when a conversation begins: its first line names the folder and the UTC start.
+fn began(home: &Path, folder: &Path, at: chrono::DateTime<chrono::Utc>) -> String {
+    let conversation = Conversation::fresh().to_string();
+    let day = home
+        .join("sessions")
+        .join(at.format("%Y").to_string())
+        .join(at.format("%m").to_string())
+        .join(at.format("%d").to_string());
+    std::fs::create_dir_all(&day).unwrap();
+    let line = json!({
+        "timestamp": at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        "type": "session_meta",
+        "payload": {
+            "id": conversation,
+            "cwd": folder,
+            "timestamp": at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        },
+    });
+    std::fs::write(
+        day.join(format!("rollout-2026-01-01T00-00-00-{conversation}.jsonl")),
+        format!("{line}\n{{}}\n"),
+    )
+    .unwrap();
+    conversation
+}
+
+fn later() -> chrono::DateTime<chrono::Utc> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap();
+    chrono::DateTime::from_timestamp_millis(i64::try_from(now.as_millis()).unwrap()).unwrap()
+        + chrono::Duration::hours(1)
+}
+
+async fn codex_thread(
+    fixture: &Fixture,
+    cx: &mut TestAppContext,
+) -> (ThreadId, PathBuf, super::Reap) {
+    let run = fixture.dir.path().join("codex-run");
+    let program = fake_agent(&run, "codex");
+    let (id, reap) = started(fixture, &program.display().to_string(), cx).await;
+    ran(&run);
     stop(&id, cx).await;
-    let again = start_again(&id, &run, cx).await;
-    assert_eq!(again.last().map(String::as_str), Some("--resume=abc"));
-    assert!(notices(&id, cx).await.is_empty());
+    (id, run, reap)
 }
 
 #[gpui_kit::test]
-async fn start_again_on_codex_starts_a_new_conversation_and_says_so(cx: &mut TestAppContext) {
+async fn start_again_resumes_the_one_codex_conversation_begun_in_its_folder(
+    cx: &mut TestAppContext,
+) {
     let fixture = Fixture::new(cx).await;
-    let run = fixture.dir.path().join("codex-run");
-    let program = fake_agent(&run, "codex");
-    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
-    ran(&run);
-    assert!(notices(&id, cx).await.is_empty());
-    stop(&id, cx).await;
-    let again = start_again(&id, &run, cx).await;
-    assert!(!again.iter().any(|arg| arg == "resume"), "{again:?}");
-    assert!(
-        notices(&id, cx)
-            .await
-            .iter()
-            .any(|text| text.contains("cannot resume a Codex conversation")),
+    let home = codex_home(&fixture, cx);
+    let (id, run, _reap) = codex_thread(&fixture, cx).await;
+    began(
+        &home,
+        fixture.dir.path(),
+        later() - chrono::Duration::days(1),
     );
+    began(&home, &fixture.dir.path().join("elsewhere"), later());
+    std::fs::create_dir_all(fixture.dir.path().join("elsewhere")).unwrap();
+    let conversation = began(&home, fixture.dir.path(), later());
+    let again = start_again(&id, &run, cx).await;
+    assert!(
+        again.ends_with(&["resume".to_owned(), conversation.clone()]),
+        "{again:?}"
+    );
+    assert!(notices(&id, cx).await.is_empty());
+    began(&home, fixture.dir.path(), later());
+    stop(&id, cx).await;
+    let third = start_again(&id, &run, cx).await;
+    assert!(
+        third.ends_with(&["resume".to_owned(), conversation]),
+        "{third:?}"
+    );
+}
+
+#[gpui_kit::test]
+async fn start_again_on_codex_starts_a_new_conversation_when_none_or_two_match(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let home = codex_home(&fixture, cx);
+    let (id, run, _reap) = codex_thread(&fixture, cx).await;
+    for _ in 0..2 {
+        let again = start_again(&id, &run, cx).await;
+        assert!(!again.iter().any(|arg| arg == "resume"), "{again:?}");
+        stop(&id, cx).await;
+        began(&home, fixture.dir.path(), later());
+        began(&home, fixture.dir.path(), later());
+    }
+    let notices = notices(&id, cx).await;
+    assert!(
+        notices
+            .iter()
+            .all(|text| text.contains("could not tell which Codex conversation")),
+        "{notices:?}"
+    );
+    assert_eq!(notices.len(), 2);
 }

@@ -449,6 +449,18 @@ impl Store {
             .ok_or_else(|| not_found("thread", id))
     }
 
+    pub fn last_started(&self, id: &ThreadId) -> Result<Option<Timestamp>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT at FROM events WHERE thread_id = ?1
+                 AND json_extract(kind, '$.type') = 'started' ORDER BY seq DESC LIMIT 1",
+                [Text(id)],
+                |row| row.get(0).map(Timestamp),
+            )
+            .optional()?)
+    }
+
     pub fn set_conversation(&self, id: &ThreadId, conversation: Conversation) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE threads SET conversation = ?2 WHERE id = ?1",

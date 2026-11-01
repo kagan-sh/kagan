@@ -141,6 +141,8 @@ pub struct Workspace {
     pub(crate) program_environment: Option<crate::program::Environment>,
     /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
     pub(crate) claude_config: Option<std::path::PathBuf>,
+    /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
+    pub(crate) codex_home: Option<std::path::PathBuf>,
     pub(crate) ui: Option<crate::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
@@ -276,6 +278,7 @@ impl Workspace {
                         plugins: None,
                         program_environment: None,
                         claude_config: None,
+                        codex_home: None,
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),

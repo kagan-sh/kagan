@@ -1,5 +1,6 @@
 mod agent;
 mod archive;
+mod conversation;
 mod extra;
 mod halt;
 mod interaction;

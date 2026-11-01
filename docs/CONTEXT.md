@@ -115,11 +115,11 @@ _Avoid_: Marketplace (the decision-3 goal, not the file), catalog, store, regist
 A packaged set of instructions an agent can load for one kind of task.
 
 **Agent integration**:
-What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, also kagan's skills and the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The person can turn the extra arguments off with the `agent-integration` preference.
+What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, also kagan's skills. For both, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The person can turn the extra arguments off with the `agent-integration` preference.
 _Avoid_: Injection, agent setup, wrapper
 
 **Conversation**:
-What an agent remembers of a thread's program: what was said and done. Kagan gives `claude` an id for it at the first start, so Start again resumes it.
+What an agent remembers of a thread's program: what was said and done. Kagan gives `claude` an id for it at the first start, and finds the id `codex` picked, so Start again resumes it.
 _Avoid_: Session, chat
 
 **Panel**:
@@ -165,5 +165,5 @@ Badge	plugin-api.md	Badge	gpui-kit component name
 Sandbox	picker.rs	sandbox	Provider permission sandbox wording
 Sandbox	tests/commands.rs	sandbox	Provider permission test copy
 Sandbox	plugins/src/files.rs	sandbox	tempdir variable in path tests
-Session	thread/agent.rs	"--	Claude Code's own flag names
+Session	thread/conversation.rs	"--	Claude Code's own flag names
 Session	*	--session-id	Claude Code's own flag name```

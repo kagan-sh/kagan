@@ -84,7 +84,7 @@ async fn spawn(
 ) -> std::result::Result<Terminal, String> {
     let environment = crate::program::environment_of(this, cx);
     let program = resolve_program(&record.provider, environment.as_ref())?;
-    let integration = agent::integrate(this, record, &program, start, cx)
+    let integration = agent::integrate(this, record, &program, &folder, start, cx)
         .await
         .map_err(|error| error.to_string())?;
     let args = integration.args.into_iter().chain(program.args).collect();

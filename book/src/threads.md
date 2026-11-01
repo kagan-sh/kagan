@@ -55,7 +55,7 @@ If the setup script fails, the program does not start. The screen shows the erro
 - **Stop** (Cmd+.) ends the program. In a terminal: `kg thread stop <id>`.
 - **Start again** (Cmd+Shift+S) runs the same program again, in the same thread and folder. In a terminal: `kg thread start-again <id>`.
 
-A Claude Code thread picks up its conversation where you left it. If Claude Code no longer has that conversation, it starts a new one, and the thread's events say so. A Codex thread always starts a new conversation. With agent integration off in Settings, the program starts as a plain program again.
+A Claude Code thread picks up its conversation where you left it. If Claude Code no longer has that conversation, it starts a new one, and the thread's events say so. A Codex thread started as plain `codex` picks up its conversation too, when kagan can tell which one it was: the only one Codex began in that folder since the thread last started. If two Codex threads share a folder, or the line has other arguments, Codex starts a new conversation and the thread's events say so. With agent integration off in Settings, the program starts as a plain program again.
 
 kagan never starts a program again without you, also not after a restart.
 

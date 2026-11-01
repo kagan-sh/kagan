@@ -1225,8 +1225,8 @@ pub enum ThreadOp {
     },
     /// Run a stopped or recovered thread's program again, in its folder. Only a request does this.
     ///
-    /// A claude thread resumes its conversation; when it cannot, the agent starts a new one and the
-    /// thread says so. Codex always starts a new one.
+    /// A claude thread, and a plain codex thread, resume their conversation; when kagan cannot find
+    /// it, the agent starts a new one and the thread says so.
     StartAgain {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
