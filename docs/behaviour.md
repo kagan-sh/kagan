@@ -39,6 +39,13 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: the thread leaves the running status [book:window].
 - **Refused when**: a missing thread — `not-found` [op.rs]. An archived thread — `failed` [op.rs].
 
+### `StartAgain`
+
+- **Allowed when**: the thread exists, is not archived, its program is not running, and its folder is ready [decision 54].
+- **Changes**: runs the thread's program again in the same thread and folder, at the size the window last gave it [decision 54]. A `claude` thread resumes its conversation with `--resume` and the id kagan gave it at the first start with `--session-id`. When the thread has no id, or Claude Code has no conversation with it, the agent starts a new conversation with a new id and the thread gets an info notice. A `codex` line with no arguments resumes with `codex resume <id>`: the thread's saved id, or else the one Codex conversation that began in the thread's folder since its last start, which kagan then saves. None, two, or a line with other arguments start a new conversation with an info notice. A line that already picks its conversation (for `codex`, one that names `resume` or `fork`), and every line with agent integration off, gets nothing added and no notice [decision 54] [decision 49]. Opening the app never does this on its own [decision 54].
+- **Shows**: the thread, now `starting` or `active` [op.rs].
+- **Refused when**: a running thread — `the program is still running` — `invalid`. An archived thread — `restore the thread before starting it again` — `invalid`. A folder that is not ready — `invalid` [op.rs].
+
 ### `Input`, `Paste`, `Report`, `Resize`, `Scroll`, `Select`, `Copy`, `Screen`
 
 - **Allowed when**: the thread's program is running in the host [decision 46].

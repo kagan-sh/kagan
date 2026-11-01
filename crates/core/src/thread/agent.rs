@@ -9,6 +9,7 @@ use crate::database::Result;
 use crate::workspace::closed;
 use crate::{SocketLocation, Workspace, skill};
 
+use super::conversation;
 use super::run::ResolvedProgram;
 
 const PREFERENCE: &str = "agent-integration";
@@ -45,12 +46,18 @@ const CLAUDE_PERMISSION_FLAGS: &[&str] = &[
     "--allow-dangerously-skip-permissions",
 ];
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Start {
+    First,
+    Again,
+}
+
 pub(crate) struct Integration {
     pub(crate) env: Vec<(OsString, OsString)>,
     pub(crate) args: Vec<OsString>,
 }
 
-enum Known {
+pub(super) enum Known {
     Claude,
     Codex,
 }
@@ -84,6 +91,8 @@ pub(crate) async fn integrate(
     this: &WeakEntity<Workspace>,
     record: &kg_domain::Thread,
     program: &ResolvedProgram,
+    folder: &Path,
+    start: Start,
     cx: &mut AsyncApp,
 ) -> Result<Integration> {
     let env = variables(this, record, cx)?;
@@ -100,25 +109,39 @@ pub(crate) async fn integrate(
         .map_err(closed)?;
     let id = record.id.0.as_str();
     let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
-    let args = match known(&program.path) {
-        Some(known) if on && !subcommand(&known, &program.args) => {
-            match arguments(this, &known, id, &cli, socket.as_deref(), &data_dir, cx).await {
-                Ok(args) => args,
-                Err(error) => {
-                    let text = format!(
-                        "kagan could not set up the agent integration, so the program starts without it: {error}"
-                    );
-                    let notice = EventKind::Notice {
-                        severity: NoticeSeverity::Warning,
-                        text,
-                    };
-                    Workspace::events(this, record.id.clone(), vec![notice], cx).await?;
-                    Vec::new()
-                }
-            }
-        }
-        _ => Vec::new(),
+    let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
+    else {
+        return Ok(Integration {
+            env,
+            args: Vec::new(),
+        });
     };
+    let setup = async {
+        let mut args = arguments(this, &known, id, &cli, socket.as_deref(), &data_dir, cx).await?;
+        let (conversation, notice) =
+            conversation::args(this, &known, record, &program.args, folder, start, cx).await?;
+        args.extend(conversation);
+        Result::Ok((args, notice))
+    };
+    let (args, notice) = match setup.await {
+        Ok((args, notice)) => (
+            args,
+            notice.map(|text| (NoticeSeverity::Info, text.to_owned())),
+        ),
+        Err(error) => (
+            Vec::new(),
+            Some((
+                NoticeSeverity::Warning,
+                format!(
+                    "kagan could not set up the agent integration, so the program starts without it: {error}"
+                ),
+            )),
+        ),
+    };
+    if let Some((severity, text)) = notice {
+        let notice = EventKind::Notice { severity, text };
+        Workspace::events(this, record.id.clone(), vec![notice], cx).await?;
+    }
     Ok(Integration { env, args })
 }
 

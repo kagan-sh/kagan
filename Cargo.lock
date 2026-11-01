@@ -4837,6 +4837,7 @@ name = "kg-core"
 version = "0.1.0"
 dependencies = [
  "async-channel",
+ "chrono",
  "dunce",
  "futures",
  "gpui-kit",
@@ -4860,6 +4861,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "thiserror 2.0.21",
+ "uuid",
 ]
 
 [[package]]

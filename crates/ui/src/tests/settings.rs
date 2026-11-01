@@ -1453,7 +1453,9 @@ fn general_describes_what_integration_still_sets(cx: &mut TestAppContext) {
     let note = aria_label(cx, window, "setting-row-agent-integration-note").unwrap_or_default();
     assert!(note.contains("claude") && note.contains("codex"), "{note}");
     assert!(
-        note.contains("--mcp-config") && note.contains("-c mcp_servers.kagan.*"),
+        note.contains("--mcp-config")
+            && note.contains("--session-id or --resume")
+            && note.contains("-c mcp_servers.kagan.*"),
         "{note}"
     );
     assert!(note.contains("Off drops kagan’s tools"), "{note}");

@@ -223,7 +223,7 @@ pub(crate) async fn commit(
     Workspace::events(this, record.id.clone(), created_with(notices), cx).await?;
     Workspace::refresh(this, cx).await?;
     let entity = super::thread(this, &record.id, cx)?;
-    super::start_terminal(this, &entity, cx).await?;
+    super::start_terminal(this, &entity, super::agent::Start::First, cx).await?;
     Ok(OpResult::Thread(
         entity.read_with(cx, |thread, _| thread.record.clone()),
     ))

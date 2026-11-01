@@ -45,7 +45,7 @@ A plugin icon opens its tool below the threads or its page in the center. Click 
 
 The center shows the terminal of the selected thread. The terminal has scrollback, mouse support, and copy and paste.
 
-The thread header menu has **Pin**, **Archive**, **Rename…**, and **Save diagnostics**. When the program ends, the line under the terminal tells you why and shows **Start again**.
+The thread header menu has **Pin**, **Archive**, **Rename…**, and **Save diagnostics**. When the program ends, the line under the terminal tells you why and shows **Start again**. Start again picks up a Claude Code or Codex conversation where you left it, when kagan can find it.
 
 A program can rename its thread one time. A title that you set stays.
 

@@ -139,6 +139,10 @@ pub struct Workspace {
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
     pub(crate) program_environment: Option<crate::program::Environment>,
+    /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
+    pub(crate) claude_config: Option<std::path::PathBuf>,
+    /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
+    pub(crate) codex_home: Option<std::path::PathBuf>,
     pub(crate) ui: Option<crate::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
@@ -273,6 +277,8 @@ impl Workspace {
                         keymap: kg_domain::Keymap::default(),
                         plugins: None,
                         program_environment: None,
+                        claude_config: None,
+                        codex_home: None,
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),
@@ -1056,10 +1062,20 @@ impl Workspace {
         kinds: Vec<kg_domain::EventKind>,
         cx: &mut AsyncApp,
     ) -> Result<()> {
+        let at = time(this, cx)?;
+        Self::events_at(this, id, at, kinds, cx).await
+    }
+
+    pub(crate) async fn events_at(
+        this: &WeakEntity<Self>,
+        id: ThreadId,
+        at: kg_domain::Timestamp,
+        kinds: Vec<kg_domain::EventKind>,
+        cx: &mut AsyncApp,
+    ) -> Result<()> {
         let database = this
             .update(cx, |workspace, _| workspace.database.clone())
             .map_err(closed)?;
-        let at = time(this, cx)?;
         let started = kinds
             .iter()
             .any(|kind| matches!(kind, kg_domain::EventKind::Started));

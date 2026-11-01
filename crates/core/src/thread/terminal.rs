@@ -11,7 +11,7 @@ use crate::database::Result;
 use crate::workspace::{Request, closed, missing};
 use crate::{Thread, Workspace, WorkspaceEvent};
 
-use super::agent;
+use super::agent::{self, Start};
 use super::halt::status;
 use super::resolve_program;
 
@@ -25,6 +25,7 @@ pub(crate) const ARM: Duration = Duration::from_secs(2);
 pub(crate) async fn start(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
+    start: Start,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let record = thread.read_with(cx, |thread, _| thread.record.clone());
@@ -46,8 +47,10 @@ pub(crate) async fn start(
                 .unwrap_or((COLS, ROWS))
         })
         .map_err(closed)?;
+    // Taken before the program starts, so what it begins in that moment counts as after the start.
+    let at = crate::workspace::time(this, cx)?;
     let spawned = match folder {
-        Some(folder) => spawn(this, &record, folder, size, cx).await,
+        Some(folder) => spawn(this, &record, folder, size, start, cx).await,
         None => Err("the thread has no folder".to_owned()),
     };
     match spawned {
@@ -59,7 +62,7 @@ pub(crate) async fn start(
                 follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
-            Workspace::events(this, record.id, vec![EventKind::Started], cx).await?;
+            Workspace::events_at(this, record.id, at, vec![EventKind::Started], cx).await?;
             status(this, thread, ThreadStatus::Active, cx).await
         }
         Err(error) => {
@@ -78,11 +81,12 @@ async fn spawn(
     record: &kg_domain::Thread,
     folder: PathBuf,
     (cols, rows): (u16, u16),
+    start: Start,
     cx: &mut AsyncApp,
 ) -> std::result::Result<Terminal, String> {
     let environment = crate::program::environment_of(this, cx);
     let program = resolve_program(&record.provider, environment.as_ref())?;
-    let integration = agent::integrate(this, record, &program, cx)
+    let integration = agent::integrate(this, record, &program, &folder, start, cx)
         .await
         .map_err(|error| error.to_string())?;
     let args = integration.args.into_iter().chain(program.args).collect();
@@ -580,7 +584,7 @@ pub(crate) async fn start_again(
         ));
     }
     status(this, &thread, ThreadStatus::Starting, cx).await?;
-    start(this, &thread, cx).await?;
+    start(this, &thread, Start::Again, cx).await?;
     Ok(OpResult::Thread(
         thread.read_with(cx, |thread, _| thread.record.clone()),
     ))

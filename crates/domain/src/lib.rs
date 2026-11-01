@@ -17,8 +17,8 @@ pub use diff::{
 };
 pub use event::{Attachment, Event, EventKind, NoticeSeverity, Role, ToolStatus, TurnOutcome};
 pub use id::{
-    EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId, Timestamp,
-    plain_identifier,
+    Conversation, EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId,
+    Timestamp, plain_identifier,
 };
 pub use op::{
     Appearance, BranchList, ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, EnvironmentOp,

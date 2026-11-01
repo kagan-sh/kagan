@@ -1,9 +1,9 @@
 use std::{fmt::Display, io::Read as _, path::Path};
 
 use kg_domain::{
-    Environment, EnvironmentId, Event, EventKind, Order, PendingInteraction, PendingInteractionId,
-    Plugin, PluginId, Project, ProjectId, Section, SectionId, Thread, ThreadId, ThreadMark,
-    Timestamp,
+    Conversation, Environment, EnvironmentId, Event, EventKind, Order, PendingInteraction,
+    PendingInteractionId, Plugin, PluginId, Project, ProjectId, Section, SectionId, Thread,
+    ThreadId, ThreadMark, Timestamp,
 };
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Row, Transaction, params};
 use serde_json::Value;
@@ -17,7 +17,8 @@ use crate::{
 // Marks a file this schema made, so a pre-release file is never mistaken for one (decision 106).
 pub(crate) const APPLICATION_ID: i32 = 0x6b67_6e31;
 
-pub(crate) const MIGRATIONS: &[&str] = &[r"
+pub(crate) const MIGRATIONS: &[&str] = &[
+    r"
 PRAGMA application_id = 1801940529;
 CREATE TABLE projects (
     id TEXT PRIMARY KEY,
@@ -128,7 +129,9 @@ CREATE TABLE plugin_values (
     PRIMARY KEY (plugin_id, key)
 ) WITHOUT ROWID;
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
-"];
+",
+    "ALTER TABLE threads ADD COLUMN conversation TEXT;",
+];
 
 // Matches `kg_terminal::SNAPSHOT_MAX`. History and the visible redraw share this bound.
 const SCREEN_MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -428,6 +431,40 @@ impl Store {
                     ELSE latest_attention_at END
              WHERE id = ?1",
             params![Text(id), Text(status), at.0],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    pub fn conversation(&self, id: &ThreadId) -> Result<Option<Conversation>> {
+        let conversation: Option<Text<Option<Conversation>>> = self
+            .conn
+            .query_row(
+                "SELECT conversation FROM threads WHERE id = ?1",
+                [Text(id)],
+                |row| row.get(0),
+            )
+            .optional()?;
+        conversation
+            .map(|Text(conversation)| conversation)
+            .ok_or_else(|| not_found("thread", id))
+    }
+
+    pub fn last_started(&self, id: &ThreadId) -> Result<Option<Timestamp>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT at FROM events WHERE thread_id = ?1
+                 AND json_extract(kind, '$.type') = 'started' ORDER BY seq DESC LIMIT 1",
+                [Text(id)],
+                |row| row.get(0).map(Timestamp),
+            )
+            .optional()?)
+    }
+
+    pub fn set_conversation(&self, id: &ThreadId, conversation: Conversation) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET conversation = ?2 WHERE id = ?1",
+            params![Text(id), Text(conversation)],
         )?;
         found(changed, "thread", id)
     }

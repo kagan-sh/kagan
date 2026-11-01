@@ -13,6 +13,8 @@ use crate::database::Result;
 mod details;
 #[cfg(unix)]
 mod extra;
+#[cfg(unix)]
+mod resume;
 mod search;
 
 struct Fixture {
@@ -4149,7 +4151,8 @@ async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext
     assert_eq!(args[3], agent.display().to_string());
     assert_eq!(args[4], "--append-system-prompt-file");
     assert_eq!(args[5], files.join("note.txt").display().to_string());
-    assert_eq!(args[6], "--person-arg");
+    assert_eq!(args[6], "--session-id");
+    assert_eq!(args[8], "--person-arg");
     let mcp = std::fs::read_to_string(files.join("mcp.json")).unwrap();
     let mcp: serde_json::Value = serde_json::from_str(&mcp).unwrap();
     assert_eq!(

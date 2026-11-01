@@ -943,7 +943,9 @@ Options:
 ## `kg thread start-again`
 
 ```text
-Run a stopped or recovered thread's program again, in its folder. Only a request does this
+Run a stopped or recovered thread's program again, in its folder. Only a request does this.
+
+A claude thread, and a plain codex thread, resume their conversation; when kagan cannot find it, the agent starts a new one and the thread says so.
 
 Usage: kg thread start-again <ID>
 
@@ -953,7 +955,7 @@ Arguments:
 
 Options:
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## `kg thread tools`
