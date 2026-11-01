@@ -133,7 +133,7 @@ jobs:
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   linux-tests:
@@ -152,7 +152,7 @@ jobs:
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
@@ -174,7 +174,7 @@ jobs:
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   macos-tests:
@@ -195,7 +195,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: macos
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && matrix.shard == 1 }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 1 }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
@@ -234,7 +234,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows
-          save-if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && matrix.shard == 1 }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 1 }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
