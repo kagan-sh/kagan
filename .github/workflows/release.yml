@@ -233,8 +233,10 @@ jobs:
           set -eu
           shopt -s nullglob
           rm -f target/packager/*.dmg.sig target/packager/*.deb.sig
+          arch=$(uname -m)
+          if [ "$arch" = arm64 ]; then arch=aarch64; fi
           for file in target/packager/kagan.app.tar.gz*; do
-            name=kagan_${VERSION}_aarch64${file#target/packager/kagan}
+            name=kagan_${VERSION}_${arch}${file#target/packager/kagan}
             mv -- "$file" "target/packager/$name"
             echo "$file -> target/packager/$name"
           done
@@ -301,8 +303,8 @@ jobs:
             exit 1
           fi
           # kagan reads releases/latest/download/update.json (decision 113).
+          shopt -s nullglob
           asset() {
-            shopt -s nullglob
             local files=(dist/$2)
             if [ "${#files[@]}" -ne 1 ] || [ ! -f "${files[0]}.sig" ]; then
               echo "expected one signed $2, found ${#files[@]}" >&2
@@ -312,8 +314,24 @@ jobs:
             jq -n --arg key "$1" --arg url "https://github.com/$GH_REPO/releases/download/$TAG/$name" \
               --rawfile signature "${files[0]}.sig" '{($key): {url: $url, signature: $signature}}'
           }
+          # An Intel app, or a universal one, serves macos-x86_64 when the release has one.
+          mac() {
+            local pattern
+            for pattern in "kagan_*_$1.app.tar.gz" 'kagan_*_universal.app.tar.gz'; do
+              local files=(dist/$pattern)
+              if [ "${#files[@]}" -gt 0 ]; then
+                asset "macos-$1" "$pattern"
+                return
+              fi
+            done
+            if [ "$1" = aarch64 ]; then
+              echo "no app archive for macos-aarch64" >&2
+              exit 1
+            fi
+          }
           {
-            asset macos-aarch64 'kagan_*_aarch64.app.tar.gz'
+            mac aarch64
+            mac x86_64
             asset windows-x86_64 'kagan_*_x64.exe'
             asset linux-x86_64 'kagan_*_x86_64.AppImage'
           } | jq -s --arg version "${TAG#v}" --arg notes "https://github.com/$GH_REPO/releases/tag/$TAG" \
