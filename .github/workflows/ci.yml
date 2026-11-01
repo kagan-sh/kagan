@@ -123,7 +123,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-26.04]
+        os: [ubuntu-24.04, ubuntu-26.04, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -147,18 +147,23 @@ jobs:
         run: |
           df -h / ; free -m ; nproc
           du -sh target ~/.cargo 2>/dev/null; ls target 2>/dev/null; du -sh target/* 2>/dev/null
+          sudo swapoff -a; free -m
           cat > "$RUNNER_TEMP/watch.sh" <<'EOF'
-          while sleep 15; do
-            { echo "=== $(date -u +%T)"; df -h / | tail -1; free -m | sed -n 2,3p; cat /proc/loadavg; echo "procs $(ps -e --no-headers | wc -l)"
-              ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args --sort=-rss | head -8 | cut -c1-220; } >> "$RUNNER_TEMP/watch.log"
-            disk=$(df --output=avail -k / | tail -1); mem=$(awk '/MemAvailable/{print $2}' /proc/meminfo)
-            if [ "$disk" -lt 1500000 ] || [ "$mem" -lt 700000 ]; then
-              { echo "!!! low disk=${disk}k mem=${mem}k"; ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args --sort=-rss | head -60 | cut -c1-300; du -sh target/* 2>/dev/null; } >> "$RUNNER_TEMP/watch.log"
-              pkill -INT -f cargo-nextest; sleep 5; pkill -KILL -f 'rustc|cargo|nextest'; sleep 60
+          i=0
+          while sleep 1; do
+            i=$((i + 1))
+            if [ $((i % 15)) -eq 0 ]; then
+              { echo "=== $(date -u +%T)"; df -h / | tail -1; free -m | sed -n 2,3p; cat /proc/loadavg; echo "procs $(ps -e --no-headers | wc -l)"
+                ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args --sort=-rss | head -6 | cut -c1-220; } >> "$RUNNER_TEMP/watch.log"
+            fi
+            mem=$(awk '/MemAvailable/{print $2}' /proc/meminfo)
+            if [ "$mem" -lt 2000000 ]; then
+              top=$(ps -eo pid= --sort=-rss | head -1)
+              { echo "!!! $(date -u +%T) low mem=${mem}k, killing $top"; ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args --sort=-rss | head -25 | cut -c1-300; } | tee -a "$RUNNER_TEMP/watch.log" > "$RUNNER_TEMP/killed.log"
+              kill -9 "$top"
             fi
           done
           EOF
-          nohup bash "$RUNNER_TEMP/watch.sh" > /dev/null 2>&1 &
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Build tests
         run: |
@@ -167,10 +172,11 @@ jobs:
       - name: Tests
         run: |
           grep PRETTY /etc/os-release; uname -r; ulimit -u 6000; ulimit -u
+          nohup bash "$RUNNER_TEMP/watch.sh" > /dev/null 2>&1 &
           timeout -k 30 12m cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all || { code=$?; echo "nextest exit $code"; ps -eo pid,ppid,pgid,sid,etimes,stat,pcpu,rss,args --sort=-etimes | head -80 | cut -c1-250; exit 1; }
       - name: Watch log
         if: always()
-        run: cat "$RUNNER_TEMP/watch.log"; df -h /; ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args | cut -c1-200
+        run: cat "$RUNNER_TEMP/killed.log"; cat "$RUNNER_TEMP/watch.log"; df -h /; ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args | cut -c1-200
 
   macos:
     needs: scope
