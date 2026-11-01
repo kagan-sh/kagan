@@ -236,4 +236,4 @@ A `secret` setting (decision 104):
 
 ## Measured by the spike
 
-An earlier spike measured a job round trip at p50 16 µs, each plugin after the first at +3.2 MiB and 15 ms to load (runtime once: +30 MiB), and JS-described drawing at about 3.5 µs per path segment, so large scenes use a native kagan drawing component.
+An earlier spike measured a job round trip at p50 16 µs, each plugin after the first at +3.2 MiB and 15 ms to load (runtime once: +30 MiB), and JS-described drawing at about 3.5 µs per path segment; a plugin that draws large scenes should keep its paths few.
