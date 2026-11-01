@@ -73,7 +73,7 @@ In a git folder, Details also shows the branch, its commits ahead of and behind 
 
 ## Questions
 
-**Questions** shows each question that waits for you, with the thread title. It shows approvals before other questions, such as a plugin install or a thread delete. An install card selects **Cancel** first, so an accidental Enter does not install.
+**Questions** shows each question that waits for you, with the thread title. It shows approvals before other questions. You can approve a plugin install. You also approve when you delete a thread. An install card selects **Cancel** first, so an accidental Enter does not install.
 
 If the right sidebar does not show, its toggle shows the number of questions. A question that only you can answer opens the sidebar over the center.
 

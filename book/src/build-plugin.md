@@ -35,7 +35,9 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 - `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center.
 - `tools` and `skills`: agent tools and skills. The starter has none.
 
-kagan refuses a manifest with an unknown key. Run `kg plugin check ./hello` to find manifest errors. The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has examples that work.
+kagan refuses a manifest with an unknown key. Run `kg plugin check ./hello` to find manifest errors. [docs/plugin-api.md](https://github.com/kagan-sh/kagan/blob/main/docs/plugin-api.md) lists every key, power, and the JavaScript API.
+
+The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has a panel, a sidebar, a review, an overlay, a `kg` command, and a theme.
 
 ## Share it
 

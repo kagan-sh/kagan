@@ -3,7 +3,7 @@
   kagan
 </h3>
 
-<p align="center">A desktop app for coding with agents</p>
+<p align="center">A desktop app where agents write code with you</p>
 
 <p align="center">
   <a href="#install">Install</a> · <a href="https://docs.kagan.sh/">Guide</a> · <a href="https://docs.kagan.sh/plugins.html">Plugins</a>
@@ -16,7 +16,7 @@
   </picture>
 </p>
 
-kagan runs your coding agents in real terminals. Each thread runs one program in its own folder.
+kagan runs your agents in real terminals. Each thread runs one program in its own folder.
 
 > [!WARNING]
 > kagan is early (0.1.0). CI tests it on macOS, Linux, and Windows, but most daily use is on macOS.
@@ -45,7 +45,7 @@ A program runs with your user access and gets your environment variables. Run on
 
 For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Use Settings → Agents to disable this integration.
 
-An agent can use `kg` to control threads and the window. It cannot answer an approval. Only you can approve a plugin install, more plugin powers, or a thread delete.
+An agent can use `kg` to control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve when you delete a thread.
 
 A plugin gets only the powers that you approve. [Plugins](book/src/plugins.md#install) lists the possible powers.
 

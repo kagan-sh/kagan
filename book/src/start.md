@@ -54,7 +54,7 @@ Homebrew puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
 
    If you cloned kagan to a different folder, change `$HOME/kagan` to that folder. On Windows, add the `target\release` folder to your `Path`.
 
-Run `kg` to open kagan later.
+Run `kg` to open kagan later. On first start, kagan makes its default data folder, `~/.kagan`.
 
 ## First thread
 

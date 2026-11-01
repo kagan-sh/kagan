@@ -21,7 +21,10 @@ Click **Discard comments** to delete comments that you did not send.
 | --- | --- |
 | J, K | Next file, previous file |
 | N, P | Next change, previous change |
+| Alt+] and Alt+[ | Next change, previous change |
 | V | Mark the file as viewed |
+| Cmd+F | Find in diff |
+| Alt+Z | Wrap lines |
 | Cmd+G, Cmd+Alt+G | Next match, previous match in a review search |
 | Escape | Return to the terminal |
 

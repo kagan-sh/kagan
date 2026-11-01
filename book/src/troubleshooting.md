@@ -20,7 +20,9 @@ This error can occur after the program stops. Click **Start again**, then send t
 
 ## A plugin fails
 
-Read the plugin logs:
+In Settings → Plugins, click **Details…** for the plugin, then click **Logs**. A failed plugin card in the right panel also has **Logs**.
+
+From a terminal:
 
 ```bash
 kg plugin logs <id> --follow
@@ -32,16 +34,8 @@ If a plugin draws the thread list or the review, kagan returns to the built-in v
 
 ## A theme has an error
 
-Open Settings → Appearance and read the error on the theme card. Correct the theme file. The window keeps the last good colors until you correct the file.
-
-`kg theme folder` shows the folder of your themes.
+[Themes](themes.md#make-your-own-theme) covers theme errors.
 
 ## Report a problem
 
-Click **Save diagnostics** in the thread menu, or run:
-
-```bash
-kg diagnostics export
-```
-
-The file has thread and plugin status. It has no terminal text, thread titles, or environment variables. Attach the file to a [GitHub issue](https://github.com/kagan-sh/kagan/issues).
+[Your data and privacy](data.md#diagnostics) explains the diagnostics file. Attach the file to a [GitHub issue](https://github.com/kagan-sh/kagan/issues).

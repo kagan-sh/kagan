@@ -30,13 +30,13 @@ kagan runs each known agent on your `PATH` with `--version` to show its version.
 
 A program runs with your user access and gets your environment variables. These variables can include API keys. Run only programs that you trust.
 
-The program also gets `kg`. With `kg`, it can control threads and the window. It cannot answer an approval. Only you can approve a plugin install, more plugin powers, or a thread delete.
+The program also gets `kg`. With `kg`, it can control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve when you delete a thread.
 
 For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Claude Code also gets the kagan skills. Use Settings → Agents to disable this integration.
 
 ## Plugins
 
-A plugin gets only the powers that you approve. [Plugins](plugins.md#install) lists the powers. A plugin that can run `git` can use your git credentials, such as SSH keys and a GitHub token.
+A plugin gets only the powers that you approve. [Plugins](plugins.md#install) covers powers and git credentials.
 
 ## Diagnostics
 

@@ -6,7 +6,7 @@ A thread runs one program in one folder. The program can be an agent, a shell, o
 
 Click **+** next to a project, or press Cmd+N. The New thread screen lists:
 
-- Claude Code and Codex, also when your computer does not have them.
+- Claude Code and Codex, also if your computer does not have them.
 - Other known agents on your `PATH`.
 - Your login shell and recent programs.
 
@@ -48,7 +48,7 @@ From a terminal, `--environment` selects the folder:
 A repository can have a `.kagan/setup` script and a `.kagan/teardown` script in git. kagan runs `.kagan/setup` in a new worktree before the program starts. It runs `.kagan/teardown` before it removes the worktree. These scripts do not run in a project folder or a Personal folder.
 
 > [!CAUTION]
-> BEFORE YOU START A THREAD IN A REPOSITORY THAT YOU DO NOT TRUST, CLICK **Show script** AND READ THE SCRIPT. THE SCRIPT CAN CAUSE DAMAGE TO YOUR FILES.
+> Before you start a thread in a repository that you do not trust, click **Show script** and read the script. The script can cause damage to your files.
 
 If the setup script fails, the program does not start. The screen shows the error and **Retry**. Add the files that the script makes to `.gitignore`.
 
@@ -57,7 +57,7 @@ If the setup script fails, the program does not start. The screen shows the erro
 - Click **Stop**, or press Cmd+., to end the program. In a terminal, run `kg thread stop <id>`.
 - Click **Start again**, or press Cmd+Shift+S, to run the same program in the same thread and folder. In a terminal, run `kg thread start-again <id>`.
 
-kagan never starts a program again without your request, also after a restart.
+kagan never starts a program again without your request, and not after a restart.
 
 ## When a program ends
 

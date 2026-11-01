@@ -25,7 +25,7 @@ kagan reads skills from four places. If two places have a skill with the same na
 If one place has two skills with the same name, kagan uses neither. `kg skill list` shows the error.
 
 > [!CAUTION]
-> BEFORE YOU START AN AGENT IN A REPOSITORY THAT YOU DO NOT TRUST, READ THE FILES IN `.kagan/skills`. AN AGENT CAN OBEY INSTRUCTIONS THAT CAUSE DAMAGE TO YOUR FILES.
+> Before you start an agent in a repository that you do not trust, read the files in `.kagan/skills`. An agent can obey instructions that cause damage to your files.
 
 The agent sees each skill's name and description. It loads the instructions only when it needs them.
 
