@@ -780,7 +780,11 @@ fn selection(
 }
 
 /// The row and column of the first line that is exactly `text`, on the shown terminal.
-fn shown_row(cx: &mut TestAppContext, kagan: &Entity<Kagan>, text: &str) -> (usize, usize) {
+pub(super) fn shown_row(
+    cx: &mut TestAppContext,
+    kagan: &Entity<Kagan>,
+    text: &str,
+) -> (usize, usize) {
     let grid = cx
         .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
         .expect("a grid");
@@ -795,7 +799,7 @@ fn shown_row(cx: &mut TestAppContext, kagan: &Entity<Kagan>, text: &str) -> (usi
 }
 
 /// The pixel at the middle of a cell of the shown terminal, from its bounds and its grid's size.
-fn cell_point(
+pub(super) fn cell_point(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
     kagan: &Entity<Kagan>,

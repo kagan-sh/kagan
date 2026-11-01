@@ -5,7 +5,7 @@ use gpui_kit::component::{IconName, Selectable as _, Sizable as _, h_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
     IntoElement, ParentElement as _, Role, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, actions,
+    Styled as _, Task, Window, actions, div,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, TerminalOp, Thread, ThreadId, ThreadOp, WindowOp};
@@ -18,7 +18,13 @@ use crate::ui_registry::Facts;
 
 actions!(
     kagan,
-    [NewTerminal, CloseTerminal, NextTerminal, PreviousTerminal]
+    [
+        NewTerminal,
+        CloseTerminal,
+        NextTerminal,
+        PreviousTerminal,
+        OpenLocalLink
+    ]
 );
 
 pub(super) fn bind(cx: &mut App) {
@@ -28,6 +34,9 @@ pub(super) fn bind(cx: &mut App) {
     cx.on_action(|_: &PreviousTerminal, cx| {
         Workspace::dispatch(Op::Window(WindowOp::PreviousTerminal), cx).detach();
     });
+    cx.on_action(|_: &OpenLocalLink, cx| {
+        Workspace::dispatch(Op::Window(WindowOp::OpenLocalLink), cx).detach();
+    });
 }
 
 pub(super) fn perform(op: WindowOp, cx: &mut App) {
@@ -35,18 +44,23 @@ pub(super) fn perform(op: WindowOp, cx: &mut App) {
         return;
     };
     let _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |this, cx| {
-            this.step_tab(op == WindowOp::NextTerminal, window, cx);
+        kagan.update(cx, |this, cx| match (op, this.tabs.local.clone()) {
+            (WindowOp::OpenLocalLink, Some(link)) => cx.open_url(&link),
+            (WindowOp::OpenLocalLink, None) => window.play_system_bell(),
+            _ => this.step_tab(op == WindowOp::NextTerminal, window, cx),
         });
     });
 }
 
-/// The extra terminals of the thread on screen, and which tab shows. `None` is the program's terminal.
+/// The extra terminals of the thread on screen, which tab shows (`None` is the program's terminal),
+/// and the newest local link its terminals printed.
 #[derive(Default)]
 pub(super) struct Tabs {
     thread: Option<ThreadId>,
     views: Vec<(u32, Entity<TerminalView>)>,
     shown: Option<u32>,
+    local: Option<String>,
+    looking: Option<Task<()>>,
 }
 
 impl Tabs {
@@ -91,6 +105,7 @@ impl Kagan {
                 thread: thread.clone(),
                 ..Tabs::default()
             };
+            self.load_local_link(cx);
         }
         let Some(id) = thread else {
             return;
@@ -210,7 +225,8 @@ impl Kagan {
         thread: &Thread,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        if self.tabs.views.is_empty() {
+        let chip = self.local_link_chip(cx);
+        if self.tabs.views.is_empty() && chip.is_none() {
             return None;
         }
         let program = kg_domain::split_program(&thread.provider)
@@ -244,25 +260,93 @@ impl Kagan {
                 )
             })
             .collect();
-        Some(
+        let tabs = (!extras.is_empty()).then(|| {
             h_flex()
                 .id("terminal-tabs")
                 .role(Role::TabList)
                 .ui_container()
-                .flex_none()
-                .w_full()
                 .min_w_0()
                 .overflow_x_scroll()
                 .gap_1()
-                .px_2()
-                .py_1()
-                .border_b_1()
-                .border_color(border)
                 .child(agent)
                 .children(extras)
+        });
+        Some(
+            h_flex()
+                .id("terminal-strip")
+                .ui_container()
+                .flex_none()
+                .w_full()
+                .min_w_0()
+                .h_9()
+                .gap_2()
+                .px_2()
+                .border_b_1()
+                .border_color(border)
+                .children(tabs)
+                .child(div().flex_1())
+                .children(chip)
                 .into_any_element(),
         )
     }
+}
+
+impl Kagan {
+    pub(super) fn load_local_link(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.tabs.thread.clone() else {
+            return;
+        };
+        let read = Workspace::dispatch(Op::Thread(ThreadOp::Links { id: id.clone() }), cx);
+        self.tabs.looking = Some(cx.spawn(async move |this, cx| {
+            let Ok(OpResult::Links(links)) = read.await else {
+                return;
+            };
+            _ = this.update(cx, |this, cx| {
+                let local = links
+                    .into_iter()
+                    .rev()
+                    .find(|link| local_host(link).is_some());
+                if this.tabs.thread.as_ref() == Some(&id) && this.tabs.local != local {
+                    this.tabs.local = local;
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
+    /// "Open localhost:3000" at the end of the tab row, for the newest local link the thread printed.
+    fn local_link_chip(&self, cx: &App) -> Option<AnyElement> {
+        let host = local_host(self.tabs.local.as_deref()?)?;
+        let label = format!("Open {host}");
+        Some(
+            control(
+                "open-local-link",
+                Facts::button(label.clone()),
+                Button::new("open-local-link-button")
+                    .small()
+                    .outline()
+                    .label(label.clone())
+                    .tooltip(tip(&label, &OpenLocalLink, cx))
+                    .on_click(dispatch(OpenLocalLink)),
+            )
+            .into_any_element(),
+        )
+    }
+}
+
+/// The host and port of a link to this machine, such as `localhost:3000`.
+fn local_host(link: &str) -> Option<&str> {
+    let (_, rest) = link.split_once("://")?;
+    let host = rest.split(['/', '?', '#']).next()?;
+    let name = match host.strip_prefix('[') {
+        Some(inner) => &host[..inner.find(']')? + 2],
+        None => host.split(':').next()?,
+    };
+    matches!(
+        name,
+        "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]" | "[::]"
+    )
+    .then_some(host)
 }
 
 fn close(id: ThreadId, number: u32, cx: &mut App) {

@@ -60,6 +60,8 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - Copy is Cmd+C, or Ctrl+Shift+C off macOS. Paste is Cmd+V, or Ctrl+Shift+V off macOS.
 - A program that asks for mouse reports (DECSET 1000, 1002 or 1003) gets clicks, drags and the wheel. It gets them in the SGR form when it asks for 1006, and in the legacy form otherwise. Shift overrides this: the press selects and the wheel scrolls in the window.
 - + in the title row opens an extra terminal and shows it. While one is open, tabs over the terminal show the program first, then each extra terminal; the shown tab is filled. A click or Cmd+Alt+] and Cmd+Alt+[ switch tabs, and focus the shown terminal. × on a tab, or Cmd+Shift+W on a shown extra terminal, closes it; the tab before it shows. A terminal opened with `kg` adds a tab and does not change the shown one. Showing another thread shows its program's tab [decision 110].
+- Cmd-click, or Ctrl-click off macOS, on an http or https link opens it in the system browser and does nothing else: no selection and no mouse report. A link the program set with OSC 8 opens its target; other links are read from the text, across wrapped rows [decision 112].
+- When the thread's terminals printed a local link (localhost, 127.0.0.1, 0.0.0.0, [::1] or [::]), the row over the terminal shows Open host:port at its right end for the newest one. The button, Cmd+Alt+O or `kg window open-local-link` opens it [decision 112].
 
 ### `Archive`
 
@@ -144,6 +146,13 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Changes**: nothing. It never fetches, never writes to the repository, and runs no `git status` [decision 111].
 - **Shows**: the folder, the environment kind, the program line, and, in a git folder, the branch (none on a detached HEAD), the base branch with how many commits the branch is ahead of and behind it (none when the repository has no base branch), and the last five commits with short revs, newest first. Outside git, `git` is none [decision 111].
 - **Refused when**: a missing thread — `not-found`. A thread with no folder — `invalid` [op.rs].
+
+### `Links`
+
+- **Allowed when**: the thread exists [decision 112].
+- **Changes**: nothing.
+- **Shows**: every http and https link the thread's terminals keep, as plain text, the program's terminal first and then each extra terminal in number order, each link once at the last place it was printed [decision 112].
+- **Refused when**: a missing thread — `not-found` [op.rs].
 
 ### `Search`
 

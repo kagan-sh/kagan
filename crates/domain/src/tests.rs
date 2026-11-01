@@ -614,7 +614,8 @@ SearchThreads\tsecondary-alt-f\tctrl-shift-alt-f\tctrl-shift-alt-f
 NewTerminal\tsecondary-t\tctrl-shift-t\tctrl-shift-t
 CloseTerminal\tsecondary-shift-w\tctrl-shift-w\tctrl-shift-w
 NextTerminal\tsecondary-alt-]\tctrl-shift-alt-]\tctrl-shift-alt-]
-PreviousTerminal\tsecondary-alt-[\tctrl-shift-alt-[\tctrl-shift-alt-["
+PreviousTerminal\tsecondary-alt-[\tctrl-shift-alt-[\tctrl-shift-alt-[
+OpenLocalLink\tsecondary-alt-o\tctrl-shift-alt-o\tctrl-shift-alt-o"
     );
 }
 

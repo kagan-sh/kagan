@@ -217,3 +217,39 @@ async fn quitting_ends_extra_terminals(cx: &mut TestAppContext) {
         .update(cx, |workspace, _| workspace.end_programs());
     assert!(numbers(&id, cx).await.is_empty());
 }
+
+async fn links(id: &ThreadId, cx: &mut TestAppContext) -> Vec<String> {
+    match op(Op::Thread(ThreadOp::Links { id: id.clone() }), cx)
+        .await
+        .unwrap()
+    {
+        OpResult::Links(links) => links,
+        other => panic!("{other:?}"),
+    }
+}
+
+#[gpui_kit::test]
+async fn links_lists_what_every_terminal_printed_newest_last(cx: &mut TestAppContext) {
+    let fixture = shell_fixture(cx).await;
+    let (id, _reap) = started(&fixture, "/bin/sh", cx).await;
+    type_into(
+        &id,
+        None,
+        "printf 'Local: http%s\\n' '://localhost:3000/'\n",
+        cx,
+    )
+    .await;
+    let number = open(&id, cx).await;
+    type_into(
+        &id,
+        Some(number),
+        "printf 'at http%s.\\n' '://127.0.0.1:5173'\n",
+        cx,
+    )
+    .await;
+    until(cx, async |cx| links(&id, cx).await.len() == 2).await;
+    assert_eq!(
+        links(&id, cx).await,
+        ["http://localhost:3000/", "http://127.0.0.1:5173"]
+    );
+}

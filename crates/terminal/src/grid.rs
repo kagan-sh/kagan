@@ -21,6 +21,10 @@ pub struct Grid {
     pub mouse: Option<Mouse>,
     /// The selected columns of each line: (line, columns).
     pub selection: Vec<(usize, Range<usize>)>,
+    /// Whether each line goes on in the next one, because the terminal wrapped it.
+    pub wrapped: Vec<bool>,
+    /// Links the program set on its text (OSC 8): (line, columns, uri).
+    pub hyperlinks: Vec<(usize, Range<usize>, String)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -123,6 +127,8 @@ pub(crate) fn grid<T: EventListener>(term: &Term<T>) -> Grid {
     let rows = term.screen_lines();
     let mut lines = vec![Vec::with_capacity(term.columns()); rows];
     let mut selection: Vec<(usize, Range<usize>)> = Vec::new();
+    let mut wrapped = vec![false; rows];
+    let mut hyperlinks: Vec<(usize, Range<usize>, String)> = Vec::new();
     for indexed in content.display_iter {
         let row = usize::try_from(indexed.point.line.0 + offset).ok();
         let Some(line) = row.and_then(|row| lines.get_mut(row).map(|line| (row, line))) else {
@@ -139,6 +145,20 @@ pub(crate) fn grid<T: EventListener>(term: &Term<T>) -> Grid {
                     columns.end += 1;
                 }
                 _ => selection.push((line.0, column..column + 1)),
+            }
+        }
+        let column = indexed.point.column.0;
+        if indexed.cell.flags.contains(Flags::WRAPLINE) {
+            wrapped[line.0] = true;
+        }
+        if let Some(link) = indexed.cell.hyperlink() {
+            match hyperlinks.last_mut() {
+                Some((row, columns, uri))
+                    if *row == line.0 && columns.end == column && uri == link.uri() =>
+                {
+                    columns.end += 1;
+                }
+                _ => hyperlinks.push((line.0, column..column + 1, link.uri().to_owned())),
             }
         }
         line.1.push(cell(indexed.cell, content.colors));
@@ -160,6 +180,8 @@ pub(crate) fn grid<T: EventListener>(term: &Term<T>) -> Grid {
         app_cursor: mode.contains(TermMode::APP_CURSOR),
         bracketed_paste: mode.contains(TermMode::BRACKETED_PASTE),
         selection,
+        wrapped,
+        hyperlinks,
         mouse: mode.intersects(TermMode::MOUSE_MODE).then(|| Mouse {
             motion: if mode.contains(TermMode::MOUSE_MOTION) {
                 Motion::All

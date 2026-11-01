@@ -2,7 +2,7 @@ use std::ffi::OsString;
 
 use gpui_kit::{AppContext as _, AsyncApp, Context, WeakEntity};
 use kg_domain::{EnvironmentStatus, ExtraTerminal, OpError, OpResult, TerminalOp, ThreadId};
-use kg_terminal::{Launch, Terminal};
+use kg_terminal::{Launch, Lines, Terminal};
 
 use crate::database::Result;
 use crate::workspace::{closed, missing};
@@ -138,6 +138,47 @@ pub(super) fn find<'a>(
         .open
         .iter()
         .find_map(|(n, terminal)| (*n == number).then_some(terminal))
+}
+
+/// Every link the thread's terminals printed, the program's first, each once at its last place.
+pub(super) async fn links(
+    this: &WeakEntity<Workspace>,
+    id: ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let terminals = this
+        .update(cx, |workspace, _| {
+            if !workspace.threads.contains_key(&id) {
+                return Err(missing("thread", &id));
+            }
+            let program = workspace.terminals.get(&id).map(|shown| match shown {
+                super::Shown::Running(terminal) => terminal.lines(),
+                super::Shown::Ended(finished) => finished.lines(),
+            });
+            let extras = workspace
+                .extras
+                .get(&id)
+                .into_iter()
+                .flat_map(|extras| extras.open.iter().map(|(_, terminal)| terminal.lines()));
+            Ok(program.into_iter().chain(extras).collect::<Vec<Lines>>())
+        })
+        .map_err(closed)??;
+    let found = cx
+        .background_spawn(async move {
+            let mut found: Vec<String> = Vec::new();
+            for kept in terminals.iter().map(Lines::kept) {
+                for line in &kept.lines {
+                    for range in kg_terminal::links(&line.text) {
+                        let link = &line.text[range];
+                        found.retain(|seen| seen != link);
+                        found.push(link.to_owned());
+                    }
+                }
+            }
+            found
+        })
+        .await;
+    Ok(OpResult::Links(found))
 }
 
 /// Ends every extra terminal of a thread and forgets its numbers. Dropping a terminal ends its program.

@@ -40,6 +40,16 @@ impl TerminalView {
         };
         let (spot, right) = self.locate(event.position);
         self.pointer.last = Some((spot, right));
+        // Cmd-click (Ctrl-click off macOS) on a link opens it instead of reaching the program.
+        if button == Button::Left
+            && event.modifiers.secondary(cx)
+            && let Some(link) = self
+                .grid
+                .link_at(usize::from(spot.row), usize::from(spot.column))
+        {
+            cx.open_url(&link);
+            return;
+        }
         if self.grid.mouse.is_some() && !event.modifiers.shift {
             self.pointer.held = Some(button);
             self.report(Some(button), Phase::Press, spot, event.modifiers, cx);

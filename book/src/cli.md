@@ -284,6 +284,7 @@ Commands:
   paste         Paste text into the program, bracketed when the program asks for that
   terminal      Extra terminals: login shells in the thread's folder
   details       The thread's folder, program, branch, base branch and last commits, read from git without fetching
+  links         http and https links printed in the thread's terminals: the program's, then each extra one. A link printed again moves to the end
   archive       Archive a thread
   unarchive     Bring back an archived thread
   delete        Delete a thread and its history for good
@@ -674,6 +675,22 @@ Options:
 The thread's folder, program, branch, base branch and last commits, read from git without fetching
 
 Usage: kg thread details <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread links`
+
+```text
+http and https links printed in the thread's terminals: the program's, then each extra one. A link printed again moves to the end
+
+Usage: kg thread links <ID>
 
 Arguments:
   <ID>
@@ -2000,6 +2017,7 @@ Commands:
   search-threads           Open the command list on thread search
   next-terminal            Show the shown thread's next terminal tab
   previous-terminal        Show the shown thread's previous terminal tab
+  open-local-link          Open the newest local link the shown thread printed, such as `localhost:3000`, in the browser
   help                     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2212,6 +2230,18 @@ Options:
 Show the shown thread's previous terminal tab
 
 Usage: kg window previous-terminal
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg window open-local-link`
+
+```text
+Open the newest local link the shown thread printed, such as `localhost:3000`, in the browser
+
+Usage: kg window open-local-link
 
 Options:
   -h, --help

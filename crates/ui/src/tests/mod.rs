@@ -5,6 +5,8 @@ mod commands;
 mod details;
 mod identities;
 mod kagan;
+#[cfg(unix)]
+mod links;
 mod menus;
 mod navigation;
 #[cfg(unix)]

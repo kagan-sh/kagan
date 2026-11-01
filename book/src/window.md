@@ -49,6 +49,8 @@ The menu at the right of the thread header has **Pin**, **Archive**, **Rename…
 
 To open a shell in the thread's folder, click **+** in the thread header, or press Cmd+T. Tabs appear over the terminal: the program first, then **Terminal 1**, **Terminal 2**, and so on. Click a tab, or press Cmd+Alt+] and Cmd+Alt+[, to switch. Click **×** on a tab, press Cmd+Shift+W, or type `exit` to close it. `kg thread terminal new`, `list`, and `close` do the same from a terminal, and `--terminal <n>` sends `kg thread input` and the other terminal commands to one of them.
 
+To open a link that a terminal printed, hold Cmd (Ctrl on Linux and Windows) and click it. When a program prints a local address, such as `http://localhost:3000`, **Open localhost:3000** appears over the terminal, at the right. Click it, or press Cmd+Alt+O, to open it in your browser. `kg thread links` lists the links that the thread's terminals printed.
+
 Extra terminals are not part of the thread: they never mark it as busy or needing you. Archive and Quit end them. They do not come back after kagan restarts.
 
 ## Review changes
@@ -113,6 +115,8 @@ On Linux and Windows, Cmd in this book means Ctrl+Shift. For example, Cmd+N is C
 | Cmd+T | New terminal in the thread's folder |
 | Cmd+Alt+] and Cmd+Alt+[ | Next terminal tab, previous terminal tab |
 | Cmd+Shift+W | Close the shown extra terminal |
+| Cmd+Alt+O | Open the newest local link, such as localhost:3000 |
+| Cmd+click | Open the link under the pointer |
 | Cmd+Alt+J | Next thread that needs you |
 | Cmd+Shift+L | Move the keyboard focus to the left sidebar |
 | Cmd+B and Cmd+Backslash | Show or hide the left or right sidebar |

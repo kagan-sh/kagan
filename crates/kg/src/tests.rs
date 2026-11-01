@@ -58,6 +58,10 @@ fn cli_thread_terminal_parses_its_verbs() {
         }))
     );
     assert_eq!(
+        parse(&["thread", "links", "thr_1"]),
+        Op::Thread(ThreadOp::Links { id: id.clone() })
+    );
+    assert_eq!(
         parse(&["thread", "input", "thr_1", "ls", "--terminal", "2"]),
         Op::Thread(ThreadOp::Input {
             id,

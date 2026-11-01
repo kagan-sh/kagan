@@ -452,6 +452,12 @@ pub const SHORTCUTS: &[Shortcut] = &[
         chord: "secondary-alt-[",
         label: "Previous terminal",
     },
+    Shortcut {
+        name: "OpenLocalLink",
+        action: "kagan::OpenLocalLink",
+        chord: "secondary-alt-o",
+        label: "Open local link",
+    },
 ];
 
 /// A shortcut as `kg keymap` names it: a built-in by its name, or a plugin's command as
@@ -666,6 +672,8 @@ pub enum WindowOp {
     NextTerminal,
     /// Show the shown thread's previous terminal tab
     PreviousTerminal,
+    /// Open the newest local link the shown thread printed, such as `localhost:3000`, in the browser
+    OpenLocalLink,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1116,6 +1124,12 @@ pub enum ThreadOp {
     Terminal(TerminalOp),
     /// The thread's folder, program, branch, base branch and last commits, read from git without fetching
     Details {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+    },
+    /// http and https links printed in the thread's terminals: the program's, then each extra one.
+    /// A link printed again moves to the end
+    Links {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
     },
@@ -1695,6 +1709,7 @@ pub enum OpResult {
     Surfaces(Vec<SurfaceItem>),
     Terminals(Vec<ExtraTerminal>),
     Details(crate::ThreadDetails),
+    Links(Vec<String>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -2085,6 +2100,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
             TerminalOp::New { id } | TerminalOp::List { id } | TerminalOp::Close { id, .. },
         )
         | ThreadOp::Details { id }
+        | ThreadOp::Links { id }
         | ThreadOp::Archive { id, .. }
         | ThreadOp::Unarchive { id, .. }
         | ThreadOp::SetPinned { id, .. }

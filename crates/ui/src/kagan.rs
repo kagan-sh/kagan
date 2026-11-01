@@ -56,7 +56,7 @@ pub(crate) use needs::QUIET;
 pub(crate) use surface::Commit as SurfaceCommit;
 pub(crate) use surface::paint_then_settle;
 #[cfg(test)]
-pub(crate) use tabs::{CloseTerminal, NewTerminal, NextTerminal, PreviousTerminal};
+pub(crate) use tabs::{CloseTerminal, NewTerminal, NextTerminal, OpenLocalLink, PreviousTerminal};
 
 use std::collections::{BTreeMap, BTreeSet};
 
