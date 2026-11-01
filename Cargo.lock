@@ -4824,6 +4824,7 @@ dependencies = [
  "rpassword",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "widestring",
  "windows-native-keyring-store",

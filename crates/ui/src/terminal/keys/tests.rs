@@ -41,7 +41,6 @@ fn control_sends_control_characters() {
         ("ctrl-a", "\x01"),
         ("ctrl-c", "\x03"),
         ("ctrl-z", "\x1a"),
-        ("ctrl-shift-c", "\x03"),
         ("ctrl-@", "\0"),
         ("ctrl-2", "\0"),
         ("ctrl-[", "\x1b"),
@@ -63,6 +62,14 @@ fn control_sends_control_characters() {
     }
     assert_eq!(sent("ctrl-1"), None);
     assert_eq!(sent("ctrl-é"), None);
+    // Off macOS, Ctrl+Shift+C is the window's copy.
+    let shifted = kg_core::parse_key("ctrl-shift-c")
+        .unwrap()
+        .with_simulated_ime();
+    assert_eq!(
+        bytes_on(&shifted, false, KeyPlatform::Mac).as_deref(),
+        Some("\x03")
+    );
 }
 
 #[test]
