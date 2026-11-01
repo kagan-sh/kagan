@@ -180,8 +180,8 @@ jobs:
               # One app for Intel and Apple silicon. cargo-packager reads kg from
               # target/<target>/release and names the dmg after the target.
               formats=dmg
-              cargo build --release -p kg --locked
-              cargo build --release -p kg --locked --target x86_64-apple-darwin
+              cargo build --release -p kg
+              cargo build --release -p kg --target x86_64-apple-darwin
               mkdir -p target/universal-apple-darwin/release
               lipo -create -output target/universal-apple-darwin/release/kg \
                 target/release/kg target/x86_64-apple-darwin/release/kg
