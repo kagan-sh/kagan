@@ -253,3 +253,19 @@ async fn links_lists_what_every_terminal_printed_newest_last(cx: &mut TestAppCon
         ["http://localhost:3000/", "http://127.0.0.1:5173"]
     );
 }
+
+#[gpui_kit::test]
+async fn archive_ends_extra_terminals_of_a_program_that_already_stopped(cx: &mut TestAppContext) {
+    let fixture = shell_fixture(cx).await;
+    let (id, _reap) = started(&fixture, "/bin/sh", cx).await;
+    type_into(&id, None, "exit 0\n", cx).await;
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    open(&id, cx).await;
+    op(Op::Thread(ThreadOp::Archive { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    cx.executor().advance_clock(Duration::from_secs(12));
+    cx.run_until_parked();
+    until(cx, async |cx| numbers(&id, cx).await.is_empty()).await;
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
+}

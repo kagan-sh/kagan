@@ -35,7 +35,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Stop`
 
 - **Allowed when**: the thread exists and is not archived [book:cli].
-- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A terminal program has no turn to end [docs:architecture]. The program and what it started end at once, except a process that calls `setsid` itself, and on Windows only the program is killed [decision 46]. It does not ask [decision 12].
+- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A terminal program has no turn to end [docs:architecture]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
 - **Shows**: the thread leaves the running status [book:window].
 - **Refused when**: a missing thread — `not-found` [op.rs]. An archived thread — `failed` [op.rs].
 
@@ -49,7 +49,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Terminal` (`New`, `List`, `Close`)
 
 - **Allowed when**: the thread exists. `New` also needs it not archived and its folder ready [decision 110].
-- **Changes**: `New` starts the login shell in the thread's folder with the thread's `KG_*` variables and gives it the next number; numbers are not reused while the thread lives. `Close` ends that shell and what it started. A shell that exits closes itself. Archive ends a thread's extra terminals when its grace stops the program; Delete and Quit end them at once. None is restored after a restart, and none writes an event or changes the thread's status or marks [decision 110].
+- **Changes**: `New` starts the login shell in the thread's folder with the thread's `KG_*` variables and gives it the next number; numbers are not reused while the thread lives. `Close` ends that shell and what it started: its process group on macOS and Linux, except a process that calls `setsid` itself, and its Job Object on Windows, except a process started before the shell joined the job. A shell that exits closes itself. Archive ends a thread's extra terminals when its 10-second grace ends, whether or not the program still runs; Undo within the grace keeps them. Delete and Quit end them at once. None is restored after a restart, and none writes an event or changes the thread's status or marks [decision 110].
 - **Shows**: `New` returns the new terminal; `List` returns each open one with its number and the title its shell set. The terminal Ops above reach one with `--terminal <n>` [decision 110].
 - **Refused when**: a missing thread, or a number that is not open — `not-found` [op.rs]. `New` on an archived thread or a folder that is not ready — `invalid`. A shell that cannot start — `failed` [decision 110].
 

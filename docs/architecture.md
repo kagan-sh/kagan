@@ -16,7 +16,7 @@ Normal dependencies (dev-dependencies omitted). `cargo metadata` is the check.
 
 ```text
 kg ──► ui ──► plugins ──► core ──► store ──► domain
- │      │        │          ├──► terminal
+ │      │        │          ├──► terminal ──► process (Windows only)
  │      │        │          ├──► process
  │      │        │          └──► domain
  │      │        ├──► process
@@ -34,8 +34,8 @@ kg ──► ui ──► plugins ──► core ──► store ──► domai
 | `domain` | ids, records, statuses, `Op`, `OpResult`; serde for both; the theme file format (`ThemeFile`). No GPUI. | validation of op inputs (`check`) |
 | `store` | `Store::open`, typed reads and writes, `append_events`, `events_after` | rusqlite, migrations, indexes, the append-only event log |
 | `core` | entities `Project`, `Thread`, `Environment`; `Workspace` with `open`, `global`, `dispatch(Op) -> Task<Result<OpResult, OpError>>`, `answer`, `answer_standalone`, `ask`, `ask_for_person`, `read_file`, `grid(id)` (the shown thread's screen as cells, in process); `WorkspaceEvent` | thread lifecycle, one terminal per running thread and its extra terminals (decision 110), pending interactions, worktrees and environment providers, event persistence, the per-thread MCP bridge |
-| `terminal` | `Terminal::spawn`, `write`, `report`, `paste`, `resize`, `scroll`, `select`, `selection`, `transcript`, `lines`, `screen`, `grid`, `title`, `take_changed`, `exited`; `Lines` (the kept text, read from any thread), `Kept` and `KeptLine` (lines as printed, wrapped rows joined); `Grid`, `Cell`, `Color`, `Cursor`, `Weight`, `Mouse`, `Motion` (the types `grid` returns), `Grid::link_at` and `links` (http and https links, decision 112); `SelectMode`; `Launch`; dropping one ends the program | the pty (portable-pty), the screen and its 10,000 lines of history in memory (alacritty_terminal), the selection, and the answers to the program's terminal queries. No GPUI and no kagan types. |
-| `process` | `Process` (owned process tree), `find_program`, `user_path`, `pathext` | Job Objects on Windows, process groups elsewhere. Used by `core`, `plugins`, and `kg`. |
+| `terminal` | `Terminal::spawn`, `write`, `report`, `paste`, `resize`, `scroll`, `select`, `selection`, `transcript`, `lines`, `screen`, `grid`, `title`, `take_changed`, `exited`; `Lines` (the kept text, read from any thread), `Kept` and `KeptLine` (lines as printed, wrapped rows joined); `Grid`, `Cell`, `Color`, `Cursor`, `Weight`, `Mouse`, `Motion` (the types `grid` returns), `Grid::link_at` and `links` (http and https links, decision 112); `SelectMode`; `Launch`; dropping one ends the program | the pty (portable-pty), the screen and its 10,000 lines of history in memory (alacritty_terminal), the selection, and the answers to the program's terminal queries; on Windows a `kg_process::Job` holds the program and what it starts. No GPUI and no kagan types. |
+| `process` | `Process` (owned process tree), `Job` (Windows), `find_program`, `user_path`, `pathext` | Job Objects on Windows (`Job`, also used by `terminal`), process groups elsewhere. Used by `core`, `plugins`, `terminal` (Windows) and `kg`. |
 | `plugins` | `PluginHost` global (`themes` lists enabled plugins' themes), `init`, `contributions`, `power_lines` | gpui-shell runtime and policies, `kagan.json`, job queue, HostModule areas, declared home-folder reads, secret settings in the keychain (decision 104), lazy load. A `downloads` key or `powers.spawn` is refused (decision 65). Install, enable, disable, and list are `PluginOp`s dispatched by `core`. |
 | `ui` | `init`, `open_window`, `show_start_failure` | Opens the Kagan window on macOS, Windows, and Linux (decision 47) |
 | `kg` | the binary: `kg` CLI (clap derived from `Op`), `kg mcp --thread <id>`, app start | local socket server and client, single-instance, headless mode |

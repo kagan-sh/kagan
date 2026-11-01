@@ -4916,6 +4916,7 @@ name = "kg-terminal"
 version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
+ "kg-process",
  "libc",
  "portable-pty",
  "rustix",

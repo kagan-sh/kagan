@@ -13,7 +13,7 @@ mod terminal;
 mod turn;
 
 pub(crate) use agent::note;
-pub(crate) use extra::Extras;
+pub(crate) use extra::{Extras, end as end_extras};
 pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
 pub(crate) use project::remove_project;

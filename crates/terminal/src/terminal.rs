@@ -53,6 +53,9 @@ pub struct Terminal {
     epoch: Instant,
     observed: OnceLock<(Exit, Duration)>,
     ended_with: OnceLock<Exit>,
+    // Holds the program and what it starts; closing the handle kills them all.
+    #[cfg(windows)]
+    job: Option<kg_process::Job>,
     #[cfg(test)]
     clock: Option<Arc<AtomicU64>>,
 }
@@ -127,6 +130,10 @@ impl Terminal {
             epoch: Instant::now(),
             observed: OnceLock::new(),
             ended_with: OnceLock::new(),
+            // The pty starts the program, so it runs briefly before it joins the job. Without a
+            // job, closing the console still ends the programs attached to it.
+            #[cfg(windows)]
+            job: kg_process::Job::assign(process_id).ok(),
             #[cfg(test)]
             clock: None,
         })
@@ -314,8 +321,13 @@ impl Terminal {
             crate::tree::kill_tree(self.process_id);
         }
         #[cfg(windows)]
-        if let Some(child) = lock(&self.child).as_mut() {
-            let _ = child.kill();
+        {
+            if let Some(job) = &self.job {
+                job.terminate();
+            }
+            if let Some(child) = lock(&self.child).as_mut() {
+                let _ = child.kill();
+            }
         }
     }
 

@@ -165,25 +165,34 @@ pub(super) async fn links(
         .map_err(closed)??;
     let found = cx
         .background_spawn(async move {
-            let mut found: Vec<String> = Vec::new();
+            let mut all: Vec<String> = Vec::new();
             for kept in terminals.iter().map(Lines::kept) {
                 for line in &kept.lines {
-                    for range in kg_terminal::links(&line.text) {
-                        let link = &line.text[range];
-                        found.retain(|seen| seen != link);
-                        found.push(link.to_owned());
-                    }
+                    all.extend(
+                        kg_terminal::links(&line.text)
+                            .into_iter()
+                            .map(|range| line.text[range].to_owned()),
+                    );
                 }
             }
+            // Newest first keeps each link at its last place; the order is turned back after.
+            let mut seen = std::collections::HashSet::new();
+            let mut found: Vec<String> = all
+                .into_iter()
+                .rev()
+                .filter(|link| seen.insert(link.clone()))
+                .collect();
+            found.reverse();
             found
         })
         .await;
     Ok(OpResult::Links(found))
 }
 
-/// Ends every extra terminal of a thread and forgets its numbers. Dropping a terminal ends its program.
-pub(crate) fn end(workspace: &mut Workspace, id: &ThreadId) {
-    workspace.extras.remove(id);
+/// Ends every extra terminal of a thread and forgets its numbers. Dropping a terminal ends its
+/// program. Returns whether the thread had any.
+pub(crate) fn end(workspace: &mut Workspace, id: &ThreadId) -> bool {
+    workspace.extras.remove(id).is_some()
 }
 
 /// Sends their screen changes and closes the ones whose shell exited. Returns whether any are open.

@@ -652,8 +652,11 @@ pub(crate) async fn sweep(
             .is_some_and(|archived| at.0 >= archived.0.saturating_add(GRACE))
         {
             let thread = this
-                .update(cx, |workspace, _| {
+                .update(cx, |workspace, cx| {
                     crate::thread::release_ended(workspace, &record.id);
+                    if crate::thread::end_extras(workspace, &record.id) {
+                        cx.emit(crate::WorkspaceEvent::Changed);
+                    }
                     drop_screens.push(record.id.clone());
                     workspace.threads.get(&record.id).cloned()
                 })
