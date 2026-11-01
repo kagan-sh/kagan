@@ -47,6 +47,8 @@ pub(crate) async fn start(
                 .unwrap_or((COLS, ROWS))
         })
         .map_err(closed)?;
+    // Taken before the program starts, so what it begins in that moment counts as after the start.
+    let at = crate::workspace::time(this, cx)?;
     let spawned = match folder {
         Some(folder) => spawn(this, &record, folder, size, start, cx).await,
         None => Err("the thread has no folder".to_owned()),
@@ -60,7 +62,7 @@ pub(crate) async fn start(
                 follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
-            Workspace::events(this, record.id, vec![EventKind::Started], cx).await?;
+            Workspace::events_at(this, record.id, at, vec![EventKind::Started], cx).await?;
             status(this, thread, ThreadStatus::Active, cx).await
         }
         Err(error) => {

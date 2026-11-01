@@ -1062,10 +1062,20 @@ impl Workspace {
         kinds: Vec<kg_domain::EventKind>,
         cx: &mut AsyncApp,
     ) -> Result<()> {
+        let at = time(this, cx)?;
+        Self::events_at(this, id, at, kinds, cx).await
+    }
+
+    pub(crate) async fn events_at(
+        this: &WeakEntity<Self>,
+        id: ThreadId,
+        at: kg_domain::Timestamp,
+        kinds: Vec<kg_domain::EventKind>,
+        cx: &mut AsyncApp,
+    ) -> Result<()> {
         let database = this
             .update(cx, |workspace, _| workspace.database.clone())
             .map_err(closed)?;
-        let at = time(this, cx)?;
         let started = kinds
             .iter()
             .any(|kind| matches!(kind, kg_domain::EventKind::Started));

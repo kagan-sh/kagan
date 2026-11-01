@@ -300,13 +300,35 @@ async fn start_again_resumes_the_one_codex_conversation_begun_in_its_folder(
         "{again:?}"
     );
     assert!(notices(&id, cx).await.is_empty());
-    began(&home, fixture.dir.path(), later());
+    let next = began(&home, fixture.dir.path(), later());
     stop(&id, cx).await;
     let third = start_again(&id, &run, cx).await;
     assert!(
-        third.ends_with(&["resume".to_owned(), conversation]),
+        third.ends_with(&["resume".to_owned(), conversation.clone()]),
         "{third:?}"
     );
+    forget(&home, &conversation);
+    stop(&id, cx).await;
+    let fourth = start_again(&id, &run, cx).await;
+    assert!(!fourth.contains(&conversation), "{fourth:?}");
+    assert!(fourth.ends_with(&["resume".to_owned(), next]), "{fourth:?}");
+}
+
+fn forget(home: &Path, conversation: &str) {
+    let end = format!("-{conversation}.jsonl");
+    let mut folders = vec![home.join("sessions")];
+    while let Some(folder) = folders.pop() {
+        for entry in std::fs::read_dir(folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                folders.push(path);
+            } else if path.to_string_lossy().ends_with(&end) {
+                std::fs::remove_file(path).unwrap();
+                return;
+            }
+        }
+    }
+    panic!("no file for {conversation}");
 }
 
 #[gpui_kit::test]
