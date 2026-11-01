@@ -117,7 +117,26 @@ jobs:
       - name: Crate boundaries
         run: sh scripts/crate-boundaries.sh
 
-  linux:
+  linux-clippy:
+    needs: [scope, checks]
+    if: needs.scope.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTFLAGS: -C link-arg=-fuse-ld=lld
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Linux build packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev lld
+      - run: rustup toolchain install --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  linux-tests:
     needs: [scope, checks]
     if: needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
@@ -139,11 +158,10 @@ jobs:
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
         run: cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
 
-  macos:
+  macos-clippy:
     needs: scope
     if: needs.scope.outputs.skip != 'true'
     runs-on: macos-latest
@@ -157,23 +175,48 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  macos-tests:
+    needs: scope
+    if: needs.scope.outputs.skip != 'true'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install lld
+        # .cargo/config.toml links macOS with ld64.lld. brew exits 1 when llvm's post-install fails, though lld is installed.
+        run: brew install lld || command -v ld64.lld
+      - run: rustup toolchain install --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: macos
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 1 }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
         # a_saved_shortcut_is_kept_and_announced has failed on macOS only; it does not block a merge.
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
+          --partition slice:${{ matrix.shard }}/2
           -E 'not test(a_saved_shortcut_is_kept_and_announced)'
 
-  windows:
+  windows-tests:
     needs: scope
     if: needs.scope.outputs.skip != 'true'
     runs-on: windows-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     defaults:
       run:
         shell: bash
@@ -190,14 +233,49 @@ jobs:
           cygpath -w "$bin" >> "$GITHUB_PATH"
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: windows
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 1 }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
       - name: Tests
-        run: cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
+        run: >-
+          cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
+          --partition slice:${{ matrix.shard }}/2
+
+  # The ruleset requires the checks linux, macos and windows. Each passes only when every job
+  # for its OS passed; a skipped job would otherwise count as a pass.
+  linux:
+    needs: [scope, linux-clippy, linux-tests]
+    if: always() && needs.scope.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: for result in $RESULTS; do echo "$result"; [ "$result" = success ] || exit 1; done
+
+  macos:
+    needs: [scope, macos-clippy, macos-tests]
+    if: always() && needs.scope.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: for result in $RESULTS; do echo "$result"; [ "$result" = success ] || exit 1; done
+
+  windows:
+    needs: [scope, windows-tests]
+    if: always() && needs.scope.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: for result in $RESULTS; do echo "$result"; [ "$result" = success ] || exit 1; done
 
   mutants:
     if: github.event_name == 'workflow_dispatch' && inputs.mutants
