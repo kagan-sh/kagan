@@ -116,6 +116,7 @@ pub struct Workspace {
     pub(crate) threads: BTreeMap<ThreadId, Entity<Thread>>,
     pub(crate) tasks: BTreeMap<ThreadId, Task<()>>,
     pub(crate) terminals: BTreeMap<ThreadId, crate::thread::Shown>,
+    pub(crate) extras: BTreeMap<ThreadId, crate::thread::Extras>,
     /// The size the window last gave each thread's program. A program started again takes it.
     pub(crate) sizes: BTreeMap<ThreadId, (u16, u16)>,
     /// Whether the task that watches `terminals` is running.
@@ -177,9 +178,13 @@ pub enum WorkspaceEvent {
     SettingsPlugins,
     NewPlugin,
     Window(kg_domain::WindowOp),
-    Event { event: Event, project_id: ProjectId },
+    Event {
+        event: Event,
+        project_id: ProjectId,
+    },
     Changed,
-    Screen(ThreadId),
+    /// A terminal's screen changed: the program's, or an extra one by number.
+    Screen(ThreadId, Option<u32>),
     Waiting(ThreadId),
     Finished(ThreadId),
 }
@@ -254,6 +259,7 @@ impl Workspace {
                         threads: BTreeMap::new(),
                         tasks: BTreeMap::new(),
                         terminals: BTreeMap::new(),
+                        extras: BTreeMap::new(),
                         sizes: BTreeMap::new(),
                         watching: false,
                         removing: BTreeSet::new(),
@@ -558,6 +564,7 @@ impl Workspace {
     }
 
     pub fn end_programs(&mut self) {
+        self.extras.clear();
         self.terminals.clear();
     }
 

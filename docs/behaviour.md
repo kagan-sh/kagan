@@ -46,12 +46,20 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: `Screen` returns the visible rows as an ANSI redraw, with the modes that change what keys send [decision 46]. With `--scrollback` it returns every kept line as plain text. `--lines` is refused without `--scrollback`; with it, the count is from 1 to 10000 and the result is that many last rows of the same text, or the whole text when there are fewer. `Copy` returns the selected text, or nothing when no text is selected; a whole line copied has no newline at its end. `Input`, `Paste`, `Report`, `Resize`, `Scroll` and `Select` return done. `WorkspaceEvent::Screen` follows a change, at most about 30 times a second [decision 46].
 - **Refused when**: the thread has no running program — `not-found` [op.rs]. A size outside those limits — `invalid` [op.rs]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op.rs]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run.
 
+### `Terminal` (`New`, `List`, `Close`)
+
+- **Allowed when**: the thread exists. `New` also needs it not archived and its folder ready [decision 110].
+- **Changes**: `New` starts the login shell in the thread's folder with the thread's `KG_*` variables and gives it the next number; numbers are not reused while the thread lives. `Close` ends that shell and what it started. A shell that exits closes itself. Archive ends a thread's extra terminals when its grace stops the program; Delete and Quit end them at once. None is restored after a restart, and none writes an event or changes the thread's status or marks [decision 110].
+- **Shows**: `New` returns the new terminal; `List` returns each open one with its number and the title its shell set. The terminal Ops above reach one with `--terminal <n>` [decision 110].
+- **Refused when**: a missing thread, or a number that is not open — `not-found` [op.rs]. `New` on an archived thread or a folder that is not ready — `invalid`. A shell that cannot start — `failed` [decision 110].
+
 ### Terminal in the window
 
 - The wheel and trackpad scroll the history. Shift+PageUp and Shift+PageDown page it. Output that arrives while the view is scrolled up does not move it; typing does.
 - Drag selects, double-click selects a word, and triple-click selects a line. The selection is drawn in the theme's selection color.
 - Copy is Cmd+C, or Ctrl+Shift+C off macOS. Paste is Cmd+V, or Ctrl+Shift+V off macOS.
 - A program that asks for mouse reports (DECSET 1000, 1002 or 1003) gets clicks, drags and the wheel. It gets them in the SGR form when it asks for 1006, and in the legacy form otherwise. Shift overrides this: the press selects and the wheel scrolls in the window.
+- + in the title row opens an extra terminal and shows it. While one is open, tabs over the terminal show the program first, then each extra terminal; the shown tab is filled. A click or Cmd+Alt+] and Cmd+Alt+[ switch tabs, and focus the shown terminal. × on a tab, or Cmd+Shift+W on a shown extra terminal, closes it; the tab before it shows. A terminal opened with `kg` adds a tab and does not change the shown one. Showing another thread shows its program's tab [decision 110].
 
 ### `Archive`
 

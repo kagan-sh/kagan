@@ -49,6 +49,8 @@ fn is_new_fit(sent: Option<(u16, u16)>, cols: u16, rows: u16) -> bool {
 /// One running thread's screen. It draws the host's grid and sends keys, pointer and size back.
 pub(crate) struct TerminalView {
     thread: ThreadId,
+    /// An extra terminal's number; `None` is the program's terminal.
+    terminal: Option<u32>,
     grid: Rc<Grid>,
     size: Option<(u16, u16)>,
     font_size: u8,
@@ -64,16 +66,23 @@ pub(crate) struct TerminalView {
 impl EventEmitter<Typed> for TerminalView {}
 
 impl TerminalView {
-    pub(crate) fn new(thread: ThreadId, font_size: u8, cx: &mut Context<Self>) -> Self {
+    pub(crate) fn new(
+        thread: ThreadId,
+        terminal: Option<u32>,
+        font_size: u8,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let screens = cx.subscribe(&Workspace::global(cx), |this, _, event, cx| {
-            if let WorkspaceEvent::Screen(id) = event
+            if let WorkspaceEvent::Screen(id, terminal) = event
                 && *id == this.thread
+                && *terminal == this.terminal
             {
                 this.refresh(cx);
             }
         });
         let mut this = Self {
             thread,
+            terminal,
             grid: Rc::default(),
             size: None,
             font_size,
@@ -132,7 +141,10 @@ impl TerminalView {
         {
             self.reads += 1;
         }
-        let Some(grid) = Workspace::global(cx).read(cx).grid(&self.thread) else {
+        let Some(grid) = Workspace::global(cx)
+            .read(cx)
+            .grid(&self.thread, self.terminal)
+        else {
             return;
         };
         if *self.grid != grid {
@@ -164,6 +176,7 @@ impl TerminalView {
                     id: self.thread.clone(),
                     text: Some(text),
                     file: None,
+                    terminal: self.terminal,
                 },
                 cx,
             );
@@ -184,6 +197,7 @@ impl TerminalView {
         let copied = Workspace::dispatch(
             Op::Thread(ThreadOp::Copy {
                 id: self.thread.clone(),
+                terminal: self.terminal,
             }),
             cx,
         );
@@ -211,6 +225,7 @@ impl TerminalView {
             ThreadOp::Scroll {
                 id: self.thread.clone(),
                 lines,
+                terminal: self.terminal,
             },
             cx,
         );
@@ -221,6 +236,7 @@ impl TerminalView {
             ThreadOp::Input {
                 id: self.thread.clone(),
                 text,
+                terminal: self.terminal,
             },
             cx,
         );
@@ -256,6 +272,7 @@ impl TerminalView {
             id: self.thread.clone(),
             cols,
             rows,
+            terminal: self.terminal,
         };
         Workspace::dispatch(Op::Thread(resize), cx).detach();
     }
@@ -272,10 +289,12 @@ impl Render for TerminalView {
         let view = cx.entity();
         let grid = self.grid.clone();
         let focus = self.focus.clone();
-        let live = Workspace::global(cx)
-            .read(cx)
-            .thread(&self.thread)
-            .is_some_and(|thread| thread.read(cx).running());
+        // An extra terminal closes when its shell ends, so it is live while it is shown.
+        let live = self.terminal.is_some()
+            || Workspace::global(cx)
+                .read(cx)
+                .thread(&self.thread)
+                .is_some_and(|thread| thread.read(cx).running());
         let font = gpui_kit::font(cx.theme().mono_font_family.clone());
         let font_size = px(f32::from(self.font_size));
         div()

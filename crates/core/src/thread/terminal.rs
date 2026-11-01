@@ -15,8 +15,8 @@ use super::agent;
 use super::halt::status;
 use super::resolve_program;
 
-const COLS: u16 = 80;
-const ROWS: u16 = 24;
+pub(super) const COLS: u16 = 80;
+pub(super) const ROWS: u16 = 24;
 const TICK: Duration = Duration::from_millis(33);
 // A program can drop its spinner for a frame in the middle of a reply. Waiting counts only after this quiet.
 const QUIET: Duration = Duration::from_secs(1);
@@ -56,10 +56,7 @@ pub(crate) async fn start(
                 workspace
                     .terminals
                     .insert(record.id.clone(), Shown::Running(terminal));
-                if !workspace.watching {
-                    workspace.watching = true;
-                    watch(cx);
-                }
+                follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
             Workspace::events(this, record.id, vec![EventKind::Started], cx).await?;
@@ -107,12 +104,12 @@ async fn spawn(
 }
 
 #[cfg(not(unix))]
-fn utf8_locale() -> Option<String> {
+pub(super) fn utf8_locale() -> Option<String> {
     None
 }
 
 #[cfg(unix)]
-fn utf8_locale() -> Option<String> {
+pub(super) fn utf8_locale() -> Option<String> {
     static INSTALLED: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     if ["LC_ALL", "LC_CTYPE", "LANG"]
         .iter()
@@ -172,31 +169,40 @@ pub(crate) fn run(
             return Err(OpError::Invalid("paste needs text".into()));
         }
     }
-    let (ThreadOp::Input { id, .. }
-    | ThreadOp::Resize { id, .. }
-    | ThreadOp::Screen { id, .. }
-    | ThreadOp::Scroll { id, .. }
-    | ThreadOp::Select { id, .. }
-    | ThreadOp::Copy { id }
-    | ThreadOp::Paste { id, .. }
-    | ThreadOp::Report { id, .. }) = &op
+    let (ThreadOp::Input { id, terminal, .. }
+    | ThreadOp::Resize { id, terminal, .. }
+    | ThreadOp::Screen { id, terminal, .. }
+    | ThreadOp::Scroll { id, terminal, .. }
+    | ThreadOp::Select { id, terminal, .. }
+    | ThreadOp::Copy { id, terminal }
+    | ThreadOp::Paste { id, terminal, .. }
+    | ThreadOp::Report { id, terminal, .. }) = &op
     else {
         return Err(OpError::Invalid("not a terminal operation".into()));
     };
-    let id = id.clone();
+    let (id, number) = (id.clone(), *terminal);
     // Scrolling and selecting move the view, so the window redraws even when nothing else changed.
     let moves_view = matches!(op, ThreadOp::Scroll { .. } | ThreadOp::Select { .. });
     this.update(cx, |workspace, cx| {
-        if let ThreadOp::Resize { cols, rows, .. } = &op {
+        if number.is_none()
+            && let ThreadOp::Resize { cols, rows, .. } = &op
+        {
             workspace.sizes.insert(id.clone(), (*cols, *rows));
         }
-        let shown = workspace
-            .terminals
-            .get(&id)
-            .ok_or_else(|| missing("terminal", &id))?;
-        let result = act(shown, op).map_err(|error| OpError::Invalid(error.to_string()));
+        let result = if let Some(number) = number {
+            super::extra::find(workspace, &id, number)
+                .ok_or_else(|| missing("terminal", &number))
+                .map(|terminal| act_running(terminal, op))
+        } else {
+            workspace
+                .terminals
+                .get(&id)
+                .ok_or_else(|| missing("terminal", &id))
+                .map(|shown| act(shown, op))
+        }?
+        .map_err(|error| OpError::Invalid(error.to_string()));
         if moves_view {
-            cx.emit(WorkspaceEvent::Screen(id.clone()));
+            cx.emit(WorkspaceEvent::Screen(id.clone(), number));
         }
         result
     })
@@ -327,9 +333,12 @@ fn terminal_mode(mode: SelectMode) -> kg_terminal::SelectMode {
 }
 
 impl Workspace {
-    /// The running program's screen as cells, for a window in this process.
+    /// A terminal's screen as cells, for a window in this process: the program's, or an extra one by number.
     #[must_use]
-    pub fn grid(&self, id: &ThreadId) -> Option<kg_terminal::Grid> {
+    pub fn grid(&self, id: &ThreadId, terminal: Option<u32>) -> Option<kg_terminal::Grid> {
+        if let Some(number) = terminal {
+            return super::extra::find(self, id, number).map(Terminal::grid);
+        }
         self.terminals.get(id).map(|shown| match shown {
             Shown::Running(terminal) => terminal.grid(),
             Shown::Ended(finished) => finished.grid(),
@@ -338,6 +347,7 @@ impl Workspace {
 }
 
 pub(crate) fn kill(workspace: &mut Workspace, id: &ThreadId) {
+    super::extra::end(workspace, id);
     workspace.terminals.remove(id);
     workspace.sizes.remove(id);
     workspace.runs.remove(id);
@@ -436,7 +446,7 @@ fn watch(cx: &mut Context<Workspace>) {
                         Shown::Ended(finished) => {
                             let (changed, follows) = finished.poll();
                             if changed {
-                                cx.emit(WorkspaceEvent::Screen(id.clone()));
+                                cx.emit(WorkspaceEvent::Screen(id.clone(), None));
                             }
                             following |= follows;
                             // `settled` is set only after the reader is joined and the last hold released.
@@ -452,7 +462,7 @@ fn watch(cx: &mut Context<Workspace>) {
                     };
                     following = true;
                     if terminal.take_changed() {
-                        cx.emit(WorkspaceEvent::Screen(id.clone()));
+                        cx.emit(WorkspaceEvent::Screen(id.clone(), None));
                     }
                     if let Some(thread) = workspace.threads.get(id) {
                         match follow(thread, terminal.title().as_deref(), now, cx) {
@@ -470,6 +480,7 @@ fn watch(cx: &mut Context<Workspace>) {
                 for (id, _) in &ended {
                     workspace.exiting.insert(id.clone());
                 }
+                following |= super::extra::poll(workspace, cx);
                 workspace.watching = following;
                 (ended, waited, keep, !workspace.watching)
             }) else {
@@ -517,7 +528,12 @@ fn keep_screen(workspace: &mut Workspace, id: &ThreadId, cx: &mut Context<Worksp
             .terminals
             .insert(id.clone(), Shown::Ended(terminal.finish()));
     }
-    cx.emit(WorkspaceEvent::Screen(id.clone()));
+    cx.emit(WorkspaceEvent::Screen(id.clone(), None));
+    follow_terminals(workspace, cx);
+}
+
+/// Starts the task that follows every terminal, unless it is running.
+pub(super) fn follow_terminals(workspace: &mut Workspace, cx: &mut Context<Workspace>) {
     if !workspace.watching {
         workspace.watching = true;
         watch(cx);

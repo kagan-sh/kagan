@@ -955,7 +955,7 @@ fn pump_for(cx: &mut TestAppContext, duration: std::time::Duration) {
 #[cfg(unix)]
 fn screen_text(cx: &mut TestAppContext, id: &ThreadId) -> String {
     let grid = cx
-        .update(|cx| Workspace::global(cx).read(cx).grid(id))
+        .update(|cx| Workspace::global(cx).read(cx).grid(id, None))
         .unwrap();
     grid.lines.iter().flatten().map(|cell| cell.c).collect()
 }
@@ -1247,6 +1247,7 @@ fn a_page_keeps_the_running_terminal_and_a_thread_switch_leaves_it(cx: &mut Test
         Op::Thread(ThreadOp::Input {
             id: first.clone(),
             text: "printf SURFACEMARK\\n".into(),
+            terminal: None,
         }),
     )
     .unwrap();
@@ -1260,6 +1261,7 @@ fn a_page_keeps_the_running_terminal_and_a_thread_switch_leaves_it(cx: &mut Test
         Op::Thread(ThreadOp::Input {
             id: first.clone(),
             text: "printf PAGEUP\\n".into(),
+            terminal: None,
         }),
     )
     .unwrap();
@@ -2018,6 +2020,7 @@ fn screen(cx: &mut TestAppContext, id: &ThreadId) -> String {
             id: id.clone(),
             scrollback: true,
             lines: None,
+            terminal: None,
         }),
     )
     .unwrap()

@@ -146,6 +146,7 @@ impl TerminalView {
                 ThreadOp::Scroll {
                     id: self.thread.clone(),
                     lines,
+                    terminal: self.terminal,
                 },
                 cx,
             );
@@ -168,6 +169,7 @@ impl TerminalView {
                 ThreadOp::Report {
                     id: self.thread.clone(),
                     bytes,
+                    terminal: self.terminal,
                 },
                 cx,
             );
@@ -182,6 +184,7 @@ impl TerminalView {
                 column: spot.column,
                 row: spot.row,
                 right,
+                terminal: self.terminal,
             },
             cx,
         );

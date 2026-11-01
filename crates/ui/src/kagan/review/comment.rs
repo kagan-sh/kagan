@@ -170,6 +170,7 @@ impl Kagan {
                 id: thread.clone(),
                 text: Some(clean(&format_notes(&notes))),
                 file: None,
+                terminal: None,
             }),
             cx,
         );

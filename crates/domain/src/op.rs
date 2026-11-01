@@ -428,6 +428,30 @@ pub const SHORTCUTS: &[Shortcut] = &[
         chord: "secondary-alt-f",
         label: "Search threads…",
     },
+    Shortcut {
+        name: "NewTerminal",
+        action: "kagan::NewTerminal",
+        chord: "secondary-t",
+        label: "New terminal",
+    },
+    Shortcut {
+        name: "CloseTerminal",
+        action: "kagan::CloseTerminal",
+        chord: "secondary-shift-w",
+        label: "Close terminal",
+    },
+    Shortcut {
+        name: "NextTerminal",
+        action: "kagan::NextTerminal",
+        chord: "secondary-alt-]",
+        label: "Next terminal",
+    },
+    Shortcut {
+        name: "PreviousTerminal",
+        action: "kagan::PreviousTerminal",
+        chord: "secondary-alt-[",
+        label: "Previous terminal",
+    },
 ];
 
 /// A shortcut as `kg keymap` names it: a built-in by its name, or a plugin's command as
@@ -638,6 +662,10 @@ pub enum WindowOp {
     CommandList,
     /// Open the command list on thread search
     SearchThreads,
+    /// Show the shown thread's next terminal tab
+    NextTerminal,
+    /// Show the shown thread's previous terminal tab
+    PreviousTerminal,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -922,6 +950,36 @@ pub enum DiffOp {
     },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
+pub enum TerminalOp {
+    /// Open another terminal in the thread's folder, running the login shell
+    New {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+    },
+    /// The thread's extra terminals
+    List {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+    },
+    /// Close an extra terminal and end its shell
+    Close {
+        #[arg(long, env = "KG_THREAD_ID")]
+        id: ThreadId,
+        number: u32,
+    },
+}
+
+/// A terminal kagan opened beside a thread's program. Numbers are never reused within a thread.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtraTerminal {
+    pub number: u32,
+    /// The title the shell set, if any
+    pub title: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum ThreadOp {
@@ -952,12 +1010,20 @@ pub enum ThreadOp {
     Input {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
         text: String,
     },
     /// Resize the program's terminal
     Resize {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
         cols: u16,
         rows: u16,
     },
@@ -965,6 +1031,10 @@ pub enum ThreadOp {
     Screen {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
         /// Every kept line, as plain text
         #[arg(long)]
         #[serde(default)]
@@ -978,6 +1048,10 @@ pub enum ThreadOp {
     Scroll {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
         /// Lines up into the history; negative moves back down
         #[arg(allow_negative_numbers = true)]
         lines: i32,
@@ -986,6 +1060,10 @@ pub enum ThreadOp {
     Select {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
         mode: SelectMode,
         /// From the left, starting at 0
         column: u16,
@@ -999,12 +1077,20 @@ pub enum ThreadOp {
     Copy {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
     },
     /// Send mouse-report bytes to the program, as decimal byte values such as `27 91 77 32 128 33`.
     /// Unlike `input`, it keeps a scrolled view where it is.
     Report {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
         /// Decimal byte values, 0 to 255, in order
         bytes: Vec<u8>,
     },
@@ -1012,6 +1098,10 @@ pub enum ThreadOp {
     Paste {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
+        /// An extra terminal, by its number; the program's terminal when left out
+        #[arg(long)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        terminal: Option<u32>,
         /// The text. Omit it when `--file` is set
         #[arg(required_unless_present = "file", conflicts_with = "file")]
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1021,6 +1111,9 @@ pub enum ThreadOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         file: Option<String>,
     },
+    /// Extra terminals: login shells in the thread's folder
+    #[command(subcommand)]
+    Terminal(TerminalOp),
     /// Archive a thread
     Archive {
         #[arg(env = "KG_THREAD_ID")]
@@ -1595,6 +1688,7 @@ pub enum OpResult {
     DiffFile(crate::DiffFileView),
     Commits(Vec<crate::DiffCommit>),
     Surfaces(Vec<SurfaceItem>),
+    Terminals(Vec<ExtraTerminal>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1978,9 +2072,12 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Screen { id, .. }
         | ThreadOp::Scroll { id, .. }
         | ThreadOp::Select { id, .. }
-        | ThreadOp::Copy { id }
+        | ThreadOp::Copy { id, .. }
         | ThreadOp::Paste { id, .. }
         | ThreadOp::Report { id, .. }
+        | ThreadOp::Terminal(
+            TerminalOp::New { id } | TerminalOp::List { id } | TerminalOp::Close { id, .. },
+        )
         | ThreadOp::Archive { id, .. }
         | ThreadOp::Unarchive { id, .. }
         | ThreadOp::SetPinned { id, .. }

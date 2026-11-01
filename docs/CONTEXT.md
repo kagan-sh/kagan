@@ -91,6 +91,10 @@ _Avoid_: Prompt, dialog
 What a thread's terminal shows right now, kept by the host. A client asks for it and draws it; it never reads the program's raw output.
 _Avoid_: Frame, buffer, pane
 
+**Extra terminal**:
+A login shell a person opens in a thread's folder beside its program, shown as a tab over the program's terminal and numbered in that thread. It is not part of the thread: no events, no marks, and it ends with the thread's run.
+_Avoid_: Split, pane, second thread
+
 **Scrollback**:
 The lines a program printed above its screen, kept by the host, 10,000 at most. The person scrolls back through them; typing brings the screen back into view.
 _Avoid_: History (as a synonym for the screen), log, buffer

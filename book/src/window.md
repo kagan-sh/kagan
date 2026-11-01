@@ -47,6 +47,10 @@ The center shows the terminal of the selected thread. The terminal has scrollbac
 
 The menu at the right of the thread header has **Pin**, **Archive**, **Rename…**, and **Save diagnostics**. When the program ends, the line under the terminal tells you why, and has **Start again**.
 
+To open a shell in the thread's folder, click **+** in the thread header, or press Cmd+T. Tabs appear over the terminal: the program first, then **Terminal 1**, **Terminal 2**, and so on. Click a tab, or press Cmd+Alt+] and Cmd+Alt+[, to switch. Click **×** on a tab, press Cmd+Shift+W, or type `exit` to close it. `kg thread terminal new`, `list`, and `close` do the same from a terminal, and `--terminal <n>` sends `kg thread input` and the other terminal commands to one of them.
+
+Extra terminals are not part of the thread: they never mark it as busy or needing you. Archive and Quit end them. They do not come back after kagan restarts.
+
 ## Review changes
 
 **Changes** in the right sidebar lists the files that the thread changed.
@@ -102,6 +106,9 @@ On Linux and Windows, Cmd in this book means Ctrl+Shift. For example, Cmd+N is C
 | Cmd+Shift+P | Pin or unpin thread |
 | Cmd+1 to Cmd+9 | Go to thread 1 to 9 |
 | Cmd+Shift+] and Cmd+Shift+[ | Next thread, previous thread |
+| Cmd+T | New terminal in the thread's folder |
+| Cmd+Alt+] and Cmd+Alt+[ | Next terminal tab, previous terminal tab |
+| Cmd+Shift+W | Close the shown extra terminal |
 | Cmd+Alt+J | Next thread that needs you |
 | Cmd+Shift+L | Move the keyboard focus to the left sidebar |
 | Cmd+B and Cmd+Backslash | Show or hide the left or right sidebar |

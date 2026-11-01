@@ -30,6 +30,7 @@ impl Kagan {
             Op::Thread(ThreadOp::Scroll {
                 id: id.clone(),
                 lines: -10_000,
+                terminal: None,
             }),
             cx,
         );
@@ -37,7 +38,14 @@ impl Kagan {
             if bottom.await.is_ok() {
                 let lines = i32::try_from(snippet.scroll).unwrap_or(i32::MAX);
                 let back = cx.update(|cx| {
-                    Workspace::dispatch(Op::Thread(ThreadOp::Scroll { id, lines }), cx)
+                    Workspace::dispatch(
+                        Op::Thread(ThreadOp::Scroll {
+                            id,
+                            lines,
+                            terminal: None,
+                        }),
+                        cx,
+                    )
                 });
                 _ = back.await;
             }

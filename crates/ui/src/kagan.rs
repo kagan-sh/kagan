@@ -34,6 +34,7 @@ mod shown;
 mod sidebar;
 mod start;
 mod surface;
+mod tabs;
 
 use changes::Changes;
 use kg_domain::ProjectOp;
@@ -53,6 +54,8 @@ pub(crate) use keys::is_chord;
 pub(crate) use needs::QUIET;
 pub(crate) use surface::Commit as SurfaceCommit;
 pub(crate) use surface::paint_then_settle;
+#[cfg(test)]
+pub(crate) use tabs::{CloseTerminal, NewTerminal, NextTerminal, PreviousTerminal};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -184,6 +187,7 @@ pub(crate) struct Kagan {
     announced: BTreeSet<PendingInteractionId>,
     typed_watch: Option<Subscription>,
     changes: Changes,
+    tabs: tabs::Tabs,
     review_drafts: review::Drafts,
     replaced: replace::Replaced,
     plugins: PluginsBox,
@@ -397,6 +401,7 @@ impl Kagan {
         if let Shown::Thread(view) = self.screen.shown() {
             view.update(cx, |view, cx| view.set_font_size(size, cx));
         }
+        self.tabs.set_font_size(size, cx);
     }
 
     fn change_terminal_size(&mut self, size: u8, cx: &mut Context<Self>) {
@@ -470,6 +475,7 @@ impl Kagan {
             announced: BTreeSet::new(),
             typed_watch: None,
             changes: Changes::new(),
+            tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
             replaced: replace::Replaced::default(),
             plugins: PluginsBox::new(window, cx),
@@ -580,6 +586,7 @@ impl Kagan {
             self.load_retired(cx);
         }
         self.load_changes(cx);
+        self.sync_tabs(window, cx);
         self.refresh_plugins(cx);
         self.tell_host(window, cx);
         cx.notify();
@@ -1044,12 +1051,13 @@ impl Kagan {
         if self.start.plugin_thread.as_ref() != Some(&id) {
             self.cancel_plugin_start();
         }
-        let view = cx.new(|cx| TerminalView::new(id.clone(), self.terminal_font_size, cx));
+        let view = cx.new(|cx| TerminalView::new(id.clone(), None, self.terminal_font_size, cx));
         self.show_work(Shown::Thread(view.clone()), window, cx);
         window.focus(&view.focus_handle(cx), cx);
         self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.load_changes(cx);
+        self.sync_tabs(window, cx);
         self.tell_host(window, cx);
         self.note_shown(cx);
         Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
@@ -1424,6 +1432,8 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::toggle_form_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
+            .on_action(cx.listener(Self::new_terminal))
+            .on_action(cx.listener(Self::close_terminal))
             .on_action(cx.listener(Self::start_again))
             .on_action(cx.listener(Self::save_diagnostics))
             .on_action(cx.listener(Self::run_command))
@@ -1513,7 +1523,7 @@ fn listen(
                 | WorkspaceEvent::SettingsPlugins
                 | WorkspaceEvent::NewPlugin
                 | WorkspaceEvent::Window(_)
-                | WorkspaceEvent::Screen(_) => {}
+                | WorkspaceEvent::Screen(..) => {}
             },
         ),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Start, window, cx| {

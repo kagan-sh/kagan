@@ -122,7 +122,9 @@ pub(crate) async fn retire(
 ) -> Result<()> {
     stop(this, thread, cx).await?;
     let id = thread.read_with(cx, |thread, _| thread.record.id.clone());
-    this.update(cx, |workspace, _| {
+    this.update(cx, |workspace, cx| {
+        super::extra::end(workspace, &id);
+        cx.emit(crate::WorkspaceEvent::Changed);
         workspace.tasks.remove(&id);
     })
     .map_err(closed)

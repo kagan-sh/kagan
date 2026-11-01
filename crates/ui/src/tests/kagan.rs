@@ -621,6 +621,7 @@ fn the_copy_key_copies_the_selected_word(cx: &mut TestAppContext) {
         column: u16::try_from(column).unwrap(),
         row: u16::try_from(row).unwrap(),
         right: false,
+        terminal: None,
     };
     cx.update(|cx| Workspace::dispatch(Op::Thread(select), cx))
         .detach();
@@ -1142,7 +1143,9 @@ fn a_screen_for_another_thread_does_not_repaint_the_shown_one(cx: &mut TestAppCo
     let reads = cx.update(|cx| view.read(cx).reads());
 
     cx.update(|cx| {
-        Workspace::global(cx).update(cx, |_, cx| cx.emit(WorkspaceEvent::Screen(other.clone())));
+        Workspace::global(cx).update(cx, |_, cx| {
+            cx.emit(WorkspaceEvent::Screen(other.clone(), None));
+        });
     });
     cx.run_until_parked();
 
@@ -3856,6 +3859,7 @@ fn input(id: &ThreadId, text: &str) -> Op {
     Op::Thread(ThreadOp::Input {
         id: id.clone(),
         text: text.into(),
+        terminal: None,
     })
 }
 
@@ -3896,7 +3900,7 @@ fn count_repaints(
 }
 
 fn host_grid(cx: &mut TestAppContext, id: &ThreadId) -> Grid {
-    cx.update(|cx| Workspace::global(cx).read(cx).grid(id))
+    cx.update(|cx| Workspace::global(cx).read(cx).grid(id, None))
         .expect("the host holds a screen")
 }
 

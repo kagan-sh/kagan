@@ -9,6 +9,8 @@ use serde_json::json;
 use crate::Workspace;
 use crate::database::Result;
 
+#[cfg(unix)]
+mod extra;
 mod search;
 
 struct Fixture {
@@ -2010,6 +2012,7 @@ async fn screen(id: &ThreadId, cx: &mut TestAppContext) -> Result<String> {
             id: id.clone(),
             scrollback: false,
             lines: None,
+            terminal: None,
         }),
         cx,
     )
@@ -2036,6 +2039,7 @@ async fn type_in(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
         Op::Thread(ThreadOp::Input {
             id: id.clone(),
             text: text.into(),
+            terminal: None,
         }),
         cx,
     )
@@ -2063,7 +2067,7 @@ async fn run_puts_the_programs_output_on_the_screen(cx: &mut TestAppContext) {
     let frame = screen_with(&id, "kagan-out", cx).await;
     assert!(frame.contains("kagan-out"), "{frame:?}");
     let grid = cx
-        .update(|cx| Workspace::global(cx).read(cx).grid(&id))
+        .update(|cx| Workspace::global(cx).read(cx).grid(&id, None))
         .unwrap();
     assert!(grid.lines.iter().any(|line| {
         line.iter()
@@ -2073,7 +2077,7 @@ async fn run_puts_the_programs_output_on_the_screen(cx: &mut TestAppContext) {
     }));
     let missing = ThreadId("thr_missing".into());
     assert!(
-        cx.update(|cx| Workspace::global(cx).read(cx).grid(&missing))
+        cx.update(|cx| Workspace::global(cx).read(cx).grid(&missing, None))
             .is_none()
     );
 }
@@ -2089,6 +2093,7 @@ async fn input_and_resize_reach_the_program(cx: &mut TestAppContext) {
                 id: id.clone(),
                 cols: 100,
                 rows: 40,
+                terminal: None,
             }),
             cx,
         )
@@ -2103,6 +2108,7 @@ async fn input_and_resize_reach_the_program(cx: &mut TestAppContext) {
             id: id.clone(),
             cols: 0,
             rows: 40,
+            terminal: None,
         }),
         cx,
     )
@@ -2123,6 +2129,7 @@ async fn a_stopped_thread_refuses_input_on_every_platform(cx: &mut TestAppContex
         Op::Thread(ThreadOp::Input {
             id: id.clone(),
             text: "x".into(),
+            terminal: None,
         }),
         cx,
     )
@@ -2161,6 +2168,7 @@ async fn a_stopped_thread_keeps_its_screen_and_takes_no_input(cx: &mut TestAppCo
         Op::Thread(ThreadOp::Input {
             id: id.clone(),
             text: "x".into(),
+            terminal: None,
         }),
         cx,
     )
@@ -3137,6 +3145,7 @@ async fn screen_of(id: &ThreadId, scrollback: bool, cx: &mut TestAppContext) -> 
             id: id.clone(),
             scrollback,
             lines: None,
+            terminal: None,
         }),
         cx,
     )
@@ -3197,6 +3206,7 @@ async fn a_paste_of_quotes_and_backticks_reaches_the_program(cx: &mut TestAppCon
             id: id.clone(),
             text: Some(text.into()),
             file: None,
+            terminal: None,
         }),
         cx,
     )
@@ -3209,6 +3219,7 @@ async fn a_paste_of_quotes_and_backticks_reaches_the_program(cx: &mut TestAppCon
             id: id.clone(),
             text: Some("NOPE".into()),
             file: Some("note.txt".into()),
+            terminal: None,
         }),
         cx,
     )
@@ -3242,6 +3253,7 @@ async fn paste_into_an_ended_program_sends_nothing(cx: &mut TestAppContext) {
             id: started.id.clone(),
             text: Some("NOPE".into()),
             file: None,
+            terminal: None,
         }),
         cx,
     )
@@ -3265,6 +3277,7 @@ async fn screen_lines(
             id: id.clone(),
             scrollback,
             lines,
+            terminal: None,
         }),
         cx,
     )
@@ -3291,11 +3304,9 @@ async fn a_fast_failure_keeps_its_last_lines_when_nothing_showed_it(cx: &mut Tes
     let kept = screen_of(&started.id, true, cx).await;
     assert!(kept.contains("line 2999"), "{kept}");
     assert!(kept.contains("LAST"), "{kept}");
-    assert!(
-        fixture
-            .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&started.id).is_some())
-    );
+    assert!(fixture.workspace.read_with(cx, |workspace, _| {
+        workspace.grid(&started.id, None).is_some()
+    }));
 }
 
 #[cfg(unix)]
@@ -3359,6 +3370,7 @@ async fn input_to_an_ended_program_is_refused(cx: &mut TestAppContext) {
         Op::Thread(ThreadOp::Input {
             id: started.id.clone(),
             text: "x".into(),
+            terminal: None,
         }),
         cx,
     )
@@ -3385,11 +3397,9 @@ async fn deleting_an_ended_thread_releases_its_screen(cx: &mut TestAppContext) {
         .await
         .unwrap();
     deleting.await.unwrap();
-    assert!(
-        fixture
-            .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&started.id).is_none())
-    );
+    assert!(fixture.workspace.read_with(cx, |workspace, _| {
+        workspace.grid(&started.id, None).is_none()
+    }));
 }
 
 #[cfg(unix)]
@@ -3414,19 +3424,15 @@ async fn an_archived_ended_thread_releases_its_screen_after_the_grace(cx: &mut T
     cx.executor()
         .advance_clock(std::time::Duration::from_secs(2));
     cx.run_until_parked();
-    assert!(
-        fixture
-            .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&started.id).is_some())
-    );
+    assert!(fixture.workspace.read_with(cx, |workspace, _| {
+        workspace.grid(&started.id, None).is_some()
+    }));
     cx.executor()
         .advance_clock(std::time::Duration::from_secs(12));
     cx.run_until_parked();
-    assert!(
-        fixture
-            .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&started.id).is_none())
-    );
+    assert!(fixture.workspace.read_with(cx, |workspace, _| {
+        workspace.grid(&started.id, None).is_none()
+    }));
 }
 
 #[cfg(unix)]
@@ -3466,11 +3472,9 @@ async fn stop_of_a_running_program_keeps_its_screen(cx: &mut TestAppContext) {
             .iter()
             .any(|kind| matches!(kind, EventKind::Exited { .. } | EventKind::Failed { .. }))
     );
-    assert!(
-        fixture
-            .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&started.id).is_some())
-    );
+    assert!(fixture.workspace.read_with(cx, |workspace, _| {
+        workspace.grid(&started.id, None).is_some()
+    }));
 }
 
 #[cfg(unix)]
@@ -3690,7 +3694,7 @@ async fn a_screen_change_is_announced_to_windows(cx: &mut TestAppContext) {
         let seen = seen.clone();
         move |cx| {
             cx.subscribe(&workspace, move |_, event: &crate::WorkspaceEvent, _| {
-                if let crate::WorkspaceEvent::Screen(id) = event {
+                if let crate::WorkspaceEvent::Screen(id, None) = event {
                     seen.borrow_mut().push(id.clone());
                 }
             })
@@ -3931,6 +3935,7 @@ async fn a_terminal_cannot_be_resized_past_its_limits(cx: &mut TestAppContext) {
                 id: id.clone(),
                 cols,
                 rows,
+                terminal: None,
             }),
             cx,
         )
@@ -3951,6 +3956,7 @@ async fn a_terminal_cannot_be_resized_past_its_limits(cx: &mut TestAppContext) {
             id,
             cols: 1000,
             rows: 500,
+            terminal: None,
         }),
         cx,
     )
@@ -4048,6 +4054,7 @@ async fn thread_programs_receive_a_utf8_locale(cx: &mut TestAppContext) {
                     id: id.clone(),
                     cols: 40,
                     rows: 8,
+                    terminal: None,
                 }),
                 cx,
             )
@@ -4061,7 +4068,7 @@ async fn thread_programs_receive_a_utf8_locale(cx: &mut TestAppContext) {
             )
             .await;
             screen_with(&id, "added", cx).await;
-            let grid = cx.update(|cx| Workspace::global(cx).read(cx).grid(&id).unwrap());
+            let grid = cx.update(|cx| Workspace::global(cx).read(cx).grid(&id, None).unwrap());
             let row: String = grid.lines[0].iter().map(|cell| cell.c).collect();
             assert!(row.starts_with("➜ demo (main) ✗ echo hi"), "{row}");
             return;
@@ -4630,6 +4637,7 @@ async fn a_crash_while_a_program_runs_keeps_no_screen(cx: &mut TestAppContext) {
             id: id.clone(),
             scrollback: true,
             lines: None,
+            terminal: None,
         }),
         cx,
     )
@@ -4813,7 +4821,7 @@ async fn a_screen_limit_is_still_told_after_reopening(cx: &mut TestAppContext) {
     assert!(
         fixture
             .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&big))
+            .read_with(cx, |workspace, _| workspace.grid(&big, None))
             .is_none()
     );
     drop(fixture);
@@ -4928,7 +4936,7 @@ async fn a_thread_left_starting_says_so_and_has_no_screen(cx: &mut TestAppContex
     assert!(
         fixture
             .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&id))
+            .read_with(cx, |workspace, _| workspace.grid(&id, None))
             .is_none()
     );
     drop(fixture);
@@ -5306,13 +5314,13 @@ async fn an_unsafe_screen_is_a_limit_after_reopening(cx: &mut TestAppContext) {
     assert!(
         fixture
             .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&wide))
+            .read_with(cx, |workspace, _| workspace.grid(&wide, None))
             .is_none()
     );
     assert!(
         fixture
             .workspace
-            .read_with(cx, |workspace, _| workspace.grid(&short))
+            .read_with(cx, |workspace, _| workspace.grid(&short, None))
             .is_none()
     );
     drop(fixture);

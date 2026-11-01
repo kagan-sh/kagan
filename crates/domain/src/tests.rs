@@ -610,7 +610,11 @@ RestoreThread\tsecondary-shift-r\tctrl-shift-r\tctrl-shift-r
 UseBuiltInSidebar\tsecondary-alt-b\tctrl-shift-alt-b\tctrl-shift-alt-b
 UseBuiltInReview\tsecondary-alt-v\tctrl-shift-alt-v\tctrl-shift-alt-v
 OpenCommandList\tsecondary-shift-a\tctrl-shift-a\tctrl-shift-a
-SearchThreads\tsecondary-alt-f\tctrl-shift-alt-f\tctrl-shift-alt-f"
+SearchThreads\tsecondary-alt-f\tctrl-shift-alt-f\tctrl-shift-alt-f
+NewTerminal\tsecondary-t\tctrl-shift-t\tctrl-shift-t
+CloseTerminal\tsecondary-shift-w\tctrl-shift-w\tctrl-shift-w
+NextTerminal\tsecondary-alt-]\tctrl-shift-alt-]\tctrl-shift-alt-]
+PreviousTerminal\tsecondary-alt-[\tctrl-shift-alt-[\tctrl-shift-alt-["
     );
 }
 
@@ -761,6 +765,7 @@ fn a_resize_outside_the_terminal_limits_is_refused() {
             id: ThreadId("thr_1".into()),
             cols,
             rows,
+            terminal: None,
         })
     };
     let refused = Err("terminal size must be 2 to 1000 columns and 1 to 500 rows");

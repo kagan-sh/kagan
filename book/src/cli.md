@@ -282,6 +282,7 @@ Commands:
   copy          The text selected on the program's screen
   report        Send mouse-report bytes to the program, as decimal byte values such as `27 91 77 32 128 33`. Unlike `input`, it keeps a scrolled view where it is
   paste         Paste text into the program, bracketed when the program asks for that
+  terminal      Extra terminals: login shells in the thread's folder
   archive       Archive a thread
   unarchive     Bring back an archived thread
   delete        Delete a thread and its history for good
@@ -411,7 +412,7 @@ Options:
 ```text
 Type into the program's terminal
 
-Usage: kg thread input <ID> <TEXT>
+Usage: kg thread input [OPTIONS] <ID> <TEXT>
 
 Arguments:
   <ID>
@@ -421,6 +422,9 @@ Arguments:
           
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
   -h, --help
           Print help
 ```
@@ -430,7 +434,7 @@ Options:
 ```text
 Resize the program's terminal
 
-Usage: kg thread resize <ID> <COLS> <ROWS>
+Usage: kg thread resize [OPTIONS] <ID> <COLS> <ROWS>
 
 Arguments:
   <ID>
@@ -443,6 +447,9 @@ Arguments:
           
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
   -h, --help
           Print help
 ```
@@ -459,6 +466,9 @@ Arguments:
           [env: KG_THREAD_ID=]
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
       --scrollback
           Every kept line, as plain text
 
@@ -474,7 +484,7 @@ Options:
 ```text
 Scroll the program's view back into its history, or forward with a negative count
 
-Usage: kg thread scroll <ID> <LINES>
+Usage: kg thread scroll [OPTIONS] <ID> <LINES>
 
 Arguments:
   <ID>
@@ -484,6 +494,9 @@ Arguments:
           Lines up into the history; negative moves back down
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
   -h, --help
           Print help
 ```
@@ -509,6 +522,9 @@ Arguments:
           From the top, starting at 0
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
       --right
           The right half of the cell
 
@@ -521,13 +537,16 @@ Options:
 ```text
 The text selected on the program's screen
 
-Usage: kg thread copy <ID>
+Usage: kg thread copy [OPTIONS] <ID>
 
 Arguments:
   <ID>
           [env: KG_THREAD_ID=]
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
   -h, --help
           Print help
 ```
@@ -537,7 +556,7 @@ Options:
 ```text
 Send mouse-report bytes to the program, as decimal byte values such as `27 91 77 32 128 33`. Unlike `input`, it keeps a scrolled view where it is
 
-Usage: kg thread report <ID> [BYTES]...
+Usage: kg thread report [OPTIONS] <ID> [BYTES]...
 
 Arguments:
   <ID>
@@ -547,6 +566,9 @@ Arguments:
           Decimal byte values, 0 to 255, in order
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
   -h, --help
           Print help
 ```
@@ -566,8 +588,80 @@ Arguments:
           The text. Omit it when `--file` is set
 
 Options:
+      --terminal <TERMINAL>
+          An extra terminal, by its number; the program's terminal when left out
+
       --file <PATH>
           Read the paste from this path, or `-` for stdin
+
+  -h, --help
+          Print help
+```
+
+## `kg thread terminal`
+
+```text
+Extra terminals: login shells in the thread's folder
+
+Usage: kg thread terminal <COMMAND>
+
+Commands:
+  new    Open another terminal in the thread's folder, running the login shell
+  list   The thread's extra terminals
+  close  Close an extra terminal and end its shell
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread terminal new`
+
+```text
+Open another terminal in the thread's folder, running the login shell
+
+Usage: kg thread terminal new <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread terminal list`
+
+```text
+The thread's extra terminals
+
+Usage: kg thread terminal list <ID>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg thread terminal close`
+
+```text
+Close an extra terminal and end its shell
+
+Usage: kg thread terminal close --id <ID> <NUMBER>
+
+Arguments:
+  <NUMBER>
+          
+
+Options:
+      --id <ID>
+          [env: KG_THREAD_ID=]
 
   -h, --help
           Print help
@@ -1887,6 +1981,8 @@ Commands:
   toggle-review-wrap       Toggle wrapping in the open diff review
   command-list             Open the command list
   search-threads           Open the command list on thread search
+  next-terminal            Show the shown thread's next terminal tab
+  previous-terminal        Show the shown thread's previous terminal tab
   help                     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2075,6 +2171,30 @@ Options:
 Open the command list on thread search
 
 Usage: kg window search-threads
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg window next-terminal`
+
+```text
+Show the shown thread's next terminal tab
+
+Usage: kg window next-terminal
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg window previous-terminal`
+
+```text
+Show the shown thread's previous terminal tab
+
+Usage: kg window previous-terminal
 
 Options:
   -h, --help

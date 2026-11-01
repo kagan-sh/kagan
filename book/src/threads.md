@@ -98,6 +98,8 @@ When a thread needs you and the thread is not on screen, kagan shows a system no
 | `kg thread ask <id> <title> --option yes=Yes --option no=No` | Asks you a question in the Questions panel |
 | `kg thread paste <id> --file <path>` | Sends the text of a file to the program, up to 1 MiB. Use `-` for stdin |
 | `kg thread screen <id> --scrollback` | Prints the kept terminal text |
+| `kg thread terminal new <id>` | Opens a shell in the thread's folder, as a tab in the window |
+| `kg thread input <id> <text> --terminal <n>` | Types into extra terminal `n` instead of the program |
 | `kg thread rename --id <id> <title>` | Sets the title. A program can do this one time. A title that you set stays |
 | `kg diagnostics export` | Writes a diagnostics file. [Your data](data.md#diagnostics) tells what it has |
 

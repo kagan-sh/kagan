@@ -1,5 +1,6 @@
 mod agent;
 mod archive;
+mod extra;
 mod halt;
 mod interaction;
 mod project;
@@ -12,6 +13,7 @@ mod terminal;
 mod turn;
 
 pub(crate) use agent::note;
+pub(crate) use extra::Extras;
 pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
 pub(crate) use project::remove_project;
@@ -30,7 +32,7 @@ pub(crate) use turn::child_notice;
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{
     EnvironmentOp, KeymapOp, Op, OpError, OpResult, PreferenceOp, ProgramOp, ProjectOp, SettingsOp,
-    Sidebar, ThemeOp, ThreadId, ThreadOp,
+    Sidebar, TerminalOp, ThemeOp, ThreadId, ThreadOp,
 };
 
 use crate::database::{Database, Result};
@@ -201,7 +203,8 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | ThreadOp::Ask { .. }
             | ThreadOp::MarkRead { .. }
             | ThreadOp::SetMetadata { .. }
-            | ThreadOp::StartAgain { .. } => true,
+            | ThreadOp::StartAgain { .. }
+            | ThreadOp::Terminal(TerminalOp::New { .. } | TerminalOp::Close { .. }) => true,
             ThreadOp::Run(_)
             | ThreadOp::Input { .. }
             | ThreadOp::Resize { .. }
@@ -221,7 +224,8 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | ThreadOp::Interactions { .. }
             | ThreadOp::WaitEvent { .. }
             | ThreadOp::Wait { .. }
-            | ThreadOp::Search { .. } => false,
+            | ThreadOp::Search { .. }
+            | ThreadOp::Terminal(TerminalOp::List { .. }) => false,
         },
     }
 }
@@ -248,6 +252,7 @@ async fn dispatch_thread(
         | ThreadOp::Copy { .. }
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
+        ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Archive { id } => archive(this, database, id, cx).await,
         ThreadOp::Unarchive { id } => unarchive(this, database, id, cx).await,
         ThreadOp::Delete { id, thread_id } => {

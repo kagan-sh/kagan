@@ -393,7 +393,7 @@ impl Kagan {
 
     pub(super) fn focus_work(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.screen.shown() {
-            Shown::Thread(view) => window.focus(&view.focus_handle(cx), cx),
+            Shown::Thread(view) => window.focus(&self.tab_view(view).focus_handle(cx), cx),
             Shown::Nothing | Shown::Start(_) => window.focus(&self.focus, cx),
         }
     }

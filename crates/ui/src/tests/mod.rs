@@ -15,3 +15,5 @@ mod secret;
 mod settings;
 mod sidebars;
 mod surfaces;
+#[cfg(unix)]
+mod tabs;
