@@ -72,6 +72,7 @@ fn assert_app_menu(menu: &OwnedMenu) {
         labels(menu),
         [
             "About kagan",
+            "Check for Updates…",
             "Settings…",
             "Hide Kagan",
             "Hide Others",

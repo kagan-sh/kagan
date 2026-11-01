@@ -29,10 +29,11 @@ Commands:
   window       The application menu and the window
   surface      Plugin surfaces in the window
   keymap       Keyboard shortcuts: built-in ones and plugin commands
-  preference   Read or save a preference: confirm-archive, agent-integration, notify, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
+  preference   Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
   ui           Native window for QA and agents
   diff         A thread environment's diff. Reads git and never writes the worktree
   diagnostics  Write a local diagnostics file
+  update       Check for a newer kagan
   help         Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2408,7 +2409,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
+Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
 
 Usage: kg preference [OPTIONS] <COMMAND>
 
@@ -2723,6 +2724,50 @@ Options:
       --path <PATH>
           File to write. The parent folder must exist. Omit to write under the data directory
 
+  -h, --help
+          Print help
+```
+
+## `kg update`
+
+```text
+Check for a newer kagan
+
+Usage: kg update [OPTIONS] <COMMAND>
+
+Commands:
+  check   Look for a newer kagan on the GitHub releases page now
+  status  The running version, how this copy was installed, and what the last check found. Only a person installs an update, from the window
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg update check`
+
+```text
+Look for a newer kagan on the GitHub releases page now
+
+Usage: kg update check
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg update status`
+
+```text
+The running version, how this copy was installed, and what the last check found. Only a person installs an update, from the window
+
+Usage: kg update status
+
+Options:
   -h, --help
           Print help
 ```
