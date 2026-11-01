@@ -120,7 +120,11 @@ jobs:
   linux:
     needs: [scope, checks]
     if: needs.scope.outputs.skip != 'true'
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
@@ -161,7 +165,9 @@ jobs:
           cargo nextest run --workspace --all-targets --locked --profile ci --no-run
           df -h / ; du -sh target target/* 2>/dev/null
       - name: Tests
-        run: cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
+        run: |
+          grep PRETTY /etc/os-release; uname -r; ulimit -u 6000; ulimit -u
+          timeout -k 30 12m cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all || { code=$?; echo "nextest exit $code"; ps -eo pid,ppid,pgid,sid,etimes,stat,pcpu,rss,args --sort=-etimes | head -80 | cut -c1-250; exit 1; }
       - name: Watch log
         if: always()
         run: cat "$RUNNER_TEMP/watch.log"; df -h /; ps -eo pid,ppid,pgid,sid,etimes,pcpu,rss,args | cut -c1-200
