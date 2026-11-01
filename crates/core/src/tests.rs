@@ -16,6 +16,7 @@ mod extra;
 #[cfg(unix)]
 mod resume;
 mod search;
+mod update;
 
 struct Fixture {
     dir: tempfile::TempDir,

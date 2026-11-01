@@ -248,6 +248,12 @@ impl Updater {
     }
 
     #[cfg(any(test, feature = "test-support"))]
+    pub fn use_state(&mut self, state: UpdateState, target: Target, cx: &mut Context<Self>) {
+        self.target = target;
+        self.set(state, cx);
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
     pub fn use_source(&mut self, endpoint: String, key: String, target: Target) {
         self.endpoint = endpoint;
         self.key = key;

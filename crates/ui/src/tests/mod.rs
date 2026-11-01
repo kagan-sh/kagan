@@ -21,3 +21,4 @@ mod sidebars;
 mod surfaces;
 #[cfg(unix)]
 mod tabs;
+mod update;
