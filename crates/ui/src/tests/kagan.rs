@@ -6253,6 +6253,46 @@ fn a_review_the_program_cannot_take_keeps_its_notes(cx: &mut TestAppContext) {
     );
 }
 
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_held_paste_reaches_the_program_after_its_new_size(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_program(
+        cx,
+        "/bin/sh -c \"stty -icanon -echo min 1; echo ready; dd bs=1 count=1 2>/dev/null >/dev/null; echo size $(stty size) end; exec sleep 60\"",
+    );
+    click(cx, window, &format!("thread-{}", id.0));
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("ready"));
+    cx.simulate_keystrokes(window, &chord("OpenSettings"));
+    cx.run_until_parked();
+    assert!(shows(cx, window, "settings-page"));
+    let view = cx
+        .update(|cx| screen_read::terminal_view(kagan.read(cx)))
+        .unwrap();
+    let sent = view.update(cx, |view, cx| view.paste_after_fit("x".into(), cx));
+    cx.simulate_window_resize(window, size(px(900.), px(720.)));
+    // Long enough for the program to answer a paste that was not held.
+    for _ in 0..10 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    assert!(
+        !grid_text(cx, &kagan).contains("size"),
+        "pasted before the terminal was drawn"
+    );
+    cx.simulate_keystrokes(window, "escape");
+    wait_until(cx, |cx| grid_text(cx, &kagan).contains("end"));
+    assert!(cx.foreground_executor().block_test(sent));
+    let cols = cx
+        .update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
+        .unwrap()
+        .lines[0]
+        .len();
+    let screen = grid_text(cx, &kagan);
+    assert!(screen.contains(&format!(" {cols} end")), "{cols}: {screen}");
+}
+
 #[gpui_kit::test]
 fn narrow_review_switches_between_file_and_tree(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);

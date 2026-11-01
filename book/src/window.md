@@ -59,7 +59,7 @@ Extra terminals are not part of the thread: they never mark it as busy or needin
 
 1. Click a file. The review opens in the center.
 2. Select a line, or drag across line numbers, and type a comment.
-3. Click **Send review to terminal**, or press Cmd+Enter. kagan pastes your comments into the terminal but does not press Enter, so you can edit them first.
+3. Click **Send review to terminal**, or press Cmd+Enter. The review closes and kagan pastes your comments into the program's terminal but does not press Enter, so you can edit them first. If the program cannot take them, for example because it ended, the terminal says Not sent and your comments stay.
 
 **Discard comments** deletes the comments that you did not send. In the review, use these keys:
 
