@@ -50,3 +50,7 @@ kagan refuses a manifest with a key that it does not know. The [plugin API](spec
 The entry has the exact commit. To let updates follow a branch, change the commit in the entry to the branch name.
 
 Each teammate approves the plugin on their own computer. [Plugins](plugins.md#install) tells what the install card shows.
+
+## Get listed on kagan.sh
+
+To list your plugin on [kagan.sh/plugins](https://kagan.sh/plugins/), add the topic `kagan-plugin` to its GitHub repository. Nobody reviews the listings. Every install still shows the plugin's powers and asks first.
