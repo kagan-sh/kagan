@@ -119,9 +119,8 @@ jobs:
         if: runner.os == 'macOS'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        # cargo-packager reads the certificate and notarization login from the environment
-        # (APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID);
-        # only the identity is a Cargo.toml field.
+        # cargo-packager reads the certificate and notarization login from the Package step's
+        # environment; the signing identity has no environment variable, so it goes in Cargo.toml.
         run: |
           if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
             echo "Apple signing secrets unset; the dmg will be unsigned"
