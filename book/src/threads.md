@@ -6,7 +6,7 @@ A thread runs one program in one folder. The program can be an agent, a shell, o
 
 Click **+** next to a project, or press Cmd+N. The New thread screen lists:
 
-- Claude Code and Codex, also if your computer does not have them.
+- Claude Code and Codex. These show if your computer does not have them.
 - Other known agents on your `PATH`.
 - Your login shell and recent programs.
 
@@ -57,7 +57,7 @@ If the setup script fails, the program does not start. The screen shows the erro
 - Click **Stop**, or press Cmd+., to end the program. In a terminal, run `kg thread stop <id>`.
 - Click **Start again**, or press Cmd+Shift+S, to run the same program in the same thread and folder. In a terminal, run `kg thread start-again <id>`.
 
-kagan never starts a program again without your request, and not after a restart.
+Only you can start a program again. A restart of kagan does not start it.
 
 ## When a program ends
 

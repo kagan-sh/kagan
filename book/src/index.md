@@ -13,7 +13,6 @@ These words have one meaning in this book:
 - **Program**: the command that a thread runs, such as `claude`, `codex`, or a shell.
 - **Plugin**: a folder of JavaScript that adds window parts, commands, or agent tools.
 - **Skill**: a folder of instructions that an agent can load.
+- **Personal**: a project that kagan makes on first start, for work outside a git repository. You cannot remove it.
 
-Personal is a project that kagan makes on first start for work outside a git repository, and you cannot remove it.
-
-Programs and plugins run code that you select. Only you can approve plugin powers. Only you can approve when you delete a thread.
+Programs and plugins run code that you select. Only you can approve plugin powers. Only you can approve a request to delete a thread.

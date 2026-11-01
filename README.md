@@ -45,7 +45,7 @@ A program runs with your user access and gets your environment variables. Run on
 
 For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Use Settings → Agents to disable this integration.
 
-An agent can use `kg` to control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve when you delete a thread.
+An agent can use `kg` to control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve a request to delete a thread.
 
 A plugin gets only the powers that you approve. [Plugins](book/src/plugins.md#install) lists the possible powers.
 

@@ -20,7 +20,7 @@ This error can occur after the program stops. Click **Start again**, then send t
 
 ## A plugin fails
 
-In Settings → Plugins, click **Details…** for the plugin, then click **Logs**. A failed plugin card in the right panel also has **Logs**.
+In Settings → Plugins, click **Details…** for the plugin, then click **Logs**. If a plugin tool or page fails, it shows **Logs**, **Reload**, and **Disable**.
 
 From a terminal:
 
