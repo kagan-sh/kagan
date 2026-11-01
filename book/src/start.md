@@ -25,10 +25,10 @@ There is no release yet. Build kagan from source.
    ```
 
    The first build takes several minutes. Then the window opens.
-4. Add the `kg` command to your `PATH`. On macOS and Linux, run this in the `kagan` folder, and add the same line to your shell profile, such as `~/.zshrc`:
+4. Add the `kg` command to your `PATH`. On macOS and Linux, add this line to your shell profile, such as `~/.zshrc`. If you cloned kagan to a different folder, change `$HOME/kagan` to that folder:
 
    ```bash
-   export PATH="$PWD/target/release:$PATH"
+   export PATH="$HOME/kagan/target/release:$PATH"
    ```
 
    On Windows, add the `target\release` folder, which has `kg.exe`, to your `Path`.

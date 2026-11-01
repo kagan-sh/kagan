@@ -45,7 +45,7 @@ A plugin icon opens its tool below the threads, or its page in the center. Click
 
 The center shows the terminal of the selected thread. The terminal has scrollback, mouse support, and copy and paste.
 
-The menu at the right of the thread header has **Rename**, **Pin**, **Archive**, and **Save diagnostics**. When the program ends, the line under the terminal tells you why, and has **Start again**.
+The menu at the right of the thread header has **Pin**, **Archive**, **Rename…**, and **Save diagnostics**. When the program ends, the line under the terminal tells you why, and has **Start again**.
 
 ## Review changes
 
@@ -86,11 +86,11 @@ Press Cmd+, or click the gear at the bottom of the rail. Settings has these sect
 
 ## Quit
 
-Quit (Cmd+Q) ends all programs that run. If a program runs, kagan asks first. Close the window (Cmd+W) to keep the programs running. On macOS, click the Dock icon to open the window again.
+Quit ends all programs that run. If a program runs, kagan asks first. To keep the programs running, close the window instead. On macOS, Quit is Cmd+Q and Close is Cmd+W. Click the Dock icon to open the window again.
 
 ## Keys
 
-On Linux and Windows, each key that this book writes with Cmd uses Ctrl+Shift. For example, Cmd+N is Ctrl+Shift+N. Ctrl alone always goes to the terminal program. On macOS, Alt is the Option key.
+On Linux and Windows, Cmd in this book means Ctrl+Shift. For example, Cmd+N is Ctrl+Shift+N. Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. Ctrl alone always goes to the terminal program. On macOS, Alt is the Option key.
 
 | Key | Action |
 | --- | --- |

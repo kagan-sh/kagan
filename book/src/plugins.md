@@ -48,13 +48,13 @@ kg plugin install <name>
 - `kg plugin index list` shows your indexes. kagan searches the first index first.
 - `kg plugin index remove <address>` removes an index.
 - `kg plugin install <index>/<name>` installs from one index.
-- Settings → Indexes does the same in the window.
+- Settings → Plugins → Indexes does the same in the window.
 
 The install card shows the git address, the commit, and the index. It shows a caution when the code is a folder on your computer, or comes from an owner whose index you did not add. kagan saves the git address and the commit, not the name. A later change to the index does not change your plugin.
 
 ## Turn on, turn off, remove
 
-Settings → Installed has a switch for each plugin. A plugin that is off does not load.
+Settings → Plugins has a switch for each plugin. A plugin that is off does not load.
 
 ```bash
 kg plugin list

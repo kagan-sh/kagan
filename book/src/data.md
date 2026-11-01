@@ -24,7 +24,7 @@ The data folder holds:
 
 ## Network
 
-kagan itself uses the network only to fetch a git plugin that you install or update. The programs that you run in threads can use the network. A plugin can use the network only when you approve its network power.
+kagan itself uses the network only to fetch a git plugin or a plugin index that you add or update. The programs that you run in threads can use the network. A plugin can use the network only when you approve its network power.
 
 To show the version of each known agent, kagan runs the agents that it finds on your `PATH` with `--version`. The known agents are `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, and `droid`. kagan does not run other programs this way.
 
@@ -44,9 +44,7 @@ A plugin can do only what you approve when you install it. Each plugin runs in i
 
 **Save diagnostics** in the thread menu, or `kg diagnostics export`, writes a file that you can attach to a bug report. The file has the status of each thread and each plugin. It has no terminal text, no titles, and no environment variables.
 
-## Updates and old data
-
-kagan cannot open a database from a pre-release build or from a different program. In that case, kagan shows the file name and stops, and it does not change the file. Move that file, and any `-wal` or `-shm` file next to it, out of the data folder. Then start kagan again.
+## Update
 
 To update kagan, run `git pull` in your `kagan` clone and build again. Before you update, quit kagan and make a copy of the data folder.
 

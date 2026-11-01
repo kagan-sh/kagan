@@ -25,6 +25,7 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 `kagan.json` tells kagan what the plugin is and what it can do. The starter manifest has these keys:
 
 - `id`: the plugin id, for example `dev.kagan.hello`.
+- `name`: the plugin name.
 - `version`: the plugin version.
 - `kagan`: the oldest kagan version that can load the plugin.
 - `entry`: the main script, `main.js`.
@@ -32,6 +33,7 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 - `powers`: what the plugin can do. The starter asks for none.
 - `commands`: commands that a person can bind to a key.
 - `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center.
+- `tools` and `skills`: agent tools and skills. The starter has none.
 
 kagan refuses a manifest with a key that it does not know. The [plugin API](spec/plugin-api.md) lists all the keys and powers. The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has small plugins: a panel, a sidebar, a review, an overlay, a `kg` command, and a theme.
 

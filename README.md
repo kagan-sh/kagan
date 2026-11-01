@@ -62,7 +62,7 @@ For a git repository, each thread gets its own git worktree by default. A worktr
 - **Your agent, unchanged.** kagan runs the program you select in a terminal. For Claude Code and Codex, kagan also adds its `kg` tools and a short note, so that the agent can use kagan. Settings → Agents turns this off.
 - **Only a person approves.** A program in a thread can use `kg` to start, stop, and archive threads, and to operate the window. It cannot answer an approval. A plugin install, more powers for a plugin, and a thread delete wait for you in the window.
 - **Plugins declare their powers.** A plugin is a folder of JavaScript with a manifest. The manifest lists what the plugin can do, such as run named programs or use the network. Each plugin runs in its own JavaScript engine, and kagan gives it only the powers that you approve.
-- **No account, no telemetry, no update check.** Your data stays on your computer in `~/.kagan`. kagan itself uses the network only to fetch a git plugin that you install or update. [Your data](book/src/data.md) tells what programs and plugins can do.
+- **No account, no telemetry, no update check.** Your data stays on your computer in `~/.kagan`. kagan itself uses the network only to fetch a git plugin or a plugin index that you add or update. [Your data](book/src/data.md) tells what programs and plugins can do.
 
 A program in a thread runs with your user access and gets your environment variables. Run only programs that you trust.
 
