@@ -47,7 +47,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
           - os: macos-latest
             size-budget: 78643200
           - os: windows-latest
@@ -247,3 +247,43 @@ jobs:
           if [ -n "$PREVIOUS" ]; then args+=(--notes-start-tag "$PREVIOUS"); fi
           if [ "$PRERELEASE" = true ]; then args+=(--prerelease); fi
           gh release create "$TAG" "${args[@]}" "${files[@]}"
+
+  homebrew:
+    needs: [tag, publish]
+    if: needs.tag.outputs.prerelease != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: kagan-sh/homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+      - name: Update the cask
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.tag.outputs.tag }}
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          set -eu
+          dmg="kagan_${VERSION}_aarch64.dmg"
+          sums=$(gh release download "$TAG" --pattern SHA256SUMS --output -)
+          sha=$(printf '%s\n' "$sums" | awk -v f="$dmg" '$2 == f { print $1 }')
+          if [ -z "$sha" ]; then
+            echo "$dmg is not in SHA256SUMS" >&2
+            exit 1
+          fi
+          sed -i \
+            -e "s/^  version \".*\"$/  version \"$VERSION\"/" \
+            -e "s/^  sha256 \".*\"$/  sha256 \"$sha\"/" \
+            Casks/kagan.rb
+          grep -qx "  version \"$VERSION\"" Casks/kagan.rb
+          grep -qx "  sha256 \"$sha\"" Casks/kagan.rb
+          if git diff --quiet; then
+            echo "The cask is already at $VERSION"
+            exit 0
+          fi
+          git -c user.name="kagan release" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qam "kagan $VERSION"
+          git push origin HEAD:main

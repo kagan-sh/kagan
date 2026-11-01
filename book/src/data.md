@@ -46,13 +46,22 @@ A plugin can do only what you approve when you install it. Each plugin runs in i
 
 ## Update
 
-To update kagan, run `git pull` in your `kagan` clone and build again. Before you update, quit kagan and make a copy of the data folder.
+Before you update, quit kagan and make a copy of the data folder. Then update the way you installed:
+
+- Homebrew: `brew upgrade --cask kagan`.
+- Download: download the new `.dmg` and replace `/Applications/kagan.app`. The `kg` link still works.
+- Windows, `.deb` or AppImage: install the new file from Releases over the old one.
+- Source: run `git pull` in your `kagan` clone and build again.
 
 ## Remove kagan
 
 1. Push or copy any work that you want to keep from the worktrees and Personal folders.
 2. Quit kagan.
-3. Delete the `kagan` clone, which has the `kg` binary. Remove it from your `PATH`.
+3. Remove the app the way you installed it:
+   - Homebrew: `brew uninstall --cask kagan`.
+   - Download: delete `/Applications/kagan.app` and the `kg` link, with `sudo rm /usr/local/bin/kg`.
+   - Windows: uninstall kagan from Settings → Apps. `.deb`: `sudo apt remove kagan`. AppImage: delete the file.
+   - Source: delete the `kagan` clone, which has the `kg` binary. Remove it from your `PATH`.
 4. Delete the data folder, `~/.kagan`.
 5. On macOS and Linux, delete the folder that has `kg.sock`. On Windows, there is nothing to delete.
 6. In each repository that you added, run `git worktree prune`. The git branches that kagan made for threads stay. Delete them with `git branch -D` when you do not need them.

@@ -2,7 +2,28 @@
 
 ## Install
 
-There is no release yet. Build kagan from source.
+On an Apple silicon Mac, download the app or use Homebrew. Otherwise, build kagan from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage.
+
+### Download
+
+1. Download the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases).
+2. Open it and drag `kagan.app` to `/Applications`.
+3. The `kg` command is at `/Applications/kagan.app/Contents/MacOS/kg`. It is not on your `PATH` by itself. Link it into `/usr/local/bin`, which is on the macOS `PATH`:
+
+   ```bash
+   sudo mkdir -p /usr/local/bin
+   sudo ln -sf /Applications/kagan.app/Contents/MacOS/kg /usr/local/bin/kg
+   ```
+
+### Homebrew
+
+```bash
+brew install --cask kagan-sh/tap/kagan
+```
+
+This puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
+
+### Build from source
 
 1. Install Rust from [rustup.rs](https://rustup.rs). The file `rust-toolchain.toml` sets the version.
 2. Install the build tools for your system:

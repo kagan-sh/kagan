@@ -23,7 +23,12 @@ kagan is a desktop app for coding with agents. Each thread is a real terminal. T
 
 ## Install
 
-There is no release yet. Build kagan from source.
+On an Apple silicon Mac, pick one:
+
+- **Download:** get the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases). Open it and drag `kagan.app` to `/Applications`. The `kg` command is at `/Applications/kagan.app/Contents/MacOS/kg`. It is not on your `PATH` by itself. [Get started](book/src/start.md#download) shows how to add it.
+- **Homebrew:** `brew install --cask kagan-sh/tap/kagan`. This also puts `kg` on your `PATH`.
+
+Or build kagan from source. Releases also have a Windows installer, a `.deb`, and an AppImage.
 
 1. Install Rust from [rustup.rs](https://rustup.rs). The file `rust-toolchain.toml` sets the version.
 2. Install the build tools for your system:
@@ -46,7 +51,7 @@ There is no release yet. Build kagan from source.
    ```
 
    The first build takes several minutes. Then the window opens.
-4. Add the `kg` command to your `PATH`. [Get started](book/src/start.md#install) shows how. To open kagan later, run `kg`.
+4. Add the `kg` command to your `PATH`. [Get started](book/src/start.md#build-from-source) shows how. To open kagan later, run `kg`.
 
 ## First run
 
