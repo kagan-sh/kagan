@@ -50,6 +50,7 @@ Before you update, quit kagan and make a copy of the data folder. Then update th
 
 - Homebrew: `brew upgrade --cask kagan`.
 - Download: download the new `.dmg` and replace `/Applications/kagan.app`. The `kg` link still works.
+- Windows, `.deb` or AppImage: install the new file from Releases over the old one.
 - Source: run `git pull` in your `kagan` clone and build again.
 
 ## Remove kagan
@@ -59,6 +60,7 @@ Before you update, quit kagan and make a copy of the data folder. Then update th
 3. Remove the app the way you installed it:
    - Homebrew: `brew uninstall --cask kagan`.
    - Download: delete `/Applications/kagan.app` and the `kg` link, with `sudo rm /usr/local/bin/kg`.
+   - Windows: uninstall kagan from Settings → Apps. `.deb`: `sudo apt remove kagan`. AppImage: delete the file.
    - Source: delete the `kagan` clone, which has the `kg` binary. Remove it from your `PATH`.
 4. Delete the data folder, `~/.kagan`.
 5. On macOS and Linux, delete the folder that has `kg.sock`. On Windows, there is nothing to delete.

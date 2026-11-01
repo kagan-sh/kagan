@@ -268,7 +268,8 @@ jobs:
         run: |
           set -eu
           dmg="kagan_${VERSION}_aarch64.dmg"
-          sha=$(gh release download "$TAG" --pattern SHA256SUMS --output - | awk -v f="$dmg" '$2 == f { print $1 }')
+          sums=$(gh release download "$TAG" --pattern SHA256SUMS --output -)
+          sha=$(printf '%s\n' "$sums" | awk -v f="$dmg" '$2 == f { print $1 }')
           if [ -z "$sha" ]; then
             echo "$dmg is not in SHA256SUMS" >&2
             exit 1
