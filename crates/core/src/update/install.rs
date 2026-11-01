@@ -18,7 +18,10 @@ pub struct Target {
 
 impl Target {
     pub(super) fn detect() -> Self {
-        let exe = std::env::current_exe().unwrap_or_default();
+        // `kg` on PATH is a link into the bundle.
+        let exe = std::env::current_exe()
+            .and_then(dunce::canonicalize)
+            .unwrap_or_default();
         let appimage = std::env::var_os("APPIMAGE").map(PathBuf::from);
         let brew = std::env::var_os("HOMEBREW_PREFIX")
             .map(PathBuf::from)
