@@ -17,6 +17,10 @@ const BUNDLED: &[(&str, &str)] = &[
         include_str!("../skills/kg-plugin-authoring.md"),
     ),
     (
+        "kg-plugin-port",
+        include_str!("../skills/kg-plugin-port.md"),
+    ),
+    (
         "kg-skill-creator",
         include_str!("../skills/kg-skill-creator.md"),
     ),

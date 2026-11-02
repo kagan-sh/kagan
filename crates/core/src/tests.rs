@@ -4180,6 +4180,7 @@ async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext
     );
     assert!(agent.join(".claude-plugin/plugin.json").exists());
     assert!(agent.join("skills/kg-cli/SKILL.md").exists());
+    assert!(agent.join("skills/kg-plugin-port/SKILL.md").exists());
     assert!(agent.join("skills/demo/notes.md").exists());
 }
 
