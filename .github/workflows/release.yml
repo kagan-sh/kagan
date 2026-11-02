@@ -419,7 +419,8 @@ jobs:
           # (decisions 113 and 116).
           shopt -s nullglob
           asset() {
-            local files=(dist/$2)
+            local files
+            mapfile -t files < <(compgen -G "dist/$2" || true)
             if [ "${#files[@]}" -ne 1 ] || [ ! -f "${files[0]}.sig" ]; then
               echo "expected one signed $2, found ${#files[@]}" >&2
               exit 1
