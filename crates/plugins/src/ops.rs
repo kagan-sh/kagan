@@ -622,9 +622,6 @@ async fn install(
     host.update(cx, |_, cx| cx.notify());
     let (parsed, fetched) = fetched?;
     let manifest = &fetched.discovered.manifest;
-    if let Some(error) = manifest.ui.right_panel_error() {
-        return Err(OpError::Invalid(error));
-    }
     let id = manifest.id.clone();
     if host.read_with(cx, |host, _| host.records.contains_key(&id)) {
         return Err(OpError::Invalid(format!(

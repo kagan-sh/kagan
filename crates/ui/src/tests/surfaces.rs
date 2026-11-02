@@ -1116,10 +1116,9 @@ fn list_open_and_close_reach_every_placement(cx: &mut TestAppContext) {
         item(&listed, ALPHA, "page").placement,
         SurfacePlacement::Center
     );
-    assert!(
-        listed
-            .iter()
-            .all(|item| item.id != "side" && item.placement != SurfacePlacement::Right)
+    assert_eq!(
+        item(&listed, ALPHA, "side").placement,
+        SurfacePlacement::Right
     );
     assert_eq!(item(&listed, BETA, "tool").id, "tool");
     assert!(!item(&listed, ALPHA, "tool").open);
@@ -1129,11 +1128,7 @@ fn list_open_and_close_reach_every_placement(cx: &mut TestAppContext) {
     assert!(shows(cx, window, &page));
     assert!(shows(cx, window, "plugins-manage"));
     assert!(!shows(cx, window, "plugins"));
-    assert!(!shows(
-        cx,
-        window,
-        &format!("panel-toggle-panel-{ALPHA}-side")
-    ));
+    assert!(!shows(cx, window, &format!("surface-item-{ALPHA}-side")));
     assert!(shows(cx, window, "project-prj_kagan"));
     assert_eq!(label(cx, window, &tool), "Alpha tool");
 
@@ -1154,13 +1149,12 @@ fn list_open_and_close_reach_every_placement(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "beta-tool"));
 
     open_and_close_the_page(cx, window);
-    let refused = open_surface(cx, ALPHA, "side").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .contains("right panels are no longer drawn"),
-        "{refused}"
-    );
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "alpha-side"));
+    assert!(shows(cx, window, "right-tab-bar"));
+    assert!(item(&surfaces(cx), ALPHA, "side").visible);
+    close_surface(cx, ALPHA, "side").unwrap();
+    assert!(!shows(cx, window, "alpha-side"));
 
     let _ = kagan;
 }
@@ -1186,20 +1180,17 @@ fn open_and_close_the_page(cx: &mut TestAppContext, window: AnyWindowHandle) {
 }
 
 #[gpui_kit::test]
-fn a_narrow_window_refuses_a_right_panel_and_still_opens_a_page(cx: &mut TestAppContext) {
+fn a_narrow_window_still_opens_a_page_after_a_right_panel(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
     wide(cx, window);
     cx.simulate_window_resize(window, size(px(528.), px(800.)));
     cx.run_until_parked();
+    let right = saved(cx, "main.right-sidebar");
 
-    let refused = open_surface(cx, ALPHA, "side").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .contains("right panels are no longer drawn"),
-        "{refused}"
-    );
-    assert!(surfaces(cx).iter().all(|item| item.id != "side"));
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, &body(ALPHA, "side")));
+    assert!(shows(cx, window, "right-overlay-panel"));
+    assert_eq!(saved(cx, "main.right-sidebar"), right);
 
     open_surface(cx, ALPHA, "page").unwrap();
     wait_until(cx, |cx| shows(cx, window, "surface-page"));
@@ -1481,44 +1472,59 @@ fn a_page_body_lines_up_with_its_title(cx: &mut TestAppContext) {
     );
 }
 
-fn saved_sidebar(cx: &mut TestAppContext) -> serde_json::Value {
-    match run(
-        cx,
-        Op::Preference(PreferenceOp::Get {
-            key: "main.right-sidebar".into(),
-        }),
-    )
-    .unwrap()
-    {
-        OpResult::Setting(value) => value,
-        other => panic!("{other:?}"),
-    }
-}
-
 #[gpui_kit::test]
-fn an_open_does_not_draw_a_right_panel(cx: &mut TestAppContext) {
+fn an_open_draws_a_right_panel_tab(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
     let _asked =
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
     wide(cx, window);
-    cx.simulate_window_resize(window, size(px(800.), px(720.)));
+    cx.simulate_window_resize(window, size(px(1120.), px(720.)));
     cx.run_until_parked();
-    let preference = saved_sidebar(cx);
-    let refused = open_surface(cx, ALPHA, "side").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .contains("right panels are no longer drawn"),
-        "{refused}"
-    );
-    assert!(surfaces(cx).iter().all(|item| item.id != "side"));
-    assert_eq!(saved_sidebar(cx), preference);
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "alpha-side"));
+    assert!(item(&surfaces(cx), ALPHA, "side").visible);
+    assert!(shows(cx, window, "right-tab-bar"));
+    assert!(shows(cx, window, "right-tab-add"));
+    assert!(shows(cx, window, &format!("right-tab-panel-{ALPHA}-side")));
+    assert!(shows(cx, window, "needs-you-header"));
+    assert!(!present(cx, window, "right-tab-close-needs-you"));
 
-    click(cx, window, "right-sidebar-toggle");
-    wait_until(cx, |cx| shows(cx, window, "needs-you"));
-    assert_eq!(saved_sidebar(cx), preference);
-    assert!(shows(cx, window, "right-overlay-panel"));
+    click(cx, window, &format!("right-tab-close-panel-{ALPHA}-side"));
+    wait_until(cx, |cx| !shows(cx, window, &body(ALPHA, "side")));
+    assert!(!item(&surfaces(cx), ALPHA, "side").open);
+    assert_eq!(focused_of(cx, window, "right-tab-add"), Some(true));
+
+    click(cx, window, "right-tab-add");
+    click(cx, window, &format!("right-add-{ALPHA}-side"));
+    wait_until(cx, |cx| shows(cx, window, &body(ALPHA, "side")));
+    assert_eq!(
+        selected_of(cx, window, &format!("right-tab-panel-{ALPHA}-side")),
+        Some(true)
+    );
+}
+
+#[gpui_kit::test]
+fn full_screen_gives_the_right_sidebar_the_window_and_gives_it_back(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "alpha-side"));
+    let right = width_of(cx, window, "right-sidebar");
+
+    click(cx, window, "right-full");
+    assert!(!shows(cx, window, "center"));
+    assert!(width_of(cx, window, "right-sidebar") > right);
+    assert_eq!(selected_of(cx, window, "right-full"), Some(true));
+
+    click(cx, window, "right-full");
+    assert!(shows(cx, window, "center"));
+    assert!((width_of(cx, window, "right-sidebar") - right).abs() < 0.5);
+
+    click(cx, window, "right-full");
+    open_surface(cx, ALPHA, "page").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "surface-page"));
+    assert_eq!(selected_of(cx, window, "right-full"), Some(false));
 }
 
 const BLANK: &str = "dev.test.blank";
@@ -1635,22 +1641,19 @@ fn a_failed_open_keeps_the_saved_layout(cx: &mut TestAppContext) {
     click(cx, window, "left-sidebar-toggle");
     assert!(!shows(cx, window, "project-prj_kagan"));
     assert_eq!(saved(cx, "main.left-sidebar"), json!(false));
+    let right = saved(cx, "main.right-sidebar");
 
     let missed = open_surface(cx, BLANK, "tool").unwrap_err();
     assert!(missed.to_string().contains("not on screen"), "{missed}");
     cx.run_until_parked();
     assert_eq!(saved(cx, "main.left-sidebar"), json!(false));
+    assert_eq!(saved(cx, "main.right-sidebar"), right);
     assert!(!shows(cx, window, "project-prj_kagan"));
     assert!(!item(&surfaces(cx), BLANK, "tool").open);
 
-    let refused = open_surface(cx, BLANK, "side").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .contains("right panels are no longer drawn"),
-        "{refused}"
-    );
-    assert!(surfaces(cx).iter().all(|item| item.id != "side"));
+    open_surface(cx, BLANK, "side").unwrap();
+    wait_until(cx, |cx| item(&surfaces(cx), BLANK, "side").open);
+    assert!(item(&surfaces(cx), BLANK, "side").visible);
     assert_eq!(saved(cx, "main.left-sidebar"), json!(false));
 }
 
@@ -1859,33 +1862,27 @@ fn overlapping_host_opens_keep_the_first_request(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn a_right_panel_is_skipped_and_the_tool_still_opens(cx: &mut TestAppContext) {
+fn a_right_panel_opens_as_a_tab_and_the_tool_still_opens(cx: &mut TestAppContext) {
     let (kagan, window, _data) = open_with_plugins_then(cx, install_blank);
     wide(cx, window);
     assert!(titles(cx, &kagan).iter().all(|title| title != "Blank side"));
-    let refused = open_surface(cx, BLANK, "side").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .contains("right panels are no longer drawn"),
-        "{refused}"
-    );
+    open_surface(cx, BLANK, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, &body(BLANK, "side")));
+    assert!(item(&surfaces(cx), BLANK, "side").visible);
     assert!(shows(cx, window, &format!("surface-item-{BLANK}-tool")));
+    assert!(shows(cx, window, "right-tab-bar"));
 }
 
 #[gpui_kit::test]
-fn a_right_panel_open_is_refused_and_the_tool_still_opens(cx: &mut TestAppContext) {
+fn a_right_panel_and_a_tool_open_together(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
     wide(cx, window);
-    let refused = open_surface(cx, ALPHA, "side").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .contains("right panels are no longer drawn"),
-        "{refused}"
-    );
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "alpha-side"));
     open_surface(cx, ALPHA, "tool").unwrap();
     wait_until(cx, |cx| shows(cx, window, "alpha-tool"));
+    assert!(item(&surfaces(cx), ALPHA, "side").visible);
+    assert!(item(&surfaces(cx), ALPHA, "tool").visible);
 }
 
 fn set_plugin(cx: &mut TestAppContext, enabled: bool) {
@@ -2118,12 +2115,10 @@ fn a_pending_surface_yields_to_archived(cx: &mut TestAppContext) {
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
     wide(cx, window);
-    click(cx, window, "panel-toggle-needs-you");
-    assert_eq!(saved(cx, "panel.needs-you.collapsed"), json!(true));
     open_surface(cx, ALPHA, "page").unwrap();
     wait_until(cx, |cx| shows(cx, window, "surface-page"));
     let left = saved(cx, "main.left-sidebar");
-    let collapsed = saved(cx, "panel.needs-you.collapsed");
+    let right = saved(cx, "main.right-sidebar");
 
     let reply = cx
         .update_window(window, |_, window, cx| {
@@ -2148,7 +2143,7 @@ fn a_pending_surface_yields_to_archived(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "surface-page"));
     assert_ne!(label(cx, window, "alpha-side"), "lost");
     assert_eq!(saved(cx, "main.left-sidebar"), left);
-    assert_eq!(saved(cx, "panel.needs-you.collapsed"), collapsed);
+    assert_eq!(saved(cx, "main.right-sidebar"), right);
 }
 
 #[gpui_kit::test]
@@ -2247,7 +2242,11 @@ fn list_hides_a_waiting_surface_and_a_zero_height_body(cx: &mut TestAppContext) 
     let (kagan, window, _data) = open_with_plugins_then(cx, install_blank);
     wide(cx, window);
     cx.run_until_parked();
-    assert!(surfaces(cx).iter().all(|item| item.id != "side"));
+    assert_eq!(
+        item(&surfaces(cx), BLANK, "side").placement,
+        SurfacePlacement::Right
+    );
+    assert!(!item(&surfaces(cx), BLANK, "side").open);
 
     let reply = cx
         .update_window(window, |_, window, cx| {
@@ -2520,13 +2519,9 @@ fn a_tool_and_a_side_leave_the_review_open(cx: &mut TestAppContext) {
     wide(cx, window);
     open_changed_file(cx, window, data.path());
     open_surface(cx, ALPHA, "tool").unwrap();
-    let refused = open_surface(cx, ALPHA, "side").unwrap_err();
-    assert!(
-        refused
-            .to_string()
-            .contains("right panels are no longer drawn"),
-        "{refused}"
-    );
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, &body(ALPHA, "side")));
+    assert!(shows(cx, window, "right-overlay-panel"));
     assert!(shows(cx, window, "review"));
     assert!(shows(cx, window, &body(ALPHA, "tool")));
 }

@@ -412,7 +412,6 @@ async fn activate(
             return Err(OpError::Failed(error.to_string()));
         }
     };
-    let skipped = discovered.manifest.ui.skipped_right();
     host.update(cx, |host, cx| {
         host.unload(&record.id, cx);
         let generation = host
@@ -422,10 +421,6 @@ async fn activate(
         let activation = host.begin_activation(&record.id);
         host.warnings.remove(&record.id);
         host.skipped.remove(&record.id);
-        if let Some(message) = &skipped {
-            host.skipped.insert(record.id.clone(), message.clone());
-            host.report(&record.id, message);
-        }
         let manifest = &discovered.manifest;
         let identity = (manifest.name.clone(), manifest.version.clone());
         host.identities.insert(record.id.clone(), identity);

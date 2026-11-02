@@ -39,7 +39,7 @@ pub(crate) fn new(
         std::fs::create_dir_all(parent).map_err(name_too_long)?;
     }
     std::fs::create_dir(&root).map_err(name_too_long)?;
-    let manifest = serde_json::json!({ "id": format!("dev.kagan.{name}"), "name": name, "version": "0.1.0", "kagan": format!(">={}", env!("CARGO_PKG_VERSION")), "entry": "main.js", "instructions": "A starter plugin: a hello tool under the threads. A panel may also be a center page. Right and bottom are refused. A hello command writes to its log; a person binds its key in Settings, Keyboard.", "powers": {}, "commands": [{ "id": "hello", "title": "Say hello" }], "ui": { "panels": [{ "id": "hello", "title": "Hello", "view": "HelloPanel", "placement": "left" }] }, "tools": [], "skills": [] });
+    let manifest = serde_json::json!({ "id": format!("dev.kagan.{name}"), "name": name, "version": "0.1.0", "kagan": format!(">={}", env!("CARGO_PKG_VERSION")), "entry": "main.js", "instructions": "A starter plugin: a hello tool under the threads. A panel may also be a center page or a right tab. Bottom is refused. A hello command writes to its log; a person binds its key in Settings, Keyboard.", "powers": {}, "commands": [{ "id": "hello", "title": "Say hello" }], "ui": { "panels": [{ "id": "hello", "title": "Hello", "view": "HelloPanel", "placement": "left" }] }, "tools": [], "skills": [] });
     std::fs::write(
         root.join("kagan.json"),
         serde_json::to_string_pretty(&manifest)?,
@@ -107,9 +107,6 @@ pub(crate) fn types(
 /// Checks a plugin's declarations and returns the problems that do not stop it from loading.
 pub(crate) fn check(root: &Path, data_dir: &Path) -> Result<Vec<String>> {
     let discovered = discover(root, data_dir)?;
-    if let Some(error) = discovered.manifest.ui.right_panel_error() {
-        return Err(OpError::Invalid(error));
-    }
     let manifest: Value = serde_json::from_str(&std::fs::read_to_string(root.join("kagan.json"))?)?;
     let source = std::fs::read_to_string(root.join(&discovered.manifest.entry))?;
     let exports = exports(&source).map_err(|error| match error {

@@ -180,7 +180,6 @@ pub(crate) struct Kagan {
     surface_close_focus: FocusHandle,
     // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
     surface_hold: bool,
-    collapse_stamp: BTreeMap<String, u64>,
     typing: bool,
     quiet: Task<()>,
     /// The questions that were on screen when the person started typing. They stay up.
@@ -195,6 +194,12 @@ pub(crate) struct Kagan {
     replaced: replace::Replaced,
     plugins: PluginsBox,
     panels: Vec<right::Panel>,
+    right_slots: Vec<surface::Slot>,
+    right_tab: Option<String>,
+    right_menu: Option<(Entity<PopupMenu>, Subscription)>,
+    right_add_focus: FocusHandle,
+    right_fill: right::Fill,
+    right_panels: Vec<surface::Declared>,
     tool: Option<surface::Slot>,
     surface_check: Option<surface::Check>,
     surface_epoch: u64,
@@ -438,16 +443,7 @@ impl Kagan {
             cx.new(|cx| InputState::new(window, cx).placeholder("Search archived threads"));
         let subscriptions = listen(&workspace, &picker, &columns, window, cx);
         let sidebar = cx.new(|cx| sidebar::Sidebar::new(workspace.read(cx).sidebar(cx), cx));
-        let sidebar_watch = [
-            cx.observe(&sidebar, |_, _, cx| cx.notify()),
-            cx.subscribe_in(
-                &sidebar,
-                window,
-                |this, _, event: &sidebar::Event, window, cx| {
-                    this.sidebar_event(event, window, cx);
-                },
-            ),
-        ];
+        let sidebar_watch = watch_sidebar(&sidebar, window, cx);
         let mut this = Self {
             start: start::StartState::default(),
             screen: screen::Screen::new(),
@@ -470,7 +466,6 @@ impl Kagan {
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
             surface_hold: false,
-            collapse_stamp: BTreeMap::new(),
             typing: false,
             quiet: Task::ready(()),
             on_screen: BTreeSet::new(),
@@ -483,6 +478,12 @@ impl Kagan {
             replaced: replace::Replaced::default(),
             plugins: PluginsBox::new(window, cx),
             panels: right::built_in(),
+            right_slots: Vec::new(),
+            right_tab: None,
+            right_menu: None,
+            right_add_focus: cx.focus_handle().tab_stop(true),
+            right_fill: right::Fill::Column,
+            right_panels: Vec::new(),
             tool: None,
             surface_check: None,
             surface_epoch: 0,
@@ -1402,28 +1403,15 @@ impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
-        let layout = self.layout;
-        let columns = h_resizable("columns")
-            .with_state(&self.columns)
-            .when(self.panes.left, |columns| {
-                columns.child(
-                    resizable_panel()
-                        .flex_none()
-                        .size(layout.left_width)
-                        .size_range(px(layout::LEFT_RANGE.0)..px(layout::LEFT_RANGE.1))
-                        .child(self.left_side(window, cx)),
-                )
-            })
-            .child(self.center_column(main, cx))
-            .when(self.panes.right, |columns| {
-                columns.child(
-                    resizable_panel()
-                        .flex_none()
-                        .size(layout.right_width)
-                        .size_range(px(right::WIDTH_RANGE.0)..px(right::WIDTH_RANGE.1))
-                        .child(right::render(self, window, cx)),
-                )
-            });
+        let columns = if self.right_fill == right::Fill::Window && self.panes.right {
+            div()
+                .id("right-full-column")
+                .size_full()
+                .child(right::render(self, window, cx))
+                .into_any_element()
+        } else {
+            self.columns(main, window, cx)
+        };
         v_flex()
             .id("kagan")
             .type_body()
@@ -1432,8 +1420,8 @@ impl Render for Kagan {
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
-            .on_action(cx.listener(Self::toggle_panel_action))
             .on_action(cx.listener(Self::toggle_details_action))
+            .on_action(cx.listener(Self::toggle_fill_action))
             .on_action(cx.listener(Self::toggle_form_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
@@ -1503,6 +1491,23 @@ fn window_body(
         .children(commands::layer(kagan, window, cx))
 }
 
+fn watch_sidebar(
+    sidebar: &Entity<sidebar::Sidebar>,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> [Subscription; 2] {
+    [
+        cx.observe(sidebar, |_, _, cx| cx.notify()),
+        cx.subscribe_in(
+            sidebar,
+            window,
+            |this, _, event: &sidebar::Event, window, cx| {
+                this.sidebar_event(event, window, cx);
+            },
+        ),
+    ]
+}
+
 fn listen(
     workspace: &Entity<Workspace>,
     picker: &Entity<picker::Picker>,
@@ -1554,6 +1559,37 @@ fn listen(
 }
 
 impl Kagan {
+    fn columns(
+        &mut self,
+        main: AnyElement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let layout = self.layout;
+        h_resizable("columns")
+            .with_state(&self.columns)
+            .when(self.panes.left, |columns| {
+                columns.child(
+                    resizable_panel()
+                        .flex_none()
+                        .size(layout.left_width)
+                        .size_range(px(layout::LEFT_RANGE.0)..px(layout::LEFT_RANGE.1))
+                        .child(self.left_side(window, cx)),
+                )
+            })
+            .child(self.center_column(main, cx))
+            .when(self.panes.right, |columns| {
+                columns.child(
+                    resizable_panel()
+                        .flex_none()
+                        .size(layout.right_width)
+                        .size_range(px(right::WIDTH_RANGE.0)..px(right::WIDTH_RANGE.1))
+                        .child(right::render(self, window, cx)),
+                )
+            })
+            .into_any_element()
+    }
+
     fn center_column(&self, main: AnyElement, cx: &mut Context<Self>) -> ResizablePanel {
         resizable_panel()
             .size_range(px(layout::CENTER_MIN)..px(f32::MAX))

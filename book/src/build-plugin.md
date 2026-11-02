@@ -32,7 +32,7 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 - `instructions`: a short text for agents.
 - `powers`: what the plugin can do. The starter asks for none.
 - `commands`: commands that you can bind to a key.
-- `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center.
+- `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center. `"placement": "right"` puts a tab in the right sidebar.
 - `tools` and `skills`: agent tools and skills. The starter has none.
 
 kagan refuses a manifest with an unknown key. Run `kg plugin check ./hello` to find manifest errors. [docs/plugin-api.md](https://github.com/kagan-sh/kagan/blob/main/docs/plugin-api.md) lists every key, power, and the JavaScript API.

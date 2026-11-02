@@ -205,9 +205,6 @@ impl Kagan {
 
     /// Reads the sidebar layout and the preferences the window shows, at start and on each change.
     pub(super) fn load_settings(&mut self, cx: &mut Context<Self>) {
-        for panel in &self.panels {
-            self.restore_collapsed(panel.id.clone(), cx);
-        }
         Self::load_layout(cx);
         self.load_prefs(cx);
         self.load_slots(cx);
