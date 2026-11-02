@@ -4282,6 +4282,93 @@ fn a_plugin_command_gets_the_answer_when_its_panel_is_missing(cx: &mut TestAppCo
     );
 }
 
+const PASTER_SOURCE: &str = r#"import { View } from "gpui-kit";
+import { fail, next, reply } from "kagan/jobs";
+import { log, pasteIntoThread } from "kagan/host";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        handle(job).then(
+          (value) => reply(job.id, value),
+          (error) => fail(job.id, String(error)),
+        );
+      }
+    });
+  }
+  render() { return ""; }
+}
+async function handle(job) {
+  if (job.kind !== "command") throw new Error(`Unknown job ${job.kind}`);
+  if (job.command === "paste") {
+    await pasteIntoThread(job.threadId, "pasted-from-plugin");
+    log("info", "paste ran");
+    return null;
+  }
+  throw new Error(`Unknown command ${job.command}`);
+}
+"#;
+
+fn install_paster(data: &Path) {
+    let root = data.join("plugins").join("paster");
+    std::fs::create_dir_all(&root).unwrap();
+    let manifest = serde_json::json!({
+        "id": "dev.kagan.paster",
+        "name": "Paster",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "instructions": "Pastes into a thread.",
+        "commands": [
+            { "id": "paste", "title": "Paste", "when": "thread" }
+        ]
+    });
+    std::fs::write(root.join("kagan.json"), manifest.to_string()).unwrap();
+    std::fs::write(root.join("main.js"), PASTER_SOURCE).unwrap();
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store
+        .insert_plugin(&Plugin {
+            id: PluginId("dev.kagan.paster".into()),
+            source: root.display().to_string(),
+            root: dunce::canonicalize(root).unwrap(),
+            commit: None,
+            enabled: true,
+            approved: serde_json::json!({
+                "powers": {}, "downloads": {}, "folders": {}
+            }),
+            error: None,
+        })
+        .unwrap();
+}
+
+#[gpui_kit::test]
+fn paste_into_thread_puts_text_in_the_program(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open_with_plugins_then(cx, install_paster);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    wait_until(cx, |cx| {
+        cx.update(|cx| kagan.read(cx).shown_thread(cx)) == Some(id.clone())
+    });
+    let host = cx.update(|cx| kg_plugins::PluginHost::global(cx));
+    let plugin = PluginId("dev.kagan.paster".into());
+    let task = cx.update(|cx| {
+        kg_plugins::PluginHost::dispatch_command(
+            &host,
+            &plugin,
+            "paste",
+            Some(id.clone()),
+            None,
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(task).unwrap();
+    wait_until(cx, |cx| {
+        grid_text(cx, &kagan).contains("pasted-from-plugin")
+    });
+    assert!(plugin_log(cx, "dev.kagan.paster").contains("paste ran"));
+}
+
 pub(super) const NAVIGATOR: &str = "dev.kagan.navigator";
 
 /// The shortcut for `keys` on this platform: `shift-j` is cmd-shift-j on macOS, ctrl-shift-j elsewhere.

@@ -8,11 +8,15 @@ use gpui_kit::{
     WindowId,
 };
 use gpui_shell::{HostArguments, HostError, HostModule, HostValue, with_current_app};
-use kg_domain::{DiffSide, PluginId, ProjectId, ThreadId};
+use kg_core::Workspace;
+use kg_domain::{DiffSide, Op, PluginId, ProjectId, ThreadId, ThreadOp};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::area::{from_host, to_host};
+
+/// Same cap as `kg thread paste` (`crates/kg/src/development.rs`).
+const PASTE_CAP: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -279,7 +283,7 @@ fn app<R>(
 
 pub(crate) fn extend(module: HostModule, plugin: &PluginId) -> HostModule {
     let declarations = format!(
-        "{}\n/** `overlay` is the size in pixels of the front window's center, which a `ui.overlay` view covers. That view may only paint: boxes, text, images, svgs and paths with styles and motion; a handler, hover style, cursor, scroll area, other component or window call fails it. */\nexport function context(): {{ threadId?: string; projectId?: string; focused: boolean; theme: 'light' | 'dark'; props?: unknown; overlay?: {{ width: number; height: number }} }};\nexport function onContextChanged(): Promise<ReturnType<typeof context>>;\nexport function threadOnScreen(threadId: string): boolean;\nexport function openThread(threadId: string): Promise<void>;\n/** Shows a panel this plugin declares, placed left or center. Resolves when it is on screen. */\nexport function openPanel(panelId: string, props?: unknown): Promise<void>;\nexport function openUrl(url: string): Promise<void>;\nexport function toast(message: string, action?: {{ label: string; command: string }}): Promise<void>;\n/** Adds a note to the review on screen, when this plugin draws it. kagan's footer sends or discards it. */\nexport function addComment(comment: {{ path: string; side?: 'old' | 'new'; start: number; end: number; text: string }}): Promise<void>;",
+        "{}\n/** `overlay` is the size in pixels of the front window's center, which a `ui.overlay` view covers. That view may only paint: boxes, text, images, svgs and paths with styles and motion; a handler, hover style, cursor, scroll area, other component or window call fails it. */\nexport function context(): {{ threadId?: string; projectId?: string; focused: boolean; theme: 'light' | 'dark'; props?: unknown; overlay?: {{ width: number; height: number }} }};\nexport function onContextChanged(): Promise<ReturnType<typeof context>>;\nexport function threadOnScreen(threadId: string): boolean;\nexport function openThread(threadId: string): Promise<void>;\n/** Shows a panel this plugin declares, placed left or center. Resolves when it is on screen. */\nexport function openPanel(panelId: string, props?: unknown): Promise<void>;\nexport function openUrl(url: string): Promise<void>;\nexport function toast(message: string, action?: {{ label: string; command: string }}): Promise<void>;\n/** Adds a note to the review on screen, when this plugin draws it. kagan's footer sends or discards it. */\nexport function addComment(comment: {{ path: string; side?: 'old' | 'new'; start: number; end: number; text: string }}): Promise<void>;\n/** Pastes text into a thread's program terminal, without pressing Enter. At most 1 MiB. */\nexport function pasteIntoThread(threadId: string, text: string): Promise<void>;",
         module.declared().unwrap_or("")
     );
     let module = context_functions(module.declarations(declarations), plugin);
@@ -294,6 +298,7 @@ pub(crate) fn extend(module: HostModule, plugin: &PluginId) -> HostModule {
         .async_function("addComment", move |arguments| {
             add_comment(&comments, arguments)
         })
+        .async_function("pasteIntoThread", paste_into_thread)
 }
 
 fn add_comment(
@@ -329,6 +334,51 @@ fn open_thread(
     let (reply, replied) = async_channel::bounded(1);
     app(|ui, cx| queue_thread(&ui, id, reply, cx))?;
     Ok(accepted(replied))
+}
+
+fn paste_into_thread(
+    arguments: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let id = ThreadId(arguments.string(0)?.to_owned());
+    let text = arguments.string(1)?.to_owned();
+    if text.is_empty() {
+        return Err(HostError::new("paste needs text"));
+    }
+    if text.len() > PASTE_CAP {
+        return Err(HostError::new(format!(
+            "paste is {} bytes; the cap is 1 MiB",
+            text.len()
+        )));
+    }
+    let receive = with_current_app(|cx| {
+        if Workspace::global(cx).read(cx).thread(&id).is_none() {
+            return Err(HostError::new("thread does not exist"));
+        }
+        let (sender, receive) = async_channel::bounded(1);
+        let task = Workspace::dispatch(
+            Op::Thread(ThreadOp::Paste {
+                id,
+                text: Some(text),
+                file: None,
+                terminal: None,
+            }),
+            cx,
+        );
+        cx.spawn(async move |_| {
+            let _ = sender.send(task.await).await;
+        })
+        .detach();
+        Ok(receive)
+    })
+    .ok_or_else(|| HostError::new("the application context is unavailable"))??;
+    Ok(async move {
+        receive
+            .recv()
+            .await
+            .map_err(|_| HostError::new("the plugin was unloaded"))?
+            .map_err(|error| HostError::new(error.to_string()))?;
+        Ok(HostValue::Null)
+    })
 }
 
 fn queue_thread(
