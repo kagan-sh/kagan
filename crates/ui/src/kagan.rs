@@ -1,6 +1,7 @@
 use crate::theme::TypeScale as _;
 mod archived;
 pub(crate) mod attention;
+mod browser;
 pub(crate) mod changes;
 pub(crate) mod commands;
 mod details;
@@ -227,6 +228,7 @@ pub(crate) struct Kagan {
     retired_load: Task<()>,
     archive_query: Entity<InputState>,
     _archive_watch: Subscription,
+    browser: browser::Browser,
     title_input: Option<Entity<InputState>>,
     title_watch: Option<Subscription>,
     _subscriptions: [Subscription; 5],
@@ -511,6 +513,7 @@ impl Kagan {
             retired_load: Task::ready(()),
             _archive_watch: archived::watch(&archive_query, cx),
             archive_query,
+            browser: browser::Browser::new(window, cx),
             title_input: None,
             title_watch: None,
             _subscriptions: subscriptions,
@@ -1403,6 +1406,8 @@ impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
+        #[cfg(target_os = "macos")]
+        self.sync_browser(cx);
         let columns = if self.right_fill == right::Fill::Window && self.panes.right {
             div()
                 .id("right-full-column")

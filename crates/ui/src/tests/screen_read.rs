@@ -36,23 +36,31 @@ pub(crate) fn terminal_grid(kagan: &Kagan, cx: &App) -> Option<kg_core::Grid> {
 }
 
 pub(crate) fn tab_numbers(kagan: &Kagan) -> Vec<u32> {
-    kagan.tabs.numbers()
+    kagan.tabs.numbers().collect()
 }
 
-pub(crate) fn shown_tab(kagan: &Kagan) -> Option<u32> {
-    kagan.tabs.shown()
+/// The extra terminal the right sidebar shows, if it shows one.
+pub(crate) fn shown_tab(kagan: &Kagan, cx: &App) -> Option<u32> {
+    right::selected_tab(kagan, cx).and_then(|tab| tabs::terminal_number(&tab))
 }
 
-pub(crate) fn tab_grid(kagan: &Kagan, cx: &App) -> Option<kg_core::Grid> {
-    match kagan.screen.shown() {
-        Shown::Thread(view) => Some(kagan.tab_view(view).read(cx).grid().clone()),
-        Shown::Nothing | Shown::Start(_) => None,
-    }
+pub(crate) fn tab_grid(kagan: &Kagan, number: u32, cx: &App) -> Option<kg_core::Grid> {
+    Some(kagan.tabs.view(number)?.read(cx).grid().clone())
 }
 
-pub(crate) fn tab_focused(kagan: &Kagan, window: &Window, cx: &App) -> bool {
-    match kagan.screen.shown() {
-        Shown::Thread(view) => kagan.tab_view(view).read(cx).focused(window),
-        Shown::Nothing | Shown::Start(_) => false,
-    }
+#[cfg(target_os = "macos")]
+pub(crate) fn browser_drawn(kagan: &Kagan, cx: &App) -> bool {
+    kagan.browser_drawn(cx)
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn browser_address(kagan: &Kagan, cx: &App) -> String {
+    kagan.browser.address(cx)
+}
+
+pub(crate) fn tab_focused(kagan: &Kagan, number: u32, window: &Window, cx: &App) -> bool {
+    kagan
+        .tabs
+        .view(number)
+        .is_some_and(|view| view.read(cx).focused(window))
 }

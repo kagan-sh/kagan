@@ -23,6 +23,7 @@ async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
 gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "8f2cc96df2377ee9e4384fa72e9e7e339e947761", features = ["tree-sitter-diff"] }
 gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "8f2cc96df2377ee9e4384fa72e9e7e339e947761", default-features = false, features = ["quickjs", "components"] }
+gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "8f2cc96df2377ee9e4384fa72e9e7e339e947761", default-features = false, features = ["gpui-fast"] }
 interprocess = "=2.4.4"
 keyring-core = "=1.0.1"
 rusqlite = { version = "=0.40.2", features = ["bundled", "fallible_uint"] }
@@ -55,6 +56,10 @@ disallowed_types = "deny"
 
 [workspace.metadata.bin]
 cargo-nextest = { version = "=0.9.148", locked = true }
+
+# The Browser's web view, with camera and microphone requests from pages denied (decision 117).
+[patch.crates-io]
+lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "c7d04f5abfdfc292251561d3eb1bdb96cf09d6be" }
 
 # Line tables keep panic locations. Full debug info dominates link time and the target directory.
 # unpacked skips dsymutil on macOS. Cargo ignores this value on MSVC, which only supports packed.

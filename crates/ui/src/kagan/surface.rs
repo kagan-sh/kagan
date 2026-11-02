@@ -210,10 +210,10 @@ impl Kagan {
         }
         self.right_slots = next;
         if changed
-            && self.right_tab.as_ref().is_some_and(|id| {
-                !self.panels.iter().any(|panel| &panel.id == id)
-                    && !self.right_slots.iter().any(|slot| &slot.id == id)
-            })
+            && self
+                .right_tab
+                .as_ref()
+                .is_some_and(|id| !super::right::tab_available(self, id, cx))
         {
             self.right_tab = self.default_right_tab(cx);
         }
@@ -485,14 +485,22 @@ impl Kagan {
     }
 
     pub(super) fn focus_right_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let slot = self
-            .right_tab
-            .as_ref()
-            .and_then(|id| self.right_slots.iter().find(|slot| &slot.id == id));
-        match slot {
-            Some(slot) => window.focus(&slot.focus, cx),
-            None => window.focus(&self.right_add_focus, cx),
+        let Some(tab) = super::right::selected_tab(self, cx) else {
+            return window.focus(&self.right_add_focus, cx);
+        };
+        if tab == super::tabs::BROWSER && cfg!(target_os = "macos") {
+            return self.browser.focus(window, cx);
         }
+        let terminal = super::tabs::terminal_number(&tab).and_then(|number| self.tabs.view(number));
+        let focus = match terminal {
+            Some(view) => view.focus_handle(cx),
+            None => self
+                .right_slots
+                .iter()
+                .find(|slot| slot.id == tab)
+                .map_or_else(|| self.right_add_focus.clone(), |slot| slot.focus.clone()),
+        };
+        window.focus(&focus, cx);
     }
 
     pub(super) fn closed_right_panels(&self) -> impl Iterator<Item = &Declared> {
@@ -538,7 +546,7 @@ impl Kagan {
 
     pub(super) fn focus_work(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.screen.shown() {
-            Shown::Thread(view) => window.focus(&self.tab_view(view).focus_handle(cx), cx),
+            Shown::Thread(view) => window.focus(&view.focus_handle(cx), cx),
             Shown::Nothing | Shown::Start(_) => window.focus(&self.focus, cx),
         }
     }

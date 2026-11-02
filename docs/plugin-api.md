@@ -233,7 +233,7 @@ A `secret` setting (decision 104):
 ## Not in this API
 
 - HTTP routes, background cron, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it.
-- Global (app not in front) hotkeys and script drag and drop: after v1. The in-app browser was removed as unused (decision 31): the window never showed one, and no plugin opened a page in it. `openUrl` still opens the system browser. Plugins do not embed their own web view.
+- Global (app not in front) hotkeys and script drag and drop: after v1. kagan's own Browser tab shows a page on macOS (decision 117), and plugins cannot use it. `openUrl` still opens the system browser. Plugins do not embed their own web view.
 
 ## Measured by the spike
 

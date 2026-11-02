@@ -8,7 +8,7 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, DismissEvent, ElementId, FocusHandle, Focusable as _,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role, SharedString,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role,
     StatefulInteractiveElement as _, Styled as _, Window, actions, div,
 };
 use kg_core::Workspace;
@@ -18,7 +18,7 @@ use super::Kagan;
 use super::plugins_box::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
 use super::shown::{control, menu_popup};
 use super::surface::Slot;
-use super::tabs::{self, CloseTab};
+use super::tabs::{self, CloseTab, NewTerminal};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -106,7 +106,7 @@ pub(super) fn render(
         )
 }
 
-fn selected_tab(kagan: &Kagan, cx: &App) -> Option<String> {
+pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<String> {
     let want = kagan
         .right_tab
         .clone()
@@ -118,11 +118,15 @@ fn selected_tab(kagan: &Kagan, cx: &App) -> Option<String> {
     }
 }
 
-fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
+pub(super) fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
     match id {
         "needs-you" => kagan.waiting_count(cx) > 0,
         "changes" | "details" => kagan.thread_visible(cx),
-        _ => kagan.right_slots.iter().any(|slot| slot.id == id),
+        tabs::BROWSER => kagan.tabs.browser && kagan.thread_visible(cx),
+        _ => match tabs::terminal_number(id) {
+            Some(number) => kagan.tabs.view(number).is_some() && kagan.thread_visible(cx),
+            None => kagan.right_slots.iter().any(|slot| slot.id == id),
+        },
     }
 }
 
@@ -146,6 +150,13 @@ fn tab_body(
                 .child(body)
                 .into_any_element(),
         );
+    }
+    if id == tabs::BROWSER {
+        return Some(kagan.render_browser(cx));
+    }
+    if let Some(number) = tabs::terminal_number(id) {
+        let view = kagan.tabs.view(number)?.clone();
+        return Some(div().size_full().child(view).into_any_element());
     }
     let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
     Some(
@@ -174,6 +185,9 @@ fn tab_bar(
     }
     for slot in &kagan.right_slots {
         tabs.push(plugin_tab(slot, selected, cx));
+    }
+    if kagan.thread_visible(cx) {
+        tabs.extend(kagan.right_tabs(selected, cx));
     }
     h_flex()
         .id("right-tab-bar")
@@ -230,56 +244,32 @@ fn built_in_tab(
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let id = panel.id.clone();
-    let title = panel.title.clone();
-    let active = selected == Some(id.as_str());
-    let select = id.clone();
     let focus = super::tab_stop(
         window,
         cx,
         ElementId::Name(format!("{id}-header-focus").into()),
     );
+    let active = selected == Some(id.as_str());
+    let header = format!("{id}-header");
+    let take = focus.clone();
+    let select = id.clone();
+    let tab = tabs::tab(
+        header,
+        panel.title.clone().into(),
+        active,
+        move |this, window, cx| {
+            window.focus(&take, cx);
+            this.select_right_tab(&select, cx);
+        },
+        None,
+        Some(focus),
+        cx,
+    );
     div()
-        .id(ElementId::Name(id.clone().into()))
+        .id(ElementId::Name(id.into()))
         .ui_container()
         .flex_none()
-        .child(
-            h_flex()
-                .id(ElementId::Name(format!("{id}-header").into()))
-                .ui_observe_as(Facts {
-                    role: Role::Tab,
-                    selected: Some(active),
-                    focus: Some(focus.clone()),
-                    ..Facts::button(title.clone())
-                })
-                .track_focus(&focus)
-                .tab_stop(true)
-                .key_context("PanelHeader")
-                .items_center()
-                .rounded(cx.theme().radius)
-                .type_small()
-                .focus(|header| header.border_1().border_color(cx.theme().ring))
-                .on_action(cx.listener({
-                    let select = select.clone();
-                    move |this, _: &ActivatePanelHeader, _, cx| {
-                        this.select_right_tab(&select, cx);
-                    }
-                }))
-                .child(
-                    Button::new(SharedString::from(format!("{id}-header-button")))
-                        .small()
-                        .ghost()
-                        .selected(active)
-                        .label(title.clone())
-                        .tab_stop(false)
-                        .on_click({
-                            let focus = focus.clone();
-                            cx.listener(move |this, _, window, cx| {
-                                window.focus(&focus, cx);
-                                this.select_right_tab(&select, cx);
-                            })
-                        }),
-                ),
-        )
+        .child(tab)
         .into_any_element()
 }
 
@@ -287,7 +277,7 @@ fn plugin_tab(slot: &Slot, selected: Option<&str>, cx: &mut Context<Kagan>) -> A
     let (plugin, id) = (slot.plugin.clone(), slot.contribution.clone());
     let close: CloseTab = (
         format!("right-tab-close-{}", slot.id).into(),
-        Box::new(move |cx| {
+        Box::new(move |_, _, cx| {
             Workspace::dispatch(
                 Op::Surface(SurfaceOp::Close {
                     plugin: plugin.clone(),
@@ -312,7 +302,10 @@ fn plugin_tab(slot: &Slot, selected: Option<&str>, cx: &mut Context<Kagan>) -> A
 
 fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
     let menu = kagan.right_menu.as_ref().map(|(menu, _)| menu.clone());
-    let enabled = kagan.closed_right_panels().next().is_some() || menu.is_some();
+    let enabled = kagan.closed_right_panels().next().is_some()
+        || kagan.can_open_browser(cx)
+        || kagan.can_open_terminal(cx)
+        || menu.is_some();
     let focus = kagan.right_add_focus.clone();
     div()
         .id("right-tab-plus")
@@ -332,7 +325,7 @@ fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
                 disabled: !enabled,
                 selected: Some(menu.is_some()),
                 focus: Some(focus),
-                ..Facts::button("Add panel")
+                ..Facts::button("Add tab")
             },
             Button::new("right-tab-add-button")
                 .small()
@@ -340,8 +333,8 @@ fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
                 .icon(IconName::Plus)
                 .disabled(!enabled)
                 .selected(menu.is_some())
-                .accessibility_label("Add panel")
-                .tooltip("Add panel")
+                .accessibility_label("Add tab")
+                .tooltip("Add tab")
                 .tab_stop(false)
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.open_right_menu(window, cx);
@@ -352,7 +345,7 @@ fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
                 &menu,
                 "right-tab-menu-layer",
                 "right-tab-menu",
-                "Add panel",
+                "Add tab",
             ))
         })
         .into_any_element()
@@ -378,10 +371,44 @@ impl Kagan {
             .closed_right_panels()
             .map(|item| (item.plugin.clone(), item.id.clone(), item.title.clone()))
             .collect();
-        if items.is_empty() {
+        let (browser, terminal) = (self.can_open_browser(cx), self.can_open_terminal(cx));
+        if items.is_empty() && !browser && !terminal {
             return;
         }
+        let kagan = cx.entity().downgrade();
         let menu = PopupMenu::build(window, cx, move |menu, _, _| {
+            let open =
+                |id: &'static str,
+                 title: &'static str,
+                 add: fn(&mut Kagan, &mut Window, &mut Context<Kagan>)| {
+                    let kagan = kagan.clone();
+                    PopupMenuItem::element(move |_, _| {
+                        control(
+                            id,
+                            Facts {
+                                role: Role::MenuItem,
+                                ..Facts::button(title)
+                            },
+                            title,
+                        )
+                    })
+                    .on_click(move |_, window, cx| {
+                        _ = kagan.update(cx, |this, cx| add(this, window, cx));
+                    })
+                };
+            let menu = menu
+                .when(browser, |menu| {
+                    menu.item(open("right-add-browser", "Browser", Kagan::open_browser))
+                })
+                .when(terminal, |menu| {
+                    menu.item(open(
+                        "right-add-terminal",
+                        "Terminal",
+                        |this, window, cx| {
+                            this.new_terminal(&NewTerminal, window, cx);
+                        },
+                    ))
+                });
             items.into_iter().fold(menu, |menu, (plugin, id, title)| {
                 let item_id = format!("right-add-{}-{id}", plugin.0);
                 menu.item(

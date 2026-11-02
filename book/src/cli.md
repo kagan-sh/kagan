@@ -2018,9 +2018,9 @@ Commands:
   toggle-review-wrap       Toggle wrapping in the open diff review
   command-list             Open the command list
   search-threads           Open the command list on thread search
-  next-terminal            Show the shown thread's next terminal tab
-  previous-terminal        Show the shown thread's previous terminal tab
-  open-local-link          Open the newest local link the shown thread printed, such as `localhost:3000`, in the browser
+  next-terminal            Move the keyboard to the shown thread's next terminal
+  previous-terminal        Move the keyboard to the shown thread's previous terminal
+  open-local-link          Open the newest local link the shown thread printed, such as `localhost:3000`, in the system browser
   help                     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2218,7 +2218,7 @@ Options:
 ## `kg window next-terminal`
 
 ```text
-Show the shown thread's next terminal tab
+Move the keyboard to the shown thread's next terminal
 
 Usage: kg window next-terminal
 
@@ -2230,7 +2230,7 @@ Options:
 ## `kg window previous-terminal`
 
 ```text
-Show the shown thread's previous terminal tab
+Move the keyboard to the shown thread's previous terminal
 
 Usage: kg window previous-terminal
 
@@ -2242,7 +2242,7 @@ Options:
 ## `kg window open-local-link`
 
 ```text
-Open the newest local link the shown thread printed, such as `localhost:3000`, in the browser
+Open the newest local link the shown thread printed, such as `localhost:3000`, in the system browser
 
 Usage: kg window open-local-link
 

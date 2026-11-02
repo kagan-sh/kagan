@@ -68,6 +68,7 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/kagan-sh/gpui-kit",
+    "https://github.com/kagan-sh/wry",
     "https://github.com/awslabs/llrt",
     "https://github.com/longbridge/quickjs-jit",
 ]

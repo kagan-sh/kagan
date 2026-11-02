@@ -92,7 +92,7 @@ What a thread's terminal shows right now, kept by the host. A client asks for it
 _Avoid_: Frame, buffer, pane
 
 **Extra terminal**:
-A login shell a person opens in a thread's folder beside its program, shown as a tab over the program's terminal and numbered in that thread. It is not part of the thread: no events, no marks, and it ends with the thread's run.
+A login shell a person opens in a thread's folder from the + of the right sidebar, shown as a tab there and numbered in that thread. It is not part of the thread: no events, no marks, and it ends with the thread's run.
 _Avoid_: Split, pane, second thread
 
 **Scrollback**:
@@ -122,8 +122,12 @@ _Avoid_: Injection, agent setup, wrapper
 What an agent remembers of a thread's program: what was said and done. Kagan gives `claude` an id for it at the first start, and finds the id `codex` picked, so Start again resumes it.
 _Avoid_: Session, chat
 
+**Browser**:
+A tab of the right sidebar that shows one web page on macOS. Plugins cannot use it.
+_Avoid_: Web view, preview, embedded browser
+
 **Panel**:
-A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, and a + that opens another right panel.
+A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, the Browser, extra terminals, and a + that opens one of them.
 _Avoid_: Pane, dock
 
 **Page**:

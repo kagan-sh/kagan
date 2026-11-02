@@ -48,7 +48,7 @@ fn the_row_over_the_terminal_offers_the_newest_local_link(cx: &mut TestAppContex
     assert_eq!(cx.opened_url().as_deref(), Some("http://localhost:3000/"));
 
     cx.dispatch_action(window, NewTerminal);
-    wait_until(cx, |cx| present(cx, window, "terminal-tab-1"));
+    wait_until(cx, |cx| present(cx, window, "right-tab-terminal-1"));
     cx.simulate_input(window, "printf 'http%s\\n' '://127.0.0.1:5173'\n");
     wait_until(cx, |cx| {
         cx.executor().advance_clock(POLL);
