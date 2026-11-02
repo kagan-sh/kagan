@@ -60,7 +60,9 @@ impl Browser {
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn open(&mut self, _: &url::Url, _: &mut Window, _: &mut Context<Kagan>) {}
+    fn open(&mut self, _: &url::Url, _: &mut Window, _: &mut Context<Kagan>) {
+        self.note = Some(UNSUPPORTED.into());
+    }
 
     #[cfg(target_os = "macos")]
     fn sync_page(&self, shown: bool, cx: &mut App) {
@@ -80,6 +82,7 @@ impl Browser {
 }
 
 const WEB: bool = cfg!(target_os = "macos");
+const UNSUPPORTED: &str = "The browser works on macOS only for now.";
 
 pub(super) fn page_url(typed: &str) -> Option<url::Url> {
     let typed = typed.trim();
@@ -124,7 +127,7 @@ impl Kagan {
         let hint = if WEB {
             "Type an address and press Enter."
         } else {
-            "The browser works on macOS only for now."
+            UNSUPPORTED
         };
         v_flex()
             .id("browser")
