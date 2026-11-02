@@ -26,7 +26,7 @@ kagan runs one script. `kagan.json` declares every contribution. The person appr
 
 4. **Scaffold.** `kg plugin new <name>` writes `kagan.json`, `main.js`, `jsconfig.json`, and the type files. `<name>` is lowercase and hyphenated. The id is `dev.kagan.<name>`. Replace the starter. Point `--dir` at the folder you want.
 
-5. **Port the code** into that one script. The default export is a View whose `init` runs the job loop. Other views are named exports. Start files with `// @ts-check`. Use `KgButton` from `gpui-component`, not `Button`. Give every control a stable id.
+5. **Port the code** into that one script. The default export is a View whose `init` runs the job loop. Other views are named exports. Start files with `// @ts-check`. Use `KgButton` from `gpui-component`, not `Button`. A field `kg ui` types into is `KgInput` or `KgTextarea` with `aria_label`, not the shell's `Input` or `Textarea`. A local page in a panel is `new WebView(id).url(url)`. Give every control a stable id.
 
 6. **Check.** `kg plugin check <path>` reads the manifest and the entry the same way install does. Fix every error. A warning about `Button` means switch that control to `KgButton`. Run `kg plugin types <path>` again after you call something new.
 
@@ -121,7 +121,10 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `node` filesystem anywhere | `fs/promises` inside granted roots, and `kagan/files` when `powers.read` is set | close for a read inside a root. Writes land only in the plugin data folder. `files.read` returns at most 1 MiB. Deleting or writing anywhere else cannot move unless a program named in `powers.run` does it. |
 | `child_process` | `powers.run` and `kagan/process` `run` | close. Name each program. Default timeout is 60 seconds. The environment is the fixed allowlist unless `"env": "inherit"`, which the install screen states. gpui-shell's own `process` is not granted. |
 | `fetch` | `powers.fetch`: `{ "host", "methods": ["GET" and/or "POST"] }` | close. Global `fetch`. 30 seconds. Body at most 8 MiB. No other method and no plugin HTTP server. |
-| clipboard | `powers.clipboard` `{ "read", "write" }` and `cx.read_from_clipboard` / `cx.write_to_clipboard` | direct |
+| clipboard text | `powers.clipboard` `{ "read", "write" }` and `cx.read_from_clipboard` / `cx.write_to_clipboard` | direct |
+| copy as image | `host.writeClipboardPng(base64)` | direct when `powers.clipboard.write` is granted. Standard base64 PNG, at most 8 MiB. Linux returns an error: png clipboard is not available on this platform. |
+| an HTML text field a test types into | `KgInput` or `KgTextarea` with `aria_label` | direct. `kg ui click` uses that name and `kg ui type` writes the value. The shell's `Input` and `Textarea` are not seen. |
+| an iframe or embedded page | `WebView` | close. `new WebView(id).url(url)`, http or https on `127.0.0.1`, `localhost`, or a `powers.fetch` host. macOS draws the page; other systems show one sentence. A general remote page cannot move. |
 | open a URL | `openUrl` from `kagan/host` | direct. The system browser. |
 | toast | `toast(message, action?)` | close. `action` is `{ label, command }` and runs one of this plugin's commands. |
 | `bb plugin build` | none | No build step. Drop it. |

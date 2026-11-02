@@ -1,7 +1,7 @@
 # Native components
 
 `kg_ui::register_components(&mut ComponentRegistry)` registers KgButton,
-WebView, ThreadTitle, ThreadStatus and Markdown.
+KgInput, KgTextarea, WebView, ThreadTitle, ThreadStatus and Markdown.
 The application builds one registry, registers the gpui-component catalog and
 these components into it, and freezes it. `kg_plugins::init` accepts that
 frozen catalog and retains it for each plugin runtime. The registry generates

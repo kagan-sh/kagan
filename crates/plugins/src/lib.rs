@@ -1,10 +1,12 @@
 mod area;
 mod catalog;
+mod clipboard;
 mod commands;
 mod contributions;
 mod database;
 mod development;
 mod files;
+mod grant;
 mod index;
 #[cfg(test)]
 mod index_test;
