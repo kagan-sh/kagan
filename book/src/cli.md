@@ -2262,7 +2262,7 @@ Commands:
   list     Declared plugin surfaces, and which are on screen
   threads  Show the threads list in the left sidebar
   open     Show a declared surface. Succeeds only when it is on screen
-  close    Close a left tool, a center page, or collapse a right panel
+  close    Close a left tool, a center page, or a right tab
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2319,7 +2319,7 @@ Options:
 ## `kg surface close`
 
 ```text
-Close a left tool, a center page, or collapse a right panel
+Close a left tool, a center page, or a right tab
 
 Usage: kg surface close <PLUGIN> <ID>
 

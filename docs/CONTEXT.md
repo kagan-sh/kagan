@@ -123,12 +123,12 @@ What an agent remembers of a thread's program: what was said and done. Kagan giv
 _Avoid_: Session, chat
 
 **Browser**:
-A tab of the right sidebar that shows one web page on macOS and fills the sidebar. Plugins cannot use it.
+A tab of the right sidebar that shows one web page on macOS. Plugins cannot use it.
 _Avoid_: Web view, preview, embedded browser
 
 **Panel**:
-A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool or a center page. A panel placed on the right or the bottom is refused. An already installed right panel is skipped and the plugin still runs.
-_Avoid_: Pane, dock, tab
+A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, the Browser, extra terminals, and a + that opens one of them.
+_Avoid_: Pane, dock
 
 **Page**:
 A plugin panel placed in the center. The host draws its title and Close. The thread's terminal stays, and Close shows it again.

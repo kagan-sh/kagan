@@ -514,12 +514,13 @@ impl Kagan {
             return;
         }
         if self.panes.right {
+            self.right_fill = right::Fill::Column;
             self.dismiss_overlay(Side::Right, window, cx);
             save(&key("right-sidebar"), false, cx);
             return;
         }
         if !self.screen.drawn(Side::Right) && self.waiting_count(cx) > 0 {
-            self.set_collapsed("needs-you", false, cx);
+            self.select_right_tab("needs-you", cx);
         }
         // Save the wide layout when the column fits, even while the overlay is up.
         if self.screen.review().is_none()
@@ -654,6 +655,7 @@ impl Kagan {
         let controls = thread
             .as_ref()
             .map(|thread| self.thread_controls(thread, cx));
+        // Controls occlude the drag area, or Windows takes a press on them as a caption drag.
         TitleBar::new().pl_0().child(
             h_flex()
                 .relative()
@@ -686,11 +688,13 @@ impl Kagan {
                             ToggleSidebar,
                             cx,
                         ))
-                        .child(h_flex().gap_2().children(controls).child(self.right_button(
-                            drawn,
-                            self.waiting_count(cx),
-                            cx,
-                        ))),
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .occlude()
+                                .children(controls)
+                                .child(self.right_button(drawn, self.waiting_count(cx), cx)),
+                        ),
                 ),
         )
     }
@@ -804,7 +808,7 @@ fn toggle(
         hint: None,
         focus: None,
     };
-    div().id(id).ui_observe_as(facts).child(button)
+    div().id(id).occlude().ui_observe_as(facts).child(button)
 }
 
 fn bar_button(

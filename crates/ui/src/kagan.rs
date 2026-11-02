@@ -181,7 +181,6 @@ pub(crate) struct Kagan {
     surface_close_focus: FocusHandle,
     // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
     surface_hold: bool,
-    collapse_stamp: BTreeMap<String, u64>,
     typing: bool,
     quiet: Task<()>,
     /// The questions that were on screen when the person started typing. They stay up.
@@ -196,6 +195,12 @@ pub(crate) struct Kagan {
     replaced: replace::Replaced,
     plugins: PluginsBox,
     panels: Vec<right::Panel>,
+    right_slots: Vec<surface::Slot>,
+    right_tab: Option<String>,
+    right_menu: Option<(Entity<PopupMenu>, Subscription)>,
+    right_add_focus: FocusHandle,
+    right_fill: right::Fill,
+    right_panels: Vec<surface::Declared>,
     tool: Option<surface::Slot>,
     surface_check: Option<surface::Check>,
     surface_epoch: u64,
@@ -463,7 +468,6 @@ impl Kagan {
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
             surface_hold: false,
-            collapse_stamp: BTreeMap::new(),
             typing: false,
             quiet: Task::ready(()),
             on_screen: BTreeSet::new(),
@@ -476,6 +480,12 @@ impl Kagan {
             replaced: replace::Replaced::default(),
             plugins: PluginsBox::new(window, cx),
             panels: right::built_in(),
+            right_slots: Vec::new(),
+            right_tab: None,
+            right_menu: None,
+            right_add_focus: cx.focus_handle().tab_stop(true),
+            right_fill: right::Fill::Column,
+            right_panels: Vec::new(),
             tool: None,
             surface_check: None,
             surface_epoch: 0,
@@ -584,7 +594,7 @@ impl Kagan {
         }
         self.load_changes(cx);
         self.load_details(cx);
-        self.sync_tabs(cx);
+        self.sync_tabs(window, cx);
         self.refresh_plugins(cx);
         self.tell_host(window, cx);
         cx.notify();
@@ -1056,7 +1066,7 @@ impl Kagan {
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.load_changes(cx);
         self.load_details(cx);
-        self.sync_tabs(cx);
+        self.sync_tabs(window, cx);
         self.tell_host(window, cx);
         self.note_shown(cx);
         Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
@@ -1398,28 +1408,15 @@ impl Render for Kagan {
         self.fit_to_window(window, cx);
         #[cfg(target_os = "macos")]
         self.sync_browser(cx);
-        let layout = self.layout;
-        let columns = h_resizable("columns")
-            .with_state(&self.columns)
-            .when(self.panes.left, |columns| {
-                columns.child(
-                    resizable_panel()
-                        .flex_none()
-                        .size(layout.left_width)
-                        .size_range(px(layout::LEFT_RANGE.0)..px(layout::LEFT_RANGE.1))
-                        .child(self.left_side(window, cx)),
-                )
-            })
-            .child(self.center_column(main, cx))
-            .when(self.panes.right, |columns| {
-                columns.child(
-                    resizable_panel()
-                        .flex_none()
-                        .size(layout.right_width)
-                        .size_range(px(right::WIDTH_RANGE.0)..px(right::WIDTH_RANGE.1))
-                        .child(right::render(self, window, cx)),
-                )
-            });
+        let columns = if self.right_fill == right::Fill::Window && self.panes.right {
+            div()
+                .id("right-full-column")
+                .size_full()
+                .child(right::render(self, window, cx))
+                .into_any_element()
+        } else {
+            self.columns(main, window, cx)
+        };
         v_flex()
             .id("kagan")
             .type_body()
@@ -1428,8 +1425,8 @@ impl Render for Kagan {
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
-            .on_action(cx.listener(Self::toggle_panel_action))
             .on_action(cx.listener(Self::toggle_details_action))
+            .on_action(cx.listener(Self::toggle_fill_action))
             .on_action(cx.listener(Self::toggle_form_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
@@ -1567,6 +1564,37 @@ fn listen(
 }
 
 impl Kagan {
+    fn columns(
+        &mut self,
+        main: AnyElement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let layout = self.layout;
+        h_resizable("columns")
+            .with_state(&self.columns)
+            .when(self.panes.left, |columns| {
+                columns.child(
+                    resizable_panel()
+                        .flex_none()
+                        .size(layout.left_width)
+                        .size_range(px(layout::LEFT_RANGE.0)..px(layout::LEFT_RANGE.1))
+                        .child(self.left_side(window, cx)),
+                )
+            })
+            .child(self.center_column(main, cx))
+            .when(self.panes.right, |columns| {
+                columns.child(
+                    resizable_panel()
+                        .flex_none()
+                        .size(layout.right_width)
+                        .size_range(px(right::WIDTH_RANGE.0)..px(right::WIDTH_RANGE.1))
+                        .child(right::render(self, window, cx)),
+                )
+            })
+            .into_any_element()
+    }
+
     fn center_column(&self, main: AnyElement, cx: &mut Context<Self>) -> ResizablePanel {
         resizable_panel()
             .size_range(px(layout::CENTER_MIN)..px(f32::MAX))

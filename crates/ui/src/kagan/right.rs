@@ -1,19 +1,24 @@
 use crate::theme::TypeScale as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
-use gpui_kit::{
-    Action, AnyElement, App, Context, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, Role, Styled as _, Window, actions, div,
+use gpui_kit::component::{
+    ActiveTheme as _, Disableable as _, IconName, Selectable as _, Sizable as _, h_flex, v_flex,
 };
-use kg_domain::{PluginId, PluginOp};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    Action, AnyElement, App, Context, DismissEvent, ElementId, FocusHandle, Focusable as _,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role,
+    StatefulInteractiveElement as _, Styled as _, Window, actions, div,
+};
+use kg_core::Workspace;
+use kg_domain::{Op, PluginId, PluginOp, SurfaceOp};
 
 use super::Kagan;
-use super::layout;
 use super::plugins_box::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
-use super::shown::control;
+use super::shown::{control, menu_popup};
 use super::surface::Slot;
-use super::tabs::RightPage;
+use super::tabs::{self, CloseTab, NewTerminal};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -22,24 +27,24 @@ pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
 
 #[derive(Clone, PartialEq, Eq, Action)]
 #[action(namespace = right, no_json)]
-pub(super) struct TogglePanel {
-    pub(super) panel: String,
-}
-
-#[derive(Clone, PartialEq, Eq, Action)]
-#[action(namespace = right, no_json)]
 pub(super) struct ToggleDetails {
     pub(super) panel: String,
 }
 
-actions!(right, [ActivatePanelHeader]);
+actions!(right, [ActivatePanelHeader, ToggleFill]);
 
-/// Enter and Space on a focused panel header collapse or open that panel.
+/// Enter and Space on a focused tab, or on the `+`, act on it.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("enter", ActivatePanelHeader, Some("PanelHeader")),
         KeyBinding::new("space", ActivatePanelHeader, Some("PanelHeader")),
     ]
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Fill {
+    Column,
+    Window,
 }
 
 #[derive(Clone)]
@@ -54,7 +59,6 @@ pub(super) struct Panel {
     pub(super) id: String,
     pub(super) title: String,
     pub(super) body: Body,
-    pub(super) collapsed: bool,
 }
 
 pub(super) fn built_in() -> Vec<Panel> {
@@ -68,69 +72,281 @@ pub(super) fn built_in() -> Vec<Panel> {
         id: id.into(),
         title: title.into(),
         body,
-        collapsed: false,
     })
     .collect()
-}
-
-fn panel_key(id: &str) -> String {
-    format!("panel.{id}.collapsed")
 }
 
 pub(super) fn plugin_panel_id(plugin: &PluginId, panel: &str) -> String {
     format!("panel-{}-{panel}", plugin.0)
 }
 
-pub(super) fn render(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
-    let thread = kagan.thread_visible(cx);
-    let tabs = thread.then(|| kagan.render_right_tabs(cx));
-    let needs = kagan
-        .panels
-        .iter()
-        .find(|panel| matches!(panel.body, Body::Needs))
-        .filter(|_| kagan.waiting_count(cx) > 0)
-        .map(|panel| frame(panel, kagan, window, cx));
-    let body = match kagan.tabs.right_page() {
-        RightPage::Browser if thread => Some(kagan.render_browser(cx)),
-        RightPage::Terminal(number) if thread => kagan
-            .tabs
-            .view(number)
-            .map(|view| div().size_full().child(view).into_any_element()),
-        RightPage::Panels | RightPage::Browser | RightPage::Terminal(_) => None,
-    };
-    if let Some(body) = body {
-        return v_flex()
-            .size_full()
-            .ui_container()
-            .id("right-sidebar")
-            .bg(cx.theme().sidebar)
-            .children(tabs)
-            .children(needs)
-            .child(div().flex_1().min_h_0().child(body))
-            .into_any_element();
-    }
-    let changes = kagan
-        .panels
-        .iter()
-        .find(|panel| matches!(panel.body, Body::Changes))
-        .filter(|_| thread)
-        .map(|panel| frame(panel, kagan, window, cx));
-    let details = kagan
-        .panels
-        .iter()
-        .find(|panel| matches!(panel.body, Body::Details))
-        .filter(|_| thread)
-        .map(|panel| frame(panel, kagan, window, cx));
+pub(super) fn render(
+    kagan: &Kagan,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> impl IntoElement {
+    let selected = selected_tab(kagan, cx);
+    let body = selected
+        .as_ref()
+        .and_then(|id| tab_body(kagan, id, window, cx));
     v_flex()
         .size_full()
         .ui_container()
-        .overflow_y_scrollbar()
         .id("right-sidebar")
         .bg(cx.theme().sidebar)
-        .children(tabs)
-        .children(needs)
-        .children(changes)
-        .children(details)
+        .child(tab_bar(kagan, selected.as_deref(), window, cx))
+        .child(
+            div()
+                .id("right-sidebar-body")
+                .ui_container()
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scrollbar()
+                .children(body),
+        )
+}
+
+pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<String> {
+    let want = kagan
+        .right_tab
+        .clone()
+        .or_else(|| kagan.default_right_tab(cx))?;
+    if tab_available(kagan, &want, cx) {
+        Some(want)
+    } else {
+        kagan.default_right_tab(cx)
+    }
+}
+
+fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
+    match id {
+        "needs-you" => kagan.waiting_count(cx) > 0,
+        "changes" | "details" => kagan.thread_visible(cx),
+        tabs::BROWSER => kagan.tabs.browser && kagan.thread_visible(cx),
+        _ => match tabs::terminal_number(id) {
+            Some(number) => kagan.tabs.view(number).is_some() && kagan.thread_visible(cx),
+            None => kagan.right_slots.iter().any(|slot| slot.id == id),
+        },
+    }
+}
+
+fn tab_body(
+    kagan: &Kagan,
+    id: &str,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> Option<AnyElement> {
+    if let Some(panel) = kagan.panels.iter().find(|panel| panel.id == id) {
+        let body = match &panel.body {
+            Body::Needs => kagan.render_needs(window, cx).into_any_element(),
+            Body::Changes => kagan.render_changes(cx).into_any_element(),
+            Body::Details => kagan.render_details(cx),
+        };
+        return Some(
+            div()
+                .id(ElementId::Name(format!("{id}-body").into()))
+                .ui_container()
+                .p_3()
+                .child(body)
+                .into_any_element(),
+        );
+    }
+    if id == tabs::BROWSER {
+        return Some(kagan.render_browser(cx));
+    }
+    if let Some(number) = tabs::terminal_number(id) {
+        let view = kagan.tabs.view(number)?.clone();
+        return Some(div().size_full().child(view).into_any_element());
+    }
+    let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
+    Some(
+        div()
+            .id(ElementId::Name(format!("{}-body", slot.id).into()))
+            .ui_container()
+            .size_full()
+            .p_3()
+            .track_focus(&slot.focus)
+            .child(plugin_body(slot, true, window, cx))
+            .into_any_element(),
+    )
+}
+
+fn tab_bar(
+    kagan: &Kagan,
+    selected: Option<&str>,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> AnyElement {
+    let mut tabs = Vec::new();
+    for panel in &kagan.panels {
+        if tab_available(kagan, &panel.id, cx) {
+            tabs.push(built_in_tab(panel, selected, window, cx));
+        }
+    }
+    for slot in &kagan.right_slots {
+        tabs.push(plugin_tab(slot, selected, cx));
+    }
+    if kagan.thread_visible(cx) {
+        tabs.extend(kagan.right_tabs(selected, cx));
+    }
+    h_flex()
+        .id("right-tab-bar")
+        .ui_container()
+        .flex_none()
+        .w_full()
+        .min_w_0()
+        .h_9()
+        .gap_2()
+        .px_2()
+        .border_b_1()
+        .border_color(cx.theme().border)
+        .child(
+            h_flex()
+                .id("right-tabs")
+                .ui_container()
+                .role(Role::TabList)
+                .min_w_0()
+                .flex_1()
+                .overflow_x_scroll()
+                .gap_1()
+                .children(tabs),
+        )
+        .child(plus_button(kagan, cx))
+        .when(kagan.panes.right, |bar| bar.child(full_button(kagan)))
+        .into_any_element()
+}
+
+fn full_button(kagan: &Kagan) -> impl IntoElement {
+    let (icon, label) = match kagan.right_fill {
+        Fill::Column => (IconName::Maximize, "Full screen"),
+        Fill::Window => (IconName::Minimize, "Exit full screen"),
+    };
+    control(
+        "right-full",
+        Facts {
+            selected: Some(kagan.right_fill == Fill::Window),
+            ..Facts::button(label)
+        },
+        Button::new("right-full-button")
+            .small()
+            .ghost()
+            .icon(icon)
+            .accessibility_label(label)
+            .tooltip(label)
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(ToggleFill), cx)),
+    )
+}
+
+fn built_in_tab(
+    panel: &Panel,
+    selected: Option<&str>,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> AnyElement {
+    let id = panel.id.clone();
+    let focus = super::tab_stop(
+        window,
+        cx,
+        ElementId::Name(format!("{id}-header-focus").into()),
+    );
+    let active = selected == Some(id.as_str());
+    let header = format!("{id}-header");
+    let take = focus.clone();
+    let select = id.clone();
+    let tab = tabs::tab(
+        header,
+        panel.title.clone().into(),
+        active,
+        move |this, window, cx| {
+            window.focus(&take, cx);
+            this.select_right_tab(&select, cx);
+        },
+        None,
+        Some(focus),
+        cx,
+    );
+    div()
+        .id(ElementId::Name(id.into()))
+        .ui_container()
+        .flex_none()
+        .child(tab)
+        .into_any_element()
+}
+
+fn plugin_tab(slot: &Slot, selected: Option<&str>, cx: &mut Context<Kagan>) -> AnyElement {
+    let (plugin, id) = (slot.plugin.clone(), slot.contribution.clone());
+    let close: CloseTab = (
+        format!("right-tab-close-{}", slot.id).into(),
+        Box::new(move |_, _, cx| {
+            Workspace::dispatch(
+                Op::Surface(SurfaceOp::Close {
+                    plugin: plugin.clone(),
+                    id: id.clone(),
+                }),
+                cx,
+            )
+            .detach();
+        }),
+    );
+    let select = slot.id.clone();
+    tabs::tab(
+        format!("right-tab-{}", slot.id),
+        slot.title.clone().into(),
+        selected == Some(slot.id.as_str()),
+        move |this, _, cx| this.select_right_tab(&select, cx),
+        Some(close),
+        None,
+        cx,
+    )
+}
+
+fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
+    let menu = kagan.right_menu.as_ref().map(|(menu, _)| menu.clone());
+    let (browser, terminal) = kagan.right_adds(cx);
+    let enabled =
+        kagan.closed_right_panels().next().is_some() || browser || terminal || menu.is_some();
+    let focus = kagan.right_add_focus.clone();
+    div()
+        .id("right-tab-plus")
+        .relative()
+        .flex_shrink_0()
+        .track_focus(&focus)
+        .tab_stop(true)
+        .key_context("PanelHeader")
+        .rounded(cx.theme().radius)
+        .focus(|add| add.border_1().border_color(cx.theme().ring))
+        .on_action(cx.listener(|this, _: &ActivatePanelHeader, window, cx| {
+            this.open_right_menu(window, cx);
+        }))
+        .child(control(
+            "right-tab-add",
+            Facts {
+                disabled: !enabled,
+                selected: Some(menu.is_some()),
+                focus: Some(focus),
+                ..Facts::button("Add tab")
+            },
+            Button::new("right-tab-add-button")
+                .small()
+                .ghost()
+                .icon(IconName::Plus)
+                .disabled(!enabled)
+                .selected(menu.is_some())
+                .accessibility_label("Add tab")
+                .tooltip("Add tab")
+                .tab_stop(false)
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.open_right_menu(window, cx);
+                })),
+        ))
+        .when_some(menu, |wrap, menu| {
+            wrap.child(menu_popup(
+                &menu,
+                "right-tab-menu-layer",
+                "right-tab-menu",
+                "Add tab",
+            ))
+        })
         .into_any_element()
 }
 
@@ -140,94 +356,92 @@ impl Kagan {
     }
 
     pub(super) fn has_right_content(&self, cx: &App) -> bool {
-        self.thread_visible(cx) || self.waiting_count(cx) > 0
+        self.thread_visible(cx)
+            || self.waiting_count(cx) > 0
+            || !self.right_slots.is_empty()
+            || !self.right_panels.is_empty()
     }
-}
 
-fn frame(panel: &Panel, kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
-    let (icon, verb) = if panel.collapsed {
-        (IconName::ChevronDown, "Show")
-    } else {
-        (IconName::ChevronUp, "Hide")
-    };
-    let (id, title) = (panel.id.clone(), panel.title.clone());
-    let toggle_id = id.clone();
-    let toggle = control(
-        format!("panel-toggle-{id}"),
-        Facts {
-            selected: Some(!panel.collapsed),
-            ..Facts::button(format!("{verb} {title}"))
-        },
-        Button::new(ElementId::Name(format!("button-panel-toggle-{id}").into()))
-            .small()
-            .ghost()
-            .icon(icon)
-            .accessibility_label(format!("{verb} {title}"))
-            .on_click(move |_, window, cx| {
-                window.dispatch_action(
-                    Box::new(TogglePanel {
-                        panel: toggle_id.clone(),
+    pub(super) fn open_right_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.right_menu.is_some() {
+            return;
+        }
+        let items: Vec<_> = self
+            .closed_right_panels()
+            .map(|item| (item.plugin.clone(), item.id.clone(), item.title.clone()))
+            .collect();
+        let (browser, terminal) = self.right_adds(cx);
+        if items.is_empty() && !browser && !terminal {
+            return;
+        }
+        let kagan = cx.entity().downgrade();
+        let menu = PopupMenu::build(window, cx, move |menu, _, _| {
+            let open =
+                |id: &'static str,
+                 title: &'static str,
+                 add: fn(&mut Kagan, &mut Window, &mut Context<Kagan>)| {
+                    let kagan = kagan.clone();
+                    PopupMenuItem::element(move |_, _| {
+                        control(
+                            id,
+                            Facts {
+                                role: Role::MenuItem,
+                                ..Facts::button(title)
+                            },
+                            title,
+                        )
+                    })
+                    .on_click(move |_, window, cx| {
+                        _ = kagan.update(cx, |this, cx| add(this, window, cx));
+                    })
+                };
+            let menu = menu
+                .when(browser, |menu| {
+                    menu.item(open("right-add-browser", "Browser", Kagan::open_browser))
+                })
+                .when(terminal, |menu| {
+                    menu.item(open(
+                        "right-add-terminal",
+                        "Terminal",
+                        |this, window, cx| {
+                            this.new_terminal(&NewTerminal, window, cx);
+                        },
+                    ))
+                });
+            items.into_iter().fold(menu, |menu, (plugin, id, title)| {
+                let item_id = format!("right-add-{}-{id}", plugin.0);
+                menu.item(
+                    PopupMenuItem::element(move |_, _| {
+                        control(
+                            ElementId::Name(item_id.clone().into()),
+                            Facts {
+                                role: Role::MenuItem,
+                                ..Facts::button(title.clone())
+                            },
+                            title.clone(),
+                        )
+                    })
+                    .on_click(move |_, _, cx| {
+                        Workspace::dispatch(
+                            Op::Surface(SurfaceOp::Open {
+                                plugin: plugin.clone(),
+                                id: id.clone(),
+                            }),
+                            cx,
+                        )
+                        .detach();
                     }),
-                    cx,
-                );
-            }),
-    );
-    let header_focus = super::tab_stop(
-        window,
-        cx,
-        ElementId::Name(format!("{id}-header-focus").into()),
-    );
-    let activate_id = id.clone();
-    let label = div()
-        .id(ElementId::Name(format!("{id}-header").into()))
-        .ui_observe_as(Facts {
-            focus: Some(header_focus.clone()),
-            ..Facts::button(panel.title.clone())
-        })
-        .track_focus(&header_focus)
-        .tab_stop(true)
-        .key_context("PanelHeader")
-        .rounded(cx.theme().radius)
-        .focus(|header| header.border_1().border_color(cx.theme().ring))
-        .type_caption()
-        .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-        .text_color(cx.theme().muted_foreground)
-        .child(title)
-        .on_action(cx.listener(move |_, _: &ActivatePanelHeader, window, cx| {
-            window.dispatch_action(
-                Box::new(TogglePanel {
-                    panel: activate_id.clone(),
-                }),
-                cx,
-            );
-        }));
-    let header = h_flex()
-        .justify_between()
-        .items_center()
-        .child(label)
-        .child(toggle);
-    let mut frame = v_flex()
-        .id(ElementId::Name(id.into()))
-        .ui_container()
-        .p_3()
-        .gap_2()
-        .border_b_1()
-        .border_color(cx.theme().border)
-        .child(header);
-    if !panel.collapsed {
-        let body = match &panel.body {
-            Body::Needs => kagan.render_needs(window, cx).into_any_element(),
-            Body::Changes => kagan.render_changes(cx).into_any_element(),
-            Body::Details => kagan.render_details(cx),
-        };
-        frame = frame.child(
-            div()
-                .id(ElementId::Name(format!("{}-body", panel.id).into()))
-                .ui_container()
-                .child(body),
-        );
+                )
+            })
+        });
+        let dismiss = cx.subscribe_in(&menu, window, |this, _, _: &DismissEvent, _, cx| {
+            this.right_menu = None;
+            cx.notify();
+        });
+        menu.read(cx).focus_handle(cx).focus(window, cx);
+        self.right_menu = Some((menu, dismiss));
+        cx.notify();
     }
-    frame.into_any_element()
 }
 
 /// The recovery buttons under a failed card. Each one sends its action from where it has focus.
@@ -356,76 +570,17 @@ fn failed_plugin(
 }
 
 impl Kagan {
-    pub(super) fn toggle_panel(&mut self, id: &str, cx: &mut Context<Self>) {
-        let collapsed = self
-            .panels
-            .iter()
-            .find(|panel| panel.id == id)
-            .is_some_and(|panel| !panel.collapsed);
-        self.set_collapsed(id, collapsed, cx);
-    }
-
-    /// Shows or hides one panel, and saves the choice so a restart and a plugin's own open keep it.
-    pub(super) fn set_collapsed(&mut self, id: &str, collapsed: bool, cx: &mut Context<Self>) {
-        let changed = self
-            .panels
-            .iter()
-            .any(|panel| panel.id == id && panel.collapsed != collapsed);
-        self.bump_collapse(id);
-        if let Some(panel) = self.panels.iter_mut().find(|panel| panel.id == id) {
-            panel.collapsed = collapsed;
-        }
-        if changed {
-            self.supersede_surface();
-        }
-        if !self.surface_hold {
-            layout::save(&panel_key(id), collapsed, cx);
-        }
-        cx.notify();
-    }
-
-    pub(super) fn restore_collapsed(&self, id: String, cx: &mut Context<Self>) {
-        let stamp = self.stamped(&id);
-        let read = layout::read::<bool>(&panel_key(&id), cx);
-        cx.spawn(async move |this, cx| {
-            let collapsed = read.await.unwrap_or(false);
-            _ = this.update(cx, |this, cx| {
-                if this.stamped(&id) != stamp {
-                    return;
-                }
-                let changed = this
-                    .panels
-                    .iter()
-                    .any(|panel| panel.id == id && panel.collapsed != collapsed);
-                if !changed {
-                    return;
-                }
-                if let Some(panel) = this.panels.iter_mut().find(|panel| panel.id == id) {
-                    panel.collapsed = collapsed;
-                }
-                this.supersede_surface();
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    fn stamped(&self, id: &str) -> u64 {
-        self.collapse_stamp.get(id).copied().unwrap_or(0)
-    }
-
-    fn bump_collapse(&mut self, id: &str) {
-        let next = self.stamped(id).wrapping_add(1);
-        self.collapse_stamp.insert(id.to_owned(), next);
-    }
-
-    pub(super) fn toggle_panel_action(
+    pub(super) fn toggle_fill_action(
         &mut self,
-        action: &TogglePanel,
+        _: &ToggleFill,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.toggle_panel(&action.panel, cx);
+        self.right_fill = match self.right_fill {
+            Fill::Column => Fill::Window,
+            Fill::Window => Fill::Column,
+        };
+        cx.notify();
     }
 
     pub(super) fn toggle_details_action(

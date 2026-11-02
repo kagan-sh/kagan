@@ -5,7 +5,7 @@ From left to right, the window has these parts:
 - **Rail**: a column of icons at the left edge.
 - **Left sidebar**: your projects and their threads.
 - **Center**: the terminal of the selected thread.
-- **Right sidebar**: Questions, Changes, and Details.
+- **Right sidebar**: tabs for Questions, Changes, Details, the plugin panels, the Browser, and extra terminals. Open the last three with `+`.
 
 On a narrow window, the right sidebar hides first, then the left sidebar. The rail stays. Press Cmd+B to show the left sidebar or Cmd+Backslash to show the right sidebar. Press Escape to close it.
 
@@ -51,9 +51,9 @@ A program can rename its thread one time. A title that you set stays.
 
 ### Extra terminals
 
-To open a shell in the thread's folder, click **+** in the thread header or press Cmd+T. Tabs over the terminal show the program first, then **Terminal 1**, **Terminal 2**, and so on.
+To open a shell in the thread's folder, click **+** in the right sidebar and choose **Terminal**, or press Cmd+T. Each shell is a tab of the right sidebar: **Terminal 1**, **Terminal 2**, and so on. The center always shows the program.
 
-Click a tab, or press Cmd+Alt+] and Cmd+Alt+[, to switch. To close an extra terminal, click **×**, press Cmd+Shift+W, or type `exit`.
+Click a tab, or press Cmd+Alt+] and Cmd+Alt+[, to move between the program and the shells. To close an extra terminal, click **×**, press Cmd+Shift+W, or type `exit`.
 
 From a terminal, use `kg thread terminal new`, `list`, and `close`. Add `--terminal <n>` to `kg thread input` and other terminal commands to select an extra terminal.
 
@@ -64,6 +64,10 @@ Extra terminals do not change the thread's marks. Archive and Quit end them. The
 To open a link in the terminal, hold Cmd and click it. On Linux and Windows, hold Ctrl and click it.
 
 When a program prints a local address, **Open localhost:3000** appears over the terminal. Click it, or press Cmd+Alt+O, to open the address in your browser. `kg thread links` lists the links from the thread's terminals.
+
+### Browser
+
+On macOS, click **+** in the right sidebar and choose **Browser**. Type an address and press Enter. Only http and https pages open. On Linux and Windows, the tab tells you that the browser works on macOS only.
 
 ## Details
 

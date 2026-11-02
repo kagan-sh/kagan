@@ -1,17 +1,18 @@
-//! The Browser page of the right sidebar: an address field and one web page, drawn by the native
+//! The Browser tab of the right sidebar: an address field and one web page, drawn by the native
 //! web view. The page is macOS only for now (`WKWebView`). Other systems show a note instead.
 
 use crate::theme::TypeScale as _;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, IntoElement,
-    ParentElement as _, Styled as _, Subscription, Window, div,
+    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
+    IntoElement, ParentElement as _, Role, Styled as _, Subscription, Window, div,
 };
 
 use super::Kagan;
-#[cfg(target_os = "macos")]
-use super::tabs::RightPage;
+use crate::ui_observe::UiObserveExt as _;
+use crate::ui_registry::Facts;
 
 #[cfg(target_os = "macos")]
 use gpui_webview::WebView;
@@ -59,9 +60,7 @@ impl Browser {
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn open(&mut self, _: &url::Url, _: &mut Window, _: &mut Context<Kagan>) {
-        self.note = Some("The browser works on macOS only for now.".into());
-    }
+    fn open(&mut self, _: &url::Url, _: &mut Window, _: &mut Context<Kagan>) {}
 
     #[cfg(target_os = "macos")]
     fn sync_page(&self, shown: bool, cx: &mut App) {
@@ -76,12 +75,7 @@ impl Browser {
     }
 }
 
-fn hint() -> AnyElement {
-    div()
-        .type_small()
-        .child("Type an address and press Enter.")
-        .into_any_element()
-}
+const WEB: bool = cfg!(target_os = "macos");
 
 pub(super) fn page_url(typed: &str) -> Option<url::Url> {
     let typed = typed.trim();
@@ -103,8 +97,7 @@ impl Kagan {
     #[cfg(target_os = "macos")]
     pub(super) fn browser_drawn(&self, cx: &App) -> bool {
         self.right_drawn()
-            && self.thread_visible(cx)
-            && self.tabs.right_page() == RightPage::Browser
+            && super::right::selected_tab(self, cx).as_deref() == Some(super::tabs::BROWSER)
     }
 
     /// Hides or shows the native page to match whether the Browser tab is on screen.
@@ -121,19 +114,36 @@ impl Kagan {
             .clone()
             .map(|note| div().type_small().text_color(cx.theme().danger).child(note));
         #[cfg(target_os = "macos")]
-        let page = match &self.browser.page {
-            Some(page) => div().size_full().child(page.clone()).into_any_element(),
-            None => hint(),
-        };
+        let page = self.browser.page.clone();
         #[cfg(not(target_os = "macos"))]
-        let page = hint();
+        let page: Option<AnyElement> = None;
+        let hint = if WEB {
+            "Type an address and press Enter."
+        } else {
+            "The browser works on macOS only for now."
+        };
         v_flex()
+            .id("browser")
+            .ui_container()
             .size_full()
             .gap_2()
             .p_2()
-            .child(Input::new(&self.browser.address))
+            .when(WEB, |browser| {
+                browser.child(Input::new(&self.browser.address))
+            })
             .children(note)
-            .child(div().flex_1().min_h_0().child(page))
+            .child(match page {
+                Some(page) => div().flex_1().min_h_0().child(page).into_any_element(),
+                None => div()
+                    .id("browser-hint")
+                    .ui_observe_as(Facts {
+                        role: Role::Label,
+                        ..Facts::button(hint)
+                    })
+                    .type_small()
+                    .child(hint)
+                    .into_any_element(),
+            })
             .into_any_element()
     }
 

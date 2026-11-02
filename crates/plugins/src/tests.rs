@@ -3519,12 +3519,7 @@ fn a_manifest_for_a_spot_kagan_does_not_draw_is_refused() {
     let error = crate::development::check(plugin.path(), spare_data())
         .unwrap_err()
         .to_string();
-    assert!(
-        error.contains(
-            "panel \"notes\": placement \"right\" is not supported. Use \"left\" or \"center\"."
-        ),
-        "{error}"
-    );
+    assert_eq!(error, "declared view Notes is not exported by main.js");
     let mut declared = manifest();
     declared["ui"]["panels"] =
         json!([{ "id": "notes", "title": "Notes", "view": "Notes", "placement": "bottom" }]);
@@ -3665,7 +3660,7 @@ fn write_theme_files(themes: &Path) -> TempDir {
 }
 
 #[gpui_kit::test]
-fn a_skipped_right_panel_stays_a_note_after_the_plugin_loads(cx: &mut TestAppContext) {
+fn a_right_panel_loads_without_a_skip_note(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     let mut declared = manifest();
     declared["ui"]["panels"] = json!([
@@ -3699,18 +3694,14 @@ fn a_skipped_right_panel_stays_a_note_after_the_plugin_loads(cx: &mut TestAppCon
     let (error, note, failure) = read(cx);
     assert!(error.is_none(), "{error:?}");
     assert!(failure.is_none(), "{failure:?}");
-    let note = note.expect("note");
-    assert!(
-        note.contains("Side") && note.contains("no longer draws"),
-        "{note}"
-    );
+    assert!(note.is_none(), "{note:?}");
     let handle = cx.add_window(|_, _| gpui_kit::EmptyView);
     cx.update(|cx| {
         handle
             .update(cx, |_, window, cx| {
                 crate::PluginHost::global(cx)
                     .update(cx, |host, cx| {
-                        host.mount_panel(&PluginId(ID.into()), "tool", window, cx)
+                        host.mount_panel(&PluginId(ID.into()), "side", window, cx)
                     })
                     .unwrap()
             })
@@ -3719,14 +3710,7 @@ fn a_skipped_right_panel_stays_a_note_after_the_plugin_loads(cx: &mut TestAppCon
     let (error, note, failure) = read(cx);
     assert!(error.is_none(), "{error:?}");
     assert!(failure.is_none(), "{failure:?}");
-    let note = note.expect("note");
-    assert!(note.contains("no longer draws"), "{note}");
-    let log = cx.read(|cx| {
-        let host = crate::PluginHost::global(cx).read(cx);
-        let path = host.data_dir.join("plugins").join(ID).join("logs.jsonl");
-        std::fs::read_to_string(path).unwrap_or_default()
-    });
-    assert!(log.contains("no longer draws"), "{log}");
+    assert!(note.is_none(), "{note:?}");
 }
 
 #[test]

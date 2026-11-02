@@ -24,6 +24,9 @@ image = { version = "=0.25.10", default-features = false, features = ["png"] }
 raw-window-handle.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# GPUI Fast draws GPUI menus over the Browser's native page. Other systems have no page.
+gpui-kit = { workspace = true, features = ["gpui-fast"] }
+gpui-shell = { workspace = true, features = ["gpui-fast"] }
 gpui-webview.workspace = true
 wry = { version = "=0.53.3", package = "lb-wry" }
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSString"] }

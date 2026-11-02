@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 use kg_core::Workspace;
 use kg_domain::{Op, PluginId, PluginOp};
-use kg_plugins::{Placement, PluginHost, PluginStatus};
+use kg_plugins::{PluginHost, PluginStatus};
 
 use super::Kagan;
 use super::pages::{Group, Row, row, switch};
@@ -257,7 +257,6 @@ fn added(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
         for panel in ui.panels() {
             match (panel.replaces(), panel.placement()) {
                 (Some(slot), _) => parts.push(format!("offers a {}", slot.name())),
-                (None, Placement::Right) => {}
                 (None, _) => parts.push(panel.title().to_owned()),
             }
         }

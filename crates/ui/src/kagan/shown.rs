@@ -113,7 +113,12 @@ pub(super) fn note(id: &'static str, text: impl Into<SharedString>, color: Hsla)
 /// The menu, under the button it is wrapped in: its top right corner sits on the button's bottom
 /// right corner. The zero-size holder is placed there, because an anchored child on its own sits at
 /// the button's top left.
-pub(super) fn menu_popup(menu: &Entity<PopupMenu>) -> impl IntoElement {
+pub(super) fn menu_popup(
+    menu: &Entity<PopupMenu>,
+    layer: &'static str,
+    id: &'static str,
+    label: &'static str,
+) -> impl IntoElement {
     div()
         .absolute()
         .bottom_0()
@@ -123,13 +128,13 @@ pub(super) fn menu_popup(menu: &Entity<PopupMenu>) -> impl IntoElement {
         .child(deferred(
             anchored().anchor(Anchor::TopRight).child(
                 div()
-                    .id("thread-menu-layer")
+                    .id(layer)
                     .on_click(|_, _, cx| cx.stop_propagation())
                     .child(control(
-                        "popup-menu",
+                        id,
                         Facts {
                             role: Role::Menu,
-                            ..Facts::button("Thread actions")
+                            ..Facts::button(label)
                         },
                         menu.clone(),
                     )),
@@ -341,7 +346,12 @@ impl Kagan {
                     .on_click(dispatch(ThreadActions)),
             ))
             .when_some(self.actions_menu.as_ref(), |wrap, (menu, _)| {
-                wrap.child(menu_popup(menu))
+                wrap.child(menu_popup(
+                    menu,
+                    "thread-menu-layer",
+                    "popup-menu",
+                    "Thread actions",
+                ))
             })
     }
 
@@ -439,11 +449,11 @@ impl Kagan {
         let archived = thread.archived_at.is_some();
         let live = running(&thread);
         // The terminal stays on screen after its program ends, so the last output stays readable.
-        let tabs = self.render_tabs(&thread, cx);
+        let strip = self.render_strip(cx);
         let ended = (!live).then(|| Self::ended_notice(&id, archived, cx));
         v_flex()
             .size_full()
-            .child(tabs)
+            .children(strip)
             .child(div().flex_1().min_h_0().child(view.clone()))
             .children(ended)
             .into_any_element()
