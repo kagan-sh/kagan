@@ -1504,6 +1504,24 @@ fn an_open_draws_a_right_panel_tab(cx: &mut TestAppContext) {
     );
 }
 
+#[gpui_kit::test]
+fn full_screen_gives_the_right_sidebar_the_window_and_gives_it_back(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
+    wide(cx, window);
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "alpha-side"));
+    let right = width_of(cx, window, "right-sidebar");
+
+    click(cx, window, "right-full");
+    assert!(!shows(cx, window, "center"));
+    assert!(width_of(cx, window, "right-sidebar") > right);
+    assert_eq!(selected_of(cx, window, "right-full"), Some(true));
+
+    click(cx, window, "right-full");
+    assert!(shows(cx, window, "center"));
+    assert!((width_of(cx, window, "right-sidebar") - right).abs() < 0.5);
+}
+
 const BLANK: &str = "dev.test.blank";
 
 const BLANK_SOURCE: &str = r#"// @ts-check

@@ -41,6 +41,12 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Fill {
+    Column,
+    Window,
+}
+
 #[derive(Clone)]
 pub(super) enum Body {
     Needs,
@@ -192,7 +198,32 @@ fn tab_bar(
                 .children(tabs),
         )
         .child(plus_button(kagan, cx))
+        .child(full_button(kagan, cx))
         .into_any_element()
+}
+
+fn full_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> impl IntoElement {
+    let (icon, label, next) = match kagan.right_fill {
+        Fill::Column => (IconName::Maximize, "Full screen", Fill::Window),
+        Fill::Window => (IconName::Minimize, "Exit full screen", Fill::Column),
+    };
+    control(
+        "right-full",
+        Facts {
+            selected: Some(kagan.right_fill == Fill::Window),
+            ..Facts::button(label)
+        },
+        Button::new("right-full-button")
+            .small()
+            .ghost()
+            .icon(icon)
+            .accessibility_label(label)
+            .tooltip(label)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.right_fill = next;
+                cx.notify();
+            })),
+    )
 }
 
 fn built_in_tab(

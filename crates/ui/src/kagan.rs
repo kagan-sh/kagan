@@ -198,6 +198,7 @@ pub(crate) struct Kagan {
     right_tab: Option<String>,
     right_menu: Option<(Entity<PopupMenu>, Subscription)>,
     right_add_focus: FocusHandle,
+    right_fill: right::Fill,
     right_panels: Vec<surface::Declared>,
     tool: Option<surface::Slot>,
     surface_check: Option<surface::Check>,
@@ -481,6 +482,7 @@ impl Kagan {
             right_tab: None,
             right_menu: None,
             right_add_focus: cx.focus_handle().tab_stop(true),
+            right_fill: right::Fill::Column,
             right_panels: Vec::new(),
             tool: None,
             surface_check: None,
@@ -1401,28 +1403,15 @@ impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
-        let layout = self.layout;
-        let columns = h_resizable("columns")
-            .with_state(&self.columns)
-            .when(self.panes.left, |columns| {
-                columns.child(
-                    resizable_panel()
-                        .flex_none()
-                        .size(layout.left_width)
-                        .size_range(px(layout::LEFT_RANGE.0)..px(layout::LEFT_RANGE.1))
-                        .child(self.left_side(window, cx)),
-                )
-            })
-            .child(self.center_column(main, cx))
-            .when(self.panes.right, |columns| {
-                columns.child(
-                    resizable_panel()
-                        .flex_none()
-                        .size(layout.right_width)
-                        .size_range(px(right::WIDTH_RANGE.0)..px(right::WIDTH_RANGE.1))
-                        .child(right::render(self, window, cx)),
-                )
-            });
+        let columns = if self.right_fill == right::Fill::Window && self.panes.right {
+            div()
+                .id("right-full-column")
+                .size_full()
+                .child(right::render(self, window, cx))
+                .into_any_element()
+        } else {
+            self.columns(main, window, cx)
+        };
         v_flex()
             .id("kagan")
             .type_body()
@@ -1569,6 +1558,37 @@ fn listen(
 }
 
 impl Kagan {
+    fn columns(
+        &mut self,
+        main: AnyElement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let layout = self.layout;
+        h_resizable("columns")
+            .with_state(&self.columns)
+            .when(self.panes.left, |columns| {
+                columns.child(
+                    resizable_panel()
+                        .flex_none()
+                        .size(layout.left_width)
+                        .size_range(px(layout::LEFT_RANGE.0)..px(layout::LEFT_RANGE.1))
+                        .child(self.left_side(window, cx)),
+                )
+            })
+            .child(self.center_column(main, cx))
+            .when(self.panes.right, |columns| {
+                columns.child(
+                    resizable_panel()
+                        .flex_none()
+                        .size(layout.right_width)
+                        .size_range(px(right::WIDTH_RANGE.0)..px(right::WIDTH_RANGE.1))
+                        .child(right::render(self, window, cx)),
+                )
+            })
+            .into_any_element()
+    }
+
     fn center_column(&self, main: AnyElement, cx: &mut Context<Self>) -> ResizablePanel {
         resizable_panel()
             .size_range(px(layout::CENTER_MIN)..px(f32::MAX))

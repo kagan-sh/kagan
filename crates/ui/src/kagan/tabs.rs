@@ -370,7 +370,6 @@ fn close(id: ThreadId, number: u32, cx: &mut App) {
 
 pub(super) type CloseTab = (SharedString, Box<dyn Fn(&mut App)>);
 
-/// A tab with its own `focus` takes the keyboard on its wrapper, so Enter and Space select it.
 pub(super) fn tab(
     id: impl Into<SharedString>,
     label: SharedString,
