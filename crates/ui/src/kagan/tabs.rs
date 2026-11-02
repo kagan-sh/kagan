@@ -52,22 +52,41 @@ pub(super) fn perform(op: WindowOp, cx: &mut App) {
     });
 }
 
-/// The extra terminals of the thread on screen, which tab shows (`None` is the program's terminal),
-/// and the newest local link its terminals printed.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum RightPage {
+    #[default]
+    Panels,
+    Browser,
+    Terminal(u32),
+}
+
 #[derive(Default)]
 pub(super) struct Tabs {
     thread: Option<ThreadId>,
     views: Vec<(u32, Entity<TerminalView>)>,
-    shown: Option<u32>,
+    page: RightPage,
+    browser: bool,
+    adding: bool,
     local: Option<String>,
     looking: Option<Task<()>>,
 }
 
 impl Tabs {
+    pub(super) fn right_page(&self) -> RightPage {
+        self.page
+    }
+
     pub(super) fn set_font_size(&self, size: u8, cx: &mut App) {
         for (_, view) in &self.views {
             view.update(cx, |view, cx| view.set_font_size(size, cx));
         }
+    }
+
+    pub(super) fn view(&self, number: u32) -> Option<Entity<TerminalView>> {
+        self.views
+            .iter()
+            .find(|(open, _)| *open == number)
+            .map(|(_, view)| view.clone())
     }
 
     #[cfg(test)]
@@ -77,7 +96,10 @@ impl Tabs {
 
     #[cfg(test)]
     pub(super) fn shown(&self) -> Option<u32> {
-        self.shown
+        match self.page {
+            RightPage::Terminal(number) => Some(number),
+            RightPage::Panels | RightPage::Browser => None,
+        }
     }
 }
 
@@ -89,16 +111,14 @@ impl Kagan {
         }
     }
 
-    /// The view the center draws for a thread: the shown extra terminal, or the program's.
     pub(super) fn tab_view(&self, agent: &Entity<TerminalView>) -> Entity<TerminalView> {
-        self.tabs
-            .shown
-            .and_then(|shown| self.tabs.views.iter().find(|(number, _)| *number == shown))
-            .map_or_else(|| agent.clone(), |(_, view)| view.clone())
+        match self.tabs.page {
+            RightPage::Terminal(number) => self.tabs.view(number).unwrap_or_else(|| agent.clone()),
+            RightPage::Panels | RightPage::Browser => agent.clone(),
+        }
     }
 
-    /// Follows the host's list of extra terminals. A closed tab gives its place to the one before it.
-    pub(super) fn sync_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn sync_tabs(&mut self, cx: &mut Context<Self>) {
         let thread = self.tabbed_thread(cx);
         if self.tabs.thread != thread {
             self.tabs = Tabs {
@@ -126,36 +146,47 @@ impl Kagan {
                 self.tabs.views.push((*number, view));
             }
         }
-        if let Some(shown) = self.tabs.shown
+        if let RightPage::Terminal(shown) = self.tabs.page
             && !numbers.contains(&shown)
         {
-            let before = numbers
-                .iter()
-                .rev()
-                .find(|number| **number < shown)
-                .copied();
-            self.show_tab(before, window, cx);
+            self.tabs.page = RightPage::Panels;
         }
     }
 
-    pub(super) fn show_tab(
+    pub(super) fn show_right(
         &mut self,
-        number: Option<u32>,
+        page: RightPage,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.tabs.shown = number;
-        if let Shown::Thread(agent) = self.screen.shown().clone() {
-            let view = self.tab_view(&agent);
-            window.focus(&view.focus_handle(cx), cx);
-            self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
+        self.tabs.page = page;
+        self.tabs.adding = false;
+        if page != RightPage::Panels && !self.layout.right_open {
+            self.force_sidebar(false, true, window, cx);
+        }
+        match page {
+            RightPage::Terminal(number) => {
+                if let Some(view) = self.tabs.view(number) {
+                    window.focus(&view.focus_handle(cx), cx);
+                    self.typed_watch =
+                        Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
+                }
+            }
+            RightPage::Browser => self.browser.focus(window, cx),
+            RightPage::Panels => {}
         }
         cx.notify();
     }
 
     fn step_tab(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let order: Vec<Option<u32>> = std::iter::once(None)
-            .chain(self.tabs.views.iter().map(|(number, _)| Some(*number)))
+        let order: Vec<RightPage> = std::iter::once(RightPage::Panels)
+            .chain(self.tabs.browser.then_some(RightPage::Browser))
+            .chain(
+                self.tabs
+                    .views
+                    .iter()
+                    .map(|(number, _)| RightPage::Terminal(*number)),
+            )
             .collect();
         if order.len() < 2 || self.shown_thread(cx).is_none() {
             window.play_system_bell();
@@ -163,14 +194,14 @@ impl Kagan {
         }
         let at = order
             .iter()
-            .position(|number| *number == self.tabs.shown)
+            .position(|page| *page == self.tabs.page)
             .unwrap_or(0);
         let next = if forward {
             (at + 1) % order.len()
         } else {
             (at + order.len() - 1) % order.len()
         };
-        self.show_tab(order[next], window, cx);
+        self.show_right(order[next], window, cx);
     }
 
     pub(super) fn new_terminal(
@@ -179,6 +210,10 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_right_terminal(window, cx);
+    }
+
+    pub(super) fn open_right_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(thread) = self.shown_open_thread(cx) else {
             return;
         };
@@ -193,9 +228,10 @@ impl Kagan {
                 _ = this.update(cx, |this, cx| match opened {
                     Ok(OpResult::Terminals(opened)) => {
                         this.note = None;
-                        this.sync_tabs(window, cx);
-                        let number = opened.first().map(|extra| extra.number);
-                        this.show_tab(number, window, cx);
+                        this.sync_tabs(cx);
+                        if let Some(number) = opened.first().map(|extra| extra.number) {
+                            this.show_right(RightPage::Terminal(number), window, cx);
+                        }
                     }
                     Ok(_) => {}
                     Err(error) => {
@@ -214,21 +250,165 @@ impl Kagan {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let (Some(id), Some(number)) = (self.shown_thread(cx), self.tabs.shown) {
-            close(id, number, cx);
+        self.close_right(self.tabs.page, cx);
+    }
+
+    fn close_right(&mut self, page: RightPage, cx: &mut Context<Self>) {
+        match page {
+            RightPage::Terminal(number) => {
+                if let Some(id) = self.shown_thread(cx) {
+                    close(id, number, cx);
+                }
+            }
+            RightPage::Browser => {
+                self.tabs.browser = false;
+                self.tabs.page = RightPage::Panels;
+                cx.notify();
+            }
+            RightPage::Panels => {}
         }
     }
 
-    /// The tab row over the terminal, drawn only while the thread has an extra terminal.
-    pub(super) fn render_tabs(
-        &self,
-        thread: &Thread,
-        cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
-        let chip = self.local_link_chip(cx);
-        if self.tabs.views.is_empty() && chip.is_none() {
-            return None;
+    pub(super) fn toggle_adding(&mut self, cx: &mut Context<Self>) {
+        self.tabs.adding = !self.tabs.adding;
+        cx.notify();
+    }
+
+    pub(super) fn add_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.tabs.browser = true;
+        self.show_right(RightPage::Browser, window, cx);
+    }
+
+    pub(super) fn render_right_tabs(&self, cx: &mut Context<Self>) -> AnyElement {
+        let mut tabs: Vec<AnyElement> =
+            vec![self.right_tab("right-tab-panels", "Panels".into(), RightPage::Panels, cx)];
+        if self.tabs.browser {
+            tabs.push(self.right_tab(
+                "right-tab-browser",
+                "Browser".into(),
+                RightPage::Browser,
+                cx,
+            ));
         }
+        for (number, _) in &self.tabs.views {
+            tabs.push(self.right_tab(
+                &format!("right-tab-{number}"),
+                format!("Terminal {number}").into(),
+                RightPage::Terminal(*number),
+                cx,
+            ));
+        }
+        let choices: Vec<AnyElement> = if self.tabs.adding {
+            vec![
+                control(
+                    "right-add-browser",
+                    Facts::button("Browser"),
+                    Button::new("right-add-browser-button")
+                        .small()
+                        .outline()
+                        .label("Browser")
+                        .on_click(cx.listener(|this, _, window, cx| this.add_browser(window, cx))),
+                )
+                .into_any_element(),
+                control(
+                    "right-add-terminal",
+                    Facts::button("Terminal"),
+                    Button::new("right-add-terminal-button")
+                        .small()
+                        .outline()
+                        .label("Terminal")
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.open_right_terminal(window, cx);
+                        })),
+                )
+                .into_any_element(),
+            ]
+        } else {
+            Vec::new()
+        };
+        let add = control(
+            "right-add",
+            Facts::button("New tab"),
+            Button::new("right-add-button")
+                .small()
+                .ghost()
+                .icon(IconName::Plus)
+                .accessibility_label("New tab")
+                .on_click(cx.listener(|this, _, _, cx| this.toggle_adding(cx))),
+        );
+        h_flex()
+            .id("right-tabs")
+            .role(Role::TabList)
+            .ui_container()
+            .flex_none()
+            .w_full()
+            .min_w_0()
+            .h_9()
+            .gap_1()
+            .px_2()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .child(
+                h_flex()
+                    .id("right-tab-list")
+                    .min_w_0()
+                    .overflow_x_scroll()
+                    .gap_1()
+                    .children(tabs),
+            )
+            .child(div().flex_1())
+            .children(choices)
+            .child(add)
+            .into_any_element()
+    }
+
+    fn right_tab(
+        &self,
+        id: &str,
+        label: SharedString,
+        page: RightPage,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let selected = self.tabs.page == page;
+        let button = Button::new(SharedString::from(format!("{id}-button")))
+            .small()
+            .ghost()
+            .selected(selected)
+            .label(label.clone())
+            .on_click(cx.listener(move |this, _, window, cx| this.show_right(page, window, cx)));
+        let close = (page != RightPage::Panels).then(|| {
+            let name = format!("Close {label}");
+            control(
+                format!("{id}-close"),
+                Facts::button(name.clone()),
+                Button::new(SharedString::from(format!("{id}-close-button")))
+                    .xsmall()
+                    .ghost()
+                    .icon(IconName::Close)
+                    .accessibility_label(name)
+                    .on_click(cx.listener(move |this, _, _, cx| this.close_right(page, cx))),
+            )
+        });
+        h_flex()
+            .flex_none()
+            .items_center()
+            .rounded(cx.theme().radius)
+            .type_small()
+            .child(control(
+                id.to_owned(),
+                Facts {
+                    role: Role::Tab,
+                    selected: Some(selected),
+                    ..Facts::button(label)
+                },
+                button,
+            ))
+            .children(close)
+            .into_any_element()
+    }
+
+    pub(super) fn render_tabs(&self, thread: &Thread, cx: &mut Context<Self>) -> AnyElement {
+        let chip = self.local_link_chip(cx);
         let program = kg_domain::split_program(&thread.provider)
             .ok()
             .and_then(|(name, _)| {
@@ -237,57 +417,32 @@ impl Kagan {
                     .map(|name| name.to_string_lossy().into_owned())
             })
             .unwrap_or_else(|| thread.provider.clone());
-        let agent = tab(
-            "terminal-tab-agent",
-            program.into(),
-            self.tabs.shown.is_none(),
-            None,
-            cx,
-        );
         let border = cx.theme().border;
-        let extras: Vec<AnyElement> = self
-            .tabs
-            .views
-            .iter()
-            .map(|(number, _)| {
-                let selected = self.tabs.shown == Some(*number);
-                tab(
-                    format!("terminal-tab-{number}"),
-                    format!("Terminal {number}").into(),
-                    selected,
-                    Some((thread.id.clone(), *number)),
-                    cx,
-                )
-            })
-            .collect();
-        let tabs = (!extras.is_empty()).then(|| {
-            h_flex()
-                .id("terminal-tabs")
-                .role(Role::TabList)
-                .ui_container()
-                .min_w_0()
-                .overflow_x_scroll()
-                .gap_1()
-                .child(agent)
-                .children(extras)
-        });
-        Some(
-            h_flex()
-                .id("terminal-strip")
-                .ui_container()
-                .flex_none()
-                .w_full()
-                .min_w_0()
-                .h_9()
-                .gap_2()
-                .px_2()
-                .border_b_1()
-                .border_color(border)
-                .children(tabs)
-                .child(div().flex_1())
-                .children(chip)
-                .into_any_element(),
-        )
+        h_flex()
+            .id("terminal-strip")
+            .ui_container()
+            .flex_none()
+            .w_full()
+            .min_w_0()
+            .h_9()
+            .gap_2()
+            .px_2()
+            .border_b_1()
+            .border_color(border)
+            .child(
+                div()
+                    .id("terminal-tab-agent")
+                    .ui_observe_as(Facts {
+                        role: Role::Tab,
+                        selected: Some(true),
+                        ..Facts::button(program.clone())
+                    })
+                    .type_small()
+                    .child(program),
+            )
+            .child(div().flex_1())
+            .children(chip)
+            .into_any_element()
     }
 }
 
@@ -355,67 +510,4 @@ fn close(id: ThreadId, number: u32, cx: &mut App) {
         cx,
     )
     .detach();
-}
-
-fn tab(
-    id: impl Into<SharedString>,
-    label: SharedString,
-    selected: bool,
-    extra: Option<(ThreadId, u32)>,
-    cx: &mut Context<Kagan>,
-) -> AnyElement {
-    let id: SharedString = id.into();
-    let number = extra.as_ref().map(|(_, number)| *number);
-    let button = Button::new(SharedString::from(format!("{id}-button")))
-        .small()
-        .ghost()
-        .selected(selected)
-        .label(label.clone())
-        .on_click(cx.listener(move |this, _, window, cx| this.show_tab(number, window, cx)));
-    let close = extra.map(|(thread, number)| {
-        let name = format!("Close {label}");
-        control(
-            format!("terminal-close-{number}"),
-            Facts::button(name.clone()),
-            Button::new(SharedString::from(format!(
-                "terminal-close-{number}-button"
-            )))
-            .xsmall()
-            .ghost()
-            .icon(IconName::Close)
-            .accessibility_label(name)
-            .on_click(move |_, _, cx| close(thread.clone(), number, cx)),
-        )
-    });
-    h_flex()
-        .flex_none()
-        .items_center()
-        .rounded(cx.theme().radius)
-        .type_small()
-        .child(control(
-            id,
-            Facts {
-                role: Role::Tab,
-                selected: Some(selected),
-                ..Facts::button(label)
-            },
-            button,
-        ))
-        .children(close)
-        .into_any_element()
-}
-
-/// The + in the thread's title row, which opens another terminal in its folder.
-pub(super) fn new_terminal_button(cx: &App) -> impl IntoElement {
-    control(
-        "new-terminal",
-        Facts::button("New terminal"),
-        Button::new("new-terminal-button")
-            .small()
-            .ghost()
-            .icon(IconName::Plus)
-            .accessibility_label("New terminal")
-            .tooltip(tip("New terminal", &NewTerminal, cx))
-            .on_click(dispatch(NewTerminal)),
-    )
 }

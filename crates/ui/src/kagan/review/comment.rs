@@ -166,7 +166,6 @@ impl Kagan {
         let crate::kagan::Shown::Thread(agent) = self.screen.shown().clone() else {
             return;
         };
-        self.show_tab(None, window, cx);
         let sent = agent.update(cx, |agent, cx| agent.paste_after_fit(text, cx));
         cx.spawn(async move |this, cx| {
             if !sent.await {

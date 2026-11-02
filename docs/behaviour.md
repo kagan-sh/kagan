@@ -600,4 +600,4 @@ Step 1 deleted these on purpose. The model suite does not assert them.
 - No unread-diffs preference. The book phrase is gone with that report (#154) [decision 43].
 - No Usage page, no cost roll-up, and no token line (#155) [decision 44].
 - `opened` and `file.predicted` are no longer written [decision 43].
-- No in-app browser. `kg browser` is not a command, and `openBrowser` is not a host function. The window never showed a browser view, every driving command failed before it reached a page, and no plugin opened one. `openUrl` still opens the system browser [decision 31].
+- Browser tab (macOS only; other systems show a note). It is a tab of the right sidebar, opened from its + and filling the sidebar while shown. Its address field opens one page: only http and https open, and a bare name such as `example.com` gets https. The page appears on the first address and is hidden whenever the panel is not drawn. Plugins cannot open a page in it. `openUrl` still opens the system browser [decision 117].

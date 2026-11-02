@@ -49,10 +49,3 @@ pub(crate) fn tab_grid(kagan: &Kagan, cx: &App) -> Option<kg_core::Grid> {
         Shown::Nothing | Shown::Start(_) => None,
     }
 }
-
-pub(crate) fn tab_focused(kagan: &Kagan, window: &Window, cx: &App) -> bool {
-    match kagan.screen.shown() {
-        Shown::Thread(view) => kagan.tab_view(view).read(cx).focused(window),
-        Shown::Nothing | Shown::Start(_) => false,
-    }
-}

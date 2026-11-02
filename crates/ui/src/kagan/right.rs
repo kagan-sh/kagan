@@ -13,6 +13,7 @@ use super::layout;
 use super::plugins_box::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
 use super::shown::control;
 use super::surface::Slot;
+use super::tabs::RightPage;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -80,12 +81,34 @@ pub(super) fn plugin_panel_id(plugin: &PluginId, panel: &str) -> String {
     format!("panel-{}-{panel}", plugin.0)
 }
 
-pub(super) fn render(
-    kagan: &Kagan,
-    window: &mut Window,
-    cx: &mut Context<Kagan>,
-) -> impl IntoElement {
+pub(super) fn render(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
     let thread = kagan.thread_visible(cx);
+    let tabs = thread.then(|| kagan.render_right_tabs(cx));
+    let needs = kagan
+        .panels
+        .iter()
+        .find(|panel| matches!(panel.body, Body::Needs))
+        .filter(|_| kagan.waiting_count(cx) > 0)
+        .map(|panel| frame(panel, kagan, window, cx));
+    let body = match kagan.tabs.right_page() {
+        RightPage::Browser if thread => Some(kagan.render_browser(cx)),
+        RightPage::Terminal(number) if thread => kagan
+            .tabs
+            .view(number)
+            .map(|view| div().size_full().child(view).into_any_element()),
+        RightPage::Panels | RightPage::Browser | RightPage::Terminal(_) => None,
+    };
+    if let Some(body) = body {
+        return v_flex()
+            .size_full()
+            .ui_container()
+            .id("right-sidebar")
+            .bg(cx.theme().sidebar)
+            .children(tabs)
+            .children(needs)
+            .child(div().flex_1().min_h_0().child(body))
+            .into_any_element();
+    }
     let changes = kagan
         .panels
         .iter()
@@ -98,21 +121,17 @@ pub(super) fn render(
         .find(|panel| matches!(panel.body, Body::Details))
         .filter(|_| thread)
         .map(|panel| frame(panel, kagan, window, cx));
-    let needs = kagan
-        .panels
-        .iter()
-        .find(|panel| matches!(panel.body, Body::Needs))
-        .filter(|_| kagan.waiting_count(cx) > 0)
-        .map(|panel| frame(panel, kagan, window, cx));
     v_flex()
         .size_full()
         .ui_container()
         .overflow_y_scrollbar()
         .id("right-sidebar")
         .bg(cx.theme().sidebar)
+        .children(tabs)
         .children(needs)
         .children(changes)
         .children(details)
+        .into_any_element()
 }
 
 impl Kagan {

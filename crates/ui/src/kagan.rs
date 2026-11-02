@@ -1,6 +1,7 @@
 use crate::theme::TypeScale as _;
 mod archived;
 pub(crate) mod attention;
+mod browser;
 pub(crate) mod changes;
 pub(crate) mod commands;
 mod details;
@@ -222,6 +223,7 @@ pub(crate) struct Kagan {
     retired_load: Task<()>,
     archive_query: Entity<InputState>,
     _archive_watch: Subscription,
+    browser: browser::Browser,
     title_input: Option<Entity<InputState>>,
     title_watch: Option<Subscription>,
     _subscriptions: [Subscription; 5],
@@ -438,16 +440,7 @@ impl Kagan {
             cx.new(|cx| InputState::new(window, cx).placeholder("Search archived threads"));
         let subscriptions = listen(&workspace, &picker, &columns, window, cx);
         let sidebar = cx.new(|cx| sidebar::Sidebar::new(workspace.read(cx).sidebar(cx), cx));
-        let sidebar_watch = [
-            cx.observe(&sidebar, |_, _, cx| cx.notify()),
-            cx.subscribe_in(
-                &sidebar,
-                window,
-                |this, _, event: &sidebar::Event, window, cx| {
-                    this.sidebar_event(event, window, cx);
-                },
-            ),
-        ];
+        let sidebar_watch = watch_sidebar(&sidebar, window, cx);
         let mut this = Self {
             start: start::StartState::default(),
             screen: screen::Screen::new(),
@@ -510,6 +503,7 @@ impl Kagan {
             retired_load: Task::ready(()),
             _archive_watch: archived::watch(&archive_query, cx),
             archive_query,
+            browser: browser::Browser::new(window, cx),
             title_input: None,
             title_watch: None,
             _subscriptions: subscriptions,
@@ -590,7 +584,7 @@ impl Kagan {
         }
         self.load_changes(cx);
         self.load_details(cx);
-        self.sync_tabs(window, cx);
+        self.sync_tabs(cx);
         self.refresh_plugins(cx);
         self.tell_host(window, cx);
         cx.notify();
@@ -1062,7 +1056,7 @@ impl Kagan {
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.load_changes(cx);
         self.load_details(cx);
-        self.sync_tabs(window, cx);
+        self.sync_tabs(cx);
         self.tell_host(window, cx);
         self.note_shown(cx);
         Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
@@ -1402,6 +1396,8 @@ impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
+        #[cfg(target_os = "macos")]
+        self.sync_browser(cx);
         let layout = self.layout;
         let columns = h_resizable("columns")
             .with_state(&self.columns)
@@ -1501,6 +1497,23 @@ fn window_body(
         .children(kagan.left_layer(window, cx))
         .children(kagan.right_layer(window, cx))
         .children(commands::layer(kagan, window, cx))
+}
+
+fn watch_sidebar(
+    sidebar: &Entity<sidebar::Sidebar>,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> [Subscription; 2] {
+    [
+        cx.observe(sidebar, |_, _, cx| cx.notify()),
+        cx.subscribe_in(
+            sidebar,
+            window,
+            |this, _, event: &sidebar::Event, window, cx| {
+                this.sidebar_event(event, window, cx);
+            },
+        ),
+    ]
 }
 
 fn listen(

@@ -1817,7 +1817,10 @@ fn the_title_bar_names_the_thread_and_the_terminal_starts_below_it(cx: &mut Test
             .expect("grid");
         let bar = f32::from(gpui_kit::component::TITLE_BAR_HEIGHT);
         let inset = 8.;
-        assert!((f32::from(grid.bounds().origin.y) - (bar + inset)).abs() < 1.);
+        let strip = crate::ui_registry::find(window, &ElementId::Name("terminal-strip".into()))
+            .expect("tab row");
+        let tabs_bottom = f32::from(strip.bounds().bottom());
+        assert!((f32::from(grid.bounds().origin.y) - (tabs_bottom + inset)).abs() < 1.);
         let title = crate::ui_registry::find(window, &ElementId::Name("thread-title".into()))
             .expect("title");
         assert!(f32::from(title.bounds().origin.y + title.bounds().size.height) <= bar);

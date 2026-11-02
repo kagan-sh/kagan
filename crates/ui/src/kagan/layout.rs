@@ -536,6 +536,11 @@ impl Kagan {
         self.open_overlay(Side::Right, Activation::Focus, window, cx);
     }
 
+    /// The right sidebar is on screen, as a column or as an overlay.
+    pub(super) fn right_drawn(&self) -> bool {
+        self.panes.right || (self.screen.drawn(Side::Right) && !self.in_settings())
+    }
+
     pub(super) fn right_mounted(&self) -> bool {
         self.layout.right_open || self.screen.drawn(Side::Right)
     }
@@ -594,7 +599,7 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let drawn = self.panes.right || (self.screen.drawn(Side::Right) && !self.in_settings());
+        let drawn = self.right_drawn();
         let left_shown = self.panes.left || self.screen.drawn(Side::Left);
         let thread = self
             .thread_visible(cx)
