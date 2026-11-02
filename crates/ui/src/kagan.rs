@@ -36,6 +36,7 @@ mod sidebar;
 mod start;
 mod surface;
 mod tabs;
+mod update;
 
 use changes::Changes;
 use kg_domain::ProjectOp;
@@ -200,7 +201,7 @@ pub(crate) struct Kagan {
     layout: Layout,
     viewport: gpui_kit::Pixels,
     prefs: Entity<settings::Prefs>,
-    _settings_watch: [Subscription; 2],
+    _settings_watch: [Subscription; 3],
     panes: layout::Panes,
     right_toggle_focus: FocusHandle,
     left_overlay_focus: FocusHandle,
@@ -1576,6 +1577,7 @@ impl Kagan {
                                 .child(note),
                         )
                     })
+                    .children(update::notice(cx))
                     .children(
                         self.plugin_prompt_visible(cx)
                             .then(|| Self::plugin_prompt_notice(cx)),

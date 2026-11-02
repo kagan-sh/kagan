@@ -97,6 +97,7 @@ fn menus() -> Vec<Menu> {
             name: "kagan".into(),
             items: vec![
                 MenuItem::action("About kagan", About),
+                MenuItem::action("Check for Updates…", super::update::CheckForUpdates),
                 MenuItem::Separator,
                 MenuItem::action("Settings…", OpenSettings),
                 MenuItem::Separator,

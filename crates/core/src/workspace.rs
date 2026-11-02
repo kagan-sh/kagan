@@ -221,7 +221,9 @@ impl Workspace {
             let (store, data_dir) = opened.await?;
             let (database, database_task) = Database::new(store, &executor);
             database.call(interrupted).await?;
+            let updates = database.clone();
             let workspace = cx.update(|cx| {
+                crate::update::Updater::install(updates, cx);
                 let (requests, incoming) = async_channel::unbounded::<Envelope>();
                 let workspace = cx.new(|cx: &mut Context<Self>| {
                     let requests_task = cx.spawn(async move |this, cx| {

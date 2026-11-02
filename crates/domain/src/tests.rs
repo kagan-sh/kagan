@@ -793,3 +793,18 @@ fn search_refusals_name_their_limits() {
     );
     assert!(search("x".into(), Some(SEARCH_LIMIT)).is_ok());
 }
+
+#[test]
+fn an_update_status_survives_the_socket() {
+    let status = OpResult::Update(crate::UpdateStatus {
+        version: "0.1.90".into(),
+        install: crate::InstallKind::App,
+        automatic: false,
+        state: crate::UpdateState::Available {
+            version: "0.1.91".into(),
+            notes: "https://github.com/kagan-sh/kagan/releases/tag/v0.1.91".into(),
+        },
+    });
+    let text = serde_json::to_string(&status).unwrap();
+    assert_eq!(serde_json::from_str::<OpResult>(&text).unwrap(), status);
+}

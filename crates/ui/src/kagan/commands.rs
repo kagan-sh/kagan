@@ -421,7 +421,7 @@ fn group_of(name: &str, action: &str) -> &'static str {
     }
 }
 
-fn keyless() -> [(&'static str, &'static str, &'static str, Rc<dyn Action>); 12] {
+fn keyless() -> [(&'static str, &'static str, &'static str, Rc<dyn Action>); 13] {
     [
         (
             "Threads",
@@ -468,6 +468,12 @@ fn keyless() -> [(&'static str, &'static str, &'static str, Rc<dyn Action>); 12]
             Rc::new(super::menus::Close),
         ),
         ("Window", "Quit", "Quit kagan", Rc::new(super::menus::Quit)),
+        (
+            "Settings",
+            "CheckForUpdates",
+            "Check for updates",
+            Rc::new(super::update::CheckForUpdates),
+        ),
         (
             "Settings",
             "NewTheme",

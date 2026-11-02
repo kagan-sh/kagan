@@ -3,7 +3,8 @@
 extend-exclude = ["assets/THIRD-PARTY-NOTICES.txt"]
 
 [default]
-extend-ignore-re = ["thr_[a-z0-9_]+"]
+# Minisign public keys are base64.
+extend-ignore-re = ["thr_[a-z0-9_]+", "RW[A-Za-z0-9+/]{54}"]
 
 [default.extend-identifiers]
 projcts = "projcts"

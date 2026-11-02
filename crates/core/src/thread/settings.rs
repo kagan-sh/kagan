@@ -64,6 +64,7 @@ const PREFERENCES: &[&str] = &[
     "confirm-archive",
     "agent-integration",
     "notify",
+    "update-check",
     "terminal-font-size",
     "slot.threads",
     "slot.review",
@@ -138,6 +139,9 @@ fn preference_value(key: &str, value: &serde_json::Value) -> Result<()> {
                 .map(|_| ())
                 .map_err(|_| OpError::Invalid(format!("{key} must be a plugin id or kagan")))
         }
+        "update-check" => serde_json::from_value::<bool>(value.clone())
+            .map(|_| ())
+            .map_err(|_| OpError::Invalid("update-check must be a boolean".into())),
         "notify" => serde_json::from_value::<bool>(value.clone())
             .map(|_| ())
             .map_err(|_| OpError::Invalid("notify must be a boolean".into())),

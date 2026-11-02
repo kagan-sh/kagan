@@ -461,7 +461,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ## Preference
 
-Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [settings.rs], and the sidebar layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar` and `<window>.right-width`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
+Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [settings.rs], `update-check` [decision 113], and the sidebar layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar` and `<window>.right-width`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
 
 ### `Get`
 
@@ -470,7 +470,7 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ### `Set`
 
-- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `notify` [settings.rs]. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48].
+- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `notify` [settings.rs]. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48].
 - **Refused when**: any other key — `invalid`, message `unknown preference <key>` [person 2026-10-08] [op.rs]. A wrong shape — `invalid` [person 2026-10-08] [op.rs].
 
 ## Config
@@ -524,6 +524,21 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 
 - **Changes**: opens the window when it is closed, and shows the command list, or the list on thread search. When the list is open, each switches it to its own view [decision 107].
 - **Shows**: every window command and each enabled plugin's commands, grouped, with the key that runs it from where the keyboard was. A command that cannot run there is greyed with its reason. Enter runs it from there; Escape or a click outside closes the list and gives the keyboard back. Thread search shows the same rows as `kg thread search --archived`, under Threads and Archived; Enter opens the thread at the matched line [decision 107].
+
+## Update
+
+Finds a newer kagan on the GitHub releases page (decision 113). Installing is not an `Op`: only the person installs, from the window.
+
+### `Check`
+
+- **Allowed when**: always, whatever `update-check` says. The kagan menu's Check for Updates…, the command list, and Settings → Updates run it [decision 113].
+- **Changes**: reads `releases/latest/download/update.json` once, and only after `update.json.sig` matches kagan's key [decision 115]. A newer version that is not a pre-release becomes the offered update; an equal, older or pre-release version reads as current [decision 113].
+- **Shows**: what `Status` shows after the check [decision 113].
+- **Refused when**: the list cannot be read or parsed — `failed`, and the state says why [decision 113].
+
+### `Status`
+
+- **Shows**: the running version, how this copy was installed (`app`, `homebrew`, `installer`, `app-image` or `other`), whether the automatic check is on, and the state: `unchecked`, `checking`, `current`, `available` with the version and its release notes, `downloading`, `ready` (downloaded and checked; with `at_quit` it installs when kagan quits) [decision 115], or `failed` with the reason [decision 113].
 
 ## Status, Guide, Open, Sidebar
 

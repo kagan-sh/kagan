@@ -51,9 +51,9 @@ A plugin gets only the powers that you approve. [Plugins](book/src/plugins.md#in
 
 ## Your data
 
-kagan has no account, no telemetry, and no update check. Your data stays on your computer. The default folder is `~/.kagan` on macOS and Linux, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to change it.
+kagan has no account and no telemetry. It checks for updates only when you, or a program in a thread, ask: such a program can run `kg update check`, or turn on the automatic check with `kg preference set update-check true`. Your data stays on your computer. The default folder is `~/.kagan` on macOS and Linux, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to change it.
 
-kagan uses the network only to fetch a git plugin or a plugin index that you add or update. Programs and approved plugins can use the network too.
+kagan uses the network only to fetch a git plugin or a plugin index that you add or update, and to check for and download a kagan update. **Check for updates** always works when you run it. The automatic check, at launch and then once a day, is off until you turn it on in Settings → Updates. Programs and approved plugins can use the network too.
 
 [Your data and privacy](book/src/data.md) covers terminal text, diagnostics, updates, and removal.
 

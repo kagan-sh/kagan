@@ -44,6 +44,19 @@ fn guide_names_every_command() {
 }
 
 #[test]
+fn kg_update_checks_and_reads_status_but_cannot_install() {
+    assert_eq!(
+        parse(&["update", "check"]),
+        Op::Update(kg_domain::UpdateOp::Check)
+    );
+    assert_eq!(
+        parse(&["update", "status"]),
+        Op::Update(kg_domain::UpdateOp::Status)
+    );
+    assert!(Cli::try_parse_from(["kg", "update", "install"]).is_err());
+}
+
+#[test]
 fn cli_thread_terminal_parses_its_verbs() {
     let id = ThreadId("thr_1".into());
     assert_eq!(

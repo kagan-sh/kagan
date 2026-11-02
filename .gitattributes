@@ -5,3 +5,5 @@
 *.ttf binary
 # Generated; upstream license texts keep their own line endings.
 assets/THIRD-PARTY-NOTICES.txt -text
+# Signed test fixtures: their bytes must not change.
+crates/core/src/tests/update/** -text

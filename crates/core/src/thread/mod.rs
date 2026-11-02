@@ -153,6 +153,7 @@ pub(crate) async fn execute(
         Op::Surface(op) => crate::ui::drive(this, crate::UiJob::Surface(op), cx).await,
         Op::Diff(op) => crate::diff::run(database, op, cx).await,
         Op::Diagnostics(op) => crate::diagnostics::export(this, op, cx).await,
+        Op::Update(op) => crate::update::run(&database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
@@ -182,7 +183,8 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Plugin(_)
         | Op::Ui(kg_domain::UiOp::Snapshot { .. })
         | Op::Diff(_)
-        | Op::Diagnostics(_) => false,
+        | Op::Diagnostics(_)
+        | Op::Update(_) => false,
         Op::Project(ProjectOp::Add { .. })
         | Op::Environment(
             EnvironmentOp::Restore { .. }
