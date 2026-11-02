@@ -102,8 +102,8 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `contributeInstructions`, `configure` | `instructions`, one string | close for standing text. Text that changes per thread or provider cannot move. |
 | `ui.requestInput` | `threads.ask` or a panel | close for a choice of two or more options. `threads.ask` needs `powers.areas` `threads`. A custom form cannot move. |
 | `thread.created`, `idle`, `failed`, `archived`, `unarchived`, `deleted` | `events`: `"thread.<type>"` | close. The job is `{ type, threadId, projectId, data }`, not a thread record. Read `docs/plugin-api.md` for `data`. |
-| `thread.active` | `thread.turn.started` | close. `thread.started` is written once, when the program starts. A terminal program writes no turn, so confirm `turn.started` is in the log before you rely on it. |
-| `turn.failed` | `thread.turn.ended` | close. `data.outcome` is `completed`, `interrupted`, or `failed`. |
+| `thread.active` | none | gap. There is no per-turn start. The nearest are `thread.started` (once, when the program starts) and `thread.waiting` (a reply ended). |
+| `turn.failed` | `thread.failed`, or `thread.exited` with a non-zero `data.code` | close. |
 | other bb events, and `experimental_hooks` | none | gap. Cannot move. A hook cannot block or change a turn. |
 | own `bb.rpc.register` and `bb.realtime.publish`, between this plugin's server and its own app | a function call and `cx.notify()` | direct. Both halves are this one script. |
 | `bb.sdk.plugins.callRpc`, `bb.http.route`, `bb plugin token` | none | gap. Cannot move. No call into another plugin, no route, and no token. |
@@ -116,7 +116,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | a review body | center panel `"replaces": "review"` | close. Props are `{ threadId, scope, path }`. Read `changes` and `diff`. Add notes with `host.addComment`. The host sends them. |
 | settings section | `ui.settings`, a View export | close. Declared settings still render above it. |
 | `experimental_appOverlay` | `ui.overlay` | close. Paint only: boxes, text, images, svgs, paths, styles, and motion. No handler, hover, cursor, scroll, or other component. Size it from `context().overlay`. |
-| composer controls, thread-header buttons, content scripts, homepage sections, message directives, code fences, sidebar footer | none | gap. Cannot move. A left tool or a command is the nearest stand-in. Say which you used. |
+| composer controls, content scripts, homepage sections, message directives, code fences, sidebar footer | none | gap. Cannot move. A left tool or a command is the nearest stand-in. Say which you used. |
 | `messageAction`, `pendingInteraction`, `bb.ui.registerMentionProvider`, `bb.ui.registerThreadAction`, `experimental_newThreadPanelAction` | none | gap. Cannot move. |
 | `node` filesystem anywhere | `fs/promises` inside granted roots, and `kagan/files` when `powers.read` is set | close for a read inside a root. Writes land only in the plugin data folder. `files.read` returns at most 1 MiB. Deleting or writing anywhere else cannot move unless a program named in `powers.run` does it. |
 | `child_process` | `powers.run` and `kagan/process` `run` | close. Name each program. Default timeout is 60 seconds. The environment is the fixed allowlist unless `"env": "inherit"`, which the install screen states. gpui-shell's own `process` is not granted. |
@@ -126,7 +126,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | toast | `toast(message, action?)` | close. `action` is `{ label, command }` and runs one of this plugin's commands. |
 | `bb plugin build` | none | No build step. Drop it. |
 
-`thread.<type>` may be any of: `created`, `started`, `exited`, `stopped`, `idle`, `waiting`, `failed`, `archived`, `unarchived`, `deleted`, `answered`, `turn.started`, `turn.ended`, `message`, `tool`, `restore.failed`, `snapshot.failed`, `notice`, `reconnecting`, `file.changed`, `file.read`, `file.predicted`, `opened`, `rewound`. Any other event name is refused.
+`thread.<type>` may be any of: `created`, `started`, `exited`, `stopped`, `idle`, `waiting`, `failed`, `archived`, `unarchived`, `deleted`, `answered`, `turn.started`, `turn.ended`, `message`, `tool`, `restore.failed`, `snapshot.failed`, `notice`, `reconnecting`, `file.changed`, `file.read`, `file.predicted`, `opened`, `rewound`. Any other event name is refused. kagan writes only `created`, `started`, `exited`, `stopped`, `idle`, `waiting`, `failed`, `archived`, `unarchived`, `deleted`, `answered` and `notice`. The others are accepted but never arrive.
 
 A panel may set `"follows": "thread"`. Read `context()` in `init` and loop on `onContextChanged()`. `openPanel` and `kg surface open` / `close` / `list` are the same path.
 
@@ -135,6 +135,8 @@ Copy from `examples/plugins`: `panel`, `cli`, `sidebar`, `review`, `overlay`, `t
 ## Themes
 
 A theme file is JSON. CSS does not load.
+
+The file lists both modes and the tokens in `docs/look.md`. Colors are opaque `#RRGGBB`. `kg theme new <id>` writes one to copy.
 
 Copy the palette into `themes/<id>.json` and declare `"themes": [{ "id": "<id>", "file": "themes/<id>.json" }]`. The id the person sets is `<plugin id>/<id>`. A stylesheet that only recolors the app becomes that file. One that also changes layout or syntax colors is rewritten by hand, or reported as a gap.
 
