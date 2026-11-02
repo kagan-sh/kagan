@@ -19,7 +19,12 @@ pub(super) fn group_for(automatic: bool, cx: &App) -> Group {
         UpdateState::Current => "This is the newest version.".to_owned(),
         UpdateState::Available { version, .. } => format!("kagan {version} is available."),
         UpdateState::Downloading { version } => format!("Downloading kagan {version}…"),
-        UpdateState::Ready { version, .. } => format!("kagan {version} installs when kagan quits."),
+        UpdateState::Ready {
+            version,
+            at_quit: true,
+            ..
+        } => format!("kagan {version} installs when kagan quits."),
+        UpdateState::Ready { version, .. } => format!("kagan {version} is ready to install."),
         UpdateState::Failed { reason } => format!("Could not check: {reason}"),
     };
     let busy = matches!(

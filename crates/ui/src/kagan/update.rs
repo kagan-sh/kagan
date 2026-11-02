@@ -65,9 +65,12 @@ pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
             }
         }
         UpdateState::Downloading { version } => format!("Downloading kagan {version}…"),
-        UpdateState::Ready { version, .. } => {
-            format!("kagan {version} installs when kagan quits.")
-        }
+        UpdateState::Ready {
+            version,
+            at_quit: true,
+            ..
+        } => format!("kagan {version} installs when kagan quits."),
+        UpdateState::Ready { version, .. } => format!("kagan {version} is ready to install."),
         _ => return None,
     };
     Some(
@@ -106,7 +109,7 @@ fn actions(cx: &App) -> AnyElement {
         UpdateState::Available { notes, .. } | UpdateState::Ready { notes, .. } => notes.clone(),
         _ => return h_flex().into_any_element(),
     };
-    let ready = matches!(updater.state(), UpdateState::Ready { .. });
+    let ready = matches!(updater.state(), UpdateState::Ready { at_quit: true, .. });
     h_flex()
         .flex_wrap()
         .gap_1()

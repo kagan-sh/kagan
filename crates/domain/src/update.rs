@@ -12,7 +12,7 @@ pub enum UpdateOp {
 }
 
 /// How this copy of kagan was installed, which decides how it updates.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum InstallKind {
     /// The macOS app from the dmg: kagan replaces it and restarts.
@@ -24,6 +24,7 @@ pub enum InstallKind {
     /// A Linux `AppImage`: kagan replaces it and restarts.
     AppImage,
     /// A .deb package or a source build: the person updates it.
+    #[default]
     Other,
 }
 
@@ -47,10 +48,11 @@ pub enum UpdateState {
     Downloading {
         version: String,
     },
-    /// Downloaded and its signature checked. It installs when kagan quits.
+    /// Downloaded and its signature checked. With `at_quit` it installs when kagan quits.
     Ready {
         version: String,
         notes: String,
+        at_quit: bool,
     },
     Failed {
         reason: String,

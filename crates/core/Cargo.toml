@@ -25,7 +25,8 @@ uuid = { version = "=1.26.1", features = ["v4"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 flate2 = "=1.1.10"
-tar = "=0.4.46"
+libc = "=0.2.191"
+tar = { version = "=0.4.46", default-features = false }
 
 [features]
 test-support = []
@@ -34,6 +35,7 @@ test-support = []
 workspace = true
 
 [dev-dependencies]
+minisign = "=0.10.0"
 gpui-kit = { workspace = true, features = ["test-support"] }
 rusqlite.workspace = true
 tempfile = "=3.27.0"

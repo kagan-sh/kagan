@@ -3,6 +3,7 @@
 mod install;
 
 use std::collections::HashMap;
+use std::io::Read as _;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -26,11 +27,12 @@ const KEY: &str = match option_env!("KG_UPDATE_KEY") {
 const MANIFEST: &str = "https://github.com/kagan-sh/kagan/releases/latest/download/update.json";
 const DAY: Duration = Duration::from_hours(24);
 const TICK: Duration = Duration::from_hours(1);
+const LIMIT: u64 = 512 * 1024 * 1024;
 
+/// `update.json`, read only after its own signature checks.
 #[derive(Deserialize)]
 struct Manifest {
     version: String,
-    notes: String,
     platforms: HashMap<String, Asset>,
 }
 
@@ -51,7 +53,6 @@ pub struct Updater {
     state: UpdateState,
     asset: Option<Asset>,
     staged: Option<PathBuf>,
-    at_quit: bool,
     restart: bool,
     checked: Option<Instant>,
     _automatic: Task<()>,
@@ -61,18 +62,24 @@ pub struct Updater {
 impl Updater {
     pub(crate) fn install(database: Database, cx: &mut App) {
         let updater = cx.new(|cx: &mut Context<Self>| {
-            let target = Target::detect();
-            let cleanup = target.clone();
-            cx.background_spawn(async move { cleanup.clean() }).detach();
+            let detect = cx.background_spawn(async {
+                let target = Target::detect();
+                target.clean();
+                target
+            });
+            cx.spawn(async move |this, cx| {
+                let target = detect.await;
+                this.update(cx, |this, _| this.target = target).ok();
+            })
+            .detach();
             Self {
                 version: current(),
-                target,
+                target: Target::default(),
                 endpoint: std::env::var("KG_UPDATE_URL").unwrap_or_else(|_| MANIFEST.into()),
                 key: KEY.into(),
                 state: UpdateState::Unchecked,
                 asset: None,
                 staged: None,
-                at_quit: false,
                 restart: false,
                 checked: None,
                 _automatic: cx.spawn(async move |this, cx| automatic(this, database, cx).await),
@@ -122,7 +129,8 @@ impl Updater {
         self.set(UpdateState::Checking, cx);
         self.checked = Some(cx.background_executor().now());
         let endpoint = self.endpoint.clone();
-        let fetch = cx.background_spawn(async move { manifest(&endpoint) });
+        let key = self.key.clone();
+        let fetch = cx.background_spawn(async move { manifest(&endpoint, &key) });
         cx.spawn(async move |this, cx| {
             let found = fetch.await;
             this.update(cx, |this, cx| match found {
@@ -133,8 +141,8 @@ impl Updater {
                         Some((version, asset)) => {
                             this.asset = Some(asset);
                             UpdateState::Available {
+                                notes: notes(&version),
                                 version: version.to_string(),
-                                notes: manifest.notes,
                             }
                         }
                         None => UpdateState::Current,
@@ -156,9 +164,21 @@ impl Updater {
         })
     }
 
-    /// Downloads the offered version, checks its signature and puts it beside this copy.
+    /// Downloads the offered version, checks its signature and puts it beside this copy. A
+    /// download already done only changes whether it installs at quit.
     /// Not an `Op`: only the person installs, from the window.
     pub fn download(&mut self, at_quit: bool, cx: &mut Context<Self>) -> Task<Result<()>> {
+        if let UpdateState::Ready { version, notes, .. } = self.state.clone() {
+            self.set(
+                UpdateState::Ready {
+                    version,
+                    notes,
+                    at_quit,
+                },
+                cx,
+            );
+            return Task::ready(Ok(()));
+        }
         let UpdateState::Available { version, notes } = self.state.clone() else {
             return Task::ready(Err(OpError::Invalid("no update is waiting".into())));
         };
@@ -179,6 +199,7 @@ impl Updater {
         let key = self.key.clone();
         let target = self.target.clone();
         let work = cx.background_spawn(async move {
+            target.prepare().map_err(|error| error.to_string())?;
             let bytes = get(&asset.url)?;
             verify(&bytes, &asset.signature, &key)?;
             target.stage(&bytes).map_err(|error| error.to_string())
@@ -188,8 +209,14 @@ impl Updater {
             this.update(cx, |this, cx| match staged {
                 Ok(path) => {
                     this.staged = Some(path);
-                    this.at_quit = at_quit;
-                    this.set(UpdateState::Ready { version, notes }, cx);
+                    this.set(
+                        UpdateState::Ready {
+                            version,
+                            notes,
+                            at_quit,
+                        },
+                        cx,
+                    );
                     Ok(())
                 }
                 Err(reason) => {
@@ -228,7 +255,8 @@ impl Updater {
 
     fn quit(&mut self, cx: &mut Context<Self>) -> impl Future<Output = ()> + use<> {
         let target = self.target.clone();
-        let staged = self.staged.take().filter(|_| self.at_quit);
+        let at_quit = matches!(self.state, UpdateState::Ready { at_quit: true, .. });
+        let staged = self.staged.take().filter(|_| at_quit);
         let restart = self.restart;
         cx.background_spawn(async move {
             if let Some(staged) = staged
@@ -309,6 +337,10 @@ fn platform() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
+fn notes(version: &Version) -> String {
+    format!("https://github.com/kagan-sh/kagan/releases/tag/v{version}")
+}
+
 pub(crate) fn newer(current: &Version, offered: &str) -> Option<Version> {
     let offered = Version::parse(offered.trim_start_matches('v')).ok()?;
     (offered.pre.is_empty() && offered > *current).then_some(offered)
@@ -328,8 +360,24 @@ pub(crate) fn verify(bytes: &[u8], signature: &str, key: &str) -> std::result::R
         .map_err(|_| "the update's signature does not match kagan's key".to_owned())
 }
 
+/// HTTPS, or plain HTTP to this machine for tests and local proof. Everything read is signed.
+fn allowed(url: &reqwest::Url) -> bool {
+    url.scheme() == "https"
+        || (url.scheme() == "http"
+            && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")))
+}
+
 fn client() -> std::result::Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() > 10 {
+                attempt.error("too many redirects")
+            } else if allowed(attempt.url()) {
+                attempt.follow()
+            } else {
+                attempt.error("an update link left HTTPS")
+            }
+        }))
         .user_agent(concat!("kagan/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(600))
@@ -338,18 +386,37 @@ fn client() -> std::result::Result<reqwest::blocking::Client, String> {
 }
 
 fn get(url: &str) -> std::result::Result<Vec<u8>, String> {
+    let parsed = reqwest::Url::parse(url).map_err(|error| format!("bad link {url}: {error}"))?;
+    if !allowed(&parsed) {
+        return Err(format!("kagan updates only over HTTPS, not {url}"));
+    }
     let response = client()?
-        .get(url)
+        .get(parsed)
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
         .map_err(|error| format!("could not reach {url}: {error}"))?;
+    let too_big = || format!("{url} is larger than {} MiB", LIMIT / 1024 / 1024);
+    if response
+        .content_length()
+        .is_some_and(|length| length > LIMIT)
+    {
+        return Err(too_big());
+    }
+    let mut bytes = Vec::new();
     response
-        .bytes()
-        .map(|bytes| bytes.to_vec())
-        .map_err(|error| format!("could not download {url}: {error}"))
+        .take(LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("could not download {url}: {error}"))?;
+    if bytes.len() as u64 > LIMIT {
+        return Err(too_big());
+    }
+    Ok(bytes)
 }
 
-fn manifest(url: &str) -> std::result::Result<Manifest, String> {
+fn manifest(url: &str, key: &str) -> std::result::Result<Manifest, String> {
     let bytes = get(url)?;
+    let signature = get(&format!("{url}.sig"))?;
+    verify(&bytes, &String::from_utf8_lossy(&signature), key)
+        .map_err(|_| "the update list's signature does not match kagan's key".to_owned())?;
     serde_json::from_slice(&bytes).map_err(|error| format!("the update list is not valid: {error}"))
 }

@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use base64::Engine as _;
 use gpui_kit::TestAppContext;
 use kg_domain::{InstallKind, Op, OpError, OpResult, PreferenceOp, UpdateOp, UpdateState};
 use serde_json::json;
@@ -13,10 +14,28 @@ use serde_json::json;
 use super::Fixture;
 use crate::{Target, Updater, Workspace};
 
-const KEY: &str = "RWSzD/q2tCpySPtUN4941KW/7HB5Kz7ILtj4uTiCqHFCzi8xT8hhvVY1";
-const OTHER_KEY: &str = "RWR5lwcRLb7K0fhTI96pBpA0ePVesZfH6fZJYujRCdvb4G3+9W5rGGqq";
 const PAYLOAD: &[u8] = include_bytes!("update/payload");
-const SIGNATURE: &str = include_str!("update/payload.sig");
+
+/// A throwaway minisign key, signing the way cargo-packager does.
+struct Signer {
+    key: String,
+    secret: minisign::SecretKey,
+}
+
+impl Signer {
+    fn new() -> Self {
+        let pair = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+        Self {
+            key: pair.pk.to_base64(),
+            secret: pair.sk,
+        }
+    }
+
+    fn sign(&self, bytes: &[u8]) -> String {
+        let signature = minisign::sign(None, &self.secret, bytes, None, None).unwrap();
+        base64::engine::general_purpose::STANDARD.encode(signature.to_string())
+    }
+}
 
 #[derive(Clone)]
 struct Server {
@@ -66,14 +85,20 @@ impl Server {
         self.files.lock().unwrap().insert(path.into(), body.into());
     }
 
-    fn offer(&self, version: &str, file: &str, signature: &str) {
+    /// Serves a signed `update.json` that offers `version` as `url`.
+    fn offer(&self, signer: &Signer, version: &str, url: &str, signature: &str) {
         let platform = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
         let manifest = json!({
             "version": version,
-            "notes": "https://github.com/kagan-sh/kagan/releases/tag/v99.0.0",
-            "platforms": { platform: { "url": format!("{}/{file}", self.url), "signature": signature } },
-        });
-        self.put("/update.json", manifest.to_string());
+            "platforms": { platform: { "url": url, "signature": signature } },
+        })
+        .to_string();
+        self.put("/update.json.sig", signer.sign(manifest.as_bytes()));
+        self.put("/update.json", manifest);
+    }
+
+    fn file(&self, name: &str) -> String {
+        format!("{}/{name}", self.url)
     }
 
     fn hits(&self) -> usize {
@@ -84,16 +109,21 @@ impl Server {
 fn appimage(dir: &Path) -> (Target, PathBuf) {
     let image = dir.join("kagan.AppImage");
     std::fs::write(&image, "old kagan").unwrap();
-    (
-        Target::find("linux", Path::new("/tmp/kg"), Some(image.clone()), &[]),
-        image,
-    )
+    let target = Target::find(
+        "linux",
+        Path::new("/tmp/.mount_kagan/usr/bin/kg"),
+        Some(image.clone()),
+        Some(Path::new("/tmp/.mount_kagan")),
+        &[],
+    );
+    (target, image)
 }
 
 fn source(cx: &mut TestAppContext, server: &Server, key: &str, target: Target) {
+    let endpoint = server.file("update.json");
     cx.update(|cx| {
         Updater::global(cx).update(cx, |updater, _| {
-            updater.use_source(format!("{}/update.json", server.url), key.into(), target);
+            updater.use_source(endpoint, key.into(), target);
         });
     });
 }
@@ -102,12 +132,16 @@ async fn op(cx: &mut TestAppContext, op: Op) -> Result<OpResult, OpError> {
     cx.update(|cx| Workspace::dispatch(op, cx)).await
 }
 
+async fn check(cx: &mut TestAppContext) -> Result<OpResult, OpError> {
+    op(cx, Op::Update(UpdateOp::Check)).await
+}
+
 fn state(cx: &mut TestAppContext) -> UpdateState {
     cx.update(|cx| Updater::global(cx).read(cx).state().clone())
 }
 
-async fn download(cx: &mut TestAppContext) -> Result<(), OpError> {
-    cx.update(|cx| Updater::global(cx).update(cx, |updater, cx| updater.download(false, cx)))
+async fn download(cx: &mut TestAppContext, at_quit: bool) -> Result<(), OpError> {
+    cx.update(|cx| Updater::global(cx).update(cx, |updater, cx| updater.download(at_quit, cx)))
         .await
 }
 
@@ -120,8 +154,14 @@ async fn replace(cx: &mut TestAppContext) -> Result<(), OpError> {
 async fn the_automatic_check_is_off_by_default(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let server = Server::start();
-    server.offer("99.0.0", "payload", SIGNATURE);
-    source(cx, &server, KEY, appimage(fixture.dir.path()).0);
+    let signer = Signer::new();
+    server.offer(
+        &signer,
+        "99.0.0",
+        &server.file("payload"),
+        &signer.sign(PAYLOAD),
+    );
+    source(cx, &server, &signer.key, appimage(fixture.dir.path()).0);
     cx.executor().advance_clock(Duration::from_hours(25));
     cx.run_until_parked();
     assert_eq!(server.hits(), 0);
@@ -142,7 +182,7 @@ async fn the_automatic_check_is_off_by_default(cx: &mut TestAppContext) {
     .unwrap();
     cx.executor().advance_clock(Duration::from_hours(1));
     cx.run_until_parked();
-    assert_eq!(server.hits(), 1);
+    assert_eq!(server.hits(), 2);
     assert!(matches!(state(cx), UpdateState::Available { .. }));
 }
 
@@ -150,19 +190,24 @@ async fn the_automatic_check_is_off_by_default(cx: &mut TestAppContext) {
 async fn a_check_offers_only_a_newer_release(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let server = Server::start();
-    source(cx, &server, KEY, appimage(fixture.dir.path()).0);
+    let signer = Signer::new();
+    source(cx, &server, &signer.key, appimage(fixture.dir.path()).0);
     for (version, offered) in [
         ("0.0.1", false),
         (env!("CARGO_PKG_VERSION"), false),
         ("99.0.0-rc.1", false),
         ("v99.0.0", true),
     ] {
-        server.offer(version, "payload", SIGNATURE);
-        let Ok(OpResult::Update(status)) = op(cx, Op::Update(UpdateOp::Check)).await else {
+        server.offer(&signer, version, &server.file("payload"), "");
+        let Ok(OpResult::Update(status)) = check(cx).await else {
             panic!("check failed");
         };
         assert_eq!(
-            matches!(status.state, UpdateState::Available { ref version, .. } if version == "99.0.0"),
+            status.state
+                == UpdateState::Available {
+                    version: "99.0.0".into(),
+                    notes: "https://github.com/kagan-sh/kagan/releases/tag/v99.0.0".into(),
+                },
             offered,
             "{version}: {:?}",
             status.state
@@ -175,9 +220,73 @@ async fn a_check_offers_only_a_newer_release(cx: &mut TestAppContext) {
 async fn a_failed_check_says_why(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let server = Server::start();
-    source(cx, &server, KEY, appimage(fixture.dir.path()).0);
-    assert!(op(cx, Op::Update(UpdateOp::Check)).await.is_err());
+    source(
+        cx,
+        &server,
+        &Signer::new().key,
+        appimage(fixture.dir.path()).0,
+    );
+    assert!(check(cx).await.is_err());
     assert!(matches!(state(cx), UpdateState::Failed { .. }));
+}
+
+#[gpui_kit::test]
+async fn a_list_that_is_unsigned_tampered_or_signed_by_another_key_is_refused(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let server = Server::start();
+    let signer = Signer::new();
+    source(cx, &server, &signer.key, appimage(fixture.dir.path()).0);
+
+    server.offer(&Signer::new(), "99.0.0", &server.file("payload"), "");
+    let refused = check(cx).await.unwrap_err().to_string();
+    assert!(refused.contains("signature"), "{refused}");
+
+    server.offer(&signer, "99.0.0", &server.file("payload"), "");
+    let signed = server.files.lock().unwrap()["/update.json"].clone();
+    server.put(
+        "/update.json",
+        String::from_utf8(signed)
+            .unwrap()
+            .replace("99.0.0", "99.0.1"),
+    );
+    let refused = check(cx).await.unwrap_err().to_string();
+    assert!(refused.contains("signature"), "{refused}");
+
+    server.files.lock().unwrap().remove("/update.json.sig");
+    assert!(check(cx).await.is_err());
+    assert!(matches!(state(cx), UpdateState::Failed { .. }));
+}
+
+#[gpui_kit::test]
+async fn an_update_link_off_https_is_refused(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let server = Server::start();
+    let signer = Signer::new();
+    let target = appimage(fixture.dir.path()).0;
+    cx.update(|cx| {
+        Updater::global(cx).update(cx, |updater, _| {
+            updater.use_source(
+                "http://example.com/update.json".into(),
+                signer.key.clone(),
+                target.clone(),
+            );
+        });
+    });
+    let refused = check(cx).await.unwrap_err().to_string();
+    assert!(refused.contains("HTTPS"), "{refused}");
+
+    source(cx, &server, &signer.key, target);
+    server.offer(
+        &signer,
+        "99.0.0",
+        "http://example.com/payload",
+        &signer.sign(PAYLOAD),
+    );
+    check(cx).await.unwrap();
+    let refused = download(cx, false).await.unwrap_err().to_string();
+    assert!(refused.contains("HTTPS"), "{refused}");
 }
 
 #[gpui_kit::test]
@@ -186,62 +295,105 @@ async fn the_signature_check_refuses_a_tampered_file_a_wrong_key_and_no_signatur
 ) {
     let fixture = Fixture::new(cx).await;
     let server = Server::start();
+    let signer = Signer::new();
     let (target, image) = appimage(fixture.dir.path());
     let mut tampered = PAYLOAD.to_vec();
     tampered[0] ^= 1;
     server.put("/payload", PAYLOAD);
     server.put("/tampered", tampered);
+    source(cx, &server, &signer.key, target);
 
-    for (file, signature, key) in [
-        ("tampered", SIGNATURE, KEY),
-        ("payload", SIGNATURE, OTHER_KEY),
-        ("payload", "", KEY),
+    for (file, signature) in [
+        ("tampered", signer.sign(PAYLOAD)),
+        ("payload", Signer::new().sign(PAYLOAD)),
+        ("payload", String::new()),
     ] {
-        server.offer("99.0.0", file, signature);
-        source(cx, &server, key, target.clone());
-        op(cx, Op::Update(UpdateOp::Check)).await.unwrap();
-        let refused = download(cx).await.unwrap_err().to_string();
-        assert!(refused.contains("signature"), "{file} {key}: {refused}");
+        server.offer(&signer, "99.0.0", &server.file(file), &signature);
+        check(cx).await.unwrap();
+        let refused = download(cx, false).await.unwrap_err().to_string();
+        assert!(refused.contains("signature"), "{file}: {refused}");
         assert!(matches!(state(cx), UpdateState::Available { .. }));
         assert_eq!(std::fs::read(&image).unwrap(), b"old kagan");
     }
 
-    server.offer("99.0.0", "payload", SIGNATURE);
-    source(cx, &server, KEY, target);
-    op(cx, Op::Update(UpdateOp::Check)).await.unwrap();
-    download(cx).await.unwrap();
-    assert!(matches!(state(cx), UpdateState::Ready { .. }));
+    server.offer(
+        &signer,
+        "99.0.0",
+        &server.file("payload"),
+        &signer.sign(PAYLOAD),
+    );
+    check(cx).await.unwrap();
+    download(cx, true).await.unwrap();
+    assert!(matches!(
+        state(cx),
+        UpdateState::Ready { at_quit: true, .. }
+    ));
+    download(cx, false).await.unwrap();
+    assert!(matches!(
+        state(cx),
+        UpdateState::Ready { at_quit: false, .. }
+    ));
     replace(cx).await.unwrap();
     assert_eq!(std::fs::read(&image).unwrap(), PAYLOAD);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
 #[gpui_kit::test]
-async fn an_app_update_replaces_the_bundle(cx: &mut TestAppContext) {
+async fn a_folder_kagan_cannot_write_fails_before_the_download(cx: &mut TestAppContext) {
+    use std::os::unix::fs::PermissionsExt as _;
     let fixture = Fixture::new(cx).await;
     let server = Server::start();
+    let signer = Signer::new();
+    let folder = fixture.dir.path().join("locked");
+    std::fs::create_dir(&folder).unwrap();
+    let (target, _) = appimage(&folder);
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o555)).unwrap();
+    server.put("/payload", PAYLOAD);
+    server.offer(
+        &signer,
+        "99.0.0",
+        &server.file("payload"),
+        &signer.sign(PAYLOAD),
+    );
+    source(cx, &server, &signer.key, target);
+    check(cx).await.unwrap();
+    let hits = server.hits();
+    let refused = download(cx, false).await.unwrap_err().to_string();
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(refused.contains("Move kagan to Applications"), "{refused}");
+    assert_eq!(server.hits(), hits);
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+async fn an_app_update_swaps_the_bundle_in_one_step(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let server = Server::start();
+    let signer = Signer::new();
     let app = fixture.dir.path().join("kagan.app");
     let exe = app.join("Contents/MacOS/kg");
     std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
     std::fs::write(&exe, "old kagan\n").unwrap();
-    let target = Target::find("macos", &exe, None, &[]);
-    server.put(
-        "/kagan.app.tar.gz",
-        include_bytes!("update/kagan.app.tar.gz").to_vec(),
-    );
+    let target = Target::find("macos", &exe, None, None, &[]);
+    let archive = include_bytes!("update/kagan.app.tar.gz");
+    server.put("/kagan.app.tar.gz", archive.to_vec());
     server.offer(
+        &signer,
         "99.0.0",
-        "kagan.app.tar.gz",
-        include_str!("update/kagan.app.tar.gz.sig"),
+        &server.file("kagan.app.tar.gz"),
+        &signer.sign(archive),
     );
-    source(cx, &server, KEY, target);
-    op(cx, Op::Update(UpdateOp::Check)).await.unwrap();
-    download(cx).await.unwrap();
+    source(cx, &server, &signer.key, target);
+    check(cx).await.unwrap();
+    download(cx, false).await.unwrap();
     assert_eq!(std::fs::read(&exe).unwrap(), b"old kagan\n");
     replace(cx).await.unwrap();
     assert_eq!(std::fs::read(&exe).unwrap(), b"new kagan\n");
-    assert!(fixture.dir.path().join(".kagan.app.old").exists());
-    assert!(!fixture.dir.path().join(".kagan.app.update").exists());
+    let replaced = fixture
+        .dir
+        .path()
+        .join(".kagan.app.update/kagan.app/Contents/MacOS/kg");
+    assert_eq!(std::fs::read(replaced).unwrap(), b"old kagan\n");
 }
 
 #[test]
@@ -261,14 +413,25 @@ fn each_install_kind_updates_its_own_way() {
     std::fs::create_dir_all(windows.parent().unwrap()).unwrap();
     std::fs::write(windows.with_file_name("uninstall.exe"), "").unwrap();
     let image = root.join("kagan.AppImage");
+    let mount = root.join(".mount_kagan");
+    let mounted = mount.join("usr/bin/kg");
     let plain = root.join("target/release/kg");
+    let none: Option<&Path> = None;
 
-    for (os, exe, appimage, prefixes, kind) in [
-        ("macos", &dmg, None, vec![brew.clone()], InstallKind::App),
+    for (os, exe, appimage, appdir, prefixes, kind) in [
+        (
+            "macos",
+            &dmg,
+            None,
+            none,
+            vec![brew.clone()],
+            InstallKind::App,
+        ),
         (
             "macos",
             &cask,
             None,
+            none,
             vec![brew.clone()],
             InstallKind::Homebrew,
         ),
@@ -276,6 +439,7 @@ fn each_install_kind_updates_its_own_way() {
             "macos",
             &cask,
             None,
+            none,
             vec![root.join("nobrew")],
             InstallKind::App,
         ),
@@ -283,21 +447,46 @@ fn each_install_kind_updates_its_own_way() {
             "macos",
             &plain,
             None,
+            none,
             vec![brew.clone()],
             InstallKind::Other,
         ),
-        ("windows", &windows, None, vec![], InstallKind::Installer),
-        ("windows", &plain, None, vec![], InstallKind::Other),
+        (
+            "windows",
+            &windows,
+            None,
+            none,
+            vec![],
+            InstallKind::Installer,
+        ),
+        ("windows", &plain, None, none, vec![], InstallKind::Other),
+        (
+            "linux",
+            &mounted,
+            Some(image.clone()),
+            Some(mount.as_path()),
+            vec![],
+            InstallKind::AppImage,
+        ),
         (
             "linux",
             &plain,
             Some(image.clone()),
+            Some(mount.as_path()),
             vec![],
-            InstallKind::AppImage,
+            InstallKind::Other,
         ),
-        ("linux", &plain, None, vec![], InstallKind::Other),
+        (
+            "linux",
+            &plain,
+            Some(image.clone()),
+            none,
+            vec![],
+            InstallKind::Other,
+        ),
+        ("linux", &plain, None, none, vec![], InstallKind::Other),
     ] {
-        let target = Target::find(os, exe, appimage, &prefixes);
+        let target = Target::find(os, exe, appimage, appdir, &prefixes);
         assert_eq!(target.install, kind, "{os} {}", exe.display());
     }
     assert!(InstallKind::App.replaces_itself());
@@ -311,14 +500,23 @@ fn each_install_kind_updates_its_own_way() {
 async fn homebrew_and_other_copies_are_not_replaced(cx: &mut TestAppContext) {
     let _fixture = Fixture::new(cx).await;
     let server = Server::start();
+    let signer = Signer::new();
     server.put("/payload", PAYLOAD);
-    server.offer("99.0.0", "payload", SIGNATURE);
+    server.offer(
+        &signer,
+        "99.0.0",
+        &server.file("payload"),
+        &signer.sign(PAYLOAD),
+    );
     for target in [
-        Target::find("linux", Path::new("/usr/bin/kg"), None, &[]),
-        Target::find("windows", Path::new("/nowhere/kg.exe"), None, &[]),
+        Target::find("linux", Path::new("/usr/bin/kg"), None, None, &[]),
+        Target::find("windows", Path::new("/nowhere/kg.exe"), None, None, &[]),
     ] {
-        source(cx, &server, KEY, target);
-        op(cx, Op::Update(UpdateOp::Check)).await.unwrap();
-        assert!(matches!(download(cx).await, Err(OpError::Invalid(_))));
+        source(cx, &server, &signer.key, target);
+        check(cx).await.unwrap();
+        assert!(matches!(
+            download(cx, false).await,
+            Err(OpError::Invalid(_))
+        ));
     }
 }
