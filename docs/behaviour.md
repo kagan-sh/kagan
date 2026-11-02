@@ -532,13 +532,13 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 ### `Check`
 
 - **Allowed when**: always, whatever `update-check` says. The kagan menu's Check for Updates…, the command list, and Settings → Updates run it [decision 113].
-- **Changes**: reads `releases/latest/download/update.json` once. A newer version that is not a pre-release becomes the offered update; an equal, older or pre-release version reads as current [decision 113].
+- **Changes**: reads `releases/latest/download/update.json` once, and only after `update.json.sig` matches kagan's key [decision 115]. A newer version that is not a pre-release becomes the offered update; an equal, older or pre-release version reads as current [decision 113].
 - **Shows**: what `Status` shows after the check [decision 113].
 - **Refused when**: the list cannot be read or parsed — `failed`, and the state says why [decision 113].
 
 ### `Status`
 
-- **Shows**: the running version, how this copy was installed (`app`, `homebrew`, `installer`, `app-image` or `other`), whether the automatic check is on, and the state: `unchecked`, `checking`, `current`, `available` with the version and its release notes, `downloading`, `ready` (downloaded and checked, installs when kagan quits), or `failed` with the reason [decision 113].
+- **Shows**: the running version, how this copy was installed (`app`, `homebrew`, `installer`, `app-image` or `other`), whether the automatic check is on, and the state: `unchecked`, `checking`, `current`, `available` with the version and its release notes, `downloading`, `ready` (downloaded and checked; with `at_quit` it installs when kagan quits) [decision 115], or `failed` with the reason [decision 113].
 
 ## Status, Guide, Open, Sidebar
 
