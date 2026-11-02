@@ -478,3 +478,6 @@ Two numbers in a cell are two runs; other builds shared the machine, so times va
 Why: fat LTO optimizes all of `kg` on one core, which was most of the Mac release time. Thin LTO cut the `kg` step by half on three cores and by four fifths on fourteen, for a binary about a quarter larger, and fat LTO with more units was not faster in one run under load.
 Cost: the dmg is larger, and the universal `kg` sits 16 MB under its budget instead of about 55 MB.
 Rules out: a separate profile only CI uses, since local release builds should match what ships.
+**120. Plugins paste into a thread through the host.** `host.pasteIntoThread(threadId, text)` pastes into that thread's program terminal without pressing Enter, through the same `ThreadOp::Paste` path as review Send and `kg thread paste`, capped at 1 MiB. It lives on `kagan/host` (always granted), not under the `threads` area, so a panel that follows a thread can put a note into the active program without asking to start or stop threads. Empty text and a missing thread are refused; a program that has ended fails the call.
+Why: Canvas (and other right panels) need BB's "send note into the active agent" without granting the full threads power.
+Rules out: requiring the `threads` area for paste, auto-submitting with Enter, and pasting into an extra terminal from this call.
