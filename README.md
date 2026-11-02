@@ -23,9 +23,9 @@ kagan runs your agents in real terminals. Each thread runs one program in its ow
 
 ## Install
 
-On an Apple silicon Mac, pick one:
+On a Mac with macOS 11 or later, Intel or Apple silicon, pick one:
 
-- **Download:** get the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases). Open it and drag `kagan.app` to `/Applications`. [Add `kg` to your `PATH`](book/src/start.md#download).
+- **Download:** get the signed `.dmg` (one file for Intel and Apple silicon) from [Releases](https://github.com/kagan-sh/kagan/releases). Open it and drag `kagan.app` to `/Applications`. [Add `kg` to your `PATH`](book/src/start.md#download).
 - **Homebrew:** run `brew install --cask kagan-sh/tap/kagan`. Homebrew puts `kg` on your `PATH`.
 
 Releases also have a Windows installer, a `.deb`, and an AppImage. You can also [build from source](book/src/start.md#build-from-source).
