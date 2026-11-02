@@ -180,7 +180,6 @@ pub(crate) struct Kagan {
     surface_close_focus: FocusHandle,
     // While a surface open or close waits for its frame, sidebar and collapse preferences stay as they were.
     surface_hold: bool,
-    collapse_stamp: BTreeMap<String, u64>,
     typing: bool,
     quiet: Task<()>,
     /// The questions that were on screen when the person started typing. They stay up.
@@ -198,6 +197,8 @@ pub(crate) struct Kagan {
     right_slots: Vec<surface::Slot>,
     right_tab: Option<String>,
     right_menu: Option<(Entity<PopupMenu>, Subscription)>,
+    right_add_focus: FocusHandle,
+    right_panels: Vec<surface::Declared>,
     tool: Option<surface::Slot>,
     surface_check: Option<surface::Check>,
     surface_epoch: u64,
@@ -464,7 +465,6 @@ impl Kagan {
             focus: cx.focus_handle(),
             surface_close_focus: cx.focus_handle().tab_stop(true),
             surface_hold: false,
-            collapse_stamp: BTreeMap::new(),
             typing: false,
             quiet: Task::ready(()),
             on_screen: BTreeSet::new(),
@@ -480,6 +480,8 @@ impl Kagan {
             right_slots: Vec::new(),
             right_tab: None,
             right_menu: None,
+            right_add_focus: cx.focus_handle().tab_stop(true),
+            right_panels: Vec::new(),
             tool: None,
             surface_check: None,
             surface_epoch: 0,
@@ -1429,11 +1431,7 @@ impl Render for Kagan {
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
-            .on_action(cx.listener(Self::toggle_panel_action))
             .on_action(cx.listener(Self::toggle_details_action))
-            .on_action(cx.listener(Self::select_right_tab_action))
-            .on_action(right::close_tab)
-            .on_action(cx.listener(Self::open_right_menu_action))
             .on_action(cx.listener(Self::toggle_form_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))

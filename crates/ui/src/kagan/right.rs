@@ -7,18 +7,18 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, Anchor, AnyElement, App, Context, DismissEvent, ElementId, Entity, FocusHandle,
-    Focusable as _, InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role,
-    StatefulInteractiveElement as _, Styled as _, Window, actions, anchored, deferred, div,
+    Action, AnyElement, App, Context, DismissEvent, ElementId, FocusHandle, Focusable as _,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role,
+    StatefulInteractiveElement as _, Styled as _, Window, actions, div,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, PluginId, PluginOp, SurfaceOp};
 
 use super::Kagan;
-use super::layout;
 use super::plugins_box::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
-use super::shown::control;
-use super::surface::{self, Slot};
+use super::shown::{control, menu_popup};
+use super::surface::Slot;
+use super::tabs::{self, CloseTab};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -27,32 +27,13 @@ pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
 
 #[derive(Clone, PartialEq, Eq, Action)]
 #[action(namespace = right, no_json)]
-pub(super) struct TogglePanel {
-    pub(super) panel: String,
-}
-
-#[derive(Clone, PartialEq, Eq, Action)]
-#[action(namespace = right, no_json)]
 pub(super) struct ToggleDetails {
     pub(super) panel: String,
 }
 
-#[derive(Clone, PartialEq, Eq, Action)]
-#[action(namespace = right, no_json)]
-pub(super) struct SelectTab {
-    pub(super) id: String,
-}
+actions!(right, [ActivatePanelHeader]);
 
-#[derive(Clone, PartialEq, Eq, Action)]
-#[action(namespace = right, no_json)]
-pub(super) struct CloseTab {
-    pub(super) plugin: String,
-    pub(super) id: String,
-}
-
-actions!(right, [ActivatePanelHeader, OpenRightMenu]);
-
-/// Enter and Space on a focused panel header collapse or open that panel.
+/// Enter and Space on a focused tab, or on the `+`, act on it.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("enter", ActivatePanelHeader, Some("PanelHeader")),
@@ -72,7 +53,6 @@ pub(super) struct Panel {
     pub(super) id: String,
     pub(super) title: String,
     pub(super) body: Body,
-    pub(super) collapsed: bool,
 }
 
 pub(super) fn built_in() -> Vec<Panel> {
@@ -86,13 +66,8 @@ pub(super) fn built_in() -> Vec<Panel> {
         id: id.into(),
         title: title.into(),
         body,
-        collapsed: false,
     })
     .collect()
-}
-
-fn panel_key(id: &str) -> String {
-    format!("panel.{id}.collapsed")
 }
 
 pub(super) fn plugin_panel_id(plugin: &PluginId, panel: &str) -> String {
@@ -152,9 +127,6 @@ fn tab_body(
     cx: &mut Context<Kagan>,
 ) -> Option<AnyElement> {
     if let Some(panel) = kagan.panels.iter().find(|panel| panel.id == id) {
-        if panel.collapsed {
-            return None;
-        }
         let body = match &panel.body {
             Body::Needs => kagan.render_needs(window, cx).into_any_element(),
             Body::Changes => kagan.render_changes(cx).into_any_element(),
@@ -188,29 +160,23 @@ fn tab_bar(
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
-    let mut tabs: Vec<AnyElement> = Vec::new();
+    let mut tabs = Vec::new();
     for panel in &kagan.panels {
-        let show = match panel.body {
-            Body::Needs => kagan.waiting_count(cx) > 0,
-            Body::Changes | Body::Details => kagan.thread_visible(cx),
-        };
-        if show {
+        if tab_available(kagan, &panel.id, cx) {
             tabs.push(built_in_tab(panel, selected, window, cx));
         }
     }
     for slot in &kagan.right_slots {
-        tabs.push(plugin_tab(slot, selected));
+        tabs.push(plugin_tab(slot, selected, cx));
     }
-    let menu = kagan.right_menu.as_ref().map(|(menu, _)| menu.clone());
     h_flex()
         .id("right-tab-bar")
         .ui_container()
-        .role(Role::TabList)
         .flex_none()
         .w_full()
         .min_w_0()
         .h_9()
-        .gap_1()
+        .gap_2()
         .px_2()
         .border_b_1()
         .border_color(cx.theme().border)
@@ -218,13 +184,14 @@ fn tab_bar(
             h_flex()
                 .id("right-tabs")
                 .ui_container()
+                .role(Role::TabList)
                 .min_w_0()
                 .flex_1()
                 .overflow_x_scroll()
                 .gap_1()
                 .children(tabs),
         )
-        .child(plus_button(kagan, menu, cx))
+        .child(plus_button(kagan, cx))
         .into_any_element()
 }
 
@@ -235,167 +202,76 @@ fn built_in_tab(
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let id = panel.id.clone();
-    let title = panel.title.clone();
-    let active = selected == Some(id.as_str());
-    let (icon, verb) = if panel.collapsed {
-        (IconName::ChevronDown, "Show")
-    } else {
-        (IconName::ChevronUp, "Hide")
-    };
-    let select = id.clone();
-    let toggle_id = id.clone();
-    let header_focus = super::tab_stop(
+    let focus = super::tab_stop(
         window,
         cx,
         ElementId::Name(format!("{id}-header-focus").into()),
     );
-    // Panel id (`needs-you`) stays findable; header / toggle ids keep accordion tests working.
-    h_flex()
+    let select = id.clone();
+    div()
         .id(ElementId::Name(id.clone().into()))
         .ui_container()
-        .gap_0()
-        .items_center()
-        .child(
-            div()
-                .id(ElementId::Name(format!("{id}-header").into()))
-                .ui_observe_as(Facts {
-                    focus: Some(header_focus.clone()),
-                    selected: Some(active),
-                    ..Facts::button(title.clone())
-                })
-                .track_focus(&header_focus)
-                .tab_stop(true)
-                .key_context("PanelHeader")
-                .rounded(cx.theme().radius)
-                .focus(|header| header.border_1().border_color(cx.theme().ring))
-                .on_click({
-                    let select = select.clone();
-                    move |_, window, cx| {
-                        window.dispatch_action(Box::new(SelectTab { id: select.clone() }), cx);
-                    }
-                })
-                .child(
-                    Button::new(ElementId::Name(format!("right-tab-button-{id}").into()))
-                        .small()
-                        .ghost()
-                        .selected(active)
-                        .label(title.clone())
-                        .accessibility_label(title.clone())
-                        .tab_stop(false)
-                        .on_click({
-                            let select = select.clone();
-                            move |_, window, cx| {
-                                window.dispatch_action(
-                                    Box::new(SelectTab { id: select.clone() }),
-                                    cx,
-                                );
-                            }
-                        }),
-                )
-                .on_action({
-                    let activate_id = id.clone();
-                    cx.listener(move |_, _: &ActivatePanelHeader, window, cx| {
-                        window.dispatch_action(
-                            Box::new(TogglePanel {
-                                panel: activate_id.clone(),
-                            }),
-                            cx,
-                        );
-                    })
-                }),
-        )
-        .child(control(
-            format!("panel-toggle-{id}"),
-            Facts {
-                selected: Some(!panel.collapsed),
-                ..Facts::button(format!("{verb} {title}"))
-            },
-            Button::new(ElementId::Name(format!("button-panel-toggle-{id}").into()))
-                .small()
-                .ghost()
-                .icon(icon)
-                .accessibility_label(format!("{verb} {title}"))
-                .on_click(move |_, window, cx| {
-                    window.dispatch_action(
-                        Box::new(TogglePanel {
-                            panel: toggle_id.clone(),
-                        }),
-                        cx,
-                    );
-                }),
+        .flex_none()
+        .child(tabs::tab(
+            format!("{id}-header"),
+            panel.title.clone().into(),
+            selected == Some(id.as_str()),
+            move |this, _, cx| this.select_right_tab(&select, cx),
+            None,
+            Some(focus),
+            cx,
         ))
         .into_any_element()
 }
 
-fn plugin_tab(slot: &Slot, selected: Option<&str>) -> AnyElement {
-    let active = selected == Some(slot.id.as_str());
-    let title = slot.title.clone();
-    let close_plugin = slot.plugin.0.clone();
-    let close_id = slot.contribution.clone();
-    let select_id = slot.id.clone();
-    h_flex()
-        .id(ElementId::Name(format!("right-tab-{}", slot.id).into()))
-        .ui_observe_as(Facts {
-            selected: Some(active),
-            ..Facts::button(title.clone())
-        })
-        .gap_0()
-        .items_center()
-        .child(
-            Button::new(ElementId::Name(
-                format!("right-tab-button-{}", slot.id).into(),
-            ))
-            .small()
-            .ghost()
-            .selected(active)
-            .label(title.clone())
-            .accessibility_label(title)
-            .on_click(move |_, window, cx| {
-                window.dispatch_action(
-                    Box::new(SelectTab {
-                        id: select_id.clone(),
-                    }),
-                    cx,
-                );
-            }),
-        )
-        .child(
-            Button::new(ElementId::Name(
-                format!("right-tab-close-{}", slot.id).into(),
-            ))
-            .small()
-            .ghost()
-            .icon(IconName::Close)
-            .accessibility_label(format!("Close {}", slot.title))
-            .on_click(move |_, window, cx| {
-                window.dispatch_action(
-                    Box::new(CloseTab {
-                        plugin: close_plugin.clone(),
-                        id: close_id.clone(),
-                    }),
-                    cx,
-                );
-            }),
-        )
-        .into_any_element()
+fn plugin_tab(slot: &Slot, selected: Option<&str>, cx: &mut Context<Kagan>) -> AnyElement {
+    let (plugin, id) = (slot.plugin.clone(), slot.contribution.clone());
+    let close: CloseTab = (
+        format!("right-tab-close-{}", slot.id).into(),
+        Box::new(move |cx| {
+            Workspace::dispatch(
+                Op::Surface(SurfaceOp::Close {
+                    plugin: plugin.clone(),
+                    id: id.clone(),
+                }),
+                cx,
+            )
+            .detach();
+        }),
+    );
+    let select = slot.id.clone();
+    tabs::tab(
+        format!("right-tab-{}", slot.id),
+        slot.title.clone().into(),
+        selected == Some(slot.id.as_str()),
+        move |this, _, cx| this.select_right_tab(&select, cx),
+        Some(close),
+        None,
+        cx,
+    )
 }
 
-fn plus_button(
-    kagan: &Kagan,
-    menu: Option<Entity<PopupMenu>>,
-    cx: &mut Context<Kagan>,
-) -> AnyElement {
-    let closed = surface::closed_right_panels(kagan, cx);
-    let enabled = !closed.is_empty() || menu.is_some();
+fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
+    let menu = kagan.right_menu.as_ref().map(|(menu, _)| menu.clone());
+    let enabled = kagan.closed_right_panels().next().is_some() || menu.is_some();
+    let focus = kagan.right_add_focus.clone();
     div()
         .id("right-tab-plus")
         .relative()
         .flex_shrink_0()
+        .track_focus(&focus)
+        .key_context("PanelHeader")
+        .rounded(cx.theme().radius)
+        .focus(|add| add.border_1().border_color(cx.theme().ring))
+        .on_action(cx.listener(|this, _: &ActivatePanelHeader, window, cx| {
+            this.open_right_menu(window, cx);
+        }))
         .child(control(
             "right-tab-add",
             Facts {
                 disabled: !enabled,
                 selected: Some(menu.is_some()),
+                focus: Some(focus),
                 ..Facts::button("Add panel")
             },
             Button::new("right-tab-add-button")
@@ -406,36 +282,20 @@ fn plus_button(
                 .selected(menu.is_some())
                 .accessibility_label("Add panel")
                 .tooltip("Add panel")
+                .tab_stop(false)
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.open_right_menu(window, cx);
                 })),
         ))
-        .when_some(menu, |wrap, menu| wrap.child(right_menu_popup(menu)))
+        .when_some(menu, |wrap, menu| {
+            wrap.child(menu_popup(
+                &menu,
+                "right-tab-menu-layer",
+                "right-tab-menu",
+                "Add panel",
+            ))
+        })
         .into_any_element()
-}
-
-fn right_menu_popup(menu: Entity<PopupMenu>) -> impl IntoElement {
-    div()
-        .absolute()
-        .bottom_0()
-        .right_0()
-        .w_0()
-        .h_0()
-        .child(deferred(
-            anchored().anchor(Anchor::TopRight).child(
-                div()
-                    .id("right-tab-menu-layer")
-                    .on_click(|_, _, cx| cx.stop_propagation())
-                    .child(control(
-                        "right-tab-menu",
-                        Facts {
-                            role: Role::Menu,
-                            ..Facts::button("Add panel")
-                        },
-                        menu,
-                    )),
-            ),
-        ))
 }
 
 impl Kagan {
@@ -447,43 +307,39 @@ impl Kagan {
         self.thread_visible(cx)
             || self.waiting_count(cx) > 0
             || !self.right_slots.is_empty()
-            || surface::has_right_panels(cx)
+            || !self.right_panels.is_empty()
     }
 
     pub(super) fn open_right_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.right_menu.is_some() {
             return;
         }
-        let closed = surface::closed_right_panels(self, cx);
-        if closed.is_empty() {
-            return;
-        }
-        let items: Vec<_> = closed
-            .into_iter()
+        let items: Vec<_> = self
+            .closed_right_panels()
             .map(|item| (item.plugin.clone(), item.id.clone(), item.title.clone()))
             .collect();
+        if items.is_empty() {
+            return;
+        }
         let menu = PopupMenu::build(window, cx, move |menu, _, _| {
             items.into_iter().fold(menu, |menu, (plugin, id, title)| {
                 let item_id = format!("right-add-{}-{id}", plugin.0);
-                let label = title.clone();
-                let open_plugin = plugin.clone();
-                let open_id = id.clone();
                 menu.item(
                     PopupMenuItem::element(move |_, _| {
                         control(
                             ElementId::Name(item_id.clone().into()),
                             Facts {
                                 role: Role::MenuItem,
-                                ..Facts::button(label.clone())
+                                ..Facts::button(title.clone())
                             },
-                            label.clone(),
+                            title.clone(),
                         )
                     })
                     .on_click(move |_, _, cx| {
                         Workspace::dispatch(
                             Op::Surface(SurfaceOp::Open {
-                                plugin: open_plugin.clone(),
-                                id: open_id.clone(),
+                                plugin: plugin.clone(),
+                                id: id.clone(),
                             }),
                             cx,
                         )
@@ -499,24 +355,6 @@ impl Kagan {
         menu.read(cx).focus_handle(cx).focus(window, cx);
         self.right_menu = Some((menu, dismiss));
         cx.notify();
-    }
-
-    pub(super) fn select_right_tab_action(
-        &mut self,
-        action: &SelectTab,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.select_right_tab(&action.id, cx);
-    }
-
-    pub(super) fn open_right_menu_action(
-        &mut self,
-        _: &OpenRightMenu,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.open_right_menu(window, cx);
     }
 }
 
@@ -646,81 +484,6 @@ fn failed_plugin(
 }
 
 impl Kagan {
-    pub(super) fn toggle_panel(&mut self, id: &str, cx: &mut Context<Self>) {
-        let collapsed = self
-            .panels
-            .iter()
-            .find(|panel| panel.id == id)
-            .is_some_and(|panel| !panel.collapsed);
-        self.set_collapsed(id, collapsed, cx);
-    }
-
-    /// Shows or hides one panel, and saves the choice so a restart and a plugin's own open keep it.
-    pub(super) fn set_collapsed(&mut self, id: &str, collapsed: bool, cx: &mut Context<Self>) {
-        let changed = self
-            .panels
-            .iter()
-            .any(|panel| panel.id == id && panel.collapsed != collapsed);
-        self.bump_collapse(id);
-        if let Some(panel) = self.panels.iter_mut().find(|panel| panel.id == id) {
-            panel.collapsed = collapsed;
-        }
-        if !collapsed {
-            self.right_tab = Some(id.to_owned());
-        }
-        if changed {
-            self.supersede_surface();
-        }
-        if !self.surface_hold {
-            layout::save(&panel_key(id), collapsed, cx);
-        }
-        cx.notify();
-    }
-
-    pub(super) fn restore_collapsed(&self, id: String, cx: &mut Context<Self>) {
-        let stamp = self.stamped(&id);
-        let read = layout::read::<bool>(&panel_key(&id), cx);
-        cx.spawn(async move |this, cx| {
-            let collapsed = read.await.unwrap_or(false);
-            _ = this.update(cx, |this, cx| {
-                if this.stamped(&id) != stamp {
-                    return;
-                }
-                let changed = this
-                    .panels
-                    .iter()
-                    .any(|panel| panel.id == id && panel.collapsed != collapsed);
-                if !changed {
-                    return;
-                }
-                if let Some(panel) = this.panels.iter_mut().find(|panel| panel.id == id) {
-                    panel.collapsed = collapsed;
-                }
-                this.supersede_surface();
-                cx.notify();
-            });
-        })
-        .detach();
-    }
-
-    fn stamped(&self, id: &str) -> u64 {
-        self.collapse_stamp.get(id).copied().unwrap_or(0)
-    }
-
-    fn bump_collapse(&mut self, id: &str) {
-        let next = self.stamped(id).wrapping_add(1);
-        self.collapse_stamp.insert(id.to_owned(), next);
-    }
-
-    pub(super) fn toggle_panel_action(
-        &mut self,
-        action: &TogglePanel,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.toggle_panel(&action.panel, cx);
-    }
-
     pub(super) fn toggle_details_action(
         &mut self,
         action: &ToggleDetails,
@@ -730,16 +493,4 @@ impl Kagan {
         self.flip_slot_details(&action.panel);
         cx.notify();
     }
-}
-
-pub(super) fn close_tab(action: &CloseTab, _: &mut Window, cx: &mut App) {
-    let plugin = PluginId(action.plugin.clone());
-    Workspace::dispatch(
-        Op::Surface(SurfaceOp::Close {
-            plugin,
-            id: action.id.clone(),
-        }),
-        cx,
-    )
-    .detach();
 }

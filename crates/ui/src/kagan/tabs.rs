@@ -2,14 +2,16 @@ use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{IconName, Selectable as _, Sizable as _, h_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
-    IntoElement, ParentElement as _, Role, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Task, Window, actions, div,
+    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable as _,
+    InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Task, Window, actions, div,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, TerminalOp, Thread, ThreadId, ThreadOp, WindowOp};
 
+use super::right::ActivatePanelHeader;
 use super::shown::{control, dispatch, tip};
 use super::{Kagan, Shown};
 use crate::terminal::{TerminalView, Typed};
@@ -241,6 +243,8 @@ impl Kagan {
             "terminal-tab-agent",
             program.into(),
             self.tabs.shown.is_none(),
+            |this, window, cx| this.show_tab(None, window, cx),
+            None,
             None,
             cx,
         );
@@ -251,11 +255,18 @@ impl Kagan {
             .iter()
             .map(|(number, _)| {
                 let selected = self.tabs.shown == Some(*number);
+                let (thread, number) = (thread.id.clone(), *number);
+                let close: CloseTab = (
+                    format!("terminal-close-{number}").into(),
+                    Box::new(move |cx| close(thread.clone(), number, cx)),
+                );
                 tab(
                     format!("terminal-tab-{number}"),
                     format!("Terminal {number}").into(),
                     selected,
-                    Some((thread.id.clone(), *number)),
+                    move |this, window, cx| this.show_tab(Some(number), window, cx),
+                    Some(close),
+                    None,
                     cx,
                 )
             })
@@ -357,37 +368,41 @@ fn close(id: ThreadId, number: u32, cx: &mut App) {
     .detach();
 }
 
-fn tab(
+pub(super) type CloseTab = (SharedString, Box<dyn Fn(&mut App)>);
+
+/// A tab with its own `focus` takes the keyboard on its wrapper, so Enter and Space select it.
+pub(super) fn tab(
     id: impl Into<SharedString>,
     label: SharedString,
     selected: bool,
-    extra: Option<(ThreadId, u32)>,
+    on_select: impl Fn(&mut Kagan, &mut Window, &mut Context<Kagan>) + Clone + 'static,
+    close: Option<CloseTab>,
+    focus: Option<FocusHandle>,
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let id: SharedString = id.into();
-    let number = extra.as_ref().map(|(_, number)| *number);
+    let select = on_select.clone();
     let button = Button::new(SharedString::from(format!("{id}-button")))
         .small()
         .ghost()
         .selected(selected)
         .label(label.clone())
-        .on_click(cx.listener(move |this, _, window, cx| this.show_tab(number, window, cx)));
-    let close = extra.map(|(thread, number)| {
+        .when(focus.is_some(), |button| button.tab_stop(false))
+        .on_click(cx.listener(move |this, _, window, cx| on_select(this, window, cx)));
+    let close = close.map(|(close_id, close)| {
         let name = format!("Close {label}");
         control(
-            format!("terminal-close-{number}"),
+            close_id.clone(),
             Facts::button(name.clone()),
-            Button::new(SharedString::from(format!(
-                "terminal-close-{number}-button"
-            )))
-            .xsmall()
-            .ghost()
-            .icon(IconName::Close)
-            .accessibility_label(name)
-            .on_click(move |_, _, cx| close(thread.clone(), number, cx)),
+            Button::new(SharedString::from(format!("{close_id}-button")))
+                .xsmall()
+                .ghost()
+                .icon(IconName::Close)
+                .accessibility_label(name)
+                .on_click(move |_, _, cx| close(cx)),
         )
     });
-    h_flex()
+    let tab = h_flex()
         .flex_none()
         .items_center()
         .rounded(cx.theme().radius)
@@ -397,12 +412,25 @@ fn tab(
             Facts {
                 role: Role::Tab,
                 selected: Some(selected),
+                focus: focus.clone(),
                 ..Facts::button(label)
             },
             button,
         ))
-        .children(close)
-        .into_any_element()
+        .children(close);
+    match focus {
+        None => tab.into_any_element(),
+        Some(focus) => tab
+            .track_focus(&focus)
+            .key_context("PanelHeader")
+            .focus(|tab| tab.border_1().border_color(cx.theme().ring))
+            .on_action(
+                cx.listener(move |this, _: &ActivatePanelHeader, window, cx| {
+                    select(this, window, cx);
+                }),
+            )
+            .into_any_element(),
+    }
 }
 
 /// The + in the thread's title row, which opens another terminal in its folder.

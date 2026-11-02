@@ -127,6 +127,10 @@ impl Kagan {
     }
 
     pub(super) fn sync_slots(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.right_panels = panels(cx)
+            .into_iter()
+            .filter(|item| item.placement == Placement::Right)
+            .collect();
         let tool_held = holds_focus(self.tool.as_ref(), window, cx);
         let page_held = holds_focus(self.screen.page(), window, cx);
         let right_held = self
@@ -204,19 +208,14 @@ impl Kagan {
                 next.push(mount(&declared, slot.details, window, cx));
             }
         }
-        if changed {
-            let selected = self.right_tab.clone();
-            self.right_slots = next;
-            if selected
+        self.right_slots = next;
+        if changed
+            && !self
+                .right_tab
                 .as_ref()
                 .is_some_and(|id| self.right_slots.iter().any(|slot| &slot.id == id))
-            {
-                self.right_tab = selected;
-            } else {
-                self.right_tab = self.default_right_tab(cx);
-            }
-        } else {
-            self.right_slots = next;
+        {
+            self.right_tab = self.default_right_tab(cx);
         }
         changed
     }
@@ -483,12 +482,23 @@ impl Kagan {
     }
 
     pub(super) fn focus_right_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.right_tab.clone() else {
-            return;
-        };
-        if let Some(slot) = self.right_slots.iter().find(|slot| slot.id == id) {
-            window.focus(&slot.focus, cx);
+        let slot = self
+            .right_tab
+            .as_ref()
+            .and_then(|id| self.right_slots.iter().find(|slot| &slot.id == id));
+        match slot {
+            Some(slot) => window.focus(&slot.focus, cx),
+            None => window.focus(&self.right_add_focus, cx),
         }
+    }
+
+    pub(super) fn closed_right_panels(&self) -> impl Iterator<Item = &Declared> {
+        self.right_panels.iter().filter(|item| {
+            !self
+                .right_slots
+                .iter()
+                .any(|slot| slot.plugin == item.plugin && slot.contribution == item.id)
+        })
     }
 
     pub(super) fn default_right_tab(&self, cx: &App) -> Option<String> {
@@ -503,16 +513,12 @@ impl Kagan {
 
     pub(super) fn select_right_tab(&mut self, id: &str, cx: &mut Context<Self>) {
         self.right_tab = Some(id.to_owned());
-        if self.panels.iter().any(|panel| panel.id == id) {
-            self.set_collapsed(id, false, cx);
-            return;
-        }
         self.supersede_surface();
         cx.notify();
     }
 
     pub(super) fn show_right(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.room_panes(self.layout.left_open, true).right {
+        if self.screen.review().is_none() && self.room_panes(self.layout.left_open, true).right {
             self.force_sidebar(false, true, window, cx);
         } else {
             self.open_overlay(
@@ -710,25 +716,6 @@ pub(super) fn nav_items(cx: &App) -> Vec<NavItem> {
         .collect()
 }
 
-pub(super) fn closed_right_panels(kagan: &Kagan, cx: &App) -> Vec<Declared> {
-    panels(cx)
-        .into_iter()
-        .filter(|item| item.placement == Placement::Right)
-        .filter(|item| {
-            !kagan
-                .right_slots
-                .iter()
-                .any(|slot| slot.plugin == item.plugin && slot.contribution == item.id)
-        })
-        .collect()
-}
-
-pub(super) fn has_right_panels(cx: &App) -> bool {
-    panels(cx)
-        .into_iter()
-        .any(|item| item.placement == Placement::Right)
-}
-
 fn panels(cx: &App) -> Vec<Declared> {
     let Ok(list) = kg_plugins::contributions(cx) else {
         return Vec::new();
@@ -812,16 +799,11 @@ fn matching_slot<'a>(
     right: &'a [Slot],
     declared: &Declared,
 ) -> Option<&'a Slot> {
+    let same = |slot: &&Slot| slot.contribution == declared.id && slot.plugin == declared.plugin;
     match declared.placement {
-        Placement::Left => {
-            tool.filter(|slot| slot.contribution == declared.id && slot.plugin == declared.plugin)
-        }
-        Placement::Center => {
-            page.filter(|slot| slot.contribution == declared.id && slot.plugin == declared.plugin)
-        }
-        Placement::Right => right
-            .iter()
-            .find(|slot| slot.contribution == declared.id && slot.plugin == declared.plugin),
+        Placement::Left => tool.filter(same),
+        Placement::Center => page.filter(same),
+        Placement::Right => right.iter().find(same),
         Placement::Bottom => None,
     }
 }
@@ -831,8 +813,8 @@ fn focus_for(placement: Placement, open: bool) -> Focus {
         (Placement::Center, true) => Focus::Page,
         (Placement::Center, false) => Focus::Work,
         (Placement::Left, _) => Focus::Tool,
-        (Placement::Right, true) => Focus::Right,
-        (Placement::Right, false) | (Placement::Bottom, _) => Focus::None,
+        (Placement::Right, _) => Focus::Right,
+        (Placement::Bottom, _) => Focus::None,
     }
 }
 

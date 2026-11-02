@@ -37,11 +37,11 @@ impl Default for Details {
 }
 
 impl Kagan {
-    /// Whether the Details panel is expanded, so a timer should keep it current.
+    /// Whether the Details panel exists, so a timer should keep it current.
     pub(super) fn details_open(&self) -> bool {
         self.panels
             .iter()
-            .any(|panel| matches!(panel.body, Body::Details) && !panel.collapsed)
+            .any(|panel| matches!(panel.body, Body::Details))
     }
 
     pub(super) fn load_details(&mut self, cx: &mut Context<Self>) {

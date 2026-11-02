@@ -129,7 +129,6 @@ impl Kagan {
             person.iter().any(|id| !self.announced.contains(id)) && !self.desired_panes(cx).right;
         self.announced.extend(person);
         if opening {
-            self.set_collapsed("needs-you", false, cx);
             self.select_right_tab("needs-you", cx);
             if !self.screen.drawn(Side::Right) {
                 self.open_overlay(Side::Right, Activation::Quiet, window, cx);
