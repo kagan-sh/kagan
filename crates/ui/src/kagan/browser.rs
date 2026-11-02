@@ -50,7 +50,7 @@ impl Browser {
             return;
         }
         // Links and redirects inside the page are held to the same rule as the address field.
-        // Private, so cookies and logins end when kagan quits and nothing lands outside its data.
+        // Private: cookies and logins end with the page, and nothing lands outside kagan's data.
         let builder = wry::WebViewBuilder::new()
             .with_url(url.as_str())
             .with_incognito(true)
