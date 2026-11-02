@@ -48,5 +48,6 @@ kg skill remove my-skill
 
 - `kg-cli`: threads, projects, and folders.
 - `kg-plugin-authoring`: make a plugin.
+- `kg-plugin-port`: port a bb plugin.
 - `kg-skill-creator`: write a skill.
 - `kg-ui`: operate the open window from `kg`.
