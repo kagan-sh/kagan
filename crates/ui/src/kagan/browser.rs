@@ -99,6 +99,7 @@ fn is_web(url: &str) -> bool {
 }
 
 impl Kagan {
+    #[cfg(target_os = "macos")]
     pub(super) fn browser_drawn(&self, cx: &App) -> bool {
         self.right_drawn()
             && self.thread_visible(cx)
