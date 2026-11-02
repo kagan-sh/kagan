@@ -74,8 +74,7 @@ opt-level = 1
 
 # Panics stay unwinding: gpui-shell and `ui` catch a plugin's panic instead of losing the app.
 [profile.release]
-codegen-units = 1
-lto = "fat"
+lto = "thin"
 strip = "symbols"
 
 # rustc's strip (llvm-objcopy) misaligns a proc-macro dylib's LINKEDIT string pool.

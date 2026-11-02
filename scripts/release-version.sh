@@ -41,6 +41,18 @@ print(f'prerelease={str("-" in version).lower()}')
 PY
 }
 
+stamp_version() {
+  awk -v v="$1" '
+    !done && $0 ~ /^version[[:space:]]*=[[:space:]]*"/ {
+      sub(/"[^"]*"/, "\"" v "\"")
+      done = 1
+    }
+    { print }
+    END { if (!done) exit 1 }
+  ' Cargo.toml > Cargo.toml.tmp
+  mv Cargo.toml.tmp Cargo.toml
+}
+
 case "${1:-}" in
 --test)
   dir=$(mktemp -d)
@@ -68,8 +80,11 @@ case "${1:-}" in
 check)
   check_version "${2:-}"
   ;;
+stamp)
+  stamp_version "${2:?version}"
+  ;;
 *)
-  echo 'Usage: release-version.sh check <version> | --test' >&2
+  echo 'Usage: release-version.sh check <version> | stamp <version> | --test' >&2
   exit 2
   ;;
 esac

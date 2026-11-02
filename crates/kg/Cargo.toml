@@ -56,7 +56,6 @@ product-name = "kagan"
 identifier = "kagan.kg"
 description = "kagan"
 homepage = "https://github.com/kagan-sh/kagan"
-before-packaging-command = "cargo build --release -p kg"
 out-dir = "../../target/packager"
 icons = [
     "../../assets/brand/png/kagan-app-icon-32.png",

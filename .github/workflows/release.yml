@@ -46,13 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-22.04
-          - os: macos-latest
-            # 160 MiB for the universal kg, both CPUs: about 112 MB plus the
-            # same headroom the old 75 MiB limit gave the Apple silicon one.
-            size-budget: 167772160
-          - os: windows-latest
+        os: [ubuntu-22.04, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,35 +56,17 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.tag.outputs.version }}
-        run: |
-          set -eu
-          stamp() {
-            file=$1
-            awk -v v="$VERSION" '
-              !done && $0 ~ /^version[[:space:]]*=[[:space:]]*"/ {
-                sub(/"[^"]*"/, "\"" v "\"")
-                done = 1
-              }
-              { print }
-              END { if (!done) exit 1 }
-            ' "$file" > "$file.tmp"
-            mv "$file.tmp" "$file"
-          }
-          stamp Cargo.toml
-      - name: macOS linker
-        if: runner.os == 'macOS'
-        run: brew install lld
+        run: bash scripts/release-version.sh stamp "$VERSION"
       - name: Linux libraries
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libfuse2 lld
-      - if: runner.os != 'Windows'
+      - if: runner.os == 'Linux'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
           version: v0.18.0
-      - if: runner.os != 'Windows'
-        shell: bash
+      - if: runner.os == 'Linux'
         run: |
           {
             echo "CARGO_INCREMENTAL=0"
@@ -102,9 +78,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
         with:
           cache: false
-      - name: Intel Mac target
-        if: runner.os == 'macOS'
-        run: rustup target add x86_64-apple-darwin
       - name: Prepare cargo-packager cache directory
         shell: bash
         run: mkdir -p "$RUNNER_TEMP/cargo-packager"
@@ -120,28 +93,6 @@ jobs:
       - name: Put cargo-packager on PATH
         shell: bash
         run: echo "$RUNNER_TEMP/cargo-packager/bin" >> "$GITHUB_PATH"
-      - name: Apple signing identity
-        if: runner.os == 'macOS'
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        # cargo-packager reads the certificate and notarization login from the Package step's
-        # environment; the signing identity has no environment variable, so it goes in Cargo.toml.
-        run: |
-          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-            echo "Apple signing secrets unset; the dmg will be unsigned"
-            exit 0
-          fi
-          table=""
-          if ! grep -q '^\[package\.metadata\.packager\.macos\]$' crates/kg/Cargo.toml; then
-            table="[package.metadata.packager.macos]"
-          fi
-          {
-            echo
-            if [ -n "$table" ]; then
-              echo "$table"
-            fi
-            echo "signing-identity = \"$APPLE_SIGNING_IDENTITY\""
-          } >> crates/kg/Cargo.toml
       - name: Windows signing
         if: runner.os == 'Windows'
         shell: pwsh
@@ -166,37 +117,198 @@ jobs:
           "@ | Add-Content -Path crates/kg/Cargo.toml
       - name: Package
         shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
         run: |
+          set -eu
           case "$RUNNER_OS" in
             Linux)
               formats=deb,appimage
               export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
               ;;
-            macOS)
-              # One app for Intel and Apple silicon. cargo-packager reads kg from
-              # target/<target>/release and names the dmg after the target.
-              # app keeps the bundle, which "Sign the update files" packs for the updater.
-              formats=app,dmg
-              cargo build --release -p kg
-              cargo build --release -p kg --target x86_64-apple-darwin
-              mkdir -p target/universal-apple-darwin/release
-              lipo -create -output target/universal-apple-darwin/release/kg \
-                target/release/kg target/x86_64-apple-darwin/release/kg
-              lipo -info target/universal-apple-darwin/release/kg
-              set -- --target universal-apple-darwin
-              ;;
             Windows) formats=nsis ;;
             *) echo "no installer for $RUNNER_OS" >&2; exit 1 ;;
           esac
-          cargo packager --release --formats "$formats" "$@"
+          cargo build --release -p kg
+          cargo packager --release --formats "$formats"
+      - name: Name the installers
+        shell: bash
+        # cargo-packager names the exe, deb and AppImage after the binary, kg.
+        run: |
+          set -eu
+          shopt -s nullglob
+          for file in target/packager/kg_*.exe target/packager/kg_*.deb target/packager/kg_*.AppImage; do
+            name=${file##*/}
+            name=kagan_${name#kg_}
+            name=${name/-setup.exe/.exe}
+            mv -- "$file" "target/packager/$name"
+            echo "$file -> target/packager/$name"
+          done
+      # The only step that holds the update key; nothing here builds or runs crate code.
+      # kagan checks these .sig files before it updates (decision 116).
+      - name: Sign the update files
+        shell: bash
+        env:
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.UPDATER_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -eu
+          shopt -s nullglob
+          if [ -z "$CARGO_PACKAGER_SIGN_PRIVATE_KEY" ]; then
+            echo "::error::UPDATER_PRIVATE_KEY is unset; a release needs signed update files"
+            exit 1
+          fi
+          files=(target/packager/kagan_*.exe target/packager/kagan_*.AppImage)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no update file to sign" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            cargo packager signer sign "$file" > /dev/null
+            echo "signed $file"
+          done
+      - name: Size
+        shell: bash
+        run: |
+          set -eu
+          bin=target/release/kg
+          if [ "$RUNNER_OS" = Windows ]; then bin=$bin.exe; fi
+          echo "\`kg\` on $RUNNER_OS: $(wc -c < "$bin" | tr -d ' ') bytes" >> "$GITHUB_STEP_SUMMARY"
+      - if: runner.os == 'Linux'
+        run: ${SCCACHE_PATH:-sccache} --show-stats
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            target/packager/*.sig
+            target/packager/*.exe
+            target/packager/*.deb
+            target/packager/*.AppImage
+          if-no-files-found: error
+
+  # Each Mac half builds on its own runner, at the same time; mac-package joins them.
+  mac-build:
+    needs: tag
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.tag.outputs.sha }}
+      - name: Stamp version
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: bash scripts/release-version.sh stamp "$VERSION"
+      - name: macOS linker
+        run: brew install lld
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.18.0
+      - run: |
+          {
+            echo "CARGO_INCREMENTAL=0"
+            echo "RUSTC_WRAPPER=sccache"
+            echo "SCCACHE_GHA_ENABLED=true"
+            echo "CMAKE_C_COMPILER_LAUNCHER=sccache"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache"
+          } >> "$GITHUB_ENV"
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+        with:
+          cache: false
+      - name: Build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -eu
+          rustup target add "$TARGET"
+          cargo build --release -p kg --target "$TARGET"
+      - run: ${SCCACHE_PATH:-sccache} --show-stats
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: kg-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/kg
+          if-no-files-found: error
+          retention-days: 1
+
+  mac-package:
+    needs: [tag, mac-build]
+    permissions:
+      contents: read
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.tag.outputs.sha }}
+      # cargo-packager reads the version for the dmg name and Info.plist.
+      - name: Stamp version
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: bash scripts/release-version.sh stamp "$VERSION"
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+        with:
+          cache: false
+      - name: Prepare cargo-packager cache directory
+        run: mkdir -p "$RUNNER_TEMP/cargo-packager"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: packager
+        with:
+          path: ${{ runner.temp }}/cargo-packager
+          key: cargo-packager-0.11.8-${{ runner.os }}-${{ runner.arch }}
+      - name: Install cargo-packager
+        if: steps.packager.outputs.cache-hit != 'true'
+        run: cargo install cargo-packager --version 0.11.8 --locked --root "$RUNNER_TEMP/cargo-packager"
+      - name: Put cargo-packager on PATH
+        run: echo "$RUNNER_TEMP/cargo-packager/bin" >> "$GITHUB_PATH"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: kg-*
+          path: ${{ runner.temp }}/halves
+      # One app for Intel and Apple silicon. cargo-packager reads kg from
+      # target/<target>/release and names the dmg after the target.
+      - name: Join the halves
+        run: |
+          set -eu
+          out=target/universal-apple-darwin/release/kg
+          mkdir -p "${out%/*}"
+          lipo -create -output "$out" \
+            "$RUNNER_TEMP/halves/kg-aarch64-apple-darwin/kg" \
+            "$RUNNER_TEMP/halves/kg-x86_64-apple-darwin/kg"
+          # Artifacts drop the executable bit.
+          chmod +x "$out"
+          lipo -info "$out"
+      - name: Apple signing identity
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        # cargo-packager reads the certificate and notarization login from the Package step's
+        # environment; the signing identity has no environment variable, so it goes in Cargo.toml.
+        run: |
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "Apple signing secrets unset; the dmg will be unsigned"
+            exit 0
+          fi
+          table=""
+          if ! grep -q '^\[package\.metadata\.packager\.macos\]$' crates/kg/Cargo.toml; then
+            table="[package.metadata.packager.macos]"
+          fi
+          {
+            echo
+            if [ -n "$table" ]; then
+              echo "$table"
+            fi
+            echo "signing-identity = \"$APPLE_SIGNING_IDENTITY\""
+          } >> crates/kg/Cargo.toml
+      # app keeps the bundle, which "Sign the update files" packs for the updater.
+      - name: Package
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: cargo packager --release --formats app,dmg --target universal-apple-darwin
       - name: Notarize the dmg
-        if: runner.os == 'macOS'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -231,25 +343,9 @@ jobs:
           fi
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
-      - name: Name the installers
-        shell: bash
-        env:
-          VERSION: ${{ needs.tag.outputs.version }}
-        # cargo-packager names the exe, deb and AppImage after the binary, kg.
-        run: |
-          set -eu
-          shopt -s nullglob
-          for file in target/packager/kg_*.exe target/packager/kg_*.deb target/packager/kg_*.AppImage; do
-            name=${file##*/}
-            name=kagan_${name#kg_}
-            name=${name/-setup.exe/.exe}
-            mv -- "$file" "target/packager/$name"
-            echo "$file -> target/packager/$name"
-          done
       # The only step that holds the update key; nothing here builds or runs crate code.
       # kagan checks these .sig files before it updates (decision 116).
       - name: Sign the update files
-        shell: bash
         env:
           VERSION: ${{ needs.tag.outputs.version }}
           CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
@@ -261,62 +357,41 @@ jobs:
             echo "::error::UPDATER_PRIVATE_KEY is unset; a release needs signed update files"
             exit 1
           fi
-          files=(target/packager/kagan_*.exe target/packager/kagan_*.AppImage)
-          if [ "$RUNNER_OS" = macOS ]; then
-            # The archive takes the dmg's arch, so a universal dmg gives a universal archive.
-            dmgs=(target/packager/kagan_*.dmg)
-            if [ "${#dmgs[@]}" -ne 1 ]; then
-              echo "expected one dmg, found ${#dmgs[@]}" >&2
-              exit 1
-            fi
-            arch=${dmgs[0]%.dmg}
-            arch=${arch##*_}
-            archive=target/packager/kagan_${VERSION}_${arch}.app.tar.gz
-            COPYFILE_DISABLE=1 tar -czf "$archive" -C target/packager kagan.app
-            files+=("$archive")
-          fi
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "no update file to sign" >&2
+          # The archive takes the dmg's arch, so a universal dmg gives a universal archive.
+          dmgs=(target/packager/kagan_*.dmg)
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "expected one dmg, found ${#dmgs[@]}" >&2
             exit 1
           fi
-          for file in "${files[@]}"; do
-            cargo packager signer sign "$file" > /dev/null
-            echo "signed $file"
-          done
+          arch=${dmgs[0]%.dmg}
+          arch=${arch##*_}
+          archive=target/packager/kagan_${VERSION}_${arch}.app.tar.gz
+          COPYFILE_DISABLE=1 tar -czf "$archive" -C target/packager kagan.app
+          cargo packager signer sign "$archive" > /dev/null
+          echo "signed $archive"
       - name: Size budget
-        shell: bash
         env:
-          BUDGET: ${{ matrix.size-budget }}
+          # 160 MiB for the universal kg, both CPUs: about 152 MB with thin LTO (decision 119).
+          BUDGET: 167772160
         run: |
           set -eu
-          case "$RUNNER_OS" in
-            macOS) bin=target/universal-apple-darwin/release/kg ;;
-            Windows) bin=target/release/kg.exe ;;
-            *) bin=target/release/kg ;;
-          esac
-          size=$(wc -c < "$bin" | tr -d ' ')
-          echo "\`kg\` on $RUNNER_OS: $size bytes, budget ${BUDGET:-none}" >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$BUDGET" ] && [ "$size" -gt "$BUDGET" ]; then
+          size=$(wc -c < target/universal-apple-darwin/release/kg | tr -d ' ')
+          echo "\`kg\` on macOS: $size bytes, budget $BUDGET" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$size" -gt "$BUDGET" ]; then
             echo "::error::kg is $size bytes, over its $BUDGET byte budget"
             exit 1
           fi
-      - if: runner.os != 'Windows'
-        shell: bash
-        run: ${SCCACHE_PATH:-sccache} --show-stats
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: installers-${{ matrix.os }}
+          name: installers-macos
           path: |
             target/packager/*.dmg
             target/packager/*.app.tar.gz
             target/packager/*.sig
-            target/packager/*.exe
-            target/packager/*.deb
-            target/packager/*.AppImage
           if-no-files-found: error
 
   publish:
-    needs: [tag, package]
+    needs: [tag, package, mac-package]
     runs-on: ubuntu-latest
     permissions:
       actions: read
