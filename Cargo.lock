@@ -5551,8 +5551,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 [[package]]
 name = "lb-wry"
 version = "0.53.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9cfe72bff8acf9af0d6d276569be5b9cb3f313f9882761ada5a50d3044214d4"
+source = "git+https://github.com/kagan-sh/wry?rev=c7d04f5abfdfc292251561d3eb1bdb96cf09d6be#c7d04f5abfdfc292251561d3eb1bdb96cf09d6be"
 dependencies = [
  "base64 0.22.1",
  "block2 0.6.2",

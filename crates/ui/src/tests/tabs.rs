@@ -195,3 +195,29 @@ fn the_page_shows_only_while_the_browser_tab_is_drawn(cx: &mut TestAppContext) {
     click(cx, window, "settings-gear");
     assert!(!drawn(cx));
 }
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn closing_the_browser_or_leaving_the_thread_drops_its_page(cx: &mut TestAppContext) {
+    let (_, window, _data) = open(cx);
+    with_sh(cx);
+    let other = run_shell(cx);
+    shown(cx, window);
+    let refuse = |cx: &mut TestAppContext| {
+        cx.simulate_input(window, "javascript:x");
+        cx.simulate_keystrokes(window, "enter");
+        cx.run_until_parked();
+        assert!(shows(cx, window, "browser-note"));
+    };
+    add(cx, window, "right-add-browser");
+    refuse(cx);
+    click(cx, window, "right-tab-close-browser");
+    add(cx, window, "right-add-browser");
+    assert!(!present(cx, window, "browser-note"));
+
+    refuse(cx);
+    click(cx, window, &format!("thread-{}", other.0));
+    assert!(!present(cx, window, "right-tab-browser"));
+    add(cx, window, "right-add-browser");
+    assert!(!present(cx, window, "browser-note"));
+}

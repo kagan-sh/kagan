@@ -118,7 +118,7 @@ pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<String> {
     }
 }
 
-fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
+pub(super) fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
     match id {
         "needs-you" => kagan.waiting_count(cx) > 0,
         "changes" | "details" => kagan.thread_visible(cx),
@@ -302,9 +302,10 @@ fn plugin_tab(slot: &Slot, selected: Option<&str>, cx: &mut Context<Kagan>) -> A
 
 fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
     let menu = kagan.right_menu.as_ref().map(|(menu, _)| menu.clone());
-    let (browser, terminal) = kagan.right_adds(cx);
-    let enabled =
-        kagan.closed_right_panels().next().is_some() || browser || terminal || menu.is_some();
+    let enabled = kagan.closed_right_panels().next().is_some()
+        || kagan.can_open_browser(cx)
+        || kagan.can_open_terminal(cx)
+        || menu.is_some();
     let focus = kagan.right_add_focus.clone();
     div()
         .id("right-tab-plus")
@@ -370,7 +371,7 @@ impl Kagan {
             .closed_right_panels()
             .map(|item| (item.plugin.clone(), item.id.clone(), item.title.clone()))
             .collect();
-        let (browser, terminal) = self.right_adds(cx);
+        let (browser, terminal) = (self.can_open_browser(cx), self.can_open_terminal(cx));
         if items.is_empty() && !browser && !terminal {
             return;
         }

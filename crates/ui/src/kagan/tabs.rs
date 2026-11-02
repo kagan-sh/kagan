@@ -111,6 +111,7 @@ impl Kagan {
                 thread: thread.clone(),
                 ..Tabs::default()
             };
+            self.browser.close();
             if self
                 .right_tab
                 .as_deref()
@@ -281,12 +282,12 @@ impl Kagan {
         .detach();
     }
 
-    /// Whether the `+` can open the Browser and a terminal.
-    pub(super) fn right_adds(&self, cx: &App) -> (bool, bool) {
-        (
-            self.thread_visible(cx) && !self.tabs.browser,
-            self.shown_open_thread(cx).is_some(),
-        )
+    pub(super) fn can_open_browser(&self, cx: &App) -> bool {
+        self.thread_visible(cx) && !self.tabs.browser
+    }
+
+    pub(super) fn can_open_terminal(&self, cx: &App) -> bool {
+        self.shown_open_thread(cx).is_some()
     }
 
     pub(super) fn open_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -296,6 +297,7 @@ impl Kagan {
 
     fn close_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.browser = false;
+        self.browser.close();
         if self.right_tab.as_deref() == Some(BROWSER) {
             self.right_tab = self.default_right_tab(cx);
         }
@@ -409,7 +411,7 @@ impl Kagan {
 }
 
 /// The host and port of a link to this machine, such as `localhost:3000`.
-fn local_host(link: &str) -> Option<&str> {
+pub(super) fn local_host(link: &str) -> Option<&str> {
     let (_, rest) = link.split_once("://")?;
     let host = rest.split(['/', '?', '#']).next()?;
     let name = match host.strip_prefix('[') {

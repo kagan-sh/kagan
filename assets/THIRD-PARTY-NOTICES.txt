@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 51a0b45d326b57a9c943a8b3079cfbbf0f11683e2ffec8a6e5f0efb710cff0a1
+cargo-lock 2d350a736a64f2e71380182c328add1b30aef8dcd4d48449dc60ec8ff6adf833
 
 kagan itself is MIT. See LICENSE.
 
@@ -8831,6 +8831,7 @@ limitations under the License.
 
 ================================================================================
 Apache-2.0
+lb-wry 0.53.3
 addr2line 0.27.1
 ahash 0.8.12
 ambient-authority 0.0.2
@@ -8924,7 +8925,6 @@ itertools 0.13.0
 itertools 0.14.0
 khronos-egl 6.0.0
 lazy_static 1.5.1
-lb-wry 0.53.3
 linux-raw-sys 0.12.1
 lock_api 0.4.14
 log 0.4.35

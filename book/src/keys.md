@@ -24,7 +24,7 @@ Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. On Linux and Windows, Ctrl+Shi
 | Cmd+Alt+L | Retry programs on the New thread screen |
 | Cmd+Alt+C | Custom command on the New thread screen |
 | Cmd+T | New terminal in the thread's folder |
-| Cmd+Alt+] and Cmd+Alt+[ | Next terminal tab, previous terminal tab |
+| Cmd+Alt+] and Cmd+Alt+[ | Move to the next terminal, the previous terminal |
 | Cmd+Shift+W | Close the shown extra terminal |
 | Cmd+Alt+O | Open the newest local link, such as localhost:3000 |
 | Cmd+click (Ctrl+click on Linux and Windows) | Open the link under the pointer |

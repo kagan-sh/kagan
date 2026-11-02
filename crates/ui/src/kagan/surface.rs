@@ -210,12 +210,10 @@ impl Kagan {
         }
         self.right_slots = next;
         if changed
-            && self.right_tab.as_ref().is_some_and(|id| {
-                !self.panels.iter().any(|panel| &panel.id == id)
-                    && !self.right_slots.iter().any(|slot| &slot.id == id)
-                    && id != super::tabs::BROWSER
-                    && super::tabs::terminal_number(id).is_none()
-            })
+            && self
+                .right_tab
+                .as_ref()
+                .is_some_and(|id| !super::right::tab_available(self, id, cx))
         {
             self.right_tab = self.default_right_tab(cx);
         }

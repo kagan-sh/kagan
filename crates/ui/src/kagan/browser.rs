@@ -50,8 +50,10 @@ impl Browser {
             return;
         }
         // Links and redirects inside the page are held to the same rule as the address field.
+        // Private, so cookies and logins end when kagan quits and nothing lands outside its data.
         let builder = wry::WebViewBuilder::new()
             .with_url(url.as_str())
+            .with_incognito(true)
             .with_navigation_handler(|target| is_web(&target));
         match WebView::build(builder, window, cx) {
             Ok(view) => self.page = Some(cx.new(|_| view)),
@@ -72,6 +74,15 @@ impl Browser {
         }
     }
 
+    /// Drops the page, so nothing on it keeps running once its tab is gone.
+    pub(super) fn close(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            self.page = None;
+        }
+        self.note = None;
+    }
+
     pub(super) fn holds_focus(&self, window: &Window, cx: &App) -> bool {
         self.address.focus_handle(cx).contains_focused(window, cx)
     }
@@ -88,6 +99,8 @@ pub(super) fn page_url(typed: &str) -> Option<url::Url> {
     let typed = typed.trim();
     let text = if typed.contains("://") {
         typed.to_owned()
+    } else if super::tabs::local_host(&format!("http://{typed}")).is_some() {
+        format!("http://{typed}")
     } else {
         format!("https://{typed}")
     };
@@ -115,11 +128,17 @@ impl Kagan {
     }
 
     pub(super) fn render_browser(&self, cx: &App) -> AnyElement {
-        let note = self
-            .browser
-            .note
-            .clone()
-            .map(|note| div().type_small().text_color(cx.theme().danger).child(note));
+        let note = self.browser.note.clone().map(|note| {
+            div()
+                .id("browser-note")
+                .ui_observe_as(Facts {
+                    role: Role::Label,
+                    ..Facts::button(note.clone())
+                })
+                .type_small()
+                .text_color(cx.theme().danger)
+                .child(note)
+        });
         #[cfg(target_os = "macos")]
         let page = self.browser.page.clone();
         #[cfg(not(target_os = "macos"))]
@@ -177,6 +196,23 @@ mod tests {
     fn a_bare_name_opens_over_https() {
         let url = page_url(" example.com ").map(|url| url.to_string());
         assert_eq!(url.as_deref(), Some("https://example.com/"));
+    }
+
+    #[test]
+    fn a_local_host_opens_over_http() {
+        let url = |typed| page_url(typed).map(|url| url.to_string());
+        assert_eq!(
+            url("localhost:3000").as_deref(),
+            Some("http://localhost:3000/")
+        );
+        assert_eq!(
+            url("127.0.0.1:5173/a").as_deref(),
+            Some("http://127.0.0.1:5173/a")
+        );
+        assert_eq!(
+            url("localhost.example.com").as_deref(),
+            Some("https://localhost.example.com/")
+        );
     }
 
     #[test]

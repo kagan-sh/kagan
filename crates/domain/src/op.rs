@@ -671,11 +671,11 @@ pub enum WindowOp {
     CommandList,
     /// Open the command list on thread search
     SearchThreads,
-    /// Show the shown thread's next terminal tab
+    /// Move the keyboard to the shown thread's next terminal
     NextTerminal,
-    /// Show the shown thread's previous terminal tab
+    /// Move the keyboard to the shown thread's previous terminal
     PreviousTerminal,
-    /// Open the newest local link the shown thread printed, such as `localhost:3000`, in the browser
+    /// Open the newest local link the shown thread printed, such as `localhost:3000`, in the system browser
     OpenLocalLink,
 }
 
