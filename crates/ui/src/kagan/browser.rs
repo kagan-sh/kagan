@@ -10,6 +10,7 @@ use gpui_kit::{
 };
 
 use super::Kagan;
+#[cfg(target_os = "macos")]
 use super::tabs::RightPage;
 
 #[cfg(target_os = "macos")]
