@@ -5,7 +5,7 @@ From left to right, the window has these parts:
 - **Rail**: a column of icons at the left edge.
 - **Left sidebar**: your projects and their threads.
 - **Center**: the terminal of the selected thread.
-- **Right sidebar**: Questions, Changes, and Details.
+- **Right sidebar**: tabs for Questions, Changes, Details, and the plugin panels you open with `+`.
 
 On a narrow window, the right sidebar hides first, then the left sidebar. The rail stays. Press Cmd+B to show the left sidebar or Cmd+Backslash to show the right sidebar. Press Escape to close it.
 
