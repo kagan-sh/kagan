@@ -86,7 +86,7 @@ impl Browser {
         });
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, target_os = "macos"))]
     pub(super) fn address(&self, cx: &App) -> String {
         self.address.read(cx).value().to_string()
     }
