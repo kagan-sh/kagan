@@ -173,3 +173,25 @@ fn off_macos_the_browser_shows_a_note(cx: &mut TestAppContext) {
         "The browser works on macOS only for now."
     );
 }
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn the_page_shows_only_while_the_browser_tab_is_drawn(cx: &mut TestAppContext) {
+    let (_, window, _data) = open(cx);
+    let (kagan, _) = shown(cx, window);
+    let drawn = |cx: &mut TestAppContext| {
+        cx.update(|cx| crate::kagan::screen_read::browser_drawn(kagan.read(cx), cx))
+    };
+    add(cx, window, "right-add-browser");
+    assert!(drawn(cx));
+    click(cx, window, "changes-header");
+    assert!(!drawn(cx));
+    click(cx, window, "right-tab-browser");
+    assert!(drawn(cx));
+    click(cx, window, "right-sidebar-toggle");
+    assert!(!drawn(cx));
+    click(cx, window, "right-sidebar-toggle");
+    assert!(drawn(cx));
+    click(cx, window, "settings-gear");
+    assert!(!drawn(cx));
+}

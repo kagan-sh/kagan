@@ -180,12 +180,8 @@ impl Kagan {
             window.play_system_bell();
             return;
         }
-        let at = self
-            .tabs
-            .views
-            .iter()
-            .position(|(_, view, _)| view.focus_handle(cx).contains_focused(window, cx))
-            .map_or(0, |at| at + 1);
+        let shown = self.focused_terminal(window, cx);
+        let at = order.iter().position(|at| *at == shown).unwrap_or(0);
         let next = if forward {
             (at + 1) % order.len()
         } else {
@@ -239,12 +235,28 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(number) = super::right::selected_tab(self, cx)
-            .as_deref()
-            .and_then(terminal_number)
-        {
+        if let Some(number) = self.focused_terminal(window, cx) {
             self.close_right_terminal(number, window, cx);
         }
+    }
+
+    /// The keyboard is in the right sidebar, which a hidden sidebar would strand.
+    pub(super) fn right_holds_focus(&self, window: &Window, cx: &App) -> bool {
+        self.right_add_focus.is_focused(window)
+            || self.browser.holds_focus(window, cx)
+            || self.focused_terminal(window, cx).is_some()
+            || self
+                .right_slots
+                .iter()
+                .any(|slot| slot.focus.contains_focused(window, cx))
+    }
+
+    fn focused_terminal(&self, window: &Window, cx: &App) -> Option<u32> {
+        self.tabs
+            .views
+            .iter()
+            .find(|(_, view, _)| view.focus_handle(cx).contains_focused(window, cx))
+            .map(|(number, ..)| *number)
     }
 
     fn close_right_terminal(&mut self, number: u32, window: &mut Window, cx: &mut Context<Self>) {

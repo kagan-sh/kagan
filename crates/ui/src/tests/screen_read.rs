@@ -48,6 +48,11 @@ pub(crate) fn tab_grid(kagan: &Kagan, number: u32, cx: &App) -> Option<kg_core::
     Some(kagan.tabs.view(number)?.read(cx).grid().clone())
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) fn browser_drawn(kagan: &Kagan, cx: &App) -> bool {
+    kagan.browser_drawn(cx)
+}
+
 pub(crate) fn tab_focused(kagan: &Kagan, number: u32, window: &Window, cx: &App) -> bool {
     kagan
         .tabs

@@ -514,6 +514,9 @@ impl Kagan {
             return;
         }
         if self.panes.right {
+            if self.right_holds_focus(window, cx) {
+                self.focus_work(window, cx);
+            }
             self.right_fill = right::Fill::Column;
             self.dismiss_overlay(Side::Right, window, cx);
             save(&key("right-sidebar"), false, cx);

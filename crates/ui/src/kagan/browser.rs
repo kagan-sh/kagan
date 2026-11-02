@@ -70,6 +70,10 @@ impl Browser {
         }
     }
 
+    pub(super) fn holds_focus(&self, window: &Window, cx: &App) -> bool {
+        self.address.focus_handle(cx).contains_focused(window, cx)
+    }
+
     pub(super) fn focus(&self, window: &mut Window, cx: &mut App) {
         window.focus(&self.address.focus_handle(cx), cx);
     }
