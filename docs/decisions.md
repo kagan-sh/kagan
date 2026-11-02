@@ -463,3 +463,18 @@ Rules out: a bundled browser engine for now, a page that a plugin embeds, and a 
 **118. Extra terminals are tabs of the right sidebar.** It supersedes the title-row `+` of 48 and 110 and the tabs over the terminal of 110. Each extra terminal is a closable tab of the right sidebar's tab bar (48), after the plugin tabs and the Browser. The `+` of that bar lists Browser while it is closed, Terminal for a thread that is not archived, and the closed right plugin panels. Opening the Browser or a terminal selects its tab, opens the sidebar as its toggle does when it is hidden, and gives that tab the keyboard. The center shows only the program's terminal, with the row over it only for a local link (112). Cmd+Alt+] and Cmd+Alt+[ step the keyboard through the program's terminal and the extra terminals. Closing a tab, or a shell that exits while it has the keyboard, gives the keyboard to the selected tab or to the `+`. A terminal opened with `kg` adds a tab and does not change the selected one. Showing another thread closes the Browser tab and shows that thread's terminals.
 Why: the browser and terminals sit beside the work, and one tab bar on the right is simpler than a second one over the terminal.
 Rules out: a second tab row, and extra terminals in the center.
+
+**119. The release builds the two Mac halves at once, with thin LTO.** `.github/workflows/release.yml` builds `kg` for `aarch64-apple-darwin` and `x86_64-apple-darwin` in two `mac-build` jobs at the same time and uploads each binary. `mac-package` joins them with `lipo` into `target/universal-apple-darwin/release/kg`, then packages, signs, notarizes, staples, signs the update archive and checks the size as before; it compiles nothing. cargo-packager has no switch to skip its `before-packaging-command`, so `crates/kg/Cargo.toml` no longer has one, and the Linux and Windows jobs run `cargo build --release -p kg` before `cargo packager`. Every job stamps the version with `scripts/release-version.sh stamp`. The release profile is `lto = "thin"` with Cargo's default 16 codegen units, in place of fat LTO with one unit. Clean `cargo build --release -p kg` on a 14-core M4 Pro, arm64:
+
+| | whole build | `kg` crate | `kg` size |
+|---|---|---|---|
+| fat, 1 unit | 413 s, 477 s | 289 s, 331 s | 58.5 MB |
+| fat, 1 unit, `-j 3` | 542 s | 285 s | |
+| fat, 16 units, one run under heavy load | 531 s | 430 s | 60.9 MB |
+| thin, 16 units | 122 s, 159 s | 52 s, 63 s | 73.9 MB |
+| thin, 16 units, `-j 3` | 364 s | 153 s | |
+
+Two numbers in a cell are two runs; other builds shared the machine, so times vary by about a fifth. `-j 3` stands in for the 3-core `macos-latest` runner. The thin universal `kg` is 151.7 MB, under the 160 MiB budget. `kg --version` and the first answer from a fresh app (0.4 to 0.6 s) did not differ. Release 41368550455 spent 36 minutes packaging the Mac app, two builds one after the other (21 and 14 minutes, of which `kg` took 15.5 and 11), so the Mac job should now take about as long as one build.
+Why: fat LTO optimizes all of `kg` on one core, which was most of the Mac release time. Thin LTO cut the `kg` step by half on three cores and by four fifths on fourteen, for a binary about a quarter larger, and fat LTO with more units was not faster in one run under load.
+Cost: the dmg is larger, and the universal `kg` sits 16 MB under its budget instead of about 55 MB.
+Rules out: a separate profile only CI uses, since local release builds should match what ships.
