@@ -63,12 +63,11 @@ impl Target {
             },
             _ => (InstallKind::Other, exe.to_path_buf()),
         };
-        let staged = match install {
-            InstallKind::Installer => std::env::temp_dir().join("kagan-update-setup.exe"),
-            _ => {
-                let name = path.file_name().unwrap_or_default().to_string_lossy();
-                path.with_file_name(format!(".{name}.update"))
-            }
+        let staged = if install == InstallKind::Installer {
+            std::env::temp_dir().join("kagan-update-setup.exe")
+        } else {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            path.with_file_name(format!(".{name}.update"))
         };
         Self {
             install,

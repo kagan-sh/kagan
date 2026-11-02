@@ -244,12 +244,10 @@ async fn a_list_that_is_unsigned_tampered_or_signed_by_another_key_is_refused(
     assert!(refused.contains("signature"), "{refused}");
 
     server.offer(&signer, "99.0.0", &server.file("payload"), "");
-    let signed = server.files.lock().unwrap()["/update.json"].clone();
+    let list = server.files.lock().unwrap()["/update.json"].clone();
     server.put(
         "/update.json",
-        String::from_utf8(signed)
-            .unwrap()
-            .replace("99.0.0", "99.0.1"),
+        String::from_utf8(list).unwrap().replace("99.0.0", "99.0.1"),
     );
     let refused = check(cx).await.unwrap_err().to_string();
     assert!(refused.contains("signature"), "{refused}");
