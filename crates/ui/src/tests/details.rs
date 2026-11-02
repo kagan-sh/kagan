@@ -30,6 +30,7 @@ fn head(repo: &std::path::Path) -> String {
 fn details_shows_the_folder_program_and_branch_of_the_thread(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     let (_, repo) = repo_thread(cx, window, data.path());
+    click(cx, window, "details-header");
     wait_until(cx, |cx| present(cx, window, "details-branch"));
     let branch = head(&repo);
     assert_eq!(value_of(cx, window, "details-branch"), Some(branch.clone()));
@@ -70,6 +71,7 @@ fn details_says_when_the_folder_is_not_git_and_collapses(cx: &mut TestAppContext
     let (_kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
+    click(cx, window, "details-header");
     wait_until(cx, |cx| present(cx, window, "details-not-git"));
     assert!(shows(cx, window, "details"));
 

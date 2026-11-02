@@ -88,7 +88,7 @@ impl Contributions {
             check_id(&panel.id, &mut ids)?;
             if matches!(panel.placement, Placement::Bottom) {
                 return Err(format!(
-                    "panel {} must be placed left or center: bottom panels are not in this version of kagan",
+                    "panel {} must be placed left, right or center: bottom panels are not in this version of kagan",
                     panel.id
                 ));
             }
@@ -134,36 +134,6 @@ impl Contributions {
         self.panels
             .iter()
             .find(|panel| panel.replaces == Some(slot))
-    }
-
-    /// `kg plugin check` and a new install refuse this. An already installed plugin still loads.
-    pub(crate) fn right_panel_error(&self) -> Option<String> {
-        self.panels
-            .iter()
-            .find(|panel| panel.placement == Placement::Right)
-            .map(|panel| {
-                format!(
-                    "panel \"{}\": placement \"right\" is not supported. Use \"left\" or \"center\".",
-                    panel.id
-                )
-            })
-    }
-
-    pub(crate) fn skipped_right(&self) -> Option<String> {
-        let titles: Vec<_> = self
-            .panels
-            .iter()
-            .filter(|panel| panel.placement == Placement::Right)
-            .map(|panel| panel.title.as_str())
-            .collect();
-        let verb = if titles.len() == 1 { "isn't" } else { "aren't" };
-        match titles.as_slice() {
-            [] => None,
-            _ => Some(format!(
-                "{} {verb} shown: kagan no longer draws right panels. Update the plugin, or ask its author to move it to left or center.",
-                titles.join(", ")
-            )),
-        }
     }
 
     /// The spots kagan does not draw yet. A manifest that declares one is refused, so a plugin never

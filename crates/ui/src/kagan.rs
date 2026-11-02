@@ -195,6 +195,9 @@ pub(crate) struct Kagan {
     replaced: replace::Replaced,
     plugins: PluginsBox,
     panels: Vec<right::Panel>,
+    right_slots: Vec<surface::Slot>,
+    right_tab: Option<String>,
+    right_menu: Option<(Entity<PopupMenu>, Subscription)>,
     tool: Option<surface::Slot>,
     surface_check: Option<surface::Check>,
     surface_epoch: u64,
@@ -438,16 +441,7 @@ impl Kagan {
             cx.new(|cx| InputState::new(window, cx).placeholder("Search archived threads"));
         let subscriptions = listen(&workspace, &picker, &columns, window, cx);
         let sidebar = cx.new(|cx| sidebar::Sidebar::new(workspace.read(cx).sidebar(cx), cx));
-        let sidebar_watch = [
-            cx.observe(&sidebar, |_, _, cx| cx.notify()),
-            cx.subscribe_in(
-                &sidebar,
-                window,
-                |this, _, event: &sidebar::Event, window, cx| {
-                    this.sidebar_event(event, window, cx);
-                },
-            ),
-        ];
+        let sidebar_watch = watch_sidebar(&sidebar, window, cx);
         let mut this = Self {
             start: start::StartState::default(),
             screen: screen::Screen::new(),
@@ -483,6 +477,9 @@ impl Kagan {
             replaced: replace::Replaced::default(),
             plugins: PluginsBox::new(window, cx),
             panels: right::built_in(),
+            right_slots: Vec::new(),
+            right_tab: None,
+            right_menu: None,
             tool: None,
             surface_check: None,
             surface_epoch: 0,
@@ -1434,6 +1431,9 @@ impl Render for Kagan {
             .text_color(cx.theme().foreground)
             .on_action(cx.listener(Self::toggle_panel_action))
             .on_action(cx.listener(Self::toggle_details_action))
+            .on_action(cx.listener(Self::select_right_tab_action))
+            .on_action(right::close_tab)
+            .on_action(cx.listener(Self::open_right_menu_action))
             .on_action(cx.listener(Self::toggle_form_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
@@ -1501,6 +1501,23 @@ fn window_body(
         .children(kagan.left_layer(window, cx))
         .children(kagan.right_layer(window, cx))
         .children(commands::layer(kagan, window, cx))
+}
+
+fn watch_sidebar(
+    sidebar: &Entity<sidebar::Sidebar>,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) -> [Subscription; 2] {
+    [
+        cx.observe(sidebar, |_, _, cx| cx.notify()),
+        cx.subscribe_in(
+            sidebar,
+            window,
+            |this, _, event: &sidebar::Event, window, cx| {
+                this.sidebar_event(event, window, cx);
+            },
+        ),
+    ]
 }
 
 fn listen(

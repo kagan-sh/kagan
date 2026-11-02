@@ -130,6 +130,7 @@ impl Kagan {
         self.announced.extend(person);
         if opening {
             self.set_collapsed("needs-you", false, cx);
+            self.select_right_tab("needs-you", cx);
             if !self.screen.drawn(Side::Right) {
                 self.open_overlay(Side::Right, Activation::Quiet, window, cx);
             }

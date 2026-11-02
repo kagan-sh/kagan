@@ -107,9 +107,6 @@ pub(crate) fn types(
 /// Checks a plugin's declarations and returns the problems that do not stop it from loading.
 pub(crate) fn check(root: &Path, data_dir: &Path) -> Result<Vec<String>> {
     let discovered = discover(root, data_dir)?;
-    if let Some(error) = discovered.manifest.ui.right_panel_error() {
-        return Err(OpError::Invalid(error));
-    }
     let manifest: Value = serde_json::from_str(&std::fs::read_to_string(root.join("kagan.json"))?)?;
     let source = std::fs::read_to_string(root.join(&discovered.manifest.entry))?;
     let exports = exports(&source).map_err(|error| match error {

@@ -65,7 +65,10 @@ fn questions_appear_before_changes_and_empty_windows_have_no_column(cx: &mut Tes
     let _asked =
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     wait_until(cx, |cx| shows(cx, window, "needs-you"));
-    assert!(row_y(cx, window, "needs-you-header") < row_y(cx, window, "changes-header"));
+    assert!(
+        col_x(cx, window, "needs-you-header") < col_x(cx, window, "changes-header"),
+        "Questions tab sits left of Changes"
+    );
 }
 
 #[gpui_kit::test]
@@ -378,6 +381,18 @@ fn row_y(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
             .bounds()
             .origin
             .y
+            .as_f32()
+    })
+    .unwrap()
+}
+
+fn col_x(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
+            .expect(name)
+            .bounds()
+            .origin
+            .x
             .as_f32()
     })
     .unwrap()
