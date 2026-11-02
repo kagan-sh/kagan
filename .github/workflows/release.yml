@@ -167,20 +167,13 @@ jobs:
           APPLE_ID: ${{ runner.os == 'macOS' && secrets.APPLE_ID || '' }}
           APPLE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ runner.os == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
-          # cargo-packager writes a minisign .sig beside each package; kagan checks it before it updates.
-          CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
-          CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.UPDATER_PRIVATE_KEY_PASSWORD }}
         run: |
-          if [ -z "$CARGO_PACKAGER_SIGN_PRIVATE_KEY" ]; then
-            echo "::error::UPDATER_PRIVATE_KEY is unset; a release needs signed update files"
-            exit 1
-          fi
           case "$RUNNER_OS" in
             Linux)
               formats=deb,appimage
               export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
               ;;
-            # app keeps the bundle, which the signer packs as kagan.app.tar.gz for the updater.
+            # app keeps the bundle, which "Sign the update files" packs for the updater.
             macOS) formats=app,dmg ;;
             Windows) formats=nsis ;;
             *) echo "no installer for $RUNNER_OS" >&2; exit 1 ;;
@@ -227,25 +220,52 @@ jobs:
         env:
           VERSION: ${{ needs.tag.outputs.version }}
         # cargo-packager names the exe, deb and AppImage after the binary, kg.
-        # Stapling changed the dmg after it was signed, and the deb does not update itself,
-        # so only the app archive, the exe and the AppImage keep a .sig.
         run: |
           set -eu
           shopt -s nullglob
-          rm -f target/packager/*.dmg.sig target/packager/*.deb.sig
-          arch=$(uname -m)
-          if [ "$arch" = arm64 ]; then arch=aarch64; fi
-          for file in target/packager/kagan.app.tar.gz*; do
-            name=kagan_${VERSION}_${arch}${file#target/packager/kagan}
-            mv -- "$file" "target/packager/$name"
-            echo "$file -> target/packager/$name"
-          done
-          for file in target/packager/kg_*.exe target/packager/kg_*.exe.sig target/packager/kg_*.deb target/packager/kg_*.AppImage target/packager/kg_*.AppImage.sig; do
+          for file in target/packager/kg_*.exe target/packager/kg_*.deb target/packager/kg_*.AppImage; do
             name=${file##*/}
             name=kagan_${name#kg_}
             name=${name/-setup.exe/.exe}
             mv -- "$file" "target/packager/$name"
             echo "$file -> target/packager/$name"
+          done
+      # The only step that holds the update key; nothing here builds or runs crate code.
+      # kagan checks these .sig files before it updates (decision 116).
+      - name: Sign the update files
+        shell: bash
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.UPDATER_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -eu
+          shopt -s nullglob
+          if [ -z "$CARGO_PACKAGER_SIGN_PRIVATE_KEY" ]; then
+            echo "::error::UPDATER_PRIVATE_KEY is unset; a release needs signed update files"
+            exit 1
+          fi
+          files=(target/packager/kagan_*.exe target/packager/kagan_*.AppImage)
+          if [ "$RUNNER_OS" = macOS ]; then
+            # The archive takes the dmg's arch, so a universal dmg gives a universal archive.
+            dmgs=(target/packager/kagan_*.dmg)
+            if [ "${#dmgs[@]}" -ne 1 ]; then
+              echo "expected one dmg, found ${#dmgs[@]}" >&2
+              exit 1
+            fi
+            arch=${dmgs[0]%.dmg}
+            arch=${arch##*_}
+            archive=target/packager/kagan_${VERSION}_${arch}.app.tar.gz
+            COPYFILE_DISABLE=1 tar -czf "$archive" -C target/packager kagan.app
+            files+=("$archive")
+          fi
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no update file to sign" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            cargo packager signer sign "$file" > /dev/null
+            echo "signed $file"
           done
       - name: Size budget
         shell: bash
@@ -288,6 +308,62 @@ jobs:
           pattern: installers-*
           merge-multiple: true
           path: dist
+      - name: Write update.json
+        env:
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # kagan reads releases/latest/download/update.json and checks update.json.sig first
+          # (decisions 113 and 116).
+          shopt -s nullglob
+          asset() {
+            local files=(dist/$2)
+            if [ "${#files[@]}" -ne 1 ] || [ ! -f "${files[0]}.sig" ]; then
+              echo "expected one signed $2, found ${#files[@]}" >&2
+              exit 1
+            fi
+            local name=${files[0]#dist/}
+            jq -n --arg key "$1" --arg url "https://github.com/$GH_REPO/releases/download/$TAG/$name" \
+              --rawfile signature "${files[0]}.sig" '{($key): {url: $url, signature: $signature}}'
+          }
+          # A universal dmg serves both Mac keys from one archive; an Intel one only its own.
+          mac() {
+            local universal=(dist/kagan_*_universal.dmg)
+            if [ "${#universal[@]}" -gt 0 ]; then
+              asset "macos-$1" 'kagan_*_universal.app.tar.gz'
+              return
+            fi
+            local own=(dist/kagan_*_"$1".app.tar.gz)
+            if [ "${#own[@]}" -gt 0 ] || [ "$1" = aarch64 ]; then
+              asset "macos-$1" "kagan_*_$1.app.tar.gz"
+            fi
+          }
+          {
+            mac aarch64
+            mac x86_64
+            asset windows-x86_64 'kagan_*_x64.exe'
+            asset linux-x86_64 'kagan_*_x86_64.AppImage'
+          } | jq -s --arg version "${TAG#v}" '{version: $version, platforms: add}' > dist/update.json
+      - name: Prepare cargo-packager cache directory
+        run: mkdir -p "$RUNNER_TEMP/cargo-packager"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: packager
+        with:
+          path: ${{ runner.temp }}/cargo-packager
+          key: cargo-packager-0.11.8-${{ runner.os }}-${{ runner.arch }}
+      - name: Install cargo-packager
+        if: steps.packager.outputs.cache-hit != 'true'
+        run: cargo install cargo-packager --version 0.11.8 --locked --root "$RUNNER_TEMP/cargo-packager"
+      # The only step here that holds the update key; it signs the list kagan reads first.
+      - name: Sign update.json
+        env:
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.UPDATER_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -eu
+          "$RUNNER_TEMP/cargo-packager/bin/cargo-packager" signer sign dist/update.json > /dev/null
+          test -s dist/update.json.sig
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -302,40 +378,6 @@ jobs:
             echo "no installers" >&2
             exit 1
           fi
-          # kagan reads releases/latest/download/update.json (decision 113).
-          shopt -s nullglob
-          asset() {
-            local files=(dist/$2)
-            if [ "${#files[@]}" -ne 1 ] || [ ! -f "${files[0]}.sig" ]; then
-              echo "expected one signed $2, found ${#files[@]}" >&2
-              exit 1
-            fi
-            local name=${files[0]#dist/}
-            jq -n --arg key "$1" --arg url "https://github.com/$GH_REPO/releases/download/$TAG/$name" \
-              --rawfile signature "${files[0]}.sig" '{($key): {url: $url, signature: $signature}}'
-          }
-          # An Intel app, or a universal one, serves macos-x86_64 when the release has one.
-          mac() {
-            local pattern
-            for pattern in "kagan_*_$1.app.tar.gz" 'kagan_*_universal.app.tar.gz'; do
-              local files=(dist/$pattern)
-              if [ "${#files[@]}" -gt 0 ]; then
-                asset "macos-$1" "$pattern"
-                return
-              fi
-            done
-            if [ "$1" = aarch64 ]; then
-              echo "no app archive for macos-aarch64" >&2
-              exit 1
-            fi
-          }
-          {
-            mac aarch64
-            mac x86_64
-            asset windows-x86_64 'kagan_*_x64.exe'
-            asset linux-x86_64 'kagan_*_x86_64.AppImage'
-          } | jq -s --arg version "${TAG#v}" --arg notes "https://github.com/$GH_REPO/releases/tag/$TAG" \
-            '{version: $version, notes: $notes, platforms: add}' > dist/update.json
           (cd dist && sha256sum -- * > SHA256SUMS)
           mapfile -t files < <(find dist -type f | sort)
           args=(--target "$SHA" --title "$TAG" --generate-notes)
