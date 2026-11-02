@@ -47,6 +47,52 @@ const CLAUDE_PERMISSION_FLAGS: &[&str] = &[
     "--allow-dangerously-skip-permissions",
 ];
 
+// Cursor Agent 2026.10.22-27dcf5f, from `agent --help`. `agent` is that program too.
+const CURSOR_SUBCOMMANDS: &[&str] = &[
+    "about",
+    "agent",
+    "bedrock",
+    "create-chat",
+    "generate-rule",
+    "help",
+    "install-shell-integration",
+    "login",
+    "logout",
+    "ls",
+    "mcp",
+    "models",
+    "persist",
+    "plugin",
+    "resume",
+    "rule",
+    "status",
+    "team",
+    "uninstall-shell-integration",
+    "update",
+    "whoami",
+    "worker",
+];
+
+// Options that take the next argument, so a subcommand after one is still seen.
+const CURSOR_VALUE_FLAGS: &[&str] = &[
+    "--add-dir",
+    "--api-key",
+    "--endpoint",
+    "--header",
+    "--mode",
+    "--model",
+    "--new-session-id",
+    "--output-format",
+    "--plugin-dir",
+    "--sandbox",
+    "--worktree",
+    "--worktree-base",
+    "--workspace",
+    "-H",
+    "-e",
+    "-w",
+];
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Start {
     First,
@@ -160,25 +206,51 @@ fn known(program: &Path) -> Option<Known> {
     match program.file_stem()?.to_str()? {
         "claude" => Some(Known::Claude),
         "codex" => Some(Known::Codex),
-        "cursor-agent" => Some(Known::Cursor),
+        "cursor-agent" | "agent" => Some(Known::Cursor),
         _ => None,
     }
 }
 
 // Claude takes no flag before a subcommand, so kagan adds nothing to a line that names one. Codex
-// takes its flags before a subcommand, so its overrides always apply.
+// takes its flags before a subcommand, so its overrides always apply. A Cursor subcommand is not
+// its conversation, so kagan adds nothing to that line either.
 fn subcommand(known: &Known, args: &[OsString]) -> bool {
-    let Known::Claude = known else {
-        return false;
-    };
-    args.iter()
-        .find(|arg| {
-            !CLAUDE_PERMISSION_FLAGS
-                .iter()
-                .any(|flag| arg.as_os_str() == OsStr::new(flag))
-        })
-        .and_then(|arg| arg.to_str())
-        .is_some_and(|arg| CLAUDE_SUBCOMMANDS.contains(&arg))
+    match known {
+        Known::Claude => args
+            .iter()
+            .find(|arg| {
+                !CLAUDE_PERMISSION_FLAGS
+                    .iter()
+                    .any(|flag| arg.as_os_str() == OsStr::new(flag))
+            })
+            .and_then(|arg| arg.to_str())
+            .is_some_and(|arg| CLAUDE_SUBCOMMANDS.contains(&arg)),
+        Known::Cursor => cursor_subcommand(args),
+        Known::Codex => false,
+    }
+}
+
+fn cursor_subcommand(args: &[OsString]) -> bool {
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let Some(arg) = arg.to_str() else {
+            return false;
+        };
+        if arg == "--" {
+            return args.next().is_some_and(|arg| {
+                arg.to_str()
+                    .is_some_and(|arg| CURSOR_SUBCOMMANDS.contains(&arg))
+            });
+        }
+        if arg.starts_with('-') {
+            if !arg.contains('=') && CURSOR_VALUE_FLAGS.contains(&arg) {
+                args.next();
+            }
+            continue;
+        }
+        return CURSOR_SUBCOMMANDS.contains(&arg);
+    }
+    false
 }
 
 async fn arguments(
