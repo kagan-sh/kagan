@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock b7d8cc88a047c4ff34eaa11723836c4d5613e1f9731286ea89e91940ea0d088d
+cargo-lock 31ba362953c3fe9e56ed5097eaf4c2f0503cfde57bceb6f3c705b7f9e0a75c3c
 
 kagan itself is MIT. See LICENSE.
 
@@ -8603,7 +8603,6 @@ uuid 1.26.1
 version_check 0.9.5
 wait-timeout 0.2.1
 waker-fn 1.2.0
-xattr 1.6.1
 xml5ever 0.18.1
 zed-font-kit 0.14.1-zed
 
@@ -9700,6 +9699,8 @@ poly1305 0.9.1
 polyval 0.7.3
 primefield 0.14.0
 primeorder 0.14.0
+salsa20 0.10.2
+scrypt 0.11.0
 sec1 0.8.1
 sha1 0.10.7
 sha1 0.11.0
@@ -17608,6 +17609,33 @@ SOFTWARE.
 
 ================================================================================
 MIT
+ct-codecs 1.1.8
+
+MIT License
+
+Copyright (c) 2020-2026 Frank Denis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+================================================================================
+MIT
 rust-i18n 4.2.4
 
 MIT License
@@ -17895,6 +17923,7 @@ jsonschema-value 0.58.3
 libm 0.2.16
 malloc_buf 0.0.6
 minisign-verify 0.3.0
+minisign 0.10.0
 objc-sys 0.3.5
 objc2-app-kit 0.2.2
 objc2-encode 4.1.0
