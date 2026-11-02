@@ -111,7 +111,7 @@ impl Kagan {
                 thread: thread.clone(),
                 ..Tabs::default()
             };
-            self.browser.close();
+            self.browser.close(window, cx);
             if self
                 .right_tab
                 .as_deref()
@@ -297,7 +297,7 @@ impl Kagan {
 
     fn close_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.browser = false;
-        self.browser.close();
+        self.browser.close(window, cx);
         if self.right_tab.as_deref() == Some(BROWSER) {
             self.right_tab = self.default_right_tab(cx);
         }

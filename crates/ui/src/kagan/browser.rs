@@ -74,13 +74,21 @@ impl Browser {
         }
     }
 
-    /// Drops the page, so nothing on it keeps running once its tab is gone.
-    pub(super) fn close(&mut self) {
+    /// Drops the page and its address, so nothing on it keeps running once its tab is gone.
+    pub(super) fn close(&mut self, window: &mut Window, cx: &mut App) {
         #[cfg(target_os = "macos")]
         {
             self.page = None;
         }
         self.note = None;
+        self.address.update(cx, |address, cx| {
+            address.set_value(String::new(), window, cx);
+        });
+    }
+
+    #[cfg(test)]
+    pub(super) fn address(&self, cx: &App) -> String {
+        self.address.read(cx).value().to_string()
     }
 
     pub(super) fn holds_focus(&self, window: &Window, cx: &App) -> bool {

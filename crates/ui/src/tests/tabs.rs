@@ -202,7 +202,10 @@ fn closing_the_browser_or_leaving_the_thread_drops_its_page(cx: &mut TestAppCont
     let (_, window, _data) = open(cx);
     with_sh(cx);
     let other = run_shell(cx);
-    shown(cx, window);
+    let (kagan, _) = shown(cx, window);
+    let address = |cx: &mut TestAppContext| {
+        cx.update(|cx| crate::kagan::screen_read::browser_address(kagan.read(cx), cx))
+    };
     let refuse = |cx: &mut TestAppContext| {
         cx.simulate_input(window, "javascript:x");
         cx.simulate_keystrokes(window, "enter");
@@ -214,10 +217,12 @@ fn closing_the_browser_or_leaving_the_thread_drops_its_page(cx: &mut TestAppCont
     click(cx, window, "right-tab-close-browser");
     add(cx, window, "right-add-browser");
     assert!(!present(cx, window, "browser-note"));
+    assert_eq!(address(cx), "");
 
     refuse(cx);
     click(cx, window, &format!("thread-{}", other.0));
     assert!(!present(cx, window, "right-tab-browser"));
     add(cx, window, "right-add-browser");
     assert!(!present(cx, window, "browser-note"));
+    assert_eq!(address(cx), "");
 }
