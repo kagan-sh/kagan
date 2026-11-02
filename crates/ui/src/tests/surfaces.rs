@@ -1185,22 +1185,12 @@ fn a_narrow_window_still_opens_a_page_after_a_right_panel(cx: &mut TestAppContex
     wide(cx, window);
     cx.simulate_window_resize(window, size(px(528.), px(800.)));
     cx.run_until_parked();
+    let right = saved(cx, "main.right-sidebar");
 
-    // Too narrow for a right column: open uses the overlay path, or fails the paint check.
-    match open_surface(cx, ALPHA, "side") {
-        Ok(_) => {
-            wait_until(cx, |cx| {
-                item(&surfaces(cx), ALPHA, "side").open || shows(cx, window, &body(ALPHA, "side"))
-            });
-        }
-        Err(error) => {
-            assert!(
-                error.to_string().contains("not on screen")
-                    || error.to_string().contains("no panel"),
-                "{error}"
-            );
-        }
-    }
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, &body(ALPHA, "side")));
+    assert!(shows(cx, window, "right-overlay-panel"));
+    assert_eq!(saved(cx, "main.right-sidebar"), right);
 
     open_surface(cx, ALPHA, "page").unwrap();
     wait_until(cx, |cx| shows(cx, window, "surface-page"));
@@ -1497,6 +1487,21 @@ fn an_open_draws_a_right_panel_tab(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "right-tab-bar"));
     assert!(shows(cx, window, "right-tab-add"));
     assert!(shows(cx, window, &format!("right-tab-panel-{ALPHA}-side")));
+    assert!(shows(cx, window, "needs-you-header"));
+    assert!(!present(cx, window, "right-tab-close-needs-you"));
+
+    click(cx, window, &format!("right-tab-close-panel-{ALPHA}-side"));
+    wait_until(cx, |cx| !shows(cx, window, &body(ALPHA, "side")));
+    assert!(!item(&surfaces(cx), ALPHA, "side").open);
+    assert_eq!(focused_of(cx, window, "right-tab-add"), Some(true));
+
+    click(cx, window, "right-tab-add");
+    click(cx, window, &format!("right-add-{ALPHA}-side"));
+    wait_until(cx, |cx| shows(cx, window, &body(ALPHA, "side")));
+    assert_eq!(
+        selected_of(cx, window, &format!("right-tab-panel-{ALPHA}-side")),
+        Some(true)
+    );
 }
 
 const BLANK: &str = "dev.test.blank";
@@ -2085,12 +2090,10 @@ fn a_pending_surface_yields_to_archived(cx: &mut TestAppContext) {
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
     wide(cx, window);
-    click(cx, window, "panel-toggle-needs-you");
-    assert_eq!(saved(cx, "panel.needs-you.collapsed"), json!(true));
     open_surface(cx, ALPHA, "page").unwrap();
     wait_until(cx, |cx| shows(cx, window, "surface-page"));
     let left = saved(cx, "main.left-sidebar");
-    let collapsed = saved(cx, "panel.needs-you.collapsed");
+    let right = saved(cx, "main.right-sidebar");
 
     let reply = cx
         .update_window(window, |_, window, cx| {
@@ -2115,7 +2118,7 @@ fn a_pending_surface_yields_to_archived(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "surface-page"));
     assert_ne!(label(cx, window, "alpha-side"), "lost");
     assert_eq!(saved(cx, "main.left-sidebar"), left);
-    assert_eq!(saved(cx, "panel.needs-you.collapsed"), collapsed);
+    assert_eq!(saved(cx, "main.right-sidebar"), right);
 }
 
 #[gpui_kit::test]
@@ -2491,9 +2494,9 @@ fn a_tool_and_a_side_leave_the_review_open(cx: &mut TestAppContext) {
     wide(cx, window);
     open_changed_file(cx, window, data.path());
     open_surface(cx, ALPHA, "tool").unwrap();
-    // Review hides the right column, so a right panel cannot paint.
-    let refused = open_surface(cx, ALPHA, "side").unwrap_err();
-    assert!(refused.to_string().contains("not on screen"), "{refused}");
+    open_surface(cx, ALPHA, "side").unwrap();
+    wait_until(cx, |cx| shows(cx, window, &body(ALPHA, "side")));
+    assert!(shows(cx, window, "right-overlay-panel"));
     assert!(shows(cx, window, "review"));
     assert!(shows(cx, window, &body(ALPHA, "tool")));
 }

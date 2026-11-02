@@ -72,7 +72,7 @@ fn questions_appear_before_changes_and_empty_windows_have_no_column(cx: &mut Tes
 }
 
 #[gpui_kit::test]
-fn the_waiting_toggle_opens_questions_even_when_they_were_folded(cx: &mut TestAppContext) {
+fn the_waiting_toggle_opens_questions(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
     cx.run_until_parked();
@@ -80,8 +80,6 @@ fn the_waiting_toggle_opens_questions_even_when_they_were_folded(cx: &mut TestAp
         Workspace::ask_for_person(None, None, "Install the plugin?".into(), vec![], cx)
     });
     cx.run_until_parked();
-    click(cx, window, "panel-toggle-needs-you");
-    assert!(!shows(cx, window, "needs-you-body"));
     click(cx, window, "right-sidebar-toggle");
     click(cx, window, "right-sidebar-toggle");
     assert!(

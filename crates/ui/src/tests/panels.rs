@@ -147,26 +147,6 @@ fn a_plugin_panel_sits_below_the_threads_and_its_button_works(cx: &mut TestAppCo
 }
 
 #[gpui_kit::test]
-fn collapsing_a_panel_hides_its_body_and_showing_it_again_restores_it(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
-    let _asked =
-        cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
-    cx.run_until_parked();
-    show_questions(cx, window);
-    wait_until(cx, |cx| shows(cx, window, "needs-you-body"));
-
-    let toggle = "panel-toggle-needs-you";
-    click(cx, window, toggle);
-    cx.run_until_parked();
-    assert!(!shows(cx, window, "needs-you-body"), "the body is hidden");
-    assert!(shows(cx, window, toggle), "the header stays");
-
-    click(cx, window, toggle);
-    cx.run_until_parked();
-    assert!(shows(cx, window, "needs-you-body"), "the body is back");
-}
-
-#[gpui_kit::test]
 fn a_panel_that_fails_to_draw_says_so_and_its_failure_reaches_status_and_the_log(
     cx: &mut TestAppContext,
 ) {
@@ -451,34 +431,6 @@ fn the_install_form_is_disabled_while_an_install_runs_and_follows_the_host(
 }
 
 #[gpui_kit::test]
-fn collapsing_a_panel_is_saved_as_a_preference(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
-    let _asked =
-        cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
-    cx.run_until_parked();
-    show_questions(cx, window);
-    wait_until(cx, |cx| shows(cx, window, "needs-you-body"));
-    click(cx, window, "panel-toggle-needs-you");
-    cx.run_until_parked();
-    assert!(!shows(cx, window, "needs-you-body"));
-    assert_eq!(saved_collapse(cx, "needs-you"), json!(true));
-}
-
-fn set_preference(cx: &mut TestAppContext, key: &str, value: serde_json::Value) {
-    let set = cx.update(|cx| {
-        Workspace::dispatch(
-            Op::Preference(kg_domain::PreferenceOp::Set {
-                key: key.into(),
-                value,
-            }),
-            cx,
-        )
-    });
-    cx.foreground_executor().block_test(set).unwrap();
-    cx.run_until_parked();
-}
-
-#[gpui_kit::test]
 fn a_focused_plugin_row_answers_its_keys_through_its_actions(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_broken);
     cx.run_until_parked();
@@ -516,8 +468,22 @@ fn a_focused_plugin_row_answers_its_keys_through_its_actions(cx: &mut TestAppCon
     });
 }
 
+fn set_preference(cx: &mut TestAppContext, key: &str, value: serde_json::Value) {
+    let set = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Preference(kg_domain::PreferenceOp::Set {
+                key: key.into(),
+                value,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(set).unwrap();
+    cx.run_until_parked();
+}
+
 #[gpui_kit::test]
-fn a_panel_saved_as_collapsed_starts_collapsed_after_a_restart(cx: &mut TestAppContext) {
+fn a_panel_saved_as_collapsed_by_an_older_kagan_still_shows_its_body(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
         let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
         store
@@ -528,15 +494,11 @@ fn a_panel_saved_as_collapsed_starts_collapsed_after_a_restart(cx: &mut TestAppC
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
     show_questions(cx, window);
-    wait_until(cx, |cx| shows(cx, window, "panel-toggle-needs-you"));
-    assert!(
-        !shows(cx, window, "needs-you-body"),
-        "the saved collapse is applied at start"
-    );
+    wait_until(cx, |cx| shows(cx, window, "needs-you-body"));
+    assert!(!shows(cx, window, "panel-toggle-needs-you"));
 }
 
 const NAVIGATOR_PANEL: &str = "panel-dev.kagan.navigator-notes";
-
 #[gpui_kit::test]
 fn a_panel_a_plugin_opens_stays_open_when_a_preference_changes(cx: &mut TestAppContext) {
     use super::kagan::{install_navigator, run_navigator};
@@ -598,57 +560,36 @@ fn space_on_the_card_is_the_row_key_that_disables_the_plugin(cx: &mut TestAppCon
     wait_until(cx, |cx| !plugin_enabled(cx, "dev.test.broken"));
 }
 
-fn saved_collapse(cx: &mut TestAppContext, id: &str) -> serde_json::Value {
-    let saved = cx.update(|cx| {
-        Workspace::dispatch(
-            Op::Preference(kg_domain::PreferenceOp::Get {
-                key: format!("panel.{id}.collapsed"),
-            }),
-            cx,
-        )
-    });
-    match cx.foreground_executor().block_test(saved).unwrap() {
-        OpResult::Setting(value) => value,
-        other => panic!("{other:?}"),
-    }
-}
-
 #[gpui_kit::test]
-fn enter_and_space_on_a_panel_header_collapse_and_open_it_and_save_it(cx: &mut TestAppContext) {
+fn enter_and_space_on_a_tab_select_it(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
+    let id = super::kagan::run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
     let _asked =
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
     cx.run_until_parked();
     show_questions(cx, window);
     wait_until(cx, |cx| shows(cx, window, "needs-you-body"));
 
-    let header = "needs-you-header";
-    let mut focused = false;
-    for _ in 0..40 {
-        cx.simulate_keystrokes(window, "tab");
-        cx.run_until_parked();
-        if focused_of_name(cx, window, header) {
-            focused = true;
-            break;
+    for (header, key, body) in [
+        ("changes-header", "enter", "changes-body"),
+        ("needs-you-header", "space", "needs-you-body"),
+    ] {
+        let mut focused = false;
+        for _ in 0..40 {
+            cx.simulate_keystrokes(window, "tab");
+            cx.run_until_parked();
+            if focused_of_name(cx, window, header) {
+                focused = true;
+                break;
+            }
         }
+        assert!(focused, "{header} takes focus");
+        press_key(cx, window, key);
+        assert!(shows(cx, window, body), "{key} selects {header}");
     }
-    assert!(focused, "the panel header takes focus");
-
-    press_key(cx, window, "enter");
-    assert!(
-        !shows(cx, window, "needs-you-body"),
-        "Enter did not collapse the panel"
-    );
-    assert_eq!(saved_collapse(cx, "needs-you"), json!(true));
-
-    press_key(cx, window, "space");
-    assert!(
-        shows(cx, window, "needs-you-body"),
-        "Space did not open the panel"
-    );
-    assert_eq!(saved_collapse(cx, "needs-you"), json!(false));
+    assert!(!shows(cx, window, "changes-body"));
 }
-
 #[gpui_kit::test]
 fn enter_on_reload_reloads_the_plugin(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_broken);

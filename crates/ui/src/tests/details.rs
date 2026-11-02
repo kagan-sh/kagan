@@ -1,20 +1,7 @@
 use gpui_kit::TestAppContext;
-use kg_core::Workspace;
-use kg_domain::{Op, OpResult, PreferenceOp};
-use serde_json::Value;
 
 use super::kagan::{click, open, present, repo_thread, run_shell, shows, value_of, wait_until};
 use crate::kagan::changes::POLL;
-
-fn saved(cx: &mut TestAppContext, key: &str) -> Value {
-    let get = cx.update(|cx| {
-        Workspace::dispatch(Op::Preference(PreferenceOp::Get { key: key.into() }), cx)
-    });
-    let OpResult::Setting(value) = cx.foreground_executor().block_test(get).unwrap() else {
-        panic!("setting");
-    };
-    value
-}
 
 fn head(repo: &std::path::Path) -> String {
     let out = std::process::Command::new("git")
@@ -67,19 +54,11 @@ fn details_shows_the_folder_program_and_branch_of_the_thread(cx: &mut TestAppCon
 }
 
 #[gpui_kit::test]
-fn details_says_when_the_folder_is_not_git_and_collapses(cx: &mut TestAppContext) {
+fn details_says_when_the_folder_is_not_git(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     click(cx, window, "details-header");
     wait_until(cx, |cx| present(cx, window, "details-not-git"));
     assert!(shows(cx, window, "details"));
-
-    click(cx, window, "panel-toggle-details");
-    assert!(!present(cx, window, "details-body"));
-    wait_until(cx, |cx| {
-        saved(cx, "panel.details.collapsed") == Value::Bool(true)
-    });
-    click(cx, window, "panel-toggle-details");
-    assert!(present(cx, window, "details-not-git"));
 }

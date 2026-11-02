@@ -3516,14 +3516,10 @@ fn a_manifest_for_a_spot_kagan_does_not_draw_is_refused() {
     declared["ui"]["panels"] =
         json!([{ "id": "notes", "title": "Notes", "view": "Notes", "placement": "right" }]);
     write_plugin(plugin.path(), &declared);
-    // Right is allowed at the manifest; check still needs the view export.
     let error = crate::development::check(plugin.path(), spare_data())
         .unwrap_err()
         .to_string();
-    assert!(
-        !error.contains("placement \"right\" is not supported"),
-        "{error}"
-    );
+    assert_eq!(error, "declared view Notes is not exported by main.js");
     let mut declared = manifest();
     declared["ui"]["panels"] =
         json!([{ "id": "notes", "title": "Notes", "view": "Notes", "placement": "bottom" }]);
