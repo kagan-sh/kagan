@@ -6831,3 +6831,27 @@ async fn diff_revision_changes_for_binary_large_and_truncated_files(cx: &mut Tes
         }
     }
 }
+
+#[test]
+fn the_port_skill_is_listed_and_its_name_matches() {
+    let skills = crate::skill::bundled_skills().unwrap();
+    let mut names: Vec<_> = skills.iter().map(|skill| skill.name.as_str()).collect();
+    names.sort_unstable();
+    assert_eq!(
+        names,
+        [
+            "kg-cli",
+            "kg-plugin-authoring",
+            "kg-plugin-port",
+            "kg-skill-creator",
+            "kg-ui",
+        ]
+    );
+    let port = skills
+        .iter()
+        .find(|skill| skill.name == "kg-plugin-port")
+        .unwrap();
+    assert_eq!(port.name, "kg-plugin-port");
+    assert_eq!(port.source, SkillSource::Bundled);
+    assert!(!port.description.is_empty());
+}

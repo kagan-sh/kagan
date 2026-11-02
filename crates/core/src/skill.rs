@@ -17,6 +17,10 @@ const BUNDLED: &[(&str, &str)] = &[
         include_str!("../skills/kg-plugin-authoring.md"),
     ),
     (
+        "kg-plugin-port",
+        include_str!("../skills/kg-plugin-port.md"),
+    ),
+    (
         "kg-skill-creator",
         include_str!("../skills/kg-skill-creator.md"),
     ),
@@ -489,4 +493,14 @@ pub(crate) async fn load(
         text: serde_json::to_string(&result)?,
         is_error: false,
     })
+}
+
+#[cfg(test)]
+pub(crate) fn bundled_skills() -> Result<Vec<Skill>> {
+    BUNDLED
+        .iter()
+        .map(|(name, text)| {
+            Skill::parse(name, text, SkillSource::Bundled, None).map(|(skill, _body)| skill)
+        })
+        .collect()
 }
