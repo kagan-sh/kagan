@@ -1421,6 +1421,7 @@ impl Render for Kagan {
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
             .on_action(cx.listener(Self::toggle_details_action))
+            .on_action(cx.listener(Self::toggle_fill_action))
             .on_action(cx.listener(Self::toggle_form_action))
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))

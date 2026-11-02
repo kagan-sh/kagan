@@ -1520,6 +1520,11 @@ fn full_screen_gives_the_right_sidebar_the_window_and_gives_it_back(cx: &mut Tes
     click(cx, window, "right-full");
     assert!(shows(cx, window, "center"));
     assert!((width_of(cx, window, "right-sidebar") - right).abs() < 0.5);
+
+    click(cx, window, "right-full");
+    open_surface(cx, ALPHA, "page").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "surface-page"));
+    assert_eq!(selected_of(cx, window, "right-full"), Some(false));
 }
 
 const BLANK: &str = "dev.test.blank";
@@ -1636,11 +1641,13 @@ fn a_failed_open_keeps_the_saved_layout(cx: &mut TestAppContext) {
     click(cx, window, "left-sidebar-toggle");
     assert!(!shows(cx, window, "project-prj_kagan"));
     assert_eq!(saved(cx, "main.left-sidebar"), json!(false));
+    let right = saved(cx, "main.right-sidebar");
 
     let missed = open_surface(cx, BLANK, "tool").unwrap_err();
     assert!(missed.to_string().contains("not on screen"), "{missed}");
     cx.run_until_parked();
     assert_eq!(saved(cx, "main.left-sidebar"), json!(false));
+    assert_eq!(saved(cx, "main.right-sidebar"), right);
     assert!(!shows(cx, window, "project-prj_kagan"));
     assert!(!item(&surfaces(cx), BLANK, "tool").open);
 

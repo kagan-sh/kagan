@@ -210,10 +210,10 @@ impl Kagan {
         }
         self.right_slots = next;
         if changed
-            && !self
-                .right_tab
-                .as_ref()
-                .is_some_and(|id| self.right_slots.iter().any(|slot| &slot.id == id))
+            && self.right_tab.as_ref().is_some_and(|id| {
+                !self.panels.iter().any(|panel| &panel.id == id)
+                    && !self.right_slots.iter().any(|slot| &slot.id == id)
+            })
         {
             self.right_tab = self.default_right_tab(cx);
         }
@@ -420,6 +420,9 @@ impl Kagan {
                 "bottom panels are not in this version of kagan".into(),
             ));
         }
+        if matches!(declared.placement, Placement::Left | Placement::Center) {
+            self.right_fill = super::right::Fill::Column;
+        }
         if declared.placement == Placement::Left {
             if self.in_settings() {
                 let work = self.screen.shown().clone();
@@ -512,6 +515,9 @@ impl Kagan {
     }
 
     pub(super) fn select_right_tab(&mut self, id: &str, cx: &mut Context<Self>) {
+        if self.right_tab.as_deref() == Some(id) {
+            return;
+        }
         self.right_tab = Some(id.to_owned());
         self.supersede_surface();
         cx.notify();

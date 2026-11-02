@@ -31,7 +31,7 @@ pub(super) struct ToggleDetails {
     pub(super) panel: String,
 }
 
-actions!(right, [ActivatePanelHeader]);
+actions!(right, [ActivatePanelHeader, ToggleFill]);
 
 /// Enter and Space on a focused tab, or on the `+`, act on it.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
@@ -198,14 +198,14 @@ fn tab_bar(
                 .children(tabs),
         )
         .child(plus_button(kagan, cx))
-        .child(full_button(kagan, cx))
+        .when(kagan.panes.right, |bar| bar.child(full_button(kagan)))
         .into_any_element()
 }
 
-fn full_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> impl IntoElement {
-    let (icon, label, next) = match kagan.right_fill {
-        Fill::Column => (IconName::Maximize, "Full screen", Fill::Window),
-        Fill::Window => (IconName::Minimize, "Exit full screen", Fill::Column),
+fn full_button(kagan: &Kagan) -> impl IntoElement {
+    let (icon, label) = match kagan.right_fill {
+        Fill::Column => (IconName::Maximize, "Full screen"),
+        Fill::Window => (IconName::Minimize, "Exit full screen"),
     };
     control(
         "right-full",
@@ -219,10 +219,7 @@ fn full_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> impl IntoElement {
             .icon(icon)
             .accessibility_label(label)
             .tooltip(label)
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.right_fill = next;
-                cx.notify();
-            })),
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(ToggleFill), cx)),
     )
 }
 
@@ -515,6 +512,19 @@ fn failed_plugin(
 }
 
 impl Kagan {
+    pub(super) fn toggle_fill_action(
+        &mut self,
+        _: &ToggleFill,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.right_fill = match self.right_fill {
+            Fill::Column => Fill::Window,
+            Fill::Window => Fill::Column,
+        };
+        cx.notify();
+    }
+
     pub(super) fn toggle_details_action(
         &mut self,
         action: &ToggleDetails,
