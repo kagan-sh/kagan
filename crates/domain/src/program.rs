@@ -21,8 +21,7 @@ pub const KNOWN_PROGRAMS: &[(&str, &str)] = &[
     ("cline", "Cline"),
 ];
 
-/// The known programs the picker lists even when they are not installed: the two the agent
-/// integration supports.
+/// The known programs the picker lists even when they are not installed.
 pub const LISTED_WHEN_MISSING: &[&str] = &["claude", "codex"];
 
 /// Where a program was found in the list.

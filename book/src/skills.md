@@ -47,6 +47,7 @@ kg skill remove my-skill
 ## Built-in skills
 
 - `kg-cli`: threads, projects, and folders.
+- `kg-threads`: create and operate a thread. A new thread's program receives this skill.
 - `kg-plugin-authoring`: make a plugin.
 - `kg-plugin-port`: port a bb plugin.
 - `kg-skill-creator`: write a skill.

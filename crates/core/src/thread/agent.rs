@@ -13,6 +13,7 @@ use super::conversation;
 use super::run::ResolvedProgram;
 
 const PREFERENCE: &str = "agent-integration";
+const SKILL_LINK: &str = ".agents/skills/kg-threads";
 
 // https://code.claude.com/docs/en/cli-reference: the commands in its table, and the aliases plugins and kill.
 const CLAUDE_SUBCOMMANDS: &[&str] = &[
@@ -60,6 +61,7 @@ pub(crate) struct Integration {
 pub(super) enum Known {
     Claude,
     Codex,
+    Cursor,
 }
 
 /// The `KG_*` variables and the PATH with `kg` on it, which every terminal of the thread gets.
@@ -118,6 +120,15 @@ pub(crate) async fn integrate(
     };
     let setup = async {
         let mut args = arguments(this, &known, id, &cli, socket.as_deref(), &data_dir, cx).await?;
+        if matches!(known, Known::Codex) {
+            let skill = data_dir.join("agent").join("skills").join("kg-threads");
+            if let Err(error) = link_skill(folder, &skill) {
+                eprintln!(
+                    "kg: could not offer kg-threads in {}: {error}",
+                    folder.display()
+                );
+            }
+        }
         let (conversation, notice) =
             conversation::args(this, &known, record, &program.args, folder, start, cx).await?;
         args.extend(conversation);
@@ -149,6 +160,7 @@ fn known(program: &Path) -> Option<Known> {
     match program.file_stem()?.to_str()? {
         "claude" => Some(Known::Claude),
         "codex" => Some(Known::Codex),
+        "cursor-agent" => Some(Known::Cursor),
         _ => None,
     }
 }
@@ -178,10 +190,10 @@ async fn arguments(
     data_dir: &Path,
     cx: &mut AsyncApp,
 ) -> Result<Vec<OsString>> {
+    let agent = data_dir.join("agent");
+    skill::mirror(this, agent.join("skills"), cx).await?;
     match known {
         Known::Claude => {
-            let agent = data_dir.join("agent");
-            skill::mirror(this, agent.join("skills"), cx).await?;
             write_files(claude_files(&agent, id, cli, socket), cx).await?;
             let thread = agent.join("threads").join(id);
             Ok(vec![
@@ -192,6 +204,10 @@ async fn arguments(
                 OsString::from("--append-system-prompt-file"),
                 thread.join("note.txt").into_os_string(),
             ])
+        }
+        Known::Cursor => {
+            write_files(cursor_files(&agent), cx).await?;
+            Ok(vec![OsString::from("--plugin-dir"), agent.into_os_string()])
         }
         Known::Codex => Ok(codex_overrides(id, cli, socket)),
     }
@@ -246,6 +262,112 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
         }
     })
     .await;
+}
+
+fn cursor_files(agent: &Path) -> Vec<(PathBuf, String)> {
+    vec![
+        (
+            agent.join(".cursor-plugin").join("plugin.json"),
+            "{\"name\": \"kagan\"}\n".into(),
+        ),
+        (
+            agent.join("rules").join("kagan.mdc"),
+            format!(
+                "---\ndescription: This thread runs inside kagan\nalwaysApply: true\n---\n\n{}\n\nThis thread's id is the environment variable KG_THREAD_ID.\n",
+                introduction()
+            ),
+        ),
+    ]
+}
+
+// Codex discovers skills in the working folder and has no per-run skills directory. The link is
+// the skill. A directory the person already put at this path is left alone. Git exclude keeps
+// the link out of the change list.
+fn link_skill(folder: &Path, skill: &Path) -> std::io::Result<()> {
+    let skill = dunce::canonicalize(skill)?;
+    let link = folder.join(".agents").join("skills").join("kg-threads");
+    if let Some(parent) = link.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match std::fs::symlink_metadata(&link) {
+        Ok(_) => match std::fs::read_link(&link) {
+            Ok(current) if current == skill => {}
+            Ok(current) if kagan_skill_link(&current) => std::fs::remove_file(&link)?,
+            Ok(_) | Err(_) => return Ok(()),
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    if !link.exists() {
+        symlink_dir(&skill, &link)?;
+    }
+    hide_from_git(folder)
+}
+
+fn kagan_skill_link(path: &Path) -> bool {
+    let mut parts = path.components().rev();
+    parts
+        .next()
+        .is_some_and(|part| part.as_os_str() == "kg-threads")
+        && parts
+            .next()
+            .is_some_and(|part| part.as_os_str() == "skills")
+        && parts.next().is_some_and(|part| part.as_os_str() == "agent")
+}
+
+fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(target, link)
+    }
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_dir(target, link)
+    }
+}
+
+fn hide_from_git(folder: &Path) -> std::io::Result<()> {
+    let Some(exclude) = git_exclude(folder) else {
+        return Ok(());
+    };
+    if let Some(parent) = exclude.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut text = match std::fs::read_to_string(&exclude) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error),
+    };
+    if text.lines().any(|line| line.trim() == SKILL_LINK) {
+        return Ok(());
+    }
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(SKILL_LINK);
+    text.push('\n');
+    std::fs::write(exclude, text)
+}
+
+fn git_exclude(folder: &Path) -> Option<PathBuf> {
+    let git = folder.join(".git");
+    if git.is_dir() {
+        return Some(git.join("info").join("exclude"));
+    }
+    if !git.is_file() {
+        return None;
+    }
+    let text = std::fs::read_to_string(&git).ok()?;
+    let dir = text
+        .lines()
+        .find_map(|line| line.strip_prefix("gitdir: "))?;
+    let dir = Path::new(dir.trim());
+    let dir = if dir.is_absolute() {
+        dir.to_path_buf()
+    } else {
+        folder.join(dir)
+    };
+    Some(dir.join("info").join("exclude"))
 }
 
 fn claude_files(
@@ -309,9 +431,18 @@ fn codex_overrides(id: &str, cli: &Path, socket: Option<&OsStr>) -> Vec<OsString
         .collect()
 }
 
+fn introduction() -> &'static str {
+    "You are working inside kagan, a workspace for programs in threads. `kg` is on PATH. Run `kg status --json` for this thread, its project, and its environment. Run `kg guide` for the map.\n\
+     \n\
+     Follow the skill kg-threads before you create a thread, or paste into, wait on, stop, or read another one. Stay in this thread unless the person asked for another.\n\
+     \n\
+     Plugin powers and a delete are approved by the person in the app. `kg ui` cannot approve them. `kg thread ask` raises a question, and the answer arrives as `answered`. The program may set the title once with `kg thread rename`. A later one says the title was kept, and a name set in the window stays."
+}
+
 pub(crate) fn note(id: &str) -> String {
     format!(
-        "You are running inside kagan thread {id}. Use `kg` (run `kg guide`) for threads, projects, plugins and skills. Plugin powers are approved by the person. The program may set the title once with `kg thread rename`. A later one says the title was kept, and a name set in the window stays. `kg thread ask` raises a question, and the answer arrives as `answered`."
+        "{}\n\nYou are running inside kagan thread {id}.",
+        introduction()
     )
 }
 

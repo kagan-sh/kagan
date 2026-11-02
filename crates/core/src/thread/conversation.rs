@@ -70,6 +70,7 @@ pub(super) async fn args(
         Known::Codex if picks_codex(args) || start == Start::First => Ok((Vec::new(), None)),
         Known::Codex if !args.is_empty() => Ok((Vec::new(), Some(CODEX_FRESH))),
         Known::Codex => codex(this, record, folder, cx).await,
+        Known::Cursor => Ok((Vec::new(), None)),
     }
 }
 
