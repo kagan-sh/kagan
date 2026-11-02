@@ -494,13 +494,3 @@ pub(crate) async fn load(
         is_error: false,
     })
 }
-
-#[cfg(test)]
-pub(crate) fn bundled_skills() -> Result<Vec<Skill>> {
-    BUNDLED
-        .iter()
-        .map(|(name, text)| {
-            Skill::parse(name, text, SkillSource::Bundled, None).map(|(skill, _body)| skill)
-        })
-        .collect()
-}

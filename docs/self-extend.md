@@ -49,6 +49,7 @@ Short, and each points at `kg guide` chapters and the generated `.d.ts` files in
 
 - `kg-cli`: thread context, threads, projects, environments, `--json`.
 - `kg-plugin-authoring`: manifest, job loop, HostModule areas, panels and spots, Workbench tokens, the dev loop below.
+- `kg-plugin-port`: map each surface onto one script and report what moved.
 - `kg-skill-creator`: writing and testing a skill.
 - `kg-ui`: drive the open window with `kg ui`. It cannot approve powers.
 

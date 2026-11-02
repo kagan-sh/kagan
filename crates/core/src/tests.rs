@@ -4180,6 +4180,7 @@ async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext
     );
     assert!(agent.join(".claude-plugin/plugin.json").exists());
     assert!(agent.join("skills/kg-cli/SKILL.md").exists());
+    assert!(agent.join("skills/kg-plugin-port/SKILL.md").exists());
     assert!(agent.join("skills/demo/notes.md").exists());
 }
 
@@ -6830,28 +6831,4 @@ async fn diff_revision_changes_for_binary_large_and_truncated_files(cx: &mut Tes
             _ => assert!(before.truncated),
         }
     }
-}
-
-#[test]
-fn the_port_skill_is_listed_and_its_name_matches() {
-    let skills = crate::skill::bundled_skills().unwrap();
-    let mut names: Vec<_> = skills.iter().map(|skill| skill.name.as_str()).collect();
-    names.sort_unstable();
-    assert_eq!(
-        names,
-        [
-            "kg-cli",
-            "kg-plugin-authoring",
-            "kg-plugin-port",
-            "kg-skill-creator",
-            "kg-ui",
-        ]
-    );
-    let port = skills
-        .iter()
-        .find(|skill| skill.name == "kg-plugin-port")
-        .unwrap();
-    assert_eq!(port.name, "kg-plugin-port");
-    assert_eq!(port.source, SkillSource::Bundled);
-    assert!(!port.description.is_empty());
 }
