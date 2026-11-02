@@ -184,7 +184,6 @@ jobs:
             target/packager/*.AppImage
           if-no-files-found: error
 
-  # Each Mac half builds on its own runner, at the same time; mac-package joins them.
   mac-build:
     needs: tag
     permissions:
