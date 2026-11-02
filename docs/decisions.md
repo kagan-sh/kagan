@@ -470,11 +470,11 @@ Rules out: a second tab row, and extra terminals in the center.
 |---|---|---|---|
 | fat, 1 unit | 413 s, 477 s | 289 s, 331 s | 58.5 MB |
 | fat, 1 unit, `-j 3` | 542 s | 285 s | |
-| fat, 16 units | 531 s | 430 s | 60.9 MB |
+| fat, 16 units, one run under heavy load | 531 s | 430 s | 60.9 MB |
 | thin, 16 units | 122 s, 159 s | 52 s, 63 s | 73.9 MB |
 | thin, 16 units, `-j 3` | 364 s | 153 s | |
 
 Two numbers in a cell are two runs; other builds shared the machine, so times vary by about a fifth. `-j 3` stands in for the 3-core `macos-latest` runner. The thin universal `kg` is 151.7 MB, under the 160 MiB budget. `kg --version` and the first answer from a fresh app (0.4 to 0.6 s) did not differ. Release 41368550455 spent 36 minutes packaging the Mac app, two builds one after the other (21 and 14 minutes, of which `kg` took 15.5 and 11), so the Mac job should now take about as long as one build.
-Why: fat LTO optimizes all of `kg` on one core, which was most of the Mac release time. Thin LTO cut the `kg` step by half on three cores and by four fifths on fourteen, for a binary about a quarter larger, and fat LTO with more units was not faster.
+Why: fat LTO optimizes all of `kg` on one core, which was most of the Mac release time. Thin LTO cut the `kg` step by half on three cores and by four fifths on fourteen, for a binary about a quarter larger, and fat LTO with more units was not faster in one run under load.
 Cost: the dmg is larger, and the universal `kg` sits 16 MB under its budget instead of about 55 MB.
 Rules out: a separate profile only CI uses, since local release builds should match what ships.
