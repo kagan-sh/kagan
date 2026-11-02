@@ -650,8 +650,7 @@ impl Kagan {
         let controls = thread
             .as_ref()
             .map(|thread| self.thread_controls(thread, cx));
-        // The title bar is a drag area. On Windows a press over any hitbox under it is
-        // answered as the caption, so the controls occlude it to keep their clicks.
+        // Controls occlude the drag area, or Windows takes a press on them as a caption drag.
         TitleBar::new().pl_0().child(
             h_flex()
                 .relative()
