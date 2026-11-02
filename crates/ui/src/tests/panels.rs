@@ -10,8 +10,8 @@ use kg_plugins::PluginHost;
 use serde_json::json;
 
 use super::kagan::{
-    PAGE, PAGE_FRAME, click, install_page, open, open_with_plugins_then, present, press_key, shows,
-    value_of, wait_until,
+    PAGE, PAGE_FRAME, click, focused_of, install_page, open, open_with_plugins_then, present,
+    press_key, shows, value_of, wait_until,
 };
 
 const BROKEN: &str = "panel-dev.test.broken-hello";
@@ -570,6 +570,10 @@ fn enter_and_space_on_a_tab_select_it(cx: &mut TestAppContext) {
     cx.run_until_parked();
     show_questions(cx, window);
     wait_until(cx, |cx| shows(cx, window, "needs-you-body"));
+    assert!(shows(cx, window, "changes-header"));
+    // Leave the terminal; Tab stays inside it otherwise.
+    click(cx, window, "needs-you-header");
+    assert_eq!(focused_of(cx, window, "needs-you-header"), Some(true));
 
     for (header, key, body) in [
         ("changes-header", "enter", "changes-body"),
@@ -577,12 +581,12 @@ fn enter_and_space_on_a_tab_select_it(cx: &mut TestAppContext) {
     ] {
         let mut focused = false;
         for _ in 0..40 {
-            cx.simulate_keystrokes(window, "tab");
-            cx.run_until_parked();
             if focused_of_name(cx, window, header) {
                 focused = true;
                 break;
             }
+            cx.simulate_keystrokes(window, "tab");
+            cx.run_until_parked();
         }
         assert!(focused, "{header} takes focus");
         press_key(cx, window, key);

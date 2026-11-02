@@ -421,6 +421,7 @@ pub(super) fn tab(
         None => tab.into_any_element(),
         Some(focus) => tab
             .track_focus(&focus)
+            .tab_stop(true)
             .key_context("PanelHeader")
             .focus(|tab| tab.border_1().border_color(cx.theme().ring))
             .on_action(

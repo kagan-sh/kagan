@@ -8,7 +8,7 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, DismissEvent, ElementId, FocusHandle, Focusable as _,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role,
+    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, actions, div,
 };
 use kg_core::Workspace;
@@ -230,25 +230,56 @@ fn built_in_tab(
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let id = panel.id.clone();
+    let title = panel.title.clone();
+    let active = selected == Some(id.as_str());
+    let select = id.clone();
     let focus = super::tab_stop(
         window,
         cx,
         ElementId::Name(format!("{id}-header-focus").into()),
     );
-    let select = id.clone();
     div()
         .id(ElementId::Name(id.clone().into()))
         .ui_container()
         .flex_none()
-        .child(tabs::tab(
-            format!("{id}-header"),
-            panel.title.clone().into(),
-            selected == Some(id.as_str()),
-            move |this, _, cx| this.select_right_tab(&select, cx),
-            None,
-            Some(focus),
-            cx,
-        ))
+        .child(
+            h_flex()
+                .id(ElementId::Name(format!("{id}-header").into()))
+                .ui_observe_as(Facts {
+                    role: Role::Tab,
+                    selected: Some(active),
+                    focus: Some(focus.clone()),
+                    ..Facts::button(title.clone())
+                })
+                .track_focus(&focus)
+                .tab_stop(true)
+                .key_context("PanelHeader")
+                .items_center()
+                .rounded(cx.theme().radius)
+                .type_small()
+                .focus(|header| header.border_1().border_color(cx.theme().ring))
+                .on_action(cx.listener({
+                    let select = select.clone();
+                    move |this, _: &ActivatePanelHeader, _, cx| {
+                        this.select_right_tab(&select, cx);
+                    }
+                }))
+                .child(
+                    Button::new(SharedString::from(format!("{id}-header-button")))
+                        .small()
+                        .ghost()
+                        .selected(active)
+                        .label(title.clone())
+                        .tab_stop(false)
+                        .on_click({
+                            let focus = focus.clone();
+                            cx.listener(move |this, _, window, cx| {
+                                window.focus(&focus, cx);
+                                this.select_right_tab(&select, cx);
+                            })
+                        }),
+                ),
+        )
         .into_any_element()
 }
 
@@ -288,6 +319,7 @@ fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
         .relative()
         .flex_shrink_0()
         .track_focus(&focus)
+        .tab_stop(true)
         .key_context("PanelHeader")
         .rounded(cx.theme().radius)
         .focus(|add| add.border_1().border_color(cx.theme().ring))
