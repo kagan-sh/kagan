@@ -4209,6 +4209,7 @@ async fn the_next_claude_thread_drops_a_deleted_file_and_a_disabled_plugin(
     ran(&fixture.dir.path().join("three"));
     assert!(!agent.join("skills/demo").exists());
     assert!(agent.join("skills/kg-cli/SKILL.md").exists());
+    assert!(agent.join("skills/kg-threads/SKILL.md").exists());
 }
 
 #[cfg(unix)]
@@ -4253,6 +4254,14 @@ async fn a_broken_agent_folder_starts_the_program_without_plugin_flags(cx: &mut 
 #[gpui_kit::test]
 async fn a_codex_thread_gets_the_server_and_note_as_overrides(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
+    assert!(
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(fixture.dir.path())
+            .status()
+            .unwrap()
+            .success()
+    );
     let run = fixture.dir.path().join("codex");
     let program = fake_agent(&run, "codex");
     let (id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
@@ -4276,7 +4285,35 @@ async fn a_codex_thread_gets_the_server_and_note_as_overrides(cx: &mut TestAppCo
         "{args:?}"
     );
     assert_eq!(args.last().map(String::as_str), Some("--person-arg"));
-    assert!(!fixture.dir.path().join("agent").exists());
+    let root = dunce::canonicalize(fixture.dir.path()).unwrap();
+    let skill = std::fs::read_to_string(root.join(".agents/skills/kg-threads/SKILL.md")).unwrap();
+    assert!(skill.contains("name: kg-threads"), "{skill}");
+    assert!(skill.contains("kg thread run"), "{skill}");
+    let exclude = std::fs::read_to_string(root.join(".git/info/exclude")).unwrap();
+    assert!(exclude.contains(".agents/skills/kg-threads"), "{exclude}");
+    assert_eq!(env["KG_THREAD_ID"], id.0);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_cursor_agent_thread_receives_the_threads_skill(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("cursor");
+    let program = fake_agent(&run, "cursor-agent");
+    let (id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
+    let (args, env) = ran(&run);
+    let agent = dunce::canonicalize(fixture.dir.path())
+        .unwrap()
+        .join("agent");
+    assert_eq!(args[0], "--plugin-dir");
+    assert_eq!(args[1], agent.display().to_string());
+    assert_eq!(args.last().map(String::as_str), Some("--person-arg"));
+    let skill = std::fs::read_to_string(agent.join("skills/kg-threads/SKILL.md")).unwrap();
+    assert!(skill.contains("name: kg-threads"), "{skill}");
+    let rule = std::fs::read_to_string(agent.join("rules/kagan.mdc")).unwrap();
+    assert!(rule.contains("alwaysApply: true"), "{rule}");
+    assert!(rule.contains("kg-threads"), "{rule}");
+    assert!(agent.join(".cursor-plugin/plugin.json").exists());
     assert_eq!(env["KG_THREAD_ID"], id.0);
 }
 
