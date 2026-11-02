@@ -819,7 +819,14 @@ fn thread_controls(
                         cx.emit(Event::ThreadActions(menu.clone()));
                     }),
                 ))
-                .when_some(popup, |wrap, popup| wrap.child(menu_popup(&popup))),
+                .when_some(popup, |wrap, popup| {
+                    wrap.child(menu_popup(
+                        &popup,
+                        "thread-menu-layer",
+                        "popup-menu",
+                        "Thread actions",
+                    ))
+                }),
         );
     Some(controls.into_any_element())
 }

@@ -792,7 +792,7 @@ pub enum SurfaceOp {
     Threads,
     /// Show a declared surface. Succeeds only when it is on screen.
     Open { plugin: PluginId, id: String },
-    /// Close a left tool, a center page, or collapse a right panel
+    /// Close a left tool, a center page, or a right tab
     Close { plugin: PluginId, id: String },
 }
 

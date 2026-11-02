@@ -150,9 +150,6 @@ fn preference_value(key: &str, value: &serde_json::Value) -> Result<()> {
                 .map(|_| ())
                 .map_err(|_| OpError::Invalid("review-viewed must be a map".into()))
         }
-        _ if panel_key(key) => serde_json::from_value::<bool>(value.clone())
-            .map(|_| ())
-            .map_err(|_| OpError::Invalid(format!("{key} must be a boolean"))),
         _ => Err(OpError::Invalid(format!("unknown preference {key}"))),
     }
 }
@@ -168,19 +165,8 @@ fn window_layout(key: &str) -> Option<&str> {
     (window_ok && LAYOUT.contains(&name)).then_some(name)
 }
 
-/// A right panel's saved collapse, as `panel.<id>.collapsed`.
-fn panel_key(key: &str) -> bool {
-    key.strip_prefix("panel.")
-        .and_then(|rest| rest.strip_suffix(".collapsed"))
-        .is_some_and(|id| !id.is_empty())
-}
-
 fn known_preference(key: &str) -> Result<()> {
-    if PREFERENCES.contains(&key)
-        || key == "review-viewed"
-        || window_layout(key).is_some()
-        || panel_key(key)
-    {
+    if PREFERENCES.contains(&key) || key == "review-viewed" || window_layout(key).is_some() {
         Ok(())
     } else {
         Err(OpError::Invalid(format!("unknown preference {key}")))
@@ -354,11 +340,7 @@ mod review_wrap_tests {
     #[test]
     fn guide_names_every_preference() {
         let guide = include_str!("../guide-map.md");
-        for key in PREFERENCES
-            .iter()
-            .copied()
-            .chain(["review-viewed", "panel.<id>.collapsed"])
-        {
+        for key in PREFERENCES.iter().copied().chain(["review-viewed"]) {
             assert!(guide.contains(&format!("`{key}`")), "missing {key}");
         }
         for key in LAYOUT {
