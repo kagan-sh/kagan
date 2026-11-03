@@ -36,7 +36,7 @@ keymap: `kg keymap get`, `kg keymap set`, `kg keymap remove`.
 
 preference: `kg preference get`, `kg preference set`.
 
-ui: `kg ui snapshot`, `kg ui click`, `kg ui type`, `kg ui key`, `kg ui scroll`, `kg ui screenshot`.
+ui: `kg ui snapshot`, `kg ui click`, `kg ui type`, `kg ui key`, `kg ui scroll`, `kg ui drag`, `kg ui drop`, `kg ui screenshot`.
 
 diff: `kg diff list`, `kg diff show`, `kg diff commits`.
 

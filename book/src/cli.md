@@ -2474,6 +2474,8 @@ Commands:
   type        Send text to the focused control
   key         Send a keystroke such as escape or cmd-,
   scroll      Scroll an element by dy pixels
+  drag        Press an element, drag it onto another, and release. `--at` picks the target's top quarter, middle or bottom quarter. `--hold` keeps the button down: finish with `kg ui drop`, or cancel with `kg ui key escape`
+  drop        Release a drag that `kg ui drag --hold` left held, where the pointer is
   screenshot  Save a PNG without focusing the window
   help        Print this message or the help of the given subcommand(s)
 
@@ -2578,6 +2580,53 @@ Options:
       --within <WITHIN>
           
 
+      --window <WINDOW>
+          [default: 0]
+
+  -h, --help
+          Print help
+```
+
+## `kg ui drag`
+
+```text
+Press an element, drag it onto another, and release. `--at` picks the target's top quarter, middle or bottom quarter. `--hold` keeps the button down: finish with `kg ui drop`, or cancel with `kg ui key escape`
+
+Usage: kg ui drag [OPTIONS] <FROM> <TO>
+
+Arguments:
+  <FROM>
+          
+
+  <TO>
+          
+
+Options:
+      --at <AT>
+          [default: middle]
+          [possible values: top, middle, bottom]
+
+      --within <WITHIN>
+          Pick both elements inside the element with this id
+
+      --hold
+          
+
+      --window <WINDOW>
+          [default: 0]
+
+  -h, --help
+          Print help
+```
+
+## `kg ui drop`
+
+```text
+Release a drag that `kg ui drag --hold` left held, where the pointer is
+
+Usage: kg ui drop [OPTIONS]
+
+Options:
       --window <WINDOW>
           [default: 0]
 
