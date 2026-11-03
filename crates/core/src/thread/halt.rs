@@ -128,7 +128,15 @@ async fn close_open_turn(
     if !open {
         return Ok(());
     }
+    let quit = this
+        .update(cx, |workspace, _| {
+            workspace.stopping.get(id) == Some(&super::StopReason::Quit)
+        })
+        .map_err(closed)?;
     thread.update(cx, |thread, _| thread.turn_open = false);
+    if quit {
+        return Ok(());
+    }
     Workspace::events(
         this,
         id.clone(),

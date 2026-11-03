@@ -527,6 +527,13 @@ fn watch(cx: &mut Context<Workspace>) {
     .detach();
 }
 
+/// Why a program was asked to stop. Quit still records `stopped` and `idle`, and skips `turn.ended`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StopReason {
+    Stop,
+    Quit,
+}
+
 /// Asks a running program to end and marks the thread stopping. Its exit records the stop and keeps
 /// the screen. Returns whether there was a program to end.
 pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
@@ -534,7 +541,10 @@ pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
         return false;
     };
     terminal.stop();
-    workspace.stopping.insert(id.clone());
+    workspace
+        .stopping
+        .entry(id.clone())
+        .or_insert(StopReason::Stop);
     true
 }
 
@@ -610,7 +620,7 @@ pub(crate) async fn exited(
     exit: Exit,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let stopped = this
+    let reason = this
         .update(cx, |workspace, _| {
             workspace.exiting.remove(&id);
             workspace.stopping.remove(&id)
@@ -630,12 +640,12 @@ pub(crate) async fn exited(
     super::halt::settle(this, &thread, cx).await?;
     this.update(cx, |workspace, cx| keep_screen(workspace, &id, cx))
         .map_err(closed)?;
-    if stopped {
+    if let Some(reason) = reason {
         Workspace::events(
             this,
             id,
             close_turn(
-                turn_open,
+                turn_open && reason != StopReason::Quit,
                 TurnOutcome::Interrupted,
                 None,
                 vec![EventKind::Stopped, EventKind::Idle],
@@ -750,29 +760,26 @@ fn follow(
 }
 
 async fn waiting(this: &WeakEntity<Workspace>, id: ThreadId, cx: &mut AsyncApp) -> Result<()> {
-    let stopping = this
-        .update(cx, |workspace, _| workspace.stopping.contains(&id))
+    let reason = this
+        .update(cx, |workspace, _| workspace.stopping.get(&id).copied())
         .map_err(closed)?;
     let thread = super::thread(this, &id, cx)?;
     done(this, &thread, cx).await?;
-    let outcome = if stopping {
-        TurnOutcome::Interrupted
-    } else {
-        TurnOutcome::Completed
-    };
-    Workspace::events(
-        this,
-        id.clone(),
-        vec![
+    let mut kinds = vec![EventKind::Waiting];
+    if reason != Some(StopReason::Quit) {
+        kinds.insert(
+            0,
             EventKind::TurnEnded {
-                outcome,
+                outcome: if reason.is_some() {
+                    TurnOutcome::Interrupted
+                } else {
+                    TurnOutcome::Completed
+                },
                 error: None,
             },
-            EventKind::Waiting,
-        ],
-        cx,
-    )
-    .await?;
+        );
+    }
+    Workspace::events(this, id.clone(), kinds, cx).await?;
     this.update(cx, |_, cx| cx.emit(WorkspaceEvent::Waiting(id)))
         .map_err(closed)
 }

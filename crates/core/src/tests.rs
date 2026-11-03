@@ -2532,6 +2532,112 @@ async fn a_stop_during_a_spinner_ends_the_turn_as_interrupted(cx: &mut TestAppCo
 
 #[cfg(unix)]
 #[gpui_kit::test]
+async fn a_quit_during_a_spinner_does_not_end_the_turn(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "spin-quit",
+        "printf '\\033]0;\\342\\240\\213 working\\007'\nsleep 60\n",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    wait_until_busy(&fixture, &id, cx);
+    let quitting = cx.update(Workspace::stop_for_quit);
+    finish_quit(cx, &id, quitting).await;
+    assert_quit_leaves_the_turn(&kinds_of(&id, cx).await);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_quit_while_a_plain_title_settles_does_not_end_the_turn(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "spin-quiet-quit",
+        "dir=$(CDPATH= cd -- \"$(dirname \"$0\")\" && pwd)\n\
+         spin=$(printf '\\342\\240\\213')\n\
+         printf '\\033]0;%s working\\007' \"$spin\"\n\
+         while [ ! -f \"$dir/plain\" ]; do sleep 0.05; done\n\
+         printf '\\033]0;ready\\007'\n\
+         sleep 60\n",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    wait_until_busy(&fixture, &id, cx);
+    std::fs::write(fixture.dir.path().join("plain"), b"go").unwrap();
+    for _ in 0..40 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        let pending = cx.read(|cx| {
+            fixture
+                .workspace
+                .read(cx)
+                .thread(&id)
+                .unwrap()
+                .read(cx)
+                .plain_since
+                .is_some()
+        });
+        if pending {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(
+        cx.read(|cx| {
+            let thread = fixture.workspace.read(cx).thread(&id).unwrap();
+            thread.read(cx).busy() && thread.read(cx).plain_since.is_some()
+        }),
+        "the plain title never started its quiet wait"
+    );
+    let quitting = cx.update(Workspace::stop_for_quit);
+    finish_quit(cx, &id, quitting).await;
+    assert_quit_leaves_the_turn(&kinds_of(&id, cx).await);
+}
+
+#[cfg(unix)]
+async fn finish_quit(cx: &mut TestAppContext, id: &ThreadId, quitting: gpui_kit::Task<Result<()>>) {
+    for _ in 0..80 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        if thread(id, cx).await.status == ThreadStatus::Idle {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    quitting.await.unwrap();
+}
+
+#[cfg(unix)]
+fn assert_quit_leaves_the_turn(kinds: &[EventKind]) {
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|kind| matches!(kind, EventKind::TurnStarted))
+            .count(),
+        1,
+        "{kinds:?}"
+    );
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|kind| matches!(kind, EventKind::TurnEnded { .. }))
+            .count(),
+        0,
+        "{kinds:?}"
+    );
+    assert!(kinds.contains(&EventKind::Stopped), "{kinds:?}");
+    assert!(kinds.contains(&EventKind::Idle), "{kinds:?}");
+    assert!(
+        !kinds
+            .iter()
+            .any(|kind| matches!(kind, EventKind::Failed { .. })),
+        "{kinds:?}"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 async fn an_exit_during_a_spinner_ends_the_turn_as_failed(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let program = script(

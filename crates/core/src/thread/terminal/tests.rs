@@ -42,6 +42,7 @@ fn a_braille_frame_first_is_busy_for_older_claude() {
 fn a_spinner_that_is_not_first_is_not_busy() {
     assert!(!busy("project \u{2819}"));
     assert!(!busy(""));
+    assert!(!busy("project \u{23f3} Working"));
 }
 
 #[gpui_kit::test]
