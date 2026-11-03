@@ -16,7 +16,7 @@ use tempfile::TempDir;
 
 use crate::manifest::{self, Grant};
 use crate::source;
-use crate::{PluginHostGlobal, TOOL_TIMEOUT};
+use crate::{INSTRUCT_TIMEOUT, PluginHostGlobal, TOOL_TIMEOUT};
 
 const THREAD: &str = "thr_1";
 const ID: &str = "dev.test.echo";
@@ -5403,4 +5403,226 @@ fn share_keeps_the_ssh_user_and_drops_a_token(cx: &mut TestAppContext) {
     assert_eq!(entry.source, source);
     assert_eq!(entry.plugin, None);
     assert_eq!(install, format!("kg plugin install {source}"));
+}
+
+#[test]
+fn instruct_is_an_install_line_and_needs_approval_again() {
+    let plugin = plugin_dir();
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap());
+    assert!(
+        !base
+            .lines()
+            .iter()
+            .any(|line| line.contains("instructions"))
+    );
+    let mut value = manifest();
+    value["instruct"] = json!(true);
+    write_plugin(plugin.path(), &value);
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap());
+    assert!(
+        with.lines()
+            .iter()
+            .any(|line| line == "adds instructions to a thread's program"),
+        "{:?}",
+        with.lines()
+    );
+    assert!(base.within(&with));
+    assert!(!with.within(&base));
+}
+
+fn instruct_plugin(script: &str) -> TempDir {
+    instruct_plugin_id("dev.test.instruct", script)
+}
+
+fn instruct_plugin_id(id: &str, script: &str) -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let manifest = json!({
+        "id": id,
+        "name": "Instruct",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "instruct": true,
+    });
+    std::fs::write(dir.path().join(manifest::FILE), manifest.to_string()).unwrap();
+    std::fs::write(dir.path().join("main.js"), script).unwrap();
+    dir
+}
+
+fn ask_instruct(cx: &mut TestAppContext) -> String {
+    let host = cx.update(|cx| cx.global::<PluginHostGlobal>().0.clone());
+    let task = cx.update(|cx| {
+        cx.spawn(async move |cx| {
+            crate::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
+        })
+    });
+    cx.run_until_parked();
+    match cx.foreground_executor().block_test(task).unwrap() {
+        OpResult::Output(Some(text)) => text,
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+#[gpui_kit::test]
+fn an_instruct_plugin_appends_text_for_a_start(cx: &mut TestAppContext) {
+    let plugin = instruct_plugin(
+        r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        if (job.kind === "instruct") {
+          reply(job.id, { text: `persona for ${job.threadId} in ${job.projectId}` });
+        }
+      }
+    });
+  }
+  render() { return "instruct"; }
+}
+"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    let text = ask_instruct(cx);
+    assert_eq!(
+        text,
+        format!("Plugin dev.test.instruct:\npersona for {THREAD} in prj_test")
+    );
+}
+
+#[gpui_kit::test]
+fn an_instruct_timeout_contributes_nothing(cx: &mut TestAppContext) {
+    let plugin = instruct_plugin(
+        r#"
+import { View } from "gpui-kit";
+import { next } from "kagan/jobs";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        await next();
+      }
+    });
+  }
+  render() { return "instruct"; }
+}
+"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    let host = cx.update(|cx| cx.global::<PluginHostGlobal>().0.clone());
+    let pending = cx.update(|cx| {
+        cx.spawn(async move |cx| {
+            crate::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
+        })
+    });
+    cx.run_until_parked();
+    cx.executor()
+        .advance_clock(INSTRUCT_TIMEOUT + Duration::from_millis(100));
+    cx.run_until_parked();
+    match cx.foreground_executor().block_test(pending).unwrap() {
+        OpResult::Output(Some(text)) => assert!(text.is_empty(), "{text}"),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+#[gpui_kit::test]
+fn instruct_text_is_capped(cx: &mut TestAppContext) {
+    let plugin = instruct_plugin(
+        r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        if (job.kind === "instruct") {
+          reply(job.id, "x".repeat(5000));
+        }
+      }
+    });
+  }
+  render() { return "instruct"; }
+}
+"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    let text = ask_instruct(cx);
+    let prefix = "Plugin dev.test.instruct:\n";
+    assert!(text.starts_with(prefix), "{text}");
+    let body = &text[prefix.len()..];
+    assert_eq!(body.len(), 4096);
+    assert!(body.chars().all(|c| c == 'x'));
+}
+
+#[gpui_kit::test]
+fn instruct_text_is_capped_in_bytes(cx: &mut TestAppContext) {
+    let plugin = instruct_plugin(
+        r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        if (job.kind === "instruct") {
+          reply(job.id, "é".repeat(3000));
+        }
+      }
+    });
+  }
+  render() { return "instruct"; }
+}
+"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    let text = ask_instruct(cx);
+    let prefix = "Plugin dev.test.instruct:\n";
+    assert!(text.starts_with(prefix), "{text}");
+    let body = &text[prefix.len()..];
+    assert_eq!(body.len(), 4096);
+    assert!(body.chars().all(|c| c == 'é'), "{body}");
+}
+
+#[gpui_kit::test]
+fn instruct_joined_text_is_capped_across_plugins(cx: &mut TestAppContext) {
+    let script = |fill: &str| {
+        format!(
+            r#"
+import {{ View }} from "gpui-kit";
+import {{ next, reply }} from "kagan/jobs";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      for (;;) {{
+        const job = await next();
+        if (job.kind === "instruct") {{
+          reply(job.id, "{fill}".repeat(5000));
+        }}
+      }}
+    }});
+  }}
+  render() {{ return "instruct"; }}
+}}
+"#
+        )
+    };
+    let plugins: Vec<_> = ["a", "b", "c", "d"]
+        .into_iter()
+        .map(|suffix| instruct_plugin_id(&format!("dev.test.instruct.{suffix}"), &script(suffix)))
+        .collect();
+    let installed: Vec<_> = plugins
+        .iter()
+        .map(|plugin| installed_at(plugin.path()))
+        .collect();
+    open(cx, &installed);
+    let text = ask_instruct(cx);
+    assert!(text.contains("Plugin dev.test.instruct.a:\n"));
+    assert!(text.contains("Plugin dev.test.instruct.b:\n"));
+    assert!(text.contains("Plugin dev.test.instruct.c:\n"));
+    assert!(!text.contains("Plugin dev.test.instruct.d:\n"), "{text}");
+    assert!(text.len() <= 16 * 1024, "{}", text.len());
 }

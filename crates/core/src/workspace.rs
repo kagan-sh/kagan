@@ -91,6 +91,10 @@ pub enum PluginRequest {
         name: String,
         input: Value,
     },
+    Instruct {
+        thread_id: ThreadId,
+        project_id: ProjectId,
+    },
     Plugin(PluginOp, Option<Requester>),
     /// A shortcut of a plugin's command, named `<plugin-id>:<command>`
     Keymap(KeymapOp),

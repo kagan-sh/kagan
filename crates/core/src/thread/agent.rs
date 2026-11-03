@@ -2,12 +2,12 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
-use kg_domain::{EventKind, NoticeSeverity, ThreadId};
+use kg_domain::{EventKind, NoticeSeverity, OpResult, ThreadId};
 use serde_json::{Value, json};
 
 use crate::database::Result;
 use crate::workspace::closed;
-use crate::{SocketLocation, Workspace, skill};
+use crate::{PluginRequest, SocketLocation, Workspace, skill};
 
 use super::conversation;
 use super::run::ResolvedProgram;
@@ -159,13 +159,21 @@ pub(crate) async fn integrate(
     let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
     let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
     else {
+        let _ = this.update(cx, |workspace, cx| {
+            if let Some(thread) = workspace.threads.get(&record.id) {
+                thread.update(cx, |thread, _| thread.instruct = None);
+            }
+        });
         return Ok(Integration {
             env,
             args: Vec::new(),
         });
     };
     let setup = async {
-        let mut args = arguments(this, &known, id, &cli, socket.as_deref(), &data_dir, cx).await?;
+        let extra = collect_instruct(this, record, cx).await;
+        let agent = data_dir.join("agent");
+        skill::mirror(this, agent.join("skills"), cx).await?;
+        write_agent_files(&known, &agent, id, &cli, socket.as_deref(), &extra, cx).await?;
         if matches!(known, Known::Codex) {
             let skill = data_dir.join("agent").join("skills").join("kg-threads");
             if let Err(error) = link_skill(folder, &skill) {
@@ -175,6 +183,7 @@ pub(crate) async fn integrate(
                 );
             }
         }
+        let mut args = flags(&known, id, &cli, socket.as_deref(), &agent);
         let (conversation, notice) =
             conversation::args(this, &known, record, &program.args, folder, start, cx).await?;
         args.extend(conversation);
@@ -253,35 +262,86 @@ fn cursor_subcommand(args: &[OsString]) -> bool {
     false
 }
 
-async fn arguments(
+async fn collect_instruct(
     this: &WeakEntity<Workspace>,
+    record: &kg_domain::Thread,
+    cx: &mut AsyncApp,
+) -> String {
+    let text = match super::forward(
+        this,
+        PluginRequest::Instruct {
+            thread_id: record.id.clone(),
+            project_id: record.project_id.clone(),
+        },
+        cx,
+    )
+    .await
+    {
+        Ok(OpResult::Output(Some(text))) => text,
+        _ => String::new(),
+    };
+    let instruct = (!text.is_empty()).then(|| text.clone());
+    let _ = this.update(cx, |workspace, cx| {
+        if let Some(thread) = workspace.threads.get(&record.id) {
+            thread.update(cx, |thread, _| {
+                thread.instruct = instruct;
+            });
+        }
+    });
+    text
+}
+
+async fn write_agent_files(
+    known: &Known,
+    agent: &Path,
+    id: &str,
+    cli: &Path,
+    socket: Option<&OsStr>,
+    extra: &str,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    match known {
+        Known::Claude => write_files(claude_files(agent, id, cli, socket, extra), cx).await,
+        Known::Cursor => {
+            let dir = cursor_dir(agent, id);
+            write_files(cursor_files(&dir, extra), cx).await?;
+            let skills = agent.join("skills");
+            cx.background_spawn(async move { link_cursor_skills(&dir, &skills) })
+                .await?;
+            Ok(())
+        }
+        Known::Codex => Ok(()),
+    }
+}
+
+fn cursor_dir(agent: &Path, id: &str) -> PathBuf {
+    agent.join("threads").join(id).join("cursor")
+}
+
+fn flags(
     known: &Known,
     id: &str,
     cli: &Path,
     socket: Option<&OsStr>,
-    data_dir: &Path,
-    cx: &mut AsyncApp,
-) -> Result<Vec<OsString>> {
-    let agent = data_dir.join("agent");
-    skill::mirror(this, agent.join("skills"), cx).await?;
+    agent: &Path,
+) -> Vec<OsString> {
     match known {
         Known::Claude => {
-            write_files(claude_files(&agent, id, cli, socket), cx).await?;
             let thread = agent.join("threads").join(id);
-            Ok(vec![
+            vec![
                 OsString::from("--mcp-config"),
                 thread.join("mcp.json").into_os_string(),
                 OsString::from("--plugin-dir"),
-                agent.into_os_string(),
+                agent.to_path_buf().into_os_string(),
                 OsString::from("--append-system-prompt-file"),
                 thread.join("note.txt").into_os_string(),
-            ])
+            ]
         }
-        Known::Cursor => {
-            write_files(cursor_files(&agent), cx).await?;
-            Ok(vec![OsString::from("--plugin-dir"), agent.into_os_string()])
-        }
-        Known::Codex => Ok(codex_overrides(id, cli, socket)),
+        Known::Cursor => vec![
+            OsString::from("--plugin-dir"),
+            cursor_dir(agent, id).into_os_string(),
+        ],
+        Known::Codex => codex_overrides(id, cli, socket),
     }
 }
 
@@ -336,20 +396,42 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
     .await;
 }
 
-fn cursor_files(agent: &Path) -> Vec<(PathBuf, String)> {
+fn cursor_files(dir: &Path, extra: &str) -> Vec<(PathBuf, String)> {
+    let mut body = format!(
+        "---\ndescription: This thread runs inside kagan\nalwaysApply: true\n---\n\n{}\n\nThis thread's id is the environment variable KG_THREAD_ID.\n",
+        introduction()
+    );
+    if !extra.is_empty() {
+        body.push('\n');
+        body.push_str(extra);
+        body.push('\n');
+    }
     vec![
         (
-            agent.join(".cursor-plugin").join("plugin.json"),
+            dir.join(".cursor-plugin").join("plugin.json"),
             "{\"name\": \"kagan\"}\n".into(),
         ),
-        (
-            agent.join("rules").join("kagan.mdc"),
-            format!(
-                "---\ndescription: This thread runs inside kagan\nalwaysApply: true\n---\n\n{}\n\nThis thread's id is the environment variable KG_THREAD_ID.\n",
-                introduction()
-            ),
-        ),
+        (dir.join("rules").join("kagan.mdc"), body),
     ]
+}
+
+fn link_cursor_skills(dir: &Path, skills: &Path) -> std::io::Result<()> {
+    let skills = match dunce::canonicalize(skills) {
+        Ok(skills) => skills,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let link = dir.join("skills");
+    match std::fs::symlink_metadata(&link) {
+        Ok(meta) if meta.file_type().is_symlink() => match std::fs::read_link(&link) {
+            Ok(current) if current == skills => return Ok(()),
+            Ok(_) | Err(_) => std::fs::remove_file(&link)?,
+        },
+        Ok(_) => std::fs::remove_dir_all(&link)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    symlink_dir(&skills, &link)
 }
 
 // Codex discovers skills in the working folder and has no per-run skills directory. The link is
@@ -447,6 +529,7 @@ fn claude_files(
     id: &str,
     cli: &Path,
     socket: Option<&OsStr>,
+    extra: &str,
 ) -> Vec<(PathBuf, String)> {
     let thread = agent.join("threads").join(id);
     vec![
@@ -455,7 +538,7 @@ fn claude_files(
             "{\"name\": \"kagan\"}\n".into(),
         ),
         (thread.join("mcp.json"), mcp_config(id, cli, socket)),
-        (thread.join("note.txt"), note(id)),
+        (thread.join("note.txt"), note_with(id, extra)),
     ]
 }
 
@@ -512,10 +595,19 @@ fn introduction() -> &'static str {
 }
 
 pub(crate) fn note(id: &str) -> String {
-    format!(
+    note_with(id, "")
+}
+
+pub(crate) fn note_with(id: &str, extra: &str) -> String {
+    let mut text = format!(
         "{}\n\nYou are running inside kagan thread {id}.",
         introduction()
-    )
+    );
+    if !extra.is_empty() {
+        text.push_str("\n\n");
+        text.push_str(extra);
+    }
+    text
 }
 
 // A literal string takes backslashes and spaces as they are, so Windows paths need no escaping.

@@ -29,7 +29,8 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 - `version`: the plugin version.
 - `kagan`: the oldest kagan version that can load the plugin.
 - `entry`: the main script, `main.js`.
-- `instructions`: a short text for agents.
+- `instructions`: a short standing text for agents.
+- `instruct`: when `true`, the plugin gets a job each time a program starts and may append text for that start only.
 - `powers`: what the plugin can do. The starter asks for none.
 - `commands`: commands that you can bind to a key. `"header": true` with `"when": "thread"` also draws the command as a button on the thread title.
 - `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center. `"placement": "right"` puts a tab in the right sidebar.

@@ -1,0 +1,11 @@
+{
+  "id": "dev.kagan.instruct",
+  "name": "Instruct",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Adds a short persona line when a program starts.",
+  "instruct": true,
+  "powers": {}
+}

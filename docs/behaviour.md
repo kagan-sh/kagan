@@ -139,7 +139,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Tools`
 
 - **Allowed when**: the thread exists [book:cli].
-- **Shows**: the tools offered to that thread, and the plugin instructions [book:cli]. A plugin's instructions go out as MCP server instructions; each tool description still stands alone [docs:plugin-api]. With no plugin host the list is empty. That is the contract before plugins load [docs:architecture] [person 2026-10-08].
+- **Shows**: the tools offered to that thread, and the plugin instructions [book:cli]. A plugin's standing `instructions` and any `instruct` text for this start go out as MCP server instructions; each tool description still stands alone [docs:plugin-api] [decision 130]. With no plugin host the list is empty. That is the contract before plugins load [docs:architecture] [person 2026-10-08].
 - **Refused when**: a missing thread — `not-found` [op.rs].
 
 ### `CallTool`
