@@ -2231,6 +2231,14 @@ fn scaffold_and_types_match_the_running_shell() {
     assert!(host.contains("overlay?: { width: number; height: number }"));
     let shell = std::fs::read_to_string(root.join("gpui-kit.d.ts")).unwrap();
     assert!(shell.contains("View"));
+    for call in [
+        "on_drag<",
+        "on_drag_move<",
+        "on_drop<",
+        "interface DropEvent",
+    ] {
+        assert!(shell.contains(call), "{call} is declared");
+    }
     assert!(crate::development::new("my-plugin", Some(root), &catalog()).is_err());
     assert!(crate::development::new("../escape", None, &catalog()).is_err());
 }

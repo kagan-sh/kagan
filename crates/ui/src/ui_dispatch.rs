@@ -1,9 +1,9 @@
 use gpui_kit::{
     App, ElementId, InputEvent, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent, Window,
-    point,
+    point, px,
 };
-use kg_domain::OpError;
+use kg_domain::{DropSide, OpError};
 
 pub(crate) fn render_frame(window: &mut Window, cx: &mut App) {
     window.refresh();
@@ -93,6 +93,79 @@ pub(crate) fn scroll_within(
     Ok(())
 }
 
+/// Presses `from`, moves past GPUI's drag threshold, then onto `at` of `to` in steps, as a hand
+/// would. Without `hold` it also lets go there.
+pub(crate) fn drag_within(
+    window: &mut Window,
+    from: &ElementId,
+    to: &ElementId,
+    within: Option<&ElementId>,
+    at: DropSide,
+    hold: bool,
+    cx: &mut App,
+) -> Result<(), OpError> {
+    bring_into_view(window, from, within, cx);
+    let start = locate(window, from, within)?;
+    spot(window, to, within, at)?;
+    move_pointer(window, start, None, cx);
+    mouse_down(window, start, MouseButton::Left, 1, cx);
+    let from = start + point(px(0.), px(8.));
+    move_pointer(window, from, Some(MouseButton::Left), cx);
+    // The target is found again: a source that looks dragged may have moved it.
+    let end = spot(window, to, within, at)?;
+    for step in 1..=4 {
+        let fraction = step as f32 / 4.;
+        let position = point(
+            from.x + (end.x - from.x) * fraction,
+            from.y + (end.y - from.y) * fraction,
+        );
+        move_pointer(window, position, Some(MouseButton::Left), cx);
+    }
+    if !hold {
+        mouse_up(window, end, MouseButton::Left, 1, cx);
+    }
+    Ok(())
+}
+
+/// Lets go of a drag `drag_within` held, where the pointer is.
+pub(crate) fn drop_held(window: &mut Window, cx: &mut App) -> Result<(), OpError> {
+    if !cx.has_active_drag() {
+        return Err(OpError::Invalid(
+            "no drag is held; start one with kg ui drag --hold".into(),
+        ));
+    }
+    let position = window.mouse_position();
+    mouse_up(window, position, MouseButton::Left, 1, cx);
+    Ok(())
+}
+
+/// The point at the top quarter, middle, or bottom quarter of an element, where a plugin's drop
+/// handler reports that side.
+fn spot(
+    window: &Window,
+    id: &ElementId,
+    within: Option<&ElementId>,
+    at: DropSide,
+) -> Result<Point<Pixels>, OpError> {
+    let target = located(window, id, within)?;
+    let bounds = target.bounds();
+    let share = match at {
+        DropSide::Top => 0.125,
+        DropSide::Middle => 0.5,
+        DropSide::Bottom => 0.875,
+    };
+    let position = point(
+        target.clipped().center().x,
+        bounds.origin.y + bounds.size.height * share,
+    );
+    if !target.clipped().contains(&position) {
+        return Err(OpError::NotFound(format!(
+            "the {at:?} of element {id:?} is not visible"
+        )));
+    }
+    Ok(position)
+}
+
 pub(crate) fn press(window: &mut Window, key: &str, cx: &mut App) -> Result<(), OpError> {
     let key = kg_core::parse_key(key).map_err(|error| OpError::Invalid(error.to_string()))?;
     render_frame(window, cx);
@@ -162,6 +235,14 @@ fn locate(
     id: &ElementId,
     within: Option<&ElementId>,
 ) -> Result<Point<Pixels>, OpError> {
+    Ok(located(window, id, within)?.clipped().center())
+}
+
+fn located(
+    window: &Window,
+    id: &ElementId,
+    within: Option<&ElementId>,
+) -> Result<crate::ui_registry::ElementSnapshot, OpError> {
     let target = match crate::ui_registry::locate(window, id, within) {
         crate::ui_registry::Located::Missing => {
             return Err(OpError::NotFound(format!(
@@ -180,7 +261,7 @@ fn locate(
     if !target.visible() {
         return Err(OpError::NotFound(format!("element {id:?} is not visible")));
     }
-    Ok(target.clipped().center())
+    Ok(target)
 }
 
 pub(crate) fn click_at(window: &mut Window, position: Point<Pixels>, cx: &mut App) {

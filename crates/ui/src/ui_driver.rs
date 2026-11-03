@@ -153,6 +153,8 @@ fn window_index(job: &UiJob) -> u32 {
         | UiJob::Type { window, .. }
         | UiJob::Key { window, .. }
         | UiJob::Scroll { window, .. }
+        | UiJob::Drag { window, .. }
+        | UiJob::Drop { window }
         | UiJob::Screenshot { window, .. } => *window,
         UiJob::Surface(_) | UiJob::NewTheme { .. } => 0,
     }
@@ -198,6 +200,32 @@ fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<Op
             let element_id = ElementId::from(element_id);
             let within = within.map(ElementId::from);
             crate::ui_dispatch::scroll_within(window, &element_id, within.as_ref(), delta, cx)?;
+            Ok(OpResult::Done)
+        }
+        UiJob::Drag {
+            from,
+            to,
+            at,
+            within,
+            hold,
+            ..
+        } => {
+            let within = within.map(ElementId::from);
+            crate::ui_dispatch::drag_within(
+                window,
+                &ElementId::from(from),
+                &ElementId::from(to),
+                within.as_ref(),
+                at,
+                hold,
+                cx,
+            )?;
+            flush(window, cx);
+            Ok(OpResult::Done)
+        }
+        UiJob::Drop { .. } => {
+            crate::ui_dispatch::drop_held(window, cx)?;
+            flush(window, cx);
             Ok(OpResult::Done)
         }
         UiJob::Surface(_) | UiJob::Screenshot { .. } | UiJob::NewTheme { .. } => {

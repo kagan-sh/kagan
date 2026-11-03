@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use gpui_kit::{App, AsyncApp, Task, WeakEntity};
-use kg_domain::{OpError, OpResult, SurfaceOp, UI_UNAVAILABLE, UiOp};
+use kg_domain::{DropSide, OpError, OpResult, SurfaceOp, UI_UNAVAILABLE, UiOp};
 
 use crate::Workspace;
 use crate::database::Result;
@@ -31,6 +31,17 @@ pub enum UiJob {
         element_id: String,
         within: Option<String>,
         dy: f32,
+    },
+    Drag {
+        window: u32,
+        from: String,
+        to: String,
+        at: DropSide,
+        within: Option<String>,
+        hold: bool,
+    },
+    Drop {
+        window: u32,
     },
     Screenshot {
         window: u32,
@@ -74,6 +85,22 @@ pub(crate) async fn run(
             within,
             dy,
         },
+        UiOp::Drag {
+            from,
+            to,
+            at,
+            within,
+            hold,
+            window,
+        } => UiJob::Drag {
+            window,
+            from,
+            to,
+            at,
+            within,
+            hold,
+        },
+        UiOp::Drop { window } => UiJob::Drop { window },
         UiOp::Screenshot { path, window } => UiJob::Screenshot { window, path },
     };
     drive(this, job, cx).await

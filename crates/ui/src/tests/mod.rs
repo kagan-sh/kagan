@@ -3,6 +3,7 @@ mod brand;
 mod commands;
 #[cfg(unix)]
 mod details;
+mod drag;
 mod identities;
 mod kagan;
 #[cfg(unix)]
