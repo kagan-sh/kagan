@@ -2596,7 +2596,7 @@ async fn a_quit_while_a_plain_title_settles_does_not_end_the_turn(cx: &mut TestA
 
 #[cfg(unix)]
 async fn finish_quit(cx: &mut TestAppContext, id: &ThreadId, quitting: gpui_kit::Task<Result<()>>) {
-    // Cap clock advance under stop_for_quit's 3s deadline; past that it fails with
+    // stop_for_quit's test-clock deadline is 3s; past that it fails with
     // "timed out stopping programs" while a slow kill is still finishing.
     let wall = std::time::Instant::now() + std::time::Duration::from_secs(2);
     let mut advanced = std::time::Duration::ZERO;

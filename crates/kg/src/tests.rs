@@ -273,8 +273,8 @@ fn test_name(label: &str) -> Name<'static> {
 fn socket_dir_is_private_and_stale_socket_is_replaced() {
     use std::os::unix::fs::PermissionsExt;
 
-    // TempDir so a leftover kg.sock cannot collide after the OS recycles the pid;
-    // bind would then fail with EADDRINUSE.
+    // Unique TempDir: a pid-keyed path can collide with a leftover kg.sock after
+    // the OS recycles the pid, and bind then fails with EADDRINUSE.
     let dir = tempfile::tempdir().unwrap();
     std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     let sock = dir.path().join("kg.sock");
