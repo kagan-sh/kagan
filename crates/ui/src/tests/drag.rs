@@ -148,6 +148,12 @@ fn a_held_drag_shows_its_state_and_kg_ui_drop_finishes_it(cx: &mut TestAppContex
         label(cx, window, "board-log"),
         "drag:started|card-a|card-b:bottom"
     );
+    assert_eq!(
+        ui(cx, drag("done", DropSide::Middle, false)),
+        Err(OpError::Invalid(
+            "a drag is held; finish it with kg ui drop or cancel it with kg ui key escape".into()
+        ))
+    );
 
     assert_eq!(ui(cx, UiOp::Drop { window: 0 }), Ok(OpResult::Done));
     assert_eq!(

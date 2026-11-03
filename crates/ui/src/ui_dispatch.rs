@@ -104,6 +104,11 @@ pub(crate) fn drag_within(
     hold: bool,
     cx: &mut App,
 ) -> Result<(), OpError> {
+    if cx.has_active_drag() {
+        return Err(OpError::Invalid(
+            "a drag is held; finish it with kg ui drop or cancel it with kg ui key escape".into(),
+        ));
+    }
     bring_into_view(window, from, within, cx);
     let start = locate(window, from, within)?;
     spot(window, to, within, at)?;
