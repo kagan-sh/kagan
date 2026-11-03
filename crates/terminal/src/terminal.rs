@@ -528,7 +528,13 @@ impl Drop for PtyWriter {
 fn close_writer_fd(fd: RawFd, closed: &AtomicBool) {
     if !closed.swap(true, Ordering::AcqRel) {
         // SAFETY: we own fd and closed was false, so PtyWriter has not dropped it.
+        // O_NONBLOCK first: on Linux close can wait behind a full-pty write_all.
+        // The flag is per open file description, so the reader may see WouldBlock.
         unsafe {
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            if flags != -1 {
+                let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            }
             let _ = libc::close(fd);
         }
     }
@@ -556,11 +562,24 @@ fn thread_read(
     std::thread::spawn(move || {
         let mut buf = [0_u8; 8192];
         // Keep reading until the pty closes: stopping early leaves the host's last frame unread.
-        while let Ok(n @ 1..) = reader.read(&mut buf) {
-            // The reply is sent after the lock is gone, so a client asking for a frame never waits on the pty.
-            let reply = shared.feed(&buf[..n]);
-            if !reply.is_empty() {
-                let _ = replies.send(Outgoing::Bytes(reply));
+        // finish may mark the open file non-blocking before close; WouldBlock is not EOF.
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    // The reply is sent after the lock is gone, so a client asking for a frame never waits on the pty.
+                    let reply = shared.feed(&buf[..n]);
+                    if !reply.is_empty() {
+                        let _ = replies.send(Outgoing::Bytes(reply));
+                    }
+                }
+                Err(error)
+                    if error.kind() == io::ErrorKind::WouldBlock
+                        || error.kind() == io::ErrorKind::Interrupted =>
+                {
+                    std::thread::sleep(Duration::from_micros(100));
+                }
+                Err(_) => break,
             }
         }
         #[cfg(test)]
