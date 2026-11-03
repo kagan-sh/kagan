@@ -21,9 +21,9 @@ kg-ui = { path = "crates/ui" }
 anyhow = "=1.0.104"
 async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
-gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "ba1e12269f1ded60e20dc599af096d314b810c94", features = ["tree-sitter-diff"] }
-gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "ba1e12269f1ded60e20dc599af096d314b810c94", default-features = false, features = ["quickjs", "components"] }
-gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "ba1e12269f1ded60e20dc599af096d314b810c94", default-features = false, features = ["gpui-fast"] }
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "c7584c02212658757adb4d12af9b19cce92de2e1", features = ["tree-sitter-diff"] }
+gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "c7584c02212658757adb4d12af9b19cce92de2e1", default-features = false, features = ["quickjs", "components"] }
+gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "c7584c02212658757adb4d12af9b19cce92de2e1", default-features = false, features = ["gpui-fast"] }
 interprocess = "=2.4.4"
 keyring-core = "=1.0.1"
 rusqlite = { version = "=0.40.2", features = ["bundled", "fallible_uint"] }
