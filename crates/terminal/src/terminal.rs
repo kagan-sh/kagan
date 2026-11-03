@@ -7,11 +7,6 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-#[cfg(unix)]
-use std::mem::ManuallyDrop;
-#[cfg(unix)]
-use std::os::fd::{FromRawFd, RawFd};
-
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use crate::screen::{Edit, MIN_COLS, SNAPSHOT_MAX, Screen, SelectMode};
@@ -62,11 +57,8 @@ pub struct Terminal {
     writer: Option<JoinHandle<()>>,
     shared: Shared,
     ended: Arc<AtomicBool>,
-    /// Writer fd closed from finish to unblock a full-pty `write_all`. Unix only.
-    #[cfg(unix)]
-    write_fd: RawFd,
-    #[cfg(unix)]
-    write_closed: Arc<AtomicBool>,
+    /// Finish sets this so a non-blocking write waiting on a full pty can exit.
+    write_stop: Arc<AtomicBool>,
     process_id: u32,
     epoch: Instant,
     observed: OnceLock<(Exit, Duration)>,
@@ -92,27 +84,19 @@ impl Terminal {
         let size = pty_size(cols, rows)?;
         let pair = native_pty_system().openpty(size).map_err(io_error)?;
         let reader = pair.master.try_clone_reader().map_err(io_error)?;
-        #[cfg(unix)]
-        let (writer, write_fd, write_closed) = {
-            let fd = pair
-                .master
-                .as_raw_fd()
-                .ok_or_else(|| io::Error::other("pty has no fd"))?;
-            // Own dup so finish can close this exact fd and unblock write_all.
-            // SAFETY: fd is the live master; dup returns a new descriptor we own.
-            let write_fd = unsafe { libc::dup(fd) };
-            if write_fd < 0 {
-                return Err(io::Error::last_os_error());
-            }
-            let write_closed = Arc::new(AtomicBool::new(false));
-            let writer: Box<dyn Write + Send> = Box::new(PtyWriter {
-                file: ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(write_fd) }),
-                closed: Arc::clone(&write_closed),
-            });
-            (writer, write_fd, write_closed)
-        };
-        #[cfg(not(unix))]
         let writer = pair.master.take_writer().map_err(io_error)?;
+        // take_writer clones the master fd. Non-blocking writes let finish cancel a
+        // checked send that filled the buffer, instead of hanging in write_all.
+        #[cfg(unix)]
+        if let Some(fd) = pair.master.as_raw_fd() {
+            // SAFETY: fd is the live pty master; O_NONBLOCK is per open file description.
+            unsafe {
+                let flags = libc::fcntl(fd, libc::F_GETFL);
+                if flags != -1 {
+                    let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                }
+            }
+        }
         let mut command = CommandBuilder::new(launch.program);
         command.args(launch.args);
         if let Some(cwd) = launch.cwd {
@@ -152,6 +136,7 @@ impl Terminal {
             publish_gate: Arc::default(),
         };
         let ended = Arc::new(AtomicBool::new(false));
+        let write_stop = Arc::new(AtomicBool::new(false));
         #[cfg(test)]
         let fail_write = Arc::new(AtomicBool::new(false));
         let (input, queued) = mpsc::channel();
@@ -166,6 +151,7 @@ impl Terminal {
             writer: Some(thread_write(
                 writer,
                 queued,
+                Arc::clone(&write_stop),
                 #[cfg(test)]
                 Arc::clone(&fail_write),
             )),
@@ -173,10 +159,7 @@ impl Terminal {
             child: Mutex::new(Some(child)),
             shared,
             ended,
-            #[cfg(unix)]
-            write_fd,
-            #[cfg(unix)]
-            write_closed,
+            write_stop,
             process_id,
             epoch: Instant::now(),
             observed: OnceLock::new(),
@@ -486,57 +469,8 @@ impl Terminal {
             writer: self.writer.take(),
             reader: self.reader.take(),
             shared: self.shared.clone(),
-            #[cfg(unix)]
-            write_fd: self.write_fd,
-            #[cfg(unix)]
-            write_closed: Arc::clone(&self.write_closed),
+            write_stop: Arc::clone(&self.write_stop),
         })
-    }
-}
-
-/// Writer whose fd finish can close to unblock a stuck `write_all`.
-#[cfg(unix)]
-struct PtyWriter {
-    file: ManuallyDrop<std::fs::File>,
-    closed: Arc<AtomicBool>,
-}
-
-#[cfg(unix)]
-impl Write for PtyWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        (&*self.file).write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        (&*self.file).flush()
-    }
-}
-
-#[cfg(unix)]
-impl Drop for PtyWriter {
-    fn drop(&mut self) {
-        if !self.closed.swap(true, Ordering::AcqRel) {
-            // SAFETY: closed was false, so finish has not closed this fd.
-            unsafe {
-                drop(ManuallyDrop::take(&mut self.file));
-            }
-        }
-    }
-}
-
-#[cfg(unix)]
-fn close_writer_fd(fd: RawFd, closed: &AtomicBool) {
-    if !closed.swap(true, Ordering::AcqRel) {
-        // SAFETY: we own fd and closed was false, so PtyWriter has not dropped it.
-        // O_NONBLOCK first: on Linux close can wait behind a full-pty write_all.
-        // The flag is per open file description, so the reader may see WouldBlock.
-        unsafe {
-            let flags = libc::fcntl(fd, libc::F_GETFL);
-            if flags != -1 {
-                let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            }
-            let _ = libc::close(fd);
-        }
     }
 }
 
@@ -562,7 +496,7 @@ fn thread_read(
     std::thread::spawn(move || {
         let mut buf = [0_u8; 8192];
         // Keep reading until the pty closes: stopping early leaves the host's last frame unread.
-        // finish may mark the open file non-blocking before close; WouldBlock is not EOF.
+        // The master is non-blocking so a full-buffer write can be cancelled; WouldBlock is not EOF.
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
@@ -593,6 +527,7 @@ fn thread_read(
 fn thread_write(
     mut writer: Box<dyn Write + Send>,
     queued: mpsc::Receiver<Outgoing>,
+    write_stop: Arc<AtomicBool>,
     #[cfg(test)] fail_write: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
@@ -608,11 +543,11 @@ fn thread_write(
                 if fail_write.swap(false, Ordering::AcqRel) {
                     Err(io::Error::other("write failed"))
                 } else {
-                    writer.write_all(&bytes).and_then(|()| writer.flush())
+                    write_bytes(&mut writer, &bytes, &write_stop)
                 }
                 #[cfg(not(test))]
                 {
-                    writer.write_all(&bytes).and_then(|()| writer.flush())
+                    write_bytes(&mut writer, &bytes, &write_stop)
                 }
             };
             if let Some(done) = done {
@@ -626,6 +561,54 @@ fn thread_write(
             }
         }
     })
+}
+
+fn write_bytes(writer: &mut dyn Write, bytes: &[u8], write_stop: &AtomicBool) -> io::Result<()> {
+    #[cfg(not(unix))]
+    {
+        let _ = write_stop;
+        return writer.write_all(bytes).and_then(|()| writer.flush());
+    }
+    #[cfg(unix)]
+    {
+        let mut offset = 0;
+        while offset < bytes.len() {
+            if write_stop.load(Ordering::Acquire) {
+                return Err(io::Error::other("terminal is closed"));
+            }
+            match writer.write(&bytes[offset..]) {
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "terminal is closed",
+                    ));
+                }
+                Ok(n) => offset += n,
+                Err(error)
+                    if error.kind() == io::ErrorKind::WouldBlock
+                        || error.kind() == io::ErrorKind::Interrupted =>
+                {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        loop {
+            if write_stop.load(Ordering::Acquire) {
+                return Err(io::Error::other("terminal is closed"));
+            }
+            match writer.flush() {
+                Ok(()) => return Ok(()),
+                Err(error)
+                    if error.kind() == io::ErrorKind::WouldBlock
+                        || error.kind() == io::ErrorKind::Interrupted =>
+                {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
 }
 
 fn pty_size(cols: u16, rows: u16) -> io::Result<PtySize> {

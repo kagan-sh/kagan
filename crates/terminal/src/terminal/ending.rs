@@ -3,9 +3,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
-#[cfg(unix)]
-use std::os::fd::RawFd;
-
 use portable_pty::{Child, MasterPty};
 
 use super::{Outgoing, Shared, lock};
@@ -17,10 +14,7 @@ pub(super) struct Ending {
     pub(super) writer: Option<JoinHandle<()>>,
     pub(super) reader: Option<JoinHandle<()>>,
     pub(super) shared: Shared,
-    #[cfg(unix)]
-    pub(super) write_fd: RawFd,
-    #[cfg(unix)]
-    pub(super) write_closed: Arc<AtomicBool>,
+    pub(super) write_stop: Arc<AtomicBool>,
 }
 
 impl Ending {
@@ -34,10 +28,9 @@ impl Ending {
         // can drain the final frame while the console closes.
         #[cfg(windows)]
         let _ = self.input.send(Outgoing::Bytes(b"\x1b[1;1R".to_vec()));
-        // A checked write stuck on a full pty never reaches the close message.
-        // Closing that writer fd unblocks write_all so we can join.
-        #[cfg(unix)]
-        super::close_writer_fd(self.write_fd, &self.write_closed);
+        // A checked write waiting on a full pty must stop before we join. The
+        // writer polls write_stop between non-blocking writes on Unix.
+        self.write_stop.store(true, Ordering::Release);
         let _ = self.input.send(Outgoing::Bytes(Vec::new()));
         if let Some(writer) = self.writer.take() {
             let _ = writer.join();
