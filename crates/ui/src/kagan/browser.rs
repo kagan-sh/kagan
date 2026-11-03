@@ -15,12 +15,12 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use gpui_webview::WebView;
+use crate::page::Page;
 
 pub(super) struct Browser {
     address: Entity<InputState>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    page: Option<Entity<WebView>>,
+    page: Option<Entity<Page>>,
     note: Option<String>,
     _enter: Subscription,
 }
@@ -46,7 +46,7 @@ impl Browser {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn open(&mut self, url: &url::Url, window: &mut Window, cx: &mut Context<Kagan>) {
         if let Some(page) = &self.page {
-            page.update(cx, |page, _| page.load_url(url.as_str()));
+            page.update(cx, |page, cx| page.load_url(url.as_str(), cx));
             return;
         }
         // Links and redirects inside the page are held to the same rule as the address field.
@@ -71,8 +71,14 @@ impl Browser {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn sync_page(&self, shown: bool, cx: &mut App) {
         let Some(page) = &self.page else { return };
-        if page.read(cx).visible() != shown {
-            page.update(cx, |page, _| if shown { page.show() } else { page.hide() });
+        if page.read(cx).visible(cx) != shown {
+            page.update(cx, |page, cx| {
+                if shown {
+                    page.show(cx);
+                } else {
+                    page.hide(cx);
+                }
+            });
         }
     }
 

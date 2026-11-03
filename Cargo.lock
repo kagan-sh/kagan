@@ -3331,7 +3331,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -3372,7 +3372,7 @@ dependencies = [
 [[package]]
 name = "gpui-component"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3424,7 +3424,7 @@ dependencies = [
 [[package]]
 name = "gpui-component-macros"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
@@ -3748,7 +3748,7 @@ dependencies = [
 [[package]]
 name = "gpui-fps"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "core-graphics 0.24.0",
  "gpui-fast",
@@ -3766,7 +3766,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "gpui-base",
  "gpui-component",
@@ -3783,7 +3783,7 @@ dependencies = [
 [[package]]
 name = "gpui-kit-assets"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "anyhow",
  "gpui-fast",
@@ -4302,7 +4302,7 @@ checksum = "e0f9dae92b9bc15baa6e530c90bdd4c689d3710bd4d18c3566deb1d6ae182daf"
 [[package]]
 name = "gpui-shell"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -4344,7 +4344,7 @@ dependencies = [
 [[package]]
 name = "gpui-webview"
 version = "0.8.1"
-source = "git+https://github.com/kagan-sh/gpui-kit?rev=defde0c1a3a636e4e014c755ff4e5ef727766fa1#defde0c1a3a636e4e014c755ff4e5ef727766fa1"
+source = "git+https://github.com/kagan-sh/gpui-kit?rev=e4d42b15539f1beb24370e0ca03b4a97636dc651#e4d42b15539f1beb24370e0ca03b4a97636dc651"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -4354,6 +4354,7 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
+ "windows 0.61.3",
  "windows 0.62.2",
 ]
 
@@ -5552,7 +5553,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 [[package]]
 name = "lb-wry"
 version = "0.53.3"
-source = "git+https://github.com/kagan-sh/wry?rev=47f60fcd532df1230d8d24bf8498f3a892033788#47f60fcd532df1230d8d24bf8498f3a892033788"
+source = "git+https://github.com/kagan-sh/wry?rev=b79084256e25ff59b5157b94ea9e02b6754a574b#b79084256e25ff59b5157b94ea9e02b6754a574b"
 dependencies = [
  "base64 0.22.1",
  "block2 0.6.2",

@@ -148,7 +148,7 @@ impl ComponentMaterializer for WebView {
 struct Shown {
     note: Option<String>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    page: Option<Entity<gpui_webview::WebView>>,
+    page: Option<Entity<crate::page::Page>>,
 }
 
 fn frame(
@@ -307,7 +307,7 @@ fn noted(reason: &str) -> Shown {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn page_shown(page: Entity<gpui_webview::WebView>) -> Shown {
+fn page_shown(page: Entity<crate::page::Page>) -> Shown {
     Shown {
         note: None,
         page: Some(page),
@@ -345,7 +345,7 @@ fn open_owned(
         } else if saved_hosts == hosts
             && let Some(page) = page.clone()
         {
-            page.update(cx, |page, _| page.load_url(url));
+            page.update(cx, |page, cx| page.load_url(url, cx));
             reveal(&page, cx);
             write_page(cx, index, url, page.clone());
             return page_shown(page);
@@ -377,7 +377,7 @@ fn build(
     hosts: &[String],
     window: &mut Window,
     cx: &mut App,
-) -> Result<Entity<gpui_webview::WebView>, String> {
+) -> Result<Entity<crate::page::Page>, String> {
     let hosts = hosts.to_vec();
     let url = url.to_owned();
     crate::page::open(window, cx, move |builder| {
@@ -389,16 +389,16 @@ fn build(
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn reveal(page: &Entity<gpui_webview::WebView>, cx: &mut App) {
-    if !page.read(cx).visible() {
-        page.update(cx, |page, _| page.show());
+fn reveal(page: &Entity<crate::page::Page>, cx: &mut App) {
+    if !page.read(cx).visible(cx) {
+        page.update(cx, |page, cx| page.show(cx));
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn conceal(page: &Entity<gpui_webview::WebView>, cx: &mut App) {
-    if page.read(cx).visible() {
-        page.update(cx, |page, _| page.hide());
+fn conceal(page: &Entity<crate::page::Page>, cx: &mut App) {
+    if page.read(cx).visible(cx) {
+        page.update(cx, |page, cx| page.hide(cx));
     }
 }
 
@@ -420,7 +420,7 @@ fn write(cx: &mut App, index: usize, url: &str, note: Option<String>) {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn write_page(cx: &mut App, index: usize, url: &str, page: Entity<gpui_webview::WebView>) {
+fn write_page(cx: &mut App, index: usize, url: &str, page: Entity<crate::page::Page>) {
     let slot = &mut cx.default_global::<Pages>().pages[index];
     url.clone_into(&mut slot.url);
     slot.note = None;
@@ -433,7 +433,7 @@ fn held(
     id: &str,
     url: &str,
     hosts: &[String],
-    page: Option<Entity<gpui_webview::WebView>>,
+    page: Option<Entity<crate::page::Page>>,
     note: Option<String>,
 ) -> Held {
     Held {
@@ -497,7 +497,7 @@ struct Held {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     hosts: Vec<String>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    page: Option<Entity<gpui_webview::WebView>>,
+    page: Option<Entity<crate::page::Page>>,
 }
 
 /// Hides a page whose panel is off screen, and drops one whose view is gone.
@@ -530,12 +530,12 @@ pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
         };
         for (page, dead, on) in views {
             let want = on && !dead;
-            if page.read(cx).visible() != want {
-                page.update(cx, |page, _| {
+            if page.read(cx).visible(cx) != want {
+                page.update(cx, |page, cx| {
                     if want {
-                        page.show();
+                        page.show(cx);
                     } else {
-                        page.hide();
+                        page.hide(cx);
                     }
                 });
             }
@@ -560,7 +560,7 @@ pub(crate) fn native_shown(cx: &App, id: &str) -> Option<bool> {
                 .pages
                 .iter()
                 .find(|page| page.id == id)
-                .and_then(|page| page.page.as_ref().map(|view| view.read(cx).visible()))
+                .and_then(|page| page.page.as_ref().map(|view| view.read(cx).visible(cx)))
         })
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
