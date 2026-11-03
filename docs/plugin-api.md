@@ -184,7 +184,15 @@ Plugins contribute **panels** (a View class the entry exports) placed `left`, `c
 - `KgInput` and `KgTextarea`: a text field. `new KgInput(state)` takes an `InputState`; `new KgTextarea(state)` takes a `TextareaState`. `aria_label(name)` is the accessible name, and `disabled(flag)` stops edits. With a name, `kg ui` finds the field, `kg ui click <name>` focuses it, and `kg ui type` writes into it. The snapshot states the name, the value, and focus. A masked value is eight dots. Without `aria_label`, the field is not a control. The shell's `Input` and `Textarea` stay as the shell draws them: kagan cannot wrap them (decision 55), so `kg ui` does not see them.
 - `WebView`: one page, placed as a panel's body. `new WebView(id)` takes one string id. `url(url)` loads that http or https address. The host must be `127.0.0.1` or `localhost`, or a host in this plugin's `powers.fetch`. Any other address is refused, and so is a navigation that leaves those hosts, with a sentence that says why. The element fills its parent. A right panel whose body is a `WebView` shows the page edge to edge, and only while that panel is on screen. On macOS the page is the same `gpui-webview` view as the Browser tab. Other systems show one sentence. It is not the Browser tab and has no address bar.
 
-**Not in v1:** script drag and drop (moves use menus and keys), pointer capture and pinch (a drag ends on hover-out; zoom by modifier-wheel and keys). Both are gpui-shell work, raised upstream.
+**Drag and drop** (decision 122). A `div`, `h_flex` or `v_flex` in a plugin view takes gpui-kit's drag calls. The payload is text, such as a ticket id or a thread id.
+
+- `on_drag(payload, (event, cx) => …)` makes the element a drag source. `event` is `{ payload, phase }`. `phase` is `started` once the pointer moves a few pixels with the button down, then `ended` after a drop, or `cancelled` after Escape or a release outside every target. A press and release without moving is still a click.
+- `on_drag_move((event, cx) => …)` on a target hears `{ payload, side }` when the drag enters it, moves between its top quarter, middle half and bottom quarter (`"top"`, `"middle"`, `"bottom"`), or leaves it. `side` is `null` once the pointer has left, and when the drag ends over it.
+- `on_drop((event, cx) => …)` hears `{ payload, side }` when the drag is released over the target.
+
+Only the innermost target under the pointer hears a drag, so a card wins over the column around it. A card that does not want a payload does the column's move in its own `on_drop`. The drag follows the pointer outside its source until the button is released. While it lasts, Escape belongs to the drag: it cancels, and the page under it stays open. Only the plugin that started a drag hears it; a release over another plugin's target cancels. Nothing is drawn under the pointer: paint the source as dragged from `started` until `ended` or `cancelled`, and a target as active while its `side` is not `null`. Scroll, click, text selection and `KgButton` work as before when nothing is dragged. An overlay may not use these calls. `kg ui snapshot` lists every drag source and drop target by its `id(...)`, and `kg ui drag` and `kg ui drop` drive them ([ui-driver.md](ui-driver.md)).
+
+**Not in v1:** pinch. gpui-shell's `on_pinch` reaches a plugin view, but kagan does not test or support it, and `kg ui` cannot drive it. Zoom by modifier-wheel and keys.
 
 Manifest form:
 
@@ -235,7 +243,7 @@ A `secret` setting (decision 104):
 ## Not in this API
 
 - HTTP routes, background cron, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it.
-- Global (app not in front) hotkeys and script drag and drop: after v1. kagan's own Browser tab shows a page on macOS (decision 117), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one local page with `WebView` (121), not a general browser.
+- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS (decision 117), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one local page with `WebView` (121), not a general browser.
 
 ## Measured by the spike
 

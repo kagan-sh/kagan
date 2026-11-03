@@ -908,12 +908,43 @@ pub enum UiOp {
         #[arg(long, default_value_t = 0)]
         window: u32,
     },
+    /// Press an element, drag it onto another, and release. `--at` picks the target's top quarter,
+    /// middle or bottom quarter. `--hold` keeps the button down: finish with `kg ui drop`, or cancel
+    /// with `kg ui key escape`
+    Drag {
+        from: String,
+        to: String,
+        #[arg(long, value_enum, default_value_t)]
+        at: DropSide,
+        /// Pick both elements inside the element with this id
+        #[arg(long)]
+        within: Option<String>,
+        #[arg(long)]
+        hold: bool,
+        #[arg(long, default_value_t = 0)]
+        window: u32,
+    },
+    /// Release a drag that `kg ui drag --hold` left held, where the pointer is
+    Drop {
+        #[arg(long, default_value_t = 0)]
+        window: u32,
+    },
     /// Save a PNG without focusing the window
     Screenshot {
         path: PathBuf,
         #[arg(long, default_value_t = 0)]
         window: u32,
     },
+}
+
+/// Where on a drop target `kg ui drag` lets go, as a plugin's drop handler reports it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum DropSide {
+    Top,
+    #[default]
+    Middle,
+    Bottom,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]

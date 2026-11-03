@@ -187,39 +187,31 @@ pub(crate) enum Located {
 
 /// The element with this id. With `within`, only elements inside an element with that id match.
 pub(crate) fn locate(window: &Window, id: &ElementId, within: Option<&ElementId>) -> Located {
-    REGISTRY.with(|registry| {
-        let registry = registry.borrow();
-        let Some(entries) = registry.get(&(std::sync::Arc::as_ptr(window.text_system()) as usize))
-        else {
-            return Located::Missing;
-        };
-        let matches: Vec<_> = entries
-            .values()
-            .filter_map(Weak::upgrade)
-            .filter(|entry| {
-                let Some((last, ancestors)) = entry.global_id.split_last() else {
-                    return false;
-                };
-                last == id && within.is_none_or(|within| ancestors.contains(within))
-            })
-            .collect();
-        match matches.as_slice() {
-            [] => Located::Missing,
-            [only] => Located::One(only.facts.borrow().clone()),
-            many => Located::Ambiguous(
-                many.iter()
-                    .map(|entry| {
-                        entry
-                            .global_id
-                            .iter()
-                            .map(|part| format!("{part:?}"))
-                            .collect::<Vec<_>>()
-                            .join(" > ")
-                    })
-                    .collect(),
-            ),
-        }
-    })
+    let matches: Vec<_> = snapshots(window)
+        .into_iter()
+        .filter(|element| {
+            let Some((last, ancestors)) = element.path.split_last() else {
+                return false;
+            };
+            last == id && within.is_none_or(|within| ancestors.contains(within))
+        })
+        .collect();
+    match matches.as_slice() {
+        [] => Located::Missing,
+        [only] => Located::One(only.clone()),
+        many => Located::Ambiguous(
+            many.iter()
+                .map(|element| {
+                    element
+                        .path
+                        .iter()
+                        .map(|part| format!("{part:?}"))
+                        .collect::<Vec<_>>()
+                        .join(" > ")
+                })
+                .collect(),
+        ),
+    }
 }
 
 /// The one element with this id, for the tests. Several matches are a test failure.
@@ -232,9 +224,11 @@ pub(crate) fn find(window: &Window, id: &ElementId) -> Option<ElementSnapshot> {
     }
 }
 
+/// Every observed element, then every drag source and drop target a plugin script drew. A script's
+/// element states no facts, so it is found by its id and bounds alone.
 #[doc(hidden)]
 pub(crate) fn snapshots(window: &Window) -> Vec<ElementSnapshot> {
-    REGISTRY.with(|registry| {
+    let mut elements: Vec<ElementSnapshot> = REGISTRY.with(|registry| {
         registry
             .borrow()
             .get(&(std::sync::Arc::as_ptr(window.text_system()) as usize))
@@ -246,7 +240,26 @@ pub(crate) fn snapshots(window: &Window) -> Vec<ElementSnapshot> {
                     .collect()
             })
             .unwrap_or_default()
-    })
+    });
+    elements.extend(
+        gpui_shell::drag_elements(window)
+            .into_iter()
+            .map(|element| ElementSnapshot {
+                role: None,
+                path: element.path,
+                value: None,
+                bounds: element.bounds,
+                clipped: element.clipped,
+                visible: element.clipped.size.width > px(0.)
+                    && element.clipped.size.height > px(0.),
+                focused: None,
+                disabled: None,
+                selected: None,
+                label: None,
+                hint: None,
+            }),
+    );
+    elements
 }
 
 /// Transparent forwarding element. Its registration is owned by GPUI element
