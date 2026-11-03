@@ -497,3 +497,7 @@ Rules out: a plugin-only gesture dialect, a browser `DataTransfer`, and files dr
 Why: a plugin can tell that a reply started or finished without reading the terminal.
 Cost: one log row when a spinner appears, and one when that turn closes, on the path that already writes `waiting`.
 Rules out: a turn from keystrokes, a `message` or `tool` event from the screen, a turn end when kagan quits, and a working mark that is not the first character. U+23F3 after a plain prefix does not open a turn.
+
+**124. A data directory brings its own socket.** When `KG_DATA_DIR` is set and `KG_SOCKET` is not, the socket follows that folder. On macOS and Linux it is `<KG_DATA_DIR>/kg.sock`. If that path does not fit in a local-socket address (103 bytes on macOS, 107 on Linux, leaving room for the trailing NUL), the socket is `/tmp/kagan-<id>/kg.sock`, where `<id>` is derived from the data directory path. On Windows the pipe is `kagan-<id>` from that path. `KG_SOCKET` still overrides. With both unset, the socket stays the platform default.
+Why: a command that set only `KG_DATA_DIR` attached to the person's real app, or started a headless app on the real socket, while the data went to the other folder. Asking where the socket is does not create that folder; the app creates it when it listens.
+Rules out: falling back to the default socket when `KG_DATA_DIR` is set.

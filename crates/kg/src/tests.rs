@@ -395,6 +395,101 @@ fn a_socket_that_appears_is_accepted_and_a_missed_deadline_is_not() {
     drop(ready.join().unwrap());
 }
 
+struct EnvVar {
+    key: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+fn set_env(key: &'static str, value: &std::ffi::OsStr) -> EnvVar {
+    let previous = std::env::var_os(key);
+    unsafe { std::env::set_var(key, value) };
+    EnvVar { key, previous }
+}
+
+fn unset_env(key: &'static str) -> EnvVar {
+    let previous = std::env::var_os(key);
+    unsafe { std::env::remove_var(key) };
+    EnvVar { key, previous }
+}
+
+impl Drop for EnvVar {
+    fn drop(&mut self) {
+        unsafe {
+            match self.previous.take() {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+}
+
+#[test]
+fn a_data_dir_without_a_socket_keeps_its_own_socket() {
+    let data = test_dir("data-socket");
+    let _data = set_env("KG_DATA_DIR", data.as_os_str());
+    let _socket = unset_env("KG_SOCKET");
+    let located = socket::location().unwrap_or_else(|error| panic!("{error}"));
+    #[cfg(unix)]
+    {
+        assert_eq!(located, data.join("kg.sock").into_os_string());
+        assert!(!data.exists());
+    }
+    #[cfg(windows)]
+    {
+        let text = located.to_string_lossy();
+        assert_eq!(text.len(), "kagan-".len() + 16);
+        assert!(text.starts_with("kagan-"));
+        let user = std::env::var("USERNAME").unwrap_or_default();
+        assert_ne!(located, std::ffi::OsString::from(format!("kagan-{user}")));
+    }
+}
+
+#[test]
+fn an_explicit_socket_wins_over_the_data_dir() {
+    let data = test_dir("data-socket-explicit");
+    let _data = set_env("KG_DATA_DIR", data.as_os_str());
+    let chosen = if cfg!(unix) {
+        std::ffi::OsString::from("/tmp/kagan-explicit.sock")
+    } else {
+        std::ffi::OsString::from("kagan-explicit")
+    };
+    let _socket = set_env("KG_SOCKET", &chosen);
+    let located = socket::location().unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(located, chosen);
+    #[cfg(unix)]
+    assert!(!data.join("kg.sock").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_data_dir_path_that_does_not_fit_uses_a_short_socket() {
+    let first = std::path::PathBuf::from(format!("/tmp/{}", "a".repeat(180)));
+    let second = std::path::PathBuf::from(format!("/tmp/{}", "b".repeat(180)));
+    assert!(first.join("kg.sock").as_os_str().len() > 103);
+
+    let _data = set_env("KG_DATA_DIR", first.as_os_str());
+    let _socket = unset_env("KG_SOCKET");
+    let located = socket::location().unwrap_or_else(|error| panic!("{error}"));
+    let path = std::path::PathBuf::from(&located);
+    let text = located.to_string_lossy();
+    assert!(text.starts_with("/tmp/kagan-"), "{text}");
+    assert!(path.ends_with("kg.sock"));
+    assert!(path.as_os_str().len() <= 103);
+    assert_ne!(path, first.join("kg.sock"));
+    assert!(!text.contains("Application Support"));
+
+    let _other_data = set_env("KG_DATA_DIR", second.as_os_str());
+    let other = socket::location().unwrap_or_else(|error| panic!("{error}"));
+    assert_ne!(other, located);
+
+    let _ = std::fs::remove_dir_all(path.parent().expect("short socket has a directory"));
+    let _ = std::fs::remove_dir_all(
+        std::path::Path::new(&other)
+            .parent()
+            .expect("short socket has a directory"),
+    );
+}
+
 #[cfg(unix)]
 struct SocketVar(Option<std::ffi::OsString>);
 

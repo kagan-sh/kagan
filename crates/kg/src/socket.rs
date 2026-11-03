@@ -14,15 +14,47 @@ use serde::Deserialize;
 
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Where the socket is: `KG_SOCKET` when the app that started this process set it, else the
-/// default place for this user.
+/// `sockaddr_un.sun_path` holds the path and a trailing NUL. Linux gives the path 108 bytes;
+/// macOS gives it 104.
+#[cfg(unix)]
+const SOCKET_PATH_MAX: usize = if cfg!(target_os = "linux") { 107 } else { 103 };
+
+fn non_empty(key: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(key).filter(|value| !value.is_empty())
+}
+
+fn socket_id(bytes: &[u8]) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+#[cfg(unix)]
+fn os_bytes(value: &std::ffi::OsStr) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    value.as_bytes().to_vec()
+}
+
+#[cfg(windows)]
+fn os_bytes(value: &std::ffi::OsStr) -> Vec<u8> {
+    use std::os::windows::ffi::OsStrExt;
+    value.encode_wide().flat_map(u16::to_le_bytes).collect()
+}
+
+/// Where the socket is: `KG_SOCKET` when set, else beside `KG_DATA_DIR` when that is set, else
+/// the default place for this user.
 #[cfg(unix)]
 pub(crate) fn location() -> io::Result<std::ffi::OsString> {
     use std::path::PathBuf;
 
-    let non_empty = |key| std::env::var_os(key).filter(|value| !value.is_empty());
     if let Some(socket) = non_empty("KG_SOCKET") {
         return Ok(socket);
+    }
+    if let Some(data) = non_empty("KG_DATA_DIR") {
+        return Ok(socket_beside(&PathBuf::from(data)));
     }
     let dir = if let Some(runtime) = non_empty("XDG_RUNTIME_DIR") {
         PathBuf::from(runtime).join("kagan")
@@ -42,16 +74,38 @@ pub(crate) fn location() -> io::Result<std::ffi::OsString> {
 }
 
 #[cfg(unix)]
-pub(crate) fn location_in(dir: &std::path::Path) -> io::Result<std::ffi::OsString> {
+fn socket_beside(dir: &std::path::Path) -> std::ffi::OsString {
+    let direct = dir.join("kg.sock");
+    if direct.as_os_str().len() <= SOCKET_PATH_MAX {
+        return direct.into_os_string();
+    }
+    let id = socket_id(&os_bytes(dir.as_os_str()));
+    format!("/tmp/kagan-{id}/kg.sock").into()
+}
+
+#[cfg(unix)]
+pub(crate) fn ensure_directory(dir: &std::path::Path) -> io::Result<()> {
     use std::{
         fs,
         os::unix::fs::{DirBuilderExt, PermissionsExt},
     };
 
+    if dir.is_dir() {
+        return Ok(());
+    }
     fs::DirBuilder::new()
         .recursive(true)
         .mode(0o700)
         .create(dir)?;
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub(crate) fn location_in(dir: &std::path::Path) -> io::Result<std::ffi::OsString> {
+    use std::{fs, os::unix::fs::PermissionsExt};
+
+    ensure_directory(dir)?;
     fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
     Ok(dir.join("kg.sock").into_os_string())
 }
@@ -67,8 +121,11 @@ pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
 
 #[cfg(windows)]
 pub(crate) fn location() -> io::Result<std::ffi::OsString> {
-    if let Some(socket) = std::env::var_os("KG_SOCKET").filter(|value| !value.is_empty()) {
+    if let Some(socket) = non_empty("KG_SOCKET") {
         return Ok(socket);
+    }
+    if let Some(data) = non_empty("KG_DATA_DIR") {
+        return Ok(format!("kagan-{}", socket_id(&os_bytes(&data))).into());
     }
     let user = std::env::var("USERNAME").unwrap_or_default();
     Ok(format!("kagan-{user}").into())

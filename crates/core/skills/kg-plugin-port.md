@@ -30,7 +30,7 @@ kagan runs one script. `kagan.json` declares every contribution. The person appr
 
 6. **Check.** `kg plugin check <path>` reads the manifest and the entry the same way install does. Fix every error. A warning about `Button` means switch that control to `KgButton`. Run `kg plugin types <path>` again after you call something new.
 
-7. **Install and try it.** `kg plugin install <path>` waits until the person approves the powers. Do not approve it yourself. Then `kg plugin dev <path>`. Try each kind you declared: `kg plugin command <id> <cmd>`, `kg <cli> <sub> …`, and a tool from inside a thread. Read `kg plugin logs <id>`. A trial that must not touch the person's app sets `KG_DATA_DIR` and `KG_SOCKET` to a new temp directory first, and stops the headless process it started when the trial is done.
+7. **Install and try it.** `kg plugin install <path>` waits until the person approves the powers. Do not approve it yourself. Then `kg plugin dev <path>`. Try each kind you declared: `kg plugin command <id> <cmd>`, `kg <cli> <sub> …`, and a tool from inside a thread. Read `kg plugin logs <id>`. A trial that must not touch the person's app sets `KG_DATA_DIR` to a new temp directory. The socket follows that folder unless `KG_SOCKET` is set. Stop the headless process the trial started when it is done.
 
 8. **Report** the checklist at the end, filled in.
 
