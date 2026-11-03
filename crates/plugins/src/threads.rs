@@ -11,6 +11,9 @@ use serde_json::{Value, json};
 use crate::Agents;
 use crate::area::{from_host, to_host};
 
+/// Must match the 256 KiB ceiling published for `threads.output`.
+pub(crate) const OUTPUT_CAP: usize = 256 * 1024;
+
 pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
     let mut module = HostModule::new("kagan/threads");
     let methods = [
@@ -49,6 +52,7 @@ pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
     let owner = plugin.clone();
     module = module.async_function("spawn", move |args| dispatch(spawn_thread(args, &owner)?));
     module = module.async_function("answer", answer_question);
+    module = module.async_function("output", read_output);
     module = module.async_function("changes", |args| dispatch(shown_diff(args, None)?));
     module = module.async_function("diff", |args| {
         dispatch(shown_diff(args, Some(args.string(2)?.to_owned()))?)
@@ -84,6 +88,26 @@ fn operation(name: &str, args: &HostArguments, plugin: &PluginId) -> Result<Op, 
 
 fn thread_by_id(name: &str, args: &HostArguments) -> Result<Op, HostError> {
     as_thread(json!({ name: { "id": args.string(0)? } }))
+}
+
+fn read_output(
+    args: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let id = ThreadId(args.string(0)?.to_owned());
+    let receive = gpui_shell::with_current_app(|cx| {
+        let (sender, receive) = async_channel::bounded(1);
+        let task = Workspace::thread_output(&id, OUTPUT_CAP, cx);
+        cx.spawn(async move |_| {
+            let _ = sender.send(task.await).await;
+        })
+        .detach();
+        receive
+    })
+    .ok_or_else(|| HostError::new("no kagan app context"))?;
+    Ok(async move {
+        let text = receive.recv().await.map_err(error)?.map_err(error)?;
+        Ok(to_host(json!({ "output": text })))
+    })
 }
 
 fn as_thread(value: Value) -> Result<Op, HostError> {
@@ -427,6 +451,18 @@ mod tests {
         .unwrap();
         assert!(
             matches!(op, kg_domain::Op::Thread(kg_domain::ThreadOp::Rename { id, title }) if id.0 == "thr_1" && title == "Notes")
+        );
+    }
+
+    #[test]
+    fn output_is_not_an_operation() {
+        let plugin = PluginId("dev.test".into());
+        let output = operation("output", &HostArguments::new(Vec::new()), &plugin).unwrap_err();
+        assert!(
+            output
+                .to_string()
+                .contains("unknown threads function output"),
+            "{output}"
         );
     }
 }

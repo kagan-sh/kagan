@@ -17,7 +17,7 @@ The data folder holds:
 
 - Your projects, threads, and history.
 - The git worktrees and Personal folders.
-- Installed skills, your themes, and plugin data.
+- Installed skills, your themes, and plugin data. A plugin script reads its own folder there as `process.dataDir`.
 
 kagan saves each thread's last terminal text without encryption. A password or token that you paste can stay on disk. Delete the thread to remove its text.
 

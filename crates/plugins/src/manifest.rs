@@ -274,7 +274,7 @@ impl Area {
             Self::Threads => (
                 "threads",
                 "Threads",
-                "reads, starts and changes your threads, and reads their changed files",
+                "reads, starts and changes your threads, reads their screen text, and reads their changed files",
             ),
             Self::Database => ("database", "Database", "keeps its own database"),
             Self::Process => (
@@ -496,6 +496,9 @@ impl Manifest {
                 || !command_ids.insert(&command.id)
             {
                 return Err("commands need unique nonempty ids and titles".into());
+            }
+            if command.header && command.when != crate::commands::CommandWhen::Thread {
+                return Err("a header command needs when thread".into());
             }
             if let Some(key) = &command.key {
                 crate::commands::checked_key(key).map_err(|error| error.to_string())?;
