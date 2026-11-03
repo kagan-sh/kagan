@@ -1581,7 +1581,7 @@ const fn platform_note(_note: &str) -> bool {
 }
 
 #[cfg(not(target_os = "macos"))]
-const fn platform_note(note: &str) -> bool {
+fn platform_note(note: &str) -> bool {
     note == crate::components::ONLY_MACOS
 }
 
