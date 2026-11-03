@@ -237,18 +237,114 @@ fn an_ask_with_fields_opens_a_popup_that_escape_dismisses(cx: &mut TestAppContex
             cx,
         )
     });
-    let OpResult::Text(_) = cx.foreground_executor().block_test(ask).unwrap() else {
+    let OpResult::Text(interaction) = cx.foreground_executor().block_test(ask).unwrap() else {
         panic!("ask");
     };
     cx.run_until_parked();
     wait_until(cx, |cx| shows(cx, window, "ask-popup"));
     assert!(shows(cx, window, "ask-popup"));
+    assert!(
+        shows(cx, window, &format!("ask-field-{interaction}-notify")),
+        "the popup states its fields for kg ui"
+    );
     press_key(cx, window, "escape");
     wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
     wait_until(cx, |cx| {
         cx.update(|cx| kagan.read(cx).question_titles(cx)) == ["Ship it?"]
     });
     assert!(!shows(cx, window, "ask-popup"));
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("question-{interaction}"))
+    });
+    wait_until(cx, |cx| focused_of(cx, window, "terminal") == Some(true));
+}
+
+#[gpui_kit::test]
+fn answering_an_ask_form_restores_terminal_focus(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let ask = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Ask {
+                id: id.clone(),
+                title: "Ship it?".into(),
+                options: vec![
+                    InteractionOption {
+                        id: "yes".into(),
+                        label: "Yes".into(),
+                    },
+                    InteractionOption {
+                        id: "no".into(),
+                        label: "No".into(),
+                    },
+                ],
+                fields: Some(vec![AskField::Number {
+                    id: "retries".into(),
+                    label: "Retries".into(),
+                    default: Some(1),
+                }]),
+            }),
+            cx,
+        )
+    });
+    let OpResult::Text(interaction) = cx.foreground_executor().block_test(ask).unwrap() else {
+        panic!("ask");
+    };
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    click(cx, window, &format!("answer-{interaction}-yes"));
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    wait_until(cx, |cx| focused_of(cx, window, "terminal") == Some(true));
+}
+
+#[gpui_kit::test]
+fn a_bad_number_in_the_ask_form_shows_on_the_card(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let ask = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Ask {
+                id: id.clone(),
+                title: "Ship it?".into(),
+                options: vec![
+                    InteractionOption {
+                        id: "yes".into(),
+                        label: "Yes".into(),
+                    },
+                    InteractionOption {
+                        id: "no".into(),
+                        label: "No".into(),
+                    },
+                ],
+                fields: Some(vec![AskField::Number {
+                    id: "retries".into(),
+                    label: "Retries".into(),
+                    default: Some(1),
+                }]),
+            }),
+            cx,
+        )
+    });
+    let OpResult::Text(interaction) = cx.foreground_executor().block_test(ask).unwrap() else {
+        panic!("ask");
+    };
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let field = format!("ask-field-{interaction}-retries");
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, "backspace");
+    cx.simulate_input(window, "nope");
+    cx.run_until_parked();
+    click(cx, window, &format!("answer-{interaction}-yes"));
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-error-{interaction}"))
+    });
+    assert!(
+        shows(cx, window, "ask-popup"),
+        "the popup stays for the error"
+    );
 }
 
 #[gpui_kit::test]

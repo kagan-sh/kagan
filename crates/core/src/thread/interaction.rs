@@ -134,6 +134,10 @@ pub(crate) async fn ask(
     Ok(OpResult::Text(interaction.id.to_string()))
 }
 
+const MAX_ID: usize = 64;
+const MAX_LABEL: usize = 128;
+const MAX_TEXT: usize = 4096;
+
 fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::AskField>> {
     if fields.len() > 32 {
         return Err(OpError::Invalid("ask allows at most 32 fields".into()));
@@ -153,8 +157,8 @@ fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::As
                 kg_domain::AskField::String {
                     id,
                     label,
-                    placeholder: trim_opt(placeholder),
-                    default: trim_opt(default),
+                    placeholder: trim_text(placeholder, "placeholder")?,
+                    default: trim_text(default, "default")?,
                 }
             }
             kg_domain::AskField::Boolean { id, label, default } => kg_domain::AskField::Boolean {
@@ -175,16 +179,14 @@ fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::As
             } => {
                 let choices: Vec<_> = choices
                     .into_iter()
-                    .map(|choice| kg_domain::InteractionOption {
-                        id: choice.id.trim().to_owned(),
-                        label: choice.label.trim().to_owned(),
+                    .map(|choice| {
+                        Ok(kg_domain::InteractionOption {
+                            id: trim_id(&choice.id, "choice")?,
+                            label: trim_label(&choice.label, "choice")?,
+                        })
                     })
-                    .collect();
-                if choices.is_empty()
-                    || choices
-                        .iter()
-                        .any(|choice| choice.id.is_empty() || choice.label.is_empty())
-                {
+                    .collect::<Result<_>>()?;
+                if choices.is_empty() {
                     return Err(OpError::Invalid(
                         "a select field needs at least one choice, each with an id and a label"
                             .into(),
@@ -195,7 +197,16 @@ fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::As
                         "a select field allows at most 32 choices".into(),
                     ));
                 }
-                let default = trim_opt(default);
+                let mut choice_ids = std::collections::BTreeSet::new();
+                for choice in &choices {
+                    if !choice_ids.insert(choice.id.clone()) {
+                        return Err(OpError::Invalid(format!(
+                            "select choice id {} is repeated",
+                            choice.id
+                        )));
+                    }
+                }
+                let default = trim_text(default, "default")?;
                 if let Some(default) = &default
                     && !choices.iter().any(|choice| choice.id == *default)
                 {
@@ -227,6 +238,11 @@ fn trim_id(id: &str, kind: &str) -> Result<String> {
     if id.is_empty() {
         return Err(OpError::Invalid(format!("{kind} needs an id")));
     }
+    if id.chars().count() > MAX_ID {
+        return Err(OpError::Invalid(format!(
+            "{kind} id is at most {MAX_ID} characters"
+        )));
+    }
     Ok(id.to_owned())
 }
 
@@ -235,14 +251,37 @@ fn trim_label(label: &str, kind: &str) -> Result<String> {
     if label.is_empty() {
         return Err(OpError::Invalid(format!("{kind} needs a label")));
     }
+    if label.chars().count() > MAX_LABEL {
+        return Err(OpError::Invalid(format!(
+            "{kind} label is at most {MAX_LABEL} characters"
+        )));
+    }
     Ok(label.to_owned())
 }
 
-fn trim_opt(value: Option<String>) -> Option<String> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_owned())
-    })
+fn trim_text(value: Option<String>, kind: &str) -> Result<Option<String>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > MAX_TEXT {
+        return Err(OpError::Invalid(format!(
+            "ask {kind} is at most {MAX_TEXT} characters"
+        )));
+    }
+    Ok(Some(trimmed.to_owned()))
+}
+
+fn capped_answer(text: String) -> Result<String> {
+    if text.chars().count() > MAX_TEXT {
+        return Err(OpError::Invalid(format!(
+            "ask answer text is at most {MAX_TEXT} characters"
+        )));
+    }
+    Ok(text)
 }
 
 pub(crate) fn insert_reply(
@@ -423,18 +462,20 @@ fn check_answer_fields(
         })?;
         let value = match (field, value) {
             (kg_domain::AskField::String { .. }, serde_json::Value::String(text)) => {
-                serde_json::Value::String(text)
+                serde_json::Value::String(capped_answer(text)?)
             }
             (kg_domain::AskField::Boolean { .. }, serde_json::Value::Bool(flag)) => {
                 serde_json::Value::Bool(flag)
             }
-            (kg_domain::AskField::Number { .. }, serde_json::Value::Number(number)) => {
+            (kg_domain::AskField::Number { .. }, serde_json::Value::Number(number))
+                if number.as_i64().is_some() =>
+            {
                 serde_json::Value::Number(number)
             }
             (kg_domain::AskField::Select { choices, .. }, serde_json::Value::String(choice))
                 if choices.iter().any(|option| option.id == choice) =>
             {
-                serde_json::Value::String(choice)
+                serde_json::Value::String(capped_answer(choice)?)
             }
             _ => {
                 return Err(OpError::Invalid(format!(

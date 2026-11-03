@@ -5,6 +5,7 @@ use std::rc::Rc;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -17,6 +18,7 @@ use serde_json::{Value, json};
 
 use super::Kagan;
 use crate::ui_observe::UiObserveExt as _;
+use crate::ui_registry::Facts;
 
 actions!(kagan, [DismissAskPopup]);
 
@@ -27,6 +29,7 @@ pub(super) struct Draft {
     texts: BTreeMap<String, Entity<InputState>>,
     flags: BTreeMap<String, bool>,
     picks: BTreeMap<String, String>,
+    error: Option<String>,
 }
 
 impl Kagan {
@@ -63,20 +66,21 @@ impl Kagan {
             cx.defer_in(window, move |_, window, cx| {
                 window.focus(&focus, cx);
             });
-        } else if !open {
-            self.ask_popup = None;
+        } else if !open && self.ask_popup.take().is_some() {
+            self.focus_work(window, cx);
         }
     }
 
-    pub(super) fn dismiss_ask_popup(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn dismiss_ask_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.popup_ask(cx).map(|asked| asked.id.clone()) {
             self.ask_hidden = Some(id);
             self.ask_popup = None;
+            self.focus_work(window, cx);
             cx.notify();
         }
     }
 
-    fn popup_ask<'a>(&'a self, cx: &'a App) -> Option<&'a PendingInteraction> {
+    pub(super) fn popup_ask<'a>(&'a self, cx: &'a App) -> Option<&'a PendingInteraction> {
         let shown = self.shown_thread(cx)?;
         self.questions
             .read(cx)
@@ -150,6 +154,7 @@ impl Draft {
             texts,
             flags,
             picks,
+            error: None,
         }
     }
 
@@ -199,97 +204,161 @@ pub(super) fn fields(
     cx: &mut App,
 ) -> impl IntoElement {
     let fields = asked.fields.as_deref().unwrap_or(&[]);
+    let error = draft.error.clone();
     v_flex()
         .gap_2()
         .children(fields.iter().map(|field| match field {
             AskField::String { id, label, .. } | AskField::Number { id, label, .. } => {
-                let input = draft.texts.get(id).cloned();
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .type_small()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(label.clone()),
-                    )
-                    .children(input.map(|input| {
-                        Input::new(&input)
-                            .text_size(px(crate::theme::TYPE_BODY))
-                            .into_any_element()
-                    }))
-                    .into_any_element()
+                text_field(asked, draft, id, label, cx)
             }
-            AskField::Boolean { id, label, .. } => {
-                let on = draft.flags.get(id).copied().unwrap_or(false);
-                let field_id = id.clone();
-                let ask_id = asked.id.clone();
-                let kagan = kagan.clone();
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(
-                        Switch::new(ElementId::Name(
-                            format!("ask-field-{}-{}", asked.id.0, id).into(),
-                        ))
-                        .checked(on)
-                        .on_click(
-                            move |checked: &bool, _, cx: &mut App| {
-                                let checked = *checked;
-                                kagan.update(cx, |kagan, cx| {
-                                    if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
-                                        draft.flags.insert(field_id.clone(), checked);
-                                        cx.notify();
-                                    }
-                                });
-                            },
-                        ),
-                    )
-                    .child(div().type_body().child(label.clone()))
-                    .into_any_element()
-            }
+            AskField::Boolean { id, label, .. } => flag_field(asked, draft, kagan, id, label),
             AskField::Select {
                 id, label, choices, ..
-            } => {
-                let picked = draft.picks.get(id).cloned().unwrap_or_default();
-                let buttons: Vec<AnyElement> = choices
-                    .iter()
-                    .map(|choice| {
-                        let selected = choice.id == picked;
-                        let ask_id = asked.id.clone();
-                        let field_id = id.clone();
-                        let choice_id = choice.id.clone();
-                        let kagan = kagan.clone();
-                        Button::new(SharedString::from(format!(
-                            "ask-choice-{}-{}-{}",
-                            asked.id.0, id, choice.id
-                        )))
-                        .small()
-                        .label(choice.label.clone())
-                        .when(selected, Button::primary)
-                        .when(!selected, Button::outline)
-                        .on_click(move |_, _, cx| {
-                            kagan.update(cx, |kagan, cx| {
-                                if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
-                                    draft.picks.insert(field_id.clone(), choice_id.clone());
-                                    cx.notify();
-                                }
-                            });
-                        })
-                        .into_any_element()
-                    })
-                    .collect();
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .type_small()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(label.clone()),
-                    )
-                    .child(h_flex().gap_2().children(buttons))
-                    .into_any_element()
-            }
+            } => select_field(asked, draft, kagan, id, label, choices, cx),
         }))
+        .children(error.map(|message| {
+            div()
+                .id(ElementId::Name(format!("ask-error-{}", asked.id.0).into()))
+                .ui_container()
+                .type_small()
+                .text_color(cx.theme().danger)
+                .child(message)
+        }))
+}
+
+fn text_field(
+    asked: &PendingInteraction,
+    draft: &Draft,
+    id: &str,
+    label: &str,
+    cx: &App,
+) -> AnyElement {
+    let input = draft.texts.get(id).cloned();
+    let scope = format!("ask-field-{}-{}", asked.id.0, id);
+    v_flex()
+        .gap_1()
+        .child(
+            div()
+                .type_small()
+                .text_color(cx.theme().muted_foreground)
+                .child(label.to_owned()),
+        )
+        .children(input.map(|input| {
+            div()
+                .id(ElementId::Name(scope.clone().into()))
+                .ui_observe_as(Facts::input(label.to_owned(), &input, cx))
+                .child(
+                    Input::new(&input)
+                        .text_size(px(crate::theme::TYPE_BODY))
+                        .into_any_element(),
+                )
+                .into_any_element()
+        }))
+        .into_any_element()
+}
+
+fn flag_field(
+    asked: &PendingInteraction,
+    draft: &Draft,
+    kagan: &Entity<Kagan>,
+    id: &str,
+    label: &str,
+) -> AnyElement {
+    let on = draft.flags.get(id).copied().unwrap_or(false);
+    let field_id = id.to_owned();
+    let ask_id = asked.id.clone();
+    let kagan = kagan.clone();
+    let scope = format!("ask-field-{}-{}", asked.id.0, id);
+    h_flex()
+        .gap_2()
+        .items_center()
+        .child(
+            div()
+                .id(ElementId::Name(scope.into()))
+                .ui_observe_as(Facts {
+                    selected: Some(on),
+                    ..Facts::button(label.to_owned())
+                })
+                .child(
+                    Switch::new(ElementId::Name(
+                        format!("ask-switch-{}-{}", asked.id.0, id).into(),
+                    ))
+                    .checked(on)
+                    .on_click(move |checked: &bool, _, cx: &mut App| {
+                        let checked = *checked;
+                        kagan.update(cx, |kagan, cx| {
+                            if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                                draft.flags.insert(field_id.clone(), checked);
+                                draft.error = None;
+                                cx.notify();
+                            }
+                        });
+                    }),
+                ),
+        )
+        .child(div().type_body().child(label.to_owned()))
+        .into_any_element()
+}
+
+fn select_field(
+    asked: &PendingInteraction,
+    draft: &Draft,
+    kagan: &Entity<Kagan>,
+    id: &str,
+    label: &str,
+    choices: &[kg_domain::InteractionOption],
+    cx: &App,
+) -> AnyElement {
+    let picked = draft.picks.get(id).cloned().unwrap_or_default();
+    let buttons: Vec<AnyElement> = choices
+        .iter()
+        .map(|choice| {
+            let selected = choice.id == picked;
+            let ask_id = asked.id.clone();
+            let field_id = id.to_owned();
+            let choice_id = choice.id.clone();
+            let kagan = kagan.clone();
+            let name = choice.label.clone();
+            div()
+                .id(ElementId::Name(
+                    format!("ask-choice-{}-{}-{}", asked.id.0, id, choice.id).into(),
+                ))
+                .ui_observe_as(Facts {
+                    selected: Some(selected),
+                    ..Facts::button(name)
+                })
+                .child(
+                    Button::new(SharedString::from(format!(
+                        "ask-choice-btn-{}-{}-{}",
+                        asked.id.0, id, choice.id
+                    )))
+                    .small()
+                    .label(choice.label.clone())
+                    .when(selected, Button::primary)
+                    .when(!selected, Button::outline)
+                    .on_click(move |_, _, cx| {
+                        kagan.update(cx, |kagan, cx| {
+                            if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                                draft.picks.insert(field_id.clone(), choice_id.clone());
+                                draft.error = None;
+                                cx.notify();
+                            }
+                        });
+                    }),
+                )
+                .into_any_element()
+        })
+        .collect();
+    v_flex()
+        .gap_1()
+        .child(
+            div()
+                .type_small()
+                .text_color(cx.theme().muted_foreground)
+                .child(label.to_owned()),
+        )
+        .child(h_flex().gap_2().flex_wrap().children(buttons))
+        .into_any_element()
 }
 
 pub(super) fn popup(
@@ -306,8 +375,8 @@ pub(super) fn popup(
         super::question::form_card(&asked, &draft, &entity, &weak, window, cx).into_any_element();
     let focus = kagan.ask_popup.clone()?;
     let scrim = cx.theme().background.opacity(0.72);
-    let dismiss = cx.listener(|this, _: &DismissAskPopup, _, cx| {
-        this.dismiss_ask_popup(cx);
+    let dismiss = cx.listener(|this, _: &DismissAskPopup, window, cx| {
+        this.dismiss_ask_popup(window, cx);
     });
     Some(
         div()
@@ -330,6 +399,8 @@ pub(super) fn popup(
                     .ui_container()
                     .w(px(420.))
                     .max_w(px(560.))
+                    .max_h(px(520.))
+                    .overflow_y_scrollbar()
                     .child(card),
             )
             .into_any_element(),
@@ -359,14 +430,24 @@ pub(super) fn answer_with_fields(
     let fields = match collect(asked, draft, cx) {
         Ok(fields) => fields,
         Err(error) => {
+            let ask_id = asked.id.clone();
             let kagan = kagan.clone();
             _ = kagan.update(cx, |kagan, cx| {
-                kagan.note = Some(error.into());
-                cx.notify();
+                if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                    draft.error = Some(error);
+                    cx.notify();
+                }
             });
             return;
         }
     };
+    let ask_id = asked.id.clone();
+    let kagan_clear = kagan.clone();
+    _ = kagan_clear.update(cx, |kagan, _| {
+        if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+            draft.error = None;
+        }
+    });
     let answered = kg_core::Workspace::answer_fields(thread, asked.id.clone(), option, fields, cx);
     let kagan = kagan.clone();
     cx.spawn(async move |cx| {

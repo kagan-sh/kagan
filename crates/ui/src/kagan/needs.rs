@@ -63,9 +63,14 @@ impl Kagan {
             }
         }
         let questions = self.questions.read(cx).questions.clone();
+        let popup = self.popup_ask(cx).map(|asked| asked.id.clone());
         for asked in &questions {
             if self.holds(&asked.id) {
                 held += 1;
+                continue;
+            }
+            // The popup owns the fields and answer controls while it is open.
+            if popup.as_ref() == Some(&asked.id) {
                 continue;
             }
             let thread = self

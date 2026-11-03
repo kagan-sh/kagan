@@ -3230,6 +3230,84 @@ async fn ask_with_fields_stores_them_and_answered_carries_values(cx: &mut TestAp
     );
 }
 
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_rejects_duplicate_select_choice_ids(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let error = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Pick".into(),
+            options: ask_options(),
+            fields: Some(vec![kg_domain::AskField::Select {
+                id: "mode".into(),
+                label: "Mode".into(),
+                choices: vec![
+                    InteractionOption {
+                        id: "a".into(),
+                        label: "A".into(),
+                    },
+                    InteractionOption {
+                        id: "a".into(),
+                        label: "Also A".into(),
+                    },
+                ],
+                default: None,
+            }]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("select choice id a is repeated"),
+        "{error}"
+    );
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_answer_requires_a_whole_number(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(vec![kg_domain::AskField::Number {
+                id: "retries".into(),
+                label: "Retries".into(),
+                default: Some(1),
+            }]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("retries".into(), serde_json::json!(1.5));
+    let error = cx
+        .update(|cx| {
+            Workspace::answer_fields(
+                &id,
+                PendingInteractionId(interaction),
+                "yes".into(),
+                values,
+                cx,
+            )
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ask answer field retries has the wrong kind of value"),
+        "{error}"
+    );
+}
+
 #[cfg(unix)]
 async fn waiting_count(id: &ThreadId, cx: &mut TestAppContext) -> usize {
     kinds_of(id, cx)
