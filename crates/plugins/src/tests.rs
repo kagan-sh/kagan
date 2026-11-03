@@ -3240,7 +3240,8 @@ fn database_refuses_external_files_and_transaction_control_in_statements() {
 fn a_plugin_can_mkdir_under_process_data_dir(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
-    // mkdir runs off the test executor, so wait on real time like peek.
+    // mkdir runs off the test executor, so wait on real time instead of the
+    // test clock, which would fire the tool timeout first.
     let task = cx.update(|cx| {
         Workspace::dispatch(
             Op::Thread(ThreadOp::CallTool {
