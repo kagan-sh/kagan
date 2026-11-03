@@ -4,9 +4,9 @@ use std::rc::Rc;
 use crate::kagan::commands::{found as commands_found, state as commands_state};
 use crate::kagan::{Kagan, screen_read};
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext};
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext, px, size};
 use kg_core::Workspace;
-use kg_domain::{KeymapOp, Op, OpResult, Plugin, PluginId, ThreadId, ThreadOp, WindowOp};
+use kg_domain::{KeymapOp, Op, OpResult, Plugin, PluginId, ThreadId, ThreadOp, UiOp, WindowOp};
 
 use super::kagan::{
     chord, click, grid_text, install_navigator, label, open, open_with_plugins_then, plugin_log,
@@ -109,6 +109,10 @@ export default class Plugin extends View {
 
 fn header_id(plugin: &str, command: &str) -> ElementId {
     crate::kagan::header::id_for(&PluginId(plugin.into()), command)
+}
+
+fn header_click(plugin: &str, command: &str) -> String {
+    format!("header\u{1F}{plugin}\u{1F}{command}")
 }
 
 fn shows_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) -> bool {
@@ -606,12 +610,47 @@ fn hyphen_joined_header_ids_stay_distinct(cx: &mut TestAppContext) {
         shows_id(cx, window, &one) && shows_id(cx, window, &two)
     });
     assert_ne!(one, two);
-    click_id(cx, window, &one);
+    assert!(matches!(
+        dispatch(
+            cx,
+            Op::Ui(UiOp::Click {
+                element_id: header_click("dev.acme.header", "hand-off"),
+                within: None,
+                window: 0,
+            }),
+        ),
+        OpResult::Done
+    ));
     wait_until(cx, |cx| {
         plugin_log(cx, "dev.acme.header").contains(&format!("hand-off {}", id.0))
     });
-    click_id(cx, window, &two);
+    assert!(matches!(
+        dispatch(
+            cx,
+            Op::Ui(UiOp::Click {
+                element_id: header_click("dev.acme.header-hand", "off"),
+                within: None,
+                window: 0,
+            }),
+        ),
+        OpResult::Done
+    ));
     wait_until(cx, |cx| {
         plugin_log(cx, "dev.acme.header-hand").contains(&format!("off {}", id.0))
     });
+}
+
+#[gpui_kit::test]
+fn the_panels_toggle_stays_on_the_right_without_a_thread_title(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.simulate_window_resize(window, size(px(1100.), px(720.)));
+    cx.run_until_parked();
+    let (left_x, left_w) =
+        super::sidebars::span(cx, window, "left-sidebar-toggle").expect("left toggle");
+    let (right_x, right_w) =
+        super::sidebars::span(cx, window, "right-sidebar-toggle").expect("right toggle");
+    assert!(
+        right_x > left_x + left_w + 100. && right_x + right_w > 1000.,
+        "left {left_x}+{left_w} right {right_x}+{right_w}"
+    );
 }

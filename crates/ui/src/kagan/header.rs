@@ -35,10 +35,8 @@ pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
 }
 
 pub(crate) fn id_for(plugin: &PluginId, id: &str) -> ElementId {
-    ElementId::from((
-        ElementId::from((ElementId::from("header"), plugin.0.clone())),
-        id.to_owned(),
-    ))
+    // Plugin ids are reverse-DNS, so U+001F cannot appear in one. The command id is the suffix.
+    ElementId::Name(format!("header\u{1F}{}\u{1F}{id}", plugin.0).into())
 }
 
 fn commands(cx: &App) -> Vec<(PluginId, String, String)> {

@@ -680,7 +680,7 @@ impl Kagan {
                     ToggleSidebar,
                     cx,
                 ))
-                .children(label)
+                .child(h_flex().flex_1().min_w_0().children(label))
                 .child(
                     h_flex()
                         .gap_2()
