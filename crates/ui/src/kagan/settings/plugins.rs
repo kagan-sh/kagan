@@ -293,14 +293,23 @@ fn string_control(
             .borrow_mut()
             .insert(scope.to_owned(), input.downgrade());
     });
-    let (draft, committed, pending, error) = {
+    let (draft, committed, pending, error, kind) = {
         let field = field.read(cx);
         let draft = field.input.read(cx).value().to_string();
         let pending = field.sent.as_ref().is_some_and(|sent| sent == &draft);
-        (draft, field.committed.clone(), pending, field.error.clone())
+        (
+            draft,
+            field.committed.clone(),
+            pending,
+            field.error.clone(),
+            field.kind,
+        )
     };
     let note = if let Some(error) = error.as_ref() {
-        format!("{error} Enter saves.")
+        match kind {
+            FieldKind::Number => error.clone(),
+            FieldKind::Text => format!("{error} Enter saves."),
+        }
     } else if pending {
         "Saving…".to_owned()
     } else if draft != committed {
@@ -543,15 +552,23 @@ impl TextField {
         cx.notify();
     }
 
-    fn submit(&mut self, cx: &mut Context<Self>) {
+    fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let value = self.input.read(cx).value().to_string();
         if value == self.committed && self.error.is_none() && self.sent.is_none() {
             return;
         }
-        let change = match self.kind {
-            FieldKind::Text => Change::Set(json!(value.clone())),
+        let (change, sent) = match self.kind {
+            FieldKind::Text => (Change::Set(json!(value.clone())), value),
             FieldKind::Number => match parse_number(&value) {
-                Ok(number) => Change::Set(Value::Number(number)),
+                Ok(number) => {
+                    let sent = number.to_string();
+                    if sent != value {
+                        self.input.update(cx, |state, cx| {
+                            state.set_value(sent.clone(), window, cx);
+                        });
+                    }
+                    (Change::Set(Value::Number(number)), sent)
+                }
                 Err(message) => {
                     self.error = Some(message);
                     self.sent = None;
@@ -561,7 +578,7 @@ impl TextField {
             },
         };
         self.error = None;
-        self.sent = Some(value);
+        self.sent = Some(sent);
         let plugin = self.plugin.clone();
         let key = self.key.clone();
         let kagan = self.kagan.clone();
@@ -617,7 +634,7 @@ fn parse_number(text: &str) -> Result<serde_json::Number, String> {
     let trimmed = text.trim();
     match serde_json::from_str::<Value>(trimmed) {
         Ok(Value::Number(number)) if number.as_f64().is_some_and(f64::is_finite) => Ok(number),
-        _ => Err("needs a finite number".into()),
+        _ => Err("Type a number.".into()),
     }
 }
 
@@ -644,9 +661,9 @@ fn text_field(
         let save = cx.subscribe_in(
             &input,
             window,
-            move |field: &mut TextField, _, event, _, cx| match event {
+            move |field: &mut TextField, _, event, window, cx| match event {
                 InputEvent::Change => cx.notify(),
-                InputEvent::PressEnter { .. } => field.submit(cx),
+                InputEvent::PressEnter { .. } => field.submit(window, cx),
                 InputEvent::Focus | InputEvent::Blur => {}
             },
         );

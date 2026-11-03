@@ -824,6 +824,25 @@ fn a_plugin_number_field_saves_a_finite_number_on_enter(cx: &mut TestAppContext)
     for _ in 0..3 {
         cx.simulate_keystrokes(window, "backspace");
     }
+    cx.simulate_input(window, "  2.50 ");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "retries"), json!(2.5));
+    assert_eq!(
+        value_of(cx, window, &field),
+        Some("2.5".into()),
+        "Enter keeps the canonical number in the field"
+    );
+    assert!(!present(
+        cx,
+        window,
+        "setting-row-dev.test.prefs/retries-note"
+    ));
+
+    click(cx, window, &field);
+    for _ in 0..3 {
+        cx.simulate_keystrokes(window, "backspace");
+    }
     cx.simulate_input(window, "nope");
     cx.simulate_keystrokes(window, "enter");
     cx.run_until_parked();
@@ -831,6 +850,11 @@ fn a_plugin_number_field_saves_a_finite_number_on_enter(cx: &mut TestAppContext)
         plugin_config(cx, "retries"),
         json!(2.5),
         "a non-number is refused"
+    );
+    assert_eq!(value_of(cx, window, &field), Some("nope".into()));
+    assert_eq!(
+        aria_label(cx, window, "setting-row-dev.test.prefs/retries-note").as_deref(),
+        Some("Type a number.")
     );
 }
 

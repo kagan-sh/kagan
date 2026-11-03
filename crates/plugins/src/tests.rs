@@ -850,7 +850,9 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
     )
     .unwrap_err();
     assert!(
-        number_error.to_string().contains("takes a finite number"),
+        number_error
+            .to_string()
+            .contains("takes a number, like 3 or 2.5"),
         "{number_error}"
     );
     assert!(matches!(
@@ -895,6 +897,42 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
             is_error: false
         }
     );
+}
+
+#[gpui_kit::test]
+fn a_stored_number_coerces_or_falls_back_on_load(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let id = PluginId(ID.into());
+    let get = Op::Plugin(PluginOp::Config {
+        id: id.clone(),
+        op: ConfigOp::Get {
+            key: "retries".into(),
+        },
+        thread_id: None,
+    });
+    let reload = Op::Plugin(PluginOp::Reload {
+        id: id.clone(),
+        thread_id: None,
+    });
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "retries", &json!("30"))
+            .unwrap();
+    });
+    run(cx, reload.clone()).unwrap();
+    assert_eq!(run(cx, get.clone()).unwrap(), OpResult::Setting(json!(30)));
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "retries", &json!(true))
+            .unwrap();
+    });
+    run(cx, reload).unwrap();
+    assert_eq!(run(cx, get).unwrap(), OpResult::Setting(json!(3)));
 }
 
 #[gpui_kit::test]
