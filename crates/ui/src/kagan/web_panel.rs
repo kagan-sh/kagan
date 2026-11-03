@@ -339,6 +339,7 @@ fn build(
         web::allows_navigation(&navigation, &target)
     })
     .with_file_dialog(false)
+    .with_drag_drop_handler(|_| true)
     .with_initialization_script(BRIDGE)
     .with_ipc_handler(move |request: wry::http::Request<String>| {
         let body = request.into_body();
