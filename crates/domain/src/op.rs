@@ -1336,6 +1336,13 @@ pub enum ProjectOp {
         /// Project to remove
         id: ProjectId,
     },
+    /// Move a project in the sidebar
+    Reorder {
+        id: ProjectId,
+        /// Place before this project; omit to move to the end, still above Personal
+        #[arg(long)]
+        before: Option<ProjectId>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]

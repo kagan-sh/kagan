@@ -1769,6 +1769,9 @@ impl Kagan {
                 }
             }
             Event::RemoveProject(id) => self.remove_project(id.clone(), cx),
+            Event::Reorder { id, before } => {
+                self.reorder_project(id.clone(), before.clone(), cx);
+            }
             Event::OpenSurface(open) => {
                 let op = SurfaceOp::Open {
                     plugin: PluginId(open.plugin.clone()),
@@ -1811,6 +1814,25 @@ impl Kagan {
                         cx.notify();
                     }
                     result => this.finish(result, "remove project", window, cx),
+                });
+            });
+        })
+        .detach();
+    }
+
+    fn reorder_project(
+        &mut self,
+        id: ProjectId,
+        before: Option<ProjectId>,
+        cx: &mut Context<Self>,
+    ) {
+        let task = Workspace::dispatch(Op::Project(ProjectOp::Reorder { id, before }), cx);
+        let window = self.window;
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            _ = cx.update_window(window, |_, window, cx| {
+                _ = this.update(cx, |this, cx| {
+                    this.finish(result, "move project", window, cx);
                 });
             });
         })

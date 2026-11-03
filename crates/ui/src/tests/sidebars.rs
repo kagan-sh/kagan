@@ -3,7 +3,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, ElementId, Modifiers, TestAppContext, point, px, size,
 };
 use kg_core::Workspace;
-use kg_domain::{InteractionOption, Op, OpResult, PreferenceOp};
+use kg_domain::{DropSide, InteractionOption, Op, OpError, OpResult, PreferenceOp, ThreadOp, UiOp};
 use serde_json::{Value, json};
 
 use super::kagan::{
@@ -764,10 +764,185 @@ fn colliding_project_names_show_the_shortest_parent(cx: &mut TestAppContext) {
         2
     );
     assert!(names.iter().any(|name| name == "solo"));
-    assert!(row_y(cx, window, &solo_id) < row_y(cx, window, &left_id));
-    assert!(row_y(cx, window, &left_id) < row_y(cx, window, "project-prj_kagan"));
+    assert!(row_y(cx, window, &left_id) < row_y(cx, window, &solo_id));
+    assert!(row_y(cx, window, &solo_id) < row_y(cx, window, "project-prj_kagan"));
     click(cx, window, &left_id);
     assert_eq!(selected_of(cx, window, &left_id), Some(true));
+}
+
+fn project_names(cx: &mut TestAppContext) -> Vec<String> {
+    cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .sidebar(cx)
+            .projects
+            .iter()
+            .map(|project| project.name.clone())
+            .collect()
+    })
+}
+
+fn ui(cx: &mut TestAppContext, op: UiOp) -> Result<OpResult, OpError> {
+    let task = cx.update(|cx| Workspace::dispatch(Op::Ui(op), cx));
+    let result = cx.foreground_executor().block_test(task);
+    cx.run_until_parked();
+    result
+}
+
+#[gpui_kit::test]
+fn dragging_a_project_header_onto_another_reorders_the_sidebar(cx: &mut TestAppContext) {
+    let (_kagan, _window, data) = open(cx);
+    let root = data.path();
+    let alpha = root.join("alpha");
+    let beta = root.join("beta");
+    let gamma = root.join("gamma");
+    std::fs::create_dir_all(&alpha).unwrap();
+    std::fs::create_dir_all(&beta).unwrap();
+    std::fs::create_dir_all(&gamma).unwrap();
+    let _alpha = add_project(cx, &alpha);
+    let beta = add_project(cx, &beta);
+    let gamma = add_project(cx, &gamma);
+    cx.run_until_parked();
+    wait_until(cx, |cx| {
+        project_names(cx)
+            .iter()
+            .filter(|name| matches!(name.as_str(), "alpha" | "beta" | "gamma"))
+            .count()
+            == 3
+    });
+    assert_eq!(
+        project_names(cx)
+            .into_iter()
+            .filter(|name| matches!(name.as_str(), "alpha" | "beta" | "gamma"))
+            .collect::<Vec<_>>(),
+        ["alpha", "beta", "gamma"]
+    );
+    ui(
+        cx,
+        UiOp::Drag {
+            from: format!("project-{}", gamma.id.0),
+            to: format!("project-{}", beta.id.0),
+            at: DropSide::Top,
+            within: None,
+            hold: false,
+            window: 0,
+        },
+    )
+    .unwrap();
+    wait_until(cx, |cx| {
+        project_names(cx)
+            .into_iter()
+            .filter(|name| matches!(name.as_str(), "alpha" | "beta" | "gamma"))
+            .collect::<Vec<_>>()
+            == ["alpha", "gamma", "beta"]
+    });
+    assert_eq!(
+        project_names(cx).last().map(String::as_str),
+        Some("Personal")
+    );
+}
+
+#[gpui_kit::test]
+fn escape_cancels_a_project_header_drag_without_reordering(cx: &mut TestAppContext) {
+    let (_kagan, _window, data) = open(cx);
+    let root = data.path();
+    let first = root.join("first");
+    let second = root.join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    let first = add_project(cx, &first);
+    let second = add_project(cx, &second);
+    cx.run_until_parked();
+    wait_until(cx, |cx| {
+        project_names(cx).iter().any(|name| name == "first")
+            && project_names(cx).iter().any(|name| name == "second")
+    });
+    let before = project_names(cx);
+    ui(
+        cx,
+        UiOp::Drag {
+            from: format!("project-{}", second.id.0),
+            to: format!("project-{}", first.id.0),
+            at: DropSide::Top,
+            within: None,
+            hold: true,
+            window: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        ui(
+            cx,
+            UiOp::Key {
+                keystroke: "escape".into(),
+                window: 0,
+            }
+        ),
+        Ok(OpResult::Done)
+    );
+    assert_eq!(project_names(cx), before);
+    assert_eq!(
+        ui(cx, UiOp::Drop { window: 0 }),
+        Err(OpError::Invalid(
+            "no drag is held; start one with kg ui drag --hold".into()
+        ))
+    );
+}
+
+#[gpui_kit::test]
+fn a_sidebar_refresh_keeps_a_held_project_drag_so_drop_still_reorders(cx: &mut TestAppContext) {
+    let (_kagan, _window, data) = open(cx);
+    let root = data.path();
+    let first = root.join("first");
+    let second = root.join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    let first = add_project(cx, &first);
+    let second = add_project(cx, &second);
+    let thread = run_shell(cx);
+    cx.run_until_parked();
+    wait_until(cx, |cx| {
+        project_names(cx).iter().any(|name| name == "first")
+            && project_names(cx).iter().any(|name| name == "second")
+    });
+    assert_eq!(
+        project_names(cx)
+            .into_iter()
+            .filter(|name| matches!(name.as_str(), "first" | "second"))
+            .collect::<Vec<_>>(),
+        ["first", "second"]
+    );
+    ui(
+        cx,
+        UiOp::Drag {
+            from: format!("project-{}", second.id.0),
+            to: format!("project-{}", first.id.0),
+            at: DropSide::Top,
+            within: None,
+            hold: true,
+            window: 0,
+        },
+    )
+    .unwrap();
+    let pinned = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::SetPinned {
+                id: thread,
+                pinned: true,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(pinned).unwrap();
+    cx.run_until_parked();
+    assert_eq!(ui(cx, UiOp::Drop { window: 0 }), Ok(OpResult::Done));
+    wait_until(cx, |cx| {
+        project_names(cx)
+            .into_iter()
+            .filter(|name| matches!(name.as_str(), "first" | "second"))
+            .collect::<Vec<_>>()
+            == ["second", "first"]
+    });
 }
 
 #[gpui_kit::test]
