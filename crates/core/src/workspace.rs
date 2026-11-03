@@ -1051,8 +1051,8 @@ impl Workspace {
         true
     }
 
-    /// Plain scrollback for a thread's program terminal, newest `cap` bytes. Clones `Lines` on
-    /// the foreground and builds the text on the background executor.
+    /// Clones `Lines` on the foreground and builds the newest `cap` bytes of plain text on
+    /// the background executor.
     pub fn thread_output(id: &ThreadId, cap: usize, cx: &mut App) -> Task<Result<String>> {
         let lines = Self::global(cx)
             .read(cx)

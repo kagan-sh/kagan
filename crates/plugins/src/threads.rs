@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use crate::Agents;
 use crate::area::{from_host, to_host};
 
-/// Plain scrollback a plugin may read through `threads.output`, in bytes.
+/// Must match the 256 KiB ceiling published for `threads.output`.
 pub(crate) const OUTPUT_CAP: usize = 256 * 1024;
 
 pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
