@@ -335,32 +335,32 @@ fn build(
     let panel = slot.contribution.clone();
     let navigation = plugin_id.clone();
     let protocol_plugin = plugin_id.clone();
-    let builder = web::builder(&url, move |target| {
-        web::allows_navigation(&navigation, &target)
-    })
-    .with_file_dialog(false)
-    .with_drag_drop_handler(|_| true)
-    .with_initialization_script(BRIDGE)
-    .with_ipc_handler(move |request: wry::http::Request<String>| {
-        let body = request.into_body();
-        if body.len() <= kg_plugins::MESSAGE_CAP {
-            let _ = sender.try_send(body);
-        }
-    })
-    .with_custom_protocol(SCHEME.to_owned(), move |_id, request| {
-        let css = served_theme.get();
-        let served = web::serve(
-            &root,
-            &protocol_plugin,
-            request.method().as_str(),
-            &request.uri().to_string(),
-            &hosts,
-            &css,
-        );
-        http_response(served)
-    });
+    let builder = crate::page::private(wry::WebViewBuilder::new())
+        .with_url(&url)
+        .with_navigation_handler(move |target| web::allows_navigation(&navigation, &target))
+        .with_file_dialog(false)
+        .with_drag_drop_handler(|_| true)
+        .with_initialization_script(BRIDGE)
+        .with_ipc_handler(move |request: wry::http::Request<String>| {
+            let body = request.into_body();
+            if body.len() <= kg_plugins::MESSAGE_CAP {
+                let _ = sender.try_send(body);
+            }
+        })
+        .with_custom_protocol(SCHEME.to_owned(), move |_id, request| {
+            let css = served_theme.get();
+            let served = web::serve(
+                &root,
+                &protocol_plugin,
+                request.method().as_str(),
+                &request.uri().to_string(),
+                &hosts,
+                &css,
+            );
+            http_response(served)
+        });
     let view = gpui_webview::WebView::build(builder, window, cx)
-        .map_err(|error| format!("The page could not open: {error}"))?;
+        .map_err(|error| crate::page::failure(&error.to_string()))?;
     let drain = page_watch::watch(receiver, plugin, panel, generation, alive, cx);
     Ok(Built {
         view: cx.new(|_| view),

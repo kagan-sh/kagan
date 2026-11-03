@@ -3,6 +3,7 @@ mod brand;
 mod components;
 mod failed;
 mod kagan;
+mod page;
 mod plugins;
 mod synthetic;
 mod terminal;

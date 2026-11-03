@@ -502,7 +502,7 @@ impl Kagan {
         let Some(tab) = super::right::selected_tab(self, cx) else {
             return window.focus(&self.right_add_focus, cx);
         };
-        if tab == super::tabs::BROWSER && cfg!(target_os = "macos") {
+        if tab == super::tabs::BROWSER && cfg!(any(target_os = "macos", target_os = "windows")) {
             return self.browser.focus(window, cx);
         }
         let terminal = super::tabs::terminal_number(&tab).and_then(|number| self.tabs.view(number));

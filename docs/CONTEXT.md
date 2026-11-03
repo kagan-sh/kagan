@@ -34,7 +34,7 @@ One program running in one environment, with a status (`pending`, `idle`, `start
 _Avoid_: Session, chat, task
 
 **Turn**:
-One round of a thread: a message goes in, the agent works, the turn ends.
+The stretch a program's title shows a spinner, until that title stays plain, or the program stops or exits while the spinner is up. `turn.started` and `turn.ended` record it.
 _Avoid_: Run, step
 
 **Event**:
@@ -104,7 +104,7 @@ The program line a thread runs, such as `claude` or `codex`.
 _Avoid_: Agent (for the program), backend, model
 
 **Plugin**:
-A package installed from git that adds UI, commands, or skills. It starts a thread by naming a program. It never sees a model.
+A package installed from git that adds UI, commands, or skills. It starts a thread by naming a program. It never sees a model. Its data folder is under the app data as `plugins/<id>/data`; the script reads that path as `process.dataDir`.
 _Avoid_: Extension, add-on
 
 **Plugin index**:
@@ -115,7 +115,7 @@ _Avoid_: Marketplace (the decision-3 goal, not the file), catalog, store, regist
 A packaged set of instructions an agent can load for one kind of task.
 
 **Agent integration**:
-What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude` and `cursor-agent`, kagan's skills, from `<dataDir>/agent`. For `cursor-agent`, the note is a rule in that folder. For `codex`, the skill `kg-threads` linked into the thread folder, where Codex looks. For `claude`, `codex`, `cursor-agent`, and `agent`, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. For `cursor-agent` and `agent`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The link in the thread folder stays. The person can turn the extra arguments off with the `agent-integration` preference.
+What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, kagan's skills from `<dataDir>/agent`. For `cursor-agent`, a per-thread plugin dir under `<dataDir>/agent/threads/<id>/cursor` (skills linked from `<dataDir>/agent/skills`, note as a rule there). For `codex`, the skill `kg-threads` linked into the thread folder, where Codex looks. Plugins that declare `instruct` may append text to that note for the current start only. For `claude`, `codex`, `cursor-agent`, and `agent`, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. For `cursor-agent` and `agent`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The link in the thread folder stays. The person can turn the extra arguments off with the `agent-integration` preference.
 _Avoid_: Injection, agent setup, wrapper
 
 **Conversation**:

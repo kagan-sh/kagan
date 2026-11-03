@@ -27,7 +27,11 @@ impl Environment {
 pub struct Thread {
     pub(crate) record: kg_domain::Thread,
     pub(crate) busy: bool,
+    /// Stays set after Stop clears `busy`, until the turn's end is written.
+    /// The watcher uses it so a spinner that is still up does not open a second turn.
+    pub(crate) turn_open: bool,
     pub(crate) plain_since: Option<Instant>,
+    pub(crate) instruct: Option<String>,
 }
 
 impl Thread {
@@ -45,7 +49,9 @@ impl Thread {
         Self {
             record,
             busy: false,
+            turn_open: false,
             plain_since: None,
+            instruct: None,
         }
     }
 

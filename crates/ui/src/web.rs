@@ -1,8 +1,5 @@
-//! One wry page setup, shared by the Browser, a plugin `WebView`, and a web panel.
-//!
-//! Private storage, no new window, and no download. Camera and microphone stay denied by the
-//! pinned wry patch. A web panel's files and navigation rules live here too, so they can be
-//! tested without a native page.
+//! A web panel's files, navigation rules and theme, so they can be tested without a native page.
+//! The page setup itself is in `page.rs`, shared with the Browser and a plugin `WebView`.
 
 use std::path::{Component, Path};
 
@@ -282,19 +279,6 @@ fn host_token(host: &str) -> bool {
         && host
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
-}
-
-#[cfg(target_os = "macos")]
-pub(crate) fn builder(
-    url: &str,
-    allow: impl Fn(String) -> bool + 'static,
-) -> wry::WebViewBuilder<'static> {
-    wry::WebViewBuilder::new()
-        .with_url(url)
-        .with_incognito(true)
-        .with_navigation_handler(allow)
-        .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
-        .with_download_started_handler(|_url, _path| false)
 }
 
 #[cfg(test)]

@@ -7,6 +7,7 @@ pub(crate) mod commands;
 mod details;
 #[cfg(target_os = "macos")]
 mod dock;
+pub(crate) mod header;
 mod keys;
 mod layout;
 #[cfg(test)]
@@ -1466,7 +1467,7 @@ impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         self.sync_browser(cx);
         crate::components::sync_pages(&self.shown_plugin_views(cx), cx);
         web_panel::sync(self, cx);

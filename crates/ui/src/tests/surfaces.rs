@@ -1572,17 +1572,20 @@ fn install_webview(data: &Path) {
 }
 
 fn placed(native: Option<bool>, note: &str) -> bool {
-    native == Some(true) || note.contains("could not open") || platform_note(note)
+    native == Some(true)
+        || note.contains("could not open")
+        || note.contains("WebView2 Runtime")
+        || platform_note(note)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const fn platform_note(_note: &str) -> bool {
     false
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn platform_note(note: &str) -> bool {
-    note == crate::components::ONLY_MACOS
+    note == crate::components::UNAVAILABLE
 }
 
 fn page_place(
