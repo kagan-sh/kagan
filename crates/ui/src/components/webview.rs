@@ -10,8 +10,6 @@ use std::sync::Arc;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
-#[cfg(target_os = "macos")]
-use gpui_kit::AppContext as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -29,8 +27,8 @@ use super::fail::ComponentError;
 pub(crate) const REFUSED_SCHEME: &str = "WebView only opens an http or https page.";
 pub(crate) const REFUSED_HOST: &str =
     "WebView only opens 127.0.0.1, localhost, or a host this plugin may fetch.";
-#[cfg(not(target_os = "macos"))]
-pub(crate) const ONLY_MACOS: &str = "This page works on macOS only for now.";
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+pub(crate) const UNAVAILABLE: &str = "This page works on macOS and Windows only for now.";
 
 thread_local! {
     static INSET: Cell<bool> = const { Cell::new(false) };
@@ -149,7 +147,7 @@ impl ComponentMaterializer for WebView {
 
 struct Shown {
     note: Option<String>,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     page: Option<Entity<gpui_webview::WebView>>,
 }
 
@@ -159,7 +157,7 @@ fn frame(
     cx: &App,
 ) -> impl gpui_kit::Styled + gpui_kit::ParentElement + gpui_kit::IntoElement {
     let note = shown.note.clone();
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     let page = shown.note.is_none().then(|| shown.page.clone()).flatten();
     div()
         .id(ElementId::Name(format!("webview-{id}").into()))
@@ -171,11 +169,11 @@ fn frame(
             element.child(sentence(id, note.as_str(), cx))
         })
         .when(shown.note.is_none(), |element| {
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             {
                 element.children(page)
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             {
                 element
             }
@@ -205,7 +203,7 @@ fn sentence(id: &str, note: &str, cx: &App) -> AnyElement {
 enum Gate {
     Empty,
     Note(&'static str),
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     Open,
 }
 
@@ -216,10 +214,10 @@ fn gate(url: &str, hosts: &[String]) -> Gate {
     if let Err(reason) = allowed(url, hosts) {
         return Gate::Note(reason);
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     return Gate::Open;
-    #[cfg(not(target_os = "macos"))]
-    Gate::Note(ONLY_MACOS)
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    Gate::Note(UNAVAILABLE)
 }
 
 fn place(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
@@ -232,18 +230,18 @@ fn place(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
 }
 
 fn loose(
-    #[cfg(target_os = "macos")] id: &str,
-    #[cfg(not(target_os = "macos"))] _id: &str,
+    #[cfg(any(target_os = "macos", target_os = "windows"))] id: &str,
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _id: &str,
     url: &str,
-    #[cfg(target_os = "macos")] window: &mut Window,
-    #[cfg(not(target_os = "macos"))] _window: &mut Window,
-    #[cfg(target_os = "macos")] cx: &mut App,
-    #[cfg(not(target_os = "macos"))] _cx: &mut App,
+    #[cfg(any(target_os = "macos", target_os = "windows"))] window: &mut Window,
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _window: &mut Window,
+    #[cfg(any(target_os = "macos", target_os = "windows"))] cx: &mut App,
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _cx: &mut App,
 ) -> Shown {
     match gate(url, &[]) {
         Gate::Empty => blank(),
         Gate::Note(reason) => noted(reason),
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         Gate::Open => {
             let key = ElementId::Name(format!("webview-loose-{id}-{url}").into());
             let state = window.use_keyed_state(key, cx, |window, cx| build(url, &[], window, cx));
@@ -263,8 +261,8 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
-    #[cfg(target_os = "macos")] window: &mut Window,
-    #[cfg(not(target_os = "macos"))] _window: &mut Window,
+    #[cfg(any(target_os = "macos", target_os = "windows"))] window: &mut Window,
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _window: &mut Window,
     cx: &mut App,
 ) -> Shown {
     let index = find(cx, owner.entity_id(), id);
@@ -272,7 +270,7 @@ fn owned(
         Gate::Empty => {
             if let Some(index) = index {
                 conceal_at(cx, index);
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 {
                     cx.default_global::<Pages>().pages[index].page = None;
                 }
@@ -287,7 +285,7 @@ fn owned(
             }
             noted(reason)
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         Gate::Open => open_owned(owner.clone(), id, url, hosts, index, window, cx),
     }
 }
@@ -295,7 +293,7 @@ fn owned(
 fn blank() -> Shown {
     Shown {
         note: None,
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         page: None,
     }
 }
@@ -303,12 +301,12 @@ fn blank() -> Shown {
 fn noted(reason: &str) -> Shown {
     Shown {
         note: Some(reason.to_owned()),
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         page: None,
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn page_shown(page: Entity<gpui_webview::WebView>) -> Shown {
     Shown {
         note: None,
@@ -316,7 +314,7 @@ fn page_shown(page: Entity<gpui_webview::WebView>) -> Shown {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn open_owned(
     owner: WeakEntity<ScriptView>,
     id: &str,
@@ -373,7 +371,7 @@ fn open_owned(
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn build(
     url: &str,
     hosts: &[String],
@@ -381,31 +379,30 @@ fn build(
     cx: &mut App,
 ) -> Result<Entity<gpui_webview::WebView>, String> {
     let hosts = hosts.to_vec();
-    let builder = wry::WebViewBuilder::new()
-        .with_url(url)
-        .with_incognito(true)
-        .with_navigation_handler(move |target| allowed(&target, &hosts).is_ok());
-    match gpui_webview::WebView::build(builder, window, cx) {
-        Ok(view) => Ok(cx.new(|_| view)),
-        Err(error) => Err(format!("The page could not open: {error}")),
-    }
+    let url = url.to_owned();
+    crate::page::open(window, cx, move |builder| {
+        builder
+            .with_url(&url)
+            .with_incognito(true)
+            .with_navigation_handler(move |target| allowed(&target, &hosts).is_ok())
+    })
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn reveal(page: &Entity<gpui_webview::WebView>, cx: &mut App) {
     if !page.read(cx).visible() {
         page.update(cx, |page, _| page.show());
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn conceal(page: &Entity<gpui_webview::WebView>, cx: &mut App) {
     if page.read(cx).visible() {
         page.update(cx, |page, _| page.hide());
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn conceal_at(cx: &mut App, index: usize) {
     let Some(page) = cx.default_global::<Pages>().pages[index].page.clone() else {
         return;
@@ -413,7 +410,7 @@ fn conceal_at(cx: &mut App, index: usize) {
     conceal(&page, cx);
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn conceal_at(_cx: &mut App, _index: usize) {}
 
 fn write(cx: &mut App, index: usize, url: &str, note: Option<String>) {
@@ -422,7 +419,7 @@ fn write(cx: &mut App, index: usize, url: &str, note: Option<String>) {
     slot.note = note;
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn write_page(cx: &mut App, index: usize, url: &str, page: Entity<gpui_webview::WebView>) {
     let slot = &mut cx.default_global::<Pages>().pages[index];
     url.clone_into(&mut slot.url);
@@ -430,7 +427,7 @@ fn write_page(cx: &mut App, index: usize, url: &str, page: Entity<gpui_webview::
     slot.page = Some(page);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn held(
     owner: WeakEntity<ScriptView>,
     id: &str,
@@ -449,7 +446,7 @@ fn held(
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn save(cx: &mut App, index: Option<usize>, slot: Held) {
     let pages = &mut cx.default_global::<Pages>().pages;
     if let Some(index) = index {
@@ -497,9 +494,9 @@ struct Held {
     id: String,
     url: String,
     note: Option<String>,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     hosts: Vec<String>,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     page: Option<Entity<gpui_webview::WebView>>,
 }
 
@@ -521,7 +518,7 @@ pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
             })
             .collect()
     };
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         let views: Vec<_> = {
             let pages = &cx.default_global::<Pages>().pages;
@@ -556,7 +553,7 @@ pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
 
 #[cfg(test)]
 pub(crate) fn native_shown(cx: &App, id: &str) -> Option<bool> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         cx.try_global::<Pages>().and_then(|pages| {
             pages
@@ -566,7 +563,7 @@ pub(crate) fn native_shown(cx: &App, id: &str) -> Option<bool> {
                 .and_then(|page| page.page.as_ref().map(|view| view.read(cx).visible()))
         })
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = (cx, id);
         None
