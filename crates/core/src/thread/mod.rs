@@ -23,6 +23,7 @@ pub(crate) use run::resolve_program;
 pub(crate) use run::{PreparedRun, commit as commit_run, prepare as prepare_run};
 pub(crate) use search::search;
 pub(crate) use settings::remember_keymap;
+pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;

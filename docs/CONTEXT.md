@@ -34,7 +34,7 @@ One program running in one environment, with a status (`pending`, `idle`, `start
 _Avoid_: Session, chat, task
 
 **Turn**:
-One round of a thread: a message goes in, the agent works, the turn ends.
+The stretch a program's title shows a spinner, until that title stays plain, or the program stops or exits while the spinner is up. `turn.started` and `turn.ended` record it.
 _Avoid_: Run, step
 
 **Event**:

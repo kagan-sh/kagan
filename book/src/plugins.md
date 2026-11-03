@@ -78,3 +78,7 @@ kg plugin use threads kagan
 `kagan` selects the built-in version. kagan always keeps the rail, New thread, Questions, and the review buttons. Only kagan sends your review comments to the agent.
 
 [Keyboard shortcuts](keys.md#change-a-key) explains plugin keys. [Troubleshooting](troubleshooting.md#a-plugin-fails) covers logs and recovery.
+
+## Thread events
+
+A plugin lists the events it wants in `kagan.json`. `thread.turn.started` fires when a program's title shows a spinner as its first character. `thread.turn.ended` fires when that spinner ends, or the program stops or exits during it. The end says `completed`, `interrupted`, or `failed`. Quitting does not write `thread.turn.ended`. A working mark later in the title, such as an hourglass after a plain prefix, does not start a turn.
