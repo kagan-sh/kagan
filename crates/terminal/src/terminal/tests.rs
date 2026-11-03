@@ -861,6 +861,63 @@ fn a_full_pty_write_is_cancelled_by_stop() {
 
 #[cfg(unix)]
 #[test]
+fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixStream;
+    let (reader, mut output) = pty_pair();
+    set_nonblocking(reader.as_raw_fd()).unwrap();
+    // Stands in for the master that teardown drops before it joins the reader.
+    let owner = reader.try_clone().unwrap();
+    let owner_fd = owner.as_raw_fd();
+    let wait = dup_fd(owner_fd).unwrap();
+    let shared = Shared::settled(Screen::new(80, 24));
+    let (replies, _received) = mpsc::channel();
+    let handle = thread_read(
+        Box::new(reader),
+        shared.clone(),
+        replies,
+        Arc::new(AtomicBool::new(false)),
+        Some(wait),
+    );
+    thread::sleep(Duration::from_millis(100));
+    // Made before the close, so its number cannot be owner_fd.
+    let (unrelated, mut peer) = UnixStream::pair().unwrap();
+    drop(owner);
+    // Reuse the number the closed master had. A reader still polling it now waits on this socket.
+    // SAFETY: owner_fd is a number this test just freed; dup2 makes it a copy of the socket.
+    assert_eq!(
+        unsafe { libc::dup2(unrelated.as_raw_fd(), owner_fd) },
+        owner_fd
+    );
+    output.write_all(b"FIRST").unwrap();
+    let end = Instant::now() + Duration::from_secs(1);
+    while !lock(&shared.screen).transcript().contains("FIRST") && Instant::now() < end {
+        thread::sleep(Duration::from_millis(5));
+    }
+    thread::sleep(Duration::from_millis(100));
+    output.write_all(b"SECOND").unwrap();
+    thread::sleep(Duration::from_millis(200));
+    let got = lock(&shared.screen).transcript();
+    // Wake a reader that waits on the socket, then close the slave so every reader ends.
+    peer.write_all(b"wake").unwrap();
+    drop(output);
+    let (joined, done) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = handle.join();
+        let _ = joined.send(());
+    });
+    let joined_in_time = done.recv_timeout(Duration::from_secs(3)).is_ok();
+    // SAFETY: this closes the copy that dup2 made; unrelated still owns its own number.
+    unsafe { libc::close(owner_fd) };
+    assert!(
+        got.contains("SECOND"),
+        "reader stopped seeing output after its fd number was reused: {got:?}"
+    );
+    assert!(joined_in_time, "reader did not join");
+}
+
+#[cfg(unix)]
+#[test]
 fn a_bad_fd_is_refused_when_made_nonblocking() {
     let error = set_nonblocking(-1).unwrap_err();
     assert_eq!(error.raw_os_error(), Some(libc::EBADF));

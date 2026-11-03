@@ -8,6 +8,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd};
 
 use crate::screen::{Edit, MIN_COLS, SNAPSHOT_MAX, Screen, SelectMode};
 
@@ -87,12 +89,15 @@ impl Terminal {
         let writer = pair.master.take_writer().map_err(io_error)?;
         // take_writer clones the master fd. Non-blocking writes let finish cancel a
         // checked send that filled the buffer, instead of hanging in write_all.
+        // Each polling thread owns its own dup, because teardown closes the master before it joins the reader.
         #[cfg(unix)]
-        let wait_fd = pair.master.as_raw_fd();
-        #[cfg(unix)]
-        if let Some(fd) = wait_fd {
-            set_nonblocking(fd)?;
-        }
+        let (reader_wait, writer_wait) = match pair.master.as_raw_fd() {
+            Some(fd) => {
+                set_nonblocking(fd)?;
+                (Some(dup_fd(fd)?), Some(dup_fd(fd)?))
+            }
+            None => (None, None),
+        };
         let mut command = CommandBuilder::new(launch.program);
         command.args(launch.args);
         if let Some(cwd) = launch.cwd {
@@ -144,14 +149,14 @@ impl Terminal {
                 input.clone(),
                 Arc::clone(&ended),
                 #[cfg(unix)]
-                wait_fd,
+                reader_wait,
             )),
             writer: Some(thread_write(
                 writer,
                 queued,
                 Arc::clone(&write_stop),
                 #[cfg(unix)]
-                wait_fd,
+                writer_wait,
                 #[cfg(test)]
                 Arc::clone(&fail_write),
             )),
@@ -492,7 +497,7 @@ fn thread_read(
     shared: Shared,
     replies: Sender<Outgoing>,
     ended: Arc<AtomicBool>,
-    #[cfg(unix)] wait_fd: Option<std::os::fd::RawFd>,
+    #[cfg(unix)] wait_fd: Option<OwnedFd>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
         let mut buf = [0_u8; 8192];
@@ -512,8 +517,8 @@ fn thread_read(
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                     // O_NONBLOCK is shared across the master's dups; sleep would spin an idle pty.
                     #[cfg(unix)]
-                    if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLIN, -1);
+                    if let Some(fd) = &wait_fd {
+                        wait_ready(fd.as_raw_fd(), libc::POLLIN, -1);
                     } else {
                         std::thread::sleep(Duration::from_micros(100));
                     }
@@ -529,6 +534,12 @@ fn thread_read(
         }
         ended.store(true, Ordering::Release);
     })
+}
+
+#[cfg(unix)]
+fn dup_fd(fd: std::os::fd::RawFd) -> io::Result<OwnedFd> {
+    // SAFETY: the master is open while spawn runs, so fd is valid for this borrow.
+    unsafe { BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()
 }
 
 #[cfg(unix)]
@@ -572,7 +583,7 @@ fn thread_write(
     mut writer: Box<dyn Write + Send>,
     queued: mpsc::Receiver<Outgoing>,
     write_stop: Arc<AtomicBool>,
-    #[cfg(unix)] wait_fd: Option<std::os::fd::RawFd>,
+    #[cfg(unix)] wait_fd: Option<OwnedFd>,
     #[cfg(test)] fail_write: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
@@ -593,7 +604,7 @@ fn thread_write(
                         &bytes,
                         &write_stop,
                         #[cfg(unix)]
-                        wait_fd,
+                        wait_fd.as_ref().map(AsRawFd::as_raw_fd),
                     )
                 }
                 #[cfg(not(test))]
@@ -603,7 +614,7 @@ fn thread_write(
                         &bytes,
                         &write_stop,
                         #[cfg(unix)]
-                        wait_fd,
+                        wait_fd.as_ref().map(AsRawFd::as_raw_fd),
                     )
                 }
             };
