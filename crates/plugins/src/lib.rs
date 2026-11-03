@@ -528,6 +528,12 @@ async fn stored_settings(
                 }
                 settings.insert(key.clone(), Value::Null);
             }
+            Setting::Number { .. } => {
+                let value = stored
+                    .and_then(number_value)
+                    .unwrap_or_else(|| setting.default_value());
+                settings.insert(key.clone(), value);
+            }
             Setting::String { .. }
             | Setting::Boolean { .. }
             | Setting::Select { .. }
@@ -538,6 +544,21 @@ async fn stored_settings(
         }
     }
     Ok((settings, agents))
+}
+
+fn number_value(value: Value) -> Option<Value> {
+    match value {
+        Value::Number(number) if number.as_f64().is_some_and(f64::is_finite) => {
+            Some(Value::Number(number))
+        }
+        Value::String(text) => match serde_json::from_str::<Value>(text.trim()) {
+            Ok(Value::Number(number)) if number.as_f64().is_some_and(f64::is_finite) => {
+                Some(Value::Number(number))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// A secret the keychain will not give is left unset and named in the plugin log.

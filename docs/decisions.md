@@ -535,3 +535,8 @@ Rules out: a child-window WebView2, turning DirectComposition off, writing the p
 Why: the person chooses which project sits where, and that choice survives restart.
 Cost: one integer column and a renumber of the standard list on each move.
 Rules out: reordering Personal, a plugin API for reorder in this change, and fractional sort keys.
+
+**134. A plugin setting may be a number.** `"type": "number"` in `kagan.json` stores a finite JSON number (integer or float). Settings draws the same text field as a string setting; Enter saves when the draft parses as a finite number. `kg plugin config <id> set <key> <value>` takes a JSON number the same way it takes `true` or `"text"`. There is no min, max, or integer-only check in the host. Decisions 129–133 are reserved for other slices on parallel branches.
+Why: ports that need a count, timeout, or size should not store a string and parse it themselves.
+Cost: one setting variant and the same text-field path used for strings.
+Rules out: a schema, range, or integer-only constraint on the setting itself.
