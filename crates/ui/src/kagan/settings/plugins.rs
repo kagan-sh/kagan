@@ -8,11 +8,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
-    IntoElement, ParentElement as _, PathPromptOptions, SharedString, Styled as _, Subscription,
-    WeakEntity, Window, div, rems,
+    IntoElement, ParentElement as _, PathPromptOptions, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, div, rems,
 };
 use kg_core::Workspace;
 use kg_domain::{ConfigOp, Op, OpError, OpResult, PluginId, PluginOp};
@@ -534,7 +535,7 @@ fn project_menu(
     let none_key = key.to_owned();
     let none_weak = weak.clone();
     let none_selected = current.is_empty();
-    let menu = menu.item(
+    let menu = menu.scrollable(true).item(
         PopupMenuItem::element(move |_, _| {
             div()
                 .id(none_id.clone())
@@ -545,6 +546,7 @@ fn project_menu(
                 })
                 .child("None")
         })
+        .checked(none_selected)
         .on_click(move |_, _, cx| {
             save_value(
                 &none_weak,
@@ -572,13 +574,19 @@ fn project_menu(
             PopupMenuItem::element(move |_, _| {
                 div()
                     .id(ElementId::Name(item_id.clone().into()))
+                    .tooltip({
+                        let text = full.clone();
+                        move |window, cx| Tooltip::new(text.clone()).build(window, cx)
+                    })
                     .ui_observe_as(Facts {
                         role: Role::MenuItem,
                         selected: Some(selected),
+                        hint: Some(full.clone().into()),
                         ..Facts::button(full.clone())
                     })
                     .child(shown.clone())
             })
+            .checked(selected)
             .on_click(move |_, _, cx| {
                 save_value(
                     &weak,

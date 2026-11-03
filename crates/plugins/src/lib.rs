@@ -523,11 +523,16 @@ async fn stored_settings(
                 }
                 settings.insert(key.clone(), Value::Null);
             }
+            Setting::Project { .. } => {
+                let value = stored
+                    .filter(|value| value.is_null() || value.is_string())
+                    .unwrap_or_else(|| setting.default_value());
+                settings.insert(key.clone(), value);
+            }
             Setting::String { .. }
             | Setting::Boolean { .. }
             | Setting::Select { .. }
-            | Setting::Folder { .. }
-            | Setting::Project { .. } => {
+            | Setting::Folder { .. } => {
                 let value = stored.unwrap_or_else(|| setting.default_value());
                 settings.insert(key.clone(), value);
             }

@@ -15,7 +15,7 @@ use kg_domain::{
 use serde_json::{Value, json};
 
 use super::kagan::{
-    NAVIGATOR, chord, click, drag_to, focused_of, install_navigator, label, open,
+    NAVIGATOR, add_project, chord, click, drag_to, focused_of, install_navigator, label, open,
     open_with_plugins_then, plugin_log, present, press as press_at, press_key, release, run_shell,
     selected_of, set_preference, shows, value_of, wait_until,
 };
@@ -566,6 +566,139 @@ fn a_missing_project_setting_keeps_its_id(cx: &mut TestAppContext) {
         note.contains("gone") && note.contains("Pick another"),
         "{note}"
     );
+}
+
+#[gpui_kit::test]
+fn a_project_menu_scrolls_to_its_last_of_25_projects(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    let mut last = None;
+    for n in 0..25 {
+        let folder = data.path().join(format!("project-{n:02}"));
+        std::fs::create_dir(&folder).unwrap();
+        last = Some(add_project(cx, &folder).id);
+    }
+    let last = last.unwrap();
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    click(cx, window, "setting-project-dev.test.prefs/board");
+    let pick = format!("project-pick-dev.test.prefs/board/{}", last.0);
+    wait_until(cx, |cx| {
+        shows(cx, window, "project-none-dev.test.prefs/board")
+    });
+    run_op(
+        cx,
+        Op::Ui(UiOp::Scroll {
+            element_id: pick.clone(),
+            within: None,
+            dy: 0.,
+            window: 0,
+        }),
+    );
+    wait_until(cx, |cx| shows(cx, window, &pick));
+    click(cx, window, &pick);
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "board"), json!(last.0));
+}
+
+#[gpui_kit::test]
+fn long_project_names_with_one_prefix_keep_full_names_in_their_hints(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    let mut projects = Vec::new();
+    for suffix in ["north", "south"] {
+        let folder = data.path().join(format!(
+            "customer-portal-migration-to-the-new-platform-{suffix}"
+        ));
+        std::fs::create_dir(&folder).unwrap();
+        projects.push(add_project(cx, &folder));
+    }
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    click(cx, window, "setting-project-dev.test.prefs/board");
+    for project in &projects {
+        let pick = format!("project-pick-dev.test.prefs/board/{}", project.id.0);
+        wait_until(cx, |cx| shows(cx, window, &pick));
+        assert_eq!(hint_of(cx, window, &pick), Some(project.name.clone()));
+    }
+    assert_ne!(projects[0].name, projects[1].name);
+}
+
+#[gpui_kit::test]
+fn the_saved_project_is_checked_in_its_menu(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    let folder = data.path().join("checked-project");
+    std::fs::create_dir(&folder).unwrap();
+    let project = add_project(cx, &folder);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    click(cx, window, "setting-project-dev.test.prefs/board");
+    let pick = format!("project-pick-dev.test.prefs/board/{}", project.id.0);
+    wait_until(cx, |cx| shows(cx, window, &pick));
+    click(cx, window, &pick);
+    cx.run_until_parked();
+    click(cx, window, "setting-project-dev.test.prefs/board");
+    wait_until(cx, |cx| shows(cx, window, &pick));
+    assert_eq!(selected_of(cx, window, &pick), Some(true));
+    assert_eq!(
+        selected_of(cx, window, "project-none-dev.test.prefs/board"),
+        Some(false)
+    );
+}
+
+#[gpui_kit::test]
+fn removing_the_project_while_settings_is_open_shows_missing(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    let folder = data.path().join("removed-project");
+    std::fs::create_dir(&folder).unwrap();
+    let project = add_project(cx, &folder);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    click(cx, window, "setting-project-dev.test.prefs/board");
+    let pick = format!("project-pick-dev.test.prefs/board/{}", project.id.0);
+    wait_until(cx, |cx| shows(cx, window, &pick));
+    click(cx, window, &pick);
+    cx.run_until_parked();
+    let removal = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Project(kg_domain::ProjectOp::Remove {
+                id: project.id.clone(),
+            }),
+            cx,
+        )
+    });
+    wait_until(cx, |cx| {
+        cx.update(|cx| Workspace::global(cx).read(cx).approvals().next().is_some())
+    });
+    let approval = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .unwrap()
+            .id()
+            .clone()
+    });
+    let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
+    cx.foreground_executor().block_test(answered).unwrap();
+    cx.foreground_executor().block_test(removal).unwrap();
+    cx.run_until_parked();
+    assert_eq!(
+        label(cx, window, "setting-project-dev.test.prefs/board"),
+        "Missing"
+    );
+    let note = aria_label(cx, window, "setting-row-dev.test.prefs/board-note").unwrap_or_default();
+    assert!(note.contains("gone"), "{note}");
+}
+
+fn hint_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<String> {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
+            .and_then(|element| element.hint().map(str::to_owned))
+    })
+    .unwrap()
 }
 
 #[gpui_kit::test]

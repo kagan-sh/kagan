@@ -1007,6 +1007,45 @@ fn a_removed_project_keeps_its_stored_id(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_stored_project_id_loads_only_as_text_or_null(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let id = PluginId(ID.into());
+    let get = Op::Plugin(PluginOp::Config {
+        id: id.clone(),
+        op: ConfigOp::Get {
+            key: "board".into(),
+        },
+        thread_id: None,
+    });
+    let reload = Op::Plugin(PluginOp::Reload {
+        id: id.clone(),
+        thread_id: None,
+    });
+    for old in [json!(true), json!(3), json!({ "id": "prj_kagan" })] {
+        cx.update(|cx| {
+            let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+            let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+            store.set_plugin_value(&id, "board", &old).unwrap();
+        });
+        run(cx, reload.clone()).unwrap();
+        assert_eq!(
+            run(cx, get.clone()).unwrap(),
+            OpResult::Setting(Value::Null)
+        );
+    }
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "board", &json!("prj_gone"))
+            .unwrap();
+    });
+    run(cx, reload).unwrap();
+    assert_eq!(run(cx, get).unwrap(), OpResult::Setting(json!("prj_gone")));
+}
+
+#[gpui_kit::test]
 fn an_install_or_removal_whose_command_stopped_never_acts(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     let source = plugin.path().display().to_string();
