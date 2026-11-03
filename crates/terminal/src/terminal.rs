@@ -203,6 +203,21 @@ impl Terminal {
         self.write(paste_text(text, bracketed).into_bytes())
     }
 
+    /// Types `text` the way [`paste`](Self::paste) does, then presses Enter.
+    ///
+    /// # Errors
+    ///
+    /// The program has already been reaped, or nothing remains after the control-character filter.
+    pub fn submit(&self, text: &str) -> io::Result<String> {
+        let typed: String = text.chars().filter(|c| !is_unsafe_control(*c)).collect();
+        if typed.is_empty() {
+            return Err(io::Error::other("send needs text"));
+        }
+        self.paste(&typed)?;
+        self.write(b"\r".to_vec())?;
+        Ok(typed)
+    }
+
     /// Moves the view back into history by `lines`, or forward when negative.
     pub fn scroll(&self, lines: i32) {
         self.edit(Edit::Scroll(lines));

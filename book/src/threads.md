@@ -22,7 +22,9 @@ kg thread run --project-id <project-id> --program claude
 
 A program line splits at spaces. Single or double quotes keep spaces together, for example `'/Applications/My Tool/bin/tool' --flag "a b"`. A backslash is a usual character, so a Windows path needs no change.
 
-`kg thread paste <id> --file <path>` sends a file to the program, up to 1 MiB. Use `-` for stdin.
+`kg thread paste <id> --file <path>` sends a file to the program, up to 1 MiB. Use `-` for stdin. Paste does not press Enter.
+
+`kg thread send <id> <text>` types that text and presses Enter, up to 1 MiB. It writes a user message in the thread log. It fails when the program is not running.
 
 ## Folders
 

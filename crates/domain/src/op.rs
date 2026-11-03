@@ -1153,6 +1153,12 @@ pub enum ThreadOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         file: Option<String>,
     },
+    /// Type text into the program and press Enter
+    Send {
+        #[arg(env = "KG_THREAD_ID")]
+        id: ThreadId,
+        text: String,
+    },
     /// Extra terminals: login shells in the thread's folder
     #[command(subcommand)]
     Terminal(TerminalOp),
@@ -2134,6 +2140,7 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Select { id, .. }
         | ThreadOp::Copy { id, .. }
         | ThreadOp::Paste { id, .. }
+        | ThreadOp::Send { id, .. }
         | ThreadOp::Report { id, .. }
         | ThreadOp::Terminal(
             TerminalOp::New { id } | TerminalOp::List { id } | TerminalOp::Close { id, .. },

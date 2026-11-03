@@ -49,6 +49,8 @@ kg thread paste <id> --file <path>
 
 `--file -` reads stdin. The cap is 1 MiB. Inside double quotes the shell runs backticks and `$(...)` before `kg` sees the text, which corrupts the prompt and can run commands. Paste sends the file's text and does not add a key after it. A newline in the file reaches the program. Tab and newline stay. Other control characters are dropped.
 
+`kg thread send <id> <text>` types that text and presses Enter. The cap is 1 MiB. The same control characters are dropped. It writes a `message` event with role `user`. It does not queue, and it fails when the program is not running.
+
 `kg thread input <id> <text>` types into the terminal, including a short submit. Use paste for anything long.
 
 ## Parent and lifetime
@@ -64,6 +66,7 @@ kg thread paste <id> --file <path>
 Do not poll with sleeps or repeated status reads.
 
 - `kg thread paste <id> --file <path>` sends text, as above.
+- `kg thread send <id> <text>` types that text and presses Enter, and writes a user message.
 - `kg thread wait <id> --timeout-ms <ms>` waits until a reply ends, the program ends, or the time is up. `--timeout-ms` is required. It returns `waiting`, `exited` (the row is idle, including after Stop), `failed`, `not-busy`, or `timeout`.
 - `kg thread wait-event <id> --kind <kind> --timeout-ms <ms>` waits for one event. `--after-seq` skips what you have already read.
 - `kg thread stop <id>` stops the program now. `kg thread archive <id>` is not a stop. Archive retires the thread after a short undo grace. `kg thread unarchive` brings it back.

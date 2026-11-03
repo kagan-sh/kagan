@@ -17,6 +17,7 @@ pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
         "get",
         "list",
         "stop",
+        "send",
         "archive",
         "unarchive",
         "remove",
@@ -63,6 +64,7 @@ pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
 fn operation(name: &str, args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError> {
     match name {
         "get" | "stop" | "archive" | "unarchive" => thread_by_id(name, args),
+        "send" => send_line(args),
         "markRead" => thread_by_id("mark-read", args),
         "remove" => thread_by_id("delete", args),
         "list" => list_threads(args),
@@ -80,6 +82,15 @@ fn operation(name: &str, args: &HostArguments, plugin: &PluginId) -> Result<Op, 
         "restoreEnvironment" => restore_environment(args),
         _ => Err(HostError::new(format!("unknown threads function {name}"))),
     }
+}
+
+fn send_line(args: &HostArguments) -> Result<Op, HostError> {
+    as_thread(json!({
+        "send": {
+            "id": args.string(0)?,
+            "text": args.string(1)?,
+        }
+    }))
 }
 
 fn thread_by_id(name: &str, args: &HostArguments) -> Result<Op, HostError> {

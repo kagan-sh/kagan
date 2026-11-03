@@ -63,7 +63,7 @@ Build a plugin in this order. Each step names the command to run.
    - `event` `{ type, threadId, projectId, data }`: reply nothing.
    - `cli` `{ command, argv, cwd, threadId?, projectId? }`: reply `{ exitCode, stdout, stderr }`.
 
-   Host calls come from `kagan/host` (`log`, `openPanel`, `openThread`, `toast`, `openUrl`), `kagan/threads`, and the other `kagan/*` modules named by `powers.areas`.
+   Host calls come from `kagan/host` (`log`, `openPanel`, `openThread`, `toast`, `openUrl`), `kagan/threads`, and the other `kagan/*` modules named by `powers.areas`. `threads.send(id, text)` needs the `threads` area. It types the text and presses Enter in the running program, at most 1 MiB, and writes a user `message`. It does not queue. Empty text and a program that is not running are refused.
 
 4. **Use `KgButton` for buttons.** Import it from `gpui-component`. A plain `Button` cannot be found or clicked through `kg ui`, and `kg plugin check` warns about it. `KgButton` takes the same calls as `Button`: `label`, `tooltip`, `primary`, `outline`, `compact`, `disabled`, `selected`, `on_click`, and children. Give every control a stable id. Two panels with the same id need `--within` to pick one. A text field `kg ui` can click and type into is `KgInput` (`InputState`) or `KgTextarea` (`TextareaState`), with `aria_label` as its name. The shell's `Input` and `Textarea` are not seen. A page in a panel is `new WebView(id).url(url)`: http or https, host `127.0.0.1`, `localhost`, or a `powers.fetch` host. macOS draws it; other systems show one sentence. `writeClipboardPng(base64)` on `kagan/host` writes a PNG when `powers.clipboard.write` is granted, and on Linux it fails because a png clipboard is not available on this platform.
 
