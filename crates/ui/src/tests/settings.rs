@@ -797,6 +797,44 @@ fn a_plugin_text_field_states_its_value_and_saves_on_enter(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
+fn a_plugin_number_field_saves_a_finite_number_on_enter(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    let field = format!("plugin-text-{PREFS}/retries");
+    assert_eq!(value_of(cx, window, &field), Some("3".into()));
+    assert_eq!(plugin_config(cx, "retries"), json!(3));
+
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, "backspace");
+    cx.simulate_input(window, "2.5");
+    cx.run_until_parked();
+    assert_eq!(
+        plugin_config(cx, "retries"),
+        json!(3),
+        "typing alone saves nothing"
+    );
+
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "retries"), json!(2.5));
+    assert_eq!(value_of(cx, window, &field), Some("2.5".into()));
+
+    click(cx, window, &field);
+    for _ in 0..3 {
+        cx.simulate_keystrokes(window, "backspace");
+    }
+    cx.simulate_input(window, "nope");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(
+        plugin_config(cx, "retries"),
+        json!(2.5),
+        "a non-number is refused"
+    );
+}
+
+#[gpui_kit::test]
 fn a_plugin_turns_off_and_on_from_the_installed_page(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
@@ -976,6 +1014,7 @@ fn install_plugins(data: &Path) {
                     "default": "comfortable"
                 },
                 "label": {"type": "string", "title": "Label", "default": "hi"},
+                "retries": {"type": "number", "title": "Retries", "default": 3},
                 "folder": {"type": "folder", "title": "Folder"}
             }
         }),
@@ -1800,7 +1839,7 @@ fn an_enabled_plugin_says_what_it_added_without_a_side(cx: &mut TestAppContext) 
     cx.run_until_parked();
     click(cx, window, "settings-gear");
     let note = aria_label(cx, window, &format!("setting-row-{PREFS}-note")).unwrap_or_default();
-    assert_eq!(note, "Adds 4 settings.");
+    assert_eq!(note, "Adds 5 settings.");
     assert!(!note.starts_with("On"), "{note}");
     assert!(!note.contains("right") && !note.contains("left"), "{note}");
 }

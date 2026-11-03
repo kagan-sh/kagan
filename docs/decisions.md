@@ -511,3 +511,8 @@ Rules out: giving a plugin the app's data folder, and a power that grants `proce
 Why: a plugin that follows a turn needs the text on screen, such as a live transcript, without parsing ANSI or attaching as a second client.
 Cost: one scrollback render per call on the background executor, result bounded by the cap.
 Rules out: pushing screen events to plugins, reading an extra terminal, returning ANSI, and scraping messages or tools out of the screen.
+
+**134. A plugin setting may be a number.** `"type": "number"` in `kagan.json` stores a finite JSON number (integer or float). Settings draws the same text field as a string setting; Enter saves when the draft parses as a finite number. `kg plugin config <id> set <key> <value>` takes a JSON number the same way it takes `true` or `"text"`. There is no min, max, or integer-only check in the host. Decisions 129–133 are reserved for other slices on parallel branches.
+Why: ports that need a count, timeout, or size should not store a string and parse it themselves.
+Cost: one setting variant and the same text-field path used for strings.
+Rules out: a schema, range, or integer-only constraint on the setting itself.

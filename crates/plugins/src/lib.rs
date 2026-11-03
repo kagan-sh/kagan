@@ -521,6 +521,7 @@ async fn stored_settings(
             }
             Setting::String { .. }
             | Setting::Boolean { .. }
+            | Setting::Number { .. }
             | Setting::Select { .. }
             | Setting::Folder { .. } => {
                 let value = stored.unwrap_or_else(|| setting.default_value());

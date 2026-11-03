@@ -164,6 +164,7 @@ fn manifest() -> Value {
         "powers": { "clipboard": { "write": true } },
         "settings": {
             "sounds": { "type": "boolean", "title": "Sounds", "default": true },
+            "retries": { "type": "number", "title": "Retries", "default": 3 },
             "notes": { "type": "folder", "title": "Notes" }
         },
         "tools": [
@@ -821,6 +822,16 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
         .unwrap(),
         OpResult::Setting(json!(true))
     );
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "retries".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!(3))
+    );
     let error = run(
         cx,
         config(ConfigOp::Set {
@@ -830,6 +841,18 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
     )
     .unwrap_err();
     assert!(error.to_string().contains("takes true or false"), "{error}");
+    let number_error = run(
+        cx,
+        config(ConfigOp::Set {
+            key: "retries".into(),
+            value: Some(json!("three")),
+        }),
+    )
+    .unwrap_err();
+    assert!(
+        number_error.to_string().contains("takes a finite number"),
+        "{number_error}"
+    );
     assert!(matches!(
         run(
             cx,
@@ -847,6 +870,24 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
         }),
     )
     .unwrap();
+    run(
+        cx,
+        config(ConfigOp::Set {
+            key: "retries".into(),
+            value: Some(json!(2.5)),
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "retries".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!(2.5))
+    );
     assert_eq!(
         call(cx, "echo", json!({ "text": "hi" })).unwrap(),
         OpResult::ToolReply {

@@ -1086,6 +1086,8 @@ fn checked(key: &str, setting: &Setting, value: Value) -> Result<Value> {
         Setting::String { .. } => Err(takes("text")),
         Setting::Boolean { .. } if value.is_boolean() => Ok(value),
         Setting::Boolean { .. } => Err(takes("true or false")),
+        Setting::Number { .. } if value.as_f64().is_some_and(f64::is_finite) => Ok(value),
+        Setting::Number { .. } => Err(takes("a finite number")),
         Setting::Select { options, .. } => match value.as_str() {
             Some(choice) if options.iter().any(|option| option == choice) => Ok(value),
             _ => Err(takes(&format!("one of {}", options.join(", ")))),

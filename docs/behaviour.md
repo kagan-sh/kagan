@@ -476,7 +476,7 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ## Config
 
-Plugin settings, reached as `kg plugin config <id> get|set|clear` [docs:plugin-api] [book:cli]. Setting types are string, boolean, select, folder, secret, and provider [docs:plugin-api]. A provider setting is left out of the settings read. A thread a plugin starts names its program in `spawn` [docs:plugin-api].
+Plugin settings, reached as `kg plugin config <id> get|set|clear` [docs:plugin-api] [book:cli]. Setting types are string, boolean, number, select, folder, secret, and provider [docs:plugin-api]. A number is a finite JSON number. A provider setting is left out of the settings read. A thread a plugin starts names its program in `spawn` [docs:plugin-api].
 
 ### `Get`
 

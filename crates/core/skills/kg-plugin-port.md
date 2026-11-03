@@ -80,9 +80,8 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `branding.icon` named glyph | `icon` file | close. Use an SVG file in the plugin. A glyph name has no meaning. |
 | `branding.logo`, `experimental_icons` | none | gap. Cannot move. One `icon` file is the mark. |
 | `bb.settings.define` | `settings` in `kagan.json` | close. Declare each key in the manifest. There is no call that defines one at runtime. The rows below are the types. |
-| `settings` string, boolean, select | same `type`, with `title` | close. No per-setting description, schema, option labels, or multiline flag. A select's `default` must be one of `options`. |
+| `settings` string, boolean, number, select | same `type`, with `title` | close. No per-setting description, schema, option labels, or multiline flag. A select's `default` must be one of `options`. A number is a finite JSON number; there is no min, max, or integer-only check. |
 | string with `secret: true` | `{ "type": "secret", "title" }` | close. Read it from `settings()` in `kagan/host`. It is `null` until set. Never print it. |
-| number setting | none | gap. Store a string and parse it, or use `select` when the choices are few. Say so. |
 | `project` setting | none | gap. With the `threads` area, list `projects()` in the view. |
 | `settings.onChange` | `onSettingsChanged()` | direct |
 | `experimental_set` | none | gap. The person uses Settings or `kg plugin config <id> set`. A secret is set with no value on the command line. |

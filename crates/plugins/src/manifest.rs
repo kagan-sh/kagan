@@ -188,7 +188,7 @@ impl Settings {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Setting {
     String {
@@ -200,6 +200,11 @@ pub enum Setting {
         title: String,
         #[serde(default)]
         default: Option<bool>,
+    },
+    Number {
+        title: String,
+        #[serde(default)]
+        default: Option<serde_json::Number>,
     },
     Select {
         title: String,
@@ -238,6 +243,7 @@ impl Setting {
         match self {
             Self::String { title, .. }
             | Self::Boolean { title, .. }
+            | Self::Number { title, .. }
             | Self::Select { title, .. }
             | Self::Folder { title }
             | Self::Provider { title }
@@ -249,6 +255,7 @@ impl Setting {
         match self {
             Self::String { default, .. } | Self::Select { default, .. } => default.clone().into(),
             Self::Boolean { default, .. } => (*default).into(),
+            Self::Number { default, .. } => default.clone().map_or(Value::Null, Value::Number),
             Self::Folder { .. } | Self::Provider { .. } | Self::Secret { .. } => Value::Null,
         }
     }
@@ -659,6 +666,7 @@ impl Grant {
                     Setting::Folder { title } => Some((key.clone(), title.clone())),
                     Setting::String { .. }
                     | Setting::Boolean { .. }
+                    | Setting::Number { .. }
                     | Setting::Select { .. }
                     | Setting::Provider { .. }
                     | Setting::Secret { .. } => None,

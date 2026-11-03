@@ -99,31 +99,61 @@ pub(super) fn sync(drafts: &mut Drafts, window: &mut Window, cx: &mut Context<Ka
             .unwrap_or_else(|| secret_field(&scope, id, key, window, cx));
         drafts.secret.insert(scope, field);
     }
-    let rows: Vec<(PluginId, String, String)> = {
+    let scopes = live_scopes(cx);
+    sync_text(drafts, &host, &scopes, window, cx);
+    drafts.fault.retain(|scope, fault| {
+        let Some((life, value)) = scopes.get(scope) else {
+            return false;
+        };
+        fault.life == *life && &fault.saved == value
+    });
+}
+
+fn text_rows(host: &PluginHost) -> Vec<(PluginId, String, FieldKind, String)> {
+    host.status()
+        .into_iter()
+        .filter(kg_plugins::PluginStatus::is_enabled)
+        .flat_map(|status| {
+            let id = status.id().clone();
+            host.settings(&id)
+                .into_iter()
+                .filter_map(|(key, setting, value)| match setting {
+                    Setting::String { .. } => Some((
+                        id.clone(),
+                        key,
+                        FieldKind::Text,
+                        value.as_str().unwrap_or_default().to_owned(),
+                    )),
+                    Setting::Number { .. } => Some((
+                        id.clone(),
+                        key,
+                        FieldKind::Number,
+                        value
+                            .as_number()
+                            .map(ToString::to_string)
+                            .unwrap_or_default(),
+                    )),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn sync_text(
+    drafts: &mut Drafts,
+    host: &Entity<PluginHost>,
+    scopes: &BTreeMap<String, (Option<u64>, Value)>,
+    window: &mut Window,
+    cx: &mut Context<Kagan>,
+) {
+    let rows = {
         let host = host.read(cx);
-        host.status()
-            .into_iter()
-            .filter(kg_plugins::PluginStatus::is_enabled)
-            .flat_map(|status| {
-                let id = status.id().clone();
-                host.settings(&id)
-                    .into_iter()
-                    .filter_map(|(key, setting, value)| match setting {
-                        Setting::String { .. } => Some((
-                            id.clone(),
-                            key,
-                            value.as_str().unwrap_or_default().to_owned(),
-                        )),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect()
+        text_rows(host)
     };
     let weak = cx.entity().downgrade();
-    let scopes = live_scopes(cx);
     let mut present = BTreeSet::new();
-    for (id, key, text) in rows {
+    for (id, key, kind, text) in rows {
         let scope = format!("{}/{key}", id.0);
         present.insert(scope.clone());
         let life = scopes.get(&scope).and_then(|(life, _)| *life);
@@ -136,7 +166,7 @@ pub(super) fn sync(drafts: &mut Drafts, window: &mut Window, cx: &mut Context<Ka
             }
             sync_one(&field, &text, window, cx);
         } else {
-            let field = text_field(&weak, &id, &key, text, window, cx);
+            let field = text_field(&weak, &id, &key, kind, text, window, cx);
             let watch = cx.observe(&field, |_, _, cx| cx.notify());
             drafts.text.insert(
                 scope,
@@ -160,12 +190,6 @@ pub(super) fn sync(drafts: &mut Drafts, window: &mut Window, cx: &mut Context<Ka
     for scope in gone {
         forget_queued(drafts, &scope);
     }
-    drafts.fault.retain(|scope, fault| {
-        let Some((life, value)) = scopes.get(scope) else {
-            return false;
-        };
-        fault.life == *life && &fault.saved == value
-    });
 }
 
 /// A plugin's declared settings, as one group named after the plugin.
@@ -229,7 +253,7 @@ fn plugin_row(
                 }),
             )
         }
-        Setting::String { title, .. } => {
+        Setting::String { title, .. } | Setting::Number { title, .. } => {
             let field = kagan.settings_drafts.text.get(&scope)?.field.clone();
             let (note, control) = string_control(title, &scope, &field, cx);
             (title, note, control)
@@ -487,8 +511,15 @@ fn select_control(
         .into_any_element()
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FieldKind {
+    Text,
+    Number,
+}
+
 struct TextField {
     input: Entity<InputState>,
+    kind: FieldKind,
     committed: String,
     sent: Option<String>,
     error: Option<String>,
@@ -517,22 +548,29 @@ impl TextField {
         if value == self.committed && self.error.is_none() && self.sent.is_none() {
             return;
         }
+        let change = match self.kind {
+            FieldKind::Text => Change::Set(json!(value.clone())),
+            FieldKind::Number => match parse_number(&value) {
+                Ok(number) => Change::Set(Value::Number(number)),
+                Err(message) => {
+                    self.error = Some(message);
+                    self.sent = None;
+                    cx.notify();
+                    return;
+                }
+            },
+        };
         self.error = None;
-        self.sent = Some(value.clone());
+        self.sent = Some(value);
         let plugin = self.plugin.clone();
         let key = self.key.clone();
         let kagan = self.kagan.clone();
         let baseline = self.committed.clone();
         let scope = format!("{}/{key}", plugin.0);
         let request = kagan.update(cx, |kagan, cx| {
-            kagan.settings_drafts.begin(
-                scope,
-                plugin,
-                key,
-                Change::Set(json!(value)),
-                Some(baseline),
-                cx,
-            )
+            kagan
+                .settings_drafts
+                .begin(scope, plugin, key, change, Some(baseline), cx)
         });
         self.request = request.ok();
         cx.notify();
@@ -549,7 +587,7 @@ impl TextField {
         if self.request != Some(request) {
             return;
         }
-        let Some(sent) = written.as_str() else {
+        let Some(sent) = shown_value(written) else {
             return;
         };
         let draft = self.input.read(cx).value().to_string();
@@ -557,7 +595,7 @@ impl TextField {
         let baseline = baseline.unwrap_or("");
         if draft != sent {
             if result.is_ok() && self.committed == baseline {
-                sent.clone_into(&mut self.committed);
+                self.committed = sent;
             }
             cx.notify();
             return;
@@ -565,7 +603,7 @@ impl TextField {
         match result {
             Ok(_) => {
                 if self.committed == baseline || self.committed == sent {
-                    sent.clone_into(&mut self.committed);
+                    self.committed = sent;
                     self.error = None;
                 }
             }
@@ -575,10 +613,27 @@ impl TextField {
     }
 }
 
+fn parse_number(text: &str) -> Result<serde_json::Number, String> {
+    let trimmed = text.trim();
+    match serde_json::from_str::<Value>(trimmed) {
+        Ok(Value::Number(number)) if number.as_f64().is_some_and(f64::is_finite) => Ok(number),
+        _ => Err("needs a finite number".into()),
+    }
+}
+
+fn shown_value(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => Some(text.clone()),
+        Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    }
+}
+
 fn text_field(
     kagan: &WeakEntity<Kagan>,
     id: &PluginId,
     key: &str,
+    kind: FieldKind,
     text: String,
     window: &mut Window,
     cx: &mut Context<Kagan>,
@@ -597,6 +652,7 @@ fn text_field(
         );
         TextField {
             input,
+            kind,
             committed: text,
             sent: None,
             error: None,

@@ -35,6 +35,7 @@ kagan owns the manifest and builds each plugin's gpui-shell `Policy` from it. Th
   "settings": {
     "personasDir": { "type": "folder", "title": "Personas folder" },
     "sounds": { "type": "boolean", "title": "Sounds", "default": true },
+    "retries": { "type": "number", "title": "Retries", "default": 3 },
     "density": { "type": "select", "title": "Density", "options": ["comfortable", "compact"], "default": "comfortable" },
     "apiKey": { "type": "secret", "title": "API key" }
   },
@@ -220,7 +221,7 @@ Decision 105. A panel may offer to fill a slot: `"replaces": "threads"` on a `le
 
 ## Settings and the CLI
 
-Setting types: `string`, `boolean`, `select`, `folder` (a user-picked folder, granted read-only), `secret` (a token such as an API key), `provider` (kept so an old manifest parses; `host.settings()` leaves it out). A thread a plugin starts names its program in `spawn`. Plugin settings are `Op`s like every feature: `kg plugin config <id> get|set|clear <key> [<value>]`.
+Setting types: `string`, `boolean`, `number` (a finite JSON number; Settings shows a text field), `select`, `folder` (a user-picked folder, granted read-only), `secret` (a token such as an API key), `provider` (kept so an old manifest parses; `host.settings()` leaves it out). A thread a plugin starts names its program in `spawn`. Plugin settings are `Op`s like every feature: `kg plugin config <id> get|set|clear <key> [<value>]`.
 
 A `secret` setting (decision 104):
 
