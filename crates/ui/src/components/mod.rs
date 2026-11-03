@@ -3,6 +3,7 @@ mod fail;
 #[cfg(test)]
 mod tests;
 mod thread;
+mod webview;
 
 use std::sync::Arc;
 
@@ -14,8 +15,13 @@ use gpui_shell::{
     MaterializeRequest, RegistryError, anyhow,
 };
 
+#[cfg(test)]
+pub(crate) use webview::{REFUSED_HOST, native_shown};
+pub(crate) use webview::{fills_panel, note_inset, sync_pages};
+
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     button::register(registry)?;
+    webview::register(registry)?;
     thread::register(registry)?;
     registry.register(
         ComponentDescriptor::new("Markdown", Arc::new(Markdown))

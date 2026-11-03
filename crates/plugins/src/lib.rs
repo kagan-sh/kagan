@@ -1021,6 +1021,39 @@ impl PluginHost {
             .filter(|icon| !icon.is_empty())
     }
 
+    /// The script view `id` and the hosts that plugin's `powers.fetch` names.
+    #[must_use]
+    pub fn view_fetch(
+        &self,
+        id: gpui_kit::EntityId,
+    ) -> Option<(WeakEntity<ScriptView>, Vec<String>)> {
+        for active in self.active.values() {
+            let Some(loaded) = &active.loaded else {
+                continue;
+            };
+            let view = if loaded.view.entity_id() == id {
+                Some(loaded.view.downgrade())
+            } else {
+                loaded
+                    .views
+                    .iter()
+                    .find(|view| view.entity_id() == id)
+                    .cloned()
+            };
+            if let Some(view) = view {
+                let hosts = active
+                    .grant
+                    .powers
+                    .fetch
+                    .iter()
+                    .map(|fetch| fetch.host.clone())
+                    .collect();
+                return Some((view, hosts));
+            }
+        }
+        None
+    }
+
     fn sample(&mut self, cx: &mut Context<Self>) -> Vec<(secret::Store, PluginId, String)> {
         let mut marks = Vec::new();
         for (id, active) in &mut self.active {
