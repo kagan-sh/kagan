@@ -547,7 +547,7 @@ fn wait_ready(fd: std::os::fd::RawFd, events: libc::c_short) {
             revents: 0,
         };
         // SAFETY: pfd is one valid pollfd; fd is a live pty master.
-        let n = unsafe { libc::poll(&mut pfd, 1, -1) };
+        let n = unsafe { libc::poll(&raw mut pfd, 1, -1) };
         if n >= 0 {
             return;
         }
