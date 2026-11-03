@@ -21,9 +21,9 @@ kg-ui = { path = "crates/ui" }
 anyhow = "=1.0.104"
 async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
-gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "6c2ff58d24b87d0ec5fcdf0cd9d6f7c910fa8b63", features = ["tree-sitter-diff"] }
-gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "6c2ff58d24b87d0ec5fcdf0cd9d6f7c910fa8b63", default-features = false, features = ["quickjs", "components"] }
-gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "6c2ff58d24b87d0ec5fcdf0cd9d6f7c910fa8b63", default-features = false, features = ["gpui-fast"] }
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "b86182e9aebe7ed2b9c730bc17bc19379dabab1f", features = ["tree-sitter-diff"] }
+gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "b86182e9aebe7ed2b9c730bc17bc19379dabab1f", default-features = false, features = ["quickjs", "components"] }
+gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "b86182e9aebe7ed2b9c730bc17bc19379dabab1f", default-features = false, features = ["gpui-fast"] }
 interprocess = "=2.4.4"
 keyring-core = "=1.0.1"
 rusqlite = { version = "=0.40.2", features = ["bundled", "fallible_uint"] }
@@ -57,7 +57,7 @@ disallowed_types = "deny"
 [workspace.metadata.bin]
 cargo-nextest = { version = "=0.9.148", locked = true }
 
-# The Browser's web view. Camera and microphone are refused, and Windows hosts the page in a composition visual (decision 123).
+# The Browser's web view. Camera and microphone are refused, and Windows hosts the page in a composition visual (decision 131).
 [patch.crates-io]
 lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "11b65fc1b90a59a02b12f4b57e64bf1546f181c3" }
 

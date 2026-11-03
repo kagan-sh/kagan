@@ -29,15 +29,16 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 - `version`: the plugin version.
 - `kagan`: the oldest kagan version that can load the plugin.
 - `entry`: the main script, `main.js`.
-- `instructions`: a short text for agents.
+- `instructions`: a short standing text for agents.
+- `instruct`: when `true`, the plugin gets a job each time a program starts and may append text for that start only.
 - `powers`: what the plugin can do. The starter asks for none.
-- `commands`: commands that you can bind to a key.
+- `commands`: commands that you can bind to a key. `"header": true` with `"when": "thread"` also draws the command as a button on the thread title.
 - `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center. `"placement": "right"` puts a tab in the right sidebar.
 - `tools` and `skills`: agent tools and skills. The starter has none.
 
 kagan refuses a manifest with an unknown key. Run `kg plugin check ./hello` to find manifest errors. [docs/plugin-api.md](https://github.com/kagan-sh/kagan/blob/main/docs/plugin-api.md) lists every key, power, and the JavaScript API.
 
-The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has a panel, a sidebar, a review, an overlay, a `kg` command, and a theme.
+The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has a panel, a sidebar, a review, an overlay, a header button, a `kg` command, and a theme.
 
 ## Share it
 

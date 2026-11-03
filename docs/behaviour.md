@@ -17,7 +17,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Get`, `Metadata`, `Events`, `Interactions`
 
 - **Allowed when**: the thread id is known [book:cli]. These reads are allowed in every status, including an archived thread [person 2026-10-08].
-- **Shows**: `Get` returns the thread. The stored provider is the program line [record.rs] [op.rs]. A plugin's own thread record omits the program [docs:plugin-api]. `Metadata` that plugin's value on the thread [book:cli]. `Events` the log after `after_seq`, limited, in `asc` or `desc` order [book:cli]. The types are `created`, `started`, `exited`, `stopped`, `idle`, `waiting`, `failed`, `archived`, `unarchived`, `deleted`, `turn.started`, `turn.ended`, `message`, `tool`, `restore.failed`, `snapshot.failed`, `notice`, `answered`, `file.changed`, `file.read`, `file.predicted`, `opened`, `rewound`, and `reconnecting` [event.rs]. Types kagan no longer writes stay in the plugin event list. A live thread does not append message events [docs:architecture]. `Interactions` the pending questions; each shows its options [decision 43] [book:cli].
+- **Shows**: `Get` returns the thread. The stored provider is the program line [record.rs] [op.rs]. A plugin's own thread record omits the program [docs:plugin-api]. `Metadata` that plugin's value on the thread [book:cli]. `Events` the log after `after_seq`, limited, in `asc` or `desc` order [book:cli]. The types are `created`, `started`, `exited`, `stopped`, `idle`, `waiting`, `failed`, `archived`, `unarchived`, `deleted`, `turn.started`, `turn.ended`, `message`, `tool`, `restore.failed`, `snapshot.failed`, `notice`, `answered`, `file.changed`, `file.read`, `file.predicted`, `opened`, `rewound`, and `reconnecting` [event.rs]. `turn.started` and `turn.ended` are written from the title spinner [decision 123]. Types kagan no longer writes stay in the plugin event list. A live thread does not append message events [docs:architecture]. `Interactions` the pending questions; each shows its options [decision 43] [book:cli].
 - **Refused when**: the thread is missing — `not-found` [op.rs].
 
 ### `List`
@@ -35,7 +35,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Stop`
 
 - **Allowed when**: the thread exists and is not archived [book:cli].
-- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A terminal program has no turn to end [docs:architecture]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
+- **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A program whose title never shows a spinner has no turn to end. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
 - **Shows**: the thread leaves the running status [book:window].
 - **Refused when**: a missing thread — `not-found` [op.rs]. An archived thread — `failed` [op.rs].
 
@@ -50,8 +50,8 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 - **Allowed when**: the thread's program is running in the host [decision 46].
 - **Changes**: `Input` writes text to the program's terminal and brings the view back to the bottom. `Paste` does the same, wrapped in bracketed-paste markers when the program asked for them; otherwise its newlines become carriage returns. A paste that names a path is `invalid` and sends nothing; `kg` reads `--file`, or stdin when the path is `-`, up to 1 MiB, and sends the text. Escape and the other control characters are removed from pasted text, so it cannot end a bracketed paste or type a command. `Report` sends mouse-report bytes (decimal values, 0 to 255) to the program without that scroll reset, so a scrolled view stays where it is. `Resize` sets the program's size, from 2 to 1000 columns and 1 to 500 rows. The last client to resize sets it [decision 46]. `Scroll` moves the view by lines into the history, up when positive. Each program keeps 10,000 lines of history. `Select` starts a selection at a cell (`simple`, `word`, `line` or `block`), or moves the end of the one there is (`extend`). `Screen` changes nothing.
-- **Shows**: `Screen` returns the visible rows as an ANSI redraw, with the modes that change what keys send [decision 46]. With `--scrollback` it returns every kept line as plain text. `--lines` is refused without `--scrollback`; with it, the count is from 1 to 10000 and the result is that many last rows of the same text, or the whole text when there are fewer. `Copy` returns the selected text, or nothing when no text is selected; a whole line copied has no newline at its end. `Input`, `Paste`, `Report`, `Resize`, `Scroll` and `Select` return done. `WorkspaceEvent::Screen` follows a change, at most about 30 times a second [decision 46].
-- **Refused when**: the thread has no running program — `not-found` [op.rs]. A size outside those limits — `invalid` [op.rs]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op.rs]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run.
+- **Shows**: `Screen` returns the visible rows as an ANSI redraw, with the modes that change what keys send [decision 46]. With `--scrollback` it returns every kept line as plain text. `--lines` is refused without `--scrollback`; with it, the count is from 1 to 10000 and the result is that many last rows of the same text, or the whole text when there are fewer. A plugin's `threads.output` is that scrollback plain text, newest 256 KiB [decision 128]. `Copy` returns the selected text, or nothing when no text is selected; a whole line copied has no newline at its end. `Input`, `Paste`, `Report`, `Resize`, `Scroll` and `Select` return done. `WorkspaceEvent::Screen` follows a change, at most about 30 times a second [decision 46].
+- **Refused when**: the thread has no running program — `not-found` [op.rs]. A size outside those limits — `invalid` [op.rs]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op.rs]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run. An ended program whose screen was kept still answers `Screen` and `threads.output`.
 
 ### `Terminal` (`New`, `List`, `Close`)
 
@@ -139,7 +139,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Tools`
 
 - **Allowed when**: the thread exists [book:cli].
-- **Shows**: the tools offered to that thread, and the plugin instructions [book:cli]. A plugin's instructions go out as MCP server instructions; each tool description still stands alone [docs:plugin-api]. With no plugin host the list is empty. That is the contract before plugins load [docs:architecture] [person 2026-10-08].
+- **Shows**: the tools offered to that thread, and the plugin instructions [book:cli]. A plugin's standing `instructions` and any `instruct` text for this start go out as MCP server instructions; each tool description still stands alone [docs:plugin-api] [decision 130]. With no plugin host the list is empty. That is the contract before plugins load [docs:architecture] [person 2026-10-08].
 - **Refused when**: a missing thread — `not-found` [op.rs].
 
 ### `CallTool`
@@ -228,7 +228,7 @@ The provider on a thread is the program line that thread runs, such as `claude` 
 
 ## Plugin
 
-A plugin is a package installed from git that adds UI, commands, tools, or skills [CONTEXT]. A plugin's thread record omits the program line [docs:plugin-api]. There is no trust shortcut for a plugin an agent built [docs:self-extend]. This contract has no catalog and no marketplace command; install is a git link or a local folder [docs:self-extend] [book:plugins]. Decision 3 describes a later index and is not an Op here [decision 3]. A manifest with `"areas": ["audio"]` is refused as an unknown area [decision 42].
+A plugin is a package installed from git that adds UI, commands, tools, or skills [CONTEXT]. A plugin's thread record omits the program line [docs:plugin-api]. There is no trust shortcut for a plugin an agent built [docs:self-extend]. This contract has no catalog and no marketplace command; install is a git link or a local folder [docs:self-extend] [book:plugins]. Decision 3 describes a later index and is not an Op here [decision 3]. A manifest with `"areas": ["audio"]` is refused as an unknown area [decision 42]. When loaded, its script reads its data folder as `process.dataDir` [decision 127].
 
 ### `List`, `Logs`, `Types`
 
@@ -245,7 +245,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 ### `Command`
 
 - **Allowed when**: the plugin declares the command, and its `when` matches: `always`, a thread on screen, or a project [docs:plugin-api] [book:cli].
-- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api].
+- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api]. A command with `"header": true` and `"when": "thread"` is also a button on the shown thread's title bar; a click runs the same path [decision 129].
 - **Refused when**: past 10 seconds — `failed` [docs:plugin-api] [op.rs]. Unavailable without a plugin host — `failed` [docs:architecture] [op.rs]. That is the contract before plugins load [person 2026-10-08].
 
 ### `New`
@@ -565,13 +565,14 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 
 ## Cross-Op rules
 
+- `KG_SOCKET` names the socket. When it is unset and `KG_DATA_DIR` is set, that folder is made absolute and the socket follows it: `<data>/kg.sock` on macOS and Linux, or `/tmp/kagan-<sha256>/kg.sock` when that path does not fit a local socket. The `/tmp` folder must be mode `0700`, owned by this user, and not a symlink, or the connection is refused. On Windows the pipe name is derived from the absolute folder. A file that is not a socket is not removed. It is not the default socket of the app that uses `~/.kagan` [decision 124] [book:data]. `KG_SOCKET` still overrides. With both unset, the socket stays the platform default.
 - Only a person answers an install, a thread delete, or a standalone approval. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin may answer another pending question on a thread through `Workspace::answer`. That removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title and the chosen option. That is the trace of an approval on the thread [docs:architecture] [event.rs].
 - Archive, unarchive, and stop never ask [decision 12] [docs:architecture] [docs:plugin-api].
 - The database is the truth for thread rows and the event log [decision 5] [docs:architecture].
 - Opening the app does not resume a program. A thread left active is marked failed with "kagan quit while the program was running". A thread left starting is marked failed with "kagan stopped while the thread was starting". A thread left stopping is marked failed. Archive and environment-removal deadlines resume [docs:architecture].
 - A live thread does not append message events [docs:architecture].
 - A restart drops standalone approvals, because their responders are gone [decision 38] [docs:architecture]. A question with no window open waits until a person answers; it does not time out [decision 13].
-- Stopping a thread that is still starting leaves it idle. Stopping a running thread marks it `stopping`; once the program has ended it records `stopped` and `idle` and goes idle, with no attention. A program that exits 0 records `exited` and `idle`. Any other exit records `exited` and `failed`, leaves the thread in `error`, and writes no `idle`. A terminal program has no turn to end [docs:architecture].
+- Stopping a thread that is still starting leaves it idle. Stopping a running thread marks it `stopping`; once the program has ended it records `stopped` and `idle` and goes idle, with no attention. A program that exits 0 records `exited` and `idle`. Any other exit records `exited` and `failed`, leaves the thread in `error`, and writes no `idle`. A program whose title never shows a spinner has no turn to end. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123].
 - A child left active or starting appends a notice on its sidebar parent. A thread left stopping stays quiet. The lifecycle owner gets no copy [decision 19].
 - Parent is sidebar nesting only. The lifecycle owner is set at creation and is not changed later. Archiving or deleting the owner does the same to its dependents [decision 20] [CONTEXT].
 - Attention moves when a thread goes to error or raises a question. Going from busy to waiting or exiting successfully sets done instead [decision 94]. Opening the thread marks it read. Unread is not raised on every agent message [decision 22]. Other threads' status shows in the sidebar as it changes. The title bar does not count them [decision 43].

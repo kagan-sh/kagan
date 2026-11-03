@@ -6,17 +6,18 @@ kagan has no account and no telemetry. It checks for updates only when you ask, 
 
 - **Data folder**: `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to use a different folder.
 - **Socket**: the connection between `kg` and the window.
-  - macOS and Linux: `$XDG_RUNTIME_DIR/kagan/kg.sock` when `XDG_RUNTIME_DIR` is set.
+  - When `KG_DATA_DIR` is set and `KG_SOCKET` is not, the socket follows that folder. The folder path is made absolute. On macOS and Linux the socket is `<data folder>/kg.sock`. If that path is too long for a local socket, it is `/tmp/kagan-<id>/kg.sock`, where `<id>` is a SHA-256 of the absolute folder path, and that `/tmp` folder is private to you. On Windows the pipe is `kagan-<id>` from that same path.
+  - Otherwise, macOS and Linux use `$XDG_RUNTIME_DIR/kagan/kg.sock` when `XDG_RUNTIME_DIR` is set.
   - Else on macOS: `~/Library/Application Support/kagan/kg.sock`.
   - Else on Linux: `$XDG_DATA_HOME/kagan/kg.sock`, or `~/.local/share/kagan/kg.sock`.
-  - Windows: a named pipe, `kagan-<your user name>`. It is not a file.
-  - Set `KG_SOCKET` to use a different socket.
+  - Otherwise on Windows: a named pipe, `kagan-<your user name>`. It is not a file.
+  - Set `KG_SOCKET` to use a different socket. That wins over the data folder.
 
 The data folder holds:
 
 - Your projects, threads, and history.
 - The git worktrees and Personal folders.
-- Installed skills, your themes, and plugin data.
+- Installed skills, your themes, and plugin data. A plugin script reads its own folder there as `process.dataDir`.
 
 kagan saves each thread's last terminal text without encryption. A password or token that you paste can stay on disk. Delete the thread to remove its text.
 

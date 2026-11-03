@@ -13,7 +13,7 @@ mod settings;
 mod terminal;
 mod turn;
 
-pub(crate) use agent::note;
+pub(crate) use agent::{note, note_with};
 pub(crate) use extra::{Extras, end as end_extras};
 pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
@@ -23,6 +23,7 @@ pub(crate) use run::resolve_program;
 pub(crate) use run::{PreparedRun, commit as commit_run, prepare as prepare_run};
 pub(crate) use search::search;
 pub(crate) use settings::remember_keymap;
+pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;
@@ -328,6 +329,7 @@ pub(crate) async fn forward(
         (None, PluginRequest::CallTool { name, .. }) => Err(OpError::NotFound(format!(
             "agent tool {name} is unavailable; no plugin host is loaded"
         ))),
+        (None, PluginRequest::Instruct { .. }) => Ok(OpResult::Output(Some(String::new()))),
         (None, PluginRequest::Keymap(KeymapOp::Get)) => {
             Ok(OpResult::Setting(serde_json::json!({})))
         }

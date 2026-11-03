@@ -91,6 +91,10 @@ pub enum PluginRequest {
         name: String,
         input: Value,
     },
+    Instruct {
+        thread_id: ThreadId,
+        project_id: ProjectId,
+    },
     Plugin(PluginOp, Option<Requester>),
     /// A shortcut of a plugin's command, named `<plugin-id>:<command>`
     Keymap(KeymapOp),
@@ -125,8 +129,8 @@ pub struct Workspace {
     pub(crate) removing: BTreeSet<EnvironmentId>,
     /// Programs whose exit is queued for the request loop, so the watcher reports each once.
     pub(crate) exiting: BTreeSet<ThreadId>,
-    /// Threads whose program a person asked to stop; its exit records the stop.
-    pub(crate) stopping: BTreeSet<ThreadId>,
+    /// Threads whose program was asked to stop, and why. Quit skips `turn.ended` only.
+    pub(crate) stopping: BTreeMap<ThreadId, crate::thread::StopReason>,
     /// The `Started` seq of the run now in progress, or the run a saved screen belongs to.
     pub(crate) runs: BTreeMap<ThreadId, u64>,
     pub(crate) ends: BTreeMap<ThreadId, crate::end::End>,
@@ -272,7 +276,7 @@ impl Workspace {
                         watching: false,
                         removing: BTreeSet::new(),
                         exiting: BTreeSet::new(),
-                        stopping: BTreeSet::new(),
+                        stopping: BTreeMap::new(),
                         runs: BTreeMap::new(),
                         ends: BTreeMap::new(),
                         losses: BTreeMap::new(),
@@ -588,6 +592,13 @@ impl Workspace {
             .filter(|(_, thread)| thread.read(cx).running())
             .map(|(id, _)| id.clone())
             .collect();
+        workspace.update(cx, |workspace, _| {
+            for id in &ids {
+                workspace
+                    .stopping
+                    .insert(id.clone(), crate::thread::StopReason::Quit);
+            }
+        });
         let stops: Vec<_> = ids
             .iter()
             .map(|id| Self::dispatch(Op::Thread(kg_domain::ThreadOp::Stop { id: id.clone() }), cx))
@@ -1042,6 +1053,23 @@ impl Workspace {
         };
         terminal.set_snapshot_bound(bound);
         true
+    }
+
+    /// Clones `Lines` on the foreground and builds the newest `cap` bytes of plain text on
+    /// the background executor.
+    pub fn thread_output(id: &ThreadId, cap: usize, cx: &mut App) -> Task<Result<String>> {
+        let lines = Self::global(cx)
+            .read(cx)
+            .terminals
+            .get(id)
+            .map(|shown| match shown {
+                crate::thread::Shown::Running(terminal) => terminal.lines(),
+                crate::thread::Shown::Ended(finished) => finished.lines(),
+            });
+        match lines {
+            None => Task::ready(Err(missing("terminal", id))),
+            Some(lines) => cx.background_spawn(async move { Ok(lines.tail(cap)) }),
+        }
     }
 
     /// A stop or any exit code. A signal, a quit, a failure, or an interrupted start does

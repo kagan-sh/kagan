@@ -7,6 +7,7 @@ pub(crate) mod commands;
 mod details;
 #[cfg(target_os = "macos")]
 mod dock;
+pub(crate) mod header;
 mod keys;
 mod layout;
 #[cfg(test)]
