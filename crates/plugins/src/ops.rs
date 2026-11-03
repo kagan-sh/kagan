@@ -413,8 +413,12 @@ async fn remove(
         return Err(error);
     }
     let data = host.read_with(cx, |host, _| host.plugin_data(&id));
+    let store_ids = crate::page::read_store_ids(&data);
     host.update(cx, |host, cx| {
         host.unload(&id, cx);
+        // Drop native pages now: they stay in a UI global until the next frame otherwise, and
+        // WebKit then refuses remove_data_store with DataStoreInUse.
+        host.drop_pages(&id, &store_ids, cx);
         host.active.remove(&id);
         host.records.remove(&id);
         host.warnings.remove(&id);
@@ -422,15 +426,9 @@ async fn remove(
         host.identities.remove(&id);
         cx.notify();
     });
-    let store_ids = crate::page::read_store_ids(&data);
-    #[cfg(target_os = "macos")]
-    let mut warnings = crate::page::remove_web_stores(store_ids, cx).await;
-    #[cfg(not(target_os = "macos"))]
-    let mut warnings = {
-        let _ = store_ids;
-        Vec::new()
-    };
-    crate::page::clear_stores(&data);
+    let cleared = crate::page::remove_web_stores(store_ids, cx).await;
+    crate::page::clear_removed_stores(&data, &cleared.removed);
+    let mut warnings = cleared.warnings;
     let store = host.read_with(cx, |host, _| host.secrets.clone());
     let forgotten = cx
         .background_spawn(async move { store.forget(&id, &declared) })

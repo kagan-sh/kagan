@@ -607,6 +607,19 @@ struct Held {
     page: Option<Entity<gpui_webview::WebView>>,
 }
 
+/// Drops native pages that hold these stores so `WebKit` releases them before remove.
+pub(crate) fn drop_stores(stores: &[[u8; 16]], cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    if !stores.is_empty() && cx.has_global::<Pages>() {
+        cx.default_global::<Pages>().pages.retain(|page| {
+            page.store
+                .is_none_or(|id| !stores.iter().any(|store| store == &id))
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (stores, cx);
+}
+
 /// Hides a page whose panel is off screen, and drops one whose view is gone.
 pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
     INSET.set(false);

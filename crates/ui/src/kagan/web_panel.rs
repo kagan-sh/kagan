@@ -102,6 +102,27 @@ pub(crate) fn forget(slot: &str, cx: &mut App) {
     let _ = (slot, cx);
 }
 
+/// Drops every open page for a plugin so `WebKit` releases their stores before remove.
+pub(crate) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    if cx.has_global::<Pages>() {
+        let indexes: Vec<usize> = cx
+            .default_global::<Pages>()
+            .pages
+            .iter()
+            .enumerate()
+            .filter_map(|(index, page)| (page.plugin == *plugin).then_some(index))
+            .collect();
+        for index in indexes.into_iter().rev() {
+            let page = cx.default_global::<Pages>().pages.remove(index);
+            page.ipc.close();
+            drop(page.life);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (plugin, cx);
+}
+
 pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
     #[cfg(target_os = "macos")]
     sync_native(kagan, cx);

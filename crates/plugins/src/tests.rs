@@ -2183,6 +2183,57 @@ fn removing_a_plugin_waits_for_a_person(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn removing_a_plugin_drops_native_pages_before_store_cleanup(cx: &mut TestAppContext) {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let seen = Rc::new(RefCell::new(None));
+    let mark = seen.clone();
+    cx.update(|cx| {
+        let host = crate::PluginHost::global(cx);
+        host.update(cx, |host, _| {
+            host.set_drop_pages(Rc::new(move |id, _, _| {
+                *mark.borrow_mut() = Some(id.clone());
+            }));
+        });
+    });
+    let data = cx.update(|cx| {
+        crate::PluginHost::global(cx)
+            .read(cx)
+            .plugin_data(&PluginId(ID.into()))
+    });
+    crate::keep_store(&data, "board").expect("store");
+    let removing = plugin_op(
+        cx,
+        PluginOp::Remove {
+            id: PluginId(ID.into()),
+            thread_id: None,
+        },
+    );
+    answer_standalone(cx, "approve");
+    let result = cx.foreground_executor().block_test(removing).unwrap();
+    assert_eq!(*seen.borrow(), Some(PluginId(ID.into())));
+    match result {
+        OpResult::Done => {}
+        OpResult::Warnings(warnings) => {
+            assert!(
+                warnings
+                    .iter()
+                    .any(|warning| warning.contains("page store")),
+                "{warnings:?}"
+            );
+            assert!(
+                crate::store_dir(&data, "board").join("store.id").is_file(),
+                "a store WebKit did not remove keeps its store.id for a later start"
+            );
+        }
+        other => panic!("unexpected remove result: {other:?}"),
+    }
+}
+
+#[gpui_kit::test]
 fn reload_stops_when_the_plugin_was_removed(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);

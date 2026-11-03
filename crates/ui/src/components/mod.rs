@@ -20,7 +20,7 @@ use gpui_shell::{
 pub(crate) use crate::web::ONLY_MACOS;
 #[cfg(test)]
 pub(crate) use webview::{REFUSED_HOST, native_shown};
-pub(crate) use webview::{fills_panel, note_inset, sync_pages};
+pub(crate) use webview::{drop_stores, fills_panel, note_inset, sync_pages};
 
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     button::register(registry)?;

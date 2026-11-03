@@ -277,18 +277,66 @@ pub fn clear_stores(data: &Path) {
     let _ = std::fs::remove_dir_all(data.join("pages"));
 }
 
+/// Deletes `pages/<page>/` only when its `store.id` is in `removed`. Keeps the others so a later
+/// start can ask `WebKit` again.
+pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
+    if removed.is_empty() {
+        return;
+    }
+    let pages = data.join("pages");
+    let Ok(entries) = std::fs::read_dir(&pages) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let id_path = path.join("store.id");
+        let Ok(bytes) = std::fs::read(&id_path) else {
+            continue;
+        };
+        if bytes.len() != 16 {
+            continue;
+        }
+        let mut id = [0u8; 16];
+        id.copy_from_slice(&bytes);
+        if removed.contains(&id) {
+            let _ = std::fs::remove_dir_all(&path);
+        }
+    }
+    if std::fs::read_dir(&pages).is_ok_and(|mut entries| entries.next().is_none()) {
+        let _ = std::fs::remove_dir(&pages);
+    }
+}
+
+/// What [`remove_web_stores`] did for each id.
+pub struct StoreRemoval {
+    pub removed: Vec<[u8; 16]>,
+    pub warnings: Vec<String>,
+}
+
 /// Deletes each `WKWebsiteDataStore` for the given ids. Call after pages are dropped, on the main
-/// thread. macOS 14+ only; older systems never created a custom store.
+/// thread. macOS 14+ only; older systems never created a custom store. Ids `WebKit` still holds stay
+/// in `warnings` and out of `removed`, so their `store.id` files can be kept for a later start.
 #[cfg(target_os = "macos")]
 pub(crate) async fn remove_web_stores(
     ids: Vec<[u8; 16]>,
     cx: &mut gpui_kit::AsyncApp,
-) -> Vec<String> {
+) -> StoreRemoval {
     use wry::WebViewExtDarwin as _;
 
-    if ids.is_empty() || macos_major() < 14 {
-        return Vec::new();
+    if ids.is_empty() {
+        return StoreRemoval {
+            removed: Vec::new(),
+            warnings: Vec::new(),
+        };
     }
+    // Custom stores need macOS 14+. Older systems never created one; drop the id files.
+    if macos_major() < 14 {
+        return StoreRemoval {
+            removed: ids,
+            warnings: Vec::new(),
+        };
+    }
+    let mut removed = Vec::new();
     let mut warnings = Vec::new();
     for id in ids {
         let (send, receive) = futures::channel::oneshot::channel();
@@ -304,10 +352,51 @@ pub(crate) async fn remove_web_stores(
             Ok(Err(error)) => warnings.push(format!(
                 "the plugin is removed, but its page store was not deleted: {error}"
             )),
-            Ok(Ok(())) | Err(_) => {}
+            Ok(Ok(())) | Err(_) => removed.push(id),
         }
     }
-    warnings
+    StoreRemoval { removed, warnings }
+}
+
+/// Offline stand-in when `WebKit` is not available: every id is treated as removed.
+#[cfg(not(target_os = "macos"))]
+pub(crate) async fn remove_web_stores(
+    ids: Vec<[u8; 16]>,
+    _cx: &mut gpui_kit::AsyncApp,
+) -> StoreRemoval {
+    StoreRemoval {
+        removed: ids,
+        warnings: Vec::new(),
+    }
+}
+
+/// Retries `WebKit` store deletion for plugin data folders that are no longer installed. A prior
+/// remove may have left `store.id` when `WebKit` still held the view.
+pub(crate) async fn retry_orphan_stores(
+    data_dir: &Path,
+    known: &std::collections::BTreeSet<kg_domain::PluginId>,
+    cx: &mut gpui_kit::AsyncApp,
+) {
+    let plugins = data_dir.join("plugins");
+    let Ok(entries) = std::fs::read_dir(&plugins) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if known.contains(&kg_domain::PluginId(name.into())) {
+            continue;
+        }
+        let data = entry.path().join("data");
+        let ids = read_store_ids(&data);
+        if ids.is_empty() {
+            continue;
+        }
+        let cleared = remove_web_stores(ids, cx).await;
+        clear_removed_stores(&data, &cleared.removed);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -369,5 +458,16 @@ mod store_tests {
         let mut want = vec![first, second];
         want.sort_unstable();
         assert_eq!(ids, want);
+    }
+
+    #[test]
+    fn clear_removed_stores_keeps_ids_web_kit_still_held() {
+        let data = tempfile::tempdir().expect("temp");
+        let gone = keep_store(data.path(), "board").expect("gone");
+        let kept = keep_store(data.path(), "other").expect("kept");
+        clear_removed_stores(data.path(), &[gone]);
+        assert!(!store_dir(data.path(), "board").exists());
+        assert!(store_dir(data.path(), "other").join("store.id").is_file());
+        assert_eq!(read_store_ids(data.path()), vec![kept]);
     }
 }
