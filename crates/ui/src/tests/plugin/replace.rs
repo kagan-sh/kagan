@@ -420,6 +420,7 @@ fn a_sidebar_plugin_draws_only_the_list_and_the_host_keeps_questions(cx: &mut Te
                         label: "No".into(),
                     },
                 ],
+                fields: None,
             }),
             cx,
         )
@@ -676,6 +677,7 @@ fn ask(cx: &mut TestAppContext, thread: &ThreadId) -> kg_domain::PendingInteract
                         label: "No".into(),
                     },
                 ],
+                fields: None,
             }),
             cx,
         )

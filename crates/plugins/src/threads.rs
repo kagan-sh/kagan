@@ -1,9 +1,9 @@
 use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use kg_core::Workspace;
 use kg_domain::{
-    DiffOp, DiffQuery, DiffScope, EnvironmentId, EnvironmentOp, EnvironmentSpec, InteractionOption,
-    Metadata, Op, OpError, OpResult, PluginId, Project, ProjectId, ProjectOp, Run, Section,
-    SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
+    AskField, DiffOp, DiffQuery, DiffScope, EnvironmentId, EnvironmentOp, EnvironmentSpec,
+    InteractionOption, Metadata, Op, OpError, OpResult, PluginId, Project, ProjectId, ProjectOp,
+    Run, Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -206,11 +206,17 @@ fn wait_event(args: &HostArguments) -> Result<Op, HostError> {
 
 fn ask_person(args: &HostArguments) -> Result<Op, HostError> {
     let options = argument::<Vec<InteractionOption>>(args, 2)?;
+    let fields = match args.get(3) {
+        None => Some(Vec::<AskField>::new()),
+        Some(value) if from_host(value) == Value::Null => Some(Vec::new()),
+        Some(_) => Some(argument::<Vec<AskField>>(args, 3)?),
+    };
     as_thread(json!({
         "ask": {
             "id": args.string(0)?,
             "title": args.string(1)?,
             "options": options,
+            "fields": fields,
         }
     }))
 }

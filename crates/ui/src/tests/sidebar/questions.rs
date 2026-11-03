@@ -1,10 +1,11 @@
 use gpui_kit::{AppContext as _, Task, TestAppContext, px, size};
 use kg_core::Workspace;
-use kg_domain::{InteractionOption, Op, OpError, ThreadOp};
+use kg_domain::{AskField, InteractionOption, Op, OpError, OpResult, ThreadOp};
 
 use crate::tests::app::picker::start_in_plain_folder;
 use crate::tests::kagan::{
-    chord, click, focused_of, open, repo_thread, run_shell, set_preference, shows, wait_until,
+    chord, click, focused_of, open, press_key, repo_thread, run_shell, set_preference, shows,
+    wait_until,
 };
 
 fn install_options() -> Vec<InteractionOption> {
@@ -204,5 +205,58 @@ fn an_install_card_focuses_cancel(cx: &mut TestAppContext) {
         focused_of(cx, window, &format!("answer-{}-approve", id.0)),
         Some(true)
     );
+    decline(cx, asked);
+}
+
+#[gpui_kit::test]
+fn an_ask_with_fields_opens_a_popup_that_escape_dismisses(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let ask = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Ask {
+                id: id.clone(),
+                title: "Ship it?".into(),
+                options: vec![
+                    InteractionOption {
+                        id: "yes".into(),
+                        label: "Yes".into(),
+                    },
+                    InteractionOption {
+                        id: "no".into(),
+                        label: "No".into(),
+                    },
+                ],
+                fields: Some(vec![AskField::Boolean {
+                    id: "notify".into(),
+                    label: "Notify".into(),
+                    default: Some(true),
+                }]),
+            }),
+            cx,
+        )
+    });
+    let OpResult::Text(_) = cx.foreground_executor().block_test(ask).unwrap() else {
+        panic!("ask");
+    };
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    assert!(shows(cx, window, "ask-popup"));
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    wait_until(cx, |cx| {
+        cx.update(|cx| kagan.read(cx).question_titles(cx)) == ["Ship it?"]
+    });
+    assert!(!shows(cx, window, "ask-popup"));
+}
+
+#[gpui_kit::test]
+fn an_install_approval_does_not_open_the_ask_popup(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let _ = run_shell(cx);
+    let asked = ask_install(cx);
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "ask-popup"));
     decline(cx, asked);
 }

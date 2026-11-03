@@ -231,6 +231,10 @@ pub struct PendingInteraction {
     pub thread_id: ThreadId,
     pub title: String,
     pub options: Vec<InteractionOption>,
+    /// Set for `threads.ask` (even when empty): the host may draw a popup. Absent for
+    /// install, delete, and other person-only approvals.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<AskField>>,
     pub created_at: Timestamp,
 }
 
@@ -246,6 +250,61 @@ impl InteractionOption {
     pub const APPROVE: &str = "approve";
     /// The answer that cancels a permission question.
     pub const DECLINE: &str = "decline";
+}
+
+/// One host-drawn control on an ask. Decision 144.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum AskField {
+    String {
+        id: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        placeholder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<String>,
+    },
+    Boolean {
+        id: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<bool>,
+    },
+    Number {
+        id: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<i64>,
+    },
+    Select {
+        id: String,
+        label: String,
+        choices: Vec<InteractionOption>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        default: Option<String>,
+    },
+}
+
+impl AskField {
+    #[must_use]
+    pub fn id(&self) -> &str {
+        match self {
+            Self::String { id, .. }
+            | Self::Boolean { id, .. }
+            | Self::Number { id, .. }
+            | Self::Select { id, .. } => id,
+        }
+    }
+
+    #[must_use]
+    pub fn label(&self) -> &str {
+        match self {
+            Self::String { label, .. }
+            | Self::Boolean { label, .. }
+            | Self::Number { label, .. }
+            | Self::Select { label, .. } => label,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

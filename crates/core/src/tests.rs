@@ -1011,6 +1011,7 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
                 id: "allow".into(),
                 label: "Allow".into(),
             }],
+            fields: None,
             created_at: Timestamp(1),
         })
         .unwrap();
@@ -3028,6 +3029,7 @@ fn ask_op(id: ThreadId, title: &str, options: Vec<InteractionOption>) -> Op {
         id,
         title: title.into(),
         options,
+        fields: None,
     })
 }
 
@@ -3151,6 +3153,79 @@ async fn ask_returns_the_open_question_until_the_person_answers(cx: &mut TestApp
         EventKind::Answered {
             title: "Ship it?".into(),
             option: "yes".into(),
+            fields: std::collections::BTreeMap::new(),
+        }
+    );
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_with_fields_stores_them_and_answered_carries_values(cx: &mut TestAppContext) {
+    let (fixture, id) = sleeping(cx).await;
+    let fields = vec![
+        kg_domain::AskField::String {
+            id: "name".into(),
+            label: "Name".into(),
+            placeholder: None,
+            default: Some("Ada".into()),
+        },
+        kg_domain::AskField::Boolean {
+            id: "notify".into(),
+            label: "Notify".into(),
+            default: Some(true),
+        },
+    ];
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(fields.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let open = pending(&id, cx).await;
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0].fields, Some(fields));
+    assert!(cx.read(|cx| fixture.workspace.read(cx).needs_a_person(&open[0].id)));
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("name".into(), serde_json::json!("Grace"));
+    values.insert("notify".into(), serde_json::json!(false));
+    cx.update(|cx| {
+        Workspace::answer_fields(
+            &id,
+            PendingInteractionId(interaction.clone()),
+            "yes".into(),
+            values.clone(),
+            cx,
+        )
+    })
+    .await
+    .unwrap();
+    assert!(pending(&id, cx).await.is_empty());
+    let OpResult::Event(Some(event)) = op(
+        Op::Thread(ThreadOp::WaitEvent {
+            id: id.clone(),
+            kind: "answered".into(),
+            after_seq: None,
+            timeout_ms: 1_000,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("answered");
+    };
+    assert_eq!(
+        event.kind,
+        EventKind::Answered {
+            title: "Ship it?".into(),
+            option: "yes".into(),
+            fields: values,
         }
     );
 }

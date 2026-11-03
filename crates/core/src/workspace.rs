@@ -82,6 +82,7 @@ pub(crate) enum Request {
         thread_id: ThreadId,
         interaction_id: PendingInteractionId,
         option_id: String,
+        fields: std::collections::BTreeMap<String, serde_json::Value>,
     },
     AnswerStandalone {
         interaction_id: PendingInteractionId,
@@ -367,7 +368,10 @@ impl Workspace {
                 thread_id,
                 interaction_id,
                 option_id,
-            } => crate::thread::answer(this, thread_id, interaction_id, option_id, cx).await,
+                fields,
+            } => {
+                crate::thread::answer(this, thread_id, interaction_id, option_id, fields, cx).await
+            }
             Request::AnswerStandalone {
                 interaction_id,
                 option_id,
@@ -814,6 +818,23 @@ impl Workspace {
         option_id: String,
         cx: &mut App,
     ) -> Task<Result<OpResult>> {
+        Self::answer_fields(
+            thread_id,
+            interaction_id,
+            option_id,
+            std::collections::BTreeMap::new(),
+            cx,
+        )
+    }
+
+    /// Answers a pending question, including values for an ask form (decision 133).
+    pub fn answer_fields(
+        thread_id: &ThreadId,
+        interaction_id: PendingInteractionId,
+        option_id: String,
+        fields: std::collections::BTreeMap<String, serde_json::Value>,
+        cx: &mut App,
+    ) -> Task<Result<OpResult>> {
         let Some(global) = cx.try_global::<WorkspaceGlobal>() else {
             return Task::ready(Err(OpError::Failed("workspace is not open".into())));
         };
@@ -822,6 +843,7 @@ impl Workspace {
             thread_id: thread_id.clone(),
             interaction_id,
             option_id,
+            fields,
         });
         cx.spawn(async move |_| submitted.await)
     }
@@ -884,6 +906,7 @@ impl Workspace {
                 &thread,
                 title,
                 options,
+                None,
                 |workspace, thread_id, id| {
                     if for_a_person {
                         workspace.for_a_person.insert(id.clone());

@@ -37,7 +37,13 @@ export function setMetadata(id: string, value: unknown): Promise<void>;
 export function events(id: string, options: { afterSeq?: number; limit?: number; order?: "asc" | "desc" }): Promise<Event[]>;
 export function waitEvent(id: string, options: { type: string; afterSeq?: number; timeoutMs: number }): Promise<Event | null>;
 export function wait(id: string, options: { timeoutMs: number }): Promise<"waiting" | "exited" | "failed" | "not-busy" | "timeout">;
-export function ask(id: string, title: string, options: { id: string; label: string }[]): Promise<string>;
+export type AskField =
+  | { type: "string"; id: string; label: string; placeholder?: string; default?: string }
+  | { type: "boolean"; id: string; label: string; default?: boolean }
+  | { type: "number"; id: string; label: string; default?: number }
+  | { type: "select"; id: string; label: string; choices: { id: string; label: string }[]; default?: string };
+/** Raise a question. Optional `fields` are drawn by the host; `answered` carries their values. */
+export function ask(id: string, title: string, options: { id: string; label: string }[], fields?: AskField[]): Promise<string>;
 export function sidebar(): Sidebar;
 /** Changed files of a thread in this window's thread list. */
 export function changes(id: string, scope: DiffScope): Promise<Changes>;

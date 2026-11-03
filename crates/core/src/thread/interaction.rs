@@ -20,6 +20,7 @@ pub(crate) async fn raise(
     thread: &Entity<Thread>,
     title: String,
     options: Vec<kg_domain::InteractionOption>,
+    fields: Option<Vec<kg_domain::AskField>>,
     keep: impl FnOnce(&mut Workspace, &ThreadId, PendingInteractionId),
     cx: &mut AsyncApp,
 ) -> Result<Raised> {
@@ -28,6 +29,7 @@ pub(crate) async fn raise(
         thread_id: thread.read_with(cx, |thread, _| thread.record.id.clone()),
         title,
         options,
+        fields,
         created_at: time(this, cx)?,
     };
     let saved = interaction.clone();
@@ -69,6 +71,7 @@ pub(crate) async fn ask(
     id: ThreadId,
     title: String,
     options: Vec<kg_domain::InteractionOption>,
+    fields: Option<Vec<kg_domain::AskField>>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let title = title.trim();
@@ -91,6 +94,10 @@ pub(crate) async fn ask(
             "ask needs at least two options, each with an id and a label".into(),
         ));
     }
+    let fields = match fields {
+        None => Some(Vec::new()),
+        Some(fields) => Some(validate_fields(fields)?),
+    };
     let title = title.to_owned();
     let thread = thread(this, &id, cx)?;
     if thread.read_with(cx, |thread, _| thread.record.archived_at.is_some()) {
@@ -113,6 +120,7 @@ pub(crate) async fn ask(
         &thread,
         title,
         options,
+        fields,
         |workspace, thread_id, interaction| {
             workspace.for_a_person.insert(interaction.clone());
             insert_reply(workspace, thread_id.clone(), interaction.clone(), sender);
@@ -124,6 +132,117 @@ pub(crate) async fn ask(
     )
     .await?;
     Ok(OpResult::Text(interaction.id.to_string()))
+}
+
+fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::AskField>> {
+    if fields.len() > 32 {
+        return Err(OpError::Invalid("ask allows at most 32 fields".into()));
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    let mut cleaned = Vec::with_capacity(fields.len());
+    for field in fields {
+        let cleaned_field = match field {
+            kg_domain::AskField::String {
+                id,
+                label,
+                placeholder,
+                default,
+            } => {
+                let id = trim_id(&id, "field")?;
+                let label = trim_label(&label, "field")?;
+                kg_domain::AskField::String {
+                    id,
+                    label,
+                    placeholder: trim_opt(placeholder),
+                    default: trim_opt(default),
+                }
+            }
+            kg_domain::AskField::Boolean { id, label, default } => kg_domain::AskField::Boolean {
+                id: trim_id(&id, "field")?,
+                label: trim_label(&label, "field")?,
+                default,
+            },
+            kg_domain::AskField::Number { id, label, default } => kg_domain::AskField::Number {
+                id: trim_id(&id, "field")?,
+                label: trim_label(&label, "field")?,
+                default,
+            },
+            kg_domain::AskField::Select {
+                id,
+                label,
+                choices,
+                default,
+            } => {
+                let choices: Vec<_> = choices
+                    .into_iter()
+                    .map(|choice| kg_domain::InteractionOption {
+                        id: choice.id.trim().to_owned(),
+                        label: choice.label.trim().to_owned(),
+                    })
+                    .collect();
+                if choices.is_empty()
+                    || choices
+                        .iter()
+                        .any(|choice| choice.id.is_empty() || choice.label.is_empty())
+                {
+                    return Err(OpError::Invalid(
+                        "a select field needs at least one choice, each with an id and a label"
+                            .into(),
+                    ));
+                }
+                if choices.len() > 32 {
+                    return Err(OpError::Invalid(
+                        "a select field allows at most 32 choices".into(),
+                    ));
+                }
+                let default = trim_opt(default);
+                if let Some(default) = &default
+                    && !choices.iter().any(|choice| choice.id == *default)
+                {
+                    return Err(OpError::Invalid(
+                        "a select field default must be one of its choices".into(),
+                    ));
+                }
+                kg_domain::AskField::Select {
+                    id: trim_id(&id, "field")?,
+                    label: trim_label(&label, "field")?,
+                    choices,
+                    default,
+                }
+            }
+        };
+        if !ids.insert(cleaned_field.id().to_owned()) {
+            return Err(OpError::Invalid(format!(
+                "ask field id {} is repeated",
+                cleaned_field.id()
+            )));
+        }
+        cleaned.push(cleaned_field);
+    }
+    Ok(cleaned)
+}
+
+fn trim_id(id: &str, kind: &str) -> Result<String> {
+    let id = id.trim();
+    if id.is_empty() {
+        return Err(OpError::Invalid(format!("{kind} needs an id")));
+    }
+    Ok(id.to_owned())
+}
+
+fn trim_label(label: &str, kind: &str) -> Result<String> {
+    let label = label.trim();
+    if label.is_empty() {
+        return Err(OpError::Invalid(format!("{kind} needs a label")));
+    }
+    Ok(label.to_owned())
+}
+
+fn trim_opt(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_owned())
+    })
 }
 
 pub(crate) fn insert_reply(
@@ -230,6 +349,7 @@ pub(crate) async fn answer(
     id: ThreadId,
     interaction_id: kg_domain::PendingInteractionId,
     option_id: String,
+    fields: std::collections::BTreeMap<String, serde_json::Value>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     thread(this, &id, cx)?;
@@ -249,6 +369,13 @@ pub(crate) async fn answer(
     {
         return Err(OpError::Invalid("unknown interaction option".into()));
     }
+    let fields = match &interaction.fields {
+        Some(declared) => check_answer_fields(declared, fields)?,
+        None if fields.is_empty() => fields,
+        None => {
+            return Err(OpError::Invalid("this question has no form fields".into()));
+        }
+    };
     let title = interaction.title.clone();
     let chosen = option_id.clone();
     this.update(cx, |workspace, _| {
@@ -272,6 +399,7 @@ pub(crate) async fn answer(
         vec![kg_domain::EventKind::Answered {
             title,
             option: chosen,
+            fields,
         }],
         cx,
     )
@@ -282,4 +410,45 @@ pub(crate) async fn answer(
     })
     .map_err(closed)?;
     Ok(OpResult::Done)
+}
+
+fn check_answer_fields(
+    declared: &[kg_domain::AskField],
+    mut fields: std::collections::BTreeMap<String, serde_json::Value>,
+) -> Result<std::collections::BTreeMap<String, serde_json::Value>> {
+    let mut cleaned = std::collections::BTreeMap::new();
+    for field in declared {
+        let value = fields.remove(field.id()).ok_or_else(|| {
+            OpError::Invalid(format!("ask answer is missing field {}", field.id()))
+        })?;
+        let value = match (field, value) {
+            (kg_domain::AskField::String { .. }, serde_json::Value::String(text)) => {
+                serde_json::Value::String(text)
+            }
+            (kg_domain::AskField::Boolean { .. }, serde_json::Value::Bool(flag)) => {
+                serde_json::Value::Bool(flag)
+            }
+            (kg_domain::AskField::Number { .. }, serde_json::Value::Number(number)) => {
+                serde_json::Value::Number(number)
+            }
+            (kg_domain::AskField::Select { choices, .. }, serde_json::Value::String(choice))
+                if choices.iter().any(|option| option.id == choice) =>
+            {
+                serde_json::Value::String(choice)
+            }
+            _ => {
+                return Err(OpError::Invalid(format!(
+                    "ask answer field {} has the wrong kind of value",
+                    field.id()
+                )));
+            }
+        };
+        cleaned.insert(field.id().to_owned(), value);
+    }
+    if let Some(extra) = fields.keys().next() {
+        return Err(OpError::Invalid(format!(
+            "ask answer has unknown field {extra}"
+        )));
+    }
+    Ok(cleaned)
 }

@@ -31,11 +31,13 @@ impl Kagan {
     /// Every question that waits for the person, across threads. While the person types, a
     /// question that arrives is held until they pause; one already on screen stays up.
     pub(super) fn render_needs(
-        &self,
+        &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let weak = cx.entity().downgrade();
+        self.sync_ask_drafts(window, cx);
+        let entity = cx.entity();
+        let weak = entity.downgrade();
         let approvals: Vec<Approval> = Workspace::global(cx)
             .read(cx)
             .approvals()
@@ -48,8 +50,15 @@ impl Kagan {
                 held += 1;
             } else {
                 cards.push(
-                    question::card(question::Question::standalone(approval), &weak, window, cx)
-                        .into_any_element(),
+                    question::card(
+                        question::Question::standalone(approval),
+                        None,
+                        &entity,
+                        &weak,
+                        window,
+                        cx,
+                    )
+                    .into_any_element(),
                 );
             }
         }
@@ -62,6 +71,7 @@ impl Kagan {
             let thread = self
                 .record(&asked.thread_id, cx)
                 .map_or_else(String::new, |thread| thread.title.clone());
+            let draft = self.ask_drafts.get(&asked.id).cloned();
             cards.push(
                 v_flex()
                     .gap_1()
@@ -73,6 +83,8 @@ impl Kagan {
                     )
                     .child(question::card(
                         question::Question::thread(asked),
+                        draft.as_ref(),
+                        &entity,
                         &weak,
                         window,
                         cx,

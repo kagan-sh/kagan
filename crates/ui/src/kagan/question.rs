@@ -6,13 +6,14 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
     SharedString, Styled as _, WeakEntity, Window, div,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::{InteractionOption, PendingInteraction, PendingInteractionId, ThreadId};
 
 use super::Kagan;
+use super::ask_form::{self, Draft};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -22,6 +23,7 @@ pub(super) struct Question {
     id: PendingInteractionId,
     title: String,
     options: Vec<InteractionOption>,
+    asked: Option<PendingInteraction>,
 }
 
 impl Question {
@@ -31,6 +33,7 @@ impl Question {
             id: asked.id.clone(),
             title: asked.title.clone(),
             options: asked.options.clone(),
+            asked: Some(asked.clone()),
         }
     }
 
@@ -40,34 +43,76 @@ impl Question {
             id: approval.id.clone(),
             title: approval.title.clone(),
             options: approval.options.clone(),
+            asked: None,
         }
     }
 }
 
 pub(super) fn card(
     question: Question,
+    draft: Option<&Draft>,
+    entity: &Entity<Kagan>,
+    kagan: &WeakEntity<Kagan>,
+    window: &mut Window,
+    cx: &mut App,
+) -> impl IntoElement {
+    let form = question.asked.as_ref().and_then(|asked| {
+        if asked.fields.as_ref().is_none_or(Vec::is_empty) {
+            return None;
+        }
+        let draft = draft?;
+        Some(ask_form::fields(asked, draft, entity, window, cx).into_any_element())
+    });
+    body(question, form, kagan, window, cx)
+}
+
+pub(super) fn form_card(
+    asked: &PendingInteraction,
+    draft: &Draft,
+    entity: &Entity<Kagan>,
+    kagan: &WeakEntity<Kagan>,
+    window: &mut Window,
+    cx: &mut App,
+) -> impl IntoElement {
+    let form = asked
+        .fields
+        .as_ref()
+        .is_some_and(|fields| !fields.is_empty())
+        .then(|| ask_form::fields(asked, draft, entity, window, cx).into_any_element());
+    body(Question::thread(asked), form, kagan, window, cx)
+}
+
+fn body(
+    question: Question,
+    form: Option<AnyElement>,
     kagan: &WeakEntity<Kagan>,
     window: &mut Window,
     cx: &mut App,
 ) -> impl IntoElement {
     let mut buttons: Vec<AnyElement> = Vec::new();
     for option in &question.options {
-        // The answer is a focus stop of its own, so `kg ui` can report when it has focus. Its
-        // handle is kept by key, so it holds across renders.
         let focus = super::tab_stop(
             window,
             cx,
             ElementId::Name(format!("answer-focus-{}-{}", question.id.0, option.id).into()),
         );
-        let answer_now: Rc<dyn Fn(&mut App)> = {
-            let (thread, id, choice, kagan) = (
-                question.thread.clone(),
-                question.id.clone(),
-                option.id.clone(),
-                kagan.clone(),
-            );
-            Rc::new(move |cx| answer(thread.clone(), id.clone(), choice.clone(), &kagan, cx))
-        };
+        let answer_now: Rc<dyn Fn(&mut App)> =
+            match (question.asked.clone(), question.thread.clone()) {
+                (Some(asked), Some(thread)) if asked.fields.is_some() => {
+                    ask_form::answer_callback(thread, asked, option.id.clone(), kagan.clone())
+                }
+                _ => {
+                    let (thread, id, choice, kagan) = (
+                        question.thread.clone(),
+                        question.id.clone(),
+                        option.id.clone(),
+                        kagan.clone(),
+                    );
+                    Rc::new(move |cx| {
+                        answer(thread.clone(), id.clone(), choice.clone(), &kagan, cx);
+                    })
+                }
+            };
         let (on_key, on_click) = (answer_now.clone(), answer_now);
         let focused = focus.is_focused(window);
         buttons.push(
@@ -117,6 +162,7 @@ pub(super) fn card(
         .border_color(cx.theme().warning)
         .bg(cx.theme().muted)
         .child(div().type_body().child(question.title))
+        .children(form)
         .child(h_flex().gap_2().children(buttons))
 }
 
@@ -127,7 +173,6 @@ fn answer(
     kagan: &WeakEntity<Kagan>,
     cx: &mut App,
 ) {
-    // `kg ui` input is synthetic, and only a person answers.
     if crate::synthetic::refuse_for_person() {
         return;
     }
