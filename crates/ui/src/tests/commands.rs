@@ -684,8 +684,10 @@ fn the_panels_toggle_stays_on_the_right_without_a_thread_title(cx: &mut TestAppC
         super::sidebars::span(cx, window, "left-sidebar-toggle").expect("left toggle");
     let (right_x, right_w) =
         super::sidebars::span(cx, window, "right-sidebar-toggle").expect("right toggle");
+    // Windows keeps caption buttons in the title bar, so the toggle sits left of 1000
+    // in an 1100-wide window; the spacer still has to push it well past the left toggle.
     assert!(
-        right_x > left_x + left_w + 100. && right_x + right_w > 1000.,
+        right_x > left_x + left_w + 100. && right_x + right_w > 900.,
         "left {left_x}+{left_w} right {right_x}+{right_w}"
     );
 }
