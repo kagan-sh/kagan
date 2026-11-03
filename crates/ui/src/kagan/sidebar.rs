@@ -168,9 +168,21 @@ impl Sidebar {
     pub(super) fn replace(&mut self, listing: kg_domain::Sidebar, footer: ArchivedFooter) {
         self.listing = listing;
         self.archived_footer = footer;
-        self.drag = None;
-        self.drop = None;
-        self.drag_keys = None;
+        if self
+            .drag
+            .as_ref()
+            .is_some_and(|id| self.project(id).is_none())
+        {
+            self.drag = None;
+            self.drop = None;
+            self.drag_keys = None;
+        } else if self
+            .drop
+            .as_ref()
+            .is_some_and(|(id, _)| self.project(id).is_none())
+        {
+            self.drop = None;
+        }
     }
 
     pub(super) fn chosen(&self) -> Option<&ProjectId> {

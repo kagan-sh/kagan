@@ -3,7 +3,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, ElementId, Modifiers, TestAppContext, point, px, size,
 };
 use kg_core::Workspace;
-use kg_domain::{DropSide, InteractionOption, Op, OpError, OpResult, PreferenceOp, UiOp};
+use kg_domain::{DropSide, InteractionOption, Op, OpError, OpResult, PreferenceOp, ThreadOp, UiOp};
 use serde_json::{Value, json};
 
 use super::kagan::{
@@ -887,6 +887,62 @@ fn escape_cancels_a_project_header_drag_without_reordering(cx: &mut TestAppConte
             "no drag is held; start one with kg ui drag --hold".into()
         ))
     );
+}
+
+#[gpui_kit::test]
+fn a_sidebar_refresh_keeps_a_held_project_drag_so_drop_still_reorders(cx: &mut TestAppContext) {
+    let (_kagan, _window, data) = open(cx);
+    let root = data.path();
+    let first = root.join("first");
+    let second = root.join("second");
+    std::fs::create_dir_all(&first).unwrap();
+    std::fs::create_dir_all(&second).unwrap();
+    let first = add_project(cx, &first);
+    let second = add_project(cx, &second);
+    let thread = run_shell(cx);
+    cx.run_until_parked();
+    wait_until(cx, |cx| {
+        project_names(cx).iter().any(|name| name == "first")
+            && project_names(cx).iter().any(|name| name == "second")
+    });
+    assert_eq!(
+        project_names(cx)
+            .into_iter()
+            .filter(|name| matches!(name.as_str(), "first" | "second"))
+            .collect::<Vec<_>>(),
+        ["first", "second"]
+    );
+    ui(
+        cx,
+        UiOp::Drag {
+            from: format!("project-{}", second.id.0),
+            to: format!("project-{}", first.id.0),
+            at: DropSide::Top,
+            within: None,
+            hold: true,
+            window: 0,
+        },
+    )
+    .unwrap();
+    let pinned = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::SetPinned {
+                id: thread,
+                pinned: true,
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(pinned).unwrap();
+    cx.run_until_parked();
+    assert_eq!(ui(cx, UiOp::Drop { window: 0 }), Ok(OpResult::Done));
+    wait_until(cx, |cx| {
+        project_names(cx)
+            .into_iter()
+            .filter(|name| matches!(name.as_str(), "first" | "second"))
+            .collect::<Vec<_>>()
+            == ["second", "first"]
+    });
 }
 
 #[gpui_kit::test]
