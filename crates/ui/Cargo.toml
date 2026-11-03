@@ -22,7 +22,7 @@ image = { version = "=0.25.10", default-features = false, features = ["png"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 raw-window-handle.workspace = true
-# GPUI Fast draws menus over the native page. Linux has no page.
+# GPUI Fast draws menus over the native page.
 gpui-kit = { workspace = true, features = ["gpui-fast"] }
 gpui-shell = { workspace = true, features = ["gpui-fast"] }
 gpui-webview.workspace = true

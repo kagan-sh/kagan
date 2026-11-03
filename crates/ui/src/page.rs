@@ -1,7 +1,4 @@
 //! One opener for the Browser and for a plugin page.
-//!
-//! Browser and plugin panels both build through `open`, so platform setup and failure mapping
-//! stay in one place instead of forking per caller.
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_kit::{App, AppContext as _, Context, Entity, IntoElement, Render, Window};
