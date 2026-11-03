@@ -1663,7 +1663,7 @@ Usage: kg plugin config [OPTIONS] <ID> <COMMAND>
 Commands:
   get    Read a setting
   set    Change a setting
-  clear  Forget a secret setting
+  clear  Forget a secret, or clear a project setting
   help   Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -1718,7 +1718,7 @@ Options:
 ## `kg plugin config clear`
 
 ```text
-Forget a secret setting
+Forget a secret, or clear a project setting
 
 Usage: kg plugin config clear <KEY>
 

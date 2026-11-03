@@ -1533,7 +1533,7 @@ pub enum ConfigOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<Value>,
     },
-    /// Forget a secret setting
+    /// Forget a secret, or clear a project setting
     Clear { key: String },
 }
 

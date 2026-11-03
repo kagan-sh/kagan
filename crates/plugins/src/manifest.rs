@@ -337,6 +337,9 @@ pub enum Setting {
     Folder {
         title: String,
     },
+    Project {
+        title: String,
+    },
     Provider {
         title: String,
     },
@@ -367,6 +370,7 @@ impl Setting {
             | Self::Boolean { title, .. }
             | Self::Select { title, .. }
             | Self::Folder { title }
+            | Self::Project { title }
             | Self::Provider { title }
             | Self::Secret { title } => title,
         }
@@ -376,7 +380,10 @@ impl Setting {
         match self {
             Self::String { default, .. } | Self::Select { default, .. } => default.clone().into(),
             Self::Boolean { default, .. } => (*default).into(),
-            Self::Folder { .. } | Self::Provider { .. } | Self::Secret { .. } => Value::Null,
+            Self::Folder { .. }
+            | Self::Project { .. }
+            | Self::Provider { .. }
+            | Self::Secret { .. } => Value::Null,
         }
     }
 }
@@ -804,6 +811,7 @@ impl Grant {
                     Setting::String { .. }
                     | Setting::Boolean { .. }
                     | Setting::Select { .. }
+                    | Setting::Project { .. }
                     | Setting::Provider { .. }
                     | Setting::Secret { .. } => None,
                 })

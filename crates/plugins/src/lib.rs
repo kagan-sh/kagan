@@ -526,7 +526,8 @@ async fn stored_settings(
             Setting::String { .. }
             | Setting::Boolean { .. }
             | Setting::Select { .. }
-            | Setting::Folder { .. } => {
+            | Setting::Folder { .. }
+            | Setting::Project { .. } => {
                 let value = stored.unwrap_or_else(|| setting.default_value());
                 settings.insert(key.clone(), value);
             }

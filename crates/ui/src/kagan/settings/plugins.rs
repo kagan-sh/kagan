@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
@@ -243,6 +244,11 @@ fn plugin_row(
             let shown = value.as_str().unwrap_or("Not chosen").to_owned();
             (title, fault, folder_control(weak, &scope, id, key, shown))
         }
+        Setting::Project { title } => {
+            let (hint, control) = project_control(weak, id, key, &scope, value, cx);
+            let note = if fault.is_empty() { hint } else { fault };
+            (title, note, control)
+        }
         Setting::Secret { title } => {
             let input = kagan.settings_drafts.secret.get(&scope)?.input.clone();
             let warning =
@@ -430,6 +436,161 @@ fn secret_control(
         ))
         .children(clear)
         .into_any_element()
+}
+
+fn project_control(
+    weak: &WeakEntity<Kagan>,
+    id: &PluginId,
+    key: &str,
+    scope: &str,
+    value: &Value,
+    cx: &App,
+) -> (String, AnyElement) {
+    let current = value.as_str().unwrap_or_default().to_owned();
+    let projects: Vec<(String, String)> = Workspace::global(cx)
+        .read(cx)
+        .sidebar(cx)
+        .projects
+        .into_iter()
+        .map(|project| (project.id.0, project.name))
+        .collect();
+    let (label, tip, note) = if current.is_empty() {
+        ("None".to_owned(), None, String::new())
+    } else if let Some((_, name)) = projects.iter().find(|(project, _)| project == &current) {
+        (short_label(name, 28), Some(name.clone()), String::new())
+    } else {
+        (
+            "Missing".to_owned(),
+            Some(current.clone()),
+            "That project is gone. Pick another or None.".into(),
+        )
+    };
+    let (plugin, setting_key, scope) = (id.clone(), key.to_owned(), scope.to_owned());
+    let weak = weak.clone();
+    let projects_for_menu = projects;
+    let mut button = Button::new(ElementId::Name(
+        format!("button-setting-project-{scope}").into(),
+    ))
+    .small()
+    .outline()
+    .label(label.clone());
+    if let Some(tip) = tip {
+        button = button.tooltip(tip);
+    }
+    let control = control(
+        format!("setting-project-{scope}"),
+        Facts::button(label),
+        button.dropdown_menu(move |menu, _, _| {
+            project_menu(
+                menu,
+                &weak,
+                &plugin,
+                &setting_key,
+                &scope,
+                &current,
+                &projects_for_menu,
+            )
+        }),
+    )
+    .into_any_element();
+    (note, control)
+}
+
+fn short_label(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_owned();
+    }
+    let mut end = 0;
+    let mut last_break = 0;
+    for (index, ch) in text.char_indices() {
+        if text[..index].chars().count() >= max {
+            break;
+        }
+        end = index + ch.len_utf8();
+        if ch.is_whitespace() || matches!(ch, '-' | '_' | '/' | '.') {
+            last_break = end;
+        }
+    }
+    let cut = if last_break > max / 2 {
+        last_break
+    } else {
+        end
+    };
+    format!("{}…", text[..cut].trim_end())
+}
+
+fn project_menu(
+    menu: PopupMenu,
+    weak: &WeakEntity<Kagan>,
+    plugin: &PluginId,
+    key: &str,
+    scope: &str,
+    current: &str,
+    projects: &[(String, String)],
+) -> PopupMenu {
+    let none_id = ElementId::Name(format!("project-none-{scope}").into());
+    let none_scope = scope.to_owned();
+    let none_plugin = plugin.clone();
+    let none_key = key.to_owned();
+    let none_weak = weak.clone();
+    let none_selected = current.is_empty();
+    let menu = menu.item(
+        PopupMenuItem::element(move |_, _| {
+            div()
+                .id(none_id.clone())
+                .ui_observe_as(Facts {
+                    role: Role::MenuItem,
+                    selected: Some(none_selected),
+                    ..Facts::button("None")
+                })
+                .child("None")
+        })
+        .on_click(move |_, _, cx| {
+            save_value(
+                &none_weak,
+                none_scope.clone(),
+                none_plugin.clone(),
+                none_key.clone(),
+                Change::Clear,
+                cx,
+            );
+        }),
+    );
+    projects.iter().fold(menu, |menu, (project_id, name)| {
+        let (weak, scope, plugin, key, pick, full, selected) = (
+            weak.clone(),
+            scope.to_owned(),
+            plugin.clone(),
+            key.to_owned(),
+            project_id.clone(),
+            name.clone(),
+            current == project_id,
+        );
+        let shown = short_label(&full, 40);
+        let item_id = format!("project-pick-{scope}/{pick}");
+        menu.item(
+            PopupMenuItem::element(move |_, _| {
+                div()
+                    .id(ElementId::Name(item_id.clone().into()))
+                    .ui_observe_as(Facts {
+                        role: Role::MenuItem,
+                        selected: Some(selected),
+                        ..Facts::button(full.clone())
+                    })
+                    .child(shown.clone())
+            })
+            .on_click(move |_, _, cx| {
+                save_value(
+                    &weak,
+                    scope.clone(),
+                    plugin.clone(),
+                    key.clone(),
+                    Change::Set(json!(pick.clone())),
+                    cx,
+                );
+            }),
+        )
+    })
 }
 
 fn select_control(

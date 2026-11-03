@@ -15,9 +15,9 @@ use kg_domain::{
 use serde_json::{Value, json};
 
 use super::kagan::{
-    NAVIGATOR, chord, click, drag_to, focused_of, install_navigator, open, open_with_plugins_then,
-    plugin_log, present, press as press_at, press_key, release, run_shell, selected_of,
-    set_preference, shows, value_of, wait_until,
+    NAVIGATOR, chord, click, drag_to, focused_of, install_navigator, label, open,
+    open_with_plugins_then, plugin_log, present, press as press_at, press_key, release, run_shell,
+    selected_of, set_preference, shows, value_of, wait_until,
 };
 use super::sidebars::span;
 use crate::theme::follow_system;
@@ -507,6 +507,68 @@ fn a_plugin_setting_saves_from_its_page(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_project_setting_picks_from_a_dropdown(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    assert_eq!(
+        label(cx, window, "setting-project-dev.test.prefs/board"),
+        "None"
+    );
+    click(cx, window, "setting-project-dev.test.prefs/board");
+    wait_until(cx, |cx| {
+        shows(cx, window, "project-pick-dev.test.prefs/board/prj_kagan")
+    });
+    click(cx, window, "project-pick-dev.test.prefs/board/prj_kagan");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "board"), json!("prj_kagan"));
+    assert_eq!(
+        label(cx, window, "setting-project-dev.test.prefs/board"),
+        "Kagan project"
+    );
+    click(cx, window, "setting-project-dev.test.prefs/board");
+    wait_until(cx, |cx| {
+        shows(cx, window, "project-none-dev.test.prefs/board")
+    });
+    click(cx, window, "project-none-dev.test.prefs/board");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "board"), Value::Null);
+    assert_eq!(
+        label(cx, window, "setting-project-dev.test.prefs/board"),
+        "None"
+    );
+}
+
+#[gpui_kit::test]
+fn a_missing_project_setting_keeps_its_id(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    let store = kg_store::Store::open(data.path().join("kagan.sqlite3")).unwrap();
+    store
+        .set_plugin_value(&PluginId(PREFS.into()), "board", &json!("prj_gone"))
+        .unwrap();
+    drop(store);
+    run_op(
+        cx,
+        Op::Plugin(PluginOp::Reload {
+            id: PluginId(PREFS.into()),
+            thread_id: None,
+        }),
+    );
+    click(cx, window, "settings-gear");
+    assert_eq!(plugin_config(cx, "board"), json!("prj_gone"));
+    assert_eq!(
+        label(cx, window, "setting-project-dev.test.prefs/board"),
+        "Missing"
+    );
+    let note = aria_label(cx, window, "setting-row-dev.test.prefs/board-note").unwrap_or_default();
+    assert!(
+        note.contains("gone") && note.contains("Pick another"),
+        "{note}"
+    );
+}
+
+#[gpui_kit::test]
 fn a_text_setting_shows_a_change_from_kg_without_saving(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
@@ -976,6 +1038,7 @@ fn install_plugins(data: &Path) {
                     "default": "comfortable"
                 },
                 "label": {"type": "string", "title": "Label", "default": "hi"},
+                "board": {"type": "project", "title": "Board"},
                 "folder": {"type": "folder", "title": "Folder"}
             }
         }),
@@ -1800,7 +1863,7 @@ fn an_enabled_plugin_says_what_it_added_without_a_side(cx: &mut TestAppContext) 
     cx.run_until_parked();
     click(cx, window, "settings-gear");
     let note = aria_label(cx, window, &format!("setting-row-{PREFS}-note")).unwrap_or_default();
-    assert_eq!(note, "Adds 4 settings.");
+    assert_eq!(note, "Adds 5 settings.");
     assert!(!note.starts_with("On"), "{note}");
     assert!(!note.contains("right") && !note.contains("left"), "{note}");
 }

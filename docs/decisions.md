@@ -521,3 +521,7 @@ Rules out: pushing screen events to plugins, reading an extra terminal, returnin
 Why: a plugin needs a one-click action on the open thread without a key the person must remember.
 Cost: one button per such command in the title bar.
 Rules out: a script-drawn header component, host-side hide-when-null, icons, a freeform toolbar slot, and folding into the thread menu on a narrow window.
+**135. A plugin setting may pick a project.** `"type": "project"` in `kagan.json` stores a project id. Settings draws a dropdown (None, then every project in sidebar order); the trigger shows the name, None, or Missing. `kg plugin config set` refuses an id that is not a live project; `clear` and None unset it. When the stored project is later removed, get and `settings()` still return that id until clear or another pick; Settings labels the trigger Missing. Decisions 129–134 are reserved for other slices on parallel branches.
+Why: a plugin that ties work to one project needs a host picker; a button per project does not scale, and a panel workaround needs the threads area only to list projects.
+Cost: one setting variant, a dropdown in Settings, and an existence check on set.
+Rules out: a default project, auto-clear on remove, and requiring the threads area to declare the setting.

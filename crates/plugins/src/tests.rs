@@ -164,6 +164,7 @@ fn manifest() -> Value {
         "powers": { "clipboard": { "write": true } },
         "settings": {
             "sounds": { "type": "boolean", "title": "Sounds", "default": true },
+            "board": { "type": "project", "title": "Board" },
             "notes": { "type": "folder", "title": "Notes" }
         },
         "tools": [
@@ -955,6 +956,53 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
             text: format!("{ID} hi false"),
             is_error: false
         }
+    );
+}
+
+#[gpui_kit::test]
+fn a_removed_project_keeps_its_stored_id(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let id = PluginId(ID.into());
+    let config = |op| {
+        Op::Plugin(PluginOp::Config {
+            id: id.clone(),
+            op,
+            thread_id: None,
+        })
+    };
+    run(
+        cx,
+        config(ConfigOp::Set {
+            key: "board".into(),
+            value: Some(json!("prj_test")),
+        }),
+    )
+    .unwrap();
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "board", &json!("prj_gone"))
+            .unwrap();
+    });
+    run(
+        cx,
+        Op::Plugin(PluginOp::Reload {
+            id: id.clone(),
+            thread_id: None,
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!("prj_gone"))
     );
 }
 
@@ -5403,4 +5451,71 @@ fn share_keeps_the_ssh_user_and_drops_a_token(cx: &mut TestAppContext) {
     assert_eq!(entry.source, source);
     assert_eq!(entry.plugin, None);
     assert_eq!(install, format!("kg plugin install {source}"));
+}
+
+#[gpui_kit::test]
+fn a_project_setting_takes_a_live_project_id(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let config = |op| {
+        Op::Plugin(PluginOp::Config {
+            id: PluginId(ID.into()),
+            op,
+            thread_id: None,
+        })
+    };
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(Value::Null)
+    );
+    let gone = run(
+        cx,
+        config(ConfigOp::Set {
+            key: "board".into(),
+            value: Some(json!("prj_gone")),
+        }),
+    )
+    .unwrap_err();
+    assert!(gone.to_string().contains("no project prj_gone"), "{gone}");
+    run(
+        cx,
+        config(ConfigOp::Set {
+            key: "board".into(),
+            value: Some(json!("prj_test")),
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!("prj_test"))
+    );
+    run(
+        cx,
+        config(ConfigOp::Clear {
+            key: "board".into(),
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(Value::Null)
+    );
 }
