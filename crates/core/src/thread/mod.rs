@@ -13,7 +13,7 @@ mod settings;
 mod terminal;
 mod turn;
 
-pub(crate) use agent::note;
+pub(crate) use agent::{note, note_with};
 pub(crate) use extra::{Extras, end as end_extras};
 pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
@@ -63,7 +63,6 @@ fn read_sidebar(store: &mut kg_store::Store) -> kg_store::Result<OpResult> {
     }))
 }
 
-#[expect(clippy::cognitive_complexity, reason = "baseline, #79 step 4")]
 pub(crate) async fn execute(
     this: &WeakEntity<Workspace>,
     op: Op,
@@ -102,27 +101,7 @@ pub(crate) async fn execute(
             Ok(OpResult::Done)
         }
         Op::Sidebar => database.call(read_sidebar).await,
-        Op::Project(ProjectOp::List) => {
-            database
-                .call(|store| Ok(OpResult::Projects(store.projects()?)))
-                .await
-        }
-        Op::Project(ProjectOp::Get { id }) => {
-            let lookup = id.clone();
-            database
-                .call(move |store| store.project(&lookup))
-                .await?
-                .map(OpResult::Project)
-                .ok_or_else(|| missing("project", &id))
-        }
-        Op::Project(ProjectOp::Add { path }) => {
-            let project = database
-                .call(move |store| Ok(add_project(store, &path)))
-                .await??;
-            Workspace::refresh(this, cx).await?;
-            Ok(OpResult::Project(project))
-        }
-        Op::Project(ProjectOp::Remove { id }) => project::remove(this, id, requester, cx).await,
+        Op::Project(op) => project_op(this, &database, op, requester, cx).await,
         Op::Environment(EnvironmentOp::Get { id }) => {
             let lookup = id.clone();
             database
@@ -166,6 +145,45 @@ pub(crate) async fn execute(
     }
 }
 
+async fn project_op(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    op: ProjectOp,
+    requester: Option<Requester>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    match op {
+        ProjectOp::List => {
+            database
+                .call(|store| Ok(OpResult::Projects(store.projects()?)))
+                .await
+        }
+        ProjectOp::Get { id } => {
+            let lookup = id.clone();
+            database
+                .call(move |store| store.project(&lookup))
+                .await?
+                .map(OpResult::Project)
+                .ok_or_else(|| missing("project", &id))
+        }
+        ProjectOp::Add { path } => {
+            let project = database
+                .call(move |store| Ok(add_project(store, &path)))
+                .await??;
+            Workspace::refresh(this, cx).await?;
+            Ok(OpResult::Project(project))
+        }
+        ProjectOp::Remove { id } => project::remove(this, id, requester, cx).await,
+        ProjectOp::Reorder { id, before } => {
+            let result = database
+                .call(move |store| project::reorder(store, &id, before.as_ref()))
+                .await?;
+            Workspace::refresh(this, cx).await?;
+            Ok(result)
+        }
+    }
+}
+
 pub(crate) fn serialized(op: &Op) -> bool {
     match op {
         Op::Status { .. }
@@ -186,7 +204,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Diff(_)
         | Op::Diagnostics(_)
         | Op::Update(_) => false,
-        Op::Project(ProjectOp::Add { .. })
+        Op::Project(ProjectOp::Add { .. } | ProjectOp::Reorder { .. })
         | Op::Environment(
             EnvironmentOp::Restore { .. }
             | EnvironmentOp::SetBase { .. }
@@ -329,6 +347,7 @@ pub(crate) async fn forward(
         (None, PluginRequest::CallTool { name, .. }) => Err(OpError::NotFound(format!(
             "agent tool {name} is unavailable; no plugin host is loaded"
         ))),
+        (None, PluginRequest::Instruct { .. }) => Ok(OpResult::Output(Some(String::new()))),
         (None, PluginRequest::Keymap(KeymapOp::Get)) => {
             Ok(OpResult::Setting(serde_json::json!({})))
         }

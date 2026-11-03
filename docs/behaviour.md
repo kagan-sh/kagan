@@ -67,7 +67,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - Copy is Cmd+C, or Ctrl+Shift+C off macOS. Paste is Cmd+V, or Ctrl+Shift+V off macOS.
 - A program that asks for mouse reports (DECSET 1000, 1002 or 1003) gets clicks, drags and the wheel. It gets them in the SGR form when it asks for 1006, and in the legacy form otherwise. Shift overrides this: the press selects and the wheel scrolls in the window.
 - Terminal in the right sidebar's + opens an extra terminal as a tab of that sidebar, selects it and gives it the keys. Cmd+T does the same and opens the sidebar when it is hidden. The center shows only the program's terminal. Cmd+Alt+] and Cmd+Alt+[ step the keys through the program's terminal and each extra terminal. × on a tab, or Cmd+Shift+W in an extra terminal, closes it, and the keys go to the selected tab or the +. A terminal opened with `kg` adds a tab and does not change the selected one. Showing another thread shows its terminals [decisions 110 and 118].
-- Browser in the right sidebar's + opens the Browser tab and gives its address field the keys. Only http and https open, from the field and for links inside the page, and a bare name such as `example.com` gets https, or http for a local host such as `localhost:3000`. The page appears on the first address and is hidden whenever its tab is not drawn. Closing the tab or showing another thread drops it and clears the address. Its cookies and logins end when the page closes, and never gets the camera or microphone. Off macOS the tab shows "The browser works on macOS only for now." and no field. Plugins cannot open a page in it [decision 117].
+- Browser in the right sidebar's + opens the Browser tab and gives its address field the keys. Only http and https open, from the field and for links inside the page, and a bare name such as `example.com` gets https, or http for a local host such as `localhost:3000`. The page appears on the first address and is hidden whenever its tab is not drawn. Closing the tab or showing another thread drops it and clears the address. Its cookies and logins end when the page closes, and never gets the camera or microphone. On Linux the tab shows "The browser works on macOS and Windows only for now." and no field. Plugins cannot open a page in it [decision 117].
 - Cmd-click, or Ctrl-click off macOS, on an http or https link opens it in the system browser and does nothing else: no selection and no mouse report. A link the program set with OSC 8 opens its target; other links are read from the text, across wrapped rows [decision 112].
 - When the thread's terminals printed a local link (localhost, 127.0.0.1, 0.0.0.0, [::1] or [::]), the row over the terminal shows Open host:port at its right end for the newest one. The button, Cmd+Alt+O or `kg window open-local-link` opens it [decision 112].
 
@@ -139,7 +139,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Tools`
 
 - **Allowed when**: the thread exists [book:cli].
-- **Shows**: the tools offered to that thread, and the plugin instructions [book:cli]. A plugin's instructions go out as MCP server instructions; each tool description still stands alone [docs:plugin-api]. With no plugin host the list is empty. That is the contract before plugins load [docs:architecture] [person 2026-10-08].
+- **Shows**: the tools offered to that thread, and the plugin instructions [book:cli]. A plugin's standing `instructions` and any `instruct` text for this start go out as MCP server instructions; each tool description still stands alone [docs:plugin-api] [decision 130]. With no plugin host the list is empty. That is the contract before plugins load [docs:architecture] [person 2026-10-08].
 - **Refused when**: a missing thread — `not-found` [op.rs].
 
 ### `CallTool`
@@ -182,14 +182,20 @@ A project is a named body of work, usually one repository, with one folder on th
 ### `List`, `Get`
 
 - **Allowed when**: `Get` needs a project id [book:cli]. `List` always [book:cli].
-- **Shows**: the projects, or one project [book:cli]. Personal is last in the sidebar [docs:look].
+- **Shows**: the projects, or one project [book:cli]. Standard projects follow the person's order; Personal is last in the sidebar [docs:look] [decision 132].
 - **Refused when**: a missing id on `Get` — `not-found` [op.rs].
 
 ### `Add`
 
 - **Allowed when**: the command is given a folder path [book:cli] [op.rs].
-- **Changes**: adds a `standard` project for that folder [book:cli] [person 2026-10-08]. The book also says this version has no such command; the CLI has it, so Add is in the contract [book:threads] [book:cli].
+- **Changes**: adds a `standard` project for that folder [book:cli] [person 2026-10-08]. The book also says this version has no such command; the CLI has it, so Add is in the contract [book:threads] [book:cli]. A new project is appended after the other standard projects [decision 132].
 - **Refused when**: a path the command cannot use as a project folder — `invalid` [op.rs].
+
+### `Reorder`
+
+- **Allowed when**: the id is a standard project [book:cli] [decision 132].
+- **Changes**: moves that project before `--before`, or to the end of the standard list when `--before` is omitted [book:cli] [decision 132]. Dragging a project header in the sidebar does the same [docs:look].
+- **Refused when**: a missing id — `not-found` [op.rs]. Personal, or `--before` naming Personal — `invalid` [op.rs] [decision 132].
 
 ## Environment
 
@@ -245,7 +251,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 ### `Command`
 
 - **Allowed when**: the plugin declares the command, and its `when` matches: `always`, a thread on screen, or a project [docs:plugin-api] [book:cli].
-- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api].
+- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api]. A command with `"header": true` and `"when": "thread"` is also a button on the shown thread's title bar; a click runs the same path [decision 129].
 - **Refused when**: past 10 seconds — `failed` [docs:plugin-api] [op.rs]. Unavailable without a plugin host — `failed` [docs:architecture] [op.rs]. That is the contract before plugins load [person 2026-10-08].
 
 ### `New`
