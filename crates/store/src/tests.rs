@@ -1069,9 +1069,12 @@ fn a_future_schema_is_refused_before_anything_is_written() {
 }
 
 #[test]
-fn a_new_database_is_schema_two_and_marked_as_kagan() {
+fn a_new_database_is_current_schema_and_marked_as_kagan() {
     let store = store();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(
+        store.schema_version().unwrap(),
+        i64::try_from(crate::store::MIGRATIONS.len()).unwrap()
+    );
     let application: i32 = store
         .conn
         .pragma_query_value(None, "application_id", |row| row.get(0))
@@ -1143,7 +1146,10 @@ fn another_file_is_refused_unchanged_and_an_empty_one_is_built() {
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
     let empty = dir.join("empty.sqlite3");
     std::fs::write(&empty, "").unwrap();
-    assert_eq!(Store::open(&empty).unwrap().schema_version().unwrap(), 2);
+    assert_eq!(
+        Store::open(&empty).unwrap().schema_version().unwrap(),
+        i64::try_from(crate::store::MIGRATIONS.len()).unwrap()
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

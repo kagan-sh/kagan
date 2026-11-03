@@ -130,6 +130,7 @@ pub(super) struct Sidebar {
     brand_menu: Option<(Entity<PopupMenu>, Subscription)>,
     drag: Option<ProjectId>,
     drop: Option<(ProjectId, Place)>,
+    drag_keys: Option<Subscription>,
 }
 
 impl EventEmitter<Event> for Sidebar {}
@@ -153,6 +154,7 @@ impl Sidebar {
             brand_menu: None,
             drag: None,
             drop: None,
+            drag_keys: None,
         }
     }
 
@@ -168,6 +170,7 @@ impl Sidebar {
         self.archived_footer = footer;
         self.drag = None;
         self.drop = None;
+        self.drag_keys = None;
     }
 
     pub(super) fn chosen(&self) -> Option<&ProjectId> {
@@ -552,28 +555,51 @@ fn reorder_line(
     let move_target = id.clone();
     let drop_target = id.clone();
     let start_id = id.clone();
-    line.on_drag(drag, move |drag, _, _, cx| {
+    line.on_drag(drag, move |drag, _, window, cx| {
+        let preview = order::preview(drag, cx);
+        let end = view.clone();
+        let keys = cx.intercept_keystrokes(|event, window, cx| {
+            if event.keystroke.key == "escape" && cx.stop_active_drag(window) {
+                cx.stop_propagation();
+            }
+        });
         _ = view.update(cx, |this, cx| {
             this.drag = Some(start_id.clone());
             this.drop = None;
+            this.drag_keys = Some(keys);
             cx.notify();
         });
-        order::preview(drag, cx)
+        cx.observe_release_in(&preview, window, move |_, _, cx| {
+            _ = end.update(cx, |this, cx| {
+                this.drag = None;
+                this.drop = None;
+                this.drag_keys = None;
+                cx.notify();
+            });
+        })
+        .detach();
+        preview
     })
     .on_drag_move(
         cx.listener(move |this, event: &DragMoveEvent<DragProject>, _, cx| {
             let from = event.drag(cx).id.clone();
-            let place = if event.bounds.contains(&event.event.position) {
+            let inside = event.bounds.contains(&event.event.position);
+            let next = if inside {
                 let place = order::place_at(event.bounds, event.event.position);
                 if order::noop_gap(&from, &move_target, place, &this.listing.projects) {
                     None
                 } else {
-                    Some(place)
+                    Some((move_target.clone(), place))
                 }
-            } else {
+            } else if this
+                .drop
+                .as_ref()
+                .is_some_and(|(target, _)| target == &move_target)
+            {
                 None
+            } else {
+                return;
             };
-            let next = place.map(|place| (move_target.clone(), place));
             if this.drop != next {
                 this.drop = next;
                 cx.notify();
@@ -587,10 +613,12 @@ fn reorder_line(
             .filter(|(target, _)| target == &drop_target)
         else {
             this.drag = None;
+            this.drag_keys = None;
             cx.notify();
             return;
         };
         this.drag = None;
+        this.drag_keys = None;
         if let Some(before) = order::before_of(&this.listing.projects, &drop_target, place) {
             cx.emit(Event::Reorder {
                 id: drag.id.clone(),

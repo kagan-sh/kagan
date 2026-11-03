@@ -323,10 +323,15 @@ impl Store {
             }
         };
         standard.insert(at, moved);
+        let tx = self.conn.unchecked_transaction()?;
         for (sort, project) in standard.iter_mut().enumerate() {
             project.sort = i64::try_from(sort).unwrap_or(i64::MAX);
-            self.put_project(project)?;
+            tx.execute(
+                "UPDATE projects SET sort = ?1 WHERE id = ?2",
+                params![project.sort, Text(&project.id)],
+            )?;
         }
+        tx.commit()?;
         Ok(())
     }
 
