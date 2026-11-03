@@ -245,7 +245,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 ### `Command`
 
 - **Allowed when**: the plugin declares the command, and its `when` matches: `always`, a thread on screen, or a project [docs:plugin-api] [book:cli].
-- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api].
+- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api]. A command with `"header": true` and `"when": "thread"` is also a button on the shown thread's title bar; a click runs the same path [decision 129].
 - **Refused when**: past 10 seconds — `failed` [docs:plugin-api] [op.rs]. Unavailable without a plugin host — `failed` [docs:architecture] [op.rs]. That is the contract before plugins load [person 2026-10-08].
 
 ### `New`

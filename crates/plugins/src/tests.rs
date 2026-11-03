@@ -3534,6 +3534,23 @@ fn a_manifest_for_a_spot_kagan_does_not_draw_is_refused() {
     refused(declared, "bottom panels are not in this version");
 }
 
+#[test]
+fn a_header_command_needs_when_thread() {
+    let plugin = plugin_dir();
+    let mut declared = manifest();
+    declared["commands"] = json!([{ "id": "hand", "title": "Hand off", "header": true }]);
+    write_plugin(plugin.path(), &declared);
+    let error = read_manifest(plugin.path()).unwrap_err().to_string();
+    assert!(
+        error.contains("a header command needs when thread"),
+        "{error}"
+    );
+    declared["commands"] =
+        json!([{ "id": "hand", "title": "Hand off", "when": "thread", "header": true }]);
+    write_plugin(plugin.path(), &declared);
+    assert!(read_manifest(plugin.path()).is_ok());
+}
+
 /// A plugin's theme is a file in its folder, checked at install and at check with the schema of
 /// a person's theme file.
 #[test]

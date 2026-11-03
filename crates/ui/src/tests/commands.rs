@@ -6,13 +6,68 @@ use crate::kagan::{Kagan, screen_read};
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppContext};
 use kg_core::Workspace;
-use kg_domain::{KeymapOp, Op, OpResult, ThreadId, ThreadOp, WindowOp};
+use kg_domain::{KeymapOp, Op, OpResult, Plugin, PluginId, ThreadId, ThreadOp, WindowOp};
 
 use super::kagan::{
     chord, click, grid_text, install_navigator, label, open, open_with_plugins_then, plugin_log,
     press, press_key, release, run_shell, shown, shows, thread_record, value_of, wait_until,
 };
 use super::panels::disabled_of;
+
+fn install_header(data: &std::path::Path) {
+    let root = data.join("plugins").join("header");
+    std::fs::create_dir_all(&root).unwrap();
+    let manifest = serde_json::json!({
+        "id": "dev.kagan.header",
+        "name": "Header",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "instructions": "A Hand off button on the thread title.",
+        "powers": {},
+        "commands": [
+            { "id": "handoff", "title": "Hand off", "when": "thread", "header": true },
+            { "id": "quiet", "title": "Quiet", "when": "thread" }
+        ]
+    });
+    std::fs::write(root.join("kagan.json"), manifest.to_string()).unwrap();
+    std::fs::write(
+        root.join("main.js"),
+        r#"import { View } from "gpui-kit";
+import { fail, next, reply } from "kagan/jobs";
+import { log } from "kagan/host";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        if (job.kind === "command" && job.command === "handoff") {
+          log("info", `handoff ${job.threadId}`);
+          reply(job.id, null);
+        } else {
+          fail(job.id, "Unknown job");
+        }
+      }
+    });
+  }
+  render() { return ""; }
+}
+"#,
+    )
+    .unwrap();
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store
+        .insert_plugin(&Plugin {
+            id: PluginId("dev.kagan.header".into()),
+            source: root.display().to_string(),
+            root: dunce::canonicalize(&root).unwrap(),
+            commit: None,
+            enabled: true,
+            approved: serde_json::json!({ "powers": {}, "downloads": {}, "folders": {} }),
+            error: None,
+        })
+        .unwrap();
+}
 
 fn dispatch(cx: &mut TestAppContext, op: Op) -> OpResult {
     let task = cx.update(|cx| Workspace::dispatch(op, cx));
@@ -376,4 +431,20 @@ fn typing_a_plugin_name_shows_its_commands(cx: &mut TestAppContext) {
     query(cx, window, &kagan, "navigator");
     assert!(shows(cx, window, "command-dev.kagan.navigator-show"));
     assert!(!shows(cx, window, "command-NewThread"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_header_command_is_a_button_on_the_thread_title(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_header);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    wait_until(cx, |cx| {
+        shows(cx, window, "header-dev.kagan.header-handoff")
+    });
+    assert!(!shows(cx, window, "header-dev.kagan.header-quiet"));
+    click(cx, window, "header-dev.kagan.header-handoff");
+    wait_until(cx, |cx| {
+        plugin_log(cx, "dev.kagan.header").contains(&format!("handoff {}", id.0))
+    });
 }

@@ -40,7 +40,8 @@ kagan owns the manifest and builds each plugin's gpui-shell `Policy` from it. Th
   },
 
   "commands": [
-    { "id": "open", "title": "VSCodium: open", "key": "cmd-shift-e", "when": "thread" }
+    { "id": "open", "title": "VSCodium: open", "key": "cmd-shift-e", "when": "thread" },
+    { "id": "handoff", "title": "Hand off", "when": "thread", "header": true }
   ],
   "tools": [
     { "name": "editor_open", "description": "...", "input": "schemas/editor_open.json", "scope": "all" }
@@ -65,7 +66,7 @@ Rules:
 - `powers.read` is a list of folders under the user's home, written `~/...` (`"read": ["~/.claude/projects"]`). An absolute path, `..`, or a path that resolves outside home is refused. The kagan data directory, a folder inside it, a folder that contains it, `~/.ssh`, and `~/.gnupg` are refused, including when `KG_DATA_DIR` points outside home. A missing folder is not an error; it becomes a read root when it exists at load. A path that is a file is refused. The install screen lists each one as "reads ~/.claude/projects". Adding a folder on update asks again. gpui-shell `fs/promises` `readFile` reads a whole file off the UI thread and stops at 64 MiB, with no offset, so these folders are also the roots of `kagan/files`.
 - `powers.areas` picks HostModule areas, one switch each, no read/write split. `downloads` is not an area.
 - `instructions` is one plugin-level text. `kg mcp` sends it as the MCP server `instructions`; each tool description must still stand alone, since an agent may ignore it.
-- `when` on a command is `always`, `thread` (a thread is on screen) or `project` (a project is on screen; Settings covers the window, so none is). A `key` runs its command only in the context `when` names.
+- `when` on a command is `always`, `thread` (a thread is on screen) or `project` (a project is on screen; Settings covers the window, so none is). A `key` runs its command only in the context `when` names. `"header": true` draws the command as a small button on the shown thread's title bar, before Stop and the thread menu; it needs `when: "thread"` (decision 129).
 - A command's `key` is not bound when the window already takes it, with a built-in shortcut or one the person saved. A key takes it when one key sequence starts with the other, so `secondary-n x` overlaps `secondary-n`. A person binds a command's key in Settings → Keyboard, or with `kg keymap set <plugin-id>:<command> <key>`; `kg keymap remove` leaves it with no key and `--reset` goes back to the manifest's. A saved key gets the same check: it answers `{ ok: false, conflict }` when a window key or another plugin command's key takes it, and the conflict is named as `kg keymap` names it (`NewThread`, `<plugin-id>:<command>`). When two plugin commands want the same key, a key the person saved wins over a manifest's, whatever the plugin order; otherwise the first in plugin and command order keeps it. Settings → Keyboard lists every command of each enabled plugin under the plugin's name, with its key or Not set, and a key that is not bound says what took it on both rows. The plugin's log says it too (`kg plugin logs <id>`). A `key` is optional: a command without one is still found and bound there. The keys are bound again when the window's shortcuts change, so a freed key starts working and a taken one stops.
 - A tool's `scope` is `all` (every thread) or `tagged` (only threads carrying this plugin's metadata, as vocodr's master thread). kagan validates every tool call's input against its `input` schema before the job and fails the call with the schema error.
 - Each `view` names a View class the entry module exports; each `job` names a handler the plugin dispatches on.
