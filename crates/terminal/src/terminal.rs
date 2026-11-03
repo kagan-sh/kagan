@@ -513,7 +513,7 @@ fn thread_read(
                     // O_NONBLOCK is shared across the master's dups; sleep would spin an idle pty.
                     #[cfg(unix)]
                     if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLIN);
+                        wait_ready(fd, libc::POLLIN, -1);
                     } else {
                         std::thread::sleep(Duration::from_micros(100));
                     }
@@ -545,8 +545,12 @@ fn set_nonblocking(fd: std::os::fd::RawFd) -> io::Result<()> {
     Ok(())
 }
 
+// A full pty never wakes a writer on its own, so writers check write_stop this often.
 #[cfg(unix)]
-fn wait_ready(fd: std::os::fd::RawFd, events: libc::c_short) {
+const WRITE_WAIT_MS: libc::c_int = 10;
+
+#[cfg(unix)]
+fn wait_ready(fd: std::os::fd::RawFd, events: libc::c_short, timeout_ms: libc::c_int) {
     loop {
         let mut pfd = libc::pollfd {
             fd,
@@ -554,7 +558,7 @@ fn wait_ready(fd: std::os::fd::RawFd, events: libc::c_short) {
             revents: 0,
         };
         // SAFETY: pfd is one valid pollfd; fd is a live pty master.
-        let n = unsafe { libc::poll(&raw mut pfd, 1, -1) };
+        let n = unsafe { libc::poll(&raw mut pfd, 1, timeout_ms) };
         if n >= 0 {
             return;
         }
@@ -652,7 +656,7 @@ fn write_bytes(
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                     if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLOUT);
+                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
                     } else {
                         std::thread::sleep(Duration::from_millis(1));
                     }
@@ -669,7 +673,7 @@ fn write_bytes(
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                     if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLOUT);
+                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
                     } else {
                         std::thread::sleep(Duration::from_millis(1));
                     }

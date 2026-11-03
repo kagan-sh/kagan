@@ -1,7 +1,7 @@
 use std::ffi::{OsStr, OsString};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -795,6 +795,68 @@ fn submit_reports_a_failed_write() {
     assert!(error.to_string().contains("write failed"), "{error}");
     quit_within(terminal, Duration::from_secs(3));
     drop(reap);
+}
+
+#[cfg(unix)]
+fn pty_pair() -> (std::fs::File, std::fs::File) {
+    use std::os::fd::FromRawFd;
+    let (mut master, mut slave) = (-1, -1);
+    // SAFETY: openpty writes one new fd through each out pointer; null name, termios and size mean defaults.
+    let opened = unsafe {
+        libc::openpty(
+            &raw mut master,
+            &raw mut slave,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(opened, 0, "openpty failed");
+    // SAFETY: an all-zero termios is valid storage that tcgetattr overwrites.
+    let mut term: libc::termios = unsafe { std::mem::zeroed() };
+    // SAFETY: tcgetattr and tcsetattr take the open slave fd and a valid termios.
+    unsafe {
+        assert_eq!(libc::tcgetattr(slave, &raw mut term), 0);
+        libc::cfmakeraw(&raw mut term);
+        assert_eq!(libc::tcsetattr(slave, libc::TCSANOW, &raw const term), 0);
+    }
+    // SAFETY: the two fds came from openpty and nothing else owns them.
+    unsafe {
+        (
+            std::fs::File::from_raw_fd(master),
+            std::fs::File::from_raw_fd(slave),
+        )
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_full_pty_write_is_cancelled_by_stop() {
+    use std::os::fd::AsRawFd;
+    let (master, mut slave) = pty_pair();
+    set_nonblocking(master.as_raw_fd()).unwrap();
+    set_nonblocking(slave.as_raw_fd()).unwrap();
+    let mut writer = master.try_clone().unwrap();
+    let fd = writer.as_raw_fd();
+    // Nobody reads the slave, so once the pty is full the next write must wait.
+    while matches!(writer.write(&[0_u8; 8192]), Ok(n) if n > 0) {}
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&stop);
+    let (done, result) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let _ = done.send(write_bytes(&mut writer, b"abc", &flag, Some(fd)));
+    });
+    thread::sleep(Duration::from_millis(100));
+    stop.store(true, Ordering::Release);
+    let observed = result.recv_timeout(Duration::from_secs(3));
+    // Drain only after the verdict, so a failing run still lets the worker finish.
+    let mut sink = [0_u8; 8192];
+    while matches!(slave.read(&mut sink), Ok(n) if n > 0) {}
+    worker.join().unwrap();
+    assert!(
+        matches!(observed, Ok(Err(_))),
+        "stop did not cancel the full write: {observed:?}"
+    );
 }
 
 #[cfg(unix)]
