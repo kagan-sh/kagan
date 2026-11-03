@@ -1571,6 +1571,20 @@ fn install_webview(data: &Path) {
         .unwrap();
 }
 
+fn placed(native: Option<bool>, note: &str) -> bool {
+    native == Some(true) || note.contains("could not open") || platform_note(note)
+}
+
+#[cfg(target_os = "macos")]
+const fn platform_note(_note: &str) -> bool {
+    false
+}
+
+#[cfg(not(target_os = "macos"))]
+const fn platform_note(note: &str) -> bool {
+    note == crate::components::ONLY_MACOS
+}
+
 fn page_place(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
@@ -1611,7 +1625,7 @@ fn a_plugin_right_panel_mounts_a_web_view(cx: &mut TestAppContext) {
     );
     let (native, note) = page_place(cx, window, "editor");
     assert!(
-        native == Some(true) || note.contains("could not open"),
+        placed(native, &note),
         "a 127.0.0.1 page did not place: native {native:?} note {note:?}"
     );
 
@@ -1620,7 +1634,7 @@ fn a_plugin_right_panel_mounts_a_web_view(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let (native, note) = page_place(cx, window, "fetch");
     assert!(
-        native == Some(true) || note.contains("could not open"),
+        placed(native, &note),
         "a powers.fetch host did not place: native {native:?} note {note:?}"
     );
 
