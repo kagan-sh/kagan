@@ -25,16 +25,35 @@ pub(crate) fn failure(error: &str) -> String {
 }
 
 #[cfg(any(test, target_os = "windows"))]
-pub(crate) fn page_dir(data: &std::path::Path) -> std::io::Result<tempfile::TempDir> {
-    tempfile::Builder::new().prefix("page-").tempdir_in(data)
+static SWEPT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(any(test, target_os = "windows"))]
+pub(crate) fn page_dir(data: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    if !SWEPT.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        sweep_page_dirs(data);
+    }
+    Ok(tempfile::Builder::new()
+        .prefix("page-")
+        .tempdir_in(data)?
+        .keep())
+}
+
+#[cfg(any(test, target_os = "windows"))]
+fn sweep_page_dirs(data: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(data) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with("page-") {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) struct Page {
-    // First, so the page drops before its directory.
     view: Entity<gpui_webview::WebView>,
-    #[cfg(target_os = "windows")]
-    _storage: tempfile::TempDir,
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -90,17 +109,21 @@ fn open_windows(
         .data_dir()
         .to_owned();
     let storage = page_dir(&data).map_err(|error| failure(&error.to_string()))?;
-    let mut context = wry::WebContext::new(Some(storage.path().to_owned()));
-    let view = build_view(
+    let mut context = wry::WebContext::new(Some(storage.clone()));
+    let mut view = match build_view(
         configure(wry::WebViewBuilder::new_with_web_context(&mut context)),
         window,
         cx,
-    )?;
+    ) {
+        Ok(view) => view,
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&storage);
+            return Err(error);
+        }
+    };
+    view.remove_user_data_when_closed(storage);
     let view = cx.new(|_| view);
-    Ok(cx.new(|_| Page {
-        view,
-        _storage: storage,
-    }))
+    Ok(cx.new(|_| Page { view }))
 }
 
 #[cfg(target_os = "macos")]
@@ -143,13 +166,21 @@ mod tests {
     #[test]
     fn webview_files_stay_inside_kagan_data() {
         let data = tempfile::tempdir().expect("temp data");
-        let storage = page_dir(data.path()).expect("page dir");
-        let path = storage.path();
+        let stale = data.path().join("page-stale");
+        std::fs::create_dir_all(&stale).expect("stale page dir");
+        std::fs::write(stale.join("lock"), b"x").expect("stale file");
+        SWEPT.store(false, std::sync::atomic::Ordering::SeqCst);
+        let path = page_dir(data.path()).expect("page dir");
         assert!(path.starts_with(data.path()));
         let name = path
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("");
         assert!(name.starts_with("page-"));
+        assert!(
+            !stale.exists(),
+            "abandoned page dirs are removed on restart"
+        );
+        let _ = std::fs::remove_dir_all(path);
     }
 }
