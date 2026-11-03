@@ -35,8 +35,17 @@ pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
 }
 
 pub(crate) fn id_for(plugin: &PluginId, id: &str) -> ElementId {
-    // Plugin ids are reverse-DNS, so U+001F cannot appear in one. The command id is the suffix.
-    ElementId::Name(format!("header\u{1F}{}\u{1F}{id}", plugin.0).into())
+    let mut command = String::new();
+    for byte in id.bytes() {
+        if matches!(byte, b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' | b'-' | b'_' | b'.') {
+            command.push(byte as char);
+        } else {
+            use std::fmt::Write as _;
+            let _ = write!(command, "%{byte:02X}");
+        }
+    }
+    // Plugin ids are reverse-DNS, so they contain neither '/' nor '%'.
+    ElementId::Name(format!("header/{}/{command}", plugin.0).into())
 }
 
 fn commands(cx: &App) -> Vec<(PluginId, String, String)> {

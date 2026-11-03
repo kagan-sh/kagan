@@ -111,8 +111,15 @@ fn header_id(plugin: &str, command: &str) -> ElementId {
     crate::kagan::header::id_for(&PluginId(plugin.into()), command)
 }
 
-fn header_click(plugin: &str, command: &str) -> String {
-    format!("header\u{1F}{plugin}\u{1F}{command}")
+fn header_name(plugin: &str, command: &str) -> String {
+    match crate::kagan::header::id_for(&PluginId(plugin.into()), command) {
+        ElementId::Name(name) => name.to_string(),
+        other => panic!("header id is a Name: {other:?}"),
+    }
+}
+
+fn name_from_snapshot(debug: &str) -> Option<&str> {
+    debug.strip_prefix("Name(\"")?.strip_suffix("\")")
 }
 
 fn shows_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) -> bool {
@@ -610,11 +617,39 @@ fn hyphen_joined_header_ids_stay_distinct(cx: &mut TestAppContext) {
         shows_id(cx, window, &one) && shows_id(cx, window, &two)
     });
     assert_ne!(one, two);
+    assert_eq!(
+        header_name("dev.acme.header", "hand-off"),
+        "header/dev.acme.header/hand-off"
+    );
+    assert_eq!(
+        header_name("dev.acme.header-hand", "off"),
+        "header/dev.acme.header-hand/off"
+    );
+    let OpResult::Ui(snapshot) = dispatch(cx, Op::Ui(UiOp::Snapshot { window: 0 })) else {
+        panic!("snapshot");
+    };
+    let from_snapshot = |want: &str| {
+        snapshot
+            .elements
+            .iter()
+            .find_map(|element| {
+                let name = name_from_snapshot(&element.id)?;
+                (name == want).then(|| name.to_owned())
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "snapshot lists {want}: {:?}",
+                    snapshot.elements.iter().map(|e| &e.id).collect::<Vec<_>>()
+                )
+            })
+    };
+    let click_one = from_snapshot("header/dev.acme.header/hand-off");
+    let click_two = from_snapshot("header/dev.acme.header-hand/off");
     assert!(matches!(
         dispatch(
             cx,
             Op::Ui(UiOp::Click {
-                element_id: header_click("dev.acme.header", "hand-off"),
+                element_id: click_one,
                 within: None,
                 window: 0,
             }),
@@ -628,7 +663,7 @@ fn hyphen_joined_header_ids_stay_distinct(cx: &mut TestAppContext) {
         dispatch(
             cx,
             Op::Ui(UiOp::Click {
-                element_id: header_click("dev.acme.header-hand", "off"),
+                element_id: click_two,
                 within: None,
                 window: 0,
             }),
