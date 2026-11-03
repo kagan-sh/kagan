@@ -10,10 +10,12 @@ use std::sync::Arc;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
+#[cfg(target_os = "macos")]
+use gpui_kit::AppContext as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, ElementId, Entity, InteractiveElement as _, IntoElement as _,
+    AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Refineable as _, Role, SharedString, Styled as _, WeakEntity, Window, div,
 };
 use gpui_shell::{
@@ -226,10 +228,18 @@ fn place(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
     let Some((owner, hosts)) = fetched else {
         return loose(id, url, window, cx);
     };
-    owned(owner, id, url, &hosts, window, cx)
+    owned(&owner, id, url, &hosts, window, cx)
 }
 
-fn loose(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
+fn loose(
+    #[cfg(target_os = "macos")] id: &str,
+    #[cfg(not(target_os = "macos"))] _id: &str,
+    url: &str,
+    #[cfg(target_os = "macos")] window: &mut Window,
+    #[cfg(not(target_os = "macos"))] _window: &mut Window,
+    #[cfg(target_os = "macos")] cx: &mut App,
+    #[cfg(not(target_os = "macos"))] _cx: &mut App,
+) -> Shown {
     match gate(url, &[]) {
         Gate::Empty => blank(),
         Gate::Note(reason) => noted(reason),
@@ -249,11 +259,12 @@ fn loose(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
 }
 
 fn owned(
-    owner: WeakEntity<ScriptView>,
+    owner: &WeakEntity<ScriptView>,
     id: &str,
     url: &str,
     hosts: &[String],
-    window: &mut Window,
+    #[cfg(target_os = "macos")] window: &mut Window,
+    #[cfg(not(target_os = "macos"))] _window: &mut Window,
     cx: &mut App,
 ) -> Shown {
     let index = find(cx, owner.entity_id(), id);
@@ -277,7 +288,7 @@ fn owned(
             noted(reason)
         }
         #[cfg(target_os = "macos")]
-        Gate::Open => open_owned(owner, id, url, hosts, index, window, cx),
+        Gate::Open => open_owned(owner.clone(), id, url, hosts, index, window, cx),
     }
 }
 
