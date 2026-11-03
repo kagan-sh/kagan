@@ -25,6 +25,8 @@ actions!(kagan, [DismissAskPopup]);
 
 pub(super) const CONTEXT: &str = "AskPopup";
 
+const MENU_WIDTH: f32 = 360.;
+
 #[derive(Clone)]
 pub(super) struct Draft {
     texts: BTreeMap<String, Entity<InputState>>,
@@ -334,11 +336,13 @@ fn select_field(
     ))
     .small()
     .outline()
+    .w_full()
     .label(shown.clone())
+    .tooltip(shown.clone())
     .dropdown_menu(move |menu, _, _| {
-        options
-            .iter()
-            .fold(menu.scrollable(true), |menu, (pick, name)| {
+        options.iter().fold(
+            menu.scrollable(true).max_w(px(MENU_WIDTH)),
+            |menu, (pick, name)| {
                 let selected = *pick == picked;
                 let item = match pick {
                     Some(choice) => format!("ask-choice-{}-{field_id}-{choice}", ask_id.0),
@@ -357,6 +361,9 @@ fn select_field(
                                 selected: Some(selected),
                                 ..Facts::button(name.clone())
                             })
+                            .w_full()
+                            .max_w(px(MENU_WIDTH))
+                            .whitespace_normal()
                             .child(name.clone())
                     })
                     .on_click(move |_, _, cx| {
@@ -369,7 +376,8 @@ fn select_field(
                         });
                     }),
                 )
-            })
+            },
+        )
     });
     v_flex()
         .gap_1()
@@ -379,7 +387,7 @@ fn select_field(
                 .text_color(cx.theme().muted_foreground)
                 .child(label.to_owned()),
         )
-        .child(h_flex().child(control(
+        .child(div().w_full().min_w_0().child(control(
             format!("ask-select-{}-{}", asked.id.0, id),
             Facts {
                 value: Some(shown.into()),

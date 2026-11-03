@@ -584,7 +584,7 @@ fn a_128_character_choice_stays_inside_the_ask_popup(cx: &mut TestAppContext) {
         }]),
     );
     wait_until(cx, |cx| shows(cx, window, "ask-popup"));
-    let card = bounds(cx, window, &format!("ask-popup-{interaction}"));
+    let card = bounds(cx, window, &format!("question-{interaction}"));
     let select = bounds(cx, window, &format!("ask-select-{interaction}-mode"));
     assert!(
         select[2] <= card[2],
