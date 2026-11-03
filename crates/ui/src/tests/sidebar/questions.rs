@@ -584,7 +584,8 @@ fn a_128_character_choice_stays_inside_the_ask_popup(cx: &mut TestAppContext) {
             "label": "Mode",
             "choices": [
                 { "id": "unbroken", "label": unbroken },
-                { "id": "spaced", "label": spaced }
+                { "id": "spaced", "label": spaced },
+                { "id": "short", "label": "Short" }
             ]
         }]),
     );
@@ -614,6 +615,19 @@ fn a_128_character_choice_stays_inside_the_ask_popup(cx: &mut TestAppContext) {
         item[0] + item[2] <= card[0] + card[2],
         "the 128-character choice runs past the popup: {item:?} in {card:?}"
     );
+    let short = bounds(cx, window, &format!("ask-choice-{interaction}-mode-short"));
+    for (name, wrapped) in [
+        ("unbroken", item),
+        (
+            "spaced",
+            bounds(cx, window, &format!("ask-choice-{interaction}-mode-spaced")),
+        ),
+    ] {
+        assert!(
+            wrapped[3] > short[3],
+            "the {name} label is one line tall, {wrapped:?}, so it is cut off; the short one is {short:?}"
+        );
+    }
 }
 
 #[gpui_kit::test]

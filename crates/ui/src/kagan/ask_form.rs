@@ -408,7 +408,6 @@ fn select_field(
                             })
                             .w_full()
                             .max_w(px(MENU_WIDTH))
-                            .whitespace_normal()
                             .child(name.clone())
                     })
                     .on_click(move |_, _, cx| {
