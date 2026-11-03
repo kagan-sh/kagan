@@ -2,7 +2,7 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{Op, TerminalOp, ThreadId, ThreadOp};
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use super::kagan::label;
 use super::kagan::{click, focused_of, open, present, run_shell, selected_of, shows, wait_until};
 use crate::kagan::screen_read::{shown_tab, tab_focused, tab_grid, tab_numbers};
@@ -162,19 +162,19 @@ fn the_browser_opens_from_the_plus_and_closes(cx: &mut TestAppContext) {
     assert_eq!(focused_of(cx, window, "right-tab-add"), Some(true));
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 #[gpui_kit::test]
-fn off_macos_the_browser_shows_a_note(cx: &mut TestAppContext) {
+fn without_a_native_page_the_browser_shows_a_note(cx: &mut TestAppContext) {
     let (_, window, _data) = open(cx);
     shown(cx, window);
     add(cx, window, "right-add-browser");
     assert_eq!(
         label(cx, window, "browser-hint"),
-        "The browser works on macOS only for now."
+        "The browser works on macOS and Windows only for now."
     );
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[gpui_kit::test]
 fn the_page_shows_only_while_the_browser_tab_is_drawn(cx: &mut TestAppContext) {
     let (_, window, _data) = open(cx);
@@ -196,7 +196,7 @@ fn the_page_shows_only_while_the_browser_tab_is_drawn(cx: &mut TestAppContext) {
     assert!(!drawn(cx));
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[gpui_kit::test]
 fn closing_the_browser_or_leaving_the_thread_drops_its_page(cx: &mut TestAppContext) {
     let (_, window, _data) = open(cx);

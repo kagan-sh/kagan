@@ -186,7 +186,7 @@ Plugins contribute **panels** (a View class the entry exports) placed `left`, `c
 - `Markdown`: rendered message text.
 - `KgButton`: a command button with the calls of `Button`: `label`, `tooltip`, `loading`, `size`, `primary`, `secondary`, `danger`, `success`, `warning`, `outline`, `ghost`, `link`, `compact`, `disabled`, `selected`, `on_click`, and children, which sit inside the button. `kg ui` finds, clicks and reads it by its id, with its role, name, state and focus. Two panels that use the same id are refused by `kg ui click` unless `--within` names one. `kg plugin check` warns on a plain `Button` in any plugin script. `kg plugin new` writes a starter panel that uses `KgButton`.
 - `KgInput` and `KgTextarea`: a text field. `new KgInput(state)` takes an `InputState`; `new KgTextarea(state)` takes a `TextareaState`. `aria_label(name)` is the accessible name, and `disabled(flag)` stops edits. With a name, `kg ui` finds the field, `kg ui click <name>` focuses it, and `kg ui type` writes into it. The snapshot states the name, the value, and focus. A masked value is eight dots. Without `aria_label`, the field is not a control. The shell's `Input` and `Textarea` stay as the shell draws them: kagan cannot wrap them (decision 55), so `kg ui` does not see them.
-- `WebView`: one page, placed as a panel's body. `new WebView(id)` takes one string id. `url(url)` loads that http or https address. The host must be `127.0.0.1` or `localhost`, or a host in this plugin's `powers.fetch`. Any other address is refused, and so is a navigation that leaves those hosts, with a sentence that says why. The element fills its parent. A right panel whose body is a `WebView` shows the page edge to edge, and only while that panel is on screen. On macOS the page is the same `gpui-webview` view as the Browser tab. Other systems show one sentence. It is not the Browser tab and has no address bar.
+- `WebView`: one page, placed as a panel's body. `new WebView(id)` takes one string id. `url(url)` loads that http or https address. The host must be `127.0.0.1` or `localhost`, or a host in this plugin's `powers.fetch`. Any other address is refused, and so is a navigation that leaves those hosts, with a sentence that says why. The element fills its parent. A right panel whose body is a `WebView` shows the page edge to edge, and only while that panel is on screen. On macOS and Windows the page is the same `gpui-webview` view as the Browser tab. Linux shows one sentence. It is not the Browser tab and has no address bar.
 
 **Drag and drop** (decision 122). A `div`, `h_flex` or `v_flex` in a plugin view takes gpui-kit's drag calls. The payload is text, such as a ticket id or a thread id.
 
@@ -247,7 +247,7 @@ A `secret` setting (decision 104):
 ## Not in this API
 
 - HTTP routes, background cron, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it.
-- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS (decision 117), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one local page with `WebView` (121), not a general browser.
+- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one local page with `WebView` (121), not a general browser.
 
 ## Measured by the spike
 
