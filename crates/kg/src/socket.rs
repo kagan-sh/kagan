@@ -14,8 +14,8 @@ use serde::Deserialize;
 
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// `sockaddr_un.sun_path` holds the path and a trailing NUL. Linux gives the path 108 bytes;
-/// macOS gives it 104.
+// `sockaddr_un.sun_path` holds the path and a trailing NUL. Linux gives the path 108 bytes;
+// macOS gives it 104.
 #[cfg(unix)]
 const SOCKET_PATH_MAX: usize = if cfg!(target_os = "linux") { 107 } else { 103 };
 
