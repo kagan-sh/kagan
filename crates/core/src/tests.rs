@@ -3308,6 +3308,67 @@ async fn ask_answer_requires_a_whole_number(cx: &mut TestAppContext) {
     );
 }
 
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_answer_accepts_none_for_a_select(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(vec![kg_domain::AskField::Select {
+                id: "mode".into(),
+                label: "Mode".into(),
+                choices: vec![InteractionOption {
+                    id: "fast".into(),
+                    label: "Fast".into(),
+                }],
+                default: None,
+            }]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("mode".into(), serde_json::Value::Null);
+    cx.update(|cx| {
+        Workspace::answer_fields(
+            &id,
+            PendingInteractionId(interaction),
+            "yes".into(),
+            values.clone(),
+            cx,
+        )
+    })
+    .await
+    .unwrap();
+    let OpResult::Event(Some(event)) = op(
+        Op::Thread(ThreadOp::WaitEvent {
+            id: id.clone(),
+            kind: "answered".into(),
+            after_seq: None,
+            timeout_ms: 1_000,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("answered");
+    };
+    assert_eq!(
+        event.kind,
+        EventKind::Answered {
+            title: "Ship it?".into(),
+            option: "yes".into(),
+            fields: values,
+        }
+    );
+}
+
 #[cfg(unix)]
 async fn waiting_count(id: &ThreadId, cx: &mut TestAppContext) -> usize {
     kinds_of(id, cx)

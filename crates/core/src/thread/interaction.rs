@@ -477,6 +477,9 @@ fn check_answer_fields(
             {
                 serde_json::Value::String(capped_answer(choice)?)
             }
+            (kg_domain::AskField::Select { .. }, serde_json::Value::Null) => {
+                serde_json::Value::Null
+            }
             _ => {
                 return Err(OpError::Invalid(format!(
                     "ask answer field {} has the wrong kind of value",

@@ -3,20 +3,21 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
-    IntoElement, ParentElement as _, SharedString, Styled as _, Window, actions, div, px,
+    IntoElement, ParentElement as _, Styled as _, Window, actions, div, px,
 };
 use kg_domain::{AskField, PendingInteraction, PendingInteractionId, ThreadId};
 use serde_json::{Value, json};
 
 use super::Kagan;
+use crate::kagan::shown::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -28,7 +29,7 @@ pub(super) const CONTEXT: &str = "AskPopup";
 pub(super) struct Draft {
     texts: BTreeMap<String, Entity<InputState>>,
     flags: BTreeMap<String, bool>,
-    picks: BTreeMap<String, String>,
+    picks: BTreeMap<String, Option<String>>,
     error: Option<String>,
 }
 
@@ -144,8 +145,7 @@ impl Draft {
                 } => {
                     let pick = default
                         .clone()
-                        .or_else(|| choices.first().map(|choice| choice.id.clone()))
-                        .unwrap_or_default();
+                        .or_else(|| choices.first().map(|choice| choice.id.clone()));
                     picks.insert(id.clone(), pick);
                 }
             }
@@ -185,10 +185,12 @@ impl Draft {
                 AskField::Boolean { id, .. } => {
                     Value::Bool(self.flags.get(id).copied().unwrap_or(false))
                 }
-                AskField::Select { id, .. } => {
-                    let pick = self.picks.get(id).cloned().unwrap_or_default();
-                    Value::String(pick)
-                }
+                AskField::Select { id, .. } => self
+                    .picks
+                    .get(id)
+                    .cloned()
+                    .flatten()
+                    .map_or(Value::Null, Value::String),
             };
             values.insert(field.id().to_owned(), value);
         }
@@ -309,46 +311,61 @@ fn select_field(
     choices: &[kg_domain::InteractionOption],
     cx: &App,
 ) -> AnyElement {
-    let picked = draft.picks.get(id).cloned().unwrap_or_default();
-    let buttons: Vec<AnyElement> = choices
+    let picked = draft.picks.get(id).cloned().flatten();
+    let shown = choices
         .iter()
-        .map(|choice| {
-            let selected = choice.id == picked;
-            let ask_id = asked.id.clone();
-            let field_id = id.to_owned();
-            let choice_id = choice.id.clone();
-            let kagan = kagan.clone();
-            let name = choice.label.clone();
-            div()
-                .id(ElementId::Name(
-                    format!("ask-choice-{}-{}-{}", asked.id.0, id, choice.id).into(),
-                ))
-                .ui_observe_as(Facts {
-                    selected: Some(selected),
-                    ..Facts::button(name)
-                })
-                .child(
-                    Button::new(SharedString::from(format!(
-                        "ask-choice-btn-{}-{}-{}",
-                        asked.id.0, id, choice.id
-                    )))
-                    .small()
-                    .label(choice.label.clone())
-                    .when(selected, Button::primary)
-                    .when(!selected, Button::outline)
-                    .on_click(move |_, _, cx| {
-                        kagan.update(cx, |kagan, cx| {
-                            if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
-                                draft.picks.insert(field_id.clone(), choice_id.clone());
-                                draft.error = None;
-                                cx.notify();
-                            }
-                        });
-                    }),
-                )
-                .into_any_element()
-        })
+        .find(|choice| Some(&choice.id) == picked.as_ref())
+        .map_or_else(|| "None".to_owned(), |choice| choice.label.clone());
+    let options: Vec<(Option<String>, String)> = std::iter::once((None, "None".to_owned()))
+        .chain(
+            choices
+                .iter()
+                .map(|choice| (Some(choice.id.clone()), choice.label.clone())),
+        )
         .collect();
+    let ask_id = asked.id.clone();
+    let field_id = id.to_owned();
+    let kagan_menu = kagan.clone();
+    let button = Button::new(ElementId::Name(
+        format!("ask-select-btn-{}-{}", asked.id.0, id).into(),
+    ))
+    .small()
+    .outline()
+    .label(shown.clone())
+    .dropdown_menu(move |menu, _, _| {
+        options.iter().fold(menu, |menu, (pick, name)| {
+            let selected = *pick == picked;
+            let item = match pick {
+                Some(choice) => format!("ask-choice-{}-{field_id}-{choice}", ask_id.0),
+                None => format!("ask-none-{}-{field_id}", ask_id.0),
+            };
+            let kagan = kagan_menu.clone();
+            let ask_id = ask_id.clone();
+            let field_id = field_id.clone();
+            let pick = pick.clone();
+            let name = name.clone();
+            menu.item(
+                PopupMenuItem::element(move |_, _| {
+                    div()
+                        .id(ElementId::Name(item.clone().into()))
+                        .ui_observe_as(Facts {
+                            selected: Some(selected),
+                            ..Facts::button(name.clone())
+                        })
+                        .child(name.clone())
+                })
+                .on_click(move |_, _, cx| {
+                    kagan.update(cx, |kagan, cx| {
+                        if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                            draft.picks.insert(field_id.clone(), pick.clone());
+                            draft.error = None;
+                            cx.notify();
+                        }
+                    });
+                }),
+            )
+        })
+    });
     v_flex()
         .gap_1()
         .child(
@@ -357,7 +374,14 @@ fn select_field(
                 .text_color(cx.theme().muted_foreground)
                 .child(label.to_owned()),
         )
-        .child(h_flex().gap_2().flex_wrap().children(buttons))
+        .child(h_flex().child(control(
+            format!("ask-select-{}-{}", asked.id.0, id),
+            Facts {
+                value: Some(shown.into()),
+                ..Facts::button(label.to_owned())
+            },
+            button,
+        )))
         .into_any_element()
 }
 

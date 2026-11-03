@@ -5,7 +5,7 @@ use kg_domain::{AskField, InteractionOption, Op, OpError, OpResult, ThreadOp};
 use crate::tests::app::picker::start_in_plain_folder;
 use crate::tests::kagan::{
     chord, click, focused_of, open, press_key, repo_thread, run_shell, set_preference, shows,
-    wait_until,
+    value_of, wait_until,
 };
 
 fn install_options() -> Vec<InteractionOption> {
@@ -345,6 +345,55 @@ fn a_bad_number_in_the_ask_form_shows_on_the_card(cx: &mut TestAppContext) {
         shows(cx, window, "ask-popup"),
         "the popup stays for the error"
     );
+}
+
+#[gpui_kit::test]
+fn a_select_in_the_ask_form_picks_none_from_its_menu(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let ask = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Ask {
+                id: id.clone(),
+                title: "Ship it?".into(),
+                options: vec![
+                    InteractionOption {
+                        id: "yes".into(),
+                        label: "Yes".into(),
+                    },
+                    InteractionOption {
+                        id: "no".into(),
+                        label: "No".into(),
+                    },
+                ],
+                fields: Some(vec![AskField::Select {
+                    id: "mode".into(),
+                    label: "Mode".into(),
+                    choices: vec![InteractionOption {
+                        id: "fast".into(),
+                        label: "Fast".into(),
+                    }],
+                    default: Some("fast".into()),
+                }]),
+            }),
+            cx,
+        )
+    });
+    let OpResult::Text(interaction) = cx.foreground_executor().block_test(ask).unwrap() else {
+        panic!("ask");
+    };
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let select = format!("ask-select-{interaction}-mode");
+    assert_eq!(value_of(cx, window, &select), Some("Fast".into()));
+    click(cx, window, &select);
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-none-{interaction}-mode"))
+    });
+    click(cx, window, &format!("ask-none-{interaction}-mode"));
+    cx.run_until_parked();
+    assert_eq!(value_of(cx, window, &select), Some("None".into()));
 }
 
 #[gpui_kit::test]
