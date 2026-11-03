@@ -105,7 +105,6 @@ pub(crate) struct Fetch {
     pub(crate) methods: BTreeSet<Method>,
 }
 
-// Cap from decision 125.
 pub(crate) const LOCAL_FETCH_CAP: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -210,8 +209,7 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
 }
 
 // Names that dial this computer must not become a remote HTTPS grant.
-// Every IPv6 literal counts as this computer (decision 125), not only
-// IPv6 loopback addresses.
+// Every IPv6 literal counts as this computer, not only IPv6 loopback.
 fn reaches_this_computer(raw: &str) -> bool {
     let name = raw.trim_start_matches('[').trim_end_matches(']');
     let bare = name.trim_end_matches('.');
