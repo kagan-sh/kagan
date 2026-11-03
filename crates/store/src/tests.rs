@@ -17,6 +17,7 @@ fn store() -> Store {
             name: "kagan".into(),
             path: "/code/kagan".into(),
             git_remote_url: Some("https://github.com/example/repo".into()),
+            sort: 0,
         })
         .unwrap();
     store
@@ -89,6 +90,42 @@ fn project_and_environment_round_trip() {
     );
     assert_eq!(store.projects().unwrap()[0].name, "kagan");
     assert_eq!(store.project(&ProjectId("prj_2".into())).unwrap(), None);
+}
+
+#[test]
+fn reorder_project_places_before_a_neighbour() {
+    let store = store();
+    store
+        .put_project(&Project {
+            id: ProjectId("prj_2".into()),
+            kind: ProjectKind::Standard,
+            name: "other".into(),
+            path: "/code/other".into(),
+            git_remote_url: None,
+            sort: 1,
+        })
+        .unwrap();
+    store
+        .put_project(&Project {
+            id: ProjectId("personal".into()),
+            kind: ProjectKind::Personal,
+            name: "Personal".into(),
+            path: "/personal".into(),
+            git_remote_url: None,
+            sort: 0,
+        })
+        .unwrap();
+    store
+        .reorder_project(&ProjectId("prj_2".into()), Some(&ProjectId("prj_1".into())))
+        .unwrap();
+    let mut projects = store.projects().unwrap();
+    kg_domain::order_sidebar_projects(&mut projects);
+    let names: Vec<_> = projects.into_iter().map(|project| project.name).collect();
+    assert_eq!(names, ["other", "kagan", "Personal"]);
+    assert!(matches!(
+        store.reorder_project(&ProjectId("personal".into()), None),
+        Err(Error::Conflict(_))
+    ));
 }
 
 #[test]
@@ -241,23 +278,36 @@ fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
     let _ = std::fs::remove_file(&path);
     let mut conn = rusqlite::Connection::open(&path).unwrap();
     crate::migrate(&mut conn, crate::store::MIGRATIONS[..1].iter().copied()).unwrap();
+    conn.execute(
+        "INSERT INTO projects (id, kind, name, path, git_remote_url) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            "prj_1",
+            "standard",
+            "kagan",
+            "/code/kagan",
+            Option::<String>::None
+        ],
+    )
+    .unwrap();
     let store = Store { conn };
-    store
-        .put_project(&Project {
-            id: ProjectId("prj_1".into()),
-            kind: ProjectKind::Standard,
-            name: "kagan".into(),
-            path: "/code/kagan".into(),
-            git_remote_url: None,
-        })
-        .unwrap();
     store.put_thread(&thread("thr_1", 1)).unwrap();
     assert_eq!(store.schema_version().unwrap(), 1);
     drop(store);
     let store = Store::open(&path).unwrap();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(
+        store.schema_version().unwrap(),
+        i64::try_from(crate::store::MIGRATIONS.len()).unwrap()
+    );
     assert!(store.thread(&id("thr_1")).unwrap().is_some());
     assert_eq!(store.conversation(&id("thr_1")).unwrap(), None);
+    assert_eq!(
+        store
+            .project(&ProjectId("prj_1".into()))
+            .unwrap()
+            .unwrap()
+            .sort,
+        0
+    );
     drop(store);
     std::fs::remove_file(&path).unwrap();
 }
@@ -1019,9 +1069,12 @@ fn a_future_schema_is_refused_before_anything_is_written() {
 }
 
 #[test]
-fn a_new_database_is_schema_two_and_marked_as_kagan() {
+fn a_new_database_is_current_schema_and_marked_as_kagan() {
     let store = store();
-    assert_eq!(store.schema_version().unwrap(), 2);
+    assert_eq!(
+        store.schema_version().unwrap(),
+        i64::try_from(crate::store::MIGRATIONS.len()).unwrap()
+    );
     let application: i32 = store
         .conn
         .pragma_query_value(None, "application_id", |row| row.get(0))
@@ -1093,7 +1146,10 @@ fn another_file_is_refused_unchanged_and_an_empty_one_is_built() {
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
     let empty = dir.join("empty.sqlite3");
     std::fs::write(&empty, "").unwrap();
-    assert_eq!(Store::open(&empty).unwrap().schema_version().unwrap(), 2);
+    assert_eq!(
+        Store::open(&empty).unwrap().schema_version().unwrap(),
+        i64::try_from(crate::store::MIGRATIONS.len()).unwrap()
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

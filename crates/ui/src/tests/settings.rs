@@ -665,6 +665,68 @@ fn removing_the_project_while_settings_is_open_shows_missing(cx: &mut TestAppCon
 }
 
 #[gpui_kit::test]
+fn review_number_type_after_reload(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_string_retries);
+    cx.run_until_parked();
+    let select_all = if cfg!(target_os = "macos") {
+        "cmd-a"
+    } else {
+        "ctrl-a"
+    };
+    click(cx, window, "settings-gear");
+    let field = format!("plugin-text-{PREFS}/retries");
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "nope");
+    cx.run_until_parked();
+    set_retries_type(data.path(), "number");
+    reload_prefs(cx);
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "4");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "retries"), json!(4));
+    let store = kg_store::Store::open(data.path().join("kagan.sqlite3")).unwrap();
+    assert_eq!(
+        store
+            .plugin_value(&PluginId(PREFS.into()), "retries")
+            .unwrap(),
+        Some(json!(4)),
+        "the saved value is a JSON number, not text"
+    );
+}
+
+fn install_string_retries(data: &Path) {
+    install_plugins(data);
+    set_retries_type(data, "string");
+}
+
+fn set_retries_type(data: &Path, kind: &str) {
+    let path = data.join("prefs-plugin").join("kagan.json");
+    let mut manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let retries = &mut manifest["settings"]["retries"];
+    retries["type"] = json!(kind);
+    retries["default"] = if kind == "string" {
+        json!("3")
+    } else {
+        json!(3)
+    };
+    std::fs::write(&path, manifest.to_string()).unwrap();
+}
+
+fn reload_prefs(cx: &mut TestAppContext) {
+    run_op(
+        cx,
+        Op::Plugin(PluginOp::Reload {
+            id: PluginId(PREFS.into()),
+            thread_id: None,
+        }),
+    );
+}
+
+#[gpui_kit::test]
 fn a_text_setting_shows_a_change_from_kg_without_saving(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
@@ -955,6 +1017,68 @@ fn a_plugin_text_field_states_its_value_and_saves_on_enter(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
+fn a_plugin_number_field_saves_a_finite_number_on_enter(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    let field = format!("plugin-text-{PREFS}/retries");
+    assert_eq!(value_of(cx, window, &field), Some("3".into()));
+    assert_eq!(plugin_config(cx, "retries"), json!(3));
+
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, "backspace");
+    cx.simulate_input(window, "2.5");
+    cx.run_until_parked();
+    assert_eq!(
+        plugin_config(cx, "retries"),
+        json!(3),
+        "typing alone saves nothing"
+    );
+
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "retries"), json!(2.5));
+    assert_eq!(value_of(cx, window, &field), Some("2.5".into()));
+
+    click(cx, window, &field);
+    for _ in 0..3 {
+        cx.simulate_keystrokes(window, "backspace");
+    }
+    cx.simulate_input(window, "  2.50 ");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "retries"), json!(2.5));
+    assert_eq!(
+        value_of(cx, window, &field),
+        Some("2.5".into()),
+        "Enter keeps the canonical number in the field"
+    );
+    assert!(!present(
+        cx,
+        window,
+        "setting-row-dev.test.prefs/retries-note"
+    ));
+
+    click(cx, window, &field);
+    for _ in 0..3 {
+        cx.simulate_keystrokes(window, "backspace");
+    }
+    cx.simulate_input(window, "nope");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(
+        plugin_config(cx, "retries"),
+        json!(2.5),
+        "a non-number is refused"
+    );
+    assert_eq!(value_of(cx, window, &field), Some("nope".into()));
+    assert_eq!(
+        aria_label(cx, window, "setting-row-dev.test.prefs/retries-note").as_deref(),
+        Some("Type a number.")
+    );
+}
+
+#[gpui_kit::test]
 fn a_plugin_turns_off_and_on_from_the_installed_page(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
@@ -1135,6 +1259,7 @@ fn install_plugins(data: &Path) {
                 },
                 "label": {"type": "string", "title": "Label", "default": "hi"},
                 "board": {"type": "project", "title": "Board"},
+                "retries": {"type": "number", "title": "Retries", "default": 3},
                 "folder": {"type": "folder", "title": "Folder"}
             }
         }),
@@ -1959,7 +2084,7 @@ fn an_enabled_plugin_says_what_it_added_without_a_side(cx: &mut TestAppContext) 
     cx.run_until_parked();
     click(cx, window, "settings-gear");
     let note = aria_label(cx, window, &format!("setting-row-{PREFS}-note")).unwrap_or_default();
-    assert_eq!(note, "Adds 5 settings.");
+    assert_eq!(note, "Adds 6 settings.");
     assert!(!note.starts_with("On"), "{note}");
     assert!(!note.contains("right") && !note.contains("left"), "{note}");
 }

@@ -80,9 +80,8 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `branding.icon` named glyph | `icon` file | close. Use an SVG file in the plugin. A glyph name has no meaning. |
 | `branding.logo`, `experimental_icons` | none | gap. Cannot move. One `icon` file is the mark. |
 | `bb.settings.define` | `settings` in `kagan.json` | close. Declare each key in the manifest. There is no call that defines one at runtime. The rows below are the types. |
-| `settings` string, boolean, select | same `type`, with `title` | close. No per-setting description, schema, option labels, or multiline flag. A select's `default` must be one of `options`. |
+| `settings` string, boolean, number, select | same `type`, with `title` | close. No per-setting description, schema, option labels, or multiline flag. A select's `default` must be one of `options`. A number is a finite JSON number; there is no min, max, or integer-only check. |
 | string with `secret: true` | `{ "type": "secret", "title" }` | close. Read it from `settings()` in `kagan/host`. It is `null` until set. Never print it. |
-| number setting | none | gap. Store a string and parse it, or use `select` when the choices are few. Say so. |
 | `project` setting | `{ "type": "project", "title" }` | close. Stores a project id. Settings shows a dropdown (None, then projects). A removed project keeps its id until clear; Settings says Missing. |
 | `settings.onChange` | `onSettingsChanged()` | direct |
 | `experimental_set` | none | gap. The person uses Settings or `kg plugin config <id> set`. A secret is set with no value on the command line. |
@@ -100,7 +99,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `app.commands.register`, `commandPaletteAction` | `commands`: `{ "id", "title", "key"?, "when"?, "header"? }` | close. `when` is `always`, `thread`, or `project`. A `key` runs only in that context. The job kind is `command`. |
 | `experimental_threadHeaderAction`, `experimental_threadAction` with `placement: "header"` | `commands` with `"when": "thread"` and `"header": true` | direct. The host draws the title as a button. No custom component and no hide-when-null. |
 | `agents.registerTool` | `tools`: `{ "name", "description", "input", "scope" }` | close. `input` is a JSON Schema file inside the plugin. `scope` is `all` or `tagged` (threads that carry this plugin's metadata). A duplicated name is kept by the plugin id that sorts first. No row label, icon, or tint. |
-| `contributeInstructions`, `configure` | `instructions`, one string | close for standing text. Text that changes per thread or provider cannot move. |
+| `contributeInstructions`, `configure` | `instructions`, and `"instruct": true` | close for standing text. `"instruct": true` gets a job at each agent start; reply with text for that start only (decision 130). Tool and skill selection per start cannot move. |
 | `ui.requestInput` | `threads.ask` or a panel | close for a choice of two or more options. `threads.ask` needs `powers.areas` `threads`. A custom form cannot move. |
 | `thread.created`, `idle`, `failed`, `archived`, `unarchived`, `deleted` | `events`: `"thread.<type>"` | close. The job is `{ type, threadId, projectId, data }`, not a thread record. Read `docs/plugin-api.md` for `data`. |
 | `thread.active` | `events`: `"thread.turn.started"` | close. It fires when the title becomes a spinner. `thread.turn.ended` fires when the title stays plain (`completed`), when the program stops during that turn (`interrupted`), or when it exits during the turn (`failed`, or `completed` on exit 0). |

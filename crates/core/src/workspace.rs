@@ -37,6 +37,7 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
                 name: "Personal".into(),
                 path: dunce::canonicalize(&personal)?,
                 git_remote_url: None,
+                sort: 0,
             })
             .map_err(closed)?;
     }
@@ -90,6 +91,10 @@ pub enum PluginRequest {
         thread_id: ThreadId,
         name: String,
         input: Value,
+    },
+    Instruct {
+        thread_id: ThreadId,
+        project_id: ProjectId,
     },
     Plugin(PluginOp, Option<Requester>),
     /// A shortcut of a plugin's command, named `<plugin-id>:<command>`

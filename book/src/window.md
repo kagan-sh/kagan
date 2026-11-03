@@ -67,7 +67,7 @@ When a program prints a local address, **Open localhost:3000** appears over the 
 
 ### Browser
 
-On macOS, click **+** in the right sidebar and choose **Browser**. Type an address and press Enter. Only http and https pages open. A local address such as `localhost:3000` opens over http. Your logins end when the page closes, and it cannot use your camera or microphone. Closing the tab closes the page. On Linux and Windows, the tab tells you that the browser works on macOS only.
+On macOS and Windows, click **+** in the right sidebar and choose **Browser**. Type an address and press Enter. Only http and https pages open. A local address such as `localhost:3000` opens over http. Your logins end when the page closes, and it cannot use your camera or microphone. Closing the tab closes the page. On Linux, the tab tells you that the browser works on macOS and Windows only.
 
 ## Details
 
