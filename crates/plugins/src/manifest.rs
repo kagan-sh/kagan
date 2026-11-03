@@ -164,7 +164,7 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
             "fetch host {raw:?} must be http://127.0.0.1:<port> or http://localhost:<port>"
         ));
     }
-    if is_loopback_literal(raw) {
+    if reaches_this_computer(raw) {
         return Err(
             "loopback fetch needs an approved explicit HTTP port (IPv6 is unsupported)".into(),
         );
@@ -209,15 +209,19 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
     }
 }
 
-/// True for `127.0.0.0/8`, `::1`, and IPv4-mapped forms such as
-/// `[::ffff:127.0.0.1]` that would otherwise become a remote HTTPS grant.
-fn is_loopback_literal(raw: &str) -> bool {
-    let address = raw.trim_start_matches('[').trim_end_matches(']');
-    match address.parse::<std::net::IpAddr>() {
-        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback(),
-        Ok(std::net::IpAddr::V6(ip)) => {
-            ip.is_loopback() || ip.to_ipv4_mapped().is_some_and(|ip| ip.is_loopback())
-        }
+/// True for names and addresses that dial this computer, including
+/// `127.0.0.0/8`, `0.0.0.0`, every IPv6 literal (decision 125), `localhost.`,
+/// and `*.localhost`. Those must not become a remote HTTPS grant.
+fn reaches_this_computer(raw: &str) -> bool {
+    let name = raw.trim_start_matches('[').trim_end_matches(']');
+    let bare = name.trim_end_matches('.');
+    let dns = bare.to_ascii_lowercase();
+    if dns == "localhost" || dns.ends_with(".localhost") {
+        return true;
+    }
+    match bare.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_unspecified(),
+        Ok(std::net::IpAddr::V6(_)) => true,
         Err(_) => false,
     }
 }
