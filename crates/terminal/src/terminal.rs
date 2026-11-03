@@ -565,7 +565,7 @@ fn thread_write(
     #[cfg(test)] fail_write: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        for outgoing in queued {
+        while let Ok(outgoing) = queued.recv() {
             let (bytes, done) = match outgoing {
                 Outgoing::Bytes(bytes) => (bytes, None),
                 Outgoing::Checked { bytes, done } => (bytes, Some(done)),
