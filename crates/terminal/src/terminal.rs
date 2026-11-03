@@ -92,11 +92,12 @@ impl Terminal {
         #[cfg(unix)]
         if let Some(fd) = wait_fd {
             // SAFETY: fd is the live pty master; O_NONBLOCK is per open file description.
-            unsafe {
-                let flags = libc::fcntl(fd, libc::F_GETFL);
-                if flags != -1 {
-                    let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                }
+            let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+            if flags == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
+                return Err(io::Error::last_os_error());
             }
         }
         let mut command = CommandBuilder::new(launch.program);
