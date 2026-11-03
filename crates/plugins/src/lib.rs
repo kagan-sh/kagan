@@ -812,7 +812,8 @@ async fn instruct(
                 return String::new();
             }
             let text = secrets.redact(&plugin, &text);
-            truncate(&text, INSTRUCT_CAP)
+            let text = truncate(&text, INSTRUCT_CAP);
+            format!("Plugin {plugin}:\n{text}")
         });
     }
     let parts = futures::future::join_all(tasks).await;

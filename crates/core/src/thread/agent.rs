@@ -159,6 +159,11 @@ pub(crate) async fn integrate(
     let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
     let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
     else {
+        let _ = this.update(cx, |workspace, cx| {
+            if let Some(thread) = workspace.threads.get(&record.id) {
+                thread.update(cx, |thread, _| thread.instruct = None);
+            }
+        });
         return Ok(Integration {
             env,
             args: Vec::new(),
@@ -297,9 +302,20 @@ async fn write_agent_files(
 ) -> Result<()> {
     match known {
         Known::Claude => write_files(claude_files(agent, id, cli, socket, extra), cx).await,
-        Known::Cursor => write_files(cursor_files(agent, extra), cx).await,
+        Known::Cursor => {
+            let dir = cursor_dir(agent, id);
+            write_files(cursor_files(&dir, extra), cx).await?;
+            let skills = agent.join("skills");
+            cx.background_spawn(async move { link_cursor_skills(&dir, &skills) })
+                .await?;
+            Ok(())
+        }
         Known::Codex => Ok(()),
     }
+}
+
+fn cursor_dir(agent: &Path, id: &str) -> PathBuf {
+    agent.join("threads").join(id).join("cursor")
 }
 
 fn flags(
@@ -323,7 +339,7 @@ fn flags(
         }
         Known::Cursor => vec![
             OsString::from("--plugin-dir"),
-            agent.to_path_buf().into_os_string(),
+            cursor_dir(agent, id).into_os_string(),
         ],
         Known::Codex => codex_overrides(id, cli, socket),
     }
@@ -380,7 +396,7 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
     .await;
 }
 
-fn cursor_files(agent: &Path, extra: &str) -> Vec<(PathBuf, String)> {
+fn cursor_files(dir: &Path, extra: &str) -> Vec<(PathBuf, String)> {
     let mut body = format!(
         "---\ndescription: This thread runs inside kagan\nalwaysApply: true\n---\n\n{}\n\nThis thread's id is the environment variable KG_THREAD_ID.\n",
         introduction()
@@ -392,11 +408,30 @@ fn cursor_files(agent: &Path, extra: &str) -> Vec<(PathBuf, String)> {
     }
     vec![
         (
-            agent.join(".cursor-plugin").join("plugin.json"),
+            dir.join(".cursor-plugin").join("plugin.json"),
             "{\"name\": \"kagan\"}\n".into(),
         ),
-        (agent.join("rules").join("kagan.mdc"), body),
+        (dir.join("rules").join("kagan.mdc"), body),
     ]
+}
+
+fn link_cursor_skills(dir: &Path, skills: &Path) -> std::io::Result<()> {
+    let skills = match dunce::canonicalize(skills) {
+        Ok(skills) => skills,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let link = dir.join("skills");
+    match std::fs::symlink_metadata(&link) {
+        Ok(meta) if meta.file_type().is_symlink() => match std::fs::read_link(&link) {
+            Ok(current) if current == skills => return Ok(()),
+            Ok(_) | Err(_) => std::fs::remove_file(&link)?,
+        },
+        Ok(_) => std::fs::remove_dir_all(&link)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    symlink_dir(&skills, &link)
 }
 
 // Codex discovers skills in the working folder and has no per-run skills directory. The link is

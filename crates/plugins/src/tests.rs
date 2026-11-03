@@ -5201,7 +5201,10 @@ export default class Plugin extends View {
     );
     open(cx, &[installed_at(plugin.path())]);
     let text = ask_instruct(cx);
-    assert_eq!(text, format!("persona for {THREAD} in prj_test"));
+    assert_eq!(
+        text,
+        format!("Plugin dev.test.instruct:\npersona for {THREAD} in prj_test")
+    );
 }
 
 #[gpui_kit::test]
@@ -5262,6 +5265,9 @@ export default class Plugin extends View {
     );
     open(cx, &[installed_at(plugin.path())]);
     let text = ask_instruct(cx);
-    assert_eq!(text.len(), 4096);
-    assert!(text.chars().all(|c| c == 'x'));
+    let prefix = "Plugin dev.test.instruct:\n";
+    assert!(text.starts_with(prefix), "{text}");
+    let body = &text[prefix.len()..];
+    assert_eq!(body.len(), 4096);
+    assert!(body.chars().all(|c| c == 'x'));
 }
