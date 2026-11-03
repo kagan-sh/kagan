@@ -1,6 +1,7 @@
 use std::ffi::{OsStr, OsString};
+use std::io::{self, Write};
 use std::process::{Command, Stdio};
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -794,6 +795,44 @@ fn submit_reports_a_failed_write() {
     assert!(error.to_string().contains("write failed"), "{error}");
     quit_within(terminal, Duration::from_secs(3));
     drop(reap);
+}
+
+#[cfg(unix)]
+#[test]
+fn write_bytes_delivers_after_a_short_write() {
+    struct ShortWrite {
+        calls: usize,
+        got: Vec<u8>,
+    }
+
+    impl Write for ShortWrite {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.calls += 1;
+            match self.calls {
+                1 => {
+                    self.got.push(buf[0]);
+                    Ok(1)
+                }
+                2 => Err(io::Error::from(io::ErrorKind::WouldBlock)),
+                _ => {
+                    self.got.extend_from_slice(buf);
+                    Ok(buf.len())
+                }
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut writer = ShortWrite {
+        calls: 0,
+        got: Vec::new(),
+    };
+    let stop = AtomicBool::new(false);
+    write_bytes(&mut writer, b"abc", &stop).unwrap();
+    assert_eq!(writer.got, b"abc");
 }
 
 #[cfg(unix)]
