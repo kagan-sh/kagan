@@ -336,38 +336,40 @@ fn select_field(
     .outline()
     .label(shown.clone())
     .dropdown_menu(move |menu, _, _| {
-        options.iter().fold(menu, |menu, (pick, name)| {
-            let selected = *pick == picked;
-            let item = match pick {
-                Some(choice) => format!("ask-choice-{}-{field_id}-{choice}", ask_id.0),
-                None => format!("ask-none-{}-{field_id}", ask_id.0),
-            };
-            let kagan = kagan_menu.clone();
-            let ask_id = ask_id.clone();
-            let field_id = field_id.clone();
-            let pick = pick.clone();
-            let name = name.clone();
-            menu.item(
-                PopupMenuItem::element(move |_, _| {
-                    div()
-                        .id(ElementId::Name(item.clone().into()))
-                        .ui_observe_as(Facts {
-                            selected: Some(selected),
-                            ..Facts::button(name.clone())
-                        })
-                        .child(name.clone())
-                })
-                .on_click(move |_, _, cx| {
-                    kagan.update(cx, |kagan, cx| {
-                        if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
-                            draft.picks.insert(field_id.clone(), pick.clone());
-                            draft.error = None;
-                            cx.notify();
-                        }
-                    });
-                }),
-            )
-        })
+        options
+            .iter()
+            .fold(menu.scrollable(true), |menu, (pick, name)| {
+                let selected = *pick == picked;
+                let item = match pick {
+                    Some(choice) => format!("ask-choice-{}-{field_id}-{choice}", ask_id.0),
+                    None => format!("ask-none-{}-{field_id}", ask_id.0),
+                };
+                let kagan = kagan_menu.clone();
+                let ask_id = ask_id.clone();
+                let field_id = field_id.clone();
+                let pick = pick.clone();
+                let name = name.clone();
+                menu.item(
+                    PopupMenuItem::element(move |_, _| {
+                        div()
+                            .id(ElementId::Name(item.clone().into()))
+                            .ui_observe_as(Facts {
+                                selected: Some(selected),
+                                ..Facts::button(name.clone())
+                            })
+                            .child(name.clone())
+                    })
+                    .on_click(move |_, _, cx| {
+                        kagan.update(cx, |kagan, cx| {
+                            if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                                draft.picks.insert(field_id.clone(), pick.clone());
+                                draft.error = None;
+                                cx.notify();
+                            }
+                        });
+                    }),
+                )
+            })
     });
     v_flex()
         .gap_1()

@@ -528,6 +528,12 @@ fn a_long_menu_reaches_its_last_choice_by_pointer(cx: &mut TestAppContext) {
     wait_until(cx, |cx| {
         shows(cx, window, &format!("ask-choice-{interaction}-mode-c00"))
     });
+    let first = gpui_kit::ElementId::Name(format!("ask-choice-{interaction}-mode-c00").into());
+    cx.update_window(window, |_, window, cx| {
+        let wheel = gpui_kit::ScrollDelta::Pixels(gpui_kit::point(px(0.), px(-2000.)));
+        crate::ui_dispatch::scroll_within(window, &first, None, wheel, cx).unwrap();
+    })
+    .unwrap();
     click(cx, window, &format!("ask-choice-{interaction}-mode-c31"));
     cx.run_until_parked();
     assert_eq!(value_of(cx, window, &select), Some("Choice 31".into()));
@@ -545,9 +551,12 @@ fn a_long_menu_reaches_its_last_choice_by_keyboard(cx: &mut TestAppContext) {
     wait_until(cx, |cx| {
         shows(cx, window, &format!("ask-choice-{interaction}-mode-c00"))
     });
-    for _ in 0..40 {
+    for _ in 0..33 {
         press_key(cx, window, "down");
     }
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-choice-{interaction}-mode-c31"))
+    });
     press_key(cx, window, "enter");
     cx.run_until_parked();
     assert_eq!(value_of(cx, window, &select), Some("Choice 31".into()));
