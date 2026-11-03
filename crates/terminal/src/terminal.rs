@@ -603,6 +603,13 @@ fn thread_write(
                 });
             }
             if result.is_err() {
+                // Finish may have queued several checked writes; settle each instead of
+                // dropping the channel and leaving the caller with Disconnected.
+                while let Ok(leftover) = queued.try_recv() {
+                    if let Outgoing::Checked { done, .. } = leftover {
+                        let _ = done.send(Err(io::Error::other("terminal is closed")));
+                    }
+                }
                 break;
             }
         }
