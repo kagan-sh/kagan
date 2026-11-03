@@ -3,6 +3,7 @@ use gpui_kit::{TestAppContext, VisualTestContext, px, size};
 use gpui_shell::{ComponentRegistry, ShellRuntime};
 
 mod button;
+mod field;
 
 fn registry() -> gpui_shell::FrozenComponentRegistry {
     build(false)
@@ -37,6 +38,8 @@ fn catalog_has_every_component_and_real_typings() {
             .collect::<Vec<_>>(),
         [
             "KgButton",
+            "KgInput",
+            "KgTextarea",
             "WebView",
             "ThreadTitle",
             "ThreadStatus",

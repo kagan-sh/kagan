@@ -1,5 +1,6 @@
 mod button;
 mod fail;
+mod field;
 #[cfg(test)]
 mod tests;
 mod thread;
@@ -15,12 +16,15 @@ use gpui_shell::{
     MaterializeRequest, RegistryError, anyhow,
 };
 
+#[cfg(all(test, not(target_os = "macos")))]
+pub(crate) use webview::ONLY_MACOS;
 #[cfg(test)]
 pub(crate) use webview::{REFUSED_HOST, native_shown};
 pub(crate) use webview::{fills_panel, note_inset, sync_pages};
 
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     button::register(registry)?;
+    field::register(registry)?;
     webview::register(registry)?;
     thread::register(registry)?;
     registry.register(

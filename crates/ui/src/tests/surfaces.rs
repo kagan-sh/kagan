@@ -1535,6 +1535,11 @@ export class Page extends View {
     return new WebView("editor").url("http://127.0.0.1:1/");
   }
 }
+export class Fetch extends View {
+  render() {
+    return new WebView("fetch").url("https://files.example/draw");
+  }
+}
 export class Off extends View {
   render() {
     return new WebView("off").url("https://example.com/");
@@ -1543,21 +1548,53 @@ export class Off extends View {
 "#;
 
 fn install_webview(data: &Path) {
-    write_plugin(
-        data,
-        "webview",
+    let mut spec = manifest(
         WEB,
-        &manifest(
-            WEB,
-            "Web view",
-            json!([
-                {"id": "page", "title": "Editor", "view": "Page", "placement": "right"},
-                {"id": "off", "title": "Off", "view": "Off", "placement": "right"}
-            ]),
-            false,
-        ),
-        WEB_SOURCE,
+        "Web view",
+        json!([
+            {"id": "page", "title": "Editor", "view": "Page", "placement": "right"},
+            {"id": "fetch", "title": "Fetch", "view": "Fetch", "placement": "right"},
+            {"id": "off", "title": "Off", "view": "Off", "placement": "right"}
+        ]),
+        false,
     );
+    spec["powers"]["fetch"] = json!([{ "host": "files.example", "methods": ["GET"] }]);
+    write_plugin(data, "webview", WEB, &spec, WEB_SOURCE);
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store
+        .set_plugin_approved(
+            &PluginId(WEB.into()),
+            &json!({
+                "powers": { "fetch": [{ "host": "files.example", "methods": ["GET"] }] }
+            }),
+        )
+        .unwrap();
+}
+
+fn placed(native: Option<bool>, note: &str) -> bool {
+    native == Some(true) || note.contains("could not open") || platform_note(note)
+}
+
+#[cfg(target_os = "macos")]
+const fn platform_note(_note: &str) -> bool {
+    false
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_note(note: &str) -> bool {
+    note == crate::components::ONLY_MACOS
+}
+
+fn page_place(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    id: &str,
+) -> (Option<bool>, String) {
+    let note = label(cx, window, &format!("webview-{id}-note"));
+    let native = cx
+        .update_window(window, |_, _, cx| crate::components::native_shown(cx, id))
+        .unwrap();
+    (native, note)
 }
 
 #[gpui_kit::test]
@@ -1586,15 +1623,19 @@ fn a_plugin_right_panel_mounts_a_web_view(cx: &mut TestAppContext) {
         ((page.1 + page.3) - (side.1 + side.3)).abs() < 1.,
         "page {page:?} side {side:?}"
     );
-    let note = label(cx, window, "webview-editor-note");
-    let native = cx
-        .update_window(window, |_, _, cx| {
-            crate::components::native_shown(cx, "editor")
-        })
-        .unwrap();
+    let (native, note) = page_place(cx, window, "editor");
     assert!(
-        native == Some(true) || !note.is_empty(),
-        "note {note:?} native {native:?}"
+        placed(native, &note),
+        "a 127.0.0.1 page did not place: native {native:?} note {note:?}"
+    );
+
+    open_surface(cx, WEB, "fetch").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "webview-fetch"));
+    cx.run_until_parked();
+    let (native, note) = page_place(cx, window, "fetch");
+    assert!(
+        placed(native, &note),
+        "a powers.fetch host did not place: native {native:?} note {note:?}"
     );
 
     open_surface(cx, WEB, "off").unwrap();

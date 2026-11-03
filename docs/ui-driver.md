@@ -17,7 +17,7 @@ A screenshot's JSON is `{"capture": {"path": ..., "current": true|false}}`. `cur
 
 ## What `kg ui` can find
 
-`kg ui` finds the controls kagan states with `ui_observe_as`. Its `Facts` are all required: role, name, value, disabled, selected and focus, so a control cannot leave one out. A container uses `ui_container` and states nothing. A control found this way reports its role, name, value, disabled, selected and focus. The thread header buttons, the title-bar sidebar toggles, the start button, the program rows and the thread actions menu state theirs. A plugin's `KgButton` states its own (see decision 55). A snapshot line also reports `selected`, which a control states itself. A plugin's plain `Button`, and any built-in control that has not stated its name, is not found.
+`kg ui` finds the controls kagan states with `ui_observe_as`. Its `Facts` are all required: role, name, value, disabled, selected and focus, so a control cannot leave one out. A container uses `ui_container` and states nothing. A control found this way reports its role, name, value, disabled, selected and focus. The thread header buttons, the title-bar sidebar toggles, the start button, the program rows and the thread actions menu state theirs. A plugin's `KgButton` states its own (see decision 55). A plugin's `KgInput` or `KgTextarea` with an `aria_label` states its name, value and focus; `kg ui click` uses that name and `kg ui type` goes to the focused field. A snapshot line also reports `selected`, which a control states itself. A plugin's plain `Button`, and any built-in control that has not stated its name, is not found.
 
 ## Person-only approvals
 

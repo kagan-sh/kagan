@@ -150,6 +150,14 @@ _Avoid_: Palette (that word is the theme's colors), launcher
 The command button a plugin script builds. It takes the calls of the shell's `Button`, and `kg ui` can find, click and read it. The shell's `Button` cannot be observed, so `kg plugin check` warns on it.
 _Avoid_: Button (in plugin scripts), observed button
 
+**KgInput**:
+The single-line text field a plugin script builds. `aria_label` is its accessible name. `kg ui` can find it, click it, type into it, and read its name, value and focus. The shell's `Input` cannot be observed.
+_Avoid_: Input (when `kg ui` must see the field)
+
+**KgTextarea**:
+The multi-line text field a plugin script builds. Same contract as `KgInput`, on a `TextareaState`.
+_Avoid_: Textarea (when `kg ui` must see the field)
+
 **WebView**:
 The page a plugin panel shows. It loads one http or https URL on `127.0.0.1`, `localhost`, or a host the plugin may fetch, and it fills the panel. The Browser tab is separate.
 _Avoid_: address bar, embedded browser
