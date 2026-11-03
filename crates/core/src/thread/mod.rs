@@ -260,7 +260,7 @@ async fn dispatch_thread(
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
         ThreadOp::Send { id, text } => {
-            let typed = terminal::submit(this, &id, &text, cx)?;
+            let typed = terminal::submit(this, &id, &text, cx).await?;
             crate::Workspace::events(
                 this,
                 id,

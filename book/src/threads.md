@@ -24,7 +24,7 @@ A program line splits at spaces. Single or double quotes keep spaces together, f
 
 `kg thread paste <id> --file <path>` sends a file to the program, up to 1 MiB. Use `-` for stdin. Paste does not press Enter.
 
-`kg thread send <id> <text>` types that text and presses Enter, up to 1 MiB. It writes a user message in the thread log. It fails when the program is not running.
+`kg thread send <id> <text>` types that text and presses Enter, up to 1 MiB. It writes into whatever the program is reading now, so a busy program or a half-typed line still receives it. What Enter does belongs to that program. It writes a user message in the thread log only after the write succeeds. It fails when the program is not running, when the text is empty or only control characters, or when the write fails.
 
 ## Folders
 

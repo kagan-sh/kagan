@@ -3530,7 +3530,7 @@ async fn send_submits_a_line_and_records_the_user_message(cx: &mut TestAppContex
     assert_eq!(sent_text(&after), ["hello"]);
     let bare = op(
         Op::Thread(ThreadOp::Send {
-            id,
+            id: id.clone(),
             text: "\u{1}".into(),
         }),
         cx,
@@ -3538,6 +3538,24 @@ async fn send_submits_a_line_and_records_the_user_message(cx: &mut TestAppContex
     .await
     .unwrap_err();
     assert!(bare.to_string().contains("send needs text"), "{bare}");
+    for text in ["\r", "\n", "\t", "\r\n\t"] {
+        let before = events(&id, cx).await.len();
+        let error = op(
+            Op::Thread(ThreadOp::Send {
+                id: id.clone(),
+                text: text.into(),
+            }),
+            cx,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("send needs text"),
+            "{text:?}: {error}"
+        );
+        assert_eq!(events(&id, cx).await.len(), before);
+        assert_eq!(sent_text(&events(&id, cx).await), ["hello"]);
+    }
 }
 
 #[cfg(unix)]
@@ -3581,6 +3599,45 @@ async fn send_into_an_ended_program_records_nothing(cx: &mut TestAppContext) {
     assert!(err.to_string().contains("the program has ended"), "{err}");
     assert_eq!(events(&started.id, cx).await.len(), before);
     assert!(!screen_of(&started.id, false, cx).await.contains("NOPE"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn send_with_embedded_newlines_follows_the_program(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "echo-lines",
+        "while IFS= read -r line; do printf 'got:%s\\n' \"$line\"; done",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    op(
+        Op::Thread(ThreadOp::Paste {
+            id: id.clone(),
+            text: Some("draft".into()),
+            file: None,
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    op(
+        Op::Thread(ThreadOp::Send {
+            id: id.clone(),
+            text: "first\nsecond".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let frame = screen_with(&id, "got:second", cx).await;
+    assert!(
+        frame.contains("got:draftfirst") || frame.contains("got:first"),
+        "{frame}"
+    );
+    assert!(frame.contains("got:second"), "{frame}");
+    assert_eq!(sent_text(&events(&id, cx).await), ["first\nsecond"]);
 }
 
 #[cfg(unix)]

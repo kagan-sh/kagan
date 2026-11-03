@@ -163,7 +163,7 @@ fn is_utf8(locale: &str) -> bool {
 
 const SEND_CAP: usize = 1024 * 1024;
 
-pub(crate) fn submit(
+pub(crate) async fn submit(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
     text: &str,
@@ -178,14 +178,23 @@ pub(crate) fn submit(
             text.len()
         )));
     }
-    this.update(cx, |workspace, _| match workspace.terminals.get(id) {
-        Some(Shown::Running(terminal)) => terminal
-            .submit(text)
-            .map_err(|error| OpError::Invalid(error.to_string())),
-        Some(Shown::Ended(_)) => Err(OpError::Invalid("the program has ended".into())),
-        None => Err(missing("terminal", id)),
+    let (typed, written) = this
+        .update(cx, |workspace, _| match workspace.terminals.get(id) {
+            Some(Shown::Running(terminal)) => terminal
+                .submit(text)
+                .map_err(|error| OpError::Invalid(error.to_string())),
+            Some(Shown::Ended(_)) => Err(OpError::Invalid("the program has ended".into())),
+            None => Err(missing("terminal", id)),
+        })
+        .map_err(closed)??;
+    cx.background_spawn(async move {
+        written
+            .recv()
+            .unwrap_or_else(|_| Err(std::io::Error::other("terminal is closed")))
     })
-    .map_err(closed)?
+    .await
+    .map_err(|error| OpError::Invalid(error.to_string()))?;
+    Ok(typed)
 }
 
 pub(crate) fn run(

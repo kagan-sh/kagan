@@ -1,6 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -742,6 +743,57 @@ fn every_control_byte_is_kept_out_of_a_paste() {
         assert_eq!(paste_text(&text, false), "ab", "{c:?}");
         assert_eq!(paste_text(&text, true), "\x1b[200~ab\x1b[201~", "{c:?}");
     }
+}
+
+#[test]
+fn submit_refuses_control_only_text() {
+    let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    for text in ["\r", "\n", "\t", "\r\n\t", "\u{1}"] {
+        let error = terminal.submit(text).unwrap_err();
+        assert!(
+            error.to_string().contains("send needs text"),
+            "{text:?}: {error}"
+        );
+    }
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}
+
+#[cfg(unix)]
+#[test]
+fn submit_refuses_an_exited_program_still_draining() {
+    let (release, gate) = std::sync::mpsc::channel();
+    let clock = Arc::new(AtomicU64::new(0));
+    let terminal = Terminal::spawn(sh("printf done; exit 0"), 80, 24)
+        .unwrap()
+        .controlled(gate, Arc::clone(&clock));
+    let reap = Reap(terminal.process_id());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !terminal.exited() {
+        assert!(Instant::now() < deadline, "the program never ended");
+        thread::sleep(Duration::from_millis(20));
+    }
+    let error = terminal.submit("NOPE").unwrap_err();
+    assert!(
+        error.to_string().contains("the program has ended"),
+        "{error}"
+    );
+    drop(release);
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}
+
+#[test]
+fn submit_reports_a_failed_write() {
+    let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    terminal.fail_next_write();
+    let (_, written) = terminal.submit("hello").unwrap();
+    let error = written.recv().unwrap().unwrap_err();
+    assert!(error.to_string().contains("write failed"), "{error}");
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
 }
 
 #[test]

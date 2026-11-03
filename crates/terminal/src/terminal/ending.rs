@@ -4,12 +4,12 @@ use std::thread::JoinHandle;
 
 use portable_pty::{Child, MasterPty};
 
-use super::{Shared, lock};
+use super::{Outgoing, Shared, lock};
 
 pub(super) struct Ending {
     pub(super) child: Box<dyn Child + Send + Sync>,
     pub(super) master: Option<Box<dyn MasterPty + Send>>,
-    pub(super) input: Sender<Vec<u8>>,
+    pub(super) input: Sender<Outgoing>,
     pub(super) writer: Option<JoinHandle<()>>,
     pub(super) reader: Option<JoinHandle<()>>,
     pub(super) shared: Shared,
@@ -25,9 +25,9 @@ impl Ending {
         // the child is dead. The reader thread is still running here, so it
         // can drain the final frame while the console closes.
         #[cfg(windows)]
-        let _ = self.input.send(b"\x1b[1;1R".to_vec());
+        let _ = self.input.send(Outgoing::Bytes(b"\x1b[1;1R".to_vec()));
         // An empty message closes the writer, which drops the pty's input.
-        let _ = self.input.send(Vec::new());
+        let _ = self.input.send(Outgoing::Bytes(Vec::new()));
         if let Some(writer) = self.writer.take() {
             let _ = writer.join();
         }

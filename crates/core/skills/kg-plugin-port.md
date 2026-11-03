@@ -94,7 +94,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `threads.spawn` | `spawn` | close. Pass `projectId`, `program`, and `environment`. |
 | `projects.get`, `projects.list` | `project`, `projects` | direct |
 | `environments.get` | `environment` | direct |
-| `threads.send` | `threads.send(id, text)` | close. Needs `powers.areas` `threads`. Types the text and presses Enter in the running program, at most 1 MiB. Writes a `message` with role `user`. Does not queue. |
+| `threads.send` | `threads.send(id, text)` | close. Needs `powers.areas` `threads`. Types the text and presses Enter in any running program, at most 1 MiB. Writes into the current input; what Enter does belongs to the program. Writes a `message` with role `user` only after the write succeeds. Does not queue. |
 | `threads.output`, `threads.queuedMessages`, `providers.models` | none | gap. Cannot move. |
 | `bb.cli.register` one command | `cli`: `[{ "name", "commands": [{ "name", "usage"? }] }]` | close. Declare every subcommand. Parse `argv` yourself. There is no generated help. A `name` that is already a `kg` command never reaches the plugin. Two plugins that declare the same name and subcommand fail at the call. |
 | `app.commands.register`, `commandPaletteAction` | `commands`: `{ "id", "title", "key"?, "when"? }` | close. `when` is `always`, `thread`, or `project`. A `key` runs only in that context. The job kind is `command`. |

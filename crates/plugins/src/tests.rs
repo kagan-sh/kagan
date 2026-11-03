@@ -4032,7 +4032,7 @@ fn an_approved_grant_reads_as_plain_lines() {
     assert_eq!(
         crate::power_lines(&approved).unwrap(),
         [
-            "reads, starts and changes your threads, and reads their changed files",
+            "reads, starts and changes your threads, can type into threads and press Enter, and reads their changed files",
             "reads a folder you choose (Notes)",
         ]
     );

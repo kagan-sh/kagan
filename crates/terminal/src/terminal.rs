@@ -41,9 +41,17 @@ pub enum Exit {
     Signal(i32),
 }
 
+enum Outgoing {
+    Bytes(Vec<u8>),
+    Checked {
+        bytes: Vec<u8>,
+        done: Sender<io::Result<()>>,
+    },
+}
+
 pub struct Terminal {
     master: Option<Box<dyn MasterPty + Send>>,
-    input: Sender<Vec<u8>>,
+    input: Sender<Outgoing>,
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
     reader: Option<JoinHandle<()>>,
     writer: Option<JoinHandle<()>>,
@@ -58,6 +66,8 @@ pub struct Terminal {
     job: Option<kg_process::Job>,
     #[cfg(test)]
     clock: Option<Arc<AtomicU64>>,
+    #[cfg(test)]
+    fail_write: Arc<AtomicBool>,
 }
 
 /// How long output may keep arriving after the program exits. A background job that keeps the pty
@@ -112,6 +122,8 @@ impl Terminal {
             publish_gate: Arc::default(),
         };
         let ended = Arc::new(AtomicBool::new(false));
+        #[cfg(test)]
+        let fail_write = Arc::new(AtomicBool::new(false));
         let (input, queued) = mpsc::channel();
         Ok(Self {
             master: Some(pair.master),
@@ -121,7 +133,12 @@ impl Terminal {
                 input.clone(),
                 Arc::clone(&ended),
             )),
-            writer: Some(thread_write(writer, queued)),
+            writer: Some(thread_write(
+                writer,
+                queued,
+                #[cfg(test)]
+                Arc::clone(&fail_write),
+            )),
             input,
             child: Mutex::new(Some(child)),
             shared,
@@ -136,6 +153,8 @@ impl Terminal {
             job: kg_process::Job::assign(process_id).ok(),
             #[cfg(test)]
             clock: None,
+            #[cfg(test)]
+            fail_write,
         })
     }
 
@@ -175,7 +194,7 @@ impl Terminal {
             return Ok(());
         }
         self.input
-            .send(bytes)
+            .send(Outgoing::Bytes(bytes))
             .map_err(|_| io::Error::other("terminal is closed"))
     }
 
@@ -203,19 +222,37 @@ impl Terminal {
         self.write(paste_text(text, bracketed).into_bytes())
     }
 
-    /// Types `text` the way [`paste`](Self::paste) does, then presses Enter.
+    /// Types `text` the way [`paste`](Self::paste) does, then presses Enter, as one write.
+    ///
+    /// The returned receiver settles when that write finishes. The caller records a message only
+    /// after it succeeds.
     ///
     /// # Errors
     ///
-    /// The program has already been reaped, or nothing remains after the control-character filter.
-    pub fn submit(&self, text: &str) -> io::Result<String> {
+    /// The program has ended, the terminal is closed, or nothing non-control remains after the filter.
+    pub fn submit(&self, text: &str) -> io::Result<(String, mpsc::Receiver<io::Result<()>>)> {
+        if self.exited() {
+            return Err(io::Error::other("the program has ended"));
+        }
         let typed: String = text.chars().filter(|c| !is_unsafe_control(*c)).collect();
-        if typed.is_empty() {
+        if !typed.chars().any(|c| !c.is_control()) {
             return Err(io::Error::other("send needs text"));
         }
-        self.paste(&typed)?;
-        self.write(b"\r".to_vec())?;
-        Ok(typed)
+        let bracketed = lock(&self.shared.screen).bracketed_paste();
+        let mut bytes = paste_text(&typed, bracketed).into_bytes();
+        bytes.push(b'\r');
+        self.edit(Edit::Bottom);
+        let (done, written) = mpsc::channel();
+        self.input
+            .send(Outgoing::Checked { bytes, done })
+            .map_err(|_| io::Error::other("terminal is closed"))?;
+        Ok((typed, written))
+    }
+
+    /// Makes the next checked write fail. Tests use this to prove a failed write is reported.
+    #[cfg(test)]
+    pub(crate) fn fail_next_write(&self) {
+        self.fail_write.store(true, Ordering::Release);
     }
 
     /// Moves the view back into history by `lines`, or forward when negative.
@@ -289,7 +326,7 @@ impl Terminal {
         };
         self.shared.publish(&screen);
         if !replies.is_empty() {
-            let _ = self.input.send(replies);
+            let _ = self.input.send(Outgoing::Bytes(replies));
         }
     }
 
@@ -436,7 +473,7 @@ impl Drop for Terminal {
 fn thread_read(
     mut reader: Box<dyn Read + Send>,
     shared: Shared,
-    replies: Sender<Vec<u8>>,
+    replies: Sender<Outgoing>,
     ended: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
@@ -446,7 +483,7 @@ fn thread_read(
             // The reply is sent after the lock is gone, so a client asking for a frame never waits on the pty.
             let reply = shared.feed(&buf[..n]);
             if !reply.is_empty() {
-                let _ = replies.send(reply);
+                let _ = replies.send(Outgoing::Bytes(reply));
             }
         }
         #[cfg(test)]
@@ -459,16 +496,36 @@ fn thread_read(
 
 fn thread_write(
     mut writer: Box<dyn Write + Send>,
-    queued: mpsc::Receiver<Vec<u8>>,
+    queued: mpsc::Receiver<Outgoing>,
+    #[cfg(test)] fail_write: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        for bytes in queued {
-            if bytes.is_empty()
-                || writer
-                    .write_all(&bytes)
-                    .and_then(|()| writer.flush())
-                    .is_err()
-            {
+        for outgoing in queued {
+            let (bytes, done) = match outgoing {
+                Outgoing::Bytes(bytes) => (bytes, None),
+                Outgoing::Checked { bytes, done } => (bytes, Some(done)),
+            };
+            let result = if bytes.is_empty() {
+                Err(io::Error::other("terminal is closed"))
+            } else {
+                #[cfg(test)]
+                if fail_write.swap(false, Ordering::AcqRel) {
+                    Err(io::Error::other("write failed"))
+                } else {
+                    writer.write_all(&bytes).and_then(|()| writer.flush())
+                }
+                #[cfg(not(test))]
+                {
+                    writer.write_all(&bytes).and_then(|()| writer.flush())
+                }
+            };
+            if let Some(done) = done {
+                let _ = done.send(match &result {
+                    Ok(()) => Ok(()),
+                    Err(error) => Err(io::Error::new(error.kind(), error.to_string())),
+                });
+            }
+            if result.is_err() {
                 break;
             }
         }
