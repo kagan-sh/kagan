@@ -35,7 +35,6 @@ impl Lines {
         self.0.drained(Screen::kept)
     }
 
-    /// Newest `cap` bytes of the plain scrollback, cut forward to a character boundary.
     #[must_use]
     pub fn tail(&self, cap: usize) -> String {
         newest(self.0.drained(Screen::transcript), cap)
