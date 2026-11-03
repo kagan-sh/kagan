@@ -5326,6 +5326,7 @@ dependencies = [
  "kg-plugins",
  "kg-process",
  "kg-ui",
+ "libc",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",

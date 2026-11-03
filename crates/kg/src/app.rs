@@ -12,15 +12,7 @@ impl gpui_kit::Global for Opened {}
 
 pub(crate) fn run() -> Result<()> {
     let location = socket::location()?;
-    #[cfg(unix)]
-    if let Some(parent) = std::path::Path::new(&location).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        socket::ensure_directory(parent)?;
-    }
-    let Some(listener) =
-        socket::bind(socket::name(&location)?).context("cannot open the kg socket")?
-    else {
+    let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
         return Ok(());
     };
     let (requests, incoming) = async_channel::unbounded::<Request>();

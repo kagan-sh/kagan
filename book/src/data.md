@@ -6,7 +6,7 @@ kagan has no account and no telemetry. It checks for updates only when you ask, 
 
 - **Data folder**: `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to use a different folder.
 - **Socket**: the connection between `kg` and the window.
-  - When `KG_DATA_DIR` is set and `KG_SOCKET` is not, the socket follows that folder. On macOS and Linux it is `<data folder>/kg.sock`. If that path is too long for a local socket, it is `/tmp/kagan-<id>/kg.sock`, and `<id>` comes from the data folder path. On Windows the pipe is `kagan-<id>` from that same path.
+  - When `KG_DATA_DIR` is set and `KG_SOCKET` is not, the socket follows that folder. The folder path is made absolute. On macOS and Linux the socket is `<data folder>/kg.sock`. If that path is too long for a local socket, it is `/tmp/kagan-<id>/kg.sock`, where `<id>` is a SHA-256 of the absolute folder path, and that `/tmp` folder is private to you. On Windows the pipe is `kagan-<id>` from that same path.
   - Otherwise, macOS and Linux use `$XDG_RUNTIME_DIR/kagan/kg.sock` when `XDG_RUNTIME_DIR` is set.
   - Else on macOS: `~/Library/Application Support/kagan/kg.sock`.
   - Else on Linux: `$XDG_DATA_HOME/kagan/kg.sock`, or `~/.local/share/kagan/kg.sock`.

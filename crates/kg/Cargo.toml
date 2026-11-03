@@ -21,6 +21,10 @@ keyring-core.workspace = true
 rpassword = "=7.5.4"
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "=0.10.9"
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.191"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"] }
