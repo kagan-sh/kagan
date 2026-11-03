@@ -9,7 +9,7 @@ use kg_core::Workspace;
 use kg_domain::{
     ConfigOp, EnvironmentSpec, EventKind, IndexOp, KeymapOp, Metadata, Op, OpError, OpResult,
     Plugin, PluginId, PluginOp, Project, ProjectId, ProjectKind, Run, Thread, ThreadId, ThreadOp,
-    ThreadStatus, Timestamp, Visibility,
+    ThreadStatus, Timestamp, TurnOutcome, Visibility,
 };
 use serde_json::{Value, json};
 use tempfile::TempDir;
@@ -4413,6 +4413,81 @@ fn a_thread_idle_event_reaches_only_a_subscribed_plugin(cx: &mut TestAppContext)
     assert!(plugin_loaded(cx, IDLE_PLUGIN));
     assert!(!plugin_loaded(cx, QUIET_PLUGIN));
     assert!(!quiet_seen.exists());
+}
+
+#[gpui_kit::test]
+fn turn_events_reach_a_subscribed_plugin(cx: &mut TestAppContext) {
+    let plugin = event_plugin(
+        "dev.test.turns",
+        &["thread.turn.started", "thread.turn.ended"],
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    let data = cx.read(|cx| Workspace::global(cx).read(cx).data_dir().to_owned());
+    let dir = data.join("plugins").join("dev.test.turns").join("data");
+    let started_path = dir.join("started.json");
+    let ended_path = dir.join("ended.json");
+    let started_js = serde_json::to_string(&started_path.display().to_string()).unwrap();
+    let ended_js = serde_json::to_string(&ended_path.display().to_string()).unwrap();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        format!(
+            r#"
+import {{ View }} from "gpui-kit";
+import {{ next, reply }} from "kagan/jobs";
+import {{ writeFile }} from "fs/promises";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      for (;;) {{
+        const job = await next();
+        if (job.kind !== "event") continue;
+        const path = job.type === "turn.started" ? {started_js} : {ended_js};
+        await writeFile(path, JSON.stringify({{
+          kind: job.kind, type: job.type, threadId: job.threadId, projectId: job.projectId, data: job.data
+        }}));
+        reply(job.id, null);
+      }}
+    }});
+  }}
+  render() {{ return "plugin"; }}
+}}
+"#
+        ),
+    )
+    .unwrap();
+    let mut store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    let persisted = store
+        .append_events(
+            &thread(),
+            Timestamp(2),
+            [
+                EventKind::TurnStarted,
+                EventKind::TurnEnded {
+                    outcome: TurnOutcome::Completed,
+                    error: None,
+                },
+            ],
+        )
+        .unwrap();
+    drop(store);
+    cx.update(|cx| {
+        Workspace::global(cx).update(cx, |_, cx| {
+            for event in persisted {
+                cx.emit(kg_core::WorkspaceEvent::Event {
+                    event,
+                    project_id: ProjectId("prj_test".into()),
+                });
+            }
+        });
+    });
+    let started = job_seen(cx, &started_path, "turn.started");
+    assert_eq!(started["data"], Value::Null, "{started}");
+    let ended = job_seen(cx, &ended_path, "turn.ended");
+    assert_eq!(
+        ended["data"],
+        json!({ "outcome": "completed", "error": null }),
+        "{ended}"
+    );
 }
 
 fn job_seen(cx: &mut TestAppContext, path: &Path, kind: &str) -> Value {

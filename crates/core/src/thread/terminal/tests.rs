@@ -49,12 +49,14 @@ fn a_plain_title_waits_only_after_one_second(cx: &mut gpui_kit::TestAppContext) 
     let thread = cx.update(|cx| cx.new(|_| crate::Thread::new(running())));
     let now = std::time::Instant::now();
     cx.update(|cx| {
-        assert_eq!(
+        assert!(matches!(
             super::follow(&thread, Some("\u{2819} work"), now, cx),
-            Some(true)
-        );
+            Some(super::Spin::Opened)
+        ));
+        assert!(thread.read(cx).turn_open);
         assert_eq!(super::follow(&thread, Some("work"), now, cx), None);
         assert!(thread.read(cx).busy(), "the title just went plain");
+        assert!(thread.read(cx).turn_open);
         assert_eq!(
             super::follow(
                 &thread,
@@ -72,9 +74,29 @@ fn a_plain_title_waits_only_after_one_second(cx: &mut gpui_kit::TestAppContext) 
                 now + std::time::Duration::from_secs(1),
                 cx,
             ),
-            Some(false)
+            Some(super::Spin::Closed)
         );
         assert!(!thread.read(cx).busy());
+        assert!(!thread.read(cx).turn_open);
+    });
+}
+
+#[gpui_kit::test]
+fn a_spinner_after_stop_clears_busy_does_not_open_another_turn(cx: &mut gpui_kit::TestAppContext) {
+    let thread = cx.update(|cx| cx.new(|_| crate::Thread::new(running())));
+    let now = std::time::Instant::now();
+    cx.update(|cx| {
+        assert!(matches!(
+            super::follow(&thread, Some("\u{2819} work"), now, cx),
+            Some(super::Spin::Opened)
+        ));
+        thread.update(cx, |thread, _| thread.busy = false);
+        assert!(matches!(
+            super::follow(&thread, Some("\u{2819} work"), now, cx),
+            Some(super::Spin::Resumed)
+        ));
+        assert!(thread.read(cx).busy());
+        assert!(thread.read(cx).turn_open);
     });
 }
 

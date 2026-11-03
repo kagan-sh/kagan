@@ -2462,10 +2462,99 @@ async fn a_plain_title_after_a_spinner_records_waiting_once_per_reply(cx: &mut T
     release();
     wait_for_waiting(&started.id, 2, cx).await;
     let kinds = kinds_of(&started.id, cx).await;
+    assert_eq!(turn_counts(&kinds), (2, 2), "{kinds:?}");
+    assert!(
+        !kinds.iter().any(|kind| matches!(kind, EventKind::Idle)),
+        "{kinds:?}"
+    );
+}
+
+fn turn_counts(kinds: &[EventKind]) -> (usize, usize) {
+    let started = kinds
+        .iter()
+        .filter(|kind| matches!(kind, EventKind::TurnStarted))
+        .count();
+    let ended = kinds
+        .iter()
+        .filter(|kind| {
+            matches!(
+                kind,
+                EventKind::TurnEnded {
+                    outcome: TurnOutcome::Completed,
+                    error: None
+                }
+            )
+        })
+        .count();
+    (started, ended)
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_stop_during_a_spinner_ends_the_turn_as_interrupted(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "spin-stop",
+        "printf '\\033]0;\\342\\240\\213 working\\007'\nsleep 60\n",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    wait_until_busy(&fixture, &id, cx);
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    let kinds = kinds_of(&id, cx).await;
+    assert!(kinds.contains(&EventKind::TurnStarted), "{kinds:?}");
+    assert!(
+        kinds.contains(&EventKind::TurnEnded {
+            outcome: TurnOutcome::Interrupted,
+            error: None,
+        }),
+        "{kinds:?}"
+    );
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|kind| matches!(kind, EventKind::TurnStarted))
+            .count(),
+        1,
+        "{kinds:?}"
+    );
+    assert!(kinds.contains(&EventKind::Stopped), "{kinds:?}");
     assert!(
         !kinds
             .iter()
-            .any(|kind| matches!(kind, EventKind::Idle | EventKind::TurnEnded { .. })),
+            .any(|kind| matches!(kind, EventKind::Failed { .. })),
+        "{kinds:?}"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn an_exit_during_a_spinner_ends_the_turn_as_failed(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "spin-fail",
+        "printf '\\033]0;\\342\\240\\213 working\\007'\nexit 7\n",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    wait_for_status(&id, ThreadStatus::Error, cx).await;
+    let kinds = kinds_of(&id, cx).await;
+    let error = "the program exited with code 7";
+    assert!(kinds.contains(&EventKind::TurnStarted), "{kinds:?}");
+    assert!(
+        kinds.contains(&EventKind::TurnEnded {
+            outcome: TurnOutcome::Failed,
+            error: Some(error.into()),
+        }),
+        "{kinds:?}"
+    );
+    assert!(
+        kinds.contains(&EventKind::Failed {
+            error: Some(error.into()),
+        }),
         "{kinds:?}"
     );
 }

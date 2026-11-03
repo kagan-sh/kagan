@@ -1,5 +1,5 @@
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
-use kg_domain::{EventKind, ThreadStatus};
+use kg_domain::{EventKind, ThreadStatus, TurnOutcome};
 
 use crate::database::Result;
 use crate::workspace::{closed, time};
@@ -78,11 +78,12 @@ pub(super) async fn halt(
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let (thread_id, running, starting) = thread.read_with(cx, |thread, _| {
+    let (thread_id, running, starting, turn_open) = thread.read_with(cx, |thread, _| {
         (
             thread.record.id.clone(),
             thread.running(),
             thread.record.status == ThreadStatus::Starting,
+            thread.turn_open,
         )
     });
     settle(this, thread, cx).await?;
@@ -94,6 +95,7 @@ pub(super) async fn halt(
             workspace.tasks.remove(&thread_id);
         })
         .map_err(closed)?;
+        close_open_turn(this, thread, &thread_id, turn_open, cx).await?;
         return status(this, thread, ThreadStatus::Idle, cx).await;
     }
     let ending = this
@@ -105,6 +107,7 @@ pub(super) async fn halt(
         // The program is ending now. Its exit records the stop and sets the thread idle.
         return status(this, thread, ThreadStatus::Stopping, cx).await;
     }
+    close_open_turn(this, thread, &thread_id, turn_open, cx).await?;
     Workspace::events(
         this,
         thread_id,
@@ -113,6 +116,29 @@ pub(super) async fn halt(
     )
     .await?;
     status(this, thread, ThreadStatus::Idle, cx).await
+}
+
+async fn close_open_turn(
+    this: &WeakEntity<Workspace>,
+    thread: &Entity<Thread>,
+    id: &kg_domain::ThreadId,
+    open: bool,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    if !open {
+        return Ok(());
+    }
+    thread.update(cx, |thread, _| thread.turn_open = false);
+    Workspace::events(
+        this,
+        id.clone(),
+        vec![EventKind::TurnEnded {
+            outcome: TurnOutcome::Interrupted,
+            error: None,
+        }],
+        cx,
+    )
+    .await
 }
 
 pub(crate) async fn retire(
