@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn bundled_examples_pass_check() {
         let examples = super::examples();
-        assert_eq!(examples.len(), 6);
+        assert_eq!(examples.len(), 7);
         for example in &examples {
             let data = tempfile::tempdir().unwrap();
             crate::development::check(&example.root, data.path()).unwrap();

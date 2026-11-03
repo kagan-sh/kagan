@@ -369,6 +369,9 @@ impl Manifest {
             {
                 return Err("commands need unique nonempty ids and titles".into());
             }
+            if command.header && command.when != crate::commands::CommandWhen::Thread {
+                return Err("a header command needs when thread".into());
+            }
             if let Some(key) = &command.key {
                 crate::commands::checked_key(key).map_err(|error| error.to_string())?;
             }

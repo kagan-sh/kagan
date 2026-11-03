@@ -97,8 +97,8 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `threads.output` | `threads.output(id)` → `{ output }` | close. Needs `powers.areas` `threads`. Plain scrollback text, newest 256 KiB, not the last assistant message. Pull on `turn.ended`; kagan does not push screen updates. |
 | `threads.send`, `threads.queuedMessages`, `providers.models` | none | gap. Cannot move. |
 | `bb.cli.register` one command | `cli`: `[{ "name", "commands": [{ "name", "usage"? }] }]` | close. Declare every subcommand. Parse `argv` yourself. There is no generated help. A `name` that is already a `kg` command never reaches the plugin. Two plugins that declare the same name and subcommand fail at the call. |
-| `app.commands.register`, `commandPaletteAction` | `commands`: `{ "id", "title", "key"?, "when"? }` | close. `when` is `always`, `thread`, or `project`. A `key` runs only in that context. The job kind is `command`. |
-| `experimental_threadHeaderAction`, `experimental_threadAction` with `placement: "header"` | `commands` with `"when": "thread"` and a `key` | close. There is no header button. |
+| `app.commands.register`, `commandPaletteAction` | `commands`: `{ "id", "title", "key"?, "when"?, "header"? }` | close. `when` is `always`, `thread`, or `project`. A `key` runs only in that context. The job kind is `command`. |
+| `experimental_threadHeaderAction`, `experimental_threadAction` with `placement: "header"` | `commands` with `"when": "thread"` and `"header": true` | direct. The host draws the title as a button. No custom component and no hide-when-null. |
 | `agents.registerTool` | `tools`: `{ "name", "description", "input", "scope" }` | close. `input` is a JSON Schema file inside the plugin. `scope` is `all` or `tagged` (threads that carry this plugin's metadata). A duplicated name is kept by the plugin id that sorts first. No row label, icon, or tint. |
 | `contributeInstructions`, `configure` | `instructions`, one string | close for standing text. Text that changes per thread or provider cannot move. |
 | `ui.requestInput` | `threads.ask` or a panel | close for a choice of two or more options. `threads.ask` needs `powers.areas` `threads`. A custom form cannot move. |
@@ -135,7 +135,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 
 A panel may set `"follows": "thread"`. Read `context()` in `init` and loop on `onContextChanged()`. `openPanel` and `kg surface open` / `close` / `list` are the same path.
 
-Copy from `examples/plugins`: `panel`, `cli`, `sidebar`, `review`, `overlay`, `theme`.
+Copy from `examples/plugins`: `panel`, `cli`, `sidebar`, `review`, `overlay`, `header`, `theme`.
 
 ## Themes
 

@@ -1,0 +1,13 @@
+{
+  "id": "dev.kagan.header",
+  "name": "Header",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Adds a Hand off button on the thread title.",
+  "powers": {},
+  "commands": [
+    { "id": "handoff", "title": "Hand off", "when": "thread", "header": true }
+  ]
+}

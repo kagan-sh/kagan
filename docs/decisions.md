@@ -511,3 +511,8 @@ Rules out: giving a plugin the app's data folder, and a power that grants `proce
 Why: a plugin that follows a turn needs the text on screen, such as a live transcript, without parsing ANSI or attaching as a second client.
 Cost: one scrollback render per call on the background executor, result bounded by the cap.
 Rules out: pushing screen events to plugins, reading an extra terminal, returning ANSI, and scraping messages or tools out of the screen.
+
+**129. A plugin command can be a button on the thread title.** A command with `"header": true` and `"when": "thread"` is drawn as a small ghost button in the title bar, before Stop and the thread menu, labeled with its title. A click runs that command for the shown thread, the same path as its key and the command list. `kg plugin check` refuses `header` without `when: "thread"`. The buttons stay while a thread is on screen, including an archived one. They use no icon and take no power beyond what the command already has. This amends 53 for those buttons, and 56 only so far as a freeform toolbar stays refused: the host draws the buttons from the command list.
+Why: a plugin needs a one-click action on the open thread without a key the person must remember.
+Cost: one button per such command in the title bar.
+Rules out: a script-drawn header component, host-side hide-when-null, icons, a freeform toolbar slot, and folding into the thread menu on a narrow window.
