@@ -3706,7 +3706,7 @@ async fn send_while_busy_records_one_user_message(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 async fn pending_sends_do_not_block_the_workers(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    // Raw mode and no reader fill the pty write buffer so checked writes stay pending.
+    // Raw mode with no reader fills the pty write buffer so checked writes stay pending.
     let program = script(
         fixture.dir.path(),
         "hold-send",
@@ -3722,7 +3722,6 @@ async fn pending_sends_do_not_block_the_workers(cx: &mut TestAppContext) {
         cx.run_until_parked();
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    // Writes are still outstanding: no user message yet, and other ops still run.
     let before = events(&id, cx).await;
     assert!(
         sent_text(&before).is_empty(),

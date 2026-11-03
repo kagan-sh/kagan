@@ -249,7 +249,6 @@ impl Terminal {
         Ok((typed, written))
     }
 
-    /// Makes the next checked write fail. Tests use this to prove a failed write is reported.
     #[cfg(test)]
     pub(crate) fn fail_next_write(&self) {
         self.fail_write.store(true, Ordering::Release);
