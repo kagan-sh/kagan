@@ -11,6 +11,9 @@ use serde_json::{Value, json};
 use crate::Agents;
 use crate::area::{from_host, to_host};
 
+/// Plain scrollback a plugin may read through `threads.output`, in bytes.
+pub(crate) const OUTPUT_CAP: usize = 256 * 1024;
+
 pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
     let mut module = HostModule::new("kagan/threads");
     let methods = [
@@ -49,6 +52,7 @@ pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
     let owner = plugin.clone();
     module = module.async_function("spawn", move |args| dispatch(spawn_thread(args, &owner)?));
     module = module.async_function("answer", answer_question);
+    module = module.async_function("output", read_output);
     module = module.async_function("changes", |args| dispatch(shown_diff(args, None)?));
     module = module.async_function("diff", |args| {
         dispatch(shown_diff(args, Some(args.string(2)?.to_owned()))?)
@@ -84,6 +88,46 @@ fn operation(name: &str, args: &HostArguments, plugin: &PluginId) -> Result<Op, 
 
 fn thread_by_id(name: &str, args: &HostArguments) -> Result<Op, HostError> {
     as_thread(json!({ name: { "id": args.string(0)? } }))
+}
+
+fn read_output(
+    args: &HostArguments,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let id = ThreadId(args.string(0)?.to_owned());
+    let receive = gpui_shell::with_current_app(|cx| {
+        watch(
+            Workspace::dispatch(
+                Op::Thread(ThreadOp::Screen {
+                    id,
+                    terminal: None,
+                    scrollback: true,
+                    lines: None,
+                }),
+                cx,
+            ),
+            cx,
+        )
+    })
+    .ok_or_else(|| HostError::new("no kagan app context"))?;
+    Ok(async move {
+        match receive.recv().await.map_err(error)?.map_err(error)? {
+            OpResult::Screen(text) => Ok(to_host(json!({ "output": cap_output(text) }))),
+            other => Err(HostError::new(format!(
+                "screen returned an unexpected result: {other:?}"
+            ))),
+        }
+    })
+}
+
+fn cap_output(text: String) -> String {
+    if text.len() <= OUTPUT_CAP {
+        return text;
+    }
+    let mut end = OUTPUT_CAP;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_owned()
 }
 
 fn as_thread(value: Value) -> Result<Op, HostError> {
@@ -428,5 +472,30 @@ mod tests {
         assert!(
             matches!(op, kg_domain::Op::Thread(kg_domain::ThreadOp::Rename { id, title }) if id.0 == "thr_1" && title == "Notes")
         );
+    }
+
+    #[test]
+    fn output_is_not_an_operation() {
+        let plugin = PluginId("dev.test".into());
+        let output = operation("output", &HostArguments::new(Vec::new()), &plugin).unwrap_err();
+        assert!(
+            output
+                .to_string()
+                .contains("unknown threads function output"),
+            "{output}"
+        );
+    }
+
+    #[test]
+    fn output_text_stops_at_the_byte_cap() {
+        let capped = super::cap_output(format!("{}y", "x".repeat(super::OUTPUT_CAP)));
+        assert_eq!(capped.len(), super::OUTPUT_CAP);
+        // Mid-character: keep the last whole char before the cap.
+        let mut over = "x".repeat(super::OUTPUT_CAP - 1);
+        over.push('€');
+        assert!(over.len() > super::OUTPUT_CAP);
+        let capped = super::cap_output(over);
+        assert_eq!(capped.len(), super::OUTPUT_CAP - 1);
+        assert!(capped.is_char_boundary(capped.len()));
     }
 }

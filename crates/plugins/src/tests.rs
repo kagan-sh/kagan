@@ -2521,6 +2521,7 @@ export default class Plugin extends View {
           ["get", () => threads.get(id)],
           ["events", () => threads.events(id, { afterSeq: 0, limit: 1 })],
           ["settle", () => threads.wait(id, { timeoutMs: 1000 })],
+          ["output", () => threads.output(id)],
           ["wait", () => threads.waitEvent(id, { type: "nope", afterSeq: 0, timeoutMs: 1 })],
           ["pin", () => threads.setPinned(id, false)],
           ["read", () => threads.markRead(id)],
@@ -2635,6 +2636,7 @@ fn a_plugin_calls_every_thread_operation(cx: &mut TestAppContext) {
     }
     assert!(ok("events")["value"].is_array());
     assert_eq!(ok("settle")["value"], "exited");
+    err("output", "not found");
     let asked = &ok("ask")["value"];
     assert!(
         asked["interaction"]
@@ -4030,7 +4032,7 @@ fn an_approved_grant_reads_as_plain_lines() {
     assert_eq!(
         crate::power_lines(&approved).unwrap(),
         [
-            "reads, starts and changes your threads, and reads their changed files",
+            "reads, starts and changes your threads, reads their screen text, and reads their changed files",
             "reads a folder you choose (Notes)",
         ]
     );
@@ -4042,6 +4044,28 @@ import { View } from "gpui-kit";
 import { next, reply } from "kagan/jobs";
 import * as process from "kagan/process";
 const modules = { process };
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        try {
+          const { module, call, args } = job.input;
+          const value = await modules[module][call](...args);
+          reply(job.id, { text: JSON.stringify(value ?? null) });
+        } catch (error) { reply(job.id, { text: String(error), isError: true }); }
+      }
+    });
+  }
+  render() { return "forward"; }
+}
+"#;
+
+const THREADS_FORWARD: &str = r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+import * as threads from "kagan/threads";
+const modules = { threads };
 export default class Plugin extends View {
   init(_props, cx) {
     cx.spawn(async () => {
@@ -4121,6 +4145,88 @@ fn process_run_answers_inside_a_script_call(cx: &mut TestAppContext) {
     assert_eq!(output["stderr"].as_str().unwrap().trim(), "error");
     let refused = forward(cx, "process", "run", &json!(["unapproved", []])).unwrap_err();
     assert!(refused.contains("not granted"), "{refused}");
+}
+
+#[gpui_kit::test]
+fn threads_output_reads_scrollback_plain_text(cx: &mut TestAppContext) {
+    cx.executor().allow_parking();
+    let plugin = probe_plugin(&["threads"], THREADS_FORWARD);
+    let mut value = manifest();
+    value["powers"] = json!({ "areas": ["threads"] });
+    value["tools"].as_array_mut().unwrap().push(json!({
+        "name": "probe",
+        "description": "Forward a host call",
+        "input": "schemas/any.json",
+        "scope": "all"
+    }));
+    write_plugin(plugin.path(), &value);
+    std::fs::write(plugin.path().join("main.js"), THREADS_FORWARD).unwrap();
+    open(cx, &[installed(plugin.path())]);
+
+    let program = if cfg!(windows) {
+        "cmd.exe".into()
+    } else {
+        "/bin/sh".into()
+    };
+    let OpResult::Thread(started) = run(
+        cx,
+        Op::Thread(ThreadOp::Run(Run {
+            project_id: ProjectId("prj_test".into()),
+            program,
+            title: Some("Output".into()),
+            environment: EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+    )
+    .unwrap() else {
+        panic!("run")
+    };
+    for _ in 0..200 {
+        cx.run_until_parked();
+        cx.executor().advance_clock(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(5));
+        let status = cx.update(|cx| {
+            Workspace::global(cx)
+                .read(cx)
+                .thread(&started.id)
+                .map(|thread| thread.read(cx).record().status)
+        });
+        if matches!(status, Some(ThreadStatus::Active | ThreadStatus::Idle)) {
+            break;
+        }
+    }
+    let marker = "kagan-output-marker";
+    let typed = if cfg!(windows) {
+        format!("echo {marker}\r\n")
+    } else {
+        format!("printf '{marker}\\n'\n")
+    };
+    run(
+        cx,
+        Op::Thread(ThreadOp::Input {
+            id: started.id.clone(),
+            text: typed,
+            terminal: None,
+        }),
+    )
+    .unwrap();
+    let mut text = String::new();
+    for _ in 0..200 {
+        cx.run_until_parked();
+        cx.executor().advance_clock(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(5));
+        let value = forward(cx, "threads", "output", &json!([started.id.0])).unwrap();
+        text = value["output"].as_str().unwrap_or("").to_owned();
+        if text.contains(marker) {
+            break;
+        }
+    }
+    assert!(text.contains(marker), "output missing {marker}: {text:?}");
+    let missing = forward(cx, "threads", "output", &json!(["thr_missing"])).unwrap_err();
+    assert!(missing.contains("not found"), "{missing}");
 }
 
 fn sleeping() -> Value {
