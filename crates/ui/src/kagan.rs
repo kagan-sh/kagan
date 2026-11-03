@@ -84,7 +84,7 @@ use gpui_kit::component::{TitleBar, WindowExt as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AnyWindowHandle, App, AppContext as _, ClickEvent, Context, ElementId, Entity,
-    FocusHandle, Focusable as _, Global, InteractiveElement as _, IntoElement, ParentElement as _,
+    FocusHandle, Global, InteractiveElement as _, IntoElement, ParentElement as _,
     PathPromptOptions, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _,
     Styled as _, Subscription, Task, WeakEntity, Window, WindowBounds, WindowOptions, actions, div,
     px, size,

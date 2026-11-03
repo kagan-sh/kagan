@@ -136,7 +136,7 @@ pub(crate) async fn ask(
 
 const MAX_ID: usize = 64;
 const MAX_LABEL: usize = 128;
-const MAX_TEXT: usize = 4096;
+const MAX_TEXT: usize = kg_domain::ASK_TEXT_MAX_CHARS;
 
 fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::AskField>> {
     if fields.len() > 32 {

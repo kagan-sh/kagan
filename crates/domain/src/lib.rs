@@ -37,10 +37,10 @@ pub use program::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, Program, ProgramList, ProgramSource, split_program,
 };
 pub use record::{
-    AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus, Found, IndexEntry,
-    InteractionOption, Listing, PendingInteraction, Plugin, Project, ProjectKind, Section, Sidebar,
-    Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span, newest_first,
-    order_sidebar_projects, owned_thread_ids,
+    ASK_TEXT_MAX_CHARS, AgentTool, AskField, Environment, EnvironmentProvider, EnvironmentStatus,
+    Found, IndexEntry, InteractionOption, Listing, PendingInteraction, Plugin, Project,
+    ProjectKind, Section, Sidebar, Snippet, Thread, ThreadMark, ThreadStatus, Visibility,
+    archive_span, newest_first, order_sidebar_projects, owned_thread_ids,
 };
 pub use review::{ReviewRow, review_rows};
 pub use theme::{

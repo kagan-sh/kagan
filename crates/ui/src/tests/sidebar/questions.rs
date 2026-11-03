@@ -339,7 +339,11 @@ fn a_bad_number_in_the_ask_form_shows_on_the_card(cx: &mut TestAppContext) {
     cx.run_until_parked();
     click(cx, window, &format!("answer-{interaction}-yes"));
     wait_until(cx, |cx| {
-        shows(cx, window, &format!("ask-error-{interaction}"))
+        shows(
+            cx,
+            window,
+            &format!("ask-field-error-{interaction}-retries"),
+        )
     });
     assert!(
         shows(cx, window, "ask-popup"),

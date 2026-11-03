@@ -245,6 +245,9 @@ pub struct InteractionOption {
     pub label: String,
 }
 
+/// The longest text an ask field or answer holds, in characters. Decision 144.
+pub const ASK_TEXT_MAX_CHARS: usize = 4096;
+
 impl InteractionOption {
     /// The answer that lets a permission question proceed.
     pub const APPROVE: &str = "approve";

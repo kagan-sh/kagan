@@ -13,7 +13,7 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, Styled as _, Window, actions, div, px,
 };
-use kg_domain::{AskField, PendingInteraction, PendingInteractionId, ThreadId};
+use kg_domain::{ASK_TEXT_MAX_CHARS, AskField, PendingInteraction, PendingInteractionId, ThreadId};
 use serde_json::{Value, json};
 
 use super::Kagan;
@@ -32,6 +32,7 @@ pub(super) struct Draft {
     texts: BTreeMap<String, Entity<InputState>>,
     flags: BTreeMap<String, bool>,
     picks: BTreeMap<String, Option<String>>,
+    errors: BTreeMap<String, String>,
     error: Option<String>,
 }
 
@@ -159,20 +160,37 @@ impl Draft {
             texts,
             flags,
             picks,
+            errors: BTreeMap::new(),
             error: None,
         }
     }
 
-    fn values(&self, fields: &[AskField], cx: &App) -> Result<BTreeMap<String, Value>, String> {
+    fn clear_errors(&mut self) {
+        self.errors.clear();
+        self.error = None;
+    }
+
+    /// The first field that cannot be sent, with its message.
+    fn values(
+        &self,
+        fields: &[AskField],
+        cx: &App,
+    ) -> Result<BTreeMap<String, Value>, (String, String)> {
         let mut values = BTreeMap::new();
         for field in fields {
             let value = match field {
-                AskField::String { id, .. } => {
+                AskField::String { id, label, .. } => {
                     let text = self
                         .texts
                         .get(id)
                         .map(|input| input.read(cx).value().to_string())
                         .unwrap_or_default();
+                    if text.chars().count() > ASK_TEXT_MAX_CHARS {
+                        return Err((
+                            id.clone(),
+                            format!("{label} is at most {ASK_TEXT_MAX_CHARS} characters"),
+                        ));
+                    }
                     Value::String(text)
                 }
                 AskField::Number { id, .. } => {
@@ -182,9 +200,12 @@ impl Draft {
                         .map(|input| input.read(cx).value().to_string())
                         .unwrap_or_default();
                     let text = text.trim();
-                    let number: i64 = text
-                        .parse()
-                        .map_err(|_| format!("{} needs a whole number", field.label()))?;
+                    let number: i64 = text.parse().map_err(|_| {
+                        (
+                            field.id().to_owned(),
+                            format!("{} needs a whole number", field.label()),
+                        )
+                    })?;
                     json!(number)
                 }
                 AskField::Boolean { id, .. } => {
@@ -214,14 +235,30 @@ pub(super) fn fields(
     let error = draft.error.clone();
     v_flex()
         .gap_2()
-        .children(fields.iter().map(|field| match field {
-            AskField::String { id, label, .. } | AskField::Number { id, label, .. } => {
-                text_field(asked, draft, id, label, cx)
-            }
-            AskField::Boolean { id, label, .. } => flag_field(asked, draft, kagan, id, label),
-            AskField::Select {
-                id, label, choices, ..
-            } => select_field(asked, draft, kagan, id, label, choices, cx),
+        .children(fields.iter().map(|field| {
+            let control = match field {
+                AskField::String { id, label, .. } | AskField::Number { id, label, .. } => {
+                    text_field(asked, draft, id, label, cx)
+                }
+                AskField::Boolean { id, label, .. } => flag_field(asked, draft, kagan, id, label),
+                AskField::Select {
+                    id, label, choices, ..
+                } => select_field(asked, draft, kagan, id, label, choices, cx),
+            };
+            v_flex()
+                .gap_1()
+                .child(control)
+                .children(draft.errors.get(field.id()).map(|message| {
+                    div()
+                        .id(ElementId::Name(
+                            format!("ask-field-error-{}-{}", asked.id.0, field.id()).into(),
+                        ))
+                        .ui_container()
+                        .type_small()
+                        .text_color(cx.theme().danger)
+                        .child(message.clone())
+                }))
+                .into_any_element()
         }))
         .children(error.map(|message| {
             div()
@@ -296,7 +333,7 @@ fn flag_field(
                         kagan.update(cx, |kagan, cx| {
                             if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
                                 draft.flags.insert(field_id.clone(), checked);
-                                draft.error = None;
+                                draft.clear_errors();
                                 cx.notify();
                             }
                         });
@@ -370,7 +407,7 @@ fn select_field(
                         kagan.update(cx, |kagan, cx| {
                             if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
                                 draft.picks.insert(field_id.clone(), pick.clone());
-                                draft.error = None;
+                                draft.clear_errors();
                                 cx.notify();
                             }
                         });
@@ -448,7 +485,7 @@ pub(super) fn collect(
     asked: &PendingInteraction,
     draft: &Draft,
     cx: &App,
-) -> Result<BTreeMap<String, Value>, String> {
+) -> Result<BTreeMap<String, Value>, (String, String)> {
     let fields = asked.fields.as_deref().unwrap_or(&[]);
     draft.values(fields, cx)
 }
@@ -464,34 +501,37 @@ pub(super) fn answer_with_fields(
     if crate::synthetic::refuse_for_person() {
         return;
     }
+    let ask_id = asked.id.clone();
     let fields = match collect(asked, draft, cx) {
         Ok(fields) => fields,
-        Err(error) => {
-            let ask_id = asked.id.clone();
+        Err((field, message)) => {
             let kagan = kagan.clone();
             _ = kagan.update(cx, |kagan, cx| {
                 if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
-                    draft.error = Some(error);
+                    draft.clear_errors();
+                    draft.errors.insert(field, message);
                     cx.notify();
                 }
             });
             return;
         }
     };
-    let ask_id = asked.id.clone();
     let kagan_clear = kagan.clone();
     _ = kagan_clear.update(cx, |kagan, _| {
         if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
-            draft.error = None;
+            draft.clear_errors();
         }
     });
     let answered = kg_core::Workspace::answer_fields(thread, asked.id.clone(), option, fields, cx);
     let kagan = kagan.clone();
+    let ask_id = asked.id.clone();
     cx.spawn(async move |cx| {
         if let Err(error) = answered.await {
             _ = kagan.update(cx, |kagan, cx| {
-                kagan.note = Some(format!("Could not answer: {error}").into());
-                cx.notify();
+                if let Some(draft) = kagan.ask_drafts.get_mut(&ask_id) {
+                    draft.error = Some(error.to_string());
+                    cx.notify();
+                }
             });
         }
     })
