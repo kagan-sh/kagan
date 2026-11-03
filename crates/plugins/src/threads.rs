@@ -95,39 +95,19 @@ fn read_output(
 ) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
     let id = ThreadId(args.string(0)?.to_owned());
     let receive = gpui_shell::with_current_app(|cx| {
-        watch(
-            Workspace::dispatch(
-                Op::Thread(ThreadOp::Screen {
-                    id,
-                    terminal: None,
-                    scrollback: true,
-                    lines: None,
-                }),
-                cx,
-            ),
-            cx,
-        )
+        let (sender, receive) = async_channel::bounded(1);
+        let task = Workspace::thread_output(&id, OUTPUT_CAP, cx);
+        cx.spawn(async move |_| {
+            let _ = sender.send(task.await).await;
+        })
+        .detach();
+        receive
     })
     .ok_or_else(|| HostError::new("no kagan app context"))?;
     Ok(async move {
-        match receive.recv().await.map_err(error)?.map_err(error)? {
-            OpResult::Screen(text) => Ok(to_host(json!({ "output": cap_output(text) }))),
-            other => Err(HostError::new(format!(
-                "screen returned an unexpected result: {other:?}"
-            ))),
-        }
+        let text = receive.recv().await.map_err(error)?.map_err(error)?;
+        Ok(to_host(json!({ "output": text })))
     })
-}
-
-fn cap_output(text: String) -> String {
-    if text.len() <= OUTPUT_CAP {
-        return text;
-    }
-    let mut end = OUTPUT_CAP;
-    while end > 0 && !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned()
 }
 
 fn as_thread(value: Value) -> Result<Op, HostError> {
@@ -484,18 +464,5 @@ mod tests {
                 .contains("unknown threads function output"),
             "{output}"
         );
-    }
-
-    #[test]
-    fn output_text_stops_at_the_byte_cap() {
-        let capped = super::cap_output(format!("{}y", "x".repeat(super::OUTPUT_CAP)));
-        assert_eq!(capped.len(), super::OUTPUT_CAP);
-        // Mid-character: keep the last whole char before the cap.
-        let mut over = "x".repeat(super::OUTPUT_CAP - 1);
-        over.push('€');
-        assert!(over.len() > super::OUTPUT_CAP);
-        let capped = super::cap_output(over);
-        assert_eq!(capped.len(), super::OUTPUT_CAP - 1);
-        assert!(capped.is_char_boundary(capped.len()));
     }
 }

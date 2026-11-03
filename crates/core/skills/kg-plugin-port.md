@@ -94,7 +94,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `threads.spawn` | `spawn` | close. Pass `projectId`, `program`, and `environment`. |
 | `projects.get`, `projects.list` | `project`, `projects` | direct |
 | `environments.get` | `environment` | direct |
-| `threads.output` | `threads.output(id)` → `{ output }` | close. Needs `powers.areas` `threads`. Plain scrollback text, at most 256 KiB, not the last assistant message. Pull on `turn.ended`; kagan does not push screen updates. |
+| `threads.output` | `threads.output(id)` → `{ output }` | close. Needs `powers.areas` `threads`. Plain scrollback text, newest 256 KiB, not the last assistant message. Pull on `turn.ended`; kagan does not push screen updates. |
 | `threads.send`, `threads.queuedMessages`, `providers.models` | none | gap. Cannot move. |
 | `bb.cli.register` one command | `cli`: `[{ "name", "commands": [{ "name", "usage"? }] }]` | close. Declare every subcommand. Parse `argv` yourself. There is no generated help. A `name` that is already a `kg` command never reaches the plugin. Two plugins that declare the same name and subcommand fail at the call. |
 | `app.commands.register`, `commandPaletteAction` | `commands`: `{ "id", "title", "key"?, "when"? }` | close. `when` is `always`, `thread`, or `project`. A `key` runs only in that context. The job kind is `command`. |
