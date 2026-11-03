@@ -14,15 +14,51 @@ use serde::Deserialize;
 
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Where the socket is: `KG_SOCKET` when the app that started this process set it, else the
-/// default place for this user.
+// `sockaddr_un.sun_path` holds the path and a trailing NUL. Linux gives the path 108 bytes;
+// macOS gives it 104.
+#[cfg(unix)]
+const SOCKET_PATH_MAX: usize = if cfg!(target_os = "linux") { 107 } else { 103 };
+
+fn non_empty(key: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(key).filter(|value| !value.is_empty())
+}
+
+fn socket_id(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+
+    let digest = Sha256::digest(bytes);
+    let mut id = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        id.push(char::from(b"0123456789abcdef"[(byte >> 4) as usize]));
+        id.push(char::from(b"0123456789abcdef"[(byte & 0x0f) as usize]));
+    }
+    id
+}
+
+#[cfg(unix)]
+fn os_bytes(value: &std::ffi::OsStr) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    value.as_bytes().to_vec()
+}
+
+#[cfg(windows)]
+fn os_bytes(value: &std::ffi::OsStr) -> Vec<u8> {
+    use std::os::windows::ffi::OsStrExt;
+    value.encode_wide().flat_map(u16::to_le_bytes).collect()
+}
+
+/// Where the socket is: `KG_SOCKET` when set, else beside `KG_DATA_DIR` when that is set, else
+/// the default place for this user.
 #[cfg(unix)]
 pub(crate) fn location() -> io::Result<std::ffi::OsString> {
     use std::path::PathBuf;
 
-    let non_empty = |key| std::env::var_os(key).filter(|value| !value.is_empty());
     if let Some(socket) = non_empty("KG_SOCKET") {
         return Ok(socket);
+    }
+    if let Some(data) = non_empty("KG_DATA_DIR") {
+        let data = std::path::absolute(data)?;
+        return Ok(socket_beside(&data));
     }
     let dir = if let Some(runtime) = non_empty("XDG_RUNTIME_DIR") {
         PathBuf::from(runtime).join("kagan")
@@ -42,16 +78,38 @@ pub(crate) fn location() -> io::Result<std::ffi::OsString> {
 }
 
 #[cfg(unix)]
-pub(crate) fn location_in(dir: &std::path::Path) -> io::Result<std::ffi::OsString> {
+fn socket_beside(dir: &std::path::Path) -> std::ffi::OsString {
+    let direct = dir.join("kg.sock");
+    if direct.as_os_str().len() <= SOCKET_PATH_MAX {
+        return direct.into_os_string();
+    }
+    let id = socket_id(&os_bytes(dir.as_os_str()));
+    format!("/tmp/kagan-{id}/kg.sock").into()
+}
+
+#[cfg(unix)]
+pub(crate) fn ensure_directory(dir: &std::path::Path) -> io::Result<()> {
     use std::{
         fs,
         os::unix::fs::{DirBuilderExt, PermissionsExt},
     };
 
+    if dir.is_dir() {
+        return Ok(());
+    }
     fs::DirBuilder::new()
         .recursive(true)
         .mode(0o700)
         .create(dir)?;
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+pub(crate) fn location_in(dir: &std::path::Path) -> io::Result<std::ffi::OsString> {
+    use std::{fs, os::unix::fs::PermissionsExt};
+
+    ensure_directory(dir)?;
     fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
     Ok(dir.join("kg.sock").into_os_string())
 }
@@ -67,8 +125,12 @@ pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
 
 #[cfg(windows)]
 pub(crate) fn location() -> io::Result<std::ffi::OsString> {
-    if let Some(socket) = std::env::var_os("KG_SOCKET").filter(|value| !value.is_empty()) {
+    if let Some(socket) = non_empty("KG_SOCKET") {
         return Ok(socket);
+    }
+    if let Some(data) = non_empty("KG_DATA_DIR") {
+        let data = std::path::absolute(data)?;
+        return Ok(format!("kagan-{}", socket_id(&os_bytes(data.as_os_str()))).into());
     }
     let user = std::env::var("USERNAME").unwrap_or_default();
     Ok(format!("kagan-{user}").into())
@@ -81,12 +143,189 @@ pub(crate) fn name(location: &std::ffi::OsStr) -> io::Result<Name<'static>> {
     location.to_os_string().to_ns_name::<GenericNamespaced>()
 }
 
+/// Checks a `/tmp/kagan-<id>` folder before a client connects to it.
+pub(crate) fn before_connect(location: &std::ffi::OsStr) -> io::Result<()> {
+    #[cfg(unix)]
+    trust_fallback(std::path::Path::new(location))?;
+    #[cfg(not(unix))]
+    let _ = location;
+    Ok(())
+}
+
+/// Listens on `location`. A leftover socket file is removed only when it is a socket we own,
+/// inside a folder we own. Anything else is left in place.
+pub(crate) fn open(location: &std::ffi::OsStr) -> io::Result<Option<Listener>> {
+    #[cfg(unix)]
+    {
+        open_unix(location)
+    }
+    #[cfg(not(unix))]
+    bind(name(location)?)
+}
+
+#[cfg(unix)]
+fn open_unix(location: &std::ffi::OsStr) -> io::Result<Option<Listener>> {
+    let path = std::path::Path::new(location);
+    if fallback_socket(path) {
+        trust_fallback(path)?;
+    } else if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        ensure_directory(parent)?;
+    }
+    let bound = name(location)?;
+    if Stream::connect(bound.borrow()).is_ok() {
+        return Ok(None);
+    }
+    reclaim_stale(path)?;
+    bind(bound)
+}
+
+#[cfg(unix)]
+fn fallback_socket(path: &std::path::Path) -> bool {
+    path.file_name().is_some_and(|name| name == "kg.sock")
+        && path.parent().is_some_and(fallback_dir)
+}
+
+#[cfg(unix)]
+fn fallback_dir(dir: &std::path::Path) -> bool {
+    let Some(name) = dir.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    dir.parent() == Some(std::path::Path::new("/tmp"))
+        && name.starts_with("kagan-")
+        && name.len() == "kagan-".len() + 64
+}
+
+#[cfg(unix)]
+fn trust_fallback(path: &std::path::Path) -> io::Result<()> {
+    if !fallback_socket(path) {
+        return Ok(());
+    }
+    let Some(dir) = path.parent() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "socket has no folder",
+        ));
+    };
+    match std::fs::symlink_metadata(dir) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => create_private(dir),
+        Err(error) => Err(error),
+        Ok(meta) => private_dir(&meta),
+    }
+}
+
+#[cfg(unix)]
+fn create_private(dir: &std::path::Path) -> io::Result<()> {
+    use std::{
+        fs,
+        os::unix::fs::{DirBuilderExt, PermissionsExt},
+    };
+
+    let created = {
+        let _umask = Umask::owner_only();
+        fs::DirBuilder::new().mode(0o700).create(dir)
+    };
+    match created {
+        Ok(()) => {
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+            private_dir(&fs::symlink_metadata(dir)?)
+        }
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            private_dir(&fs::symlink_metadata(dir)?)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(unix)]
+fn private_dir(metadata: &std::fs::Metadata) -> io::Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    if metadata.file_type().is_symlink()
+        || !metadata.is_dir()
+        || metadata.uid() != effective_uid()
+        || metadata.permissions().mode() & 0o777 != 0o700
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "the socket folder is not private",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn reclaim_stale(path: &std::path::Path) -> io::Result<()> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+    let meta = match std::fs::symlink_metadata(path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+        Ok(meta) => meta,
+    };
+    let kind = meta.file_type();
+    if kind.is_symlink() || !kind.is_socket() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "kg.sock is not a socket",
+        ));
+    }
+    if meta.uid() != effective_uid() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "kg.sock is owned by someone else",
+        ));
+    }
+    // A bare `kg.sock` has an empty parent. The working directory is that folder.
+    let dir = path
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let dir_meta = std::fs::symlink_metadata(dir)?;
+    if dir_meta.file_type().is_symlink() || !dir_meta.is_dir() || dir_meta.uid() != effective_uid()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "the socket folder is not ours",
+        ));
+    }
+    if fallback_dir(dir) {
+        private_dir(&dir_meta)?;
+    }
+    std::fs::remove_file(path)
+}
+
+#[cfg(unix)]
+fn effective_uid() -> u32 {
+    // `geteuid` only reads this process's credential.
+    unsafe { libc::geteuid() }
+}
+
+#[cfg(unix)]
+struct Umask(libc::mode_t);
+
+#[cfg(unix)]
+impl Umask {
+    fn owner_only() -> Self {
+        // `umask` is process-wide. Drop puts the previous mask back before anything else is created.
+        Self(unsafe { libc::umask(0o077) })
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Umask {
+    fn drop(&mut self) {
+        unsafe { libc::umask(self.0) };
+    }
+}
+
 pub(crate) fn bind(name: Name<'_>) -> io::Result<Option<Listener>> {
     if Stream::connect(name.borrow()).is_ok() {
         return Ok(None);
     }
-    // Nobody answers, so a socket file still there was left by a crash.
-    let options = ListenerOptions::new().name(name).try_overwrite(true);
+    let options = ListenerOptions::new().name(name).try_overwrite(false);
     #[cfg(windows)]
     let options = interprocess::os::windows::local_socket::ListenerOptionsExt::security_descriptor(
         options,
@@ -165,6 +404,7 @@ impl Client {
 
     pub(crate) fn connect_or_start() -> io::Result<Self> {
         let location = location()?;
+        before_connect(&location)?;
         if let Ok(client) = Self::connect(name(&location)?) {
             return Ok(client);
         }
@@ -190,6 +430,7 @@ impl Client {
 pub(crate) fn wait_for_socket(location: &std::ffi::OsStr, timeout: Duration) -> io::Result<Client> {
     let deadline = Instant::now() + timeout;
     loop {
+        before_connect(location)?;
         match Client::connect(name(location)?) {
             Ok(client) => return Ok(client),
             Err(error) if Instant::now() > deadline => return Err(error),
