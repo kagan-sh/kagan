@@ -862,6 +862,24 @@ fn body(plugin: &str, id: &str) -> String {
     format!("panel-{plugin}-{id}-body")
 }
 
+fn box_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> (f32, f32, f32, f32) {
+    cx.update_window(window, |_, window, _| {
+        crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into())).map_or(
+            (0., 0., 0., 0.),
+            |element| {
+                let bounds = element.bounds();
+                (
+                    f32::from(bounds.origin.x),
+                    f32::from(bounds.origin.y),
+                    f32::from(bounds.size.width),
+                    f32::from(bounds.size.height),
+                )
+            },
+        )
+    })
+    .unwrap()
+}
+
 #[cfg(unix)]
 #[gpui_kit::test]
 fn add_plugin_starts_a_thread_and_pastes_without_enter(cx: &mut TestAppContext) {
@@ -1502,6 +1520,108 @@ fn an_open_draws_a_right_panel_tab(cx: &mut TestAppContext) {
         selected_of(cx, window, &format!("right-tab-panel-{ALPHA}-side")),
         Some(true)
     );
+}
+
+const WEB: &str = "dev.test.webview";
+
+const WEB_SOURCE: &str = r#"// @ts-check
+import { View } from "gpui-kit";
+import { WebView } from "gpui-component";
+export default class Plugin extends View {
+  render() { return ""; }
+}
+export class Page extends View {
+  render() {
+    return new WebView("editor").url("http://127.0.0.1:1/");
+  }
+}
+export class Off extends View {
+  render() {
+    return new WebView("off").url("https://example.com/");
+  }
+}
+"#;
+
+fn install_webview(data: &Path) {
+    write_plugin(
+        data,
+        "webview",
+        WEB,
+        &manifest(
+            WEB,
+            "Web view",
+            json!([
+                {"id": "page", "title": "Editor", "view": "Page", "placement": "right"},
+                {"id": "off", "title": "Off", "view": "Off", "placement": "right"}
+            ]),
+            false,
+        ),
+        WEB_SOURCE,
+    );
+}
+
+#[gpui_kit::test]
+fn a_plugin_right_panel_mounts_a_web_view(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_webview);
+    wide(cx, window);
+    open_surface(cx, WEB, "page").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "webview-editor"));
+    cx.run_until_parked();
+    let page = box_of(cx, window, "webview-editor");
+    let side = box_of(cx, window, "right-sidebar");
+    let panel = box_of(cx, window, &body(WEB, "page"));
+    assert!(
+        (page.0 - panel.0).abs() < 1.
+            && (page.1 - panel.1).abs() < 1.
+            && (page.2 - panel.2).abs() < 1.
+            && (page.3 - panel.3).abs() < 1.,
+        "page {page:?} panel {panel:?}"
+    );
+    assert!(
+        (page.0 - side.0).abs() < 1. && (page.2 - side.2).abs() < 1.,
+        "page {page:?} side {side:?}"
+    );
+    assert!(page.1 > side.1, "page {page:?} side {side:?}");
+    assert!(
+        ((page.1 + page.3) - (side.1 + side.3)).abs() < 1.,
+        "page {page:?} side {side:?}"
+    );
+    let note = label(cx, window, "webview-editor-note");
+    let native = cx
+        .update_window(window, |_, _, cx| {
+            crate::components::native_shown(cx, "editor")
+        })
+        .unwrap();
+    assert!(
+        native == Some(true) || !note.is_empty(),
+        "note {note:?} native {native:?}"
+    );
+
+    open_surface(cx, WEB, "off").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "webview-off-note"));
+    assert!(!shows(cx, window, "webview-editor"));
+    assert_eq!(
+        label(cx, window, "webview-off-note"),
+        crate::components::REFUSED_HOST
+    );
+    let hidden = cx
+        .update_window(window, |_, _, cx| {
+            crate::components::native_shown(cx, "editor")
+        })
+        .unwrap();
+    assert_ne!(hidden, Some(true));
+
+    click(cx, window, &format!("right-tab-panel-{WEB}-page"));
+    wait_until(cx, |cx| shows(cx, window, "webview-editor"));
+    cx.run_until_parked();
+    let back = cx
+        .update_window(window, |_, _, cx| {
+            crate::components::native_shown(cx, "editor")
+        })
+        .unwrap();
+    if back.is_some() {
+        assert_eq!(back, Some(true));
+    }
 }
 
 #[gpui_kit::test]

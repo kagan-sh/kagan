@@ -58,6 +58,10 @@ impl Replaced {
         self.chosen.get(&slot)
     }
 
+    pub(super) fn mounted_view(&self, slot: Slot) -> Option<&gpui_kit::Entity<ScriptView>> {
+        self.mounted.get(&slot).and_then(|slot| slot.view.as_ref())
+    }
+
     // The window drops a plugin's props when the thread leaves the screen, so a review opened
     // again sends them again.
     pub(super) fn forget_review(&mut self) {

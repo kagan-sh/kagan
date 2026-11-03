@@ -150,6 +150,10 @@ _Avoid_: Palette (that word is the theme's colors), launcher
 The command button a plugin script builds. It takes the calls of the shell's `Button`, and `kg ui` can find, click and read it. The shell's `Button` cannot be observed, so `kg plugin check` warns on it.
 _Avoid_: Button (in plugin scripts), observed button
 
+**WebView**:
+The page a plugin panel shows. It loads one http or https URL on `127.0.0.1`, `localhost`, or a host the plugin may fetch, and it fills the panel. The Browser tab is separate.
+_Avoid_: address bar, embedded browser
+
 **Agent tool**:
 A function a plugin or kagan offers to agents in threads.
 _Avoid_: MCP tool (the transport, not the concept)

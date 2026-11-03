@@ -1402,12 +1402,60 @@ pub(crate) fn description(status: ThreadStatus, extra: usize) -> String {
     sentences.join(" ")
 }
 
+impl Kagan {
+    /// Plugin views that are in this frame, so a native page can hide with its panel.
+    fn shown_plugin_views(&self, cx: &App) -> Vec<gpui_kit::EntityId> {
+        let mut ids = Vec::new();
+        let full = self.right_fill == right::Fill::Window && self.panes.right;
+        if self.right_drawn()
+            && let Some(tab) = right::selected_tab(self, cx)
+            && let Some(view) = self
+                .right_slots
+                .iter()
+                .find(|slot| slot.id == tab)
+                .and_then(|slot| slot.view.as_ref())
+        {
+            ids.push(view.entity_id());
+        }
+        let left = !full
+            && (self.panes.left || (self.screen.drawn(screen::Side::Left) && !self.in_settings()));
+        if left && let Some(view) = self.tool.as_ref().and_then(|slot| slot.view.as_ref()) {
+            ids.push(view.entity_id());
+        }
+        if left && let Some(view) = self.replaced.mounted_view(kg_domain::Slot::Threads) {
+            ids.push(view.entity_id());
+        }
+        if !full {
+            match self.screen.current() {
+                screen::Center::Page(page) => {
+                    if let Some(view) = page.view.as_ref() {
+                        ids.push(view.entity_id());
+                    }
+                }
+                screen::Center::Review(_) => {
+                    if let Some(view) = self.replaced.mounted_view(kg_domain::Slot::Review) {
+                        ids.push(view.entity_id());
+                    }
+                }
+                screen::Center::Settings => {
+                    for (_, view) in self.settings_views.values() {
+                        ids.push(view.entity_id());
+                    }
+                }
+                screen::Center::Work(_) | screen::Center::Archived(_) => {}
+            }
+        }
+        ids
+    }
+}
+
 impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
         #[cfg(target_os = "macos")]
         self.sync_browser(cx);
+        crate::components::sync_pages(&self.shown_plugin_views(cx), cx);
         let columns = if self.right_fill == right::Fill::Window && self.panes.right {
             div()
                 .id("right-full-column")

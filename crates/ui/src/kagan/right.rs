@@ -19,6 +19,7 @@ use super::plugins_box::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answ
 use super::shown::{control, menu_popup};
 use super::surface::Slot;
 use super::tabs::{self, CloseTab, NewTerminal};
+use crate::components::fills_panel;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -159,12 +160,15 @@ fn tab_body(
         return Some(div().size_full().child(view).into_any_element());
     }
     let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
+    let page = slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
+    crate::components::note_inset(!page);
     Some(
         div()
             .id(ElementId::Name(format!("{}-body", slot.id).into()))
             .ui_container()
             .size_full()
-            .p_3()
+            .when(!page, gpui_kit::Styled::p_3)
+            .when(page, gpui_kit::Styled::overflow_hidden)
             .track_focus(&slot.focus)
             .child(plugin_body(slot, true, window, cx))
             .into_any_element(),

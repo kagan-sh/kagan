@@ -35,10 +35,42 @@ fn catalog_has_every_component_and_real_typings() {
             .descriptors()
             .map(gpui_shell::ComponentDescriptor::name)
             .collect::<Vec<_>>(),
-        ["KgButton", "ThreadTitle", "ThreadStatus", "Markdown"]
+        [
+            "KgButton",
+            "WebView",
+            "ThreadTitle",
+            "ThreadStatus",
+            "Markdown"
+        ]
     );
     let declarations = gpui_shell::type_declarations(&registry);
     assert!(declarations.contains("thread_id: string"));
+    assert!(declarations.contains("url(url: string): WebViewElement"));
+}
+
+#[test]
+fn a_web_view_only_opens_an_allowed_host() {
+    let hosts = [String::from("example.com")];
+    let open = |url| super::webview::allowed(url, &hosts);
+    assert!(super::webview::allowed("http://127.0.0.1:1/a", &[]).is_ok());
+    assert!(super::webview::allowed("https://Localhost/a", &[]).is_ok());
+    assert!(open("https://example.com/a").is_ok());
+    assert!(open("https://EXAMPLE.com/a").is_ok());
+    assert_eq!(
+        super::webview::allowed("https://example.com/", &[]).unwrap_err(),
+        super::webview::REFUSED_HOST
+    );
+    assert_eq!(
+        open("file:///etc/passwd").unwrap_err(),
+        super::webview::REFUSED_SCHEME
+    );
+    assert_eq!(
+        open("http://127.0.0.1.example.com/").unwrap_err(),
+        super::webview::REFUSED_HOST
+    );
+    assert!(open("javascript:alert(1)").is_err());
+    assert!(open("about:blank").is_err());
+    assert!(open("http:///missing").is_err());
 }
 
 /// Mounts `source` and keeps the runtime alive: a script's click reaches the script only while
