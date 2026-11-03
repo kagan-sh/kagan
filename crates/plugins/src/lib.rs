@@ -67,6 +67,7 @@ fn event_data(kind: &kg_domain::EventKind) -> Value {
 const TOOL_TIMEOUT: Duration = Duration::from_mins(2);
 const INSTRUCT_TIMEOUT: Duration = Duration::from_secs(2);
 const INSTRUCT_CAP: usize = 4096;
+const INSTRUCT_TOTAL: usize = 16 * 1024;
 /// What every reader but the plugin sees for a secret setting that holds a value.
 const SET: &str = "set";
 
@@ -817,11 +818,21 @@ async fn instruct(
         });
     }
     let parts = futures::future::join_all(tasks).await;
-    let joined = parts
-        .into_iter()
-        .filter(|text| !text.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let mut joined = String::new();
+    for part in parts.into_iter().filter(|text| !text.is_empty()) {
+        let next = if joined.is_empty() {
+            part.len()
+        } else {
+            joined.len() + 2 + part.len()
+        };
+        if next > INSTRUCT_TOTAL {
+            break;
+        }
+        if !joined.is_empty() {
+            joined.push_str("\n\n");
+        }
+        joined.push_str(&part);
+    }
     Ok(OpResult::Output(Some(joined)))
 }
 

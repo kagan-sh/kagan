@@ -5150,9 +5150,13 @@ fn instruct_is_an_install_line_and_needs_approval_again() {
 }
 
 fn instruct_plugin(script: &str) -> TempDir {
+    instruct_plugin_id("dev.test.instruct", script)
+}
+
+fn instruct_plugin_id(id: &str, script: &str) -> TempDir {
     let dir = tempfile::tempdir().unwrap();
     let manifest = json!({
-        "id": "dev.test.instruct",
+        "id": id,
         "name": "Instruct",
         "version": "1.0.0",
         "kagan": ">=0.1.0",
@@ -5270,4 +5274,74 @@ export default class Plugin extends View {
     let body = &text[prefix.len()..];
     assert_eq!(body.len(), 4096);
     assert!(body.chars().all(|c| c == 'x'));
+}
+
+#[gpui_kit::test]
+fn instruct_text_is_capped_in_bytes(cx: &mut TestAppContext) {
+    let plugin = instruct_plugin(
+        r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        if (job.kind === "instruct") {
+          reply(job.id, "é".repeat(3000));
+        }
+      }
+    });
+  }
+  render() { return "instruct"; }
+}
+"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    let text = ask_instruct(cx);
+    let prefix = "Plugin dev.test.instruct:\n";
+    assert!(text.starts_with(prefix), "{text}");
+    let body = &text[prefix.len()..];
+    assert_eq!(body.len(), 4096);
+    assert!(body.chars().all(|c| c == 'é'), "{body}");
+}
+
+#[gpui_kit::test]
+fn instruct_joined_text_is_capped_across_plugins(cx: &mut TestAppContext) {
+    let script = |fill: &str| {
+        format!(
+            r#"
+import {{ View }} from "gpui-kit";
+import {{ next, reply }} from "kagan/jobs";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      for (;;) {{
+        const job = await next();
+        if (job.kind === "instruct") {{
+          reply(job.id, "{fill}".repeat(5000));
+        }}
+      }}
+    }});
+  }}
+  render() {{ return "instruct"; }}
+}}
+"#
+        )
+    };
+    let plugins: Vec<_> = ["a", "b", "c", "d"]
+        .into_iter()
+        .map(|suffix| instruct_plugin_id(&format!("dev.test.instruct.{suffix}"), &script(suffix)))
+        .collect();
+    let installed: Vec<_> = plugins
+        .iter()
+        .map(|plugin| installed_at(plugin.path()))
+        .collect();
+    open(cx, &installed);
+    let text = ask_instruct(cx);
+    assert!(text.contains("Plugin dev.test.instruct.a:\n"));
+    assert!(text.contains("Plugin dev.test.instruct.b:\n"));
+    assert!(text.contains("Plugin dev.test.instruct.c:\n"));
+    assert!(!text.contains("Plugin dev.test.instruct.d:\n"), "{text}");
+    assert!(text.len() <= 16 * 1024, "{}", text.len());
 }
