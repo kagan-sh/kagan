@@ -555,6 +555,10 @@ impl Kagan {
     }
 
     pub(super) fn focus_work(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(popup) = self.ask_popup.clone() {
+            window.focus(&popup, cx);
+            return;
+        }
         match self.screen.shown() {
             Shown::Thread(view) => window.focus(&view.focus_handle(cx), cx),
             Shown::Nothing | Shown::Start(_) => window.focus(&self.focus, cx),
