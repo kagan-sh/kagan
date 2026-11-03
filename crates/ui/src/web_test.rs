@@ -86,6 +86,16 @@ fn the_page_is_served_from_its_own_folder() {
     assert_eq!(theme.status, 200);
     assert_eq!(theme.body, b":root{--bg:#fff}");
     assert_eq!(theme.mime, "text/css; charset=utf-8");
+    let theme_case = serve(
+        root.path(),
+        PLUGIN,
+        "GET",
+        "kagan-plugin://dev.kagan.page/__KAGAN/theme.css",
+        &[],
+        ":root{--bg:#fff}",
+    );
+    assert_eq!(theme_case.status, 200);
+    assert_eq!(theme_case.body, b":root{--bg:#fff}");
 
     assert_eq!(
         serve(

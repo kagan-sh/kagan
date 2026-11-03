@@ -212,7 +212,7 @@ fn check_web(web: &str) -> Result<(), String> {
             .all(|part| matches!(part, Component::Normal(_)))
         && !web
             .split('/')
-            .any(|part| part.is_empty() || part == "__kagan")
+            .any(|part| part.is_empty() || part.eq_ignore_ascii_case("__kagan"))
     {
         Ok(())
     } else {

@@ -93,4 +93,8 @@ fn the_reserved_folder_is_not_a_plugin_file() {
         read_plugin_file(root.path(), "__kagan/theme.css"),
         Err(PageFileError::Refused)
     );
+    assert_eq!(
+        read_plugin_file(root.path(), "__KAGAN/theme.css"),
+        Err(PageFileError::Refused)
+    );
 }

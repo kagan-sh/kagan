@@ -1392,6 +1392,15 @@ impl PluginHost {
         Ok(())
     }
 
+    /// Bytes of page payloads still held for `next()` on this plugin.
+    #[must_use]
+    pub fn pending_page_bytes(&self, id: &PluginId) -> usize {
+        self.active
+            .get(id)
+            .and_then(|active| active.loaded.as_ref())
+            .map_or(0, |loaded| loaded.jobs.pending_page_bytes())
+    }
+
     /// Writes a line to the plugin's log: something kagan did with the plugin's request, such as
     /// refusing a key the window already uses.
     pub fn report(&self, plugin: &PluginId, message: &str) {

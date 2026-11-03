@@ -4,7 +4,7 @@ use std::future::Future;
 use std::pin::pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex, Weak};
 
 use async_channel::{Receiver, Sender};
 use gpui_shell::{HostError, HostModule, HostValue};
@@ -47,6 +47,10 @@ impl PageBounds {
         self.pages.fetch_sub(1, Ordering::Relaxed);
         self.bytes.fetch_sub(bytes, Ordering::Relaxed);
     }
+
+    fn bytes(&self) -> usize {
+        self.bytes.load(Ordering::Relaxed)
+    }
 }
 
 struct PageTicket {
@@ -59,7 +63,7 @@ struct PageTicket {
 }
 
 impl PageTicket {
-    fn clear_pending(&self) {
+    fn release_bounds(&self) {
         if self.pending.swap(false, Ordering::Relaxed) {
             self.bounds.release(self.bytes);
         }
@@ -68,7 +72,8 @@ impl PageTicket {
 
 enum Queued {
     Job(Job),
-    Page(PageTicket),
+    /// Page bodies live in [`Jobs::page_waiting`]; the channel carries only the id.
+    Page(String),
 }
 
 /// One plugin's job queue. Never shared: gpui-shell does not cancel a pending `next()`
@@ -76,8 +81,9 @@ enum Queued {
 pub(crate) struct Jobs {
     queue: (Sender<Queued>, Receiver<Queued>),
     open: RefCell<BTreeMap<String, Sender<Reply>>>,
-    /// Page jobs still counting against the cap, so a timeout can free them.
-    page_waiting: RefCell<BTreeMap<String, (Arc<AtomicBool>, usize)>>,
+    /// Page jobs still waiting for `next()`, so a timeout can drop their bodies.
+    /// `Arc`/`Mutex` so the `Send` `next()` future can take a ticket without the `Rc`.
+    page_waiting: Arc<Mutex<BTreeMap<String, PageTicket>>>,
     bounds: Arc<PageBounds>,
     next: Cell<u64>,
 }
@@ -87,13 +93,18 @@ impl Jobs {
         Rc::new(Self {
             queue: async_channel::unbounded(),
             open: RefCell::default(),
-            page_waiting: RefCell::default(),
+            page_waiting: Arc::new(Mutex::new(BTreeMap::new())),
             bounds: Arc::new(PageBounds {
                 pages: AtomicUsize::new(0),
                 bytes: AtomicUsize::new(0),
             }),
             next: Cell::new(1),
         })
+    }
+
+    /// Bytes of page payloads still held for `next()` (not yet timed out or taken).
+    pub(crate) fn pending_page_bytes(&self) -> usize {
+        self.bounds.bytes()
     }
 
     /// Queues `job` and returns its id and where its reply arrives. The reply channel
@@ -127,16 +138,19 @@ impl Jobs {
         let (reply, replied) = async_channel::bounded(1);
         self.open.borrow_mut().insert(id.clone(), reply);
         self.page_waiting
-            .borrow_mut()
-            .insert(id.clone(), (pending.clone(), bytes));
-        let ticket = PageTicket {
-            job,
-            alive,
-            pending,
-            bytes,
-            bounds: self.bounds.clone(),
-        };
-        if self.queue.0.try_send(Queued::Page(ticket)).is_err() {
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(
+                id.clone(),
+                PageTicket {
+                    job,
+                    alive,
+                    pending,
+                    bytes,
+                    bounds: self.bounds.clone(),
+                },
+            );
+        if self.queue.0.try_send(Queued::Page(id.clone())).is_err() {
             self.free_page(&id);
             self.forget(&id);
             return None;
@@ -156,7 +170,10 @@ impl Jobs {
     ) -> Result<Reply, Ended> {
         match futures::future::select(pin!(replied.recv()), pin!(timer)).await {
             futures::future::Either::Left((reply, _)) => {
-                self.page_waiting.borrow_mut().remove(id);
+                self.page_waiting
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(id);
                 self.forget(id);
                 reply.map_err(|_| Ended::Unloaded)
             }
@@ -172,15 +189,22 @@ impl Jobs {
     pub(crate) fn close(&self) {
         self.queue.0.close();
         self.open.borrow_mut().clear();
-        for (_, (pending, bytes)) in std::mem::take(&mut *self.page_waiting.borrow_mut()) {
-            if pending.swap(false, Ordering::Relaxed) {
-                self.bounds.release(bytes);
-            }
+        let waiting = std::mem::take(
+            &mut *self
+                .page_waiting
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        for (_, ticket) in waiting {
+            ticket.release_bounds();
         }
     }
 
     fn settle(&self, id: &str, reply: Reply) -> Result<HostValue, HostError> {
-        self.page_waiting.borrow_mut().remove(id);
+        self.page_waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(id);
         let sender = self
             .open
             .borrow_mut()
@@ -195,15 +219,19 @@ impl Jobs {
     }
 
     fn free_page(&self, id: &str) {
-        if let Some((pending, bytes)) = self.page_waiting.borrow_mut().remove(id)
-            && pending.swap(false, Ordering::Relaxed)
+        if let Some(ticket) = self
+            .page_waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(id)
         {
-            self.bounds.release(bytes);
+            ticket.release_bounds();
         }
     }
 
     pub(crate) fn module(self: &Rc<Self>) -> HostModule {
         let receiver = self.queue.1.clone();
+        let waiting = self.page_waiting.clone();
         let (replies, failures) = (self.clone(), self.clone());
         HostModule::new("kagan/jobs")
             .declarations(
@@ -214,6 +242,7 @@ impl Jobs {
             )
             .async_function("next", move |_| {
                 let receiver = receiver.clone();
+                let waiting = waiting.clone();
                 Ok(async move {
                     loop {
                         let queued = receiver
@@ -222,14 +251,21 @@ impl Jobs {
                             .map_err(|_| HostError::new("the plugin was unloaded"))?;
                         match queued {
                             Queued::Job(job) => return Ok(to_host(Value::Object(job))),
-                            Queued::Page(ticket) => {
+                            Queued::Page(id) => {
+                                let Some(ticket) = waiting
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                    .remove(&id)
+                                else {
+                                    continue;
+                                };
                                 let live = ticket.alive.upgrade().is_some();
-                                let waiting = ticket.pending.load(Ordering::Relaxed);
-                                if live && waiting {
-                                    ticket.clear_pending();
+                                let waiting_cap = ticket.pending.load(Ordering::Relaxed);
+                                if live && waiting_cap {
+                                    ticket.release_bounds();
                                     return Ok(to_host(Value::Object(ticket.job)));
                                 }
-                                ticket.clear_pending();
+                                ticket.release_bounds();
                             }
                         }
                     }

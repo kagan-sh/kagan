@@ -133,7 +133,7 @@ fn shape(relative: &str) -> Result<(), String> {
         || relative.contains('\0')
         || relative
             .split('/')
-            .any(|part| part == RESERVED || part.is_empty())
+            .any(|part| part.is_empty() || part.eq_ignore_ascii_case(RESERVED))
     {
         return Err(format!(
             "web {relative:?} must be an .html file inside the plugin"
@@ -157,7 +157,7 @@ fn relative_file(relative: &str) -> Result<PathBuf, PageFileError> {
         || relative.contains('\0')
         || relative
             .split('/')
-            .any(|part| part.is_empty() || part == RESERVED)
+            .any(|part| part.is_empty() || part.eq_ignore_ascii_case(RESERVED))
     {
         return Err(PageFileError::Refused);
     }

@@ -5278,6 +5278,23 @@ export default class Plugin extends View {{
     plugin
 }
 
+fn flood_page(cx: &mut TestAppContext, life: &std::sync::Arc<()>, raw: &str) -> Result<(), String> {
+    let alive = std::sync::Arc::downgrade(life);
+    cx.update(|cx| {
+        crate::PluginHost::global(cx).update(cx, |host, cx| {
+            host.deliver_page(&PluginId(PAGE_PLUGIN.into()), "board", raw, alive, cx)
+        })
+    })
+}
+
+fn pending_page_bytes(cx: &mut TestAppContext) -> usize {
+    cx.update(|cx| {
+        crate::PluginHost::global(cx)
+            .read(cx)
+            .pending_page_bytes(&PluginId(PAGE_PLUGIN.into()))
+    })
+}
+
 #[gpui_kit::test]
 fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
     let _plugin = open_page_holding_next(cx);
@@ -5285,13 +5302,7 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
     let mut accepted = 0;
     for i in 0..crate::jobs::PAGE_PENDING_CAP + 8 {
         let raw = format!(r#"{{"n":{i}}}"#);
-        let alive = std::sync::Arc::downgrade(&life);
-        let result = cx.update(|cx| {
-            crate::PluginHost::global(cx).update(cx, |host, cx| {
-                host.deliver_page(&PluginId(PAGE_PLUGIN.into()), "board", &raw, alive, cx)
-            })
-        });
-        match result {
+        match flood_page(cx, &life, &raw) {
             Ok(()) => accepted += 1,
             Err(error) => {
                 assert!(
@@ -5303,22 +5314,40 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
         }
     }
     assert_eq!(accepted, crate::jobs::PAGE_PENDING_CAP);
-    let alive = std::sync::Arc::downgrade(&life);
-    let refused = cx.update(|cx| {
-        crate::PluginHost::global(cx).update(cx, |host, cx| {
-            host.deliver_page(
-                &PluginId(PAGE_PLUGIN.into()),
-                "board",
-                r#"{"n":"over"}"#,
-                alive,
-                cx,
-            )
-        })
-    });
     assert!(
-        refused
+        pending_page_bytes(cx) <= crate::jobs::PAGE_PENDING_BYTES,
+        "{}",
+        pending_page_bytes(cx)
+    );
+    assert!(
+        flood_page(cx, &life, r#"{"n":"over"}"#)
             .unwrap_err()
             .contains("cannot take another page message")
+    );
+
+    // Timeouts free the cap and drop the bodies; refill must stay within 1 MiB.
+    cx.executor().advance_clock(Duration::from_secs(10));
+    cx.run_until_parked();
+    assert_eq!(pending_page_bytes(cx), 0);
+    let mut after = 0;
+    for i in 0..crate::jobs::PAGE_PENDING_CAP + 8 {
+        let raw = format!(r#"{{"again":{i}}}"#);
+        match flood_page(cx, &life, &raw) {
+            Ok(()) => after += 1,
+            Err(error) => {
+                assert!(
+                    error.contains("cannot take another page message"),
+                    "{error}"
+                );
+                break;
+            }
+        }
+    }
+    assert_eq!(after, crate::jobs::PAGE_PENDING_CAP);
+    assert!(
+        pending_page_bytes(cx) <= crate::jobs::PAGE_PENDING_BYTES,
+        "{}",
+        pending_page_bytes(cx)
     );
 }
 

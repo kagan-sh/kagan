@@ -144,10 +144,10 @@ pub(crate) fn serve(
     let Some(path) = request_path(target) else {
         return refuse(403);
     };
-    if path == THEME_FILE {
+    if path.eq_ignore_ascii_case(THEME_FILE) {
         return Served {
             status: 200,
-            mime: mime(&path),
+            mime: mime(THEME_FILE),
             body: if method == "HEAD" {
                 Vec::new()
             } else {
