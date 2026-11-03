@@ -426,7 +426,12 @@ async fn remove(
         host.identities.remove(&id);
         cx.notify();
     });
-    let cleared = crate::page::remove_web_stores(store_ids, cx).await;
+    // The WKWebView stays in a queued foreground release and the frame mouse listener until the
+    // next draw, so wait for that release and retry InUse before clearing store.id.
+    cx.update(gpui_kit::App::refresh_windows);
+    let cleared = cx
+        .spawn(async move |cx| crate::page::remove_web_stores_after_release(store_ids, cx).await)
+        .await;
     crate::page::clear_removed_stores(&data, &cleared.removed);
     let mut warnings = cleared.warnings;
     let store = host.read_with(cx, |host, _| host.secrets.clone());

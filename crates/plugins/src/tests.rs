@@ -2183,21 +2183,32 @@ fn removing_a_plugin_waits_for_a_person(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn removing_a_plugin_drops_native_pages_before_store_cleanup(cx: &mut TestAppContext) {
-    use std::cell::RefCell;
+fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut TestAppContext) {
+    use std::cell::Cell;
     use std::rc::Rc;
 
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
-    let seen = Rc::new(RefCell::new(None));
-    let mark = seen.clone();
+    let dropped = Rc::new(Cell::new(false));
+    let mark_drop = dropped.clone();
     cx.update(|cx| {
         let host = crate::PluginHost::global(cx);
         host.update(cx, |host, _| {
-            host.set_drop_pages(Rc::new(move |id, _, _| {
-                *mark.borrow_mut() = Some(id.clone());
+            host.set_drop_pages(Rc::new(move |_, _, _| {
+                mark_drop.set(true);
             }));
         });
+    });
+    let attempts = Rc::new(Cell::new(0));
+    let count = attempts.clone();
+    let _hook = crate::page::set_remove_hook(move |_| {
+        let n = count.get() + 1;
+        count.set(n);
+        if n < 3 {
+            crate::page::StoreAttempt::InUse
+        } else {
+            crate::page::StoreAttempt::Removed
+        }
     });
     let data = cx.update(|cx| {
         crate::PluginHost::global(cx)
@@ -2213,24 +2224,42 @@ fn removing_a_plugin_drops_native_pages_before_store_cleanup(cx: &mut TestAppCon
         },
     );
     answer_standalone(cx, "approve");
-    let result = cx.foreground_executor().block_test(removing).unwrap();
-    assert_eq!(*seen.borrow(), Some(PluginId(ID.into())));
-    match result {
-        OpResult::Done => {}
-        OpResult::Warnings(warnings) => {
-            assert!(
-                warnings
-                    .iter()
-                    .any(|warning| warning.contains("page store")),
-                "{warnings:?}"
-            );
-            assert!(
-                crate::store_dir(&data, "board").join("store.id").is_file(),
-                "a store WebKit did not remove keeps its store.id for a later start"
-            );
-        }
-        other => panic!("unexpected remove result: {other:?}"),
-    }
+    cx.run_until_parked();
+    assert!(dropped.get(), "pages drop in the remove turn");
+    assert_eq!(
+        attempts.get(),
+        0,
+        "remove_data_store waits for the native release after drop"
+    );
+    assert!(
+        crate::store_dir(&data, "board").join("store.id").is_file(),
+        "store.id stays until WebKit accepts the delete"
+    );
+    cx.executor().advance_clock(
+        crate::page::RELEASE_WAIT
+            .checked_sub(Duration::from_millis(1))
+            .expect("release wait"),
+    );
+    cx.run_until_parked();
+    assert_eq!(attempts.get(), 0, "still inside the release wait");
+    cx.executor().advance_clock(Duration::from_millis(1));
+    cx.run_until_parked();
+    assert_eq!(attempts.get(), 1, "first attempt after the release wait");
+    assert!(
+        crate::store_dir(&data, "board").join("store.id").is_file(),
+        "InUse keeps store.id for a retry"
+    );
+    cx.executor().advance_clock(Duration::from_secs(3));
+    cx.run_until_parked();
+    assert_eq!(
+        cx.foreground_executor().block_test(removing).unwrap(),
+        OpResult::Done
+    );
+    assert_eq!(attempts.get(), 3, "retries InUse until Removed");
+    assert!(
+        !crate::store_dir(&data, "board").join("store.id").is_file(),
+        "store.id clears only after WebKit accepts the delete"
+    );
 }
 
 #[gpui_kit::test]

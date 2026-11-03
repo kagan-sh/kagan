@@ -313,23 +313,150 @@ pub struct StoreRemoval {
     pub warnings: Vec<String>,
 }
 
-/// Deletes each `WKWebsiteDataStore` for the given ids. Call after pages are dropped, on the main
-/// thread. macOS 14+ only; older systems never created a custom store. Ids `WebKit` still holds stay
-/// in `warnings` and out of `removed`, so their `store.id` files can be kept for a later start.
-#[cfg(target_os = "macos")]
-pub(crate) async fn remove_web_stores(
+/// Wait for GPUI's queued native `WebView` drop and the frame mouse listener to release the store.
+pub(crate) const RELEASE_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
+/// Cap for `InUse` retries after that first wait.
+const RETRY_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
+const RETRY_START: std::time::Duration = std::time::Duration::from_millis(50);
+const RETRY_MAX: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// One attempt's outcome for a single store id.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum StoreAttempt {
+    Removed,
+    InUse,
+    Failed(String),
+}
+
+#[cfg(test)]
+type RemoveHook = Box<dyn FnMut([u8; 16]) -> StoreAttempt>;
+
+#[cfg(test)]
+thread_local! {
+    static REMOVE_HOOK: std::cell::RefCell<Option<RemoveHook>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Installs a fake `remove_data_store` for tests. Cleared when the guard drops.
+#[cfg(test)]
+pub(crate) fn set_remove_hook(
+    hook: impl FnMut([u8; 16]) -> StoreAttempt + 'static,
+) -> RemoveHookGuard {
+    REMOVE_HOOK.with(|cell| {
+        *cell.borrow_mut() = Some(Box::new(hook));
+    });
+    RemoveHookGuard
+}
+
+#[cfg(test)]
+pub(crate) struct RemoveHookGuard;
+
+#[cfg(test)]
+impl Drop for RemoveHookGuard {
+    fn drop(&mut self) {
+        REMOVE_HOOK.with(|cell| {
+            *cell.borrow_mut() = None;
+        });
+    }
+}
+
+/// Waits for the native view to release, then deletes each store, retrying `DataStoreInUse` with
+/// backoff for a few seconds. Ids still held stay out of `removed` so their `store.id` files remain
+/// for a later start.
+pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
     cx: &mut gpui_kit::AsyncApp,
 ) -> StoreRemoval {
-    use wry::WebViewExtDarwin as _;
-
     if ids.is_empty() {
         return StoreRemoval {
             removed: Vec::new(),
             warnings: Vec::new(),
         };
     }
-    // Custom stores need macOS 14+. Older systems never created one; drop the id files.
+    #[cfg(target_os = "macos")]
+    if macos_major() < 14 {
+        // Custom stores need macOS 14+. Older systems never created one; drop the id files.
+        return StoreRemoval {
+            removed: ids,
+            warnings: Vec::new(),
+        };
+    }
+    cx.background_executor().timer(RELEASE_WAIT).await;
+    let mut pending = ids;
+    let mut removed = Vec::new();
+    let mut warnings = Vec::new();
+    let mut delay = RETRY_START;
+    let mut waited = RELEASE_WAIT;
+    loop {
+        let mut still = Vec::new();
+        for id in pending {
+            match remove_one_store(id, cx).await {
+                StoreAttempt::Removed => removed.push(id),
+                StoreAttempt::InUse => still.push(id),
+                StoreAttempt::Failed(message) => warnings.push(message),
+            }
+        }
+        if still.is_empty() || waited >= RETRY_BUDGET + RELEASE_WAIT {
+            for _ in &still {
+                warnings.push(
+                    "the plugin is removed, but WebKit still held a page store (DataStoreInUse)"
+                        .into(),
+                );
+            }
+            // Keep store.id for the ones still in use.
+            return StoreRemoval { removed, warnings };
+        }
+        cx.background_executor().timer(delay).await;
+        waited = waited.saturating_add(delay);
+        delay = (delay.saturating_mul(2)).min(RETRY_MAX);
+        pending = still;
+    }
+}
+
+async fn remove_one_store(id: [u8; 16], cx: &mut gpui_kit::AsyncApp) -> StoreAttempt {
+    #[cfg(test)]
+    if let Some(attempt) = REMOVE_HOOK.with(|cell| cell.borrow_mut().as_mut().map(|hook| hook(id)))
+    {
+        return attempt;
+    }
+    remove_one_native(id, cx).await
+}
+
+#[cfg(target_os = "macos")]
+async fn remove_one_native(id: [u8; 16], cx: &mut gpui_kit::AsyncApp) -> StoreAttempt {
+    use wry::WebViewExtDarwin as _;
+
+    let (send, receive) = futures::channel::oneshot::channel();
+    cx.update(|_| {
+        wry::WebView::remove_data_store(&id, move |result| {
+            let _ = send.send(result);
+        });
+    });
+    match receive.await {
+        Ok(Err(wry::Error::DataStoreInUse)) => StoreAttempt::InUse,
+        Ok(Err(error)) => StoreAttempt::Failed(format!(
+            "the plugin is removed, but its page store was not deleted: {error}"
+        )),
+        Ok(Ok(())) | Err(_) => StoreAttempt::Removed,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn remove_one_native(_id: [u8; 16], _cx: &mut gpui_kit::AsyncApp) -> StoreAttempt {
+    StoreAttempt::Removed
+}
+
+/// One-shot delete used by the orphan-store retry on host start.
+pub(crate) async fn remove_web_stores(
+    ids: Vec<[u8; 16]>,
+    cx: &mut gpui_kit::AsyncApp,
+) -> StoreRemoval {
+    if ids.is_empty() {
+        return StoreRemoval {
+            removed: Vec::new(),
+            warnings: Vec::new(),
+        };
+    }
+    #[cfg(target_os = "macos")]
     if macos_major() < 14 {
         return StoreRemoval {
             removed: ids,
@@ -339,35 +466,15 @@ pub(crate) async fn remove_web_stores(
     let mut removed = Vec::new();
     let mut warnings = Vec::new();
     for id in ids {
-        let (send, receive) = futures::channel::oneshot::channel();
-        cx.update(|_| {
-            wry::WebView::remove_data_store(&id, move |result| {
-                let _ = send.send(result);
-            });
-        });
-        match receive.await {
-            Ok(Err(wry::Error::DataStoreInUse)) => warnings.push(
+        match remove_one_store(id, cx).await {
+            StoreAttempt::Removed => removed.push(id),
+            StoreAttempt::InUse => warnings.push(
                 "the plugin is removed, but WebKit still held a page store (DataStoreInUse)".into(),
             ),
-            Ok(Err(error)) => warnings.push(format!(
-                "the plugin is removed, but its page store was not deleted: {error}"
-            )),
-            Ok(Ok(())) | Err(_) => removed.push(id),
+            StoreAttempt::Failed(message) => warnings.push(message),
         }
     }
     StoreRemoval { removed, warnings }
-}
-
-/// Offline stand-in when `WebKit` is not available: every id is treated as removed.
-#[cfg(not(target_os = "macos"))]
-pub(crate) async fn remove_web_stores(
-    ids: Vec<[u8; 16]>,
-    _cx: &mut gpui_kit::AsyncApp,
-) -> StoreRemoval {
-    StoreRemoval {
-        removed: ids,
-        warnings: Vec::new(),
-    }
 }
 
 /// Retries `WebKit` store deletion for plugin data folders that are no longer installed. A prior
