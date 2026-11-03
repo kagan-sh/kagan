@@ -187,9 +187,8 @@ pub(crate) async fn submit(
             None => Err(missing("terminal", id)),
         })
         .map_err(closed)??;
-    // Poll the write ack: a blocking recv would pin a background worker and starve Stop and the DB.
-    // Park on the executor timer between polls; the writer thread must not wake GPUI tasks (the
-    // test scheduler forbids it).
+    // A blocking recv would pin a background worker and starve Stop and the DB.
+    // Park on the executor timer; the writer must not wake GPUI tasks (the test scheduler forbids it).
     let executor = cx.background_executor().clone();
     cx.background_spawn(async move {
         loop {
