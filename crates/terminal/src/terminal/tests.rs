@@ -1,7 +1,7 @@
 use std::ffi::{OsStr, OsString};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -832,6 +832,7 @@ fn pty_pair() -> (std::fs::File, std::fs::File) {
 #[cfg(unix)]
 #[test]
 fn a_full_pty_write_is_cancelled_by_stop() {
+    use std::io::Read;
     use std::os::fd::AsRawFd;
     let (master, mut slave) = pty_pair();
     set_nonblocking(master.as_raw_fd()).unwrap();
