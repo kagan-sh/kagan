@@ -422,21 +422,34 @@ async fn remove(
         host.identities.remove(&id);
         cx.notify();
     });
+    let store_ids = crate::page::read_store_ids(&data);
+    #[cfg(target_os = "macos")]
+    let mut warnings = crate::page::remove_web_stores(store_ids, cx).await;
+    #[cfg(not(target_os = "macos"))]
+    let mut warnings = {
+        let _ = store_ids;
+        Vec::new()
+    };
     crate::page::clear_stores(&data);
     let store = host.read_with(cx, |host, _| host.secrets.clone());
     let forgotten = cx
         .background_spawn(async move { store.forget(&id, &declared) })
         .await;
-    Ok(match forgotten {
-        Ok(kept) if kept.is_empty() => OpResult::Done,
-        Ok(kept) => OpResult::Warnings(vec![format!(
+    match forgotten {
+        Ok(kept) if !kept.is_empty() => warnings.push(format!(
             "the plugin is removed, but the system keychain kept its secrets {}; \
              delete them in the keychain, service kagan",
             kept.join(", ")
-        )]),
-        Err(error) => OpResult::Warnings(vec![format!(
+        )),
+        Err(error) => warnings.push(format!(
             "the plugin is removed, but its secrets were not forgotten: {error}"
-        )]),
+        )),
+        Ok(_) => {}
+    }
+    Ok(if warnings.is_empty() {
+        OpResult::Done
+    } else {
+        OpResult::Warnings(warnings)
     })
 }
 
@@ -501,7 +514,7 @@ async fn reload(
             "reload cannot change the plugin id".into(),
         ));
     }
-    let grant = Grant::of(&fetched.discovered.manifest);
+    let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
     let approved: Grant = serde_json::from_value(record.approved.clone())?;
     if !grant.within(&approved) {
         let thread_id = thread_id.ok_or_else(|| OpError::Invalid(NO_THREAD.into()))?;
@@ -630,7 +643,7 @@ async fn install(
             "plugin {id} is already installed; use kg plugin update {id}"
         )));
     }
-    let grant = Grant::of(manifest);
+    let grant = Grant::of(manifest, &fetched.root);
     approve(
         thread_id.as_ref(),
         requester,
@@ -698,7 +711,7 @@ async fn update(
             record.source, manifest.id
         )));
     }
-    let grant = Grant::of(manifest);
+    let grant = Grant::of(manifest, &fetched.root);
     let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
     let within = grant.within(&approved);
     if within && fetched.commit.is_some() && fetched.commit == record.commit {

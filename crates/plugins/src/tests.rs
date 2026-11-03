@@ -202,7 +202,7 @@ fn installed(root: &Path) -> Plugin {
     Plugin {
         id: PluginId(ID.into()),
         source: root.display().to_string(),
-        approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap())).unwrap(),
+        approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap(), &root)).unwrap(),
         root,
         commit: None,
         enabled: true,
@@ -625,13 +625,64 @@ fn unique(label: &str) -> String {
 }
 
 #[test]
+fn page_store_is_an_install_line_and_needs_approval_again() {
+    let plugin = plugin_dir();
+    let html = plugin.path().join("ui");
+    std::fs::create_dir_all(&html).unwrap();
+    std::fs::write(html.join("index.html"), "<p>hi</p>").unwrap();
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(!base.lines().iter().any(|line| line == "keeps page data"));
+    let mut value = manifest();
+    value["ui"]["panels"] = json!([{
+        "id": "board",
+        "title": "Board",
+        "web": "ui/index.html",
+        "placement": "right",
+        "store": true
+    }]);
+    write_plugin(plugin.path(), &value);
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        with.lines().iter().any(|line| line == "keeps page data"),
+        "{:?}",
+        with.lines()
+    );
+    assert!(base.within(&with));
+    assert!(!with.within(&base));
+}
+
+#[test]
+fn webview_store_true_in_the_script_asks_for_page_data() {
+    let plugin = plugin_dir();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        r#"
+import { View } from "gpui-kit";
+import { WebView } from "gpui-component";
+export default class Plugin extends View {
+  render() {
+    return new WebView("board").url("http://127.0.0.1/").store(true);
+  }
+}
+"#,
+    )
+    .unwrap();
+    let grant = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        grant.lines().iter().any(|line| line == "keeps page data"),
+        "{:?}",
+        grant.lines()
+    );
+}
+
+#[test]
 fn a_grant_grows_only_when_it_asks_for_more() {
     let dir = plugin_dir();
     let grant = |edit: &dyn Fn(&mut Value)| {
         let mut value = manifest();
         edit(&mut value);
         std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
-        Grant::of(&read_manifest(dir.path()).unwrap())
+        Grant::of(&read_manifest(dir.path()).unwrap(), dir.path())
     };
     let base = grant(&|value| {
         value["powers"]["fetch"] =
@@ -4003,7 +4054,8 @@ fn a_cli_command_two_plugins_declare_is_refused(cx: &mut TestAppContext) {
         Plugin {
             id: PluginId("dev.test.other".into()),
             source: root.display().to_string(),
-            approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap())).unwrap(),
+            approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap(), &root))
+                .unwrap(),
             root,
             commit: None,
             enabled: true,
@@ -4078,7 +4130,7 @@ fn forwarding(cx: &mut TestAppContext, powers: Value) -> (TempDir, Grant) {
     write_plugin(plugin.path(), &value);
     std::fs::write(plugin.path().join("main.js"), FORWARD).unwrap();
     open(cx, &[installed(plugin.path())]);
-    let grant = Grant::of(&read_manifest(plugin.path()).unwrap());
+    let grant = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     (plugin, grant)
 }
 
@@ -4236,7 +4288,7 @@ fn installed_example(root: &Path) -> Plugin {
     Plugin {
         id: manifest.id.clone(),
         source: root.display().to_string(),
-        approved: serde_json::to_value(Grant::of(&manifest)).unwrap(),
+        approved: serde_json::to_value(Grant::of(&manifest, &root)).unwrap(),
         root,
         commit: None,
         enabled: true,
@@ -4315,7 +4367,7 @@ fn installed_at(root: &Path) -> Plugin {
     Plugin {
         id: manifest.id.clone(),
         source: root.display().to_string(),
-        approved: serde_json::to_value(Grant::of(&manifest)).unwrap(),
+        approved: serde_json::to_value(Grant::of(&manifest, &root)).unwrap(),
         root,
         commit: None,
         enabled: true,

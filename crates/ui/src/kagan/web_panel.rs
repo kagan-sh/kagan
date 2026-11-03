@@ -140,12 +140,18 @@ pub(super) fn repaint(cx: &mut App) {
 fn frame(id: &str, title: &str, shown: &Shown, cx: &App) -> AnyElement {
     let note = shown.note.clone();
     #[cfg(target_os = "macos")]
-    let page = shown.note.is_none().then(|| shown.page.clone()).flatten();
-    div()
+    let page = shown.page.clone();
+    #[cfg(target_os = "macos")]
+    let fill_note = page.is_none();
+    #[cfg(not(target_os = "macos"))]
+    let fill_note = true;
+    let mut element = div()
         .id(ElementId::Name(format!("web-panel-{id}").into()))
         .size_full()
         .min_h_0()
         .overflow_hidden()
+        .flex()
+        .flex_col()
         .ui_observe_as(Facts {
             role: Role::Document,
             name: "Web panel".into(),
@@ -156,24 +162,21 @@ fn frame(id: &str, title: &str, shown: &Shown, cx: &App) -> AnyElement {
             hint: Some("kg ui cannot drive this page".into()),
         })
         .when_some(note.as_deref(), |element, note| {
-            element.child(sentence(id, note, cx))
-        })
-        .when(shown.note.is_none(), |element| {
-            #[cfg(target_os = "macos")]
-            {
-                element.children(page)
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                element
-            }
-        })
-        .into_any_element()
+            element.child(sentence(id, note, fill_note, cx))
+        });
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(page) = page {
+            element = element.child(page).min_h_0().flex_1();
+        }
+    }
+    element.into_any_element()
 }
 
-fn sentence(id: &str, note: &str, cx: &App) -> AnyElement {
+fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
     div()
-        .size_full()
+        .w_full()
+        .when(fill, gpui_kit::Styled::flex_1)
         .flex()
         .items_center()
         .justify_center()
@@ -264,6 +267,7 @@ fn open_page(
     match build(slot, file, root, hosts, generation, window, cx) {
         Ok(built) => {
             let view = built.view.clone();
+            let note = built.note.clone();
             save(
                 cx,
                 Held {
@@ -272,7 +276,7 @@ fn open_page(
                     panel: slot.contribution.clone(),
                     file: file.to_owned(),
                     generation,
-                    note: None,
+                    note: note.clone(),
                     view: Some(built.view),
                     theme: built.theme,
                     _drain: built.drain,
@@ -282,7 +286,7 @@ fn open_page(
                 },
             );
             Shown {
-                note: None,
+                note,
                 page: Some(view),
             }
         }
@@ -335,14 +339,19 @@ fn build(
     let panel = slot.contribution.clone();
     let navigation = plugin_id.clone();
     let protocol_plugin = plugin_id.clone();
-    let store = if PluginHost::global(cx)
+    let wants_store = PluginHost::global(cx)
         .read(cx)
-        .web_store(&slot.plugin, &slot.contribution)
-    {
-        let data = PluginHost::global(cx).read(cx).plugin_data(&slot.plugin);
-        Some(kg_plugins::keep_store(&data, &slot.contribution)?)
+        .web_store(&slot.plugin, &slot.contribution);
+    let (store, store_note) = if !wants_store {
+        (None, None)
+    } else if web::macos_major() < 14 {
+        (None, Some(web::STORE_NEEDS_MACOS.to_owned()))
     } else {
-        None
+        let data = PluginHost::global(cx).read(cx).plugin_data(&slot.plugin);
+        (
+            Some(kg_plugins::keep_store(&data, &slot.contribution)?),
+            None,
+        )
     };
     let builder = web::builder(
         &url,
@@ -379,6 +388,7 @@ fn build(
         drain,
         ipc,
         life,
+        note: store_note,
     })
 }
 
@@ -389,6 +399,7 @@ struct Built {
     drain: gpui_kit::Task<()>,
     ipc: async_channel::Sender<String>,
     life: std::sync::Arc<()>,
+    note: Option<String>,
 }
 
 #[cfg(target_os = "macos")]

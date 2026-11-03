@@ -55,7 +55,7 @@ pub use contributions::{Capability, Contributions, Follows, PanelContribution, P
 pub use manifest::{AgentChoice, Setting};
 pub use page::{
     MESSAGE_CAP, PageFileError, SCHEME, clear_stores, keep_store, parse_message, read_plugin_file,
-    store_dir,
+    read_store_ids, store_dir,
 };
 pub use ui_host::{HostContext, HostUi, HostUiEvent, ReviewComment, ToastAction};
 pub use watchdog::PluginStatus;
@@ -393,7 +393,7 @@ async fn activate(
         )));
     }
     let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
-    let asked = Grant::of(&discovered.manifest);
+    let asked = Grant::of(&discovered.manifest, &record.root);
     if !asked.within(&approved) {
         host.update(cx, |host, cx| {
             host.end_activation(&record.id);
@@ -1336,6 +1336,7 @@ impl PluginHost {
     pub fn web_store(&self, id: &PluginId, panel: &str) -> bool {
         self.active
             .get(id)
+            .filter(|active| active.grant.page_store)
             .and_then(|active| {
                 active
                     .manifest
@@ -1346,6 +1347,14 @@ impl PluginHost {
                     .map(PanelContribution::store)
             })
             .unwrap_or(false)
+    }
+
+    /// Whether the approved grant lets this plugin keep page data.
+    #[must_use]
+    pub fn allows_page_store(&self, id: &PluginId) -> bool {
+        self.active
+            .get(id)
+            .is_some_and(|active| active.grant.page_store)
     }
 
     /// This plugin's read-write data folder.

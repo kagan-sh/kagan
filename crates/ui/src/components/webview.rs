@@ -181,31 +181,35 @@ fn frame(
 ) -> impl gpui_kit::Styled + gpui_kit::ParentElement + gpui_kit::IntoElement {
     let note = shown.note.clone();
     #[cfg(target_os = "macos")]
-    let page = shown.note.is_none().then(|| shown.page.clone()).flatten();
-    div()
+    let page = shown.page.clone();
+    #[cfg(target_os = "macos")]
+    let fill_note = page.is_none();
+    #[cfg(not(target_os = "macos"))]
+    let fill_note = true;
+    let mut element = div()
         .id(ElementId::Name(format!("webview-{id}").into()))
         .ui_container()
         .size_full()
         .min_h_0()
         .overflow_hidden()
+        .flex()
+        .flex_col()
         .when_some(note, |element, note| {
-            element.child(sentence(id, note.as_str(), cx))
-        })
-        .when(shown.note.is_none(), |element| {
-            #[cfg(target_os = "macos")]
-            {
-                element.children(page)
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                element
-            }
-        })
+            element.child(sentence(id, note.as_str(), fill_note, cx))
+        });
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(page) = page {
+            element = element.child(page).min_h_0().flex_1();
+        }
+    }
+    element
 }
 
-fn sentence(id: &str, note: &str, cx: &App) -> AnyElement {
+fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
     div()
-        .size_full()
+        .w_full()
+        .when(fill, gpui_kit::Styled::flex_1)
         .flex()
         .items_center()
         .justify_center()
@@ -251,10 +255,15 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
     };
     #[cfg(target_os = "macos")]
     let keep = store.then(|| {
-        let data = kg_plugins::PluginHost::global(cx)
-            .read(cx)
-            .plugin_data(&plugin);
-        kg_plugins::keep_store(&data, id)
+        let host = kg_plugins::PluginHost::global(cx).read(cx);
+        if !host.allows_page_store(&plugin) {
+            return Ok(None);
+        }
+        if crate::web::macos_major() < 14 {
+            return Err(crate::web::STORE_NEEDS_MACOS.to_owned());
+        }
+        let data = host.plugin_data(&plugin);
+        kg_plugins::keep_store(&data, id).map(Some)
     });
     #[cfg(not(target_os = "macos"))]
     let keep = {
@@ -297,7 +306,7 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
-    keep: Option<Result<[u8; 16], String>>,
+    keep: Option<Result<Option<[u8; 16]>, String>>,
     #[cfg(target_os = "macos")] window: &mut Window,
     #[cfg(not(target_os = "macos"))] _window: &mut Window,
     cx: &mut App,
@@ -324,6 +333,25 @@ fn owned(
         }
         #[cfg(target_os = "macos")]
         Gate::Open => match keep {
+            Some(Err(message)) if message == crate::web::STORE_NEEDS_MACOS => {
+                let mut shown = open_owned(
+                    Open {
+                        owner: owner.clone(),
+                        id,
+                        url,
+                        hosts,
+                        store: None,
+                        index,
+                    },
+                    window,
+                    cx,
+                );
+                shown.note = Some(message.clone());
+                if let Some(index) = find(cx, owner.entity_id(), id) {
+                    cx.default_global::<Pages>().pages[index].note = Some(message);
+                }
+                shown
+            }
             Some(Err(message)) => {
                 if let Some(index) = index {
                     conceal_at(cx, index);
@@ -332,7 +360,7 @@ fn owned(
                 noted(&message)
             }
             other => {
-                let store = other.and_then(Result::ok);
+                let store = other.and_then(Result::ok).flatten();
                 open_owned(
                     Open {
                         owner: owner.clone(),

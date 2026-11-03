@@ -251,17 +251,79 @@ pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], String> {
     Ok(id)
 }
 
+/// Reads every durable store id under this plugin's data directory.
+#[must_use]
+pub fn read_store_ids(data: &Path) -> Vec<[u8; 16]> {
+    let pages = data.join("pages");
+    let Ok(entries) = std::fs::read_dir(&pages) else {
+        return Vec::new();
+    };
+    let mut ids = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path().join("store.id");
+        if let Ok(bytes) = std::fs::read(&path)
+            && bytes.len() == 16
+        {
+            let mut id = [0u8; 16];
+            id.copy_from_slice(&bytes);
+            ids.push(id);
+        }
+    }
+    ids
+}
+
 /// Removes every page store folder under this plugin's data directory.
 pub fn clear_stores(data: &Path) {
     let _ = std::fs::remove_dir_all(data.join("pages"));
 }
 
+/// Deletes each `WKWebsiteDataStore` for the given ids. Call after pages are dropped, on the main
+/// thread. macOS 14+ only; older systems never created a custom store.
+#[cfg(target_os = "macos")]
+pub(crate) async fn remove_web_stores(
+    ids: Vec<[u8; 16]>,
+    cx: &mut gpui_kit::AsyncApp,
+) -> Vec<String> {
+    use wry::WebViewExtDarwin as _;
+
+    if ids.is_empty() || macos_major() < 14 {
+        return Vec::new();
+    }
+    let mut warnings = Vec::new();
+    for id in ids {
+        let (send, receive) = futures::channel::oneshot::channel();
+        cx.update(|_| {
+            wry::WebView::remove_data_store(&id, move |result| {
+                let _ = send.send(result);
+            });
+        });
+        match receive.await {
+            Ok(Err(wry::Error::DataStoreInUse)) => warnings.push(
+                "the plugin is removed, but WebKit still held a page store (DataStoreInUse)".into(),
+            ),
+            Ok(Err(error)) => warnings.push(format!(
+                "the plugin is removed, but its page store was not deleted: {error}"
+            )),
+            Ok(Ok(())) | Err(_) => {}
+        }
+    }
+    warnings
+}
+
+#[cfg(target_os = "macos")]
+#[must_use]
+pub(crate) fn macos_major() -> u32 {
+    use objc2_foundation::NSProcessInfo;
+    let version = NSProcessInfo::processInfo().operatingSystemVersion();
+    u32::try_from(version.majorVersion).unwrap_or(0)
+}
+
 fn store_name(page: &str) -> String {
-    if !page.is_empty()
+    let safe = !matches!(page, "" | "." | "..")
         && page.bytes().all(|byte| {
             byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-' || byte == b'_'
-        })
-    {
+        });
+    if safe {
         page.to_owned()
     } else {
         let mut name = String::with_capacity(page.len() * 2);
@@ -292,5 +354,20 @@ mod store_tests {
     fn store_name_hexes_unsafe_ids() {
         assert_eq!(store_name("board"), "board");
         assert_eq!(store_name("a/b"), "612f62");
+        assert_eq!(store_name("."), "2e");
+        assert_eq!(store_name(".."), "2e2e");
+        assert_ne!(store_name(".."), store_name("."));
+    }
+
+    #[test]
+    fn read_store_ids_lists_each_page() {
+        let data = tempfile::tempdir().expect("temp");
+        let first = keep_store(data.path(), "board").expect("first");
+        let second = keep_store(data.path(), "other").expect("second");
+        let mut ids = read_store_ids(data.path());
+        ids.sort_unstable();
+        let mut want = vec![first, second];
+        want.sort_unstable();
+        assert_eq!(ids, want);
     }
 }

@@ -211,6 +211,54 @@ fn constructs_button(source: &str) -> bool {
     false
 }
 
+/// Whether any script under the plugin calls `.store(true)` on a view (opt-in page data).
+pub(crate) fn calls_webview_store(root: &Path) -> bool {
+    plugin_scripts(root).is_ok_and(|scripts| {
+        scripts
+            .iter()
+            .any(|path| std::fs::read_to_string(path).is_ok_and(|source| calls_store_true(&source)))
+    })
+}
+
+fn calls_store_true(source: &str) -> bool {
+    let mut parser = tree_sitter::Parser::new();
+    if parser
+        .set_language(&tree_sitter_javascript::LANGUAGE.into())
+        .is_err()
+    {
+        return false;
+    }
+    let Some(tree) = parser.parse(source, None) else {
+        return false;
+    };
+    let mut nodes = vec![tree.root_node()];
+    while let Some(node) = nodes.pop() {
+        if node.kind() == "call_expression"
+            && node
+                .child_by_field_name("function")
+                .is_some_and(|function| {
+                    function.kind() == "member_expression"
+                        && function
+                            .child_by_field_name("property")
+                            .is_some_and(|property| &source[property.byte_range()] == "store")
+                })
+            && node
+                .child_by_field_name("arguments")
+                .is_some_and(|arguments| {
+                    let mut cursor = arguments.walk();
+                    arguments
+                        .named_children(&mut cursor)
+                        .any(|argument| &source[argument.byte_range()] == "true")
+                })
+        {
+            return true;
+        }
+        let mut cursor = node.walk();
+        nodes.extend(node.children(&mut cursor));
+    }
+    false
+}
+
 fn contributions(value: &Value, declared: &mut Vec<String>) {
     match value {
         Value::Object(fields) => {

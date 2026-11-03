@@ -285,6 +285,24 @@ fn host_token(host: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
 }
 
+/// macOS 14+ is required for a per-plugin `WKWebsiteDataStore`; older versions share the default.
+pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
+
+#[cfg(target_os = "macos")]
+#[must_use]
+pub(crate) fn macos_major() -> u32 {
+    use objc2_foundation::NSProcessInfo;
+    let version = NSProcessInfo::processInfo().operatingSystemVersion();
+    u32::try_from(version.majorVersion).unwrap_or(0)
+}
+
+/// Whether a store id will actually get its own website data store (not the shared default).
+#[cfg(target_os = "macos")]
+#[must_use]
+pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 16]> {
+    store.filter(|_| major >= 14)
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn builder(
     url: &str,
@@ -293,13 +311,14 @@ pub(crate) fn builder(
 ) -> wry::WebViewBuilder<'static> {
     use wry::WebViewBuilderExtDarwin as _;
 
+    let custom = durable_store(store, macos_major());
     let builder = wry::WebViewBuilder::new()
         .with_url(url)
-        .with_incognito(store.is_none())
+        .with_incognito(custom.is_none())
         .with_navigation_handler(allow)
         .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
         .with_download_started_handler(|_url, _path| false);
-    match store {
+    match custom {
         Some(id) => builder.with_data_store_identifier(id),
         None => builder,
     }

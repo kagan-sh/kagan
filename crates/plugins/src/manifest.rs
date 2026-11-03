@@ -651,10 +651,13 @@ pub(crate) struct Grant {
     /// The folder a person approved for each folder setting, canonical.
     #[serde(default)]
     pub(crate) paths: BTreeMap<String, PathBuf>,
+    /// A web panel or `WebView.store(true)` keeps page cookies and storage.
+    #[serde(default)]
+    pub(crate) page_store: bool,
 }
 
 impl Grant {
-    pub(crate) fn of(manifest: &Manifest) -> Self {
+    pub(crate) fn of(manifest: &Manifest, root: &Path) -> Self {
         Self {
             powers: manifest.powers.clone(),
             folders: manifest
@@ -670,6 +673,12 @@ impl Grant {
                 })
                 .collect(),
             paths: BTreeMap::new(),
+            page_store: manifest
+                .ui
+                .panels()
+                .iter()
+                .any(crate::contributions::PanelContribution::store)
+                || crate::development::calls_webview_store(root),
         }
     }
 
@@ -734,6 +743,7 @@ impl Grant {
                 .map(|(key, path)| (key.clone(), path.clone()))
                 .collect(),
             folders,
+            page_store: self.page_store && other.page_store,
         }
     }
 
@@ -759,6 +769,7 @@ impl Grant {
                 .folders
                 .keys()
                 .all(|key| approved.folders.contains_key(key))
+            && (!self.page_store || approved.page_store)
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -808,6 +819,9 @@ impl Grant {
         }
         for title in self.folders.values() {
             lines.push(format!("reads a folder you choose ({title})"));
+        }
+        if self.page_store {
+            lines.push("keeps page data".into());
         }
         lines
     }
