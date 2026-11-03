@@ -718,6 +718,8 @@ fn local_fetch_hosts_are_checked() {
     };
     rejected("127.0.0.1", "http://127.0.0.1:<port>");
     rejected("localhost", "http://localhost:<port>");
+    rejected("::1", "IPv6 is unsupported");
+    rejected("[::1]", "IPv6 is unsupported");
     rejected("http://127.0.0.1", "explicit port");
     rejected("http://localhost", "explicit port");
     rejected("http://example.com:80", "only for 127.0.0.1 or localhost");
@@ -725,6 +727,19 @@ fn local_fetch_hosts_are_checked() {
         "https://127.0.0.1:443",
         "hostname, or http://127.0.0.1:<port>",
     );
+    rejected("http://[::1]:3847", "only for 127.0.0.1 or localhost");
+
+    for host in ["http://127.0.0.1:80", "http://localhost:80"] {
+        let mut value = manifest();
+        value["powers"]["fetch"] = json!([{ "host": host, "methods": ["GET"] }]);
+        std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+        let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+        assert!(
+            grant.lines().iter().any(|line| line.contains("port 80")),
+            "{host}: {:?}",
+            grant.lines()
+        );
+    }
 
     let mut value = manifest();
     value["powers"]["fetch"] = (1..=manifest::LOCAL_FETCH_CAP + 1)

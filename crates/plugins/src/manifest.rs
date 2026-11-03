@@ -164,6 +164,15 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
             "fetch host {raw:?} must be http://127.0.0.1:<port> or http://localhost:<port>"
         ));
     }
+    let address = raw.trim_start_matches('[').trim_end_matches(']');
+    if address
+        .parse::<std::net::IpAddr>()
+        .is_ok_and(|ip| ip.is_loopback())
+    {
+        return Err(
+            "loopback fetch needs an approved explicit HTTP port (IPv6 is unsupported)".into(),
+        );
+    }
     match url::Url::parse(raw) {
         Ok(url) => {
             if url.scheme() != "http" {
@@ -179,9 +188,7 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
                     "http fetch is only for 127.0.0.1 or localhost, not {host:?}"
                 ));
             }
-            let Some(port) = url.port() else {
-                return Err(format!("local fetch {raw:?} needs an explicit port"));
-            };
+            let port = explicit_loopback_port(raw)?;
             if url.path() != "/" && !url.path().is_empty()
                 || url.query().is_some()
                 || url.fragment().is_some()
@@ -204,6 +211,21 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
         }
         Err(_) => Ok(FetchKind::Remote),
     }
+}
+
+/// `Url::port` drops a scheme's default, so `http://127.0.0.1:80` looks unported.
+fn explicit_loopback_port(raw: &str) -> Result<u16, String> {
+    let Some((_, authority)) = raw.split_once("://") else {
+        return Err(format!("local fetch {raw:?} needs an explicit port"));
+    };
+    let authority = authority
+        .split_once(['/', '?', '#'])
+        .map_or(authority, |(head, _)| head);
+    let Some((_, port)) = authority.rsplit_once(':') else {
+        return Err(format!("local fetch {raw:?} needs an explicit port"));
+    };
+    port.parse::<u16>()
+        .map_err(|_| format!("local fetch {raw:?} needs a valid explicit port"))
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
