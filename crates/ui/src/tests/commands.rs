@@ -25,7 +25,7 @@ fn install_header(data: &std::path::Path) {
                 "ship",
                 "Ship it now please",
                 true,
-                Some("secondary-shift-i"),
+                Some("secondary-shift-u"),
             ),
             ("quiet", "Quiet", false, None),
         ],
@@ -553,7 +553,7 @@ fn a_header_tooltip_shows_that_command_s_shortcut(cx: &mut TestAppContext) {
     let ship = header_id("dev.kagan.header", "ship");
     wait_until(cx, |cx| shows_id(cx, window, &handoff));
     let handoff_keys = keys("secondary-shift-h");
-    let ship_keys = keys("secondary-shift-i");
+    let ship_keys = keys("secondary-shift-u");
     assert_eq!(
         hint_of_id(cx, window, &handoff),
         Some(format!("Hand off ({handoff_keys})"))
