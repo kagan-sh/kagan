@@ -192,7 +192,7 @@ Plugins contribute **panels** (a View class the entry exports) placed `left`, `c
 
 Only the innermost target under the pointer hears a drag, so a card wins over the column around it. A card that does not want a payload does the column's move in its own `on_drop`. The drag follows the pointer outside its source until the button is released. While it lasts, Escape belongs to the drag: it cancels, and the page under it stays open. Only the plugin that started a drag hears it; a release over another plugin's target cancels. Nothing is drawn under the pointer: paint the source as dragged from `started` until `ended` or `cancelled`, and a target as active while its `side` is not `null`. Scroll, click, text selection and `KgButton` work as before when nothing is dragged. An overlay may not use these calls. `kg ui snapshot` lists every drag source and drop target by its `id(...)`, and `kg ui drag` and `kg ui drop` drive them ([ui-driver.md](ui-driver.md)).
 
-**Not in v1:** pinch. Zoom by modifier-wheel and keys.
+**Not in v1:** pinch. gpui-shell's `on_pinch` reaches a plugin view, but kagan does not test or support it, and `kg ui` cannot drive it. Zoom by modifier-wheel and keys.
 
 Manifest form:
 

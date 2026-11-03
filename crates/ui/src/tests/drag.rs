@@ -8,7 +8,7 @@ use super::kagan::{label, open_with_plugins_then, shows, wait_until};
 
 const BOARD: &str = "dev.test.board";
 
-/// Two columns of cards, drawn as a center page. `board-log` shows what the script heard, which
+/// Two columns of cards, drawn as a center page, and a third column that is gone while a drag lasts. `board-log` shows what the script heard, which
 /// card looks dragged, and where on which card the pointer is.
 const SOURCE: &str = r#"// @ts-check
 import { View, div } from "gpui-kit";
@@ -53,7 +53,16 @@ export class Board extends View {
               .id("done")
               .w(150)
               .h(200)
-              .on_drop((event, cx) => this.note(`drop:done:${event.payload}`, cx)),
+              .on_drop((event, cx) => this.note(`drop:done:${event.payload}:${event.side}`, cx)),
+          )
+          .when(this.dragged === "-", (row) =>
+            row.child(
+              v_flex()
+                .id("gone-while-dragging")
+                .w(80)
+                .h(200)
+                .on_drop((event, cx) => this.note(`drop:gone:${event.payload}`, cx)),
+            ),
           ),
       )
       .child(new KgButton("board-log").label(`${this.log.join(" ")}|${this.dragged}|${this.over}`));
@@ -225,6 +234,54 @@ fn a_release_outside_every_target_drops_nothing(cx: &mut TestAppContext) {
     assert_eq!(
         label(cx, window, "board-log"),
         "drag:started drag:cancelled|-|-"
+    );
+}
+
+/// A column drop moves a ticket; the board reads only the payload, and the side is the middle.
+#[gpui_kit::test]
+fn a_drop_on_a_column_reports_the_column(cx: &mut TestAppContext) {
+    let (window, _data) = open_board(cx);
+    ui(cx, drag("done", DropSide::Middle, false)).unwrap();
+    assert_eq!(
+        label(cx, window, "board-log"),
+        "drag:started drop:done:ticket:card-a:middle drag:ended|-|-"
+    );
+}
+
+/// The middle of a card is where the board nests a ticket under another.
+#[gpui_kit::test]
+fn a_drop_on_the_middle_of_a_card_reports_middle(cx: &mut TestAppContext) {
+    let (window, _data) = open_board(cx);
+    ui(cx, drag("card-b", DropSide::Middle, false)).unwrap();
+    assert_eq!(
+        label(cx, window, "board-log"),
+        "drag:started drop:card-b:ticket:card-a:middle drag:ended|-|-"
+    );
+}
+
+/// A target that goes away once the drag starts fails the command, and leaves no drag or button
+/// held: the next drag works.
+#[gpui_kit::test]
+fn a_target_gone_after_the_press_cancels_the_drag(cx: &mut TestAppContext) {
+    let (window, _data) = open_board(cx);
+    assert!(matches!(
+        ui(cx, drag("gone-while-dragging", DropSide::Middle, false)),
+        Err(OpError::NotFound(_))
+    ));
+    assert_eq!(
+        label(cx, window, "board-log"),
+        "drag:started drag:cancelled|-|-"
+    );
+    assert_eq!(
+        ui(cx, UiOp::Drop { window: 0 }),
+        Err(OpError::Invalid(
+            "no drag is held; start one with kg ui drag --hold".into()
+        ))
+    );
+    ui(cx, drag("card-b", DropSide::Top, false)).unwrap();
+    assert_eq!(
+        label(cx, window, "board-log"),
+        "drag:started drag:cancelled drag:started drop:card-b:ticket:card-a:top drag:ended|-|-"
     );
 }
 

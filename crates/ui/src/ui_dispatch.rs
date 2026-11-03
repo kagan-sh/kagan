@@ -116,8 +116,16 @@ pub(crate) fn drag_within(
     mouse_down(window, start, MouseButton::Left, 1, cx);
     let from = start + point(px(0.), px(8.));
     move_pointer(window, from, Some(MouseButton::Left), cx);
-    // The target is found again: a source that looks dragged may have moved it.
-    let end = spot(window, to, within, at)?;
+    // The target is found again: a source that looks dragged may have moved it, or removed it. A
+    // target that is gone cancels the drag and lets go, so no button stays down.
+    let end = match spot(window, to, within, at) {
+        Ok(end) => end,
+        Err(error) => {
+            cx.stop_active_drag(window);
+            mouse_up(window, from, MouseButton::Left, 1, cx);
+            return Err(error);
+        }
+    };
     for fraction in [0.25, 0.5, 0.75, 1.] {
         let position = point(
             from.x + (end.x - from.x) * fraction,
