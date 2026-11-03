@@ -26,11 +26,18 @@ impl Ending {
         // can drain the final frame while the console closes.
         #[cfg(windows)]
         let _ = self.input.send(Outgoing::Bytes(b"\x1b[1;1R".to_vec()));
-        // An empty message closes the writer, which drops the pty's input.
+        // A checked write stuck on a full pty never reaches the close message
+        // below. On Unix, drop the master first so that write fails and the
+        // writer can exit; then the empty message is only a backstop. On
+        // Windows, ClosePseudoConsole can wait for the host, so the master
+        // stays until after the writer joins (the cursor reply above).
+        #[cfg(unix)]
+        self.master.take();
         let _ = self.input.send(Outgoing::Bytes(Vec::new()));
         if let Some(writer) = self.writer.take() {
             let _ = writer.join();
         }
+        #[cfg(not(unix))]
         self.master.take();
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();

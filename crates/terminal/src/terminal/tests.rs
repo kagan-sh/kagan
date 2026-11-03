@@ -796,6 +796,35 @@ fn submit_reports_a_failed_write() {
     drop(reap);
 }
 
+#[cfg(unix)]
+#[test]
+fn finish_settles_a_submit_blocked_on_a_full_pty() {
+    let terminal =
+        Terminal::spawn(sh("stty raw -echo; printf 'ready\\n'; sleep 30"), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    wait_for(&terminal, "ready");
+    let chunk = "x".repeat(64 * 1024);
+    let pending: Vec<_> = (0..4)
+        .map(|n| {
+            let text = format!("{n}-{chunk}");
+            terminal.submit(&text).unwrap().1
+        })
+        .collect();
+    thread::sleep(Duration::from_millis(100));
+    let finished = terminal.finish();
+    for written in pending {
+        let result = written.recv_timeout(Duration::from_secs(3));
+        assert!(
+            matches!(result, Ok(Err(_)) | Err(_)),
+            "blocked submit must settle when finish runs: {result:?}"
+        );
+    }
+    while !finished.settled() {
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(reap);
+}
+
 #[test]
 fn a_report_queues_no_scroll_reset_and_typing_queues_one() {
     let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
