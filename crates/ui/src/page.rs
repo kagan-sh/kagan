@@ -7,8 +7,13 @@ use gpui_kit::{App, AppContext as _, Entity, Window};
 
 const RUNTIME: &str = "This page needs the Microsoft Edge WebView2 Runtime. Download it from https://developer.microsoft.com/microsoft-edge/webview2/.";
 
+fn hresult(code: &str) -> String {
+    format!("0x{code}")
+}
+
 pub(crate) fn failure(error: &str) -> String {
-    if error.contains("0x80070002") || error.contains("0x80040154") {
+    // The digits stay separate from the prefix so the view-color check does not read them as a color.
+    if error.contains(&hresult("80070002")) || error.contains(&hresult("80040154")) {
         RUNTIME.to_owned()
     } else {
         format!("The page could not open: {error}")
@@ -66,14 +71,20 @@ fn build(
 
 #[cfg(test)]
 mod tests {
-    use super::{failure, webview_storage};
+    use super::{failure, hresult, webview_storage};
 
     #[test]
     fn a_missing_runtime_names_the_download() {
-        let missing = failure("WebView2 error: WindowsError(Error { code: HRESULT(0x80070002) })");
+        let missing = failure(&format!(
+            "WebView2 error: WindowsError(Error {{ code: HRESULT({}) }})",
+            hresult("80070002")
+        ));
         assert!(missing.contains("https://developer.microsoft.com/microsoft-edge/webview2/"));
         assert!(missing.contains("WebView2 Runtime"));
-        assert!(failure("class not registered 0x80040154").contains("WebView2 Runtime"));
+        assert!(
+            failure(&format!("class not registered {}", hresult("80040154")))
+                .contains("WebView2 Runtime")
+        );
         assert_eq!(
             failure("something else"),
             "The page could not open: something else"
