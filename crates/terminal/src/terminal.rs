@@ -88,7 +88,9 @@ impl Terminal {
         // take_writer clones the master fd. Non-blocking writes let finish cancel a
         // checked send that filled the buffer, instead of hanging in write_all.
         #[cfg(unix)]
-        if let Some(fd) = pair.master.as_raw_fd() {
+        let wait_fd = pair.master.as_raw_fd();
+        #[cfg(unix)]
+        if let Some(fd) = wait_fd {
             // SAFETY: fd is the live pty master; O_NONBLOCK is per open file description.
             unsafe {
                 let flags = libc::fcntl(fd, libc::F_GETFL);
@@ -147,6 +149,8 @@ impl Terminal {
                 shared.clone(),
                 input.clone(),
                 Arc::clone(&ended),
+                #[cfg(unix)]
+                wait_fd,
             )),
             writer: Some(thread_write(
                 writer,
@@ -492,6 +496,7 @@ fn thread_read(
     shared: Shared,
     replies: Sender<Outgoing>,
     ended: Arc<AtomicBool>,
+    #[cfg(unix)] wait_fd: Option<std::os::fd::RawFd>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
         let mut buf = [0_u8; 8192];
@@ -507,10 +512,16 @@ fn thread_read(
                         let _ = replies.send(Outgoing::Bytes(reply));
                     }
                 }
-                Err(error)
-                    if error.kind() == io::ErrorKind::WouldBlock
-                        || error.kind() == io::ErrorKind::Interrupted =>
-                {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    // O_NONBLOCK is shared across the master's dups; sleep would spin an idle pty.
+                    #[cfg(unix)]
+                    if let Some(fd) = wait_fd {
+                        wait_ready(fd, libc::POLLIN);
+                    } else {
+                        std::thread::sleep(Duration::from_micros(100));
+                    }
+                    #[cfg(not(unix))]
                     std::thread::sleep(Duration::from_micros(100));
                 }
                 Err(_) => break,
@@ -522,6 +533,25 @@ fn thread_read(
         }
         ended.store(true, Ordering::Release);
     })
+}
+
+#[cfg(unix)]
+fn wait_ready(fd: std::os::fd::RawFd, events: libc::c_short) {
+    loop {
+        let mut pfd = libc::pollfd {
+            fd,
+            events,
+            revents: 0,
+        };
+        // SAFETY: pfd is one valid pollfd; fd is a live pty master.
+        let n = unsafe { libc::poll(&mut pfd, 1, -1) };
+        if n >= 0 {
+            return;
+        }
+        if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+            return;
+        }
+    }
 }
 
 fn thread_write(
