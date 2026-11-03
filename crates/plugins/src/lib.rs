@@ -19,6 +19,7 @@ mod manifest;
 mod ops;
 mod page;
 mod process;
+mod schedule;
 mod secret;
 mod share;
 mod source;

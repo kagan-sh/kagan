@@ -24,7 +24,7 @@ use crate::manifest::{self, AgentChoice, Grant, Manifest, Scope, Setting, Tool};
 use crate::{
     DropPages, HostUi, INSTRUCT_CAP, INSTRUCT_TIMEOUT, INSTRUCT_TOTAL, Level, PluginStatus,
     PluginTheme, Result, SET, TOOL_TIMEOUT, area, commands, event_data, http_grants, index, ops,
-    process, secret, source, watchdog, web_store,
+    process, schedule, secret, source, watchdog, web_store,
 };
 
 #[derive(Clone, Debug)]
@@ -203,6 +203,8 @@ pub(crate) struct Active {
     /// Counts each load of this plugin, so a view from an older load can be told apart.
     pub(crate) generation: u64,
     pub(crate) activation: u64,
+    /// Dropping these stops the plugin's schedules.
+    pub(crate) _schedules: Vec<Task<()>>,
 }
 
 // Kept apart from the other settings so `host.settings()` never shows them. `None` until picked.
@@ -359,6 +361,7 @@ pub(crate) async fn activate(
         let manifest = &discovered.manifest;
         let identity = (manifest.name.clone(), manifest.version.clone());
         host.identities.insert(record.id.clone(), identity);
+        let schedules = schedule::start(&record.id, &manifest.schedules, cx);
         host.active.insert(
             record.id.clone(),
             Active {
@@ -375,6 +378,7 @@ pub(crate) async fn activate(
                 loaded: None,
                 generation,
                 activation,
+                _schedules: schedules,
             },
         );
         cx.notify();
@@ -1238,6 +1242,15 @@ impl PluginHost {
     }
 
     pub(crate) fn load(&mut self, id: &PluginId, cx: &mut Context<Self>) -> Result<Rc<Jobs>> {
+        // A load whose view crashed is dead: retire it before handing out its queue again.
+        let crashed = self
+            .active
+            .get(id)
+            .and_then(|active| active.loaded.as_ref())
+            .is_some_and(|loaded| loaded.watchdog.error.is_some());
+        if crashed {
+            self.unload(id, cx);
+        }
         if let Some(loaded) = self
             .active
             .get(id)

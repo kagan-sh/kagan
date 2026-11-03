@@ -53,6 +53,7 @@ kagan owns the manifest and builds each plugin's gpui-shell `Policy` from it. Th
     { "name": "vscodium", "commands": [{ "name": "open", "usage": "open <path>[:line]" }] }
   ],
   "events": ["thread.idle", "thread.archived"],
+  "schedules": [{ "id": "sync", "every": 15 }],
   "skills": ["skills/vscodium"],
   "themes": [{ "id": "midnight", "file": "themes/midnight.json" }]
 }
@@ -72,6 +73,7 @@ Rules:
 - A tool name is global to an agent, not namespaced by plugin: it may be declared by one installed plugin only. When two enabled plugins declare the same name, the agent sees the earlier plugin's tool (plugins in id order), and `kg status` and the plugin's Settings row say which plugin the name also belongs to. Prefix tool names with the plugin's own id to keep them distinct.
 - `instructions` is one plugin-level text. `kg mcp` sends it as the MCP server `instructions`; each tool description must still stand alone, since an agent may ignore it.
 - `"instruct": true` asks for a job each time a program starts with agent integration. The job is `{ kind: "instruct", threadId, projectId }`. Reply with a string or `{ text }`, at most 4096 bytes; empty, a crash, or a 2-second timeout adds nothing. Each kept reply is prefixed with `Plugin <id>:` and joined replies (at most 16 KiB total, dropping later whole replies) append to that start's note and MCP instructions (decision 130). The install screen says "adds instructions to a thread's program".
+- `schedules` runs a job on a timer, while kagan is open: `{ id, every }` with `every` a whole number of minutes, 1 to 1440, and each `id` unique. Each run loads the plugin if it is not loaded, then sends `{ kind: "schedule", name }`. The run ends when the plugin replies or fails, or after 2 minutes. A loop waits for its last run to end before the next wait, so runs never overlap, and a failure or timeout is written to the plugin log. A timeout also retires that load, so the next run starts a new one. The first run comes one interval after the plugin starts. Nothing runs while kagan is closed, and a missed run is not made up. Disabling, removing or reloading the plugin stops the loops. A reload starts them again from zero. The install screen says "runs on its own every 15 minutes while kagan is open", and an update that adds a schedule or changes its interval asks again (decision 146).
 - `when` on a command is `always`, `thread` (a thread is on screen) or `project` (a project is on screen; Settings covers the window, so none is). A `key` runs its command only in the context `when` names. `"header": true` draws the command as a small button on the shown thread's title bar, before Stop and the thread menu; it needs `when: "thread"` (decision 129). `"menu": true` adds the command as a row in the shown thread's actions menu (the ellipsis), after Rename and before Save diagnostics, labeled with its title; it needs `when: "thread"` too (decision 141). A command may set both, and `menu` is a placement, not a key: the command still has no key unless it declares one.
 - A command's `key` is not bound when the window already takes it, with a built-in shortcut or one the person saved. A key takes it when one key sequence starts with the other, so `secondary-n x` overlaps `secondary-n`. A person binds a command's key in Settings → Keyboard, or with `kg keymap set <plugin-id>:<command> <key>`; `kg keymap remove` leaves it with no key and `--reset` goes back to the manifest's. A saved key gets the same check: it answers `{ ok: false, conflict }` when a window key or another plugin command's key takes it, and the conflict is named as `kg keymap` names it (`NewThread`, `<plugin-id>:<command>`). When two plugin commands want the same key, a key the person saved wins over a manifest's, whatever the plugin order; otherwise the first in plugin and command order keeps it. Settings → Keyboard lists every command of each enabled plugin under the plugin's name, with its key or Not set, and a key that is not bound says what took it on both rows. The plugin's log says it too (`kg plugin logs <id>`). A `key` is optional: a command without one is still found and bound there. The keys are bound again when the window's shortcuts change, so a freed key starts working and a taken one stops.
 - A tool's `scope` is `all` (every thread) or `tagged` (only threads carrying this plugin's metadata, as vocodr's master thread). kagan validates every tool call's input against its `input` schema before the job and fails the call with the schema error.
@@ -81,7 +83,7 @@ Rules:
 ## Lifecycle
 
 1. **Discover**: read `kagan.json` from each installed plugin folder. Register commands, keys, UI contributions, tools, CLI names, settings and skills. No script runs.
-2. **Load** on first use: a panel comes on screen, a command runs, a tool is called, a CLI command runs, or a subscribed event fires. gpui-shell loads the entry's default-export View under the plugin's own `Policy` and HostModule registry, in a hidden window (`show: false`) when none of its UI is on screen.
+2. **Load** on first use: a panel comes on screen, a command runs, a tool is called, a CLI command runs, a subscribed event fires, or a schedule is due. gpui-shell loads the entry's default-export View under the plugin's own `Policy` and HostModule registry, in a hidden window (`show: false`) when none of its UI is on screen.
 3. **Serve**: that View's `init` starts the job loop with `cx.spawn`; its UI Views render as usual.
 4. **Unload** on disable, uninstall or reload: gpui-shell cancels every task under the plugin's `Policy`; kagan closes the plugin's job queue (its pending `next()` rejects, so it cannot take anyone else's job), fails its open jobs, and kills every process tree it started for the plugin.
 
@@ -118,8 +120,9 @@ A job is plain data with a `kind`:
 | `event` | `{ type, threadId, projectId, data }` | none |
 | `page` | `{ panelId, message }` | none |
 | `instruct` | `{ threadId, projectId }` | string or `{ text }`, or nothing |
+| `schedule` | `{ name }`, the schedule's `id` | nothing. The reply or failure ends the run. |
 
-Timeouts: tool and CLI 120 s, instruct 2 s (empty on timeout), others 10 s; the caller gets a plain error naming the plugin, except instruct, which skips a late or failed reply. A `cli` job's `projectId` is the thread's project, else the project whose folder contains `cwd`.
+Timeouts: tool and CLI 120 s, schedule 120 s, instruct 2 s (empty on timeout), others 10 s; the caller gets a plain error naming the plugin, except instruct, which skips a late or failed reply. A `cli` job's `projectId` is the thread's project, else the project whose folder contains `cwd`.
 
 **The UI thread is shared.** Each plugin has its own QuickJS VM, and every one runs on the UI thread. gpui-shell cuts off a call that runs past its budget: 50 ms for render and layout, 500 ms for an event handler or a job, 5 s for loading. A JS loop therefore stalls the whole app for up to that long per call, and the call fails. So heavy work goes to the `process` area (`process.run`). kagan times every render; a plugin whose renders average over 16 ms, repeatedly, is marked slow on its plugin row with an offer to disable it. Jobs are not timed, so a slow job shows only as a stalled window.
 
@@ -282,7 +285,7 @@ A `secret` setting (decision 104):
 
 ## Not in this API
 
-- HTTP routes, background cron, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it.
+- HTTP routes, background services that stay running, cron expressions, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it. Timers are `schedules` (decision 146).
 - Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131), and plugins cannot use it. A thread's agent can drive it with `kg browser`, and no power reaches that page (decision 143). `openUrl` still opens the system browser. A plugin shows one page with `WebView` (121), from localhost or a `powers.fetch` host, or its own HTML as a web panel (133). Neither is a general browser.
 
 ## Measured by the spike

@@ -108,7 +108,8 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | other bb events, and `experimental_hooks` | none | gap. Cannot move. A hook cannot block or change a turn. |
 | own `bb.rpc.register` and `bb.realtime.publish`, between this plugin's server and its own app | a function call and `cx.notify()` | direct. Both halves are this one script. |
 | `bb.sdk.plugins.callRpc`, `bb.http.route`, `bb plugin token` | none | gap. Cannot move. No call into another plugin, no route, and no token. |
-| `background` service or schedule | none | gap. Cannot move. No clock and no process that outlives a job. A command or an event can do the work while the app is open. |
+| `background` schedule | `schedules`: `[{ "id", "every" }]` | close. Whole minutes, 1 to 1440, while kagan is open. The job is `schedule`, `{ name }`; the reply ends the run. A missed run is not made up. Cron and a service that keeps running are still gap. |
+| `background` service that keeps running | none | gap. Cannot move. No process outlives a job. A schedule or an event can do the work while the app is open. |
 | providers, environment providers, machines, helper AI services | none | gap. Cannot move. |
 | thread side panel, `experimental_tab` on a thread, `threadPanelAction` | `ui.panels` `"placement": "right"` | needs right panel support. See Right panels. |
 | `navPanel` | `"placement": "center"` | close. It owns a page: a rail spot and a header title. The host draws the title and Close. The terminal stays mounted. Lost: `subPath` routing and deep links, `headerContent`, `experimental_useBadge`. Only its `experimental_sidebar`, and `experimental_sidebarNavigation` with `"placement": "list"`, go to `"placement": "left"`: one rail icon, the body under the threads, a second click closes it. |
@@ -136,7 +137,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 
 A panel may set `"follows": "thread"`. Read `context()` in `init` and loop on `onContextChanged()`. `openPanel` and `kg surface open` / `close` / `list` are the same path.
 
-Copy from `examples/plugins`: `panel`, `web-panel`, `cli`, `sidebar`, `review`, `overlay`, `header`, `theme`.
+Copy from `examples/plugins`: `panel`, `web-panel`, `cli`, `sidebar`, `review`, `overlay`, `header`, `theme`, `schedule`.
 
 ## Themes
 
