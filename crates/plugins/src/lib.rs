@@ -42,11 +42,13 @@ use gpui_kit::{
 use gpui_shell::policy::{self, Policy};
 use gpui_shell::{Capabilities, HttpRequestGrant, LoadedApplication, ScriptView, ShellRuntime};
 use kg_core::{PluginRequest, Workspace};
-use kg_domain::{AgentTool, Event, Op, OpError, OpResult, PluginId, ThemeFile, ThreadId, ThreadOp};
+use kg_domain::{
+    AgentTool, Event, Op, OpError, OpResult, PluginId, ProjectId, ThemeFile, ThreadId, ThreadOp,
+};
 use serde_json::{Map, Value};
 
 use crate::jobs::{Ended, Jobs};
-use crate::manifest::{Grant, Manifest, Method, Scope, Tool};
+use crate::manifest::{Fetch, Grant, Manifest, Scope, Tool};
 pub use catalog::{Example, capabilities, examples, kinds_in, matched};
 pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
 pub use manifest::{AgentChoice, Setting};
@@ -62,7 +64,14 @@ fn event_data(kind: &kg_domain::EventKind) -> Value {
         .unwrap_or(Value::Null)
 }
 
+fn http_grants(fetch: &[Fetch]) -> std::result::Result<Vec<HttpRequestGrant>, String> {
+    fetch.iter().map(Fetch::http_grant).collect()
+}
+
 const TOOL_TIMEOUT: Duration = Duration::from_mins(2);
+const INSTRUCT_TIMEOUT: Duration = Duration::from_secs(2);
+const INSTRUCT_CAP: usize = 4096;
+const INSTRUCT_TOTAL: usize = 16 * 1024;
 /// What every reader but the plugin sees for a secret setting that holds a value.
 const SET: &str = "set";
 
@@ -591,6 +600,10 @@ fn dispatch(request: PluginRequest, cx: &mut App) -> Task<Result<OpResult>> {
             name,
             input,
         } => cx.spawn(async move |cx| call_tool(&host, &thread_id, &name, input, cx).await),
+        PluginRequest::Instruct {
+            thread_id,
+            project_id,
+        } => cx.spawn(async move |cx| instruct(&host, &thread_id, &project_id, cx).await),
         PluginRequest::Plugin(op, requester) => {
             cx.spawn(async move |cx| ops::run(&host, op, requester, cx).await)
         }
@@ -763,6 +776,93 @@ async fn call_tool(
     }
 }
 
+async fn instruct(
+    host: &Entity<PluginHost>,
+    thread_id: &ThreadId,
+    project_id: &ProjectId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let plugins: Vec<PluginId> = host.read_with(cx, |host, _| {
+        host.active
+            .iter()
+            .filter(|(_, active)| active.manifest.instruct)
+            .map(|(id, _)| id.clone())
+            .collect()
+    });
+    if plugins.is_empty() {
+        return Ok(OpResult::Output(Some(String::new())));
+    }
+    let secrets = host.read_with(cx, |host, _| host.secrets.clone());
+    let mut tasks = Vec::with_capacity(plugins.len());
+    for plugin in plugins {
+        let Ok(jobs) = host.update(cx, |host, cx| host.load(&plugin, cx)) else {
+            continue;
+        };
+        let job = Map::from_iter([
+            ("kind".to_owned(), "instruct".into()),
+            ("threadId".to_owned(), thread_id.0.clone().into()),
+            ("projectId".to_owned(), project_id.0.clone().into()),
+        ]);
+        let Some((id, replied)) = jobs.send(job) else {
+            continue;
+        };
+        let timer = cx.background_executor().timer(INSTRUCT_TIMEOUT);
+        let secrets = secrets.clone();
+        tasks.push(async move {
+            let Ok(Ok(reply)) = jobs.settled(&id, &replied, timer).await else {
+                return String::new();
+            };
+            let text = instruct_text(&reply);
+            if text.is_empty() {
+                return String::new();
+            }
+            let text = secrets.redact(&plugin, &text);
+            let text = truncate(&text, INSTRUCT_CAP);
+            format!("Plugin {plugin}:\n{text}")
+        });
+    }
+    let parts = futures::future::join_all(tasks).await;
+    let mut joined = String::new();
+    for part in parts.into_iter().filter(|text| !text.is_empty()) {
+        let next = if joined.is_empty() {
+            part.len()
+        } else {
+            joined.len() + 2 + part.len()
+        };
+        if next > INSTRUCT_TOTAL {
+            break;
+        }
+        if !joined.is_empty() {
+            joined.push_str("\n\n");
+        }
+        joined.push_str(&part);
+    }
+    Ok(OpResult::Output(Some(joined)))
+}
+
+fn instruct_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Object(map) => map
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Array(_) => String::new(),
+    }
+}
+
+fn truncate(text: &str, cap: usize) -> String {
+    if text.len() <= cap {
+        return text.to_owned();
+    }
+    let mut end = cap;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_owned()
+}
+
 type Prepared = (Policy, Entity<process::Processes>);
 
 impl Active {
@@ -827,17 +927,7 @@ impl Active {
             .storage(true)
             .clipboard_read(powers.clipboard.read)
             .clipboard_write(powers.clipboard.write)
-            .http_requests(powers.fetch.iter().map(|fetch| {
-                HttpRequestGrant::new(
-                    fetch.host.clone(),
-                    fetch.methods.iter().map(|method| match method {
-                        Method::Get => "GET",
-                        Method::Post => "POST",
-                    }),
-                    Vec::<String>::new(),
-                    ["/"],
-                )
-            }));
+            .http_requests(http_grants(&powers.fetch).map_err(|error| failed(&error))?);
 
         let processes = cx.new(|_| process::Processes::default());
         let policy = Policy::new()
@@ -1049,7 +1139,7 @@ impl PluginHost {
                     .powers
                     .fetch
                     .iter()
-                    .map(|fetch| fetch.host.clone())
+                    .filter_map(|fetch| fetch.view_host().ok())
                     .collect();
                 return Some((view, hosts));
             }

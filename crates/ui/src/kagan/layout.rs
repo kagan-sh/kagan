@@ -631,8 +631,9 @@ impl Kagan {
             h_flex()
                 .id("thread-heading")
                 .ui_container()
-                .max_w_full()
+                .flex_1()
                 .min_w_0()
+                .justify_center()
                 .gap_1p5()
                 .child(self.title_line(thread, cx))
                 .when_some(project, |heading, project| {
@@ -661,43 +662,32 @@ impl Kagan {
         // Controls occlude the drag area, or Windows takes a press on them as a caption drag.
         TitleBar::new().pl_0().child(
             h_flex()
-                .relative()
                 .size_full()
-                .children(label.map(|label| {
-                    h_flex()
-                        .absolute()
-                        .inset_0()
-                        .px_40()
-                        .justify_center()
-                        .child(label)
-                }))
+                .items_center()
+                .pr_2()
+                .when(cfg!(target_os = "macos"), Styled::pl_20)
+                .when(!cfg!(target_os = "macos"), Styled::pl_3)
+                .child(toggle(
+                    "left-sidebar-toggle",
+                    if left_shown {
+                        "Hide sidebar"
+                    } else {
+                        "Show sidebar"
+                    },
+                    left_shown,
+                    self.in_settings(),
+                    (IconName::PanelLeft, IconName::PanelLeftOpen),
+                    ToggleSidebar,
+                    cx,
+                ))
+                .child(h_flex().flex_1().min_w_0().children(label))
                 .child(
                     h_flex()
-                        .size_full()
-                        .justify_between()
-                        .pr_2()
-                        .when(cfg!(target_os = "macos"), Styled::pl_20)
-                        .when(!cfg!(target_os = "macos"), Styled::pl_3)
-                        .child(toggle(
-                            "left-sidebar-toggle",
-                            if left_shown {
-                                "Hide sidebar"
-                            } else {
-                                "Show sidebar"
-                            },
-                            left_shown,
-                            self.in_settings(),
-                            (IconName::PanelLeft, IconName::PanelLeftOpen),
-                            ToggleSidebar,
-                            cx,
-                        ))
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .occlude()
-                                .children(controls)
-                                .child(self.right_button(drawn, self.waiting_count(cx), cx)),
-                        ),
+                        .gap_2()
+                        .occlude()
+                        .flex_none()
+                        .children(controls)
+                        .child(self.right_button(drawn, self.waiting_count(cx), cx)),
                 ),
         )
     }

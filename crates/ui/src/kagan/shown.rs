@@ -402,6 +402,7 @@ impl Kagan {
         let live = running(thread);
         h_flex()
             .gap_2()
+            .children(super::header::buttons(cx))
             .when(live, |header| {
                 let keys = bound_keys(&StopThread, cx);
                 let tip = if keys.is_empty() {

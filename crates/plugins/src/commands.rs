@@ -53,6 +53,8 @@ pub(crate) struct Command {
     pub(crate) key: Option<String>,
     #[serde(default)]
     pub(crate) when: CommandWhen,
+    #[serde(default)]
+    pub(crate) header: bool,
 }
 
 /// Where a command's key comes from. A key the person saved is bound before any manifest's.
@@ -90,6 +92,10 @@ impl CommandContribution {
     #[must_use]
     pub fn when(&self) -> CommandWhen {
         self.command.when
+    }
+    #[must_use]
+    pub fn header(&self) -> bool {
+        self.command.header
     }
     #[must_use]
     pub fn source(&self) -> KeySource {

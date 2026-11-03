@@ -31,6 +31,7 @@ pub struct Thread {
     /// The watcher uses it so a spinner that is still up does not open a second turn.
     pub(crate) turn_open: bool,
     pub(crate) plain_since: Option<Instant>,
+    pub(crate) instruct: Option<String>,
 }
 
 impl Thread {
@@ -50,6 +51,7 @@ impl Thread {
             busy: false,
             turn_open: false,
             plain_since: None,
+            instruct: None,
         }
     }
 

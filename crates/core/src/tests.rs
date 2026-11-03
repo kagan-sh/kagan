@@ -4549,16 +4549,105 @@ async fn a_cursor_agent_thread_receives_the_threads_skill(cx: &mut TestAppContex
     let agent = dunce::canonicalize(fixture.dir.path())
         .unwrap()
         .join("agent");
+    let cursor = agent.join("threads").join(&id.0).join("cursor");
     assert_eq!(args[0], "--plugin-dir");
-    assert_eq!(args[1], agent.display().to_string());
+    assert_eq!(args[1], cursor.display().to_string());
     assert_eq!(args.last().map(String::as_str), Some("--person-arg"));
     let skill = std::fs::read_to_string(agent.join("skills/kg-threads/SKILL.md")).unwrap();
     assert!(skill.contains("name: kg-threads"), "{skill}");
-    let rule = std::fs::read_to_string(agent.join("rules/kagan.mdc")).unwrap();
+    assert_eq!(
+        std::fs::read_link(cursor.join("skills")).unwrap(),
+        dunce::canonicalize(agent.join("skills")).unwrap()
+    );
+    let rule = std::fs::read_to_string(cursor.join("rules/kagan.mdc")).unwrap();
     assert!(rule.contains("alwaysApply: true"), "{rule}");
     assert!(rule.contains("kg-threads"), "{rule}");
-    assert!(agent.join(".cursor-plugin/plugin.json").exists());
+    assert!(cursor.join(".cursor-plugin/plugin.json").exists());
+    assert!(!agent.join("rules/kagan.mdc").exists());
     assert_eq!(env["KG_THREAD_ID"], id.0);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn each_cursor_thread_keeps_its_own_rule_file(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let first_run = fixture.dir.path().join("cursor-a");
+    let second_run = fixture.dir.path().join("cursor-b");
+    let first = fake_agent(&first_run, "cursor-agent");
+    let second = fake_agent(&second_run, "cursor-agent");
+    let (first_id, _reap_a) = started(&fixture, first.to_str().unwrap(), cx).await;
+    ran(&first_run);
+    let agent = dunce::canonicalize(fixture.dir.path())
+        .unwrap()
+        .join("agent");
+    let first_rule = agent
+        .join("threads")
+        .join(&first_id.0)
+        .join("cursor/rules/kagan.mdc");
+    std::fs::write(&first_rule, "keep-first\n").unwrap();
+    let (second_id, _reap_b) = started(&fixture, second.to_str().unwrap(), cx).await;
+    ran(&second_run);
+    let second_rule = agent
+        .join("threads")
+        .join(&second_id.0)
+        .join("cursor/rules/kagan.mdc");
+    assert_ne!(first_rule, second_rule);
+    assert_eq!(
+        std::fs::read_to_string(&first_rule).unwrap(),
+        "keep-first\n"
+    );
+    assert!(
+        std::fs::read_to_string(&second_rule)
+            .unwrap()
+            .contains("alwaysApply: true")
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_non_agent_start_clears_prior_instruct(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("claude-then-clear");
+    let program = fake_agent(&run, "claude");
+    let (id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
+    ran(&run);
+    cx.update(|cx| {
+        let entity = Workspace::global(cx)
+            .read(cx)
+            .thread(&id)
+            .cloned()
+            .expect("thread");
+        entity.update(cx, |thread, _| {
+            thread.instruct = Some("old persona".into());
+        });
+    });
+    op(
+        Op::Preference(PreferenceOp::Set {
+            key: "agent-integration".into(),
+            value: json!(false),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Active, cx).await;
+    let instruct = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .thread(&id)
+            .expect("thread")
+            .read(cx)
+            .instruct
+            .clone()
+    });
+    assert_eq!(instruct, None);
 }
 
 #[cfg(unix)]
