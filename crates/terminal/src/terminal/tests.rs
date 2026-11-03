@@ -815,7 +815,7 @@ fn finish_settles_a_submit_blocked_on_a_full_pty() {
     for written in pending {
         let result = written.recv_timeout(Duration::from_secs(3));
         assert!(
-            matches!(result, Ok(Err(_)) | Err(_)),
+            matches!(result, Ok(Err(_))),
             "blocked submit must settle when finish runs: {result:?}"
         );
     }
