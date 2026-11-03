@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 43b9a70291a87046b426171813bca0998156565948752f6dfba2c016ff090c3d
+cargo-lock 4efa06db41abede13839711258737d2811adf41eca71585741275804ae3fd235
 
 kagan itself is MIT. See LICENSE.
 

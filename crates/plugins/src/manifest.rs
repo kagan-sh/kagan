@@ -164,11 +164,7 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
             "fetch host {raw:?} must be http://127.0.0.1:<port> or http://localhost:<port>"
         ));
     }
-    let address = raw.trim_start_matches('[').trim_end_matches(']');
-    if address
-        .parse::<std::net::IpAddr>()
-        .is_ok_and(|ip| ip.is_loopback())
-    {
+    if is_loopback_literal(raw) {
         return Err(
             "loopback fetch needs an approved explicit HTTP port (IPv6 is unsupported)".into(),
         );
@@ -210,6 +206,19 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
             ))
         }
         Err(_) => Ok(FetchKind::Remote),
+    }
+}
+
+/// True for `127.0.0.0/8`, `::1`, and IPv4-mapped forms such as
+/// `[::ffff:127.0.0.1]` that would otherwise become a remote HTTPS grant.
+fn is_loopback_literal(raw: &str) -> bool {
+    let address = raw.trim_start_matches('[').trim_end_matches(']');
+    match address.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback(),
+        Ok(std::net::IpAddr::V6(ip)) => {
+            ip.is_loopback() || ip.to_ipv4_mapped().is_some_and(|ip| ip.is_loopback())
+        }
+        Err(_) => false,
     }
 }
 

@@ -720,6 +720,9 @@ fn local_fetch_hosts_are_checked() {
     rejected("localhost", "http://localhost:<port>");
     rejected("::1", "IPv6 is unsupported");
     rejected("[::1]", "IPv6 is unsupported");
+    rejected("::ffff:127.0.0.1", "IPv6 is unsupported");
+    rejected("[::ffff:127.0.0.1]", "IPv6 is unsupported");
+    rejected("[::ffff:7f00:1]", "IPv6 is unsupported");
     rejected("http://127.0.0.1", "explicit port");
     rejected("http://localhost", "explicit port");
     rejected("http://example.com:80", "only for 127.0.0.1 or localhost");
