@@ -379,6 +379,7 @@ fn a_select_in_the_ask_form_picks_none_from_its_menu(cx: &mut TestAppContext) {
                         label: "Fast".into(),
                     }],
                     default: Some("fast".into()),
+                    required: false,
                 }]),
             }),
             cx,

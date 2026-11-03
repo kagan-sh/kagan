@@ -41,7 +41,7 @@ export type AskField =
   | { type: "string"; id: string; label: string; placeholder?: string; default?: string }
   | { type: "boolean"; id: string; label: string; default?: boolean }
   | { type: "number"; id: string; label: string; default?: number }
-  | { type: "select"; id: string; label: string; choices: { id: string; label: string }[]; default?: string };
+  | { type: "select"; id: string; label: string; choices: { id: string; label: string }[]; default?: string; required?: boolean };
 /** Raise a question. Optional `fields` are drawn by the host; `answered` carries their values. */
 export function ask(id: string, title: string, options: { id: string; label: string }[], fields?: AskField[]): Promise<string>;
 export function sidebar(): Sidebar;

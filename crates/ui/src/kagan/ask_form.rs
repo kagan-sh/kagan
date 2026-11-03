@@ -241,9 +241,7 @@ pub(super) fn fields(
                     text_field(asked, draft, id, label, cx)
                 }
                 AskField::Boolean { id, label, .. } => flag_field(asked, draft, kagan, id, label),
-                AskField::Select {
-                    id, label, choices, ..
-                } => select_field(asked, draft, kagan, id, label, choices, cx),
+                AskField::Select { .. } => select_field(asked, draft, kagan, field, cx),
             };
             v_flex()
                 .gap_1()
@@ -348,17 +346,27 @@ fn select_field(
     asked: &PendingInteraction,
     draft: &Draft,
     kagan: &Entity<Kagan>,
-    id: &str,
-    label: &str,
-    choices: &[kg_domain::InteractionOption],
+    field: &AskField,
     cx: &App,
 ) -> AnyElement {
+    let AskField::Select {
+        id,
+        label,
+        choices,
+        required,
+        ..
+    } = field
+    else {
+        return div().into_any_element();
+    };
     let picked = draft.picks.get(id).cloned().flatten();
     let shown = choices
         .iter()
         .find(|choice| Some(&choice.id) == picked.as_ref())
         .map_or_else(|| "None".to_owned(), |choice| choice.label.clone());
-    let options: Vec<(Option<String>, String)> = std::iter::once((None, "None".to_owned()))
+    let none = (!*required).then(|| (None, "None".to_owned()));
+    let options: Vec<(Option<String>, String)> = none
+        .into_iter()
         .chain(
             choices
                 .iter()

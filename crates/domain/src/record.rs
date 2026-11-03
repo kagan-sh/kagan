@@ -285,6 +285,9 @@ pub enum AskField {
         choices: Vec<InteractionOption>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         default: Option<String>,
+        /// No None item; the answer must be one of the choices.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        required: bool,
     },
 }
 

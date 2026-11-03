@@ -176,6 +176,7 @@ fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::As
                 label,
                 choices,
                 default,
+                required,
             } => {
                 let choices: Vec<_> = choices
                     .into_iter()
@@ -219,6 +220,7 @@ fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::As
                     label: trim_label(&label, "field")?,
                     choices,
                     default,
+                    required,
                 }
             }
         };
@@ -477,8 +479,17 @@ fn check_answer_fields(
             {
                 serde_json::Value::String(capped_answer(choice)?)
             }
-            (kg_domain::AskField::Select { .. }, serde_json::Value::Null) => {
-                serde_json::Value::Null
+            (
+                kg_domain::AskField::Select {
+                    required: false, ..
+                },
+                serde_json::Value::Null,
+            ) => serde_json::Value::Null,
+            (kg_domain::AskField::Select { required: true, .. }, serde_json::Value::Null) => {
+                return Err(OpError::Invalid(format!(
+                    "ask answer field {} needs a choice",
+                    field.id()
+                )));
             }
             _ => {
                 return Err(OpError::Invalid(format!(
