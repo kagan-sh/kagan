@@ -188,13 +188,16 @@ pub(crate) async fn submit(
         })
         .map_err(closed)??;
     // Poll the sync ack so a stuck write does not pin a background worker
-    // (blocking recv starved Stop and the DB). Yield requeues on this executor;
-    // the writer thread must not wake GPUI tasks (test scheduler forbids it).
+    // (blocking recv starved Stop and the DB). Park on the executor timer between
+    // polls; the writer thread must not wake GPUI tasks (test scheduler forbids it).
+    let executor = cx.background_executor().clone();
     cx.background_spawn(async move {
         loop {
             match written.try_recv() {
                 Ok(result) => break result,
-                Err(std::sync::mpsc::TryRecvError::Empty) => yield_now().await,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    executor.timer(Duration::from_millis(2)).await;
+                }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     break Err(std::io::Error::other("terminal is closed"));
                 }
@@ -204,19 +207,6 @@ pub(crate) async fn submit(
     .await
     .map_err(|error| OpError::Invalid(error.to_string()))?;
     Ok(typed)
-}
-
-fn yield_now() -> impl std::future::Future<Output = ()> {
-    let mut yielded = false;
-    std::future::poll_fn(move |cx| {
-        if yielded {
-            std::task::Poll::Ready(())
-        } else {
-            yielded = true;
-            cx.waker().wake_by_ref();
-            std::task::Poll::Pending
-        }
-    })
 }
 
 pub(crate) fn run(

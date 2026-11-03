@@ -3722,6 +3722,12 @@ async fn pending_sends_do_not_block_the_workers(cx: &mut TestAppContext) {
         cx.run_until_parked();
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
+    // Writes are still outstanding: no user message yet, and other ops still run.
+    let before = events(&id, cx).await;
+    assert!(
+        sent_text(&before).is_empty(),
+        "pending writes must not record a message yet: {before:?}"
+    );
     op(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx)
         .await
         .unwrap();
@@ -3732,6 +3738,10 @@ async fn pending_sends_do_not_block_the_workers(cx: &mut TestAppContext) {
             .any(|event| matches!(event.kind, EventKind::Started)),
         "{listed:?}"
     );
+    assert!(
+        sent_text(&listed).is_empty(),
+        "MarkRead must run while sends are still pending: {listed:?}"
+    );
     op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
         .await
         .unwrap();
@@ -3739,6 +3749,11 @@ async fn pending_sends_do_not_block_the_workers(cx: &mut TestAppContext) {
     for task in pending {
         let _ = task.await;
     }
+    let after = events(&id, cx).await;
+    assert!(
+        sent_text(&after).is_empty(),
+        "stopped pending sends must record nothing: {after:?}"
+    );
 }
 
 #[cfg(unix)]
