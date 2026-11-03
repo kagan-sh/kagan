@@ -842,6 +842,7 @@ impl Active {
         let processes = cx.new(|_| process::Processes::default());
         let policy = Policy::new()
             .with_application(&id.0)
+            .with_data_dir(data)
             .with_capabilities(capabilities)
             .with_storage_path(data.join("store.json"));
         let bound = area::Bound {
