@@ -105,7 +105,7 @@ pub(crate) struct Fetch {
     pub(crate) methods: BTreeSet<Method>,
 }
 
-/// At most this many `http://127.0.0.1:<port>` / `http://localhost:<port>` fetch entries.
+// Cap from decision 125.
 pub(crate) const LOCAL_FETCH_CAP: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -209,9 +209,9 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
     }
 }
 
-/// True for names and addresses that dial this computer, including
-/// `127.0.0.0/8`, `0.0.0.0`, every IPv6 literal (decision 125), `localhost.`,
-/// and `*.localhost`. Those must not become a remote HTTPS grant.
+// Names that dial this computer must not become a remote HTTPS grant.
+// Every IPv6 literal counts as this computer (decision 125), not only
+// IPv6 loopback addresses.
 fn reaches_this_computer(raw: &str) -> bool {
     let name = raw.trim_start_matches('[').trim_end_matches(']');
     let bare = name.trim_end_matches('.');
@@ -226,7 +226,7 @@ fn reaches_this_computer(raw: &str) -> bool {
     }
 }
 
-/// `Url::port` drops a scheme's default, so `http://127.0.0.1:80` looks unported.
+// `Url::port` drops a scheme's default, so `http://127.0.0.1:80` looks unported.
 fn explicit_loopback_port(raw: &str) -> Result<u16, String> {
     let Some((_, authority)) = raw.split_once("://") else {
         return Err(format!("local fetch {raw:?} needs an explicit port"));
