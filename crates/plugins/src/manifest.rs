@@ -17,6 +17,7 @@ const KEYS: &[&str] = &[
     "entry",
     "icon",
     "instructions",
+    "instruct",
     "powers",
     "settings",
     "commands",
@@ -41,6 +42,8 @@ pub(crate) struct Manifest {
     pub(crate) icon: Option<PathBuf>,
     #[serde(default)]
     pub(crate) instructions: Option<String>,
+    #[serde(default)]
+    pub(crate) instruct: bool,
     #[serde(default)]
     pub(crate) powers: Powers,
     #[serde(default)]
@@ -646,6 +649,8 @@ pub(crate) struct Grant {
     /// The folder a person approved for each folder setting, canonical.
     #[serde(default)]
     pub(crate) paths: BTreeMap<String, PathBuf>,
+    #[serde(default)]
+    pub(crate) instruct: bool,
 }
 
 impl Grant {
@@ -665,6 +670,7 @@ impl Grant {
                 })
                 .collect(),
             paths: BTreeMap::new(),
+            instruct: manifest.instruct,
         }
     }
 
@@ -729,6 +735,7 @@ impl Grant {
                 .map(|(key, path)| (key.clone(), path.clone()))
                 .collect(),
             folders,
+            instruct: self.instruct && other.instruct,
         }
     }
 
@@ -754,6 +761,7 @@ impl Grant {
                 .folders
                 .keys()
                 .all(|key| approved.folders.contains_key(key))
+            && (!self.instruct || approved.instruct)
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -803,6 +811,9 @@ impl Grant {
         }
         for title in self.folders.values() {
             lines.push(format!("reads a folder you choose ({title})"));
+        }
+        if self.instruct {
+            lines.push("adds instructions to a thread's program".into());
         }
         lines
     }
