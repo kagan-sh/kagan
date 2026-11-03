@@ -39,7 +39,7 @@ export class Board extends View {
         cx.notify();
       })
       .on_drop((event, cx) => this.note(`drop:${id}:${event.payload}:${event.side}`, cx))
-      .child(id);
+      .child(new KgButton(`${id}-open`).label(id).on_click((_event, cx) => this.note(`open:${id}`, cx)));
   }
   render() {
     return v_flex()
@@ -192,6 +192,24 @@ fn escape_cancels_a_held_drag_and_leaves_the_page_open(cx: &mut TestAppContext) 
     )
     .unwrap();
     wait_until(cx, |cx| !shows(cx, window, "surface-page"));
+}
+
+/// A button inside a source still clicks when nothing is dragged.
+#[gpui_kit::test]
+fn a_button_inside_a_card_still_clicks(cx: &mut TestAppContext) {
+    let (window, _data) = open_board(cx);
+    assert_eq!(
+        ui(
+            cx,
+            UiOp::Click {
+                element_id: "card-a-open".into(),
+                within: None,
+                window: 0,
+            }
+        ),
+        Ok(OpResult::Done)
+    );
+    assert_eq!(label(cx, window, "board-log"), "open:card-a|-|-");
 }
 
 #[gpui_kit::test]
