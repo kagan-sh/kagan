@@ -51,6 +51,10 @@ pub(crate) enum Error {
     MenuCommand,
     #[error("{0}")]
     Schedule(String),
+    #[error("{0}")]
+    Exports(String),
+    #[error("a plugin cannot call itself")]
+    CallsSelf,
     #[error("$hotkeys is reserved for keyboard shortcuts")]
     ReservedHotkeys,
     #[error("tool name {0:?} must be 1 to 64 letters, digits, _ or -")]
@@ -137,6 +141,8 @@ pub(crate) struct Manifest {
     pub(crate) events: BTreeSet<String>,
     #[serde(default)]
     pub(crate) schedules: Vec<Schedule>,
+    #[serde(default)]
+    pub(crate) exports: Vec<String>,
     #[serde(default)]
     themes: Vec<Theme>,
 }
@@ -255,6 +261,8 @@ impl Manifest {
         self.check_options()?;
         self.check_native()?;
         self.check_fetch()?;
+        self.check_exports()?;
+        self.check_calls()?;
         self.check_read(data_dir)?;
         self.themes(root)?;
         self.shown().try_for_each(plain_line)
@@ -422,6 +430,25 @@ impl Manifest {
                     return Err(Error::LocalFetch(LOCAL_FETCH_CAP));
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn check_exports(&self) -> Result<(), Error> {
+        let mut seen = BTreeSet::new();
+        for name in &self.exports {
+            if name.is_empty() || !seen.insert(name) {
+                return Err(Error::Exports(format!(
+                    "exports must be unique, nonempty names: {name:?}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn check_calls(&self) -> Result<(), Error> {
+        if self.powers.calls.contains(&self.id) {
+            return Err(Error::CallsSelf);
         }
         Ok(())
     }

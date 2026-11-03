@@ -107,7 +107,8 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `turn.failed` | `thread.failed`, or `thread.exited` with a non-zero `data.code` | close. |
 | other bb events, and `experimental_hooks` | none | gap. Cannot move. A hook cannot block or change a turn. |
 | own `bb.rpc.register` and `bb.realtime.publish`, between this plugin's server and its own app | a function call and `cx.notify()` | direct. Both halves are this one script. |
-| `bb.sdk.plugins.callRpc`, `bb.http.route`, `bb plugin token` | none | gap. Cannot move. No call into another plugin, no route, and no token. |
+| `bb.sdk.plugins.callRpc` | `kagan/host` `call(plugin, name, input)`, with `exports` on the callee and `powers.calls` on the caller | close. The caller names each plugin it calls, and the install screen says so. There is no `outputSchema`, the wait is 30 s, and a call made at the top of a script fails the load. |
+| `bb.http.route`, `bb plugin token` | none | gap. Cannot move. No route and no token. |
 | `background` schedule | `schedules`: `[{ "id", "every" }]` | close. Whole minutes, 1 to 1440, while kagan is open. The job is `schedule`, `{ name }`; the reply ends the run. A missed run is not made up. Cron and a service that keeps running are still gap. |
 | `background` service that keeps running | none | gap. Cannot move. No process outlives a job. A schedule or an event can do the work while the app is open. |
 | providers, environment providers, machines, helper AI services | none | gap. Cannot move. |
