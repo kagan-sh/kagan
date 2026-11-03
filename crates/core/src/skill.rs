@@ -24,6 +24,7 @@ const BUNDLED: &[(&str, &str)] = &[
         "kg-skill-creator",
         include_str!("../skills/kg-skill-creator.md"),
     ),
+    ("kg-threads", include_str!("../skills/kg-threads.md")),
     ("kg-ui", include_str!("../skills/kg-ui.md")),
 ];
 

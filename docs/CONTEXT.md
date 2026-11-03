@@ -115,7 +115,7 @@ _Avoid_: Marketplace (the decision-3 goal, not the file), catalog, store, regist
 A packaged set of instructions an agent can load for one kind of task.
 
 **Agent integration**:
-What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, also kagan's skills. For both, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The person can turn the extra arguments off with the `agent-integration` preference.
+What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude` and `cursor-agent`, kagan's skills, from `<dataDir>/agent`. For `cursor-agent`, the note is a rule in that folder. For `codex`, the skill `kg-threads` linked into the thread folder, where Codex looks. For `claude` and `codex`, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The link in the thread folder stays. The person can turn the extra arguments off with the `agent-integration` preference.
 _Avoid_: Injection, agent setup, wrapper
 
 **Conversation**:

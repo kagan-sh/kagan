@@ -20,7 +20,7 @@ Every thread's program gets `KG_THREAD_ID`, `KG_PROJECT_ID`, `KG_ENVIRONMENT_ID`
 
 ## Instructions
 
-Kagan does not inject `<dataDir>/AGENTS.md` or `<project>/.kagan/AGENTS.md` into a prompt. The person's program reads its own instructions. Agent integration (decision 49) adds one fixed note and the `kg mcp` server to `claude` and `codex`. Only `claude` also gets kagan's skills.
+Kagan does not inject `<dataDir>/AGENTS.md` or `<project>/.kagan/AGENTS.md` into a prompt. The person's program reads its own instructions. Agent integration (decision 49) adds one fixed note and the `kg mcp` server to `claude` and `codex`, and that note as a rule for `cursor-agent`. `claude` and `cursor-agent` load kagan's skills from the agent plugin. `codex` loads `kg-threads` from the thread folder.
 
 ## Skills
 
@@ -39,7 +39,7 @@ A higher source overrides a lower one with the same name. Two skills with the sa
 
 **Reaching the agent.** `kg mcp` offers the agent tool `skill_load { name }`. The tool list names each skill and its description. The tool returns the body and the skill's absolute file paths. `kg skill files <name>` lists the same paths; the agent reads them with its own file tools. Bundled skills have no supporting files and return an empty list.
 
-**Native skills for `claude`.** The bundled skills and the enabled plugins' skills are also copied, one folder each, to `<dataDir>/agent/skills`. That folder is the plugin `kagan` that `claude` loads, so its skills appear as `kagan:<name>`. kagan rebuilds it beside the folder and swaps it in, each time a `claude` thread starts while `agent-integration` is on. Folders that no longer apply are removed. User and project skills stay where they are.
+**Native skills.** The bundled skills and the enabled plugins' skills are copied, one folder each, to `<dataDir>/agent/skills`. `claude` loads that folder as the plugin `kagan`, so its skills appear as `kagan:<name>`. `cursor-agent` loads the same folder with `--plugin-dir`, and reads the note from `rules/kagan.mdc`. kagan rebuilds the folder beside itself and swaps it in, each time a `claude`, `cursor-agent`, or `codex` thread starts while `agent-integration` is on. Folders that no longer apply are removed. User and project skills stay where they are. `codex` has no per-run skills folder. kagan links `kg-threads` to `<thread folder>/.agents/skills/kg-threads`, which is where Codex looks, and adds that path to the repository's git exclude when the folder is a repository. A directory the person already has at that path is left alone.
 
 **Commands:** `kg skill list`, `kg skill show <name>`, `kg skill files <name>`, `kg skill new <name> [--project]` (scaffold into user or project skills), `kg skill add <path> [--project]` (copy a skill folder in), `kg skill remove <name>` (user and project skills only).
 
@@ -48,6 +48,7 @@ A higher source overrides a lower one with the same name. Two skills with the sa
 Short, and each points at `kg guide` chapters and the generated `.d.ts` files instead of copying the API, so they do not go stale.
 
 - `kg-cli`: thread context, threads, projects, environments, `--json`.
+- `kg-threads`: when to stay in this thread, and how to create, paste, wait, stop, ask, and read another. The note names it. The procedure stays in the skill.
 - `kg-plugin-authoring`: manifest, job loop, HostModule areas, panels and spots, Workbench tokens, the dev loop below.
 - `kg-plugin-port`: map each surface onto one script and report what moved.
 - `kg-skill-creator`: writing and testing a skill.
