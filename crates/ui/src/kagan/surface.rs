@@ -33,6 +33,7 @@ pub(super) struct Slot {
     pub(super) title: String,
     pub(super) details: bool,
     pub(super) view: Option<Entity<ScriptView>>,
+    pub(super) web: Option<String>,
     pub(super) error: Option<String>,
     pub(super) generation: u64,
     pub(super) focus: FocusHandle,
@@ -787,6 +788,26 @@ pub(super) fn mount(
     cx: &mut Context<Kagan>,
 ) -> Slot {
     let host = PluginHost::global(cx);
+    let web = host.read(cx).web_file(&declared.plugin, &declared.id);
+    if web.is_some() {
+        let loaded = host.update(cx, |host, cx| host.load_plugin(&declared.plugin, cx));
+        let (web, error) = match loaded {
+            Ok(()) => (web, None),
+            Err(error) => (None, Some(mount_error(&error))),
+        };
+        return Slot {
+            id: declared.surface_id(),
+            plugin: declared.plugin.clone(),
+            contribution: declared.id.clone(),
+            title: declared.title.clone(),
+            details,
+            view: None,
+            web,
+            error,
+            generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),
+            focus: cx.focus_handle(),
+        };
+    }
     let mounted = host.update(cx, |host, cx| {
         host.mount_panel(&declared.plugin, &declared.id, window, cx)
     });
@@ -801,6 +822,7 @@ pub(super) fn mount(
         title: declared.title.clone(),
         details,
         view,
+        web: None,
         error,
         generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),
         focus: cx.focus_handle(),
@@ -891,6 +913,28 @@ pub(super) fn tool_region(
     })
 }
 
+fn center_body(slot: &Slot, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
+    let id = ElementId::Name(format!("surface-scroll-{}", slot.id).into());
+    let body = plugin_body(slot, true, window, cx);
+    if slot.web.is_none() {
+        div()
+            .size_full()
+            .p_4()
+            .ui_container()
+            .overflow_y_scrollbar()
+            .id(id)
+            .child(body)
+            .into_any_element()
+    } else {
+        div()
+            .size_full()
+            .overflow_hidden()
+            .id(id)
+            .child(body)
+            .into_any_element()
+    }
+}
+
 pub(super) fn page(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
     let Some(slot) = kagan.screen.page() else {
         return div().into_any_element();
@@ -951,17 +995,7 @@ pub(super) fn page(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
                     .min_h_0()
                     .ui_container()
                     .track_focus(&slot.focus)
-                    .child(
-                        div()
-                            .size_full()
-                            .p_4()
-                            .ui_container()
-                            .overflow_y_scrollbar()
-                            .id(ElementId::Name(
-                                format!("surface-scroll-{}", slot.id).into(),
-                            ))
-                            .child(plugin_body(slot, true, window, cx)),
-                    ),
+                    .child(center_body(slot, window, cx)),
             ),
         )
         .into_any_element()

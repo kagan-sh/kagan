@@ -49,6 +49,7 @@ pub(crate) fn modules(
     let files = crate::files::module(bound.map(|bound| bound.read_roots), id, &values.secrets);
     vec![
         (Gate::Always, jobs.module()),
+        (Gate::Always, crate::page::module(id)),
         (Gate::Always, crate::ui_host::extend(host(id, values), id)),
         (Gate::Area(Area::Process), process),
         (

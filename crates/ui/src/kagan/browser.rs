@@ -51,10 +51,7 @@ impl Browser {
         }
         // Links and redirects inside the page are held to the same rule as the address field.
         // Private: cookies and logins end with the page, and nothing lands outside kagan's data.
-        let builder = wry::WebViewBuilder::new()
-            .with_url(url.as_str())
-            .with_incognito(true)
-            .with_navigation_handler(|target| is_web(&target));
+        let builder = crate::web::builder(url.as_str(), |target| is_web(&target));
         match WebView::build(builder, window, cx) {
             Ok(view) => self.page = Some(cx.new(|_| view)),
             Err(error) => self.note = Some(format!("The page could not open: {error}")),

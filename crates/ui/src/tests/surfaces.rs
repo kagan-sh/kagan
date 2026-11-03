@@ -1665,6 +1665,54 @@ fn a_plugin_right_panel_mounts_a_web_view(cx: &mut TestAppContext) {
     }
 }
 
+const WEB_PANEL: &str = "dev.test.web-panel";
+
+const WEB_PANEL_SOURCE: &str = r#"import { View } from "gpui-kit";
+export default class Plugin extends View {
+  render() { return ""; }
+}
+"#;
+
+fn install_web_panel(data: &Path) {
+    write_plugin(
+        data,
+        "web-panel",
+        WEB_PANEL,
+        &manifest(
+            WEB_PANEL,
+            "Web panel",
+            json!([
+                {"id": "board", "title": "Board", "web": "ui/index.html", "placement": "right"},
+                {"id": "stage", "title": "Stage", "web": "ui/index.html", "placement": "center"}
+            ]),
+            false,
+        ),
+        WEB_PANEL_SOURCE,
+    );
+    let ui = data.join("web-panel").join("ui");
+    std::fs::create_dir(&ui).unwrap();
+    std::fs::write(ui.join("index.html"), "<p>page</p>").unwrap();
+}
+
+fn web_panel_id(plugin: &str, id: &str) -> String {
+    format!("web-panel-panel-{plugin}-{id}")
+}
+
+#[gpui_kit::test]
+fn a_web_panel_is_labeled_for_kg_ui(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_web_panel);
+    wide(cx, window);
+    open_surface(cx, WEB_PANEL, "board").unwrap();
+    let right = web_panel_id(WEB_PANEL, "board");
+    wait_until(cx, |cx| shows(cx, window, &right));
+    assert_eq!(label(cx, window, &right), "Web panel");
+
+    open_surface(cx, WEB_PANEL, "stage").unwrap();
+    let center = web_panel_id(WEB_PANEL, "stage");
+    wait_until(cx, |cx| shows(cx, window, &center));
+    assert_eq!(label(cx, window, &center), "Web panel");
+}
+
 #[gpui_kit::test]
 fn full_screen_gives_the_right_sidebar_the_window_and_gives_it_back(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);

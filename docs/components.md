@@ -22,3 +22,9 @@ to preserve its projected background, foreground and primary colors.
 WebView takes one id. `url(url)` loads one http or https page and the element
 fills its parent. The host must be `127.0.0.1`, `localhost`, or a host in that
 plugin's `powers.fetch`. The URL rule is in `docs/plugin-api.md`.
+
+## Web panel
+
+A panel may name `"web"` instead of `"view"`. The body is an HTML file in the
+plugin folder, drawn by the same macOS web view. The page, the bridge, and the
+theme variables are in `docs/plugin-api.md` (decision 123).

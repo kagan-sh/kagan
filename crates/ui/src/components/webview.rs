@@ -29,9 +29,6 @@ use super::fail::ComponentError;
 pub(crate) const REFUSED_SCHEME: &str = "WebView only opens an http or https page.";
 pub(crate) const REFUSED_HOST: &str =
     "WebView only opens 127.0.0.1, localhost, or a host this plugin may fetch.";
-#[cfg(not(target_os = "macos"))]
-pub(crate) const ONLY_MACOS: &str = "This page works on macOS only for now.";
-
 thread_local! {
     static INSET: Cell<bool> = const { Cell::new(false) };
 }
@@ -219,7 +216,7 @@ fn gate(url: &str, hosts: &[String]) -> Gate {
     #[cfg(target_os = "macos")]
     return Gate::Open;
     #[cfg(not(target_os = "macos"))]
-    Gate::Note(ONLY_MACOS)
+    Gate::Note(crate::web::ONLY_MACOS)
 }
 
 fn place(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
@@ -381,10 +378,7 @@ fn build(
     cx: &mut App,
 ) -> Result<Entity<gpui_webview::WebView>, String> {
     let hosts = hosts.to_vec();
-    let builder = wry::WebViewBuilder::new()
-        .with_url(url)
-        .with_incognito(true)
-        .with_navigation_handler(move |target| allowed(&target, &hosts).is_ok());
+    let builder = crate::web::builder(url, move |target| allowed(&target, &hosts).is_ok());
     match gpui_webview::WebView::build(builder, window, cx) {
         Ok(view) => Ok(cx.new(|_| view)),
         Err(error) => Err(format!("The page could not open: {error}")),

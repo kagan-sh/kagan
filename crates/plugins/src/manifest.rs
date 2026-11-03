@@ -314,6 +314,11 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
 impl Manifest {
     fn check(&self, root: &Path, data_dir: &Path) -> Result<(), String> {
         self.ui.check()?;
+        for panel in self.ui.panels() {
+            if let Some(web) = panel.web() {
+                crate::page::require_html(root, web)?;
+            }
+        }
         self.check_id()?;
         self.check_kagan()?;
         self.check_entry(root)?;

@@ -38,6 +38,7 @@ mod start;
 mod surface;
 mod tabs;
 mod update;
+mod web_panel;
 
 use changes::Changes;
 use kg_domain::ProjectOp;
@@ -763,6 +764,14 @@ impl Kagan {
                     let _ = reply.try_send(saved);
                 }
             }
+            HostUiEvent::PostPage {
+                plugin,
+                panel,
+                message,
+                reply,
+            } => {
+                let _ = reply.try_send(web_panel::post(plugin, panel, message, cx));
+            }
         }
     }
 
@@ -1456,6 +1465,7 @@ impl Render for Kagan {
         #[cfg(target_os = "macos")]
         self.sync_browser(cx);
         crate::components::sync_pages(&self.shown_plugin_views(cx), cx);
+        web_panel::sync(self, cx);
         let columns = if self.right_fill == right::Fill::Window && self.panes.right {
             div()
                 .id("right-full-column")

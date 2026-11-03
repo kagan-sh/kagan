@@ -13,6 +13,7 @@ mod ui_dispatch;
 mod ui_driver;
 mod ui_observe;
 mod ui_registry;
+mod web;
 
 use gpui_kit::App;
 
