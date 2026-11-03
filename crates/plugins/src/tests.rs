@@ -659,6 +659,85 @@ fn a_grant_grows_only_when_it_asks_for_more() {
     );
 }
 
+#[test]
+fn local_fetch_grants_http_on_that_port_and_install_line() {
+    use gpui_shell::Capabilities;
+
+    use crate::manifest::{Fetch, Method};
+
+    let dir = plugin_dir();
+    let mut value = manifest();
+    value["powers"]["fetch"] = json!([
+        { "host": "http://127.0.0.1:3847", "methods": ["GET"] },
+        { "host": "http://localhost:3847", "methods": ["POST"] },
+        { "host": "api.github.com", "methods": ["GET"] }
+    ]);
+    std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+    let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+    assert_eq!(
+        grant.lines(),
+        vec![
+            "talks to programs on this computer (port 3847)",
+            "talks to api.github.com (GET)",
+            "writes to your clipboard",
+            "reads a folder you choose (Notes)",
+        ]
+    );
+
+    let caps = Capabilities::new().http_requests(
+        [
+            Fetch {
+                host: "http://127.0.0.1:3847".into(),
+                methods: [Method::Get].into_iter().collect(),
+            },
+            Fetch {
+                host: "api.github.com".into(),
+                methods: [Method::Get].into_iter().collect(),
+            },
+        ]
+        .iter()
+        .map(|fetch| fetch.http_grant().unwrap()),
+    );
+    assert!(caps.may_request("http", "127.0.0.1", Some(3847), "GET", "/"));
+    assert!(!caps.may_request("http", "127.0.0.1", Some(3848), "GET", "/"));
+    assert!(!caps.may_request("http", "127.0.0.1", Some(3847), "POST", "/"));
+    assert!(!caps.may_request("https", "127.0.0.1", Some(3847), "GET", "/"));
+    assert!(caps.may_request("https", "api.github.com", None, "GET", "/"));
+    assert!(!caps.may_request("http", "api.github.com", None, "GET", "/"));
+}
+
+#[test]
+fn local_fetch_hosts_are_checked() {
+    let dir = plugin_dir();
+    let rejected = |host: &str, expected: &str| {
+        let mut value = manifest();
+        value["powers"]["fetch"] = json!([{ "host": host, "methods": ["GET"] }]);
+        std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+        let error = read_manifest(dir.path()).unwrap_err().to_string();
+        assert!(error.contains(expected), "host {host:?}: {error}");
+    };
+    rejected("127.0.0.1", "http://127.0.0.1:<port>");
+    rejected("localhost", "http://localhost:<port>");
+    rejected("http://127.0.0.1", "explicit port");
+    rejected("http://localhost", "explicit port");
+    rejected("http://example.com:80", "only for 127.0.0.1 or localhost");
+    rejected(
+        "https://127.0.0.1:443",
+        "hostname, or http://127.0.0.1:<port>",
+    );
+
+    let mut value = manifest();
+    value["powers"]["fetch"] = (1..=manifest::LOCAL_FETCH_CAP + 1)
+        .map(|port| json!({ "host": format!("http://127.0.0.1:{port}"), "methods": ["GET"] }))
+        .collect();
+    std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+    let error = read_manifest(dir.path()).unwrap_err().to_string();
+    assert!(
+        error.contains(&format!("at most {}", manifest::LOCAL_FETCH_CAP)),
+        "{error}"
+    );
+}
+
 #[gpui_kit::test]
 fn tools_follow_scope_and_thread_metadata(cx: &mut TestAppContext) {
     let plugin = plugin_dir();

@@ -120,7 +120,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `messageAction`, `pendingInteraction`, `bb.ui.registerMentionProvider`, `bb.ui.registerThreadAction`, `experimental_newThreadPanelAction` | none | gap. Cannot move. |
 | `node` filesystem anywhere | `fs/promises` inside granted roots, and `kagan/files` when `powers.read` is set | close for a read inside a root. Writes land only in the plugin data folder. `files.read` returns at most 1 MiB. Deleting or writing anywhere else cannot move unless a program named in `powers.run` does it. |
 | `child_process` | `powers.run` and `kagan/process` `run` | close. Name each program. Default timeout is 60 seconds. The environment is the fixed allowlist unless `"env": "inherit"`, which the install screen states. gpui-shell's own `process` is not granted. |
-| `fetch` | `powers.fetch`: `{ "host", "methods": ["GET" and/or "POST"] }` | close. Global `fetch`. 30 seconds. Body at most 8 MiB. No other method and no plugin HTTP server. |
+| `fetch` | `powers.fetch`: `{ "host", "methods": ["GET" and/or "POST"] }` | close. Global `fetch`. 30 seconds. Body at most 8 MiB. Host is a remote hostname (HTTPS) or `http://127.0.0.1\|localhost:<port>` (HTTP on that port; at most eight). No other method, no any-port local grant, and no plugin HTTP server. |
 | clipboard text | `powers.clipboard` `{ "read", "write" }` and `cx.read_from_clipboard` / `cx.write_to_clipboard` | direct |
 | copy as image | `host.writeClipboardPng(base64)` | direct when `powers.clipboard.write` is granted. Standard base64 PNG, at most 8 MiB. Linux returns an error: png clipboard is not available on this platform. |
 | an HTML text field a test types into | `KgInput` or `KgTextarea` with `aria_label` | direct. `kg ui click` uses that name and `kg ui type` writes the value. The shell's `Input` and `Textarea` are not seen. |
@@ -164,7 +164,7 @@ List only what the port uses. The install screen shows each one in plain words. 
 | the plugin's own database | `powers.areas`: `database` |
 | a program on `PATH` | `powers.run`: `{ "program": "<name>" }`, and `powers.areas`: `process` |
 | that program's full environment | `"env": "inherit"` on that program |
-| HTTP | `powers.fetch`: host and `GET` and/or `POST` |
+| HTTP | `powers.fetch`: remote hostname or `http://127.0.0.1\|localhost:<port>`, and `GET` and/or `POST` |
 | clipboard | `powers.clipboard`: `read` and/or `write` |
 | a folder under the home directory | `powers.read`: `["~/path"]`. Not the kagan data directory, `~/.ssh`, or `~/.gnupg`. |
 | a folder the person picks | a `folder` setting. It is read-only. |

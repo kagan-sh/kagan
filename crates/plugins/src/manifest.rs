@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
+use gpui_shell::HttpRequestGrant;
 use indexmap::IndexMap;
 use kg_domain::{OpError, PluginId, ThemeFile};
 use serde::{Deserialize, Serialize};
@@ -104,12 +105,105 @@ pub(crate) struct Fetch {
     pub(crate) methods: BTreeSet<Method>,
 }
 
+/// At most this many `http://127.0.0.1:<port>` / `http://localhost:<port>` fetch entries.
+pub(crate) const LOCAL_FETCH_CAP: usize = 8;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum FetchKind {
+    Remote,
+    Loopback { host: String, port: u16 },
+}
+
+impl Fetch {
+    pub(crate) fn kind(&self) -> Result<FetchKind, String> {
+        parse_fetch_host(&self.host)
+    }
+
+    pub(crate) fn view_host(&self) -> Result<String, String> {
+        match self.kind()? {
+            FetchKind::Remote => Ok(self.host.clone()),
+            FetchKind::Loopback { host, .. } => Ok(host),
+        }
+    }
+
+    pub(crate) fn http_grant(&self) -> Result<HttpRequestGrant, String> {
+        let methods = self.methods.iter().map(|method| method.name());
+        Ok(match self.kind()? {
+            FetchKind::Remote => {
+                HttpRequestGrant::new(self.host.clone(), methods, Vec::<String>::new(), ["/"])
+            }
+            FetchKind::Loopback { host, port } => {
+                HttpRequestGrant::new(host, methods, Vec::<String>::new(), ["/"])
+                    .scheme("http")
+                    .port(port)
+            }
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum Method {
     #[serde(rename = "GET")]
     Get,
     #[serde(rename = "POST")]
     Post,
+}
+
+impl Method {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+        }
+    }
+}
+
+fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
+    if raw.eq_ignore_ascii_case("127.0.0.1") || raw.eq_ignore_ascii_case("localhost") {
+        return Err(format!(
+            "fetch host {raw:?} must be http://127.0.0.1:<port> or http://localhost:<port>"
+        ));
+    }
+    match url::Url::parse(raw) {
+        Ok(url) => {
+            if url.scheme() != "http" {
+                return Err(format!(
+                    "fetch host {raw:?} must be a hostname, or http://127.0.0.1:<port>"
+                ));
+            }
+            let Some(host) = url.host_str() else {
+                return Err(format!("fetch host {raw:?} needs a host"));
+            };
+            if !host.eq_ignore_ascii_case("127.0.0.1") && !host.eq_ignore_ascii_case("localhost") {
+                return Err(format!(
+                    "http fetch is only for 127.0.0.1 or localhost, not {host:?}"
+                ));
+            }
+            let Some(port) = url.port() else {
+                return Err(format!("local fetch {raw:?} needs an explicit port"));
+            };
+            if url.path() != "/" && !url.path().is_empty()
+                || url.query().is_some()
+                || url.fragment().is_some()
+                || !url.username().is_empty()
+                || url.password().is_some()
+            {
+                return Err(format!("local fetch {raw:?} must be only http://host:port"));
+            }
+            Ok(FetchKind::Loopback {
+                host: host.to_ascii_lowercase(),
+                port,
+            })
+        }
+        Err(_)
+            if raw.contains("://") || raw.is_empty() || raw.contains('/') || raw.contains(' ') =>
+        {
+            Err(format!(
+                "fetch host {raw:?} must be a hostname, or http://127.0.0.1:<port>"
+            ))
+        }
+        Err(_) => Ok(FetchKind::Remote),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -324,6 +418,7 @@ impl Manifest {
         self.check_tools(root)?;
         self.check_options()?;
         self.check_native()?;
+        self.check_fetch()?;
         self.check_read(data_dir)?;
         self.themes(root)?;
         self.shown().try_for_each(plain_line)
@@ -446,6 +541,19 @@ impl Manifest {
         for program in &self.powers.run {
             if program.program.is_empty() || Path::new(&program.program).components().count() != 1 {
                 return Err("run program must be a name on PATH".into());
+            }
+        }
+        Ok(())
+    }
+
+    fn check_fetch(&self) -> Result<(), String> {
+        let mut local = 0;
+        for fetch in &self.powers.fetch {
+            if matches!(fetch.kind()?, FetchKind::Loopback { .. }) {
+                local += 1;
+                if local > LOCAL_FETCH_CAP {
+                    return Err(format!("at most {LOCAL_FETCH_CAP} local fetch entries"));
+                }
             }
         }
         Ok(())
@@ -778,16 +886,22 @@ impl Grant {
                 None => format!("runs {}", program.program),
             });
         }
+        let mut local_ports = BTreeSet::new();
         for fetch in &powers.fetch {
-            let methods: Vec<&str> = fetch
+            let methods = fetch
                 .methods
                 .iter()
-                .map(|method| match method {
-                    Method::Get => "GET",
-                    Method::Post => "POST",
-                })
-                .collect();
-            lines.push(format!("talks to {} ({})", fetch.host, methods.join(", ")));
+                .map(|method| method.name())
+                .collect::<Vec<_>>()
+                .join(", ");
+            match fetch.kind() {
+                Ok(FetchKind::Loopback { port, .. }) => {
+                    if local_ports.insert(port) {
+                        lines.push(format!("talks to programs on this computer (port {port})"));
+                    }
+                }
+                _ => lines.push(format!("talks to {} ({methods})", fetch.host)),
+            }
         }
         if powers.clipboard.read {
             lines.push("reads your clipboard".into());
