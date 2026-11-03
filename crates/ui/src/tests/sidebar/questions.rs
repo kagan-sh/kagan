@@ -405,3 +405,263 @@ fn an_install_approval_does_not_open_the_ask_popup(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, "ask-popup"));
     decline(cx, asked);
 }
+
+fn yes_no() -> Vec<InteractionOption> {
+    vec![
+        InteractionOption {
+            id: "yes".into(),
+            label: "Yes".into(),
+        },
+        InteractionOption {
+            id: "no".into(),
+            label: "No".into(),
+        },
+    ]
+}
+
+/// Asks with fields written as JSON, so these tests state the wire shape from decision 133.
+fn ask_fields(
+    cx: &mut TestAppContext,
+    thread: &kg_domain::ThreadId,
+    fields: serde_json::Value,
+) -> String {
+    let fields: Vec<AskField> = serde_json::from_value(fields).expect("ask fields");
+    let ask = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Ask {
+                id: thread.clone(),
+                title: "Ship it?".into(),
+                options: yes_no(),
+                fields: Some(fields),
+            }),
+            cx,
+        )
+    });
+    let OpResult::Text(interaction) = cx.foreground_executor().block_test(ask).unwrap() else {
+        panic!("ask");
+    };
+    cx.run_until_parked();
+    interaction
+}
+
+/// The bounds `kg ui` reports for an element: x, y, width and height, in points.
+fn bounds(cx: &mut TestAppContext, window: gpui_kit::AnyWindowHandle, name: &str) -> [f32; 4] {
+    cx.update_window(window, |_, window, _| {
+        let element =
+            crate::ui_registry::find(window, &gpui_kit::ElementId::Name(name.to_owned().into()))
+                .unwrap_or_else(|| panic!("{name} is not drawn"));
+        let bounds = element.bounds();
+        [
+            f32::from(bounds.origin.x),
+            f32::from(bounds.origin.y),
+            f32::from(bounds.size.width),
+            f32::from(bounds.size.height),
+        ]
+    })
+    .unwrap()
+}
+
+fn thirty_two_choices() -> serde_json::Value {
+    let choices: Vec<_> = (0..32)
+        .map(|n| serde_json::json!({ "id": format!("c{n:02}"), "label": format!("Choice {n:02}") }))
+        .collect();
+    serde_json::json!([{ "type": "select", "id": "mode", "label": "Mode", "choices": choices }])
+}
+
+#[gpui_kit::test]
+fn typing_stays_in_the_ask_popup_after_reselecting_and_switching_threads(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let first = run_shell(cx);
+    let second = run_shell(cx);
+    let number = serde_json::json!([{ "type": "number", "id": "retries", "label": "Retries" }]);
+    click(cx, window, &format!("thread-{}", first.0));
+    ask_fields(cx, &first, number.clone());
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    click(cx, window, &format!("thread-{}", first.0));
+    assert_eq!(focused_of(cx, window, "ask-popup"), Some(true));
+    cx.simulate_input(window, "7");
+    assert_ne!(focused_of(cx, window, "terminal"), Some(true));
+    let second_ask = ask_fields(cx, &second, number);
+    click(cx, window, &format!("thread-{}", second.0));
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-field-{second_ask}-retries"))
+    });
+    assert_eq!(focused_of(cx, window, "ask-popup"), Some(true));
+    cx.simulate_input(window, "7");
+    assert_ne!(focused_of(cx, window, "terminal"), Some(true));
+}
+
+#[gpui_kit::test]
+fn an_ask_form_arriving_in_full_screen_questions_shows_its_card(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    cx.simulate_window_resize(window, size(px(1280.), px(800.)));
+    cx.run_until_parked();
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    set_preference(cx, "main.right-sidebar", serde_json::json!(true));
+    cx.run_until_parked();
+    let asked = ask_install(cx);
+    cx.run_until_parked();
+    click(cx, window, "right-full");
+    cx.run_until_parked();
+    let interaction = ask_fields(
+        cx,
+        &id,
+        serde_json::json!([{ "type": "boolean", "id": "notify", "label": "Notify" }]),
+    );
+    assert!(!shows(cx, window, "ask-popup"));
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("question-{interaction}"))
+    });
+    decline(cx, asked);
+}
+
+#[gpui_kit::test]
+fn a_long_menu_reaches_its_last_choice_by_pointer(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let interaction = ask_fields(cx, &id, thirty_two_choices());
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let select = format!("ask-select-{interaction}-mode");
+    click(cx, window, &select);
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-choice-{interaction}-mode-c00"))
+    });
+    click(cx, window, &format!("ask-choice-{interaction}-mode-c31"));
+    cx.run_until_parked();
+    assert_eq!(value_of(cx, window, &select), Some("Choice 31".into()));
+}
+
+#[gpui_kit::test]
+fn a_long_menu_reaches_its_last_choice_by_keyboard(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let interaction = ask_fields(cx, &id, thirty_two_choices());
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let select = format!("ask-select-{interaction}-mode");
+    click(cx, window, &select);
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-choice-{interaction}-mode-c00"))
+    });
+    for _ in 0..40 {
+        press_key(cx, window, "down");
+    }
+    press_key(cx, window, "enter");
+    cx.run_until_parked();
+    assert_eq!(value_of(cx, window, &select), Some("Choice 31".into()));
+}
+
+#[gpui_kit::test]
+fn a_128_character_choice_stays_inside_the_ask_popup(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let unbroken = "a".repeat(128);
+    let spaced = format!("{}ab", "ab ".repeat(42));
+    assert_eq!(spaced.chars().count(), 128);
+    let interaction = ask_fields(
+        cx,
+        &id,
+        serde_json::json!([{
+            "type": "select",
+            "id": "mode",
+            "label": "Mode",
+            "choices": [
+                { "id": "unbroken", "label": unbroken },
+                { "id": "spaced", "label": spaced }
+            ]
+        }]),
+    );
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let card = bounds(cx, window, &format!("ask-popup-{interaction}"));
+    let select = bounds(cx, window, &format!("ask-select-{interaction}-mode"));
+    assert!(
+        select[2] <= card[2],
+        "the select is {} wide, the popup {} wide",
+        select[2],
+        card[2]
+    );
+    click(cx, window, &format!("ask-select-{interaction}-mode"));
+    wait_until(cx, |cx| {
+        shows(
+            cx,
+            window,
+            &format!("ask-choice-{interaction}-mode-unbroken"),
+        )
+    });
+    let item = bounds(
+        cx,
+        window,
+        &format!("ask-choice-{interaction}-mode-unbroken"),
+    );
+    assert!(
+        item[0] + item[2] <= card[0] + card[2],
+        "the 128-character choice runs past the popup: {item:?} in {card:?}"
+    );
+}
+
+#[gpui_kit::test]
+fn an_answer_over_the_length_cap_shows_beside_its_field(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let interaction = ask_fields(
+        cx,
+        &id,
+        serde_json::json!([{ "type": "string", "id": "note", "label": "Note" }]),
+    );
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let field = format!("ask-field-{interaction}-note");
+    click(cx, window, &field);
+    cx.simulate_input(window, &"x".repeat(4097));
+    cx.run_until_parked();
+    click(cx, window, &format!("answer-{interaction}-yes"));
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-field-error-{interaction}-note"))
+    });
+    assert!(
+        shows(cx, window, "ask-popup"),
+        "the popup stays open for the fix"
+    );
+    assert!(
+        !shows(cx, window, "note"),
+        "the error does not go behind the popup"
+    );
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, "backspace");
+    cx.run_until_parked();
+    click(cx, window, &format!("answer-{interaction}-yes"));
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    wait_until(cx, |cx| {
+        cx.update(|cx| kagan.read(cx).question_titles(cx))
+            .is_empty()
+    });
+}
+
+#[gpui_kit::test]
+fn a_required_select_has_no_none_item(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let interaction = ask_fields(
+        cx,
+        &id,
+        serde_json::json!([{
+            "type": "select",
+            "id": "mode",
+            "label": "Mode",
+            "required": true,
+            "choices": [{ "id": "fast", "label": "Fast" }]
+        }]),
+    );
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let select = format!("ask-select-{interaction}-mode");
+    assert_eq!(value_of(cx, window, &select), Some("Fast".into()));
+    click(cx, window, &select);
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-choice-{interaction}-mode-fast"))
+    });
+    assert!(!shows(cx, window, &format!("ask-none-{interaction}-mode")));
+}

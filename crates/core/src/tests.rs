@@ -3310,6 +3310,66 @@ async fn ask_answer_requires_a_whole_number(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 #[cfg(unix)]
+async fn a_required_select_refuses_none_and_takes_a_choice(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let fields = serde_json::from_value(json!([{
+        "type": "select",
+        "id": "mode",
+        "label": "Mode",
+        "required": true,
+        "choices": [{ "id": "fast", "label": "Fast" }]
+    }]))
+    .unwrap();
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(fields),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("mode".into(), serde_json::Value::Null);
+    let error = cx
+        .update(|cx| {
+            Workspace::answer_fields(
+                &id,
+                PendingInteractionId(interaction.clone()),
+                "yes".into(),
+                values,
+                cx,
+            )
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ask answer field mode needs a choice"),
+        "{error}"
+    );
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("mode".into(), json!("fast"));
+    cx.update(|cx| {
+        Workspace::answer_fields(
+            &id,
+            PendingInteractionId(interaction),
+            "yes".into(),
+            values,
+            cx,
+        )
+    })
+    .await
+    .unwrap();
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
 async fn ask_answer_accepts_none_for_a_select(cx: &mut TestAppContext) {
     let (_fixture, id) = sleeping(cx).await;
     let OpResult::Text(interaction) = op(
