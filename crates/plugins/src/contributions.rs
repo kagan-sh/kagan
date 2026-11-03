@@ -59,6 +59,9 @@ pub struct PanelContribution {
     pub(crate) view: Option<String>,
     #[serde(default)]
     pub(crate) web: Option<String>,
+    /// Keep the page's cookies and storage under this plugin's data folder.
+    #[serde(default)]
+    pub(crate) store: bool,
     pub(crate) placement: Placement,
     pub(crate) follows: Option<Follows>,
     pub(crate) replaces: Option<Slot>,
@@ -181,7 +184,15 @@ fn check_id<'a>(id: &'a str, ids: &mut BTreeSet<&'a str>) -> Result<(), String> 
 
 fn check_body(panel: &PanelContribution) -> Result<(), String> {
     match (panel.view.as_deref(), panel.web.as_deref()) {
-        (Some(view), None) => check_view(view),
+        (Some(view), None) => {
+            if panel.store {
+                return Err(format!(
+                    "panel {} uses a view, so store belongs on WebView.store(true)",
+                    panel.id
+                ));
+            }
+            check_view(view)
+        }
         (None, Some(web)) => {
             if panel.replaces.is_some() {
                 return Err(format!(
@@ -267,6 +278,11 @@ impl PanelContribution {
     #[must_use]
     pub fn web(&self) -> Option<&str> {
         self.web.as_deref()
+    }
+    /// Whether the page keeps cookies and storage under this plugin's data folder.
+    #[must_use]
+    pub fn store(&self) -> bool {
+        self.store
     }
     #[must_use]
     pub fn placement(&self) -> Placement {

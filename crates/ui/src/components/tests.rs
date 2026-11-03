@@ -49,6 +49,7 @@ fn catalog_has_every_component_and_real_typings() {
     let declarations = gpui_shell::type_declarations(&registry);
     assert!(declarations.contains("thread_id: string"));
     assert!(declarations.contains("url(url: string): WebViewElement"));
+    assert!(declarations.contains("store(keep: boolean): WebViewElement"));
 }
 
 #[test]

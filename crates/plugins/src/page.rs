@@ -223,3 +223,74 @@ fn classify(error: &std::io::Error) -> PageFileError {
         PageFileError::Refused
     }
 }
+
+/// Folder for one page's durable store files under the plugin data directory.
+#[must_use]
+pub fn store_dir(data: &Path, page: &str) -> PathBuf {
+    data.join("pages").join(store_name(page))
+}
+
+/// Stable 16-byte id for a page store, kept under [`store_dir`].
+///
+/// # Errors
+///
+/// The folder cannot be created or the id file cannot be read or written.
+pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], String> {
+    let dir = store_dir(data, page);
+    std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let path = dir.join("store.id");
+    if let Ok(bytes) = std::fs::read(&path)
+        && bytes.len() == 16
+    {
+        let mut id = [0u8; 16];
+        id.copy_from_slice(&bytes);
+        return Ok(id);
+    }
+    let id = *uuid::Uuid::new_v4().as_bytes();
+    std::fs::write(&path, id).map_err(|error| error.to_string())?;
+    Ok(id)
+}
+
+/// Removes every page store folder under this plugin's data directory.
+pub fn clear_stores(data: &Path) {
+    let _ = std::fs::remove_dir_all(data.join("pages"));
+}
+
+fn store_name(page: &str) -> String {
+    if !page.is_empty()
+        && page.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-' || byte == b'_'
+        })
+    {
+        page.to_owned()
+    } else {
+        let mut name = String::with_capacity(page.len() * 2);
+        for byte in page.as_bytes() {
+            use std::fmt::Write as _;
+            let _ = write!(name, "{byte:02x}");
+        }
+        name
+    }
+}
+
+#[cfg(test)]
+mod store_tests {
+    use super::*;
+
+    #[test]
+    fn keep_store_reuses_the_same_id() {
+        let data = tempfile::tempdir().expect("temp");
+        let first = keep_store(data.path(), "board").expect("first");
+        let second = keep_store(data.path(), "board").expect("second");
+        assert_eq!(first, second);
+        assert!(store_dir(data.path(), "board").join("store.id").is_file());
+        clear_stores(data.path());
+        assert!(!data.path().join("pages").exists());
+    }
+
+    #[test]
+    fn store_name_hexes_unsafe_ids() {
+        assert_eq!(store_name("board"), "board");
+        assert_eq!(store_name("a/b"), "612f62");
+    }
+}

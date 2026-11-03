@@ -412,6 +412,7 @@ async fn remove(
         host.update(cx, |host, _| host.resume_activation(&id));
         return Err(error);
     }
+    let data = host.read_with(cx, |host, _| host.plugin_data(&id));
     host.update(cx, |host, cx| {
         host.unload(&id, cx);
         host.active.remove(&id);
@@ -421,6 +422,7 @@ async fn remove(
         host.identities.remove(&id);
         cx.notify();
     });
+    crate::page::clear_stores(&data);
     let store = host.read_with(cx, |host, _| host.secrets.clone());
     let forgotten = cx
         .background_spawn(async move { store.forget(&id, &declared) })

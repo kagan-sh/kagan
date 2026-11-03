@@ -83,25 +83,44 @@ pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryE
                         Ok(ComponentPayload::new(id.clone()))
                     },
                 )])
-                .with_methods(vec![MethodDescriptor::new(
-                    "url",
-                    vec![ArgumentDescriptor::new("url", ArgumentSchema::String)],
-                    |arguments| match arguments {
-                        [ComponentArgument::String(url)] => {
-                            let url = url.clone();
-                            let set: Set = Arc::new(move |props: &mut Props| {
-                                props.url = Some(url.clone());
-                            });
-                            Ok(ComponentPayload::new(set))
-                        }
-                        _ => Err("WebView.url expects one string".into()),
-                    },
-                )
+                .with_methods(vec![
+                    MethodDescriptor::new(
+                        "url",
+                        vec![ArgumentDescriptor::new("url", ArgumentSchema::String)],
+                        |arguments| match arguments {
+                            [ComponentArgument::String(url)] => {
+                                let url = url.clone();
+                                let set: Set = Arc::new(move |props: &mut Props| {
+                                    props.url = Some(url.clone());
+                                });
+                                Ok(ComponentPayload::new(set))
+                            }
+                            _ => Err("WebView.url expects one string".into()),
+                        },
+                    )
+                    .with_documentation(
+                        "Loads this http or https URL. The host must be 127.0.0.1, localhost, or a host in this plugin's powers.fetch.",
+                    ),
+                    MethodDescriptor::new(
+                        "store",
+                        vec![ArgumentDescriptor::new("keep", ArgumentSchema::Boolean)],
+                        |arguments| match arguments {
+                            [ComponentArgument::Boolean(keep)] => {
+                                let keep = *keep;
+                                let set: Set = Arc::new(move |props: &mut Props| {
+                                    props.store = keep;
+                                });
+                                Ok(ComponentPayload::new(set))
+                            }
+                            _ => Err("WebView.store expects one boolean".into()),
+                        },
+                    )
+                    .with_documentation(
+                        "When true, keeps cookies and storage under this plugin's data folder across opens. Default false: private, gone when the page closes.",
+                    ),
+                ])
                 .with_documentation(
-                    "Loads this http or https URL. The host must be 127.0.0.1, localhost, or a host in this plugin's powers.fetch.",
-                )])
-                .with_documentation(
-                    "One page filling its parent. new WebView(id) takes the element id. url(url) loads an http or https address on 127.0.0.1, localhost, or a host in this plugin's powers.fetch. Any other address is refused, and so is a navigation that leaves those hosts.",
+                    "One page filling its parent. new WebView(id) takes the element id. url(url) loads an http or https address on 127.0.0.1, localhost, or a host in this plugin's powers.fetch. store(true) keeps cookies and storage under the plugin data folder. Any other address is refused, and so is a navigation that leaves those hosts.",
                 ),
         )
         .map(|_| ())
@@ -111,6 +130,7 @@ type Set = Arc<dyn Fn(&mut Props) + Send + Sync>;
 
 struct Props {
     url: Option<String>,
+    store: bool,
 }
 
 struct WebView;
@@ -122,20 +142,24 @@ impl ComponentMaterializer for WebView {
             .downcast_ref::<String>()
             .ok_or_else(|| ComponentError::new("WebView received an incompatible id"))?
             .clone();
-        let mut props = Props { url: None };
+        let mut props = Props {
+            url: None,
+            store: false,
+        };
         for method in request.methods() {
             if let Some(set) = method.payload().downcast_ref::<Set>() {
                 set(&mut props);
             }
         }
         let url = props.url.unwrap_or_default();
+        let store = props.store;
         let style = request.take_style();
         let children = request.take_children()?;
         if !children.is_empty() {
             anyhow::bail!("WebView takes no children");
         }
         request.with_window_app(move |window, cx| {
-            let shown = place(&id, &url, window, cx);
+            let shown = place(&id, &url, store, window, cx);
             nudge(window, cx);
             let mut element = frame(&id, &shown, cx);
             element.style().refine(&style);
@@ -219,13 +243,25 @@ fn gate(url: &str, hosts: &[String]) -> Gate {
     Gate::Note(crate::web::ONLY_MACOS)
 }
 
-fn place(id: &str, url: &str, window: &mut Window, cx: &mut App) -> Shown {
+fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) -> Shown {
     let fetched = kg_plugins::PluginHost::try_global(cx)
         .and_then(|host| host.read(cx).view_fetch(window.current_view()));
-    let Some((owner, hosts)) = fetched else {
+    let Some((owner, plugin, hosts)) = fetched else {
         return loose(id, url, window, cx);
     };
-    owned(&owner, id, url, &hosts, window, cx)
+    #[cfg(target_os = "macos")]
+    let keep = store.then(|| {
+        let data = kg_plugins::PluginHost::global(cx)
+            .read(cx)
+            .plugin_data(&plugin);
+        kg_plugins::keep_store(&data, id)
+    });
+    #[cfg(not(target_os = "macos"))]
+    let keep = {
+        let _ = (store, &plugin);
+        None
+    };
+    owned(&owner, id, url, &hosts, keep, window, cx)
 }
 
 fn loose(
@@ -243,7 +279,8 @@ fn loose(
         #[cfg(target_os = "macos")]
         Gate::Open => {
             let key = ElementId::Name(format!("webview-loose-{id}-{url}").into());
-            let state = window.use_keyed_state(key, cx, |window, cx| build(url, &[], window, cx));
+            let state =
+                window.use_keyed_state(key, cx, |window, cx| build(url, &[], None, window, cx));
             match state.read(cx) {
                 Ok(page) => page_shown(page.clone()),
                 Err(message) => Shown {
@@ -260,6 +297,7 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
+    keep: Option<Result<[u8; 16], String>>,
     #[cfg(target_os = "macos")] window: &mut Window,
     #[cfg(not(target_os = "macos"))] _window: &mut Window,
     cx: &mut App,
@@ -285,8 +323,41 @@ fn owned(
             noted(reason)
         }
         #[cfg(target_os = "macos")]
-        Gate::Open => open_owned(owner.clone(), id, url, hosts, index, window, cx),
+        Gate::Open => match keep {
+            Some(Err(message)) => {
+                if let Some(index) = index {
+                    conceal_at(cx, index);
+                    write(cx, index, url, Some(message.clone()));
+                }
+                noted(&message)
+            }
+            other => {
+                let store = other.and_then(Result::ok);
+                open_owned(
+                    Open {
+                        owner: owner.clone(),
+                        id,
+                        url,
+                        hosts,
+                        store,
+                        index,
+                    },
+                    window,
+                    cx,
+                )
+            }
+        },
     }
+}
+
+#[cfg(target_os = "macos")]
+struct Open<'a> {
+    owner: WeakEntity<ScriptView>,
+    id: &'a str,
+    url: &'a str,
+    hosts: &'a [String],
+    store: Option<[u8; 16]>,
+    index: Option<usize>,
 }
 
 fn blank() -> Shown {
@@ -314,26 +385,27 @@ fn page_shown(page: Entity<gpui_webview::WebView>) -> Shown {
 }
 
 #[cfg(target_os = "macos")]
-fn open_owned(
-    owner: WeakEntity<ScriptView>,
-    id: &str,
-    url: &str,
-    hosts: &[String],
-    index: Option<usize>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Shown {
+fn open_owned(open: Open<'_>, window: &mut Window, cx: &mut App) -> Shown {
+    let Open {
+        owner,
+        id,
+        url,
+        hosts,
+        store,
+        index,
+    } = open;
     if let Some(index) = index {
-        let (saved_url, saved_hosts, note, page) = {
+        let (saved_url, saved_hosts, saved_store, note, page) = {
             let slot = &cx.default_global::<Pages>().pages[index];
             (
                 slot.url.clone(),
                 slot.hosts.clone(),
+                slot.store,
                 slot.note.clone(),
                 slot.page.clone(),
             )
         };
-        if saved_url == url && saved_hosts == hosts {
+        if saved_url == url && saved_hosts == hosts && saved_store == store {
             if let Some(page) = page {
                 reveal(&page, cx);
                 return page_shown(page);
@@ -342,6 +414,7 @@ fn open_owned(
                 return Shown { note, page: None };
             }
         } else if saved_hosts == hosts
+            && saved_store == store
             && let Some(page) = page.clone()
         {
             page.update(cx, |page, _| page.load_url(url));
@@ -353,18 +426,22 @@ fn open_owned(
             cx.default_global::<Pages>().pages[index].page = None;
         }
     }
-    match build(url, hosts, window, cx) {
+    match build(url, hosts, store, window, cx) {
         Ok(page) => {
             save(
                 cx,
                 index,
-                held(owner, id, url, hosts, Some(page.clone()), None),
+                held(owner, id, url, hosts, store, Some(page.clone()), None),
             );
             page_shown(page)
         }
         Err(message) => {
             let note = Some(message.clone());
-            save(cx, index, held(owner, id, url, hosts, None, note.clone()));
+            save(
+                cx,
+                index,
+                held(owner, id, url, hosts, store, None, note.clone()),
+            );
             Shown { note, page: None }
         }
     }
@@ -374,11 +451,12 @@ fn open_owned(
 fn build(
     url: &str,
     hosts: &[String],
+    store: Option<[u8; 16]>,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<Entity<gpui_webview::WebView>, String> {
     let hosts = hosts.to_vec();
-    let builder = crate::web::builder(url, move |target| allowed(&target, &hosts).is_ok());
+    let builder = crate::web::builder(url, move |target| allowed(&target, &hosts).is_ok(), store);
     match gpui_webview::WebView::build(builder, window, cx) {
         Ok(view) => Ok(cx.new(|_| view)),
         Err(error) => Err(format!("The page could not open: {error}")),
@@ -430,6 +508,7 @@ fn held(
     id: &str,
     url: &str,
     hosts: &[String],
+    store: Option<[u8; 16]>,
     page: Option<Entity<gpui_webview::WebView>>,
     note: Option<String>,
 ) -> Held {
@@ -438,6 +517,7 @@ fn held(
         id: id.to_owned(),
         url: url.to_owned(),
         hosts: hosts.to_vec(),
+        store,
         note,
         page,
     }
@@ -493,6 +573,8 @@ struct Held {
     note: Option<String>,
     #[cfg(target_os = "macos")]
     hosts: Vec<String>,
+    #[cfg(target_os = "macos")]
+    store: Option<[u8; 16]>,
     #[cfg(target_os = "macos")]
     page: Option<Entity<gpui_webview::WebView>>,
 }

@@ -5407,6 +5407,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-javascript",
  "url",
+ "uuid",
  "windows-sys 0.61.2",
 ]
 

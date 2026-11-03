@@ -53,7 +53,10 @@ use crate::manifest::{Grant, Manifest, Method, Scope, Tool};
 pub use catalog::{Example, capabilities, examples, kinds_in, matched};
 pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
 pub use manifest::{AgentChoice, Setting};
-pub use page::{MESSAGE_CAP, PageFileError, SCHEME, parse_message, read_plugin_file};
+pub use page::{
+    MESSAGE_CAP, PageFileError, SCHEME, clear_stores, keep_store, parse_message, read_plugin_file,
+    store_dir,
+};
 pub use ui_host::{HostContext, HostUi, HostUiEvent, ReviewComment, ToastAction};
 pub use watchdog::PluginStatus;
 
@@ -1032,8 +1035,8 @@ impl PluginHost {
     pub fn view_fetch(
         &self,
         id: gpui_kit::EntityId,
-    ) -> Option<(WeakEntity<ScriptView>, Vec<String>)> {
-        for active in self.active.values() {
+    ) -> Option<(WeakEntity<ScriptView>, PluginId, Vec<String>)> {
+        for (plugin, active) in &self.active {
             let Some(loaded) = &active.loaded else {
                 continue;
             };
@@ -1054,7 +1057,7 @@ impl PluginHost {
                     .iter()
                     .map(|fetch| fetch.host.clone())
                     .collect();
-                return Some((view, hosts));
+                return Some((view, plugin.clone(), hosts));
             }
         }
         None
@@ -1326,6 +1329,29 @@ impl PluginHost {
                 .find(|item| item.id() == panel)
                 .and_then(|item| item.web().map(str::to_owned))
         })
+    }
+
+    /// Whether that web panel keeps cookies and storage under the plugin data folder.
+    #[must_use]
+    pub fn web_store(&self, id: &PluginId, panel: &str) -> bool {
+        self.active
+            .get(id)
+            .and_then(|active| {
+                active
+                    .manifest
+                    .ui
+                    .panels()
+                    .iter()
+                    .find(|item| item.id() == panel)
+                    .map(PanelContribution::store)
+            })
+            .unwrap_or(false)
+    }
+
+    /// This plugin's read-write data folder.
+    #[must_use]
+    pub fn plugin_data(&self, id: &PluginId) -> PathBuf {
+        self.data_dir.join("plugins").join(&id.0).join("data")
     }
 
     /// The plugin folder, for serving that plugin's own page.

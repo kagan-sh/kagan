@@ -3532,6 +3532,15 @@ fn a_manifest_for_a_spot_kagan_does_not_draw_is_refused() {
     declared["ui"]["panels"] =
         json!([{ "id": "notes", "title": "Notes", "view": "Notes", "placement": "bottom" }]);
     refused(declared, "bottom panels are not in this version");
+    let mut declared = manifest();
+    declared["ui"]["panels"] = json!([{
+        "id": "notes",
+        "title": "Notes",
+        "view": "Notes",
+        "placement": "right",
+        "store": true
+    }]);
+    refused(declared, "store belongs on WebView.store(true)");
 }
 
 /// A plugin's theme is a file in its folder, checked at install and at check with the schema of

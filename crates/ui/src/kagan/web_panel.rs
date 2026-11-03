@@ -335,9 +335,20 @@ fn build(
     let panel = slot.contribution.clone();
     let navigation = plugin_id.clone();
     let protocol_plugin = plugin_id.clone();
-    let builder = web::builder(&url, move |target| {
-        web::allows_navigation(&navigation, &target)
-    })
+    let store = if PluginHost::global(cx)
+        .read(cx)
+        .web_store(&slot.plugin, &slot.contribution)
+    {
+        let data = PluginHost::global(cx).read(cx).plugin_data(&slot.plugin);
+        Some(kg_plugins::keep_store(&data, &slot.contribution)?)
+    } else {
+        None
+    };
+    let builder = web::builder(
+        &url,
+        move |target| web::allows_navigation(&navigation, &target),
+        store,
+    )
     .with_file_dialog(false)
     .with_drag_drop_handler(|_| true)
     .with_initialization_script(BRIDGE)

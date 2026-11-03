@@ -1,8 +1,9 @@
 //! One wry page setup, shared by the Browser, a plugin `WebView`, and a web panel.
 //!
-//! Private storage, no new window, and no download. Camera and microphone stay denied by the
-//! pinned wry patch. A web panel's files and navigation rules live here too, so they can be
-//! tested without a native page.
+//! Private storage by default, or a durable store under the plugin data folder when opted in.
+//! No new window, and no download. Camera and microphone stay denied by the pinned wry patch.
+//! A web panel's files and navigation rules live here too, so they can be tested without a
+//! native page.
 
 use std::path::{Component, Path};
 
@@ -288,13 +289,20 @@ fn host_token(host: &str) -> bool {
 pub(crate) fn builder(
     url: &str,
     allow: impl Fn(String) -> bool + 'static,
+    store: Option<[u8; 16]>,
 ) -> wry::WebViewBuilder<'static> {
-    wry::WebViewBuilder::new()
+    use wry::WebViewBuilderExtDarwin as _;
+
+    let builder = wry::WebViewBuilder::new()
         .with_url(url)
-        .with_incognito(true)
+        .with_incognito(store.is_none())
         .with_navigation_handler(allow)
         .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
-        .with_download_started_handler(|_url, _path| false)
+        .with_download_started_handler(|_url, _path| false);
+    match store {
+        Some(id) => builder.with_data_store_identifier(id),
+        None => builder,
+    }
 }
 
 #[cfg(test)]
