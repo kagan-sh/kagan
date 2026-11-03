@@ -13,7 +13,6 @@ pub(super) enum Place {
 
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum Before {
-    /// End of the standard list, still above Personal.
     End,
     Id(ProjectId),
 }
