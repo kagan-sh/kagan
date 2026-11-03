@@ -296,8 +296,6 @@ impl Store {
         Ok(projects)
     }
 
-    /// Places `id` before `before`, or at the end of the standard projects when `before` is none.
-    /// Personal is refused as the moved project and as `before`.
     pub fn reorder_project(&self, id: &ProjectId, before: Option<&ProjectId>) -> Result<()> {
         let mut projects = self.projects()?;
         let Some(index) = projects.iter().position(|project| &project.id == id) else {

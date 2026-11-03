@@ -88,12 +88,11 @@ pub struct Project {
     pub name: String,
     pub path: PathBuf,
     pub git_remote_url: Option<String>,
-    /// Sidebar place among projects of the same kind. Personal stays last regardless.
+    /// Rank among standard projects; Personal stays last regardless.
     #[serde(default)]
     pub sort: i64,
 }
 
-/// Personal last; among the rest, by `sort`, then name, then id.
 pub fn order_sidebar_projects(projects: &mut [Project]) {
     projects.sort_by(|left, right| {
         let personal = |project: &Project| u8::from(matches!(project.kind, ProjectKind::Personal));

@@ -11,10 +11,9 @@ pub(super) enum Place {
     After,
 }
 
-/// Where a dropped project should sit among the standard projects.
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum Before {
-    /// Last among standard projects (still above Personal).
+    /// End of the standard list, still above Personal.
     End,
     Id(ProjectId),
 }
