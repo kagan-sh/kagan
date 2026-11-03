@@ -1,5 +1,5 @@
 //! The Browser tab of the right sidebar: an address field and one web page, drawn by the native
-//! web view. Linux shows a note instead.
+//! web view.
 
 use crate::theme::TypeScale as _;
 use gpui_kit::component::input::{Input, InputEvent, InputState};

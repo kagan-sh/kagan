@@ -1,7 +1,7 @@
 //! One opener for the Browser and for a plugin page.
 //!
-//! Callers set the address, private mode, and which navigations stay. A later caller can also
-//! attach a custom protocol and an IPC handler to the same builder.
+//! Browser and plugin panels both build through `open`, so platform setup and failure mapping
+//! stay in one place instead of forking per caller.
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_kit::{App, AppContext as _, Context, Entity, IntoElement, Render, Window};
@@ -11,12 +11,12 @@ const RUNTIME: &str = "This page needs the Microsoft Edge WebView2 Runtime. Down
 
 #[cfg(any(test, target_os = "macos", target_os = "windows"))]
 fn hresult(code: &str) -> String {
+    // `0x` and the digits stay apart in source so view-colors.sh does not treat the HRESULT as a color.
     format!("0x{code}")
 }
 
 #[cfg(any(test, target_os = "macos", target_os = "windows"))]
 pub(crate) fn failure(error: &str) -> String {
-    // The digits stay separate from the prefix so the view-color check does not read them as a color.
     if error.contains(&hresult("80070002")) || error.contains(&hresult("80040154")) {
         RUNTIME.to_owned()
     } else {
