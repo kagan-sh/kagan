@@ -1055,6 +1055,23 @@ impl Workspace {
         true
     }
 
+    /// Clones `Lines` on the foreground and builds the newest `cap` bytes of plain text on
+    /// the background executor.
+    pub fn thread_output(id: &ThreadId, cap: usize, cx: &mut App) -> Task<Result<String>> {
+        let lines = Self::global(cx)
+            .read(cx)
+            .terminals
+            .get(id)
+            .map(|shown| match shown {
+                crate::thread::Shown::Running(terminal) => terminal.lines(),
+                crate::thread::Shown::Ended(finished) => finished.lines(),
+            });
+        match lines {
+            None => Task::ready(Err(missing("terminal", id))),
+            Some(lines) => cx.background_spawn(async move { Ok(lines.tail(cap)) }),
+        }
+    }
+
     /// A stop or any exit code. A signal, a quit, a failure, or an interrupted start does
     /// not count.
     #[must_use]

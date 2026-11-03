@@ -48,7 +48,7 @@ use kg_domain::{
 use serde_json::{Map, Value};
 
 use crate::jobs::{Ended, Jobs};
-use crate::manifest::{Grant, Manifest, Method, Scope, Tool};
+use crate::manifest::{Fetch, Grant, Manifest, Scope, Tool};
 pub use catalog::{Example, capabilities, examples, kinds_in, matched};
 pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
 pub use manifest::{AgentChoice, Setting};
@@ -62,6 +62,10 @@ fn event_data(kind: &kg_domain::EventKind) -> Value {
         .ok()
         .and_then(|value| value.get("data").cloned())
         .unwrap_or(Value::Null)
+}
+
+fn http_grants(fetch: &[Fetch]) -> std::result::Result<Vec<HttpRequestGrant>, String> {
+    fetch.iter().map(Fetch::http_grant).collect()
 }
 
 const TOOL_TIMEOUT: Duration = Duration::from_mins(2);
@@ -923,21 +927,12 @@ impl Active {
             .storage(true)
             .clipboard_read(powers.clipboard.read)
             .clipboard_write(powers.clipboard.write)
-            .http_requests(powers.fetch.iter().map(|fetch| {
-                HttpRequestGrant::new(
-                    fetch.host.clone(),
-                    fetch.methods.iter().map(|method| match method {
-                        Method::Get => "GET",
-                        Method::Post => "POST",
-                    }),
-                    Vec::<String>::new(),
-                    ["/"],
-                )
-            }));
+            .http_requests(http_grants(&powers.fetch).map_err(|error| failed(&error))?);
 
         let processes = cx.new(|_| process::Processes::default());
         let policy = Policy::new()
             .with_application(&id.0)
+            .with_data_dir(data)
             .with_capabilities(capabilities)
             .with_storage_path(data.join("store.json"));
         let bound = area::Bound {
@@ -1144,7 +1139,7 @@ impl PluginHost {
                     .powers
                     .fetch
                     .iter()
-                    .map(|fetch| fetch.host.clone())
+                    .filter_map(|fetch| fetch.view_host().ok())
                     .collect();
                 return Some((view, hosts));
             }

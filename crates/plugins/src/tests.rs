@@ -112,7 +112,8 @@ const MAIN: &str = r#"
 import { View } from "gpui-kit";
 import { next, reply, fail } from "kagan/jobs";
 import { pluginId, settings, context, onContextChanged } from "kagan/host";
-import { readFile } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
+import { join } from "path";
 
 export default class Plugin extends View {
   init(_props, cx) {
@@ -123,6 +124,12 @@ export default class Plugin extends View {
           reply(job.id, { text: JSON.stringify(context()) });
         } else if (job.name === "echo" && job.input.text === "env") {
           reply(job.id, { text: JSON.stringify(Object.keys(process.env)) });
+        } else if (job.name === "echo" && job.input.text === "data-dir") {
+          Promise.resolve().then(async () => {
+            if (!process.dataDir) throw new Error("process.dataDir is unset");
+            await mkdir(join(process.dataDir, "proof"));
+            reply(job.id, { text: process.dataDir });
+          }).catch((error) => reply(job.id, { text: String(error), isError: true }));
         } else if (job.name === "echo" && job.input.text === "watch") {
           onContextChanged().then(value => reply(job.id, { text: JSON.stringify(value) }));
         } else if (job.name === "echo") {
@@ -656,6 +663,108 @@ fn a_grant_grows_only_when_it_asks_for_more() {
             "writes to your clipboard",
             "reads a folder you choose (Notes)"
         ]
+    );
+}
+
+#[test]
+fn local_fetch_grants_http_on_that_port_and_install_line() {
+    use gpui_shell::Capabilities;
+
+    use crate::manifest::{Fetch, Method};
+
+    let dir = plugin_dir();
+    let mut value = manifest();
+    value["powers"]["fetch"] = json!([
+        { "host": "http://127.0.0.1:3847", "methods": ["GET"] },
+        { "host": "http://localhost:3847", "methods": ["POST"] },
+        { "host": "api.github.com", "methods": ["GET"] }
+    ]);
+    std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+    let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+    assert_eq!(
+        grant.lines(),
+        vec![
+            "talks to programs on this computer (port 3847)",
+            "talks to api.github.com (GET)",
+            "writes to your clipboard",
+            "reads a folder you choose (Notes)",
+        ]
+    );
+
+    let caps = Capabilities::new().http_requests(
+        [
+            Fetch {
+                host: "http://127.0.0.1:3847".into(),
+                methods: [Method::Get].into_iter().collect(),
+            },
+            Fetch {
+                host: "api.github.com".into(),
+                methods: [Method::Get].into_iter().collect(),
+            },
+        ]
+        .iter()
+        .map(|fetch| fetch.http_grant().unwrap()),
+    );
+    assert!(caps.may_request("http", "127.0.0.1", Some(3847), "GET", "/"));
+    assert!(!caps.may_request("http", "127.0.0.1", Some(3848), "GET", "/"));
+    assert!(!caps.may_request("http", "127.0.0.1", Some(3847), "POST", "/"));
+    assert!(!caps.may_request("https", "127.0.0.1", Some(3847), "GET", "/"));
+    assert!(caps.may_request("https", "api.github.com", None, "GET", "/"));
+    assert!(!caps.may_request("http", "api.github.com", None, "GET", "/"));
+}
+
+#[test]
+fn local_fetch_hosts_are_checked() {
+    let dir = plugin_dir();
+    let rejected = |host: &str, expected: &str| {
+        let mut value = manifest();
+        value["powers"]["fetch"] = json!([{ "host": host, "methods": ["GET"] }]);
+        std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+        let error = read_manifest(dir.path()).unwrap_err().to_string();
+        assert!(error.contains(expected), "host {host:?}: {error}");
+    };
+    rejected("127.0.0.1", "http://127.0.0.1:<port>");
+    rejected("localhost", "http://localhost:<port>");
+    rejected("::1", "IPv6 is unsupported");
+    rejected("[::1]", "IPv6 is unsupported");
+    rejected("::ffff:127.0.0.1", "IPv6 is unsupported");
+    rejected("[::ffff:127.0.0.1]", "IPv6 is unsupported");
+    rejected("[::ffff:7f00:1]", "IPv6 is unsupported");
+    rejected("0.0.0.0", "IPv6 is unsupported");
+    rejected("[::]", "IPv6 is unsupported");
+    rejected("[::ffff:0:0]", "IPv6 is unsupported");
+    rejected("localhost.", "IPv6 is unsupported");
+    rejected("foo.localhost", "IPv6 is unsupported");
+    rejected("http://127.0.0.1", "explicit port");
+    rejected("http://localhost", "explicit port");
+    rejected("http://example.com:80", "only for 127.0.0.1 or localhost");
+    rejected(
+        "https://127.0.0.1:443",
+        "hostname, or http://127.0.0.1:<port>",
+    );
+    rejected("http://[::1]:3847", "only for 127.0.0.1 or localhost");
+
+    for host in ["http://127.0.0.1:80", "http://localhost:80"] {
+        let mut value = manifest();
+        value["powers"]["fetch"] = json!([{ "host": host, "methods": ["GET"] }]);
+        std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+        let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+        assert!(
+            grant.lines().iter().any(|line| line.contains("port 80")),
+            "{host}: {:?}",
+            grant.lines()
+        );
+    }
+
+    let mut value = manifest();
+    value["powers"]["fetch"] = (1..=manifest::LOCAL_FETCH_CAP + 1)
+        .map(|port| json!({ "host": format!("http://127.0.0.1:{port}"), "methods": ["GET"] }))
+        .collect();
+    std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+    let error = read_manifest(dir.path()).unwrap_err().to_string();
+    assert!(
+        error.contains(&format!("at most {}", manifest::LOCAL_FETCH_CAP)),
+        "{error}"
     );
 }
 
@@ -2521,6 +2630,7 @@ export default class Plugin extends View {
           ["get", () => threads.get(id)],
           ["events", () => threads.events(id, { afterSeq: 0, limit: 1 })],
           ["settle", () => threads.wait(id, { timeoutMs: 1000 })],
+          ["output", () => threads.output(id)],
           ["wait", () => threads.waitEvent(id, { type: "nope", afterSeq: 0, timeoutMs: 1 })],
           ["pin", () => threads.setPinned(id, false)],
           ["read", () => threads.markRead(id)],
@@ -2635,6 +2745,7 @@ fn a_plugin_calls_every_thread_operation(cx: &mut TestAppContext) {
     }
     assert!(ok("events")["value"].is_array());
     assert_eq!(ok("settle")["value"], "exited");
+    err("output", "not found");
     let asked = &ok("ask")["value"];
     assert!(
         asked["interaction"]
@@ -3230,6 +3341,55 @@ fn database_refuses_external_files_and_transaction_control_in_statements() {
 }
 
 #[gpui_kit::test]
+fn a_plugin_can_mkdir_under_process_data_dir(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    // mkdir runs off the test executor, so wait on real time instead of the
+    // test clock, which would fire the tool timeout first.
+    let task = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::CallTool {
+                id: thread(),
+                name: "echo".into(),
+                input: json!({"text":"data-dir"}),
+            }),
+            cx,
+        )
+    });
+    let (sender, reply) = async_channel::bounded(1);
+    cx.foreground_executor()
+        .spawn(async move { sender.send(task.await).await })
+        .detach();
+    let result = (|| {
+        for _ in 0..2000 {
+            cx.run_until_parked();
+            if let Ok(result) = reply.try_recv() {
+                return result.unwrap();
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("data-dir did not answer")
+    })();
+    let OpResult::ToolReply {
+        text,
+        is_error: false,
+    } = result
+    else {
+        panic!("data-dir: {result:?}");
+    };
+    let expected = cx.read(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .data_dir()
+            .join("plugins")
+            .join(ID)
+            .join("data")
+    });
+    assert_eq!(text, expected.display().to_string());
+    assert!(expected.join("proof").is_dir(), "{text}");
+}
+
+#[gpui_kit::test]
 fn a_plugin_with_no_powers_sees_none_of_the_environment(cx: &mut TestAppContext) {
     let named = ["HTTPS_PROXY", "PATH", "HOME", "USER", "HOSTNAME", "SHELL"];
     // SAFETY: nextest runs each test in its own process, and nothing else here reads the
@@ -3532,6 +3692,23 @@ fn a_manifest_for_a_spot_kagan_does_not_draw_is_refused() {
     declared["ui"]["panels"] =
         json!([{ "id": "notes", "title": "Notes", "view": "Notes", "placement": "bottom" }]);
     refused(declared, "bottom panels are not in this version");
+}
+
+#[test]
+fn a_header_command_needs_when_thread() {
+    let plugin = plugin_dir();
+    let mut declared = manifest();
+    declared["commands"] = json!([{ "id": "hand", "title": "Hand off", "header": true }]);
+    write_plugin(plugin.path(), &declared);
+    let error = read_manifest(plugin.path()).unwrap_err().to_string();
+    assert!(
+        error.contains("a header command needs when thread"),
+        "{error}"
+    );
+    declared["commands"] =
+        json!([{ "id": "hand", "title": "Hand off", "when": "thread", "header": true }]);
+    write_plugin(plugin.path(), &declared);
+    assert!(read_manifest(plugin.path()).is_ok());
 }
 
 /// A plugin's theme is a file in its folder, checked at install and at check with the schema of
@@ -4030,7 +4207,7 @@ fn an_approved_grant_reads_as_plain_lines() {
     assert_eq!(
         crate::power_lines(&approved).unwrap(),
         [
-            "reads, starts and changes your threads, and reads their changed files",
+            "reads, starts and changes your threads, reads their screen text, and reads their changed files",
             "reads a folder you choose (Notes)",
         ]
     );
@@ -4042,6 +4219,28 @@ import { View } from "gpui-kit";
 import { next, reply } from "kagan/jobs";
 import * as process from "kagan/process";
 const modules = { process };
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        try {
+          const { module, call, args } = job.input;
+          const value = await modules[module][call](...args);
+          reply(job.id, { text: JSON.stringify(value ?? null) });
+        } catch (error) { reply(job.id, { text: String(error), isError: true }); }
+      }
+    });
+  }
+  render() { return "forward"; }
+}
+"#;
+
+const THREADS_FORWARD: &str = r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+import * as threads from "kagan/threads";
+const modules = { threads };
 export default class Plugin extends View {
   init(_props, cx) {
     cx.spawn(async () => {
@@ -4121,6 +4320,88 @@ fn process_run_answers_inside_a_script_call(cx: &mut TestAppContext) {
     assert_eq!(output["stderr"].as_str().unwrap().trim(), "error");
     let refused = forward(cx, "process", "run", &json!(["unapproved", []])).unwrap_err();
     assert!(refused.contains("not granted"), "{refused}");
+}
+
+#[gpui_kit::test]
+fn threads_output_reads_scrollback_plain_text(cx: &mut TestAppContext) {
+    cx.executor().allow_parking();
+    let plugin = probe_plugin(&["threads"], THREADS_FORWARD);
+    let mut value = manifest();
+    value["powers"] = json!({ "areas": ["threads"] });
+    value["tools"].as_array_mut().unwrap().push(json!({
+        "name": "probe",
+        "description": "Forward a host call",
+        "input": "schemas/any.json",
+        "scope": "all"
+    }));
+    write_plugin(plugin.path(), &value);
+    std::fs::write(plugin.path().join("main.js"), THREADS_FORWARD).unwrap();
+    open(cx, &[installed(plugin.path())]);
+
+    let program = if cfg!(windows) {
+        "cmd.exe".into()
+    } else {
+        "/bin/sh".into()
+    };
+    let OpResult::Thread(started) = run(
+        cx,
+        Op::Thread(ThreadOp::Run(Run {
+            project_id: ProjectId("prj_test".into()),
+            program,
+            title: Some("Output".into()),
+            environment: EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+    )
+    .unwrap() else {
+        panic!("run")
+    };
+    for _ in 0..200 {
+        cx.run_until_parked();
+        cx.executor().advance_clock(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(5));
+        let status = cx.update(|cx| {
+            Workspace::global(cx)
+                .read(cx)
+                .thread(&started.id)
+                .map(|thread| thread.read(cx).record().status)
+        });
+        if matches!(status, Some(ThreadStatus::Active | ThreadStatus::Idle)) {
+            break;
+        }
+    }
+    let marker = "kagan-output-marker";
+    let typed = if cfg!(windows) {
+        format!("echo {marker}\r\n")
+    } else {
+        format!("printf '{marker}\\n'\n")
+    };
+    run(
+        cx,
+        Op::Thread(ThreadOp::Input {
+            id: started.id.clone(),
+            text: typed,
+            terminal: None,
+        }),
+    )
+    .unwrap();
+    let mut text = String::new();
+    for _ in 0..200 {
+        cx.run_until_parked();
+        cx.executor().advance_clock(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(5));
+        let value = forward(cx, "threads", "output", &json!([started.id.0])).unwrap();
+        text = value["output"].as_str().unwrap_or("").to_owned();
+        if text.contains(marker) {
+            break;
+        }
+    }
+    assert!(text.contains(marker), "output missing {marker}: {text:?}");
+    let missing = forward(cx, "threads", "output", &json!(["thr_missing"])).unwrap_err();
+    assert!(missing.contains("not found"), "{missing}");
 }
 
 fn sleeping() -> Value {

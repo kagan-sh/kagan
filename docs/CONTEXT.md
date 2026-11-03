@@ -104,7 +104,7 @@ The program line a thread runs, such as `claude` or `codex`.
 _Avoid_: Agent (for the program), backend, model
 
 **Plugin**:
-A package installed from git that adds UI, commands, or skills. It starts a thread by naming a program. It never sees a model.
+A package installed from git that adds UI, commands, or skills. It starts a thread by naming a program. It never sees a model. Its data folder is under the app data as `plugins/<id>/data`; the script reads that path as `process.dataDir`.
 _Avoid_: Extension, add-on
 
 **Plugin index**:

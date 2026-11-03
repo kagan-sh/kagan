@@ -50,8 +50,8 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 - **Allowed when**: the thread's program is running in the host [decision 46].
 - **Changes**: `Input` writes text to the program's terminal and brings the view back to the bottom. `Paste` does the same, wrapped in bracketed-paste markers when the program asked for them; otherwise its newlines become carriage returns. A paste that names a path is `invalid` and sends nothing; `kg` reads `--file`, or stdin when the path is `-`, up to 1 MiB, and sends the text. Escape and the other control characters are removed from pasted text, so it cannot end a bracketed paste or type a command. `Report` sends mouse-report bytes (decimal values, 0 to 255) to the program without that scroll reset, so a scrolled view stays where it is. `Resize` sets the program's size, from 2 to 1000 columns and 1 to 500 rows. The last client to resize sets it [decision 46]. `Scroll` moves the view by lines into the history, up when positive. Each program keeps 10,000 lines of history. `Select` starts a selection at a cell (`simple`, `word`, `line` or `block`), or moves the end of the one there is (`extend`). `Screen` changes nothing.
-- **Shows**: `Screen` returns the visible rows as an ANSI redraw, with the modes that change what keys send [decision 46]. With `--scrollback` it returns every kept line as plain text. `--lines` is refused without `--scrollback`; with it, the count is from 1 to 10000 and the result is that many last rows of the same text, or the whole text when there are fewer. `Copy` returns the selected text, or nothing when no text is selected; a whole line copied has no newline at its end. `Input`, `Paste`, `Report`, `Resize`, `Scroll` and `Select` return done. `WorkspaceEvent::Screen` follows a change, at most about 30 times a second [decision 46].
-- **Refused when**: the thread has no running program — `not-found` [op.rs]. A size outside those limits — `invalid` [op.rs]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op.rs]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run.
+- **Shows**: `Screen` returns the visible rows as an ANSI redraw, with the modes that change what keys send [decision 46]. With `--scrollback` it returns every kept line as plain text. `--lines` is refused without `--scrollback`; with it, the count is from 1 to 10000 and the result is that many last rows of the same text, or the whole text when there are fewer. A plugin's `threads.output` is that scrollback plain text, newest 256 KiB [decision 128]. `Copy` returns the selected text, or nothing when no text is selected; a whole line copied has no newline at its end. `Input`, `Paste`, `Report`, `Resize`, `Scroll` and `Select` return done. `WorkspaceEvent::Screen` follows a change, at most about 30 times a second [decision 46].
+- **Refused when**: the thread has no running program — `not-found` [op.rs]. A size outside those limits — `invalid` [op.rs]. `--lines` without `--scrollback`, or a count outside 1 to 10000 — `invalid` [op.rs]. A settled screen is kept across a restart, at most 4 MiB for the whole snapshot [decision 62]. A crash while the program is still running leaves the reason and no screen. The thread says no output was saved for that run. An ended program whose screen was kept still answers `Screen` and `threads.output`.
 
 ### `Terminal` (`New`, `List`, `Close`)
 
@@ -228,7 +228,7 @@ The provider on a thread is the program line that thread runs, such as `claude` 
 
 ## Plugin
 
-A plugin is a package installed from git that adds UI, commands, tools, or skills [CONTEXT]. A plugin's thread record omits the program line [docs:plugin-api]. There is no trust shortcut for a plugin an agent built [docs:self-extend]. This contract has no catalog and no marketplace command; install is a git link or a local folder [docs:self-extend] [book:plugins]. Decision 3 describes a later index and is not an Op here [decision 3]. A manifest with `"areas": ["audio"]` is refused as an unknown area [decision 42].
+A plugin is a package installed from git that adds UI, commands, tools, or skills [CONTEXT]. A plugin's thread record omits the program line [docs:plugin-api]. There is no trust shortcut for a plugin an agent built [docs:self-extend]. This contract has no catalog and no marketplace command; install is a git link or a local folder [docs:self-extend] [book:plugins]. Decision 3 describes a later index and is not an Op here [decision 3]. A manifest with `"areas": ["audio"]` is refused as an unknown area [decision 42]. When loaded, its script reads its data folder as `process.dataDir` [decision 127].
 
 ### `List`, `Logs`, `Types`
 
@@ -245,7 +245,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 ### `Command`
 
 - **Allowed when**: the plugin declares the command, and its `when` matches: `always`, a thread on screen, or a project [docs:plugin-api] [book:cli].
-- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api].
+- **Changes**: runs that command [book:cli]. The job has no reply body [docs:plugin-api]. A command with `"header": true` and `"when": "thread"` is also a button on the shown thread's title bar; a click runs the same path [decision 129].
 - **Refused when**: past 10 seconds — `failed` [docs:plugin-api] [op.rs]. Unavailable without a plugin host — `failed` [docs:architecture] [op.rs]. That is the contract before plugins load [person 2026-10-08].
 
 ### `New`
