@@ -278,12 +278,11 @@ fn reclaim_stale(path: &std::path::Path) -> io::Result<()> {
             "kg.sock is owned by someone else",
         ));
     }
-    let Some(dir) = path.parent() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "socket has no folder",
-        ));
-    };
+    // A bare `kg.sock` has an empty parent. The working directory is that folder.
+    let dir = path
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
     let dir_meta = std::fs::symlink_metadata(dir)?;
     if dir_meta.file_type().is_symlink() || !dir_meta.is_dir() || dir_meta.uid() != effective_uid()
     {

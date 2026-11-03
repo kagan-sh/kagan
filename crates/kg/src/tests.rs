@@ -305,6 +305,37 @@ fn socket_dir_is_private_and_stale_socket_is_replaced() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_bare_socket_name_replaces_a_stale_socket() {
+    let _cwd = Cwd::stay();
+    let dir = test_dir("bare-sock");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::env::set_current_dir(&dir).unwrap();
+    let _socket = set_env("KG_SOCKET", std::ffi::OsStr::new("kg.sock"));
+    drop(std::os::unix::net::UnixListener::bind("kg.sock").unwrap());
+    let location = socket::location().unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(location, "kg.sock");
+    let started = std::time::Instant::now();
+    let listener = loop {
+        if let Some(listener) = socket::open(&location).unwrap_or_else(|error| panic!("{error}")) {
+            break listener;
+        }
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "stale socket still answers"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    };
+    socket::serve(listener, |_, _| Ok(OpResult::Done));
+    assert_eq!(
+        Client::connect(socket::name(&location).unwrap())
+            .unwrap()
+            .call(&Op::Sidebar),
+        Ok(OpResult::Done)
+    );
+}
+
 #[test]
 fn socket_round_trip() {
     let name = test_name("round-trip");
