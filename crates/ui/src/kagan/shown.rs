@@ -13,7 +13,6 @@ use gpui_kit::{
 };
 use kg_core::{Color, Workspace};
 use kg_domain::{Op, Thread, ThreadId, ThreadOp, ThreadStatus};
-use kg_plugins::{CommandWhen, PluginHost, RunCommand};
 
 use super::{
     AddProject, ArchiveThread, Kagan, NewThread, RenameThread, SaveDiagnostics, StartAgain,
@@ -403,21 +402,7 @@ impl Kagan {
         let live = running(thread);
         h_flex()
             .gap_2()
-            .children(header_commands(cx).into_iter().map(|(plugin, id, title)| {
-                let run = RunCommand::new(plugin.clone(), id.clone());
-                let tooltip = tip(&title, &run, cx);
-                let name = format!("header-{plugin}-{id}");
-                control(
-                    name.clone(),
-                    Facts::button(title.clone()),
-                    Button::new(SharedString::from(format!("{name}-button")))
-                        .small()
-                        .ghost()
-                        .label(title)
-                        .tooltip(tooltip)
-                        .on_click(dispatch(run)),
-                )
-            }))
+            .children(super::header::buttons(cx))
             .when(live, |header| {
                 let keys = bound_keys(&StopThread, cx);
                 let tip = if keys.is_empty() {
@@ -541,24 +526,6 @@ impl Kagan {
             .child(text)
             .into_any_element()
     }
-}
-
-fn header_commands(cx: &App) -> Vec<(kg_domain::PluginId, String, String)> {
-    let Some(host) = PluginHost::try_global(cx) else {
-        return Vec::new();
-    };
-    host.read(cx)
-        .commands()
-        .into_iter()
-        .filter(|command| command.header() && command.when() == CommandWhen::Thread)
-        .map(|command| {
-            (
-                command.plugin().clone(),
-                command.id().to_owned(),
-                command.title().to_owned(),
-            )
-        })
-        .collect()
 }
 
 pub(super) fn bound_keys(action: &dyn Action, cx: &App) -> String {
