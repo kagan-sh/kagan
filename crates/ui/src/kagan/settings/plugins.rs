@@ -162,7 +162,10 @@ fn sync_text(
             kept.life = life;
             if replaced {
                 forget_queued(drafts, &scope);
-                field.update(cx, TextField::drop_pending);
+                field.update(cx, |field, cx| {
+                    field.kind = kind;
+                    field.drop_pending(cx);
+                });
             }
             sync_one(&field, &text, window, cx);
         } else {

@@ -1529,7 +1529,7 @@ pub enum ConfigOp {
     Set {
         key: String,
         /// Omit it to type it at a prompt that does not show it, or to pipe it on stdin. Do that for a secret, so it stays out of your shell history
-        #[arg(value_parser = StringValueParser::new().map(json))]
+        #[arg(allow_negative_numbers = true, value_parser = StringValueParser::new().map(json))]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<Value>,
     },

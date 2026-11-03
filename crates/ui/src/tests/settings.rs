@@ -507,6 +507,68 @@ fn a_plugin_setting_saves_from_its_page(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn review_number_type_after_reload(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_string_retries);
+    cx.run_until_parked();
+    let select_all = if cfg!(target_os = "macos") {
+        "cmd-a"
+    } else {
+        "ctrl-a"
+    };
+    click(cx, window, "settings-gear");
+    let field = format!("plugin-text-{PREFS}/retries");
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "nope");
+    cx.run_until_parked();
+    set_retries_type(data.path(), "number");
+    reload_prefs(cx);
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "4");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "retries"), json!(4));
+    let store = kg_store::Store::open(data.path().join("kagan.sqlite3")).unwrap();
+    assert_eq!(
+        store
+            .plugin_value(&PluginId(PREFS.into()), "retries")
+            .unwrap(),
+        Some(json!(4)),
+        "the saved value is a JSON number, not text"
+    );
+}
+
+fn install_string_retries(data: &Path) {
+    install_plugins(data);
+    set_retries_type(data, "string");
+}
+
+fn set_retries_type(data: &Path, kind: &str) {
+    let path = data.join("prefs-plugin").join("kagan.json");
+    let mut manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let retries = &mut manifest["settings"]["retries"];
+    retries["type"] = json!(kind);
+    retries["default"] = if kind == "string" {
+        json!("3")
+    } else {
+        json!(3)
+    };
+    std::fs::write(&path, manifest.to_string()).unwrap();
+}
+
+fn reload_prefs(cx: &mut TestAppContext) {
+    run_op(
+        cx,
+        Op::Plugin(PluginOp::Reload {
+            id: PluginId(PREFS.into()),
+            thread_id: None,
+        }),
+    );
+}
+
+#[gpui_kit::test]
 fn a_text_setting_shows_a_change_from_kg_without_saving(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
