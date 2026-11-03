@@ -7,6 +7,11 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+use std::mem::ManuallyDrop;
+#[cfg(unix)]
+use std::os::fd::{FromRawFd, RawFd};
+
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use crate::screen::{Edit, MIN_COLS, SNAPSHOT_MAX, Screen, SelectMode};
@@ -57,6 +62,11 @@ pub struct Terminal {
     writer: Option<JoinHandle<()>>,
     shared: Shared,
     ended: Arc<AtomicBool>,
+    /// Writer fd closed from finish to unblock a full-pty `write_all`. Unix only.
+    #[cfg(unix)]
+    write_fd: RawFd,
+    #[cfg(unix)]
+    write_closed: Arc<AtomicBool>,
     process_id: u32,
     epoch: Instant,
     observed: OnceLock<(Exit, Duration)>,
@@ -82,6 +92,26 @@ impl Terminal {
         let size = pty_size(cols, rows)?;
         let pair = native_pty_system().openpty(size).map_err(io_error)?;
         let reader = pair.master.try_clone_reader().map_err(io_error)?;
+        #[cfg(unix)]
+        let (writer, write_fd, write_closed) = {
+            let fd = pair
+                .master
+                .as_raw_fd()
+                .ok_or_else(|| io::Error::other("pty has no fd"))?;
+            // Own dup so finish can close this exact fd and unblock write_all.
+            // SAFETY: fd is the live master; dup returns a new descriptor we own.
+            let write_fd = unsafe { libc::dup(fd) };
+            if write_fd < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let write_closed = Arc::new(AtomicBool::new(false));
+            let writer: Box<dyn Write + Send> = Box::new(PtyWriter {
+                file: ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(write_fd) }),
+                closed: Arc::clone(&write_closed),
+            });
+            (writer, write_fd, write_closed)
+        };
+        #[cfg(not(unix))]
         let writer = pair.master.take_writer().map_err(io_error)?;
         let mut command = CommandBuilder::new(launch.program);
         command.args(launch.args);
@@ -143,6 +173,10 @@ impl Terminal {
             child: Mutex::new(Some(child)),
             shared,
             ended,
+            #[cfg(unix)]
+            write_fd,
+            #[cfg(unix)]
+            write_closed,
             process_id,
             epoch: Instant::now(),
             observed: OnceLock::new(),
@@ -452,7 +486,51 @@ impl Terminal {
             writer: self.writer.take(),
             reader: self.reader.take(),
             shared: self.shared.clone(),
+            #[cfg(unix)]
+            write_fd: self.write_fd,
+            #[cfg(unix)]
+            write_closed: Arc::clone(&self.write_closed),
         })
+    }
+}
+
+/// Writer whose fd finish can close to unblock a stuck `write_all`.
+#[cfg(unix)]
+struct PtyWriter {
+    file: ManuallyDrop<std::fs::File>,
+    closed: Arc<AtomicBool>,
+}
+
+#[cfg(unix)]
+impl Write for PtyWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        (&*self.file).write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        (&*self.file).flush()
+    }
+}
+
+#[cfg(unix)]
+impl Drop for PtyWriter {
+    fn drop(&mut self) {
+        if !self.closed.swap(true, Ordering::AcqRel) {
+            // SAFETY: closed was false, so finish has not closed this fd.
+            unsafe {
+                drop(ManuallyDrop::take(&mut self.file));
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn close_writer_fd(fd: RawFd, closed: &AtomicBool) {
+    if !closed.swap(true, Ordering::AcqRel) {
+        // SAFETY: we own fd and closed was false, so PtyWriter has not dropped it.
+        unsafe {
+            let _ = libc::close(fd);
+        }
     }
 }
 
