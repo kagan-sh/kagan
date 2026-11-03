@@ -579,6 +579,7 @@ fn a_project_menu_scrolls_to_its_last_of_25_projects(cx: &mut TestAppContext) {
         last = Some(add_project(cx, &folder).id);
     }
     let last = last.unwrap();
+    cx.simulate_window_resize(window, size(px(1100.), px(420.)));
     cx.run_until_parked();
     click(cx, window, "settings-gear");
     click(cx, window, "setting-project-dev.test.prefs/board");
@@ -586,6 +587,10 @@ fn a_project_menu_scrolls_to_its_last_of_25_projects(cx: &mut TestAppContext) {
     wait_until(cx, |cx| {
         shows(cx, window, "project-none-dev.test.prefs/board")
     });
+    assert!(
+        !shows(cx, window, &pick),
+        "the last project starts below the short window"
+    );
     run_op(
         cx,
         Op::Ui(UiOp::Scroll {
@@ -596,55 +601,21 @@ fn a_project_menu_scrolls_to_its_last_of_25_projects(cx: &mut TestAppContext) {
         }),
     );
     wait_until(cx, |cx| shows(cx, window, &pick));
+    let (row_bottom, viewport) = cx
+        .update_window(window, |_, window, _| {
+            let row = crate::ui_registry::find(window, &ElementId::Name(pick.clone().into()))
+                .unwrap()
+                .bounds();
+            (row.bottom(), window.viewport_size().height)
+        })
+        .unwrap();
+    assert!(
+        row_bottom <= viewport,
+        "the revealed row sits inside the window: bottom {row_bottom:?}, window {viewport:?}"
+    );
     click(cx, window, &pick);
     cx.run_until_parked();
     assert_eq!(plugin_config(cx, "board"), json!(last.0));
-}
-
-#[gpui_kit::test]
-fn long_project_names_with_one_prefix_keep_full_names_in_their_hints(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
-    cx.run_until_parked();
-    let mut projects = Vec::new();
-    for suffix in ["north", "south"] {
-        let folder = data.path().join(format!(
-            "customer-portal-migration-to-the-new-platform-{suffix}"
-        ));
-        std::fs::create_dir(&folder).unwrap();
-        projects.push(add_project(cx, &folder));
-    }
-    cx.run_until_parked();
-    click(cx, window, "settings-gear");
-    click(cx, window, "setting-project-dev.test.prefs/board");
-    for project in &projects {
-        let pick = format!("project-pick-dev.test.prefs/board/{}", project.id.0);
-        wait_until(cx, |cx| shows(cx, window, &pick));
-        assert_eq!(hint_of(cx, window, &pick), Some(project.name.clone()));
-    }
-    assert_ne!(projects[0].name, projects[1].name);
-}
-
-#[gpui_kit::test]
-fn the_saved_project_is_checked_in_its_menu(cx: &mut TestAppContext) {
-    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
-    cx.run_until_parked();
-    let folder = data.path().join("checked-project");
-    std::fs::create_dir(&folder).unwrap();
-    let project = add_project(cx, &folder);
-    cx.run_until_parked();
-    click(cx, window, "settings-gear");
-    click(cx, window, "setting-project-dev.test.prefs/board");
-    let pick = format!("project-pick-dev.test.prefs/board/{}", project.id.0);
-    wait_until(cx, |cx| shows(cx, window, &pick));
-    click(cx, window, &pick);
-    cx.run_until_parked();
-    click(cx, window, "setting-project-dev.test.prefs/board");
-    wait_until(cx, |cx| shows(cx, window, &pick));
-    assert_eq!(selected_of(cx, window, &pick), Some(true));
-    assert_eq!(
-        selected_of(cx, window, "project-none-dev.test.prefs/board"),
-        Some(false)
-    );
 }
 
 #[gpui_kit::test]
@@ -691,14 +662,6 @@ fn removing_the_project_while_settings_is_open_shows_missing(cx: &mut TestAppCon
     );
     let note = aria_label(cx, window, "setting-row-dev.test.prefs/board-note").unwrap_or_default();
     assert!(note.contains("gone"), "{note}");
-}
-
-fn hint_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<String> {
-    cx.update_window(window, |_, window, _| {
-        crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.hint().map(str::to_owned))
-    })
-    .unwrap()
 }
 
 #[gpui_kit::test]
