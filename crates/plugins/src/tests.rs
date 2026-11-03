@@ -112,7 +112,8 @@ const MAIN: &str = r#"
 import { View } from "gpui-kit";
 import { next, reply, fail } from "kagan/jobs";
 import { pluginId, settings, context, onContextChanged } from "kagan/host";
-import { readFile } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
+import { join } from "path";
 
 export default class Plugin extends View {
   init(_props, cx) {
@@ -123,6 +124,12 @@ export default class Plugin extends View {
           reply(job.id, { text: JSON.stringify(context()) });
         } else if (job.name === "echo" && job.input.text === "env") {
           reply(job.id, { text: JSON.stringify(Object.keys(process.env)) });
+        } else if (job.name === "echo" && job.input.text === "data-dir") {
+          Promise.resolve().then(async () => {
+            if (!process.dataDir) throw new Error("process.dataDir is unset");
+            await mkdir(join(process.dataDir, "proof"));
+            reply(job.id, { text: process.dataDir });
+          }).catch((error) => reply(job.id, { text: String(error), isError: true }));
         } else if (job.name === "echo" && job.input.text === "watch") {
           onContextChanged().then(value => reply(job.id, { text: JSON.stringify(value) }));
         } else if (job.name === "echo") {
@@ -3227,6 +3234,54 @@ fn database_refuses_external_files_and_transaction_control_in_statements() {
         call("query", vec![json!("SELECT * FROM notes"), json!([])]).unwrap(),
         json!([{ "text": "kept" }])
     );
+}
+
+#[gpui_kit::test]
+fn a_plugin_can_mkdir_under_process_data_dir(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    // mkdir runs off the test executor, so wait on real time like peek.
+    let task = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::CallTool {
+                id: thread(),
+                name: "echo".into(),
+                input: json!({"text":"data-dir"}),
+            }),
+            cx,
+        )
+    });
+    let (sender, reply) = async_channel::bounded(1);
+    cx.foreground_executor()
+        .spawn(async move { sender.send(task.await).await })
+        .detach();
+    let result = (|| {
+        for _ in 0..2000 {
+            cx.run_until_parked();
+            if let Ok(result) = reply.try_recv() {
+                return result.unwrap();
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        panic!("data-dir did not answer")
+    })();
+    let OpResult::ToolReply {
+        text,
+        is_error: false,
+    } = result
+    else {
+        panic!("data-dir: {result:?}");
+    };
+    let expected = cx.read(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .data_dir()
+            .join("plugins")
+            .join(ID)
+            .join("data")
+    });
+    assert_eq!(text, expected.display().to_string());
+    assert!(expected.join("proof").is_dir(), "{text}");
 }
 
 #[gpui_kit::test]
