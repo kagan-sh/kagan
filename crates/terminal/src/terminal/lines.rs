@@ -41,7 +41,6 @@ impl Lines {
     }
 }
 
-/// May return fewer than `cap` bytes so the slice starts on a character boundary.
 #[must_use]
 pub(crate) fn newest(text: String, cap: usize) -> String {
     if text.len() <= cap {
