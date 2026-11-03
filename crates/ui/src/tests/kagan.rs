@@ -3830,6 +3830,7 @@ fn seed(dir: &Path) {
             name: "Kagan project".into(),
             path: dir.to_path_buf(),
             git_remote_url: None,
+            sort: 0,
         })
         .unwrap();
 }

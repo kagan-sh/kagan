@@ -13,8 +13,8 @@ use gpui_kit::component::{
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Context, DismissEvent, ElementId, Entity, EventEmitter,
-    FocusHandle, Focusable as _, InteractiveElement as _, IntoElement, KeyBinding,
+    AnyElement, App, ClickEvent, Context, DismissEvent, DragMoveEvent, ElementId, Entity,
+    EventEmitter, FocusHandle, Focusable as _, InteractiveElement as _, IntoElement, KeyBinding,
     ParentElement as _, Role, ScrollHandle, SharedString, StatefulInteractiveElement as _,
     Styled as _, Subscription, WeakEntity, Window, actions, div, px, relative,
 };
@@ -22,8 +22,10 @@ use kg_core::Workspace;
 use kg_domain::{PluginId, Project, ProjectId, ProjectKind, Thread, ThreadId};
 
 mod brand_menu;
+mod order;
 
 use super::surface::{self, OpenSurface};
+use order::{DragProject, Place};
 
 use super::shown::{control, menu_item, menu_popup, tip};
 use crate::theme::Tone;
@@ -70,6 +72,10 @@ pub(super) enum Event {
     Archive(ThreadId),
     ThreadActions(ThreadId),
     RemoveProject(ProjectId),
+    Reorder {
+        id: ProjectId,
+        before: Option<ProjectId>,
+    },
     RowPin(ThreadId),
     RowArchive(ThreadId),
     RowRename(ThreadId),
@@ -122,6 +128,8 @@ pub(super) struct Sidebar {
     row_menu: Option<(Entity<PopupMenu>, Subscription, ThreadId)>,
     brand_focus: FocusHandle,
     brand_menu: Option<(Entity<PopupMenu>, Subscription)>,
+    drag: Option<ProjectId>,
+    drop: Option<(ProjectId, Place)>,
 }
 
 impl EventEmitter<Event> for Sidebar {}
@@ -143,6 +151,8 @@ impl Sidebar {
             row_menu: None,
             brand_focus: cx.focus_handle().tab_stop(true),
             brand_menu: None,
+            drag: None,
+            drop: None,
         }
     }
 
@@ -156,6 +166,8 @@ impl Sidebar {
     pub(super) fn replace(&mut self, listing: kg_domain::Sidebar, footer: ArchivedFooter) {
         self.listing = listing;
         self.archived_footer = footer;
+        self.drag = None;
+        self.drop = None;
     }
 
     pub(super) fn chosen(&self) -> Option<&ProjectId> {
@@ -426,7 +438,91 @@ fn project_line(
         .is_some_and(|focus| focus.is_focused(window));
     let project = id.clone();
     let view = cx.entity().downgrade();
+    let menu_view = view.clone();
+    let standard = matches!(
+        row.kind,
+        Kind::Project {
+            kind: ProjectKind::Standard,
+            ..
+        }
+    );
+    let line = project_shell(
+        id,
+        sidebar.drag.as_ref() == Some(id),
+        sidebar.drop.as_ref(),
+        cx,
+    )
+    .child(div().min_w_0().flex_1().child(face))
+    .child(
+        h_flex()
+            .ml_2()
+            .flex_shrink_0()
+            .items_center()
+            .when(!focused, gpui_kit::Styled::invisible)
+            .group_hover("project-row", gpui_kit::Styled::visible)
+            .child(
+                h_flex()
+                    .id(ElementId::Name(format!("project-disclose-{id}").into()))
+                    .w_0()
+                    .flex_shrink_0()
+                    .overflow_hidden()
+                    .when(focused, gpui_kit::Styled::w_6)
+                    .group_hover("project-row", gpui_kit::Styled::w_6)
+                    .ui_observe_as(Facts::button(disclose.clone()))
+                    .child(icon_button(
+                        &format!("project-disclose-{id}"),
+                        disclose.clone(),
+                        disclose,
+                        icon,
+                        cx.listener(move |this, _, _, cx| {
+                            this.toggle_project(hide_id.clone(), cx);
+                        }),
+                    )),
+            )
+            .child(icon_command(
+                format!("project-new-{id}"),
+                started.clone(),
+                tip(&started, &super::NewThread, cx),
+                IconName::Plus,
+                cx.listener(move |_, _, _, cx| {
+                    cx.emit(Event::Project(start_id.clone()));
+                }),
+            ))
+            .when(standard, |controls| {
+                controls.child(control(
+                    ElementId::Name(format!("project-actions-{id}").into()),
+                    Facts::button("Project actions"),
+                    Button::new(SharedString::from(format!("project-actions-control-{id}")))
+                        .small()
+                        .ghost()
+                        .icon(IconName::Ellipsis)
+                        .accessibility_label("Project actions")
+                        .tooltip("Project actions")
+                        .tab_stop(false)
+                        .dropdown_menu(move |menu, _, _| {
+                            project_menu(menu, project.clone(), menu_view.clone())
+                        }),
+                ))
+            }),
+    );
+    if !standard {
+        return line.into_any_element();
+    }
+    reorder_line(line, id, &row.label, view, cx).into_any_element()
+}
+
+fn project_shell(
+    id: &ProjectId,
+    dragged: bool,
+    drop: Option<&(ProjectId, Place)>,
+    cx: &App,
+) -> impl gpui_kit::ParentElement
++ gpui_kit::Styled
++ gpui_kit::StatefulInteractiveElement
++ IntoElement
++ use<> {
     h_flex()
+        .id(ElementId::Name(format!("project-drag-{id}").into()))
         .group("project-row")
         .w_full()
         .h_6()
@@ -434,71 +530,75 @@ fn project_line(
         .items_center()
         .rounded(cx.theme().radius)
         .hover(|line| line.bg(cx.theme().list_hover))
-        .child(div().min_w_0().flex_1().child(face))
-        .child(
-            h_flex()
-                .ml_2()
-                .flex_shrink_0()
-                .items_center()
-                .when(!focused, gpui_kit::Styled::invisible)
-                .group_hover("project-row", gpui_kit::Styled::visible)
-                .child(
-                    h_flex()
-                        .id(ElementId::Name(format!("project-disclose-{id}").into()))
-                        .w_0()
-                        .flex_shrink_0()
-                        .overflow_hidden()
-                        .when(focused, gpui_kit::Styled::w_6)
-                        .group_hover("project-row", gpui_kit::Styled::w_6)
-                        .ui_observe_as(Facts::button(disclose.clone()))
-                        .child(icon_button(
-                            &format!("project-disclose-{id}"),
-                            disclose.clone(),
-                            disclose,
-                            icon,
-                            cx.listener(move |this, _, _, cx| {
-                                this.toggle_project(hide_id.clone(), cx);
-                            }),
-                        )),
-                )
-                .child(icon_command(
-                    format!("project-new-{id}"),
-                    started.clone(),
-                    tip(&started, &super::NewThread, cx),
-                    IconName::Plus,
-                    cx.listener(move |_, _, _, cx| {
-                        cx.emit(Event::Project(start_id.clone()));
-                    }),
-                ))
-                .when(
-                    matches!(
-                        row.kind,
-                        Kind::Project {
-                            kind: ProjectKind::Standard,
-                            ..
-                        }
-                    ),
-                    |controls| {
-                        controls.child(control(
-                            ElementId::Name(format!("project-actions-{id}").into()),
-                            Facts::button("Project actions"),
-                            Button::new(SharedString::from(format!(
-                                "project-actions-control-{id}"
-                            )))
-                            .small()
-                            .ghost()
-                            .icon(IconName::Ellipsis)
-                            .accessibility_label("Project actions")
-                            .tooltip("Project actions")
-                            .tab_stop(false)
-                            .dropdown_menu(move |menu, _, _| {
-                                project_menu(menu, project.clone(), view.clone())
-                            }),
-                        ))
-                    },
-                ),
+        .when(dragged, |line| line.opacity(0.5))
+        .when(
+            drop.is_some_and(|(target, place)| target == id && *place == Place::Before),
+            |line| line.border_t_2().border_color(cx.theme().border),
         )
-        .into_any_element()
+        .when(
+            drop.is_some_and(|(target, place)| target == id && *place == Place::After),
+            |line| line.border_b_2().border_color(cx.theme().border),
+        )
+}
+
+fn reorder_line(
+    line: impl gpui_kit::StatefulInteractiveElement + IntoElement,
+    id: &ProjectId,
+    label: &str,
+    view: WeakEntity<Sidebar>,
+    cx: &mut Context<Sidebar>,
+) -> impl IntoElement {
+    let drag = DragProject::new(id.clone(), label.to_owned());
+    let move_target = id.clone();
+    let drop_target = id.clone();
+    let start_id = id.clone();
+    line.on_drag(drag, move |drag, _, _, cx| {
+        _ = view.update(cx, |this, cx| {
+            this.drag = Some(start_id.clone());
+            this.drop = None;
+            cx.notify();
+        });
+        order::preview(drag, cx)
+    })
+    .on_drag_move(
+        cx.listener(move |this, event: &DragMoveEvent<DragProject>, _, cx| {
+            let from = event.drag(cx).id.clone();
+            let place = if event.bounds.contains(&event.event.position) {
+                let place = order::place_at(event.bounds, event.event.position);
+                if order::noop_gap(&from, &move_target, place, &this.listing.projects) {
+                    None
+                } else {
+                    Some(place)
+                }
+            } else {
+                None
+            };
+            let next = place.map(|place| (move_target.clone(), place));
+            if this.drop != next {
+                this.drop = next;
+                cx.notify();
+            }
+        }),
+    )
+    .on_drop(cx.listener(move |this, drag: &DragProject, _, cx| {
+        let Some((_, place)) = this
+            .drop
+            .take()
+            .filter(|(target, _)| target == &drop_target)
+        else {
+            this.drag = None;
+            cx.notify();
+            return;
+        };
+        this.drag = None;
+        if let Some(before) = order::before_of(&this.listing.projects, &drop_target, place) {
+            cx.emit(Event::Reorder {
+                id: drag.id.clone(),
+                before: before.into_option(),
+            });
+        }
+        cx.notify();
+    }))
 }
 
 fn icon_command(

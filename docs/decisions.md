@@ -506,3 +506,8 @@ Rules out: falling back to the default socket when `KG_DATA_DIR` is set, and tru
 Why: a script that writes under its granted data root has to know that path; without this it is unset.
 Cost: one path on the policy, already held for storage and file roots.
 Rules out: giving a plugin the app's data folder, and a power that grants `process.dataDir`.
+
+**132. Drag a project header to reorder the sidebar.** Each standard project stores a `sort` integer. The sidebar lists standard projects by that order (then name, then id), and Personal always last. Dragging one standard header onto another places it before the target on the top half of that row, or after on the bottom half; a drop that would not move anything is ignored. Personal cannot be dragged or named as `--before`. A new project gets the next sort after the current standard projects. `kg project reorder <id> [--before <id>]` does the same without the drag. An upgrade from an older database fills sort from the previous name order.
+Why: the person chooses which project sits where, and that choice survives restart.
+Cost: one integer column and a renumber of the standard list on each move.
+Rules out: reordering Personal, a plugin API for reorder in this change, and fractional sort keys.

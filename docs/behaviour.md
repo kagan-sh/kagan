@@ -182,14 +182,20 @@ A project is a named body of work, usually one repository, with one folder on th
 ### `List`, `Get`
 
 - **Allowed when**: `Get` needs a project id [book:cli]. `List` always [book:cli].
-- **Shows**: the projects, or one project [book:cli]. Personal is last in the sidebar [docs:look].
+- **Shows**: the projects, or one project [book:cli]. Standard projects follow the person's order; Personal is last in the sidebar [docs:look] [decision 132].
 - **Refused when**: a missing id on `Get` — `not-found` [op.rs].
 
 ### `Add`
 
 - **Allowed when**: the command is given a folder path [book:cli] [op.rs].
-- **Changes**: adds a `standard` project for that folder [book:cli] [person 2026-10-08]. The book also says this version has no such command; the CLI has it, so Add is in the contract [book:threads] [book:cli].
+- **Changes**: adds a `standard` project for that folder [book:cli] [person 2026-10-08]. The book also says this version has no such command; the CLI has it, so Add is in the contract [book:threads] [book:cli]. A new project is appended after the other standard projects [decision 132].
 - **Refused when**: a path the command cannot use as a project folder — `invalid` [op.rs].
+
+### `Reorder`
+
+- **Allowed when**: the id is a standard project [book:cli] [decision 132].
+- **Changes**: moves that project before `--before`, or to the end of the standard list when `--before` is omitted [book:cli] [decision 132]. Dragging a project header in the sidebar does the same [docs:look].
+- **Refused when**: a missing id — `not-found` [op.rs]. Personal, or `--before` naming Personal — `invalid` [op.rs] [decision 132].
 
 ## Environment
 

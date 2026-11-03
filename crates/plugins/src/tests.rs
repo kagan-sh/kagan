@@ -236,6 +236,7 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
         name: "Project".into(),
         path: dunce::canonicalize(data).unwrap(),
         git_remote_url: None,
+        sort: 0,
     };
     store.put_project(&project).unwrap();
     store
