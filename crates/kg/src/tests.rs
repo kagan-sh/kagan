@@ -273,15 +273,16 @@ fn test_name(label: &str) -> Name<'static> {
 fn socket_dir_is_private_and_stale_socket_is_replaced() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dir = test_dir("stale");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let sock = dir.join("kg.sock");
+    // Not test_dir: a pid-keyed path can collide with a leftover kg.sock after
+    // the OS recycles the pid, and bind then fails with EADDRINUSE.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let sock = dir.path().join("kg.sock");
     drop(std::os::unix::net::UnixListener::bind(&sock).unwrap());
-    let location = socket::location_in(&dir).unwrap();
+    let location = socket::location_in(dir.path()).unwrap();
     let name = socket::name(&location).unwrap();
     assert_eq!(
-        std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+        std::fs::metadata(dir.path()).unwrap().permissions().mode() & 0o777,
         0o700
     );
     assert!(sock.exists(), "stale socket file is gone");
