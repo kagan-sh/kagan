@@ -799,6 +799,13 @@ fn submit_reports_a_failed_write() {
 
 #[cfg(unix)]
 #[test]
+fn a_bad_fd_is_refused_when_made_nonblocking() {
+    let error = set_nonblocking(-1).unwrap_err();
+    assert_eq!(error.raw_os_error(), Some(libc::EBADF));
+}
+
+#[cfg(unix)]
+#[test]
 fn write_bytes_delivers_after_a_short_write() {
     struct ShortWrite {
         calls: usize,

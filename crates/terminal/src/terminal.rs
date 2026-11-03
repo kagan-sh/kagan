@@ -91,14 +91,7 @@ impl Terminal {
         let wait_fd = pair.master.as_raw_fd();
         #[cfg(unix)]
         if let Some(fd) = wait_fd {
-            // SAFETY: fd is the live pty master; O_NONBLOCK is per open file description.
-            let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-            if flags == -1 {
-                return Err(io::Error::last_os_error());
-            }
-            if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
-                return Err(io::Error::last_os_error());
-            }
+            set_nonblocking(fd)?;
         }
         let mut command = CommandBuilder::new(launch.program);
         command.args(launch.args);
@@ -536,6 +529,20 @@ fn thread_read(
         }
         ended.store(true, Ordering::Release);
     })
+}
+
+#[cfg(unix)]
+fn set_nonblocking(fd: std::os::fd::RawFd) -> io::Result<()> {
+    // SAFETY: fcntl only reads and sets flags on fd; a bad fd fails with EBADF.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: as above. O_NONBLOCK is per open file description, so every dup of the master sees it.
+    if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
