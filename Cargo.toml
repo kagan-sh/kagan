@@ -59,7 +59,7 @@ cargo-nextest = { version = "=0.9.148", locked = true }
 
 # The Browser's web view, with camera and microphone requests from pages denied (decision 117).
 [patch.crates-io]
-lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "c7d04f5abfdfc292251561d3eb1bdb96cf09d6be" }
+lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "9d6fe880603f99b7afeda6d81ad36d615bcf1211" }
 
 # Line tables keep panic locations. Full debug info dominates link time and the target directory.
 # unpacked skips dsymutil on macOS. Cargo ignores this value on MSVC, which only supports packed.
