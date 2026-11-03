@@ -1,0 +1,73 @@
+use gpui_kit::App;
+use kg_domain::PluginId;
+#[cfg(target_os = "macos")]
+use kg_plugins::PluginHost;
+
+#[cfg(target_os = "macos")]
+use super::{Held, Pages, find, page_watch, save};
+
+#[cfg(target_os = "macos")]
+pub(crate) fn inject(plugin: &PluginId, panel: &str, raw: &str, cx: &App) -> bool {
+    let Some(page) = cx.try_global::<Pages>().and_then(|pages| {
+        pages
+            .pages
+            .iter()
+            .find(|page| page.plugin == *plugin && page.panel == panel)
+    }) else {
+        return false;
+    };
+    page.ipc.try_send(raw.to_owned()).is_ok()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn inject(plugin: &PluginId, panel: &str, raw: &str, cx: &App) -> bool {
+    let _ = (plugin, panel, raw, cx);
+    false
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn mark_stale(slot: &str, cx: &mut App) -> bool {
+    let Some(index) = find(cx, slot) else {
+        return false;
+    };
+    cx.default_global::<Pages>().pages[index].generation = u64::MAX;
+    true
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn mark_stale(slot: &str, cx: &mut App) -> bool {
+    let _ = (slot, cx);
+    false
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn testing_page(plugin: &PluginId, panel: &str, slot: &str, shown: bool, cx: &mut App) {
+    super::forget(slot, cx);
+    let generation = PluginHost::try_global(cx)
+        .and_then(|host| host.read(cx).generation(plugin))
+        .unwrap_or(1);
+    let (sender, receiver) = async_channel::bounded(32);
+    let ipc = sender.clone();
+    let drain = page_watch::watch(receiver, plugin.clone(), panel.to_owned(), generation, cx);
+    save(
+        cx,
+        Held {
+            slot: slot.to_owned(),
+            plugin: plugin.clone(),
+            panel: panel.to_owned(),
+            file: "ui/index.html".to_owned(),
+            generation,
+            note: None,
+            view: None,
+            theme: crate::web::ThemeCss::new(String::new()),
+            _drain: drain,
+            ipc,
+            shown: Some(shown),
+        },
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn testing_page(plugin: &PluginId, panel: &str, slot: &str, shown: bool, cx: &mut App) {
+    let _ = (plugin, panel, slot, shown, cx);
+}

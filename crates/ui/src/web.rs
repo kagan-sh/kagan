@@ -70,21 +70,26 @@ pub(crate) fn csp(hosts: &[String]) -> String {
 }
 
 pub(crate) fn mime(path: &str) -> &'static str {
-    match path.rsplit('.').next() {
-        Some("html" | "htm") => "text/html; charset=utf-8",
-        Some("css") => "text/css; charset=utf-8",
-        Some("js" | "mjs") => "text/javascript; charset=utf-8",
-        Some("json" | "map") => "application/json",
-        Some("svg") => "image/svg+xml",
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
-        Some("ico") => "image/x-icon",
-        Some("woff") => "font/woff",
-        Some("woff2") => "font/woff2",
-        Some("txt") => "text/plain; charset=utf-8",
-        Some("wasm") => "application/wasm",
+    let extension = path
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "json" | "map" => "application/json",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        "txt" => "text/plain; charset=utf-8",
+        "wasm" => "application/wasm",
         _ => "application/octet-stream",
     }
 }
@@ -176,7 +181,44 @@ pub(crate) fn page_event(message: &str) -> Option<String> {
 
 pub(crate) const BRIDGE: &str = r#"(function(){function post(message){var text;try{text=JSON.stringify(message);}catch(e){return;}if(typeof text!=="string")return;window.ipc.postMessage(text);}window.kagan=Object.freeze({post:post});var link=document.getElementById("kagan-theme");if(!link){link=document.createElement("link");link.id="kagan-theme";link.rel="stylesheet";link.href=new URL("/__kagan/theme.css",window.location.href).href;(document.head||document.documentElement).appendChild(link);}})();"#;
 
-pub(crate) const THEME_REFRESH: &str = r#"(function(){var link=document.getElementById("kagan-theme");if(!link)return;link.href=link.href.split("?")[0]+"?v="+Date.now();})();"#;
+/// Applies the live Workbench tokens in the page and reloads `/__kagan/theme.css`.
+pub(crate) fn theme_refresh(cx: &gpui_kit::App) -> String {
+    let state = ThemeState::global(cx);
+    let state = state.read(cx);
+    let palette = &state.palette;
+    let scheme = match state.mode {
+        gpui_kit::component::ThemeMode::Light => "light",
+        gpui_kit::component::ThemeMode::Dark => "dark",
+    };
+    let hover = palette.hover.unwrap_or(palette.raised);
+    format!(
+        concat!(
+            "(function(){{var r=document.documentElement;",
+            "var v={{'--bg':'{bg}','--surface':'{surface}','--raised':'{raised}',",
+            "'--hover':'{hover}','--ink':'{ink}','--muted':'{muted}','--line':'{line}',",
+            "'--accent':'{accent}','--needs':'{needs}','--failed':'{failed}',",
+            "'--added':'{added}','--working':'{working}'}};",
+            "for(var k in v)r.style.setProperty(k,v[k]);",
+            "r.style.colorScheme='{scheme}';",
+            "var link=document.getElementById('kagan-theme');",
+            "if(link){{link.href=link.href.split('?')[0]+'?v='+Date.now();",
+            "link.dispatchEvent(new Event('load'));}}}})();"
+        ),
+        bg = palette.bg.hex(),
+        surface = palette.surface.hex(),
+        raised = palette.raised.hex(),
+        hover = hover.hex(),
+        ink = palette.ink.hex(),
+        muted = palette.muted.hex(),
+        line = palette.line.hex(),
+        accent = palette.accent.hex(),
+        needs = palette.needs.hex(),
+        failed = palette.failed.hex(),
+        added = palette.added().hex(),
+        working = palette.working.hex(),
+        scheme = scheme,
+    )
+}
 
 fn host_token(host: &str) -> bool {
     !host.is_empty()

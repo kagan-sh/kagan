@@ -16,10 +16,13 @@ use kg_plugins::{PluginHost, SCHEME};
 
 use super::surface::Slot;
 use super::{Kagan, screen};
+#[cfg(target_os = "macos")]
+#[path = "page_watch.rs"]
+mod page_watch;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
-use crate::web::{self, BRIDGE, THEME_REFRESH};
+use crate::web::{self, BRIDGE};
 
 pub(super) fn body(slot: &Slot, window: &mut Window, cx: &mut App) -> AnyElement {
     let Some(file) = slot.web.clone() else {
@@ -30,7 +33,7 @@ pub(super) fn body(slot: &Slot, window: &mut Window, cx: &mut App) -> AnyElement
 }
 
 /// Delivers JSON from the plugin script to the open page.
-pub(super) fn post(
+pub(crate) fn post(
     plugin: &PluginId,
     panel: &str,
     message: &str,
@@ -50,19 +53,50 @@ fn deliver(plugin: &PluginId, panel: &str, message: &str, cx: &mut App) -> Resul
     let Some(script) = web::page_event(message) else {
         return Err("a page message must be JSON".into());
     };
-    let Some(view) = cx.try_global::<Pages>().and_then(|pages| {
+    let Some((view, shown)) = cx.try_global::<Pages>().and_then(|pages| {
         pages
             .pages
             .iter()
             .find(|page| page.plugin == *plugin && page.panel == panel)
-            .and_then(|page| page.view.clone())
+            .map(|page| {
+                let shown = page.shown.unwrap_or_else(|| {
+                    page.view
+                        .as_ref()
+                        .is_some_and(|view| view.read(cx).visible())
+                });
+                (page.view.clone(), shown)
+            })
     }) else {
         return Err("the web panel is not on screen".into());
+    };
+    if !shown {
+        return Err("the web panel is not on screen".into());
+    }
+    let Some(view) = view else {
+        return Err("the page could not take the message: it is not open".into());
     };
     view.update(cx, |view, _| {
         view.evaluate_script(&script)
             .map_err(|error| format!("the page could not take the message: {error}"))
     })
+}
+
+pub(super) fn clear(cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    if cx.has_global::<Pages>() {
+        cx.default_global::<Pages>().pages.clear();
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = cx;
+}
+
+pub(crate) fn forget(slot: &str, cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    if let Some(index) = find(cx, slot) {
+        cx.default_global::<Pages>().pages.remove(index);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (slot, cx);
 }
 
 pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
@@ -72,6 +106,32 @@ pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
     {
         let _ = (kagan, cx);
     }
+}
+
+/// Pushes the live Workbench theme into every open page, even when the window is not drawing.
+pub(super) fn repaint(cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    if cx.has_global::<Pages>() {
+        let css = web::theme_css(cx);
+        let views: Vec<_> = cx
+            .default_global::<Pages>()
+            .pages
+            .iter()
+            .enumerate()
+            .filter_map(|(index, page)| page.view.clone().map(|view| (index, view)))
+            .collect();
+        for (index, view) in views {
+            if cx.default_global::<Pages>().pages[index].theme.get() == css {
+                continue;
+            }
+            cx.default_global::<Pages>().pages[index]
+                .theme
+                .set(css.clone());
+            paint_theme(&view, cx);
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = cx;
 }
 
 fn frame(id: &str, title: &str, shown: &Shown, cx: &App) -> AnyElement {
@@ -198,22 +258,37 @@ fn open_page(
         conceal_at(cx, index);
         cx.default_global::<Pages>().pages.remove(index);
     }
-    match build(slot, file, root, hosts, window, cx) {
-        Ok((view, theme)) => {
-            save(
-                cx,
-                held(slot, file, generation, None, Some(view.clone()), theme),
+    match build(slot, file, root, hosts, generation, window, cx) {
+        Ok(built) => {
+            let mut page = held(
+                slot,
+                file,
+                generation,
+                None,
+                Some(built.view.clone()),
+                built.theme,
+                built.drain,
             );
+            page.ipc = built.ipc;
+            save(cx, page);
             Shown {
                 note: None,
-                page: Some(view),
+                page: Some(built.view),
             }
         }
         Err(message) => {
             let theme = web::ThemeCss::new(String::new());
             save(
                 cx,
-                held(slot, file, generation, Some(message.clone()), None, theme),
+                held(
+                    slot,
+                    file,
+                    generation,
+                    Some(message.clone()),
+                    None,
+                    theme,
+                    gpui_kit::Task::ready(()),
+                ),
             );
             noted(&message)
         }
@@ -226,9 +301,10 @@ fn build(
     file: &str,
     root: &std::path::Path,
     hosts: &[String],
+    generation: u64,
     window: &mut Window,
     cx: &mut App,
-) -> Result<(Entity<gpui_webview::WebView>, web::ThemeCss), String> {
+) -> Result<Built, String> {
     let theme = web::ThemeCss::new(web::theme_css(cx));
     let served_theme = theme.clone();
     let root = root.to_path_buf();
@@ -236,22 +312,9 @@ fn build(
     let hosts = hosts.to_vec();
     let url = format!("{SCHEME}://{plugin_id}/{file}");
     let (sender, receiver) = async_channel::bounded::<String>(32);
+    let ipc = sender.clone();
     let plugin = slot.plugin.clone();
     let panel = slot.contribution.clone();
-    cx.spawn(async move |cx| {
-        while let Ok(raw) = receiver.recv().await {
-            let plugin = plugin.clone();
-            let panel = panel.clone();
-            cx.update(|cx| {
-                if let Some(host) = PluginHost::try_global(cx) {
-                    host.update(cx, |host, cx| {
-                        let _ = host.deliver_page(&plugin, &panel, &raw, cx);
-                    });
-                }
-            });
-        }
-    })
-    .detach();
     let navigation = plugin_id.clone();
     let protocol_plugin = plugin_id.clone();
     let builder = web::builder(&url, move |target| {
@@ -273,10 +336,23 @@ fn build(
         );
         http_response(served)
     });
-    match gpui_webview::WebView::build(builder, window, cx) {
-        Ok(view) => Ok((cx.new(|_| view), theme)),
-        Err(error) => Err(format!("The page could not open: {error}")),
-    }
+    let view = gpui_webview::WebView::build(builder, window, cx)
+        .map_err(|error| format!("The page could not open: {error}"))?;
+    let drain = page_watch::watch(receiver, plugin, panel, generation, cx);
+    Ok(Built {
+        view: cx.new(|_| view),
+        theme,
+        drain,
+        ipc,
+    })
+}
+
+#[cfg(target_os = "macos")]
+struct Built {
+    view: Entity<gpui_webview::WebView>,
+    theme: web::ThemeCss,
+    drain: gpui_kit::Task<()>,
+    ipc: async_channel::Sender<String>,
 }
 
 #[cfg(target_os = "macos")]
@@ -297,6 +373,7 @@ fn sync_native(kagan: &Kagan, cx: &mut App) {
     if !cx.has_global::<Pages>() {
         return;
     }
+    page_watch::drop_stale(cx);
     let open = listed(kagan, cx);
     let css = web::theme_css(cx);
     let plan: Vec<(usize, bool, bool)> = {
@@ -344,9 +421,7 @@ fn sync_native(kagan: &Kagan, cx: &mut App) {
                 .theme
                 .set(css.clone());
             if let Some(view) = cx.default_global::<Pages>().pages[index].view.clone() {
-                view.update(cx, |view, _| {
-                    let _ = view.evaluate_script(THEME_REFRESH);
-                });
+                paint_theme(&view, cx);
             }
         }
     }
@@ -398,10 +473,21 @@ fn refresh_theme(cx: &mut App, index: usize) {
     }
     cx.default_global::<Pages>().pages[index].theme.set(css);
     if let Some(view) = cx.default_global::<Pages>().pages[index].view.clone() {
-        view.update(cx, |view, _| {
-            let _ = view.evaluate_script(THEME_REFRESH);
-        });
+        paint_theme(&view, cx);
     }
+}
+
+#[cfg(target_os = "macos")]
+fn paint_theme(view: &Entity<gpui_webview::WebView>, cx: &mut App) {
+    let native = match crate::theme::ThemeState::global(cx).read(cx).mode {
+        gpui_kit::component::ThemeMode::Light => wry::Theme::Light,
+        gpui_kit::component::ThemeMode::Dark => wry::Theme::Dark,
+    };
+    let script = web::theme_refresh(cx);
+    view.update(cx, |view, _| {
+        let _ = view.set_theme(native);
+        let _ = view.evaluate_script(&script);
+    });
 }
 
 #[cfg(target_os = "macos")]
@@ -442,7 +528,10 @@ fn held(
     note: Option<String>,
     view: Option<Entity<gpui_webview::WebView>>,
     theme: web::ThemeCss,
+    drain: gpui_kit::Task<()>,
 ) -> Held {
+    let (ipc, disconnected) = async_channel::bounded(1);
+    drop(disconnected);
     Held {
         slot: slot.id.clone(),
         plugin: slot.plugin.clone(),
@@ -452,8 +541,18 @@ fn held(
         note,
         view,
         theme,
+        _drain: drain,
+        ipc,
+        shown: None,
     }
 }
+
+#[cfg(test)]
+#[path = "web_panel_test.rs"]
+mod web_panel_test;
+
+#[cfg(test)]
+pub(crate) use web_panel_test::{inject, mark_stale, testing_page};
 
 #[cfg(target_os = "macos")]
 #[derive(Default)]
@@ -469,14 +568,12 @@ struct Held {
     slot: String,
     plugin: PluginId,
     panel: String,
-    #[cfg(target_os = "macos")]
     file: String,
-    #[cfg(target_os = "macos")]
     generation: u64,
-    #[cfg(target_os = "macos")]
     note: Option<String>,
-    #[cfg(target_os = "macos")]
     view: Option<Entity<gpui_webview::WebView>>,
-    #[cfg(target_os = "macos")]
     theme: web::ThemeCss,
+    _drain: gpui_kit::Task<()>,
+    ipc: async_channel::Sender<String>,
+    shown: Option<bool>,
 }

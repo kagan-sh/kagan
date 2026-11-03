@@ -35,8 +35,11 @@ fn fetch_hosts_are_only_a_connect_source() {
 #[test]
 fn mime_types_follow_the_extension() {
     assert_eq!(mime("ui/index.html"), "text/html; charset=utf-8");
+    assert_eq!(mime("ui/INDEX.HTML"), "text/html; charset=utf-8");
     assert_eq!(mime("app.css"), "text/css; charset=utf-8");
+    assert_eq!(mime("APP.CSS"), "text/css; charset=utf-8");
     assert_eq!(mime("app.js"), "text/javascript; charset=utf-8");
+    assert_eq!(mime("APP.JS"), "text/javascript; charset=utf-8");
     assert_eq!(mime("icon.svg"), "image/svg+xml");
     assert_eq!(mime("pic.png"), "image/png");
     assert_eq!(mime("no-extension"), "application/octet-stream");

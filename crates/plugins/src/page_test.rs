@@ -57,6 +57,13 @@ fn a_symlink_out_of_the_plugin_is_refused() {
 }
 
 #[test]
+fn a_page_file_error_is_an_error() {
+    let error = PageFileError::TooBig;
+    let reported: &dyn std::error::Error = &error;
+    assert!(reported.to_string().contains("8 MiB"));
+}
+
+#[test]
 fn a_file_over_the_cap_is_refused() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("big.html");

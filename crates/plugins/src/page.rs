@@ -40,6 +40,8 @@ impl std::fmt::Display for PageFileError {
     }
 }
 
+impl std::error::Error for PageFileError {}
+
 /// Reads one file inside `root`. `..`, an absolute path, and any symlink are refused.
 ///
 /// # Errors
@@ -194,9 +196,10 @@ fn read_in(dir: &Dir, relative: &Path) -> Result<Vec<u8>, PageFileError> {
             return Err(PageFileError::Refused);
         }
     }
-    let mut file = dir.open(relative).map_err(|_| PageFileError::Refused)?;
+    let file = dir.open(relative).map_err(|_| PageFileError::Refused)?;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
+    file.take(FILE_CAP + 1)
+        .read_to_end(&mut bytes)
         .map_err(|_| PageFileError::Refused)?;
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > FILE_CAP {
         return Err(PageFileError::TooBig);

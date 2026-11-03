@@ -391,6 +391,7 @@ impl Kagan {
             if !self.is_open(&declared) {
                 return Err(OpError::Invalid(format!("{id} is not open")));
             }
+            self.drop_page(&declared, cx);
             match declared.placement {
                 Placement::Bottom => {}
                 Placement::Right => {
@@ -473,6 +474,18 @@ impl Kagan {
             Placement::Bottom => {}
         }
         Ok(expect_of(&declared, true, Some(plugin), props))
+    }
+
+    fn drop_page(&self, declared: &Declared, cx: &mut Context<Self>) {
+        let id = match declared.placement {
+            Placement::Right => Some(declared.surface_id()),
+            Placement::Left => self.tool.as_ref().map(|slot| slot.id.clone()),
+            Placement::Center => self.screen.page().map(|slot| slot.id.clone()),
+            Placement::Bottom => None,
+        };
+        if let Some(id) = id {
+            super::web_panel::forget(&id, cx);
+        }
     }
 
     fn is_open(&self, declared: &Declared) -> bool {

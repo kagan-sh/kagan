@@ -13,6 +13,9 @@ function paint() {
     .getPropertyValue("--bg")
     .trim();
   document.body.dataset.bg = bg;
+  const shown = document.getElementById("bg");
+  if (shown) shown.textContent = bg;
+  if (window.kagan && bg) window.kagan.post({ bg });
 }
 
 const theme = document.getElementById("kagan-theme");

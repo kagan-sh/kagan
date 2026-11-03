@@ -39,6 +39,8 @@ mod surface;
 mod tabs;
 mod update;
 mod web_panel;
+#[cfg(test)]
+pub(crate) use web_panel::{forget, inject, mark_stale, post, testing_page};
 
 use changes::Changes;
 use kg_domain::ProjectOp;
@@ -333,6 +335,7 @@ pub(crate) fn start_plugin(cx: &mut App) -> gpui_kit::Result<()> {
 }
 
 fn release_window(this: &mut Kagan, cx: &mut App) {
+    web_panel::clear(cx);
     let id = this.window.window_id();
     this.cancel_plugin_start();
     this.surface_check = None;
@@ -376,6 +379,7 @@ impl Kagan {
 
     fn theme_paint(cx: &mut Context<Self>) -> Subscription {
         cx.observe(&crate::theme::ThemeState::global(cx), |_, _, cx| {
+            web_panel::repaint(cx);
             cx.notify();
         })
     }
