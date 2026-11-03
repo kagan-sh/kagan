@@ -113,8 +113,7 @@ pub(crate) fn drag_within(
     move_pointer(window, from, Some(MouseButton::Left), cx);
     // The target is found again: a source that looks dragged may have moved it.
     let end = spot(window, to, within, at)?;
-    for step in 1..=4 {
-        let fraction = step as f32 / 4.;
+    for fraction in [0.25, 0.5, 0.75, 1.] {
         let position = point(
             from.x + (end.x - from.x) * fraction,
             from.y + (end.y - from.y) * fraction,
