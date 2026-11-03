@@ -1353,19 +1353,26 @@ impl PluginHost {
 
     /// Delivers one JSON page message to the plugin script as a `page` job.
     ///
+    /// `alive` is the open page; when it drops, a still-queued job is discarded before `next()`.
+    ///
     /// # Errors
     ///
-    /// The text is over the size cap, is not JSON, or the plugin has no such web panel loaded.
+    /// The text is over the size cap, is not JSON, the plugin has no such web panel loaded,
+    /// the page is gone, or too many page jobs are already waiting.
     pub fn deliver_page(
         &mut self,
         id: &PluginId,
         panel: &str,
         raw: &str,
+        alive: std::sync::Weak<()>,
         cx: &mut Context<Self>,
     ) -> std::result::Result<(), String> {
         let message = crate::page::parse_message(raw)?;
         if self.web_file(id, panel).is_none() {
             return Err(format!("plugin {id} has no web panel {panel}"));
+        }
+        if alive.upgrade().is_none() {
+            return Err("the web panel is not on screen".into());
         }
         let jobs = self
             .active
@@ -1373,8 +1380,9 @@ impl PluginHost {
             .and_then(|active| active.loaded.as_ref())
             .map(|loaded| loaded.jobs.clone())
             .ok_or_else(|| format!("plugin {id} is not loaded"))?;
-        let Some((job, replied)) = crate::page::enqueue(&jobs, panel, message) else {
-            return Err(format!("plugin {id} was unloaded"));
+        let Some((job, replied)) = crate::page::enqueue(&jobs, panel, message, alive, raw.len())
+        else {
+            return Err(format!("plugin {id} cannot take another page message"));
         };
         cx.spawn(async move |_, cx| {
             let timer = cx.background_executor().timer(Duration::from_secs(10));

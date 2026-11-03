@@ -3,26 +3,82 @@ use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::pin;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Weak};
 
 use async_channel::{Receiver, Sender};
 use gpui_shell::{HostError, HostModule, HostValue};
 use serde_json::{Map, Value};
 
 use crate::area::{from_host, to_host};
+use crate::page::MESSAGE_CAP;
 
 type Job = Map<String, Value>;
 type Reply = Result<Value, String>;
+
+/// How many page jobs may wait for `next()` at once.
+pub(crate) const PAGE_PENDING_CAP: usize = 32;
+/// Total JSON bytes of those waiting page jobs.
+pub(crate) const PAGE_PENDING_BYTES: usize = MESSAGE_CAP;
 
 pub(crate) enum Ended {
     Unloaded,
     TimedOut,
 }
 
+struct PageBounds {
+    pages: AtomicUsize,
+    bytes: AtomicUsize,
+}
+
+impl PageBounds {
+    fn try_add(&self, bytes: usize) -> bool {
+        let pages = self.pages.load(Ordering::Relaxed);
+        let held = self.bytes.load(Ordering::Relaxed);
+        if pages >= PAGE_PENDING_CAP || held.saturating_add(bytes) > PAGE_PENDING_BYTES {
+            return false;
+        }
+        self.pages.fetch_add(1, Ordering::Relaxed);
+        self.bytes.fetch_add(bytes, Ordering::Relaxed);
+        true
+    }
+
+    fn release(&self, bytes: usize) {
+        self.pages.fetch_sub(1, Ordering::Relaxed);
+        self.bytes.fetch_sub(bytes, Ordering::Relaxed);
+    }
+}
+
+struct PageTicket {
+    job: Job,
+    alive: Weak<()>,
+    /// True while this ticket still counts against the pending page cap.
+    pending: Arc<AtomicBool>,
+    bytes: usize,
+    bounds: Arc<PageBounds>,
+}
+
+impl PageTicket {
+    fn clear_pending(&self) {
+        if self.pending.swap(false, Ordering::Relaxed) {
+            self.bounds.release(self.bytes);
+        }
+    }
+}
+
+enum Queued {
+    Job(Job),
+    Page(PageTicket),
+}
+
 /// One plugin's job queue. Never shared: gpui-shell does not cancel a pending `next()`
 /// on unload, so a shared queue would hand the next plugin's job to a dead one.
 pub(crate) struct Jobs {
-    queue: (Sender<Job>, Receiver<Job>),
+    queue: (Sender<Queued>, Receiver<Queued>),
     open: RefCell<BTreeMap<String, Sender<Reply>>>,
+    /// Page jobs still counting against the cap, so a timeout can free them.
+    page_waiting: RefCell<BTreeMap<String, (Arc<AtomicBool>, usize)>>,
+    bounds: Arc<PageBounds>,
     next: Cell<u64>,
 }
 
@@ -31,6 +87,11 @@ impl Jobs {
         Rc::new(Self {
             queue: async_channel::unbounded(),
             open: RefCell::default(),
+            page_waiting: RefCell::default(),
+            bounds: Arc::new(PageBounds {
+                pages: AtomicUsize::new(0),
+                bytes: AtomicUsize::new(0),
+            }),
             next: Cell::new(1),
         })
     }
@@ -38,11 +99,45 @@ impl Jobs {
     /// Queues `job` and returns its id and where its reply arrives. The reply channel
     /// closes without a value when the plugin unloads.
     pub(crate) fn send(&self, mut job: Job) -> Option<(String, Receiver<Reply>)> {
-        let id = self.next.replace(self.next.get() + 1).to_string();
+        let id = self.next_id();
         job.insert("id".into(), id.clone().into());
         let (reply, replied) = async_channel::bounded(1);
         self.open.borrow_mut().insert(id.clone(), reply);
-        if self.queue.0.try_send(job).is_err() {
+        if self.queue.0.try_send(Queued::Job(job)).is_err() {
+            self.forget(&id);
+            return None;
+        }
+        Some((id, replied))
+    }
+
+    /// Queues a page job that dies with `alive`. Refuses when the pending page cap is full.
+    pub(crate) fn send_page(
+        &self,
+        mut job: Job,
+        alive: Weak<()>,
+        bytes: usize,
+    ) -> Option<(String, Receiver<Reply>)> {
+        alive.upgrade()?;
+        if !self.bounds.try_add(bytes) {
+            return None;
+        }
+        let id = self.next_id();
+        job.insert("id".into(), id.clone().into());
+        let pending = Arc::new(AtomicBool::new(true));
+        let (reply, replied) = async_channel::bounded(1);
+        self.open.borrow_mut().insert(id.clone(), reply);
+        self.page_waiting
+            .borrow_mut()
+            .insert(id.clone(), (pending.clone(), bytes));
+        let ticket = PageTicket {
+            job,
+            alive,
+            pending,
+            bytes,
+            bounds: self.bounds.clone(),
+        };
+        if self.queue.0.try_send(Queued::Page(ticket)).is_err() {
+            self.free_page(&id);
             self.forget(&id);
             return None;
         }
@@ -60,8 +155,13 @@ impl Jobs {
         timer: impl Future<Output = ()>,
     ) -> Result<Reply, Ended> {
         match futures::future::select(pin!(replied.recv()), pin!(timer)).await {
-            futures::future::Either::Left((reply, _)) => reply.map_err(|_| Ended::Unloaded),
+            futures::future::Either::Left((reply, _)) => {
+                self.page_waiting.borrow_mut().remove(id);
+                self.forget(id);
+                reply.map_err(|_| Ended::Unloaded)
+            }
             futures::future::Either::Right(((), _)) => {
+                self.free_page(id);
                 self.forget(id);
                 Err(Ended::TimedOut)
             }
@@ -72,9 +172,15 @@ impl Jobs {
     pub(crate) fn close(&self) {
         self.queue.0.close();
         self.open.borrow_mut().clear();
+        for (_, (pending, bytes)) in std::mem::take(&mut *self.page_waiting.borrow_mut()) {
+            if pending.swap(false, Ordering::Relaxed) {
+                self.bounds.release(bytes);
+            }
+        }
     }
 
     fn settle(&self, id: &str, reply: Reply) -> Result<HostValue, HostError> {
+        self.page_waiting.borrow_mut().remove(id);
         let sender = self
             .open
             .borrow_mut()
@@ -82,6 +188,18 @@ impl Jobs {
             .ok_or_else(|| HostError::new(format!("no open job {id}")))?;
         let _ = sender.try_send(reply);
         Ok(HostValue::Null)
+    }
+
+    fn next_id(&self) -> String {
+        self.next.replace(self.next.get() + 1).to_string()
+    }
+
+    fn free_page(&self, id: &str) {
+        if let Some((pending, bytes)) = self.page_waiting.borrow_mut().remove(id)
+            && pending.swap(false, Ordering::Relaxed)
+        {
+            self.bounds.release(bytes);
+        }
     }
 
     pub(crate) fn module(self: &Rc<Self>) -> HostModule {
@@ -97,11 +215,24 @@ impl Jobs {
             .async_function("next", move |_| {
                 let receiver = receiver.clone();
                 Ok(async move {
-                    let job = receiver
-                        .recv()
-                        .await
-                        .map_err(|_| HostError::new("the plugin was unloaded"))?;
-                    Ok(to_host(Value::Object(job)))
+                    loop {
+                        let queued = receiver
+                            .recv()
+                            .await
+                            .map_err(|_| HostError::new("the plugin was unloaded"))?;
+                        match queued {
+                            Queued::Job(job) => return Ok(to_host(Value::Object(job))),
+                            Queued::Page(ticket) => {
+                                let live = ticket.alive.upgrade().is_some();
+                                let waiting = ticket.pending.load(Ordering::Relaxed);
+                                if live && waiting {
+                                    ticket.clear_pending();
+                                    return Ok(to_host(Value::Object(ticket.job)));
+                                }
+                                ticket.clear_pending();
+                            }
+                        }
+                    }
                 })
             })
             .function("reply", move |arguments| {

@@ -1,3 +1,5 @@
+use std::sync::Weak;
+
 use gpui_kit::App;
 use kg_domain::PluginId;
 use kg_plugins::PluginHost;
@@ -9,19 +11,21 @@ pub(super) fn watch(
     plugin: PluginId,
     panel: String,
     generation: u64,
+    alive: Weak<()>,
     cx: &mut App,
 ) -> gpui_kit::Task<()> {
     cx.spawn(async move |cx| {
         while let Ok(raw) = receiver.recv().await {
             let plugin = plugin.clone();
             let panel = panel.clone();
+            let alive = alive.clone();
             cx.update(|cx| {
                 if !live(&plugin, &panel, generation, cx) {
                     return;
                 }
                 if let Some(host) = PluginHost::try_global(cx) {
                     host.update(cx, |host, cx| {
-                        let _ = host.deliver_page(&plugin, &panel, &raw, cx);
+                        let _ = host.deliver_page(&plugin, &panel, &raw, alive, cx);
                     });
                 }
             });

@@ -93,7 +93,10 @@ pub(super) fn clear(cx: &mut App) {
 pub(crate) fn forget(slot: &str, cx: &mut App) {
     #[cfg(target_os = "macos")]
     if let Some(index) = find(cx, slot) {
-        cx.default_global::<Pages>().pages.remove(index);
+        let page = cx.default_global::<Pages>().pages.remove(index);
+        page.ipc.close();
+        // Dropping the strong token expires any page job still waiting on next().
+        drop(page.life);
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (slot, cx);
@@ -260,35 +263,48 @@ fn open_page(
     }
     match build(slot, file, root, hosts, generation, window, cx) {
         Ok(built) => {
-            let mut page = held(
-                slot,
-                file,
-                generation,
-                None,
-                Some(built.view.clone()),
-                built.theme,
-                built.drain,
+            let view = built.view.clone();
+            save(
+                cx,
+                Held {
+                    slot: slot.id.clone(),
+                    plugin: slot.plugin.clone(),
+                    panel: slot.contribution.clone(),
+                    file: file.to_owned(),
+                    generation,
+                    note: None,
+                    view: Some(built.view),
+                    theme: built.theme,
+                    _drain: built.drain,
+                    ipc: built.ipc,
+                    life: built.life,
+                    shown: None,
+                },
             );
-            page.ipc = built.ipc;
-            save(cx, page);
             Shown {
                 note: None,
-                page: Some(built.view),
+                page: Some(view),
             }
         }
         Err(message) => {
-            let theme = web::ThemeCss::new(String::new());
+            let (ipc, disconnected) = async_channel::bounded(1);
+            drop(disconnected);
             save(
                 cx,
-                held(
-                    slot,
-                    file,
+                Held {
+                    slot: slot.id.clone(),
+                    plugin: slot.plugin.clone(),
+                    panel: slot.contribution.clone(),
+                    file: file.to_owned(),
                     generation,
-                    Some(message.clone()),
-                    None,
-                    theme,
-                    gpui_kit::Task::ready(()),
-                ),
+                    note: Some(message.clone()),
+                    view: None,
+                    theme: web::ThemeCss::new(String::new()),
+                    _drain: gpui_kit::Task::ready(()),
+                    ipc,
+                    life: std::sync::Arc::new(()),
+                    shown: None,
+                },
             );
             noted(&message)
         }
@@ -310,7 +326,9 @@ fn build(
     let root = root.to_path_buf();
     let plugin_id = slot.plugin.0.clone();
     let hosts = hosts.to_vec();
-    let url = format!("{SCHEME}://{plugin_id}/{file}");
+    let url = web::page_url(&plugin_id, file)?;
+    let life = std::sync::Arc::new(());
+    let alive = std::sync::Arc::downgrade(&life);
     let (sender, receiver) = async_channel::bounded::<String>(32);
     let ipc = sender.clone();
     let plugin = slot.plugin.clone();
@@ -322,7 +340,10 @@ fn build(
     })
     .with_initialization_script(BRIDGE)
     .with_ipc_handler(move |request: wry::http::Request<String>| {
-        let _ = sender.try_send(request.into_body());
+        let body = request.into_body();
+        if body.len() <= kg_plugins::MESSAGE_CAP {
+            let _ = sender.try_send(body);
+        }
     })
     .with_custom_protocol(SCHEME.to_owned(), move |_id, request| {
         let css = served_theme.get();
@@ -338,12 +359,13 @@ fn build(
     });
     let view = gpui_webview::WebView::build(builder, window, cx)
         .map_err(|error| format!("The page could not open: {error}"))?;
-    let drain = page_watch::watch(receiver, plugin, panel, generation, cx);
+    let drain = page_watch::watch(receiver, plugin, panel, generation, alive, cx);
     Ok(Built {
         view: cx.new(|_| view),
         theme,
         drain,
         ipc,
+        life,
     })
 }
 
@@ -353,6 +375,7 @@ struct Built {
     theme: web::ThemeCss,
     drain: gpui_kit::Task<()>,
     ipc: async_channel::Sender<String>,
+    life: std::sync::Arc<()>,
 }
 
 #[cfg(target_os = "macos")]
@@ -520,39 +543,12 @@ fn save(cx: &mut App, slot: Held) {
     cx.default_global::<Pages>().pages.push(slot);
 }
 
-#[cfg(target_os = "macos")]
-fn held(
-    slot: &Slot,
-    file: &str,
-    generation: u64,
-    note: Option<String>,
-    view: Option<Entity<gpui_webview::WebView>>,
-    theme: web::ThemeCss,
-    drain: gpui_kit::Task<()>,
-) -> Held {
-    let (ipc, disconnected) = async_channel::bounded(1);
-    drop(disconnected);
-    Held {
-        slot: slot.id.clone(),
-        plugin: slot.plugin.clone(),
-        panel: slot.contribution.clone(),
-        file: file.to_owned(),
-        generation,
-        note,
-        view,
-        theme,
-        _drain: drain,
-        ipc,
-        shown: None,
-    }
-}
-
 #[cfg(test)]
 #[path = "web_panel_test.rs"]
 mod web_panel_test;
 
 #[cfg(test)]
-pub(crate) use web_panel_test::{inject, mark_stale, testing_page};
+pub(crate) use web_panel_test::{inject, mark_stale, queue_page, testing_page};
 
 #[cfg(target_os = "macos")]
 #[derive(Default)]
@@ -575,5 +571,6 @@ struct Held {
     theme: web::ThemeCss,
     _drain: gpui_kit::Task<()>,
     ipc: async_channel::Sender<String>,
+    life: std::sync::Arc<()>,
     shown: Option<bool>,
 }

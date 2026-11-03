@@ -5055,6 +5055,7 @@ struct PageRun {
     _plugin: tempfile::TempDir,
     seen: std::path::PathBuf,
     posted: async_channel::Receiver<String>,
+    life: std::sync::Arc<()>,
 }
 
 fn page_script(seen: &std::path::Path) -> String {
@@ -5147,13 +5148,15 @@ fn open_page(cx: &mut TestAppContext) -> PageRun {
         _plugin: plugin,
         seen,
         posted,
+        life: std::sync::Arc::new(()),
     }
 }
 
-fn deliver_page(cx: &mut TestAppContext, raw: &str) -> Result<(), String> {
+fn deliver_page(cx: &mut TestAppContext, run: &PageRun, raw: &str) -> Result<(), String> {
+    let alive = std::sync::Arc::downgrade(&run.life);
     cx.update(|cx| {
         crate::PluginHost::global(cx).update(cx, |host, cx| {
-            host.deliver_page(&PluginId(PAGE_PLUGIN.into()), "board", raw, cx)
+            host.deliver_page(&PluginId(PAGE_PLUGIN.into()), "board", raw, alive, cx)
         })
     })
 }
@@ -5161,7 +5164,7 @@ fn deliver_page(cx: &mut TestAppContext, raw: &str) -> Result<(), String> {
 #[gpui_kit::test]
 fn a_page_message_round_trips_through_the_plugin(cx: &mut TestAppContext) {
     let run = open_page(cx);
-    deliver_page(cx, r#"{"from":"page"}"#).unwrap();
+    deliver_page(cx, &run, r#"{"from":"page"}"#).unwrap();
     let mut echoed = String::new();
     for _ in 0..2000 {
         cx.run_until_parked();
@@ -5188,9 +5191,9 @@ fn a_page_message_round_trips_through_the_plugin(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_page_message_over_the_cap_is_refused(cx: &mut TestAppContext) {
     let run = open_page(cx);
-    let over = deliver_page(cx, &format!("\"{}\"", "y".repeat(crate::MESSAGE_CAP)));
+    let over = deliver_page(cx, &run, &format!("\"{}\"", "y".repeat(crate::MESSAGE_CAP)));
     assert!(over.unwrap_err().contains("over the"));
-    deliver_page(cx, r#"{"big":true}"#).unwrap();
+    deliver_page(cx, &run, r#"{"big":true}"#).unwrap();
     for _ in 0..2000 {
         cx.run_until_parked();
         if run.seen.is_file() {
@@ -5201,4 +5204,155 @@ fn a_page_message_over_the_cap_is_refused(cx: &mut TestAppContext) {
     let error = std::fs::read_to_string(&run.seen).unwrap();
     assert!(error.starts_with("error:"), "{error}");
     assert!(error.contains("over the"), "{error}");
+}
+
+fn open_page_holding_next(cx: &mut TestAppContext) -> tempfile::TempDir {
+    let plugin = tempfile::tempdir().unwrap();
+    let ui = plugin.path().join("ui");
+    std::fs::create_dir(&ui).unwrap();
+    std::fs::write(ui.join("index.html"), "<p>page</p>").unwrap();
+    let manifest = json!({
+        "id": PAGE_PLUGIN,
+        "name": "Page",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "ui": { "panels": [{ "id": "board", "title": "Board", "web": "ui/index.html", "placement": "right" }] }
+    });
+    std::fs::write(plugin.path().join(manifest::FILE), manifest.to_string()).unwrap();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        "import { View } from \"gpui-kit\";\nexport default class Plugin extends View { render() { return \"\"; } }\n",
+    )
+    .unwrap();
+    open(cx, &[installed_at(plugin.path())]);
+    let ready = cx.read(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .data_dir()
+            .join("plugins")
+            .join(PAGE_PLUGIN)
+            .join("data")
+            .join("ready")
+    });
+    let ready_lit = serde_json::to_string(&ready.display().to_string()).unwrap();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        format!(
+            r#"
+import {{ View }} from "gpui-kit";
+import {{ writeFile }} from "fs/promises";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      await writeFile({ready_lit}, "ready");
+      await new Promise(() => {{}});
+    }});
+  }}
+  render() {{ return ""; }}
+}}
+"#
+        ),
+    )
+    .unwrap();
+    let handle = cx.add_window(|_, _| gpui_kit::EmptyView);
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, _window, cx| {
+                crate::PluginHost::global(cx)
+                    .update(cx, |host, cx| {
+                        host.load_plugin(&PluginId(PAGE_PLUGIN.into()), cx)
+                    })
+                    .unwrap();
+            })
+            .unwrap();
+    });
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if ready.is_file() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(ready.is_file(), "plugin never started");
+    plugin
+}
+
+#[gpui_kit::test]
+fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
+    let _plugin = open_page_holding_next(cx);
+    let life = std::sync::Arc::new(());
+    let mut accepted = 0;
+    for i in 0..crate::jobs::PAGE_PENDING_CAP + 8 {
+        let raw = format!(r#"{{"n":{i}}}"#);
+        let alive = std::sync::Arc::downgrade(&life);
+        let result = cx.update(|cx| {
+            crate::PluginHost::global(cx).update(cx, |host, cx| {
+                host.deliver_page(&PluginId(PAGE_PLUGIN.into()), "board", &raw, alive, cx)
+            })
+        });
+        match result {
+            Ok(()) => accepted += 1,
+            Err(error) => {
+                assert!(
+                    error.contains("cannot take another page message"),
+                    "{error}"
+                );
+                break;
+            }
+        }
+    }
+    assert_eq!(accepted, crate::jobs::PAGE_PENDING_CAP);
+    let alive = std::sync::Arc::downgrade(&life);
+    let refused = cx.update(|cx| {
+        crate::PluginHost::global(cx).update(cx, |host, cx| {
+            host.deliver_page(
+                &PluginId(PAGE_PLUGIN.into()),
+                "board",
+                r#"{"n":"over"}"#,
+                alive,
+                cx,
+            )
+        })
+    });
+    assert!(
+        refused
+            .unwrap_err()
+            .contains("cannot take another page message")
+    );
+}
+
+#[gpui_kit::test]
+fn a_page_job_expires_when_its_page_token_dies(cx: &mut TestAppContext) {
+    let run = open_page(cx);
+    cx.update(|cx| {
+        let stale_life = std::sync::Arc::new(());
+        let alive = std::sync::Arc::downgrade(&stale_life);
+        crate::PluginHost::global(cx)
+            .update(cx, |host, cx| {
+                host.deliver_page(
+                    &PluginId(PAGE_PLUGIN.into()),
+                    "board",
+                    r#"{"at":"stale"}"#,
+                    alive,
+                    cx,
+                )
+            })
+            .unwrap();
+        drop(stale_life);
+    });
+    deliver_page(cx, &run, r#"{"at":"fresh"}"#).unwrap();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if std::fs::read_to_string(&run.seen)
+            .unwrap_or_default()
+            .contains("fresh")
+        {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let text = std::fs::read_to_string(&run.seen).unwrap();
+    assert!(!text.contains("stale"), "{text}");
+    assert!(text.contains("fresh"), "{text}");
 }

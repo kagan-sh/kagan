@@ -4,7 +4,7 @@
 //! pinned wry patch. A web panel's files and navigation rules live here too, so they can be
 //! tested without a native page.
 
-use std::path::Path;
+use std::path::{Component, Path};
 
 use kg_plugins::{PageFileError, SCHEME};
 
@@ -141,14 +141,13 @@ pub(crate) fn serve(
     if !allows_navigation(plugin, target) {
         return refuse(403);
     }
-    let Ok(url) = url::Url::parse(target) else {
+    let Some(path) = request_path(target) else {
         return refuse(403);
     };
-    let path = url.path().trim_start_matches('/');
     if path == THEME_FILE {
         return Served {
             status: 200,
-            mime: mime(path),
+            mime: mime(&path),
             body: if method == "HEAD" {
                 Vec::new()
             } else {
@@ -157,7 +156,7 @@ pub(crate) fn serve(
             csp,
         };
     }
-    let body = match kg_plugins::read_plugin_file(root, path) {
+    let body = match kg_plugins::read_plugin_file(root, &path) {
         Ok(body) => body,
         Err(PageFileError::Missing) => return refuse(404),
         Err(PageFileError::TooBig) => return refuse(413),
@@ -165,10 +164,64 @@ pub(crate) fn serve(
     };
     Served {
         status: 200,
-        mime: mime(path),
+        mime: mime(&path),
         body: if method == "HEAD" { Vec::new() } else { body },
         csp,
     }
+}
+
+/// Builds `kagan-plugin://<plugin>/<file>` with a typed path so spaces, `#`, `?` and `%` round-trip.
+pub(crate) fn page_url(plugin: &str, file: &str) -> Result<String, String> {
+    let mut url = url::Url::parse(&format!("{SCHEME}://{plugin}/"))
+        .map_err(|_| format!("plugin id {plugin:?} is not a page origin"))?;
+    // `set_path` leaves a bare `%` untouched; encode it so decode-once stays strict.
+    url.set_path(&format!("/{}", file.replace('%', "%25")));
+    Ok(url.to_string())
+}
+
+/// Percent-decodes the request path once, from the raw URL so `.` / `..` are not
+/// normalized away before confinement. Invalid encoding, traversal, backslashes and NULs are refused.
+fn request_path(target: &str) -> Option<String> {
+    let rest = target.split_once("://")?.1;
+    let encoded = rest.split_once('/')?.1.split(['?', '#']).next()?;
+    if !percent_ok(encoded) {
+        return None;
+    }
+    let decoded = percent_encoding::percent_decode_str(encoded)
+        .decode_utf8()
+        .ok()?;
+    let path = decoded.as_ref();
+    if path.is_empty()
+        || path.contains('\\')
+        || path.contains('\0')
+        || path.starts_with('/')
+        || Path::new(path).is_absolute()
+        || !Path::new(path)
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)))
+    {
+        return None;
+    }
+    Some(path.to_owned())
+}
+
+fn percent_ok(encoded: &str) -> bool {
+    let bytes = encoded.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            index += 1;
+            continue;
+        }
+        if index + 2 >= bytes.len()
+            || !bytes[index + 1].is_ascii_hexdigit()
+            || !bytes[index + 2].is_ascii_hexdigit()
+        {
+            return false;
+        }
+        index += 3;
+    }
+    true
 }
 
 /// The script that tells the page one JSON value, as a `kagan` event.

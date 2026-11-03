@@ -2,6 +2,7 @@
 
 use std::io::Read as _;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Weak;
 
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -115,12 +116,14 @@ pub(crate) fn enqueue(
     jobs: &Jobs,
     panel: &str,
     message: Value,
+    alive: Weak<()>,
+    bytes: usize,
 ) -> Option<(String, async_channel::Receiver<Result<Value, String>>)> {
     let mut job = Map::new();
     job.insert("kind".into(), "page".into());
     job.insert("panelId".into(), panel.into());
     job.insert("message".into(), message);
-    jobs.send(job)
+    jobs.send_page(job, alive, bytes)
 }
 
 fn shape(relative: &str) -> Result<(), String> {

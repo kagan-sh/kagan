@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{allows_navigation, csp, mime, page_event, serve};
+use super::{allows_navigation, csp, mime, page_event, page_url, serve};
 
 const PLUGIN: &str = "dev.kagan.page";
 
@@ -153,4 +153,57 @@ fn a_page_event_is_json() {
     assert!(script.contains("JSON.parse"));
     assert!(script.contains(r#"{\"from\":\"plugin\"}"#));
     assert!(page_event("\u{2028}").is_some());
+}
+
+#[test]
+fn page_paths_round_trip_through_the_url() {
+    let root = tempfile::tempdir().unwrap();
+    let ui = root.path().join("ui");
+    std::fs::create_dir(&ui).unwrap();
+    std::fs::write(ui.join("my page.html"), b"<p>space</p>").unwrap();
+    std::fs::write(ui.join("café.html"), b"<p>unicode</p>").unwrap();
+    std::fs::write(ui.join("100%.html"), b"<p>percent</p>").unwrap();
+    std::fs::write(ui.join("a?b.html"), b"<p>query</p>").unwrap();
+    std::fs::write(ui.join("a#b.html"), b"<p>hash</p>").unwrap();
+
+    for (file, body) in [
+        ("ui/my page.html", b"<p>space</p>".as_slice()),
+        ("ui/café.html", b"<p>unicode</p>"),
+        ("ui/100%.html", b"<p>percent</p>"),
+        ("ui/a?b.html", b"<p>query</p>"),
+        ("ui/a#b.html", b"<p>hash</p>"),
+    ] {
+        let url = page_url(PLUGIN, file).unwrap();
+        assert!(!url.contains(' '), "{url}");
+        assert!(!url.contains('#'), "{url}");
+        let served = serve(root.path(), PLUGIN, "GET", &url, &[], "");
+        assert_eq!(served.status, 200, "{file} -> {url}");
+        assert_eq!(served.body, body, "{file}");
+    }
+
+    let traversal = format!(
+        "kagan-plugin://{PLUGIN}/{}",
+        percent_encoding::utf8_percent_encode("../secret.html", percent_encoding::NON_ALPHANUMERIC)
+    );
+    assert_eq!(
+        serve(root.path(), PLUGIN, "GET", &traversal, &[], "").status,
+        403
+    );
+    let encoded_dot = format!("kagan-plugin://{PLUGIN}/%2e%2e/secret.html");
+    assert_eq!(
+        serve(root.path(), PLUGIN, "GET", &encoded_dot, &[], "").status,
+        403
+    );
+    assert_eq!(
+        serve(
+            root.path(),
+            PLUGIN,
+            "GET",
+            &format!("kagan-plugin://{PLUGIN}/ui/%zz.html"),
+            &[],
+            ""
+        )
+        .status,
+        403
+    );
 }

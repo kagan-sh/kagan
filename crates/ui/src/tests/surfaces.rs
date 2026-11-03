@@ -1888,6 +1888,52 @@ fn a_closed_window_gets_no_page_job(cx: &mut TestAppContext) {
 
 #[cfg(target_os = "macos")]
 #[gpui_kit::test]
+fn a_page_job_queued_before_close_does_not_reach_the_reopened_panel(cx: &mut TestAppContext) {
+    let (_kagan, _window, _data, seen) = open_life(cx);
+    let plugin = PluginId(LIFE.into());
+    // Queue under the old page token and drop that token before the script can
+    // observe the job, then reopen and queue under a new token.
+    cx.update(|cx| {
+        crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
+        assert!(crate::kagan::queue_page(
+            &plugin,
+            "board",
+            r#"{"at":"stale"}"#,
+            cx
+        ));
+        crate::kagan::forget(&life_slot(), cx);
+    });
+    cx.update(|cx| {
+        crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
+        assert!(crate::kagan::queue_page(
+            &plugin,
+            "board",
+            r#"{"at":"fresh"}"#,
+            cx
+        ));
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
+    loop {
+        cx.run_until_parked();
+        if std::fs::read_to_string(&seen)
+            .unwrap_or_default()
+            .contains("fresh")
+        {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for the page job"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let text = std::fs::read_to_string(&seen).unwrap();
+    assert!(!text.contains("stale"), "{text}");
+    assert!(text.contains("fresh"), "{text}");
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
 fn a_hidden_web_panel_refuses_post(cx: &mut TestAppContext) {
     let (_kagan, _window, _data) = open_with_plugins_then(cx, |_| {});
     let plugin = PluginId(HIDE.into());

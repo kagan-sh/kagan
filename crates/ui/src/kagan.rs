@@ -40,7 +40,7 @@ mod tabs;
 mod update;
 mod web_panel;
 #[cfg(test)]
-pub(crate) use web_panel::{forget, inject, mark_stale, post, testing_page};
+pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
 
 use changes::Changes;
 use kg_domain::ProjectOp;
