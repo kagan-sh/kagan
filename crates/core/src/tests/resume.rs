@@ -198,6 +198,10 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
     let fixture = Fixture::new(cx).await;
     claude_config(&fixture, cx);
     codex_home(&fixture, cx);
+    cursor_config(&fixture, cx);
+    let plugin = dunce::canonicalize(fixture.dir.path())
+        .unwrap()
+        .join("agent");
     let lines = [
         ("claude", "--resume=abc"),
         ("claude", "-c"),
@@ -205,6 +209,10 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
         ("claude", "-p hi"),
         ("codex", "resume --last"),
         ("codex", "fork --last"),
+        ("cursor-agent", "--resume abc"),
+        ("cursor-agent", "--continue"),
+        ("agent", "--new-session-id abc"),
+        ("agent", "login"),
     ];
     for (number, (agent, rest)) in lines.into_iter().enumerate() {
         let run = fixture.dir.path().join(format!("run-{number}"));
@@ -215,14 +223,58 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
         let again = start_again(&id, &run, cx).await;
         for args in [&first, &again] {
             assert!(after(args, "--session-id").is_none(), "{rest}: {args:?}");
+            if !rest.contains("--new-session-id") {
+                assert!(
+                    after(args, "--new-session-id").is_none(),
+                    "{rest}: {args:?}"
+                );
+            }
             assert!(args.ends_with(&person(rest)), "{rest}: {args:?}");
+            if agent == "cursor-agent" || agent == "agent" {
+                if rest == "login" {
+                    assert_eq!(args, &person(rest), "{rest}: {args:?}");
+                } else {
+                    let mut expected =
+                        vec!["--plugin-dir".to_owned(), plugin.display().to_string()];
+                    expected.extend(person(rest));
+                    assert_eq!(args, &expected, "{rest}: {args:?}");
+                }
+            }
         }
         assert!(notices(&id, cx).await.is_empty(), "{rest}");
     }
 }
 
+fn leaves_out(args: &[String], ids: &[&str]) {
+    assert!(
+        args.iter().all(|arg| !ids.contains(&arg.as_str())),
+        "{args:?}"
+    );
+}
+
 fn person(rest: &str) -> Vec<String> {
     rest.split(' ').map(str::to_owned).collect()
+}
+
+fn cursor_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    let config = fixture.dir.path().join("cursor");
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.cursor_config = Some(config.clone());
+    });
+    config
+}
+
+/// What Cursor Agent leaves for one conversation: `chats/<hash>/<id>/meta.json`, whose `cwd` is the folder.
+fn wrote(config: &Path, folder: &Path, conversation: &str) {
+    let dir = config.join("chats").join("bucket").join(conversation);
+    std::fs::create_dir_all(&dir).unwrap();
+    let meta = json!({
+        "schemaVersion": 1,
+        "createdAtMs": 1,
+        "hasConversation": true,
+        "cwd": folder,
+    });
+    std::fs::write(dir.join("meta.json"), format!("{meta}\n")).unwrap();
 }
 
 fn codex_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
@@ -312,6 +364,130 @@ async fn start_again_resumes_the_one_codex_conversation_begun_in_its_folder(
     let fourth = start_again(&id, &run, cx).await;
     assert!(!fourth.contains(&conversation), "{fourth:?}");
     assert!(fourth.ends_with(&["resume".to_owned(), next]), "{fourth:?}");
+}
+
+#[gpui_kit::test]
+async fn start_again_resumes_the_cursor_conversation_the_first_start_named(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let config = cursor_config(&fixture, cx);
+    let folder = dunce::canonicalize(fixture.dir.path()).unwrap();
+    let plugin = folder.join("agent");
+    let elsewhere = folder.join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    let run = fixture.dir.path().join("cursor-run");
+    let program = fake_agent(&run, "cursor-agent");
+    let (id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
+    let (first, _) = ran(&run);
+    let conversation = after(&first, "--new-session-id").expect("a conversation id");
+    assert_eq!(
+        first,
+        [
+            "--plugin-dir".to_owned(),
+            plugin.display().to_string(),
+            "--new-session-id".to_owned(),
+            conversation.clone(),
+            "--person-arg".to_owned()
+        ]
+    );
+
+    let stranger = Conversation::fresh().to_string();
+    let other = Conversation::fresh().to_string();
+    wrote(&config, &folder, &stranger);
+    wrote(&config, &elsewhere, &other);
+    wrote(&config, &folder, &conversation);
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert_eq!(
+        again,
+        [
+            "--plugin-dir".to_owned(),
+            plugin.display().to_string(),
+            "--resume".to_owned(),
+            conversation.clone(),
+            "--person-arg".to_owned()
+        ]
+    );
+    assert!(after(&again, "--new-session-id").is_none(), "{again:?}");
+    leaves_out(&again, &[&stranger, &other]);
+    assert!(notices(&id, cx).await.is_empty());
+
+    std::fs::remove_dir_all(config.join("chats").join("bucket").join(&conversation)).unwrap();
+    stop(&id, cx).await;
+    let missing = start_again(&id, &run, cx).await;
+    assert!(after(&missing, "--resume").is_none(), "{missing:?}");
+    let fresh = after(&missing, "--new-session-id").expect("a new conversation");
+    assert_ne!(fresh, conversation);
+    leaves_out(&missing, &[&stranger, &other]);
+    assert!(
+        notices(&id, cx)
+            .await
+            .iter()
+            .any(|text| text.contains("could not find the agent's last conversation")),
+    );
+
+    wrote(&config, &elsewhere, &fresh);
+    stop(&id, cx).await;
+    let wrong_folder = start_again(&id, &run, cx).await;
+    assert!(
+        after(&wrong_folder, "--resume").is_none(),
+        "{wrong_folder:?}"
+    );
+    assert_ne!(
+        after(&wrong_folder, "--new-session-id").as_deref(),
+        Some(fresh.as_str())
+    );
+    leaves_out(&wrong_folder, &[&stranger, &other, &fresh]);
+
+    let run = fixture.dir.path().join("agent-run");
+    let program = fake_agent(&run, "agent");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    let conversation = after(&ran(&run).0, "--new-session-id").unwrap();
+    wrote(&config, &folder, &conversation);
+    stop(&id, cx).await;
+    assert_eq!(
+        start_again(&id, &run, cx).await,
+        [
+            "--plugin-dir".to_owned(),
+            plugin.display().to_string(),
+            "--resume".to_owned(),
+            conversation,
+        ]
+    );
+}
+
+#[gpui_kit::test]
+async fn a_worktree_name_is_not_a_cursor_subcommand(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    cursor_config(&fixture, cx);
+    let plugin = dunce::canonicalize(fixture.dir.path())
+        .unwrap()
+        .join("agent");
+    let lines = [("-w", "agent"), ("--worktree", "login")];
+    for (number, (flag, name)) in lines.into_iter().enumerate() {
+        let run = fixture.dir.path().join(format!("worktree-{number}"));
+        let program = fake_agent(&run, "cursor-agent");
+        let (_id, _reap) = started(
+            &fixture,
+            &format!("{} {flag} {name}", program.display()),
+            cx,
+        )
+        .await;
+        let (named, _) = ran(&run);
+        let stored = after(&named, "--new-session-id").expect("a conversation id");
+        assert_eq!(
+            named,
+            [
+                "--plugin-dir".to_owned(),
+                plugin.display().to_string(),
+                "--new-session-id".to_owned(),
+                stored,
+                flag.to_owned(),
+                name.to_owned(),
+            ]
+        );
+    }
 }
 
 fn forget(home: &Path, conversation: &str) {

@@ -143,6 +143,8 @@ pub struct Workspace {
     pub(crate) claude_config: Option<std::path::PathBuf>,
     /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
     pub(crate) codex_home: Option<std::path::PathBuf>,
+    /// Where Cursor keeps its conversations, when a test has set it; None is `CURSOR_CONFIG_DIR`, `$XDG_CONFIG_HOME/cursor`, or `~/.cursor`
+    pub(crate) cursor_config: Option<std::path::PathBuf>,
     pub(crate) ui: Option<crate::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
@@ -281,6 +283,7 @@ impl Workspace {
                         program_environment: None,
                         claude_config: None,
                         codex_home: None,
+                        cursor_config: None,
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),

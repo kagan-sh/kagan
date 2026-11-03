@@ -1451,7 +1451,11 @@ fn general_describes_what_integration_still_sets(cx: &mut TestAppContext) {
     click(cx, window, "settings-gear");
     click(cx, window, "setting-row-agent-integration-note");
     let note = aria_label(cx, window, "setting-row-agent-integration-note").unwrap_or_default();
-    assert!(note.contains("claude") && note.contains("codex"), "{note}");
+    assert!(
+        note.contains("claude") && note.contains("codex") && note.contains("cursor-agent"),
+        "{note}"
+    );
+    assert!(note.contains("--new-session-id or --resume"), "{note}");
     assert!(
         note.contains("--mcp-config")
             && note.contains("--session-id or --resume")

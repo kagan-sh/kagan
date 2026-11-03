@@ -30,8 +30,16 @@ const CLAUDE_FLAGS: &[&str] = &[
 
 const CODEX_SUBCOMMANDS: &[&str] = &["resume", "fork"];
 
+const CURSOR_FLAGS: &[&str] = &["--continue", "--new-session-id", "--resume"];
+
 const CODEX_FRESH: &str =
     "kagan could not tell which Codex conversation was this thread's, so Codex starts a new one.";
+
+const NO_CONVERSATION: &str =
+    "This thread has no saved conversation to resume, so the agent starts a new one.";
+
+const LOST_CONVERSATION: &str =
+    "kagan could not find the agent's last conversation, so it starts a new one.";
 
 enum Last {
     None,
@@ -53,6 +61,11 @@ struct CodexMeta {
     timestamp: String,
 }
 
+#[derive(Deserialize)]
+struct CursorMeta {
+    cwd: Option<PathBuf>,
+}
+
 /// The arguments that resume the thread's conversation or begin one kagan can find again, and a
 /// notice when Start again could not resume.
 pub(super) async fn args(
@@ -70,7 +83,8 @@ pub(super) async fn args(
         Known::Codex if picks_codex(args) || start == Start::First => Ok((Vec::new(), None)),
         Known::Codex if !args.is_empty() => Ok((Vec::new(), Some(CODEX_FRESH))),
         Known::Codex => codex(this, record, folder, cx).await,
-        Known::Cursor => Ok((Vec::new(), None)),
+        Known::Cursor if picks_cursor(args) => Ok((Vec::new(), None)),
+        Known::Cursor => cursor(this, record, folder, start, cx).await,
     }
 }
 
@@ -101,22 +115,7 @@ async fn claude(
             .await
         }
     };
-    let notice = match last {
-        Last::Kept(conversation) => return Ok((resume("--resume", conversation), None)),
-        Last::None => {
-            "This thread has no saved conversation to resume, so the agent starts a new one."
-        }
-        Last::Gone => "kagan could not find the agent's last conversation, so it starts a new one.",
-    };
-    let conversation = Conversation::fresh();
-    let id = record.id.clone();
-    database
-        .call(move |store| store.set_conversation(&id, conversation))
-        .await?;
-    Ok((
-        resume("--session-id", conversation),
-        (start == Start::Again).then_some(notice),
-    ))
+    remember(&database, &record.id, last, "--session-id", start).await
 }
 
 async fn codex(
@@ -157,17 +156,81 @@ async fn codex(
     Ok((resume("resume", conversation), None))
 }
 
+async fn cursor(
+    this: &WeakEntity<Workspace>,
+    record: &kg_domain::Thread,
+    folder: &Path,
+    start: Start,
+    cx: &mut AsyncApp,
+) -> Result<(Vec<OsString>, Option<&'static str>)> {
+    let (database, config) = this
+        .update(cx, |workspace, _| {
+            (workspace.database.clone(), workspace.cursor_config.clone())
+        })
+        .map_err(closed)?;
+    let id = record.id.clone();
+    let stored = database.call(move |store| store.conversation(&id)).await?;
+    let folder = folder.to_owned();
+    let last = match stored {
+        None => Last::None,
+        Some(conversation) => {
+            let config = config.clone();
+            cx.background_spawn(async move {
+                let root = cursor_root(config);
+                if root.is_some_and(|root| cursor_kept(&root, conversation, &folder)) {
+                    Last::Kept(conversation)
+                } else {
+                    Last::Gone
+                }
+            })
+            .await
+        }
+    };
+    remember(&database, &record.id, last, "--new-session-id", start).await
+}
+
+async fn remember(
+    database: &crate::database::Database,
+    thread: &kg_domain::ThreadId,
+    last: Last,
+    flag: &str,
+    start: Start,
+) -> Result<(Vec<OsString>, Option<&'static str>)> {
+    let notice = match last {
+        Last::Kept(conversation) => return Ok((resume("--resume", conversation), None)),
+        Last::None => NO_CONVERSATION,
+        Last::Gone => LOST_CONVERSATION,
+    };
+    let conversation = Conversation::fresh();
+    let id = thread.clone();
+    database
+        .call(move |store| store.set_conversation(&id, conversation))
+        .await?;
+    Ok((
+        resume(flag, conversation),
+        (start == Start::Again).then_some(notice),
+    ))
+}
+
 fn resume(word: &str, conversation: Conversation) -> Vec<OsString> {
     vec![OsString::from(word), conversation.to_string().into()]
 }
 
-fn picks_claude(args: &[OsString]) -> bool {
+fn picks(args: &[OsString], flags: &[&str]) -> bool {
     args.iter().filter_map(|arg| arg.to_str()).any(|arg| {
-        CLAUDE_FLAGS.iter().any(|flag| {
+        flags.iter().any(|flag| {
             arg.strip_prefix(flag)
                 .is_some_and(|rest| rest.is_empty() || rest.starts_with('='))
         })
     })
+}
+
+fn picks_claude(args: &[OsString]) -> bool {
+    picks(args, CLAUDE_FLAGS)
+}
+
+fn picks_cursor(args: &[OsString]) -> bool {
+    picks(args, CURSOR_FLAGS)
 }
 
 fn picks_codex(args: &[OsString]) -> bool {
@@ -176,6 +239,19 @@ fn picks_codex(args: &[OsString]) -> bool {
             .iter()
             .any(|word| arg.as_os_str() == OsStr::new(word))
     })
+}
+
+fn cursor_root(set: Option<PathBuf>) -> Option<PathBuf> {
+    if let Some(set) = set {
+        return Some(set);
+    }
+    if let Some(dir) = std::env::var_os("CURSOR_CONFIG_DIR").filter(|dir| !dir.is_empty()) {
+        return Some(PathBuf::from(dir));
+    }
+    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME").filter(|dir| !dir.is_empty()) {
+        return Some(PathBuf::from(dir).join("cursor"));
+    }
+    home("CURSOR_CONFIG_DIR", ".cursor")
 }
 
 fn home(variable: &str, folder: &str) -> Option<PathBuf> {
@@ -250,6 +326,31 @@ fn date(day: &Path) -> Option<NaiveDate> {
         .map(|part| part.to_str()?.parse::<u32>().ok());
     let (day, month, year) = (parts.next()??, parts.next()??, parts.next()??);
     NaiveDate::from_ymd_opt(i32::try_from(year).ok()?, month, day)
+}
+
+// Cursor Agent 2026.10.22 writes `chats/<hash>/<id>/` under `CURSOR_CONFIG_DIR`,
+// `$XDG_CONFIG_HOME/cursor`, or `~/.cursor`. `meta.json` records `cwd`. The first
+// start passes `--new-session-id`, which reserves that directory. Start again
+// passes `--resume` only while it is still there and the recorded folder is this
+// thread's. A different folder belongs to another thread.
+fn cursor_kept(config: &Path, conversation: Conversation, folder: &Path) -> bool {
+    let name = conversation.to_string();
+    let folder = dunce::canonicalize(folder).ok();
+    entries(&config.join("chats")).any(|bucket| {
+        let dir = bucket.join(&name);
+        dir.is_dir()
+            && match cursor_cwd(&dir) {
+                None => true,
+                Some(cwd) => folder.as_ref().is_some_and(|folder| {
+                    dunce::canonicalize(&cwd).is_ok_and(|cwd| cwd == *folder)
+                }),
+            }
+    })
+}
+
+fn cursor_cwd(dir: &Path) -> Option<PathBuf> {
+    let text = std::fs::read_to_string(dir.join("meta.json")).ok()?;
+    serde_json::from_str::<CursorMeta>(&text).ok()?.cwd
 }
 
 fn entries(folder: &Path) -> impl Iterator<Item = PathBuf> + use<> {
