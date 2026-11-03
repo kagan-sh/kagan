@@ -82,6 +82,9 @@ impl Kagan {
     }
 
     pub(super) fn popup_ask<'a>(&'a self, cx: &'a App) -> Option<&'a PendingInteraction> {
+        if !self.center_drawn() {
+            return None;
+        }
         let shown = self.shown_thread(cx)?;
         self.questions
             .read(cx)
