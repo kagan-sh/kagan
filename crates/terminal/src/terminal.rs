@@ -157,6 +157,8 @@ impl Terminal {
                 writer,
                 queued,
                 Arc::clone(&write_stop),
+                #[cfg(unix)]
+                wait_fd,
                 #[cfg(test)]
                 Arc::clone(&fail_write),
             )),
@@ -559,6 +561,7 @@ fn thread_write(
     mut writer: Box<dyn Write + Send>,
     queued: mpsc::Receiver<Outgoing>,
     write_stop: Arc<AtomicBool>,
+    #[cfg(unix)] wait_fd: Option<std::os::fd::RawFd>,
     #[cfg(test)] fail_write: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
@@ -574,11 +577,23 @@ fn thread_write(
                 if fail_write.swap(false, Ordering::AcqRel) {
                     Err(io::Error::other("write failed"))
                 } else {
-                    write_bytes(&mut writer, &bytes, &write_stop)
+                    write_bytes(
+                        &mut writer,
+                        &bytes,
+                        &write_stop,
+                        #[cfg(unix)]
+                        wait_fd,
+                    )
                 }
                 #[cfg(not(test))]
                 {
-                    write_bytes(&mut writer, &bytes, &write_stop)
+                    write_bytes(
+                        &mut writer,
+                        &bytes,
+                        &write_stop,
+                        #[cfg(unix)]
+                        wait_fd,
+                    )
                 }
             };
             if let Some(done) = done {
@@ -594,7 +609,12 @@ fn thread_write(
     })
 }
 
-fn write_bytes(writer: &mut dyn Write, bytes: &[u8], write_stop: &AtomicBool) -> io::Result<()> {
+fn write_bytes(
+    writer: &mut dyn Write,
+    bytes: &[u8],
+    write_stop: &AtomicBool,
+    #[cfg(unix)] wait_fd: Option<std::os::fd::RawFd>,
+) -> io::Result<()> {
     #[cfg(not(unix))]
     {
         let _ = write_stop;
@@ -615,11 +635,13 @@ fn write_bytes(writer: &mut dyn Write, bytes: &[u8], write_stop: &AtomicBool) ->
                     ));
                 }
                 Ok(n) => offset += n,
-                Err(error)
-                    if error.kind() == io::ErrorKind::WouldBlock
-                        || error.kind() == io::ErrorKind::Interrupted =>
-                {
-                    std::thread::sleep(Duration::from_millis(1));
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    if let Some(fd) = wait_fd {
+                        wait_ready(fd, libc::POLLOUT);
+                    } else {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
                 }
                 Err(error) => return Err(error),
             }
@@ -630,11 +652,13 @@ fn write_bytes(writer: &mut dyn Write, bytes: &[u8], write_stop: &AtomicBool) ->
             }
             match writer.flush() {
                 Ok(()) => return Ok(()),
-                Err(error)
-                    if error.kind() == io::ErrorKind::WouldBlock
-                        || error.kind() == io::ErrorKind::Interrupted =>
-                {
-                    std::thread::sleep(Duration::from_millis(1));
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    if let Some(fd) = wait_fd {
+                        wait_ready(fd, libc::POLLOUT);
+                    } else {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
                 }
                 Err(error) => return Err(error),
             }

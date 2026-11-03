@@ -831,7 +831,7 @@ fn write_bytes_delivers_after_a_short_write() {
         got: Vec::new(),
     };
     let stop = AtomicBool::new(false);
-    write_bytes(&mut writer, b"abc", &stop).unwrap();
+    write_bytes(&mut writer, b"abc", &stop, None).unwrap();
     assert_eq!(writer.got, b"abc");
 }
 
