@@ -37,6 +37,7 @@ kagan owns the manifest and builds each plugin's gpui-shell `Policy` from it. Th
     "sounds": { "type": "boolean", "title": "Sounds", "default": true },
     "retries": { "type": "number", "title": "Retries", "default": 3 },
     "density": { "type": "select", "title": "Density", "options": ["comfortable", "compact"], "default": "comfortable" },
+    "board": { "type": "project", "title": "Board project" },
     "apiKey": { "type": "secret", "title": "API key" }
   },
 
@@ -224,7 +225,14 @@ Decision 105. A panel may offer to fill a slot: `"replaces": "threads"` on a `le
 
 ## Settings and the CLI
 
-Setting types: `string`, `boolean`, `number` (a finite JSON number; Settings shows a text field), `select`, `folder` (a user-picked folder, granted read-only), `secret` (a token such as an API key), `provider` (kept so an old manifest parses; `host.settings()` leaves it out). A thread a plugin starts names its program in `spawn`. Plugin settings are `Op`s like every feature: `kg plugin config <id> get|set|clear <key> [<value>]`.
+Setting types: `string`, `boolean`, `number` (a finite JSON number; Settings shows a text field), `select`, `folder` (a user-picked folder, granted read-only), `project` (a project id from a dropdown; decision 135), `secret` (a token such as an API key), `provider` (kept so an old manifest parses; `host.settings()` leaves it out). A thread a plugin starts names its program in `spawn`. Plugin settings are `Op`s like every feature: `kg plugin config <id> get|set|clear <key> [<value>]`.
+
+A `project` setting (decision 135):
+
+- Declare `{ "type": "project", "title": "Board project" }`. There is no default: unset is `null`.
+- Settings shows a dropdown: None, then every project in sidebar order. The trigger shows the project's name, None, or Missing when the stored id is gone, with a note to pick another or None. Long names shorten with a tooltip of the full name.
+- `settings()` and `kg plugin config get` return the stored id string, or `null` when unset. A removed project keeps its id until clear or another pick; Settings labels that Missing.
+- `set` refuses an id that is not a live project. `clear` unsets it (same as picking None).
 
 A `secret` setting (decision 104):
 

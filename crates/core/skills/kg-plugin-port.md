@@ -82,7 +82,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | `bb.settings.define` | `settings` in `kagan.json` | close. Declare each key in the manifest. There is no call that defines one at runtime. The rows below are the types. |
 | `settings` string, boolean, number, select | same `type`, with `title` | close. No per-setting description, schema, option labels, or multiline flag. A select's `default` must be one of `options`. A number is a finite JSON number; there is no min, max, or integer-only check. |
 | string with `secret: true` | `{ "type": "secret", "title" }` | close. Read it from `settings()` in `kagan/host`. It is `null` until set. Never print it. |
-| `project` setting | none | gap. With the `threads` area, list `projects()` in the view. |
+| `project` setting | `{ "type": "project", "title" }` | close. Stores a project id. Settings shows a dropdown (None, then projects). A removed project keeps its id until clear; Settings says Missing. |
 | `settings.onChange` | `onSettingsChanged()` | direct |
 | `experimental_set` | none | gap. The person uses Settings or `kg plugin config <id> set`. A secret is set with no value on the command line. |
 | `storage.kv` | `localStorage`, then `flush()` | close. Values are strings (`JSON.stringify`). One value is at most 1 MiB, the file at most 8 MiB, and there are at most 4,096 keys. Always granted. |

@@ -540,3 +540,8 @@ Rules out: reordering Personal, a plugin API for reorder in this change, and fra
 Why: ports that need a count, timeout, or size should not store a string and parse it themselves.
 Cost: one setting variant and the same text-field path used for strings.
 Rules out: a schema, range, or integer-only constraint on the setting itself.
+
+**135. A plugin setting may pick a project.** `"type": "project"` in `kagan.json` stores a project id. Settings draws a dropdown (None, then every project in sidebar order); the trigger shows the name, None, or Missing. `kg plugin config set` refuses an id that is not a live project; `clear` and None unset it. When the stored project is later removed, get and `settings()` still return that id until clear or another pick; Settings labels the trigger Missing. Decisions 129–134 are reserved for other slices on parallel branches.
+Why: a plugin that ties work to one project needs a host picker; a button per project does not scale, and a panel workaround needs the threads area only to list projects.
+Cost: one setting variant, a dropdown in Settings, and an existence check on set.
+Rules out: a default project, auto-clear on remove, and requiring the threads area to declare the setting.

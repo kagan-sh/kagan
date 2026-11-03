@@ -345,6 +345,9 @@ pub enum Setting {
     Folder {
         title: String,
     },
+    Project {
+        title: String,
+    },
     Provider {
         title: String,
     },
@@ -376,6 +379,7 @@ impl Setting {
             | Self::Number { title, .. }
             | Self::Select { title, .. }
             | Self::Folder { title }
+            | Self::Project { title }
             | Self::Provider { title }
             | Self::Secret { title } => title,
         }
@@ -386,7 +390,10 @@ impl Setting {
             Self::String { default, .. } | Self::Select { default, .. } => default.clone().into(),
             Self::Boolean { default, .. } => (*default).into(),
             Self::Number { default, .. } => default.clone().map_or(Value::Null, Value::Number),
-            Self::Folder { .. } | Self::Provider { .. } | Self::Secret { .. } => Value::Null,
+            Self::Folder { .. }
+            | Self::Project { .. }
+            | Self::Provider { .. }
+            | Self::Secret { .. } => Value::Null,
         }
     }
 }
@@ -817,6 +824,7 @@ impl Grant {
                     | Setting::Boolean { .. }
                     | Setting::Number { .. }
                     | Setting::Select { .. }
+                    | Setting::Project { .. }
                     | Setting::Provider { .. }
                     | Setting::Secret { .. } => None,
                 })
