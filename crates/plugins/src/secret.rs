@@ -10,6 +10,8 @@ use keyring_core::{CredentialStore, Entry};
 use kg_domain::{OpError, PluginId};
 use serde::{Deserialize, Serialize};
 
+type IoGuard<'a> = MutexGuard<'a, ()>;
+
 const SERVICE: &str = "kagan";
 const HIDDEN: &str = "[secret]";
 /// Windows Credential Manager keeps at most 2560 bytes of UTF-16, so every system takes
@@ -281,7 +283,7 @@ impl Store {
         }
     }
 
-    fn io(&self) -> Result<MutexGuard<'_, ()>, Error> {
+    fn io(&self) -> Result<IoGuard<'_>, Error> {
         self.io.lock().map_err(|_| Error::Poisoned)
     }
 

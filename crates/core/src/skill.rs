@@ -166,10 +166,10 @@ pub(crate) async fn mirror(
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let database = crate::workspace::database(this, cx)?;
-    let _turn = MIRROR.get_or_init(|| Mutex::new(())).lock().await;
     let plugins = database.call(|store| store.plugins()).await?;
     cx.background_spawn(async move {
         let catalog = shared(plugins)?;
+        let _turn = MIRROR.get_or_init(|| Mutex::new(())).lock().await;
         write(&root, &catalog)
     })
     .await

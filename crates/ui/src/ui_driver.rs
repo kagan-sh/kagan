@@ -476,8 +476,8 @@ mod windows {
         let bitmap = unsafe { CreateCompatibleBitmap(hdc, width, height) };
         // SAFETY: both handles are live and the bitmap is compatible with the DC.
         let _ = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) };
-        // SAFETY: `hwnd` is live and `mem_dc` is a compatible memory DC.
         let printed =
+            // SAFETY: `hwnd` is live and `mem_dc` is a compatible memory DC.
             unsafe { PrintWindow(hwnd, mem_dc, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)) };
         let header = BITMAPINFOHEADER {
             biSize: u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>())
@@ -508,9 +508,11 @@ mod windows {
             )
         };
         // SAFETY: each handle was created above and is released exactly once here.
-        let _ = unsafe { DeleteObject(HGDIOBJ(bitmap.0)) };
-        let _ = unsafe { DeleteDC(mem_dc) };
-        let _ = unsafe { ReleaseDC(Some(hwnd), hdc) };
+        unsafe {
+            let _ = DeleteObject(HGDIOBJ(bitmap.0));
+            let _ = DeleteDC(mem_dc);
+            let _ = ReleaseDC(Some(hwnd), hdc);
+        }
         printed
             .ok()
             .map_err(|error| OpError::Failed(error.to_string()))?;

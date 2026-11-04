@@ -227,6 +227,8 @@ impl SshRewrite {
         .unwrap();
         let previous_global = std::env::var_os("GIT_CONFIG_GLOBAL");
         let previous_nosystem = std::env::var_os("GIT_CONFIG_NOSYSTEM");
+        // SAFETY: nextest runs each test in its own process, so this test owns these
+        // process-global variables while the guard is alive and restores them on drop.
         unsafe {
             std::env::set_var("GIT_CONFIG_GLOBAL", &path);
             std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
@@ -240,6 +242,8 @@ impl SshRewrite {
 
 impl Drop for SshRewrite {
     fn drop(&mut self) {
+        // SAFETY: nextest runs each test in its own process, so nothing else reads these
+        // variables while the guard restores them.
         unsafe {
             match self.previous_global.take() {
                 Some(value) => std::env::set_var("GIT_CONFIG_GLOBAL", value),

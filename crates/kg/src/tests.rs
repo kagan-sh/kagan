@@ -440,18 +440,24 @@ struct EnvVar {
 
 fn set_env(key: &'static str, value: &std::ffi::OsStr) -> EnvVar {
     let previous = std::env::var_os(key);
+    // SAFETY: nextest runs each test in its own process, so this test owns these
+    // process-global variables while the guard is alive and restores them on drop.
     unsafe { std::env::set_var(key, value) };
     EnvVar { key, previous }
 }
 
 fn unset_env(key: &'static str) -> EnvVar {
     let previous = std::env::var_os(key);
+    // SAFETY: nextest runs each test in its own process, so this test owns these
+    // process-global variables while the guard is alive and restores them on drop.
     unsafe { std::env::remove_var(key) };
     EnvVar { key, previous }
 }
 
 impl Drop for EnvVar {
     fn drop(&mut self) {
+        // SAFETY: nextest runs each test in its own process, so nothing else reads this
+        // variable while the guard restores it.
         unsafe {
             match self.previous.take() {
                 Some(value) => std::env::set_var(self.key, value),
@@ -665,6 +671,7 @@ fn chown_away(dir: &std::path::Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let mut bytes = dir.as_os_str().as_bytes().to_vec();
     bytes.push(0);
+    // SAFETY: `bytes` is a NUL-terminated path owned by `dir`, and lchown only reads it.
     unsafe { libc::lchown(bytes.as_ptr().cast(), 65_534, libc::gid_t::MAX) == 0 }
 }
 
@@ -673,6 +680,7 @@ fn chown_back(dir: &std::path::Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let mut bytes = dir.as_os_str().as_bytes().to_vec();
     bytes.push(0);
+    // SAFETY: `bytes` is a NUL-terminated path owned by `dir`, and lchown only reads it.
     unsafe { libc::lchown(bytes.as_ptr().cast(), libc::geteuid(), libc::getegid()) == 0 }
 }
 
@@ -682,6 +690,8 @@ struct SocketVar(Option<std::ffi::OsString>);
 #[cfg(unix)]
 fn socket_var(location: &std::ffi::OsStr) -> SocketVar {
     let previous = std::env::var_os("KG_SOCKET");
+    // SAFETY: nextest runs each test in its own process, so this test owns the variable while
+    // the guard is alive and restores it on drop.
     unsafe { std::env::set_var("KG_SOCKET", location) };
     SocketVar(previous)
 }
@@ -689,6 +699,8 @@ fn socket_var(location: &std::ffi::OsStr) -> SocketVar {
 #[cfg(unix)]
 impl Drop for SocketVar {
     fn drop(&mut self) {
+        // SAFETY: nextest runs each test in its own process, so nothing else reads this
+        // variable while the guard restores it.
         unsafe {
             match self.0.take() {
                 Some(value) => std::env::set_var("KG_SOCKET", value),
