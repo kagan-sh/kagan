@@ -187,7 +187,7 @@ fn frame(
     let fill_note = page.is_none();
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let fill_note = true;
-    let mut element = div()
+    let element = div()
         .id(ElementId::Name(format!("webview-{id}").into()))
         .ui_container()
         .size_full()
@@ -199,11 +199,7 @@ fn frame(
             element.child(sentence(id, note.as_str(), fill_note, cx))
         });
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    {
-        if let Some(page) = page {
-            element = element.child(page).min_h_0().flex_1();
-        }
-    }
+    let element = element.when_some(page, |element, page| element.child(page).min_h_0().flex_1());
     element
 }
 
@@ -307,7 +303,12 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
-    keep: Option<Result<Option<[u8; 16]>, String>>,
+    #[cfg(any(target_os = "macos", target_os = "windows"))] keep: Option<
+        Result<Option<[u8; 16]>, String>,
+    >,
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _keep: Option<
+        Result<Option<[u8; 16]>, String>,
+    >,
     #[cfg(any(target_os = "macos", target_os = "windows"))] window: &mut Window,
     #[cfg(not(any(target_os = "macos", target_os = "windows")))] _window: &mut Window,
     cx: &mut App,

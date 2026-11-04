@@ -324,7 +324,9 @@ const RETRY_MAX: std::time::Duration = std::time::Duration::from_millis(250);
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum StoreAttempt {
     Removed,
+    #[cfg(any(target_os = "macos", test))]
     InUse,
+    #[cfg(any(target_os = "macos", test))]
     Failed(String),
 }
 
@@ -387,14 +389,26 @@ pub(crate) async fn remove_web_stores_after_release(
     let mut delay = RETRY_START;
     let mut waited = RELEASE_WAIT;
     loop {
-        let mut still = Vec::new();
+        let mut attempts = Vec::new();
         for id in pending {
-            match remove_one_store(id, cx).await {
-                StoreAttempt::Removed => removed.push(id),
-                StoreAttempt::InUse => still.push(id),
-                StoreAttempt::Failed(message) => warnings.push(message),
-            }
+            attempts.push((id, remove_one_store(id, cx).await));
         }
+        let still: Vec<[u8; 16]> = attempts
+            .into_iter()
+            .filter_map(|(id, attempt)| match attempt {
+                StoreAttempt::Removed => {
+                    removed.push(id);
+                    None
+                }
+                #[cfg(any(target_os = "macos", test))]
+                StoreAttempt::InUse => Some(id),
+                #[cfg(any(target_os = "macos", test))]
+                StoreAttempt::Failed(message) => {
+                    warnings.push(message);
+                    None
+                }
+            })
+            .collect();
         if still.is_empty() || waited >= RETRY_BUDGET + RELEASE_WAIT {
             for _ in &still {
                 warnings.push(
@@ -441,8 +455,11 @@ async fn remove_one_native(id: [u8; 16], cx: &mut gpui_kit::AsyncApp) -> StoreAt
 }
 
 #[cfg(not(target_os = "macos"))]
-async fn remove_one_native(_id: [u8; 16], _cx: &mut gpui_kit::AsyncApp) -> StoreAttempt {
-    StoreAttempt::Removed
+fn remove_one_native(
+    _id: [u8; 16],
+    _cx: &mut gpui_kit::AsyncApp,
+) -> impl std::future::Future<Output = StoreAttempt> {
+    std::future::ready(StoreAttempt::Removed)
 }
 
 /// One-shot delete used by the orphan-store retry on host start.
@@ -463,17 +480,26 @@ pub(crate) async fn remove_web_stores(
             warnings: Vec::new(),
         };
     }
-    let mut removed = Vec::new();
-    let mut warnings = Vec::new();
+    let mut attempts = Vec::new();
     for id in ids {
-        match remove_one_store(id, cx).await {
-            StoreAttempt::Removed => removed.push(id),
-            StoreAttempt::InUse => warnings.push(
+        attempts.push((id, remove_one_store(id, cx).await));
+    }
+    let mut removed = Vec::new();
+    let warnings = attempts
+        .into_iter()
+        .filter_map(|(id, attempt)| match attempt {
+            StoreAttempt::Removed => {
+                removed.push(id);
+                None
+            }
+            #[cfg(any(target_os = "macos", test))]
+            StoreAttempt::InUse => Some(
                 "the plugin is removed, but WebKit still held a page store (DataStoreInUse)".into(),
             ),
-            StoreAttempt::Failed(message) => warnings.push(message),
-        }
-    }
+            #[cfg(any(target_os = "macos", test))]
+            StoreAttempt::Failed(message) => Some(message),
+        })
+        .collect();
     StoreRemoval { removed, warnings }
 }
 

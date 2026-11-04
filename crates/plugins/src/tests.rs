@@ -6337,3 +6337,16 @@ export default class Plugin extends View {{
     assert!(!text.contains("Plugin dev.test.instruct.d:\n"), "{text}");
     assert!(text.len() <= 16 * 1024, "{}", text.len());
 }
+
+#[gpui_kit::test]
+fn a_failed_store_delete_keeps_its_id_and_says_why(cx: &mut TestAppContext) {
+    let _hook = crate::page::set_remove_hook(|_| {
+        crate::page::StoreAttempt::Failed("the store is locked".into())
+    });
+    let mut async_cx = cx.to_async();
+    let removal = cx
+        .foreground_executor()
+        .block_test(crate::page::remove_web_stores(vec![[7; 16]], &mut async_cx));
+    assert!(removal.removed.is_empty(), "a failed delete keeps store.id");
+    assert_eq!(removal.warnings, vec!["the store is locked".to_owned()]);
+}
