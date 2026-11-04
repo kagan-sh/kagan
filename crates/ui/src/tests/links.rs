@@ -9,8 +9,8 @@ use super::kagan::{
 use crate::kagan::changes::POLL;
 use crate::kagan::{NewTerminal, OpenLocalLink};
 
-// Waits on a real shell, which runs on OS time the test clock cannot move, so there is no short
-// budget. The long limit only stops a test that can never pass from hanging.
+// Real shell output arrives on OS time, which the test clock cannot move, so waits need no short
+// limit. The 120 s limit only stops a test that can never pass from hanging.
 fn wait_for_shell(cx: &mut TestAppContext, mut done: impl FnMut(&mut TestAppContext) -> bool) {
     let hang = Instant::now() + Duration::from_secs(120);
     loop {
