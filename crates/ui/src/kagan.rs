@@ -751,8 +751,8 @@ impl Kagan {
                         message: message.clone().into(),
                         action: action.as_ref().map(|action| ToastCommand {
                             plugin: plugin.clone(),
-                            command: action.command().to_owned(),
-                            label: action.label().to_owned().into(),
+                            command: action.command.clone(),
+                            label: action.label.clone().into(),
                         }),
                         undo: Vec::new(),
                     },

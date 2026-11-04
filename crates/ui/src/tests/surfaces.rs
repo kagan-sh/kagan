@@ -230,7 +230,7 @@ fn bounds_of(
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .unwrap_or_else(|| panic!("{name} is not drawn"))
-            .bounds()
+            .bounds
     })
     .unwrap()
 }
@@ -269,7 +269,7 @@ fn an_overlay_covers_the_center_and_kagan_draws_over_it(cx: &mut TestAppContext)
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name("terminal-grid".into()))
                 .expect("the terminal grid")
-                .bounds()
+                .bounds
                 .scale(window.scale_factor())
         })
         .unwrap();
@@ -351,7 +351,7 @@ fn disable_reload_and_removal_take_the_overlay_away(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
@@ -845,7 +845,7 @@ fn item<'a>(items: &'a [SurfaceItem], plugin: &str, id: &str) -> &'a SurfaceItem
 fn width_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .map_or(0., |element| f32::from(element.bounds().size.width))
+            .map_or(0., |element| f32::from(element.bounds.size.width))
     })
     .unwrap()
 }
@@ -853,7 +853,7 @@ fn width_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32
 fn height_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .map_or(0., |element| f32::from(element.bounds().size.height))
+            .map_or(0., |element| f32::from(element.bounds.size.height))
     })
     .unwrap()
 }
@@ -867,7 +867,7 @@ fn box_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> (f32,
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into())).map_or(
             (0., 0., 0., 0.),
             |element| {
-                let bounds = element.bounds();
+                let bounds = element.bounds;
                 (
                     f32::from(bounds.origin.x),
                     f32::from(bounds.origin.y),
@@ -1378,7 +1378,7 @@ fn reload_disable_and_removal_drop_one_plugin_and_leave_the_other(cx: &mut TestA
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
@@ -1437,7 +1437,7 @@ fn origin_x(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .unwrap_or_else(|| panic!("{name} is not drawn"))
-            .bounds()
+            .bounds
             .origin
             .x
             .as_f32()
@@ -1449,7 +1449,7 @@ fn origin_y(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .unwrap_or_else(|| panic!("{name} is not drawn"))
-            .bounds()
+            .bounds
             .origin
             .y
             .as_f32()
@@ -2445,7 +2445,7 @@ fn removal_moves_focus_to_the_terminal(
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
@@ -3027,7 +3027,7 @@ fn removal_of_the_only_tool_focuses_the_terminal(
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));

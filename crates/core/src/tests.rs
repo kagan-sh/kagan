@@ -890,7 +890,7 @@ async fn deleting_a_thread_waits_for_a_person(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
@@ -1554,7 +1554,7 @@ fn pending_delete(cx: &mut TestAppContext) -> (PendingInteractionId, String) {
     cx.read(|cx| {
         let workspace = Workspace::global(cx);
         let approval = workspace.read(cx).approvals().next().unwrap();
-        (approval.id().clone(), approval.title().to_string())
+        (approval.id.clone(), approval.title.clone())
     })
 }
 
@@ -4421,7 +4421,7 @@ async fn deleting_a_thread_ends_its_program(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
@@ -5064,7 +5064,7 @@ async fn archive_and_delete_remove_the_thread_agent_files(cx: &mut TestAppContex
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))

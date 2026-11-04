@@ -34,19 +34,8 @@ pub struct HostContext {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ToastAction {
-    label: String,
-    command: String,
-}
-
-impl ToastAction {
-    #[must_use]
-    pub fn label(&self) -> &str {
-        &self.label
-    }
-    #[must_use]
-    pub fn command(&self) -> &str {
-        &self.command
-    }
+    pub label: String,
+    pub command: String,
 }
 
 pub enum HostUiEvent {
@@ -520,7 +509,7 @@ fn declared_command(plugin: &PluginId, action: &ToastAction, cx: &App) -> bool {
         .read(cx)
         .commands()
         .iter()
-        .any(|command| command.plugin() == plugin && command.id() == action.command())
+        .any(|command| command.plugin() == plugin && command.id() == action.command.as_str())
 }
 
 fn context_functions(module: HostModule, plugin: &PluginId) -> HostModule {

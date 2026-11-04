@@ -834,7 +834,7 @@ fn cell_point_at(
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name("terminal-grid".into()))
                 .expect("the terminal grid")
-                .bounds()
+                .bounds
         })
         .unwrap();
     point(
@@ -982,7 +982,7 @@ pub(super) fn present(cx: &mut TestAppContext, window: AnyWindowHandle, name: &s
 pub(super) fn shows(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> bool {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .is_some_and(|element| element.visible())
+            .is_some_and(|element| element.visible)
     })
     .unwrap()
 }
@@ -995,7 +995,7 @@ pub(super) fn value_of(
 ) -> Option<String> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.value().map(str::to_owned))
+            .and_then(|element| element.value.as_deref().map(str::to_owned))
     })
     .unwrap()
 }
@@ -1008,7 +1008,7 @@ pub(super) fn focused_of(
 ) -> Option<bool> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.focused())
+            .and_then(|element| element.focused)
     })
     .unwrap()
 }
@@ -1021,7 +1021,7 @@ pub(super) fn role_of(
 ) -> Option<gpui_kit::Role> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.role())
+            .and_then(|element| element.role)
     })
     .unwrap()
 }
@@ -1034,7 +1034,7 @@ pub(super) fn selected_of(
 ) -> Option<bool> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.selected())
+            .and_then(|element| element.selected)
     })
     .unwrap()
 }
@@ -1042,7 +1042,7 @@ pub(super) fn selected_of(
 pub(super) fn label(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> String {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.label().map(str::to_owned))
+            .and_then(|element| element.label.as_deref().map(str::to_owned))
             .unwrap_or_default()
     })
     .unwrap()
@@ -1052,7 +1052,7 @@ fn row_top(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .expect("a row")
-            .bounds()
+            .bounds
             .origin
             .y
             .as_f32()
@@ -1071,7 +1071,7 @@ fn quad_at_row(
         .update_window(window, |_, window, _| {
             let row = crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
                 .expect("a row");
-            (row.bounds().origin.y.as_f32(), window.scale_factor())
+            (row.bounds.origin.y.as_f32(), window.scale_factor())
         })
         .unwrap();
     painted(cx, window)
@@ -1090,7 +1090,7 @@ fn point_at(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) {
     cx.update_window(window, |_, window, cx| {
         let target = crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .expect("an element to point at")
-            .bounds()
+            .bounds
             .center();
         window.dispatch_event(
             MouseMoveEvent {
@@ -1811,10 +1811,10 @@ fn the_title_bar_names_the_thread_and_the_terminal_starts_below_it(cx: &mut Test
             .expect("grid");
         let bar = f32::from(gpui_kit::component::TITLE_BAR_HEIGHT);
         let inset = 8.;
-        assert!((f32::from(grid.bounds().origin.y) - (bar + inset)).abs() < 1.);
+        assert!((f32::from(grid.bounds.origin.y) - (bar + inset)).abs() < 1.);
         let title = crate::ui_registry::find(window, &ElementId::Name("thread-title".into()))
             .expect("title");
-        assert!(f32::from(title.bounds().origin.y + title.bounds().size.height) <= bar);
+        assert!(f32::from(title.bounds.origin.y + title.bounds.size.height) <= bar);
     })
     .unwrap();
 }
@@ -2007,7 +2007,7 @@ fn long_default_thread_title_ends_with_an_ellipsis(cx: &mut TestAppContext) {
     cx.update_window(window, |_, window, _| {
         let row = crate::ui_registry::find(window, &ElementId::Name(format!("thread-{id}").into()))
             .expect("thread row");
-        assert!(row.label().is_some_and(|label| label.contains('…')));
+        assert!(row.label.is_some_and(|label| label.contains('…')));
     })
     .unwrap();
 }
@@ -2375,7 +2375,7 @@ fn synthetic_input_cannot_answer_an_approval(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .expect("approval waiting")
-            .id()
+            .id
             .0
             .clone()
     });
@@ -2510,7 +2510,7 @@ fn approval_answer(cx: &mut TestAppContext) -> String {
             .approvals()
             .next()
             .expect("approval waiting")
-            .id()
+            .id
             .0
             .clone()
     });
@@ -2549,7 +2549,7 @@ fn an_approval_can_be_answered(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .expect("approval waiting")
-            .id()
+            .id
             .0
             .clone()
     });
@@ -3180,7 +3180,7 @@ export class PanelB extends View {
 fn observed_label(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<String> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.label().map(str::to_owned))
+            .and_then(|element| element.label.as_deref().map(str::to_owned))
     })
     .unwrap()
 }
@@ -3271,7 +3271,7 @@ fn a_generated_plugin_button_is_installed_found_clicked_and_checked_after_a_relo
             .approvals()
             .next()
             .expect("an approval waiting for the person")
-            .id()
+            .id
             .clone()
     });
     let approved = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
@@ -3368,9 +3368,9 @@ fn labels_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Ve
             crate::ui_registry::snapshots(window)
                 .iter()
                 .filter(|element| {
-                    element.path().last() == Some(&ElementId::Name(name.to_owned().into()))
+                    element.path.last() == Some(&ElementId::Name(name.to_owned().into()))
                 })
-                .map(|element| element.label().map(str::to_owned))
+                .map(|element| element.label.as_deref().map(str::to_owned))
                 .collect()
         })
         .unwrap();
@@ -3434,7 +3434,7 @@ fn the_switch_and_the_custom_command_input_state_their_values(cx: &mut TestAppCo
     let value = |cx: &mut TestAppContext| {
         cx.update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name("agent-integration".into()))
-                .and_then(|element| element.value().map(str::to_owned))
+                .and_then(|element| element.value.as_deref().map(str::to_owned))
         })
         .unwrap()
     };
@@ -3456,7 +3456,7 @@ fn the_switch_and_the_custom_command_input_state_their_values(cx: &mut TestAppCo
     cx.run_until_parked();
     let program = cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name("custom-program".into()))
-            .and_then(|element| element.value().map(str::to_owned))
+            .and_then(|element| element.value.as_deref().map(str::to_owned))
     });
     assert_eq!(program.unwrap(), Some("zsh".into()));
 }
@@ -3499,7 +3499,7 @@ fn installing_from_the_plugins_box_asks_for_approval_in_needs_you(cx: &mut TestA
                 .read(cx)
                 .approvals()
                 .next()
-                .map(|approval| approval.id().clone())
+                .map(|approval| approval.id.clone())
         })
         .expect("an approval waiting for the person");
     assert!(shows(cx, window, &format!("answer-{}-decline", approval.0)));
@@ -4925,7 +4925,7 @@ fn scope_filled(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> b
     let bounds = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name(id.to_owned().into()))
-                .map(|element| element.bounds())
+                .map(|element| element.bounds)
         })
         .unwrap();
     let Some(bounds) = bounds else {
@@ -5492,7 +5492,7 @@ fn a_saved_diagnostics_notice_keeps_dismiss_on_screen(cx: &mut TestAppContext) {
     let title_y = |cx: &mut TestAppContext| {
         cx.update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name("thread-title".into()))
-                .map(|element| element.bounds().origin.y)
+                .map(|element| element.bounds.origin.y)
         })
         .unwrap()
         .expect("thread title")
@@ -5543,7 +5543,7 @@ fn a_saved_diagnostics_notice_keeps_dismiss_on_screen(cx: &mut TestAppContext) {
 fn disabled(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<bool> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.disabled())
+            .and_then(|element| element.disabled)
     })
     .unwrap()
 }
@@ -5883,7 +5883,7 @@ fn right_click(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) {
         .update_window(window, |_, window, _| {
             let bounds = crate::ui_registry::find(window, &ElementId::Name(row.to_owned().into()))
                 .unwrap()
-                .bounds();
+                .bounds;
             point(
                 bounds.origin.x + bounds.size.width / 2.,
                 bounds.origin.y + bounds.size.height / 2.,
@@ -5951,7 +5951,7 @@ fn project_menu_asks_and_removal_updates_the_sidebar(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     let cancelled = cx.update(|cx| Workspace::answer_standalone(approval, "decline".into(), cx));
@@ -5973,7 +5973,7 @@ fn project_menu_asks_and_removal_updates_the_sidebar(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
@@ -6019,10 +6019,10 @@ fn remove_project_focuses_cancel_in_the_narrow_questions_panel(cx: &mut TestAppC
             .unwrap()
             .clone()
     });
-    assert_eq!(asked.options()[0].label, "Cancel");
-    assert_eq!(asked.options()[1].label, "Remove");
-    let cancel = format!("answer-{}-decline", asked.id());
-    let remove = format!("answer-{}-approve", asked.id());
+    assert_eq!(asked.options[0].label, "Cancel");
+    assert_eq!(asked.options[1].label, "Remove");
+    let cancel = format!("answer-{}-decline", asked.id);
+    let remove = format!("answer-{}-approve", asked.id);
     set_preference(cx, "main.right-sidebar", serde_json::json!(true));
     cx.simulate_window_resize(window, size(px(800.), px(720.)));
     cx.run_until_parked();
@@ -6030,7 +6030,7 @@ fn remove_project_focuses_cancel_in_the_narrow_questions_panel(cx: &mut TestAppC
     assert_eq!(focused_of(cx, window, &cancel), Some(true));
     assert_ne!(focused_of(cx, window, &remove), Some(true));
     let answered =
-        cx.update(|cx| Workspace::answer_standalone(asked.id().clone(), "decline".into(), cx));
+        cx.update(|cx| Workspace::answer_standalone(asked.id.clone(), "decline".into(), cx));
     cx.foreground_executor().block_test(answered).unwrap();
     assert!(cx.foreground_executor().block_test(removing).is_err());
 }
@@ -6508,7 +6508,7 @@ fn sidebar_controls_follow_hover_and_focus(cx: &mut TestAppContext) {
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name(row.into()))
                 .unwrap()
-                .bounds()
+                .bounds
         })
         .unwrap();
     hover_to(
@@ -6545,14 +6545,14 @@ fn sidebar_nests_and_collapses_child_threads(cx: &mut TestAppContext) {
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name(parent_row.clone().into()))
                 .unwrap()
-                .bounds()
+                .bounds
         })
         .unwrap();
     let child_bounds = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name(child_row.clone().into()))
                 .unwrap()
-                .bounds()
+                .bounds
         })
         .unwrap();
     assert!(child_bounds.origin.x >= bounds.origin.x + px(24.));

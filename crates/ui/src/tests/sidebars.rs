@@ -192,7 +192,7 @@ fn a_saved_left_width_is_shown_at_once(cx: &mut TestAppContext) {
     let width = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &gpui_kit::ElementId::Name("sidebar-pane".into()))
-                .map_or(0., |element| f32::from(element.bounds().size.width))
+                .map_or(0., |element| f32::from(element.bounds.size.width))
         })
         .unwrap();
     assert!((width - 330.).abs() < 1., "shown {width}");
@@ -208,7 +208,7 @@ fn a_saved_left_width_is_shown_after_settings(cx: &mut TestAppContext) {
     let width = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &gpui_kit::ElementId::Name("sidebar-pane".into()))
-                .map_or(0., |element| f32::from(element.bounds().size.width))
+                .map_or(0., |element| f32::from(element.bounds.size.width))
         })
         .unwrap();
     assert!((width - 330.).abs() < 1., "shown {width}");
@@ -222,7 +222,7 @@ pub(super) fn span(
 ) -> Option<(f32, f32)> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(id.into())).map(|element| {
-            let bounds = element.bounds();
+            let bounds = element.bounds;
             (f32::from(bounds.origin.x), f32::from(bounds.size.width))
         })
     })
@@ -376,7 +376,7 @@ fn row_y(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .expect(name)
-            .bounds()
+            .bounds
             .origin
             .y
             .as_f32()
@@ -388,7 +388,7 @@ fn col_x(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
             .expect(name)
-            .bounds()
+            .bounds
             .origin
             .x
             .as_f32()
@@ -643,7 +643,7 @@ fn a_hidden_sidebar_counts_what_is_waiting_and_refuses_a_synthetic_answer(cx: &m
             let place = |name: &str| {
                 let bounds = crate::ui_registry::find(window, &ElementId::Name(name.into()))
                     .unwrap_or_else(|| panic!("{name}"))
-                    .bounds();
+                    .bounds;
                 (
                     f32::from(bounds.origin.x),
                     f32::from(bounds.origin.y),
@@ -676,7 +676,7 @@ fn a_hidden_sidebar_counts_what_is_waiting_and_refuses_a_synthetic_answer(cx: &m
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .0
             .clone()
     });
@@ -1184,7 +1184,7 @@ pub(super) fn hover_row(cx: &mut TestAppContext, window: AnyWindowHandle, name: 
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
                 .unwrap()
-                .bounds()
+                .bounds
         })
         .unwrap();
     hover_to(
@@ -1243,7 +1243,7 @@ fn center_of(
     cx.update_window(window, |_, window, _| {
         let bounds = crate::ui_registry::find(window, &ElementId::Name(name.into()))
             .unwrap_or_else(|| panic!("{name}"))
-            .bounds();
+            .bounds;
         point(
             bounds.origin.x + bounds.size.width / 2.,
             bounds.origin.y + bounds.size.height / 2.,
@@ -1255,7 +1255,7 @@ fn center_of(
 fn hint_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<String> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.into()))
-            .and_then(|element| element.hint().map(str::to_owned))
+            .and_then(|element| element.hint.as_deref().map(str::to_owned))
     })
     .unwrap()
 }

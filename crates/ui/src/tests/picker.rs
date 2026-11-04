@@ -96,7 +96,7 @@ fn bounds(
 ) -> Option<(f32, f32, f32, f32)> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(id.into())).map(|element| {
-            let bounds = element.bounds();
+            let bounds = element.bounds;
             (
                 f32::from(bounds.origin.x),
                 f32::from(bounds.origin.y),

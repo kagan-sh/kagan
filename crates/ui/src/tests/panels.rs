@@ -124,7 +124,7 @@ fn plugin_log(cx: &mut TestAppContext, id: &str) -> String {
 fn height_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .map_or(0., |element| f32::from(element.bounds().size.height))
+            .map_or(0., |element| f32::from(element.bounds.size.height))
     })
     .unwrap()
 }
@@ -203,7 +203,7 @@ fn manage_plugins_opens_the_installed_page(cx: &mut TestAppContext) {
 fn bounds_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<[f32; 4]> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into())).map(|element| {
-            let bounds = element.bounds();
+            let bounds = element.bounds;
             [
                 f32::from(bounds.origin.x),
                 f32::from(bounds.origin.y),
@@ -223,7 +223,7 @@ pub(super) fn disabled_of(
 ) -> Option<bool> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.disabled())
+            .and_then(|element| element.disabled)
     })
     .unwrap()
 }
@@ -331,7 +331,7 @@ fn space_answers_an_approval_as_a_person_and_synthetic_space_is_refused(cx: &mut
             .approvals()
             .next()
             .expect("approval waiting")
-            .id()
+            .id
             .0
             .clone();
         format!("answer-{id}-yes")
@@ -368,7 +368,7 @@ fn space_answers_an_approval_as_a_person_and_synthetic_space_is_refused(cx: &mut
 fn focused_of_name(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> bool {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.focused())
+            .and_then(|element| element.focused)
             == Some(true)
     })
     .unwrap()
@@ -419,7 +419,7 @@ fn the_install_form_is_disabled_while_an_install_runs_and_follows_the_host(
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .clone()
     });
     let declined = cx.update(|cx| Workspace::answer_standalone(approval, "decline".into(), cx));

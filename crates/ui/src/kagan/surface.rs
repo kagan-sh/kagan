@@ -886,9 +886,9 @@ pub(super) fn mount_error(error: &MountError) -> String {
 pub(super) fn painted(window: &Window, id: &str) -> bool {
     match locate(window, &ElementId::Name(id.into()), None) {
         Located::One(element) => {
-            element.visible()
-                && f32::from(element.bounds().size.width) > 0.
-                && f32::from(element.bounds().size.height) > 0.
+            element.visible
+                && f32::from(element.bounds.size.width) > 0.
+                && f32::from(element.bounds.size.height) > 0.
         }
         Located::Missing | Located::Ambiguous(_) => false,
     }

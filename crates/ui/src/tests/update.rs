@@ -155,7 +155,7 @@ fn kg_ui_cannot_confirm_an_install_a_person_asked_for(cx: &mut TestAppContext) {
     let at = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name("update-install".into()))
-                .map(|element| element.bounds().center())
+                .map(|element| element.bounds.center())
         })
         .unwrap()
         .unwrap();

@@ -289,7 +289,7 @@ fn bounds(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> gpui_ki
     cx.update_window(window, |_, window, _| {
         let bounds = crate::ui_registry::find(window, &ElementId::Name(id.to_owned().into()))
             .unwrap_or_else(|| panic!("{id} is not drawn"))
-            .bounds();
+            .bounds;
         gpui_kit::Bounds::new(
             gpui_kit::point(f32::from(bounds.origin.x), f32::from(bounds.origin.y)),
             gpui_kit::size(f32::from(bounds.size.width), f32::from(bounds.size.height)),
@@ -380,7 +380,7 @@ fn only_the_persons_choice_switches_a_slot(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
@@ -694,7 +694,7 @@ fn answer_standalone(cx: &mut TestAppContext, option: &str) {
             .approvals()
             .next()
             .expect("approval")
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, option.into(), cx));

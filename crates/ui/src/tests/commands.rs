@@ -124,7 +124,7 @@ fn name_from_snapshot(debug: &str) -> Option<&str> {
 
 fn shows_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) -> bool {
     cx.update_window(window, |_, window, _| {
-        crate::ui_registry::find(window, id).is_some_and(|element| element.visible())
+        crate::ui_registry::find(window, id).is_some_and(|element| element.visible)
     })
     .unwrap()
 }
@@ -139,7 +139,8 @@ fn click_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) {
 
 fn hint_of_id(cx: &mut TestAppContext, window: AnyWindowHandle, id: &ElementId) -> Option<String> {
     cx.update_window(window, |_, window, _| {
-        crate::ui_registry::find(window, id).and_then(|element| element.hint().map(str::to_owned))
+        crate::ui_registry::find(window, id)
+            .and_then(|element| element.hint.as_deref().map(str::to_owned))
     })
     .unwrap()
 }
@@ -151,7 +152,7 @@ fn bounds_of(
 ) -> Option<(f32, f32, f32, f32)> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, id).map(|element| {
-            let bounds = element.bounds();
+            let bounds = element.bounds;
             (
                 f32::from(bounds.origin.x),
                 f32::from(bounds.origin.y),
@@ -184,7 +185,7 @@ fn query(cx: &mut TestAppContext, window: AnyWindowHandle, kagan: &Entity<Kagan>
 fn hint_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<String> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.hint().map(str::to_owned))
+            .and_then(|element| element.hint.as_deref().map(str::to_owned))
     })
     .unwrap()
 }

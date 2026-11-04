@@ -826,6 +826,7 @@ impl Workspace {
     /// Raises a question on the thread and resolves with the chosen option id.
     /// [`Self::answer`] answers it, including from a plugin. Fails when the thread
     /// stops or the question is otherwise cancelled.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn ask(
         thread_id: &ThreadId,
         title: String,

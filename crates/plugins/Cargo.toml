@@ -39,6 +39,7 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
+kg-core = { workspace = true, features = ["test-support"] }
 kg-store.workspace = true
 
 [lints]

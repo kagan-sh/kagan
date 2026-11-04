@@ -352,7 +352,7 @@ fn answer_standalone(cx: &mut TestAppContext, option: &str) {
             .unwrap()
     });
     let answered =
-        cx.update(|cx| Workspace::answer_standalone(approval.id().clone(), option.into(), cx));
+        cx.update(|cx| Workspace::answer_standalone(approval.id.clone(), option.into(), cx));
     cx.foreground_executor().block_test(answered).unwrap();
 }
 
@@ -1343,9 +1343,9 @@ fn installing_needs_a_person_with_or_without_a_thread(cx: &mut TestAppContext) {
             .cloned()
             .unwrap()
     });
-    assert!(approval.title().contains("writes to your clipboard"));
+    assert!(approval.title.contains("writes to your clipboard"));
     let invalid =
-        cx.update(|cx| Workspace::answer_standalone(approval.id().clone(), "invented".into(), cx));
+        cx.update(|cx| Workspace::answer_standalone(approval.id.clone(), "invented".into(), cx));
     assert!(cx.foreground_executor().block_test(invalid).is_err());
     assert_eq!(
         cx.read(|cx| Workspace::global(cx).read(cx).approvals().count()),
@@ -3425,7 +3425,7 @@ fn a_plugin_answers_a_question_and_leaves_person_approvals(cx: &mut TestAppConte
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     plugin_refuses(cx, &approval.0);
@@ -5449,11 +5449,11 @@ fn a_plugin_without_powers_says_what_it_cannot_do(cx: &mut TestAppContext) {
             .unwrap()
     });
     assert!(
-        approval.title().contains(
+        approval.title.contains(
             "It asks for no extra powers. It cannot run programs or read your other files."
         ),
         "{}",
-        approval.title()
+        approval.title
     );
     answer_standalone(cx, "decline");
     assert!(cx.foreground_executor().block_test(install_task).is_err());

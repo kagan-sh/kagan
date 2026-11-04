@@ -199,7 +199,7 @@ fn the_settings_thumb_follows_the_page_down(cx: &mut TestAppContext) {
     let bottom = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name("settings-page".into()))
-                .map(|page| page.bounds().bottom())
+                .map(|page| page.bounds.bottom())
         })
         .unwrap()
         .unwrap();
@@ -220,7 +220,7 @@ fn the_settings_thumb_follows_the_page_down(cx: &mut TestAppContext) {
 fn top_of(cx: &mut TestAppContext, window: AnyWindowHandle, id: &str) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(id.into()))
-            .map(|element| f32::from(element.bounds().origin.y))
+            .map(|element| f32::from(element.bounds.origin.y))
     })
     .unwrap()
     .unwrap()
@@ -605,7 +605,7 @@ fn a_project_menu_scrolls_to_its_last_of_25_projects(cx: &mut TestAppContext) {
         .update_window(window, |_, window, _| {
             let row = crate::ui_registry::find(window, &ElementId::Name(pick.clone().into()))
                 .unwrap()
-                .bounds();
+                .bounds;
             (row.bottom(), window.viewport_size().height)
         })
         .unwrap();
@@ -649,7 +649,7 @@ fn removing_the_project_while_settings_is_open_shows_missing(cx: &mut TestAppCon
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     let answered = cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx));
@@ -775,7 +775,7 @@ fn a_folder_approval_shows_in_settings(cx: &mut TestAppContext) {
                 .read(cx)
                 .approvals()
                 .next()
-                .map(|approval| approval.id().clone())
+                .map(|approval| approval.id.clone())
         })
         .expect("the folder waits for approval");
     assert!(
@@ -1105,7 +1105,7 @@ fn a_plugin_turns_off_and_on_from_the_installed_page(cx: &mut TestAppContext) {
 fn aria_label(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Option<String> {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .and_then(|element| element.label().map(str::to_owned))
+            .and_then(|element| element.label.as_deref().map(str::to_owned))
     })
     .unwrap()
 }
@@ -1141,7 +1141,7 @@ fn setup_only(cx: &mut TestAppContext) -> tempfile::TempDir {
 fn pane_width(cx: &mut TestAppContext, window: AnyWindowHandle) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name("sidebar-pane".into()))
-            .map_or(0., |element| f32::from(element.bounds().size.width))
+            .map_or(0., |element| f32::from(element.bounds.size.width))
     })
     .unwrap()
 }
@@ -1162,7 +1162,7 @@ fn saved(cx: &mut TestAppContext, key: &str) -> Value {
 fn focused(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> bool {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .is_some_and(|element| element.focused() == Some(true))
+            .is_some_and(|element| element.focused == Some(true))
     })
     .unwrap()
 }
@@ -1418,9 +1418,9 @@ fn keyboard_groups_shortcuts_by_where_they_apply(cx: &mut TestAppContext) {
         cx.update_window(window, |_, window, _| {
             let element =
                 crate::ui_registry::find(window, &ElementId::Name(row.clone().into())).unwrap();
-            assert!((f32::from(element.bounds().size.height) - 24.).abs() < 0.5);
+            assert!((f32::from(element.bounds.size.height) - 24.).abs() < 0.5);
             assert!(
-                element.path().iter().any(|id| *id
+                element.path.iter().any(|id| *id
                     == ElementId::Name(format!("settings-group-shortcuts-{section}").into()))
             );
         })
@@ -2272,7 +2272,7 @@ fn waiting(cx: &mut TestAppContext) -> Option<kg_domain::PendingInteractionId> {
             .read(cx)
             .approvals()
             .next()
-            .map(|approval| approval.id().clone())
+            .map(|approval| approval.id.clone())
     })
 }
 
@@ -2308,7 +2308,7 @@ fn set_theme(cx: &mut TestAppContext, theme: &str) {
 fn row_top(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> f32 {
     cx.update_window(window, |_, window, _| {
         crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))
-            .map_or(f32::MAX, |element| f32::from(element.bounds().origin.y))
+            .map_or(f32::MAX, |element| f32::from(element.bounds.origin.y))
     })
     .unwrap()
 }
@@ -2458,14 +2458,14 @@ fn an_index_added_in_settings_finds_a_plugin_and_install_asks_for_approval(
     });
     assert!(
         approval
-            .title()
+            .title
             .starts_with("Install Echo 1.0.0 (dev.test.echo)?\nFrom the folder ")
-            && approval.title().contains(", listed by index team at "),
+            && approval.title.contains(", listed by index team at "),
         "{}",
-        approval.title()
+        approval.title
     );
     let accepted =
-        cx.update(|cx| Workspace::answer_standalone(approval.id().clone(), "approve".into(), cx));
+        cx.update(|cx| Workspace::answer_standalone(approval.id.clone(), "approve".into(), cx));
     cx.foreground_executor().block_test(accepted).unwrap();
     wait_until(cx, |cx| present(cx, window, "plugin-row-dev.test.echo"));
 

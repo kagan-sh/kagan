@@ -31,7 +31,7 @@ fn first_approval(cx: &mut TestAppContext) -> kg_domain::PendingInteractionId {
             .approvals()
             .next()
             .expect("an approval")
-            .id()
+            .id
             .clone()
     })
 }

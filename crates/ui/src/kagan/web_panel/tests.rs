@@ -144,7 +144,7 @@ fn drawn(
 fn placed(window: &gpui_kit::Window, name: &str) -> Option<(f32, f32)> {
     crate::ui_registry::find(window, &gpui_kit::ElementId::Name(name.to_owned().into())).map(
         |element| {
-            let bounds = element.bounds();
+            let bounds = element.bounds;
             (f32::from(bounds.origin.y), f32::from(bounds.size.height))
         },
     )
