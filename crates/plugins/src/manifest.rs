@@ -318,7 +318,7 @@ impl Settings {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Setting {
     String {
@@ -331,6 +331,11 @@ pub enum Setting {
         #[serde(default)]
         default: Option<bool>,
     },
+    Number {
+        title: String,
+        #[serde(default)]
+        default: Option<serde_json::Number>,
+    },
     Select {
         title: String,
         options: Vec<String>,
@@ -338,6 +343,9 @@ pub enum Setting {
         default: Option<String>,
     },
     Folder {
+        title: String,
+    },
+    Project {
         title: String,
     },
     Provider {
@@ -368,8 +376,10 @@ impl Setting {
         match self {
             Self::String { title, .. }
             | Self::Boolean { title, .. }
+            | Self::Number { title, .. }
             | Self::Select { title, .. }
             | Self::Folder { title }
+            | Self::Project { title }
             | Self::Provider { title }
             | Self::Secret { title } => title,
         }
@@ -379,7 +389,11 @@ impl Setting {
         match self {
             Self::String { default, .. } | Self::Select { default, .. } => default.clone().into(),
             Self::Boolean { default, .. } => (*default).into(),
-            Self::Folder { .. } | Self::Provider { .. } | Self::Secret { .. } => Value::Null,
+            Self::Number { default, .. } => default.clone().map_or(Value::Null, Value::Number),
+            Self::Folder { .. }
+            | Self::Project { .. }
+            | Self::Provider { .. }
+            | Self::Secret { .. } => Value::Null,
         }
     }
 }
@@ -813,7 +827,9 @@ impl Grant {
                     Setting::Folder { title } => Some((key.clone(), title.clone())),
                     Setting::String { .. }
                     | Setting::Boolean { .. }
+                    | Setting::Number { .. }
                     | Setting::Select { .. }
+                    | Setting::Project { .. }
                     | Setting::Provider { .. }
                     | Setting::Secret { .. } => None,
                 })

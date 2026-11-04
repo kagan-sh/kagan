@@ -933,53 +933,92 @@ async fn config(
         ConfigOp::Clear { .. } if matches!(setting, Setting::Secret { .. }) => {
             keep_secret(host, id, &key, None, cx).await
         }
+        ConfigOp::Clear { .. } if matches!(setting, Setting::Project { .. }) => {
+            write_setting(host, id, &key, Value::Null, None, (activation, permit), cx).await
+        }
         ConfigOp::Clear { .. } => Err(OpError::Invalid(format!(
-            "setting {key} is not a secret; set it instead"
+            "setting {key} is not a secret or project; set it instead"
         ))),
         ConfigOp::Set {
             value: Some(value), ..
         } => {
             let value = checked(&key, &setting, value)?;
+            if matches!(setting, Setting::Project { .. }) {
+                let Some(id_text) = value.as_str() else {
+                    return Err(OpError::Invalid(format!(
+                        "setting {key} ({}) takes a project id",
+                        setting.title()
+                    )));
+                };
+                let project = ProjectId(id_text.into());
+                let workspace = cx.update(|cx| Workspace::global(cx));
+                let found =
+                    workspace.read_with(cx, |workspace, _| workspace.project(&project).is_some());
+                if !found {
+                    return Err(OpError::Invalid(format!("no project {project}")));
+                }
+            }
             let asked = format!("Let {name} ({id}) read a folder?");
             let folder = approve_folder(&setting, &value, asked, thread_id, requester, cx).await?;
             host.read_with(cx, |host, _| stage(host, id, &key, folder.as_ref()))?;
-            if host.read_with(cx, |host, _| host.activation(id)) != Some(activation) {
-                return Err(OpError::Invalid(format!(
-                    "plugin {id} changed while this was saving"
-                )));
-            }
-            #[cfg(test)]
-            if let Some(hold) = host.update(cx, |host, _| host.commit_hold.take()) {
-                let _ = hold.recv().await;
-            }
-            let workspace = cx.update(|cx| Workspace::global(cx));
-            #[cfg(test)]
-            if let Some(hold) = host.update(cx, |host, _| host.write_hold.take()) {
-                let _ = hold.recv().await;
-            }
-            let wrote = workspace
-                .read_with(cx, |workspace, _| {
-                    workspace.commit_plugin_config(
-                        id.clone(),
-                        key.clone(),
-                        value.clone(),
-                        folder.as_ref().map(|path| path.display().to_string()),
-                        permit,
-                        activation,
-                    )
-                })
-                .await?;
-            if !wrote {
-                return Err(OpError::Invalid(format!(
-                    "plugin {id} changed while this was saving"
-                )));
-            }
-            host.update(cx, |host, cx| {
-                remember_setting(host, id, &key, &value, folder.as_ref(), activation, cx)
-            })?;
-            Ok(OpResult::Done)
+            write_setting(
+                host,
+                id,
+                &key,
+                value,
+                folder.as_ref(),
+                (activation, permit),
+                cx,
+            )
+            .await
         }
     }
+}
+
+async fn write_setting(
+    host: &Entity<PluginHost>,
+    id: &PluginId,
+    key: &str,
+    value: Value,
+    folder: Option<&PathBuf>,
+    (activation, permit): (u64, std::sync::Arc<std::sync::Mutex<Option<u64>>>),
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    if host.read_with(cx, |host, _| host.activation(id)) != Some(activation) {
+        return Err(OpError::Invalid(format!(
+            "plugin {id} changed while this was saving"
+        )));
+    }
+    #[cfg(test)]
+    if let Some(hold) = host.update(cx, |host, _| host.commit_hold.take()) {
+        let _ = hold.recv().await;
+    }
+    let workspace = cx.update(|cx| Workspace::global(cx));
+    #[cfg(test)]
+    if let Some(hold) = host.update(cx, |host, _| host.write_hold.take()) {
+        let _ = hold.recv().await;
+    }
+    let wrote = workspace
+        .read_with(cx, |workspace, _| {
+            workspace.commit_plugin_config(
+                id.clone(),
+                key.to_owned(),
+                value.clone(),
+                folder.map(|path| path.display().to_string()),
+                permit,
+                activation,
+            )
+        })
+        .await?;
+    if !wrote {
+        return Err(OpError::Invalid(format!(
+            "plugin {id} changed while this was saving"
+        )));
+    }
+    host.update(cx, |host, cx| {
+        remember_setting(host, id, key, &value, folder, activation, cx)
+    })?;
+    Ok(OpResult::Done)
 }
 
 /// Writes or clears a secret in the store, never in the database, and returns the store's
@@ -1086,6 +1125,8 @@ fn checked(key: &str, setting: &Setting, value: Value) -> Result<Value> {
         Setting::String { .. } => Err(takes("text")),
         Setting::Boolean { .. } if value.is_boolean() => Ok(value),
         Setting::Boolean { .. } => Err(takes("true or false")),
+        Setting::Number { .. } if value.as_f64().is_some_and(f64::is_finite) => Ok(value),
+        Setting::Number { .. } => Err(takes("a number, like 3 or 2.5")),
         Setting::Select { options, .. } => match value.as_str() {
             Some(choice) if options.iter().any(|option| option == choice) => Ok(value),
             _ => Err(takes(&format!("one of {}", options.join(", ")))),
@@ -1097,6 +1138,10 @@ fn checked(key: &str, setting: &Setting, value: Value) -> Result<Value> {
             .filter(|path: &PathBuf| path.is_dir())
             .map(|path| Value::String(path.display().to_string()))
             .ok_or_else(|| takes("an existing folder")),
+        Setting::Project { .. } => match value.as_str() {
+            Some(id) if !id.is_empty() && !id.chars().any(char::is_control) => Ok(value),
+            _ => Err(takes("a project id")),
+        },
         Setting::Secret { .. } => {
             let fits = value.as_str().is_some_and(|text| {
                 !text.is_empty()

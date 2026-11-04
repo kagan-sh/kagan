@@ -27,4 +27,4 @@ plugin's `powers.fetch`. The URL rule is in `docs/plugin-api.md`.
 
 A panel may name `"web"` instead of `"view"`. The body is an HTML file in the
 plugin folder, drawn by the same macOS web view. The page, the bridge, and the
-theme variables are in `docs/plugin-api.md` (decision 132).
+theme variables are in `docs/plugin-api.md` (decision 133).

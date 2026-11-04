@@ -182,14 +182,20 @@ A project is a named body of work, usually one repository, with one folder on th
 ### `List`, `Get`
 
 - **Allowed when**: `Get` needs a project id [book:cli]. `List` always [book:cli].
-- **Shows**: the projects, or one project [book:cli]. Personal is last in the sidebar [docs:look].
+- **Shows**: the projects, or one project [book:cli]. Standard projects follow the person's order; Personal is last in the sidebar [docs:look] [decision 132].
 - **Refused when**: a missing id on `Get` — `not-found` [op.rs].
 
 ### `Add`
 
 - **Allowed when**: the command is given a folder path [book:cli] [op.rs].
-- **Changes**: adds a `standard` project for that folder [book:cli] [person 2026-10-08]. The book also says this version has no such command; the CLI has it, so Add is in the contract [book:threads] [book:cli].
+- **Changes**: adds a `standard` project for that folder [book:cli] [person 2026-10-08]. The book also says this version has no such command; the CLI has it, so Add is in the contract [book:threads] [book:cli]. A new project is appended after the other standard projects [decision 132].
 - **Refused when**: a path the command cannot use as a project folder — `invalid` [op.rs].
+
+### `Reorder`
+
+- **Allowed when**: the id is a standard project [book:cli] [decision 132].
+- **Changes**: moves that project before `--before`, or to the end of the standard list when `--before` is omitted [book:cli] [decision 132]. Dragging a project header in the sidebar does the same [docs:look].
+- **Refused when**: a missing id — `not-found` [op.rs]. Personal, or `--before` naming Personal — `invalid` [op.rs] [decision 132].
 
 ## Environment
 
@@ -476,23 +482,23 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ## Config
 
-Plugin settings, reached as `kg plugin config <id> get|set|clear` [docs:plugin-api] [book:cli]. Setting types are string, boolean, select, folder, secret, and provider [docs:plugin-api]. A provider setting is left out of the settings read. A thread a plugin starts names its program in `spawn` [docs:plugin-api].
+Plugin settings, reached as `kg plugin config <id> get|set|clear` [docs:plugin-api] [book:cli]. Setting types are string, boolean, number, select, folder, project, secret, and provider [docs:plugin-api]. A number is a finite JSON number. A provider setting is left out of the settings read. A thread a plugin starts names its program in `spawn` [docs:plugin-api].
 
 ### `Get`
 
-- **Shows**: the setting value [book:cli]. A provider setting is left out of the plugin's settings read [docs:plugin-api]. A secret setting shows `"set"` or `null`, never its text, to every caller [decision 104].
+- **Shows**: the setting value [book:cli]. A provider setting is left out of the plugin's settings read [docs:plugin-api]. A secret setting shows `"set"` or `null`, never its text, to every caller [decision 104]. A project setting shows the stored id even when that project was later removed [decision 135].
 - **Refused when**: a key the manifest does not declare — `invalid` [docs:plugin-api] [op.rs].
 
 ### `Set`
 
-- **Allowed when**: the key is one the manifest declares [docs:plugin-api]. A folder value is approved by a person on the calling thread [book:cli] [docs:plugin-api].
+- **Allowed when**: the key is one the manifest declares [docs:plugin-api]. A folder value is approved by a person on the calling thread [book:cli] [docs:plugin-api]. A project value names a live project [decision 135].
 - **Changes**: stores the value [book:cli]. A folder setting is granted read-only [docs:plugin-api]. `kg` reads a value left off the command line from a prompt that does not show it, or from stdin, as text [book:cli]. A secret goes to the system keychain, or to a file only the person can read with a warning, never the database [decision 104].
-- **Refused when**: the person declines a folder — `failed` [book:plugins] [op.rs]. A value of the wrong type — `invalid` [op.rs]. No value — `invalid` [op.rs]. A secret that is empty, more than one line, or over 1024 bytes — `invalid`, and the message does not repeat it [decision 104].
+- **Refused when**: the person declines a folder — `failed` [book:plugins] [op.rs]. A value of the wrong type — `invalid` [op.rs]. No value — `invalid` [op.rs]. A secret that is empty, more than one line, or over 1024 bytes — `invalid`, and the message does not repeat it [decision 104]. A project id that is not a live project — `invalid` [decision 135].
 
 ### `Clear`
 
-- **Allowed when**: the key is a secret setting the manifest declares [decision 104].
-- **Changes**: forgets the secret; the plugin's settings read shows `null` [decision 104].
+- **Allowed when**: the key is a secret setting the manifest declares [decision 104], or a project setting [decision 135].
+- **Changes**: forgets the secret, or unsets the project; the plugin's settings read shows `null` [decision 104] [decision 135].
 - **Refused when**: any other setting — `invalid` [op.rs].
 
 ## Window

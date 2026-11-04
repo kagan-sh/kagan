@@ -35,7 +35,9 @@ kagan owns the manifest and builds each plugin's gpui-shell `Policy` from it. Th
   "settings": {
     "personasDir": { "type": "folder", "title": "Personas folder" },
     "sounds": { "type": "boolean", "title": "Sounds", "default": true },
+    "retries": { "type": "number", "title": "Retries", "default": 3 },
     "density": { "type": "select", "title": "Density", "options": ["comfortable", "compact"], "default": "comfortable" },
+    "board": { "type": "project", "title": "Board project" },
     "apiKey": { "type": "secret", "title": "API key" }
   },
 
@@ -191,9 +193,9 @@ Plugins contribute **panels** placed `left`, `center`, or `right` (decision 59).
 - `Markdown`: rendered message text.
 - `KgButton`: a command button with the calls of `Button`: `label`, `tooltip`, `loading`, `size`, `primary`, `secondary`, `danger`, `success`, `warning`, `outline`, `ghost`, `link`, `compact`, `disabled`, `selected`, `on_click`, and children, which sit inside the button. `kg ui` finds, clicks and reads it by its id, with its role, name, state and focus. Two panels that use the same id are refused by `kg ui click` unless `--within` names one. `kg plugin check` warns on a plain `Button` in any plugin script. `kg plugin new` writes a starter panel that uses `KgButton`.
 - `KgInput` and `KgTextarea`: a text field. `new KgInput(state)` takes an `InputState`; `new KgTextarea(state)` takes a `TextareaState`. `aria_label(name)` is the accessible name, and `disabled(flag)` stops edits. With a name, `kg ui` finds the field, `kg ui click <name>` focuses it, and `kg ui type` writes into it. The snapshot states the name, the value, and focus. A masked value is eight dots. Without `aria_label`, the field is not a control. The shell's `Input` and `Textarea` stay as the shell draws them: kagan cannot wrap them (decision 55), so `kg ui` does not see them.
-- `WebView`: one page, placed as a panel's body. `new WebView(id)` takes one string id. `url(url)` loads that http or https address. The host must be `127.0.0.1` or `localhost`, or a host in this plugin's `powers.fetch`. Any other address is refused, and so is a navigation that leaves those hosts, with a sentence that says why. The element fills its parent. A right panel whose body is a `WebView` shows the page edge to edge, and only while that panel is on screen. On macOS and Windows the page is the same `gpui-webview` view as the Browser tab. Linux shows one sentence. It is not the Browser tab and has no address bar.
+- `WebView`: one page, placed as a panel's body. `new WebView(id)` takes one string id. `url(url)` loads that http or https address. The host must be `127.0.0.1` or `localhost`, or a host in this plugin's `powers.fetch`. Any other address is refused, and so is a navigation that leaves those hosts, with a sentence that says why. The element fills its parent. A right panel whose body is a `WebView` shows the page edge to edge, and only while that panel is on screen. On macOS and Windows the page is the same `gpui-webview` view as the Browser tab. Linux shows one sentence. It is not the Browser tab and has no address bar. A page that lives in the plugin folder uses a web panel instead.
 
-**Web panel** (decision 132). `"web"` is a relative path to one `.html` file inside the plugin, such as `"ui/index.html"`. No absolute path, no `..`, no `\`, and no `__kagan` segment. `kg plugin check` reads that file. Left, center, and right all place it. A right or center web panel fills its frame edge to edge. The plugin's entry still loads, so its job loop can answer the page. There is no server.
+**Web panel** (decision 133). `"web"` is a relative path to one `.html` file inside the plugin, such as `"ui/index.html"`. No absolute path, no `..`, no `\`, and no `__kagan` segment. `kg plugin check` reads that file. Left, center, and right all place it. A right or center web panel fills its frame edge to edge. The plugin's entry still loads, so its job loop can answer the page. There is no server.
 
 The page is served from the plugin folder on `kagan-plugin://<plugin-id>/`. That origin is private to the plugin. Reads stay inside the folder: `..` is refused, every symlink is refused, and a file over 8 MiB is refused. The page may load only its own files. Known types are html, css, js, mjs, json, svg, png, jpg, gif, webp, ico, woff, woff2, txt, and wasm. Anything else is `application/octet-stream`.
 
@@ -240,7 +242,14 @@ Decision 105. A panel may offer to fill a slot: `"replaces": "threads"` on a `le
 
 ## Settings and the CLI
 
-Setting types: `string`, `boolean`, `select`, `folder` (a user-picked folder, granted read-only), `secret` (a token such as an API key), `provider` (kept so an old manifest parses; `host.settings()` leaves it out). A thread a plugin starts names its program in `spawn`. Plugin settings are `Op`s like every feature: `kg plugin config <id> get|set|clear <key> [<value>]`.
+Setting types: `string`, `boolean`, `number` (a finite JSON number; Settings shows a text field), `select`, `folder` (a user-picked folder, granted read-only), `project` (a project id from a dropdown; decision 135), `secret` (a token such as an API key), `provider` (kept so an old manifest parses; `host.settings()` leaves it out). A thread a plugin starts names its program in `spawn`. Plugin settings are `Op`s like every feature: `kg plugin config <id> get|set|clear <key> [<value>]`.
+
+A `project` setting (decision 135):
+
+- Declare `{ "type": "project", "title": "Board project" }`. There is no default: unset is `null`.
+- Settings shows a dropdown: None, then every project in sidebar order. The trigger shows the project's name, None, or Missing when the stored id is gone, with a note to pick another or None. Long names shorten with a tooltip of the full name.
+- `settings()` and `kg plugin config get` return the stored id string, or `null` when unset. A removed project keeps its id until clear or another pick; Settings labels that Missing.
+- `set` refuses an id that is not a live project. `clear` unsets it (same as picking None).
 
 A `secret` setting (decision 104):
 
@@ -264,7 +273,7 @@ A `secret` setting (decision 104):
 ## Not in this API
 
 - HTTP routes, background cron, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it.
-- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one local page with `WebView` (121), or its own HTML as a web panel (132). Neither is a general browser.
+- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one page with `WebView` (121), from localhost or a `powers.fetch` host, or its own HTML as a web panel (133). Neither is a general browser.
 
 ## Measured by the spike
 

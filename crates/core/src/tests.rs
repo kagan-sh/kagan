@@ -53,6 +53,7 @@ impl Fixture {
                 name: "Project".into(),
                 path: dunce::canonicalize(dir.path()).unwrap(),
                 git_remote_url: None,
+                sort: 0,
             })
             .unwrap();
         drop(store);
@@ -714,6 +715,46 @@ async fn personal_is_last_in_both_sidebars(cx: &mut TestAppContext) {
             Some(ProjectKind::Personal)
         );
     }
+}
+
+#[gpui_kit::test]
+async fn reorder_moves_a_standard_project_and_keeps_personal_last(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let zebra = fixture.dir.path().join("Zebra");
+    std::fs::create_dir(&zebra).unwrap();
+    let OpResult::Project(zebra) = op(Op::Project(ProjectOp::Add { path: zebra }), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("zebra")
+    };
+    op(
+        Op::Project(ProjectOp::Reorder {
+            id: zebra.id.clone(),
+            before: Some(fixture.project.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Sidebar(sidebar) = op(Op::Sidebar, cx).await.unwrap() else {
+        panic!("sidebar")
+    };
+    let names: Vec<_> = sidebar
+        .projects
+        .iter()
+        .map(|project| project.name.as_str())
+        .collect();
+    assert_eq!(names, ["Zebra", "Project", "Personal"]);
+    let refused = op(
+        Op::Project(ProjectOp::Reorder {
+            id: ProjectId("personal".into()),
+            before: None,
+        }),
+        cx,
+    )
+    .await;
+    assert!(matches!(refused, Err(OpError::Invalid(_))), "{refused:?}");
 }
 
 #[gpui_kit::test]
@@ -1872,6 +1913,7 @@ async fn a_project_in_a_personal_folder_keeps_it_when_its_thread_is_deleted(
                     name: "Linked".into(),
                     path: linked,
                     git_remote_url: None,
+                    sort: 0,
                 })
                 .unwrap();
         })

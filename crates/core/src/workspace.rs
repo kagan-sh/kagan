@@ -37,6 +37,7 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
                 name: "Personal".into(),
                 path: dunce::canonicalize(&personal)?,
                 git_remote_url: None,
+                sort: 0,
             })
             .map_err(closed)?;
     }

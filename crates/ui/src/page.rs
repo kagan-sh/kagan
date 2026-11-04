@@ -95,7 +95,6 @@ pub(crate) fn open(
     }
 }
 
-/// Private storage rules every page shares: no new window and no download.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn private(builder: wry::WebViewBuilder<'_>) -> wry::WebViewBuilder<'_> {
     builder

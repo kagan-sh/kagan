@@ -2,8 +2,8 @@ use std::{fmt::Display, io::Read as _, path::Path};
 
 use kg_domain::{
     Conversation, Environment, EnvironmentId, Event, EventKind, Order, PendingInteraction,
-    PendingInteractionId, Plugin, PluginId, Project, ProjectId, Section, SectionId, Thread,
-    ThreadId, ThreadMark, Timestamp,
+    PendingInteractionId, Plugin, PluginId, Project, ProjectId, ProjectKind, Section, SectionId,
+    Thread, ThreadId, ThreadMark, Timestamp,
 };
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Row, Transaction, params};
 use serde_json::Value;
@@ -131,6 +131,15 @@ CREATE TABLE plugin_values (
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
 ",
     "ALTER TABLE threads ADD COLUMN conversation TEXT;",
+    r"
+ALTER TABLE projects ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;
+UPDATE projects SET sort = (
+    SELECT COUNT(*) FROM projects AS other
+    WHERE other.kind = projects.kind
+      AND (other.name < projects.name
+        OR (other.name = projects.name AND other.id < projects.id))
+);
+",
 ];
 
 // Matches `kg_terminal::SNAPSHOT_MAX`. History and the visible redraw share this bound.
@@ -230,15 +239,18 @@ impl Store {
 
     pub fn put_project(&self, project: &Project) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO projects (id, kind, name, path, git_remote_url) VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO projects (id, kind, name, path, git_remote_url, sort)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, name = excluded.name,
-                path = excluded.path, git_remote_url = excluded.git_remote_url",
+                path = excluded.path, git_remote_url = excluded.git_remote_url,
+                sort = excluded.sort",
             params![
                 Text(&project.id),
                 Text(project.kind),
                 project.name,
                 Text(&project.path),
                 project.git_remote_url,
+                project.sort,
             ],
         )?;
         Ok(())
@@ -248,7 +260,7 @@ impl Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT id, kind, name, path, git_remote_url FROM projects WHERE id = ?1",
+                "SELECT id, kind, name, path, git_remote_url, sort FROM projects WHERE id = ?1",
                 [Text(id)],
                 project,
             )
@@ -274,13 +286,51 @@ impl Store {
     }
 
     pub fn projects(&self) -> Result<Vec<Project>> {
-        let mut statement = self
-            .conn
-            .prepare("SELECT id, kind, name, path, git_remote_url FROM projects ORDER BY name")?;
+        let mut statement = self.conn.prepare(
+            "SELECT id, kind, name, path, git_remote_url, sort FROM projects
+             ORDER BY sort, name, id",
+        )?;
         let projects = statement
             .query_map([], project)?
             .collect::<Result<_, _>>()?;
         Ok(projects)
+    }
+
+    pub fn reorder_project(&self, id: &ProjectId, before: Option<&ProjectId>) -> Result<()> {
+        let mut projects = self.projects()?;
+        let Some(index) = projects.iter().position(|project| &project.id == id) else {
+            return Err(not_found("project", id));
+        };
+        if projects[index].kind == ProjectKind::Personal {
+            return Err(Error::Conflict(
+                "Personal stays last and cannot be moved".into(),
+            ));
+        }
+        let moved = projects.remove(index);
+        let mut standard: Vec<Project> = projects
+            .into_iter()
+            .filter(|project| project.kind == ProjectKind::Standard)
+            .collect();
+        let at = match before {
+            None => standard.len(),
+            Some(before) => {
+                let Some(at) = standard.iter().position(|project| &project.id == before) else {
+                    return Err(not_found("project", before));
+                };
+                at
+            }
+        };
+        standard.insert(at, moved);
+        let tx = self.conn.unchecked_transaction()?;
+        for (sort, project) in standard.iter_mut().enumerate() {
+            project.sort = i64::try_from(sort).unwrap_or(i64::MAX);
+            tx.execute(
+                "UPDATE projects SET sort = ?1 WHERE id = ?2",
+                params![project.sort, Text(&project.id)],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn delete_environment(&self, id: &EnvironmentId) -> Result<()> {
@@ -1157,6 +1207,7 @@ fn project(row: &Row) -> rusqlite::Result<Project> {
         name: row.get(2)?,
         path: row.get::<_, Text<_>>(3)?.0,
         git_remote_url: row.get(4)?,
+        sort: row.get(5)?,
     })
 }
 

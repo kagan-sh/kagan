@@ -164,6 +164,8 @@ fn manifest() -> Value {
         "powers": { "clipboard": { "write": true } },
         "settings": {
             "sounds": { "type": "boolean", "title": "Sounds", "default": true },
+            "board": { "type": "project", "title": "Board" },
+            "retries": { "type": "number", "title": "Retries", "default": 3 },
             "notes": { "type": "folder", "title": "Notes" }
         },
         "tools": [
@@ -236,6 +238,7 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
         name: "Project".into(),
         path: dunce::canonicalize(data).unwrap(),
         git_remote_url: None,
+        sort: 0,
     };
     store.put_project(&project).unwrap();
     store
@@ -923,6 +926,16 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
         .unwrap(),
         OpResult::Setting(json!(true))
     );
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "retries".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!(3))
+    );
     let error = run(
         cx,
         config(ConfigOp::Set {
@@ -932,6 +945,20 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
     )
     .unwrap_err();
     assert!(error.to_string().contains("takes true or false"), "{error}");
+    let number_error = run(
+        cx,
+        config(ConfigOp::Set {
+            key: "retries".into(),
+            value: Some(json!("three")),
+        }),
+    )
+    .unwrap_err();
+    assert!(
+        number_error
+            .to_string()
+            .contains("takes a number, like 3 or 2.5"),
+        "{number_error}"
+    );
     assert!(matches!(
         run(
             cx,
@@ -949,6 +976,24 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
         }),
     )
     .unwrap();
+    run(
+        cx,
+        config(ConfigOp::Set {
+            key: "retries".into(),
+            value: Some(json!(2.5)),
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "retries".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!(2.5))
+    );
     assert_eq!(
         call(cx, "echo", json!({ "text": "hi" })).unwrap(),
         OpResult::ToolReply {
@@ -956,6 +1001,128 @@ fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
             is_error: false
         }
     );
+}
+
+#[gpui_kit::test]
+fn a_removed_project_keeps_its_stored_id(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let id = PluginId(ID.into());
+    let config = |op| {
+        Op::Plugin(PluginOp::Config {
+            id: id.clone(),
+            op,
+            thread_id: None,
+        })
+    };
+    run(
+        cx,
+        config(ConfigOp::Set {
+            key: "board".into(),
+            value: Some(json!("prj_test")),
+        }),
+    )
+    .unwrap();
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "board", &json!("prj_gone"))
+            .unwrap();
+    });
+    run(
+        cx,
+        Op::Plugin(PluginOp::Reload {
+            id: id.clone(),
+            thread_id: None,
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!("prj_gone"))
+    );
+}
+
+#[gpui_kit::test]
+fn a_stored_project_id_loads_only_as_text_or_null(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let id = PluginId(ID.into());
+    let get = Op::Plugin(PluginOp::Config {
+        id: id.clone(),
+        op: ConfigOp::Get {
+            key: "board".into(),
+        },
+        thread_id: None,
+    });
+    let reload = Op::Plugin(PluginOp::Reload {
+        id: id.clone(),
+        thread_id: None,
+    });
+    for old in [json!(true), json!(3), json!({ "id": "prj_kagan" })] {
+        cx.update(|cx| {
+            let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+            let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+            store.set_plugin_value(&id, "board", &old).unwrap();
+        });
+        run(cx, reload.clone()).unwrap();
+        assert_eq!(
+            run(cx, get.clone()).unwrap(),
+            OpResult::Setting(Value::Null)
+        );
+    }
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "board", &json!("prj_gone"))
+            .unwrap();
+    });
+    run(cx, reload).unwrap();
+    assert_eq!(run(cx, get).unwrap(), OpResult::Setting(json!("prj_gone")));
+}
+
+#[gpui_kit::test]
+fn a_stored_number_coerces_or_falls_back_on_load(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let id = PluginId(ID.into());
+    let get = Op::Plugin(PluginOp::Config {
+        id: id.clone(),
+        op: ConfigOp::Get {
+            key: "retries".into(),
+        },
+        thread_id: None,
+    });
+    let reload = Op::Plugin(PluginOp::Reload {
+        id: id.clone(),
+        thread_id: None,
+    });
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "retries", &json!("30"))
+            .unwrap();
+    });
+    run(cx, reload.clone()).unwrap();
+    assert_eq!(run(cx, get.clone()).unwrap(), OpResult::Setting(json!(30)));
+    cx.update(|cx| {
+        let data = Workspace::global(cx).read(cx).data_dir().to_owned();
+        let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+        store
+            .set_plugin_value(&id, "retries", &json!(true))
+            .unwrap();
+    });
+    run(cx, reload).unwrap();
+    assert_eq!(run(cx, get).unwrap(), OpResult::Setting(json!(3)));
 }
 
 #[gpui_kit::test]
@@ -5740,6 +5907,73 @@ fn a_page_job_expires_when_its_page_token_dies(cx: &mut TestAppContext) {
     let text = std::fs::read_to_string(&run.seen).unwrap();
     assert!(!text.contains("stale"), "{text}");
     assert!(text.contains("fresh"), "{text}");
+}
+
+#[gpui_kit::test]
+fn a_project_setting_takes_a_live_project_id(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let config = |op| {
+        Op::Plugin(PluginOp::Config {
+            id: PluginId(ID.into()),
+            op,
+            thread_id: None,
+        })
+    };
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(Value::Null)
+    );
+    let gone = run(
+        cx,
+        config(ConfigOp::Set {
+            key: "board".into(),
+            value: Some(json!("prj_gone")),
+        }),
+    )
+    .unwrap_err();
+    assert!(gone.to_string().contains("no project prj_gone"), "{gone}");
+    run(
+        cx,
+        config(ConfigOp::Set {
+            key: "board".into(),
+            value: Some(json!("prj_test")),
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!("prj_test"))
+    );
+    run(
+        cx,
+        config(ConfigOp::Clear {
+            key: "board".into(),
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(Value::Null)
+    );
 }
 
 #[test]
