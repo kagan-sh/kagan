@@ -3514,6 +3514,313 @@ async fn paste_into_an_ended_program_sends_nothing(cx: &mut TestAppContext) {
     assert!(!after.contains("NOPE"), "{after:?}");
 }
 
+#[gpui_kit::test]
+async fn send_refuses_empty_and_oversized_text(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let id = ThreadId("thread".into());
+    let empty = op(
+        Op::Thread(ThreadOp::Send {
+            id: id.clone(),
+            text: String::new(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(empty.to_string().contains("send needs text"), "{empty}");
+    let over = op(
+        Op::Thread(ThreadOp::Send {
+            id,
+            text: "x".repeat(1024 * 1024 + 1),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(over.to_string().contains("1 MiB"), "{over}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn send_submits_a_line_and_records_the_user_message(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "echo-line",
+        "while IFS= read -r line; do printf 'got:%s\\n' \"$line\"; done",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    op(
+        Op::Thread(ThreadOp::Send {
+            id: id.clone(),
+            text: "hello\u{1}".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let frame = screen_with(&id, "got:hello", cx).await;
+    assert!(frame.contains("got:hello"), "{frame}");
+    assert_eq!(sent_text(&events(&id, cx).await), ["hello"]);
+    let before = events(&id, cx).await.len();
+    op(
+        Op::Thread(ThreadOp::Paste {
+            id: id.clone(),
+            text: Some("note".into()),
+            file: None,
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let after = events(&id, cx).await;
+    assert_eq!(after.len(), before);
+    assert_eq!(sent_text(&after), ["hello"]);
+    let bare = op(
+        Op::Thread(ThreadOp::Send {
+            id: id.clone(),
+            text: "\u{1}".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(bare.to_string().contains("send needs text"), "{bare}");
+    for text in ["\r", "\n", "\t", "\r\n\t"] {
+        let before = events(&id, cx).await.len();
+        let error = op(
+            Op::Thread(ThreadOp::Send {
+                id: id.clone(),
+                text: text.into(),
+            }),
+            cx,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("send needs text"),
+            "{text:?}: {error}"
+        );
+        assert_eq!(events(&id, cx).await.len(), before);
+        assert_eq!(sent_text(&events(&id, cx).await), ["hello"]);
+    }
+}
+
+#[cfg(unix)]
+fn sent_text(events: &[Event]) -> Vec<&str> {
+    events
+        .iter()
+        .filter_map(|event| match &event.kind {
+            EventKind::Message {
+                role: Role::User,
+                text,
+                message_id: None,
+                attachments,
+            } if attachments.is_empty() => Some(text.as_str()),
+            EventKind::Message { .. } => panic!("unexpected message {event:?}"),
+            _ => None,
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn send_into_an_ended_program_records_nothing(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"printf done\""), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    let before = events(&started.id, cx).await.len();
+    let err = op(
+        Op::Thread(ThreadOp::Send {
+            id: started.id.clone(),
+            text: "NOPE".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(err.to_string().contains("the program has ended"), "{err}");
+    assert_eq!(events(&started.id, cx).await.len(), before);
+    assert!(!screen_of(&started.id, false, cx).await.contains("NOPE"));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn send_with_embedded_newlines_follows_the_program(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "echo-lines",
+        "while IFS= read -r line; do printf 'got:%s\\n' \"$line\"; done",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    op(
+        Op::Thread(ThreadOp::Paste {
+            id: id.clone(),
+            text: Some("draft".into()),
+            file: None,
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let _ = screen_with(&id, "draft", cx).await;
+    op(
+        Op::Thread(ThreadOp::Send {
+            id: id.clone(),
+            text: "first\nsecond".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let frame = screen_with(&id, "got:second", cx).await;
+    assert!(frame.contains("got:draftfirst"), "{frame}");
+    assert!(frame.contains("got:second"), "{frame}");
+    assert_eq!(sent_text(&events(&id, cx).await), ["first\nsecond"]);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn send_uses_bracketed_paste_bytes(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let got = fixture.dir.path().join("got");
+    let got_path = got.display().to_string();
+    let program = script(
+        fixture.dir.path(),
+        "bracket-send",
+        &format!(
+            "stty raw -echo\n\
+             printf '\\033[?2004h'\n\
+             printf 'ready\\n'\n\
+             dd bs=1 count=25 2>/dev/null > '{got_path}'\n\
+             printf 'done\\n'\n\
+             sleep 60\n"
+        ),
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    let _ = screen_with(&id, "ready", cx).await;
+    op(
+        Op::Thread(ThreadOp::Send {
+            id: id.clone(),
+            text: "first\nsecond".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let _ = screen_with(&id, "done", cx).await;
+    let received = std::fs::read(&got).unwrap();
+    assert_eq!(received, b"\x1b[200~first\nsecond\x1b[201~\r");
+    assert_eq!(sent_text(&events(&id, cx).await), ["first\nsecond"]);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn send_while_busy_records_one_user_message(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let program = script(
+        fixture.dir.path(),
+        "busy-send",
+        "spin=$(printf '\\342\\240\\213')\n\
+         printf '\\033]0;%s working\\007' \"$spin\"\n\
+         printf 'ready\\n'\n\
+         while IFS= read -r line; do printf 'got:%s\\n' \"$line\"; done\n",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    let _ = screen_with(&id, "ready", cx).await;
+    wait_until_busy(&fixture, &id, cx);
+    op(
+        Op::Thread(ThreadOp::Send {
+            id: id.clone(),
+            text: "hello".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let frame = screen_with(&id, "got:hello", cx).await;
+    assert!(frame.contains("got:hello"), "{frame}");
+    assert_eq!(sent_text(&events(&id, cx).await), ["hello"]);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn pending_sends_do_not_block_the_workers(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    // Raw mode with no reader fills the pty write buffer so checked writes stay pending.
+    let program = script(
+        fixture.dir.path(),
+        "hold-send",
+        "stty raw -echo\nprintf 'ready\\n'\nsleep 5\n",
+    );
+    let (id, _reap) = started(&fixture, &program, cx).await;
+    let _ = screen_with(&id, "ready", cx).await;
+    let chunk = "x".repeat(64 * 1024);
+    let pending: Vec<_> = (0..4)
+        .map(|n| dispatch_send(&id, &format!("{n}-{chunk}"), cx))
+        .collect();
+    for _ in 0..20 {
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let before = events(&id, cx).await;
+    assert!(
+        sent_text(&before).is_empty(),
+        "pending writes must not record a message yet: {before:?}"
+    );
+    op(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    let listed = events(&id, cx).await;
+    assert!(
+        listed
+            .iter()
+            .any(|event| matches!(event.kind, EventKind::Started)),
+        "{listed:?}"
+    );
+    assert!(
+        sent_text(&listed).is_empty(),
+        "MarkRead must run while sends are still pending: {listed:?}"
+    );
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    for task in pending {
+        let _ = task.await;
+    }
+    let after = events(&id, cx).await;
+    assert!(
+        sent_text(&after).is_empty(),
+        "stopped pending sends must record nothing: {after:?}"
+    );
+}
+
+#[cfg(unix)]
+fn dispatch_send(
+    id: &ThreadId,
+    text: &str,
+    cx: &mut TestAppContext,
+) -> gpui_kit::Task<Result<OpResult>> {
+    cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::Send {
+                id: id.clone(),
+                text: text.into(),
+            }),
+            cx,
+        )
+    })
+}
+
 #[cfg(unix)]
 async fn screen_lines(
     id: &ThreadId,

@@ -235,6 +235,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
             | ThreadOp::Select { .. }
             | ThreadOp::Copy { .. }
             | ThreadOp::Paste { .. }
+            | ThreadOp::Send { .. }
             | ThreadOp::Report { .. }
             | ThreadOp::Delete { .. }
             | ThreadOp::Get { .. }
@@ -276,6 +277,22 @@ async fn dispatch_thread(
         | ThreadOp::Copy { .. }
         | ThreadOp::Paste { .. }
         | ThreadOp::Report { .. }) => terminal::run(this, op, cx),
+        ThreadOp::Send { id, text } => {
+            let typed = terminal::submit(this, &id, &text, cx).await?;
+            crate::Workspace::events(
+                this,
+                id,
+                vec![kg_domain::EventKind::Message {
+                    role: kg_domain::Role::User,
+                    text: typed,
+                    message_id: None,
+                    attachments: Vec::new(),
+                }],
+                cx,
+            )
+            .await?;
+            Ok(OpResult::Done)
+        }
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
         ThreadOp::Details { id } => crate::details::read(database, id, cx).await,
         ThreadOp::Links { id } => extra::links(this, id, cx).await,

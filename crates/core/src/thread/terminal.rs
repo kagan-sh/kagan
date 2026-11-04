@@ -161,6 +161,53 @@ fn is_utf8(locale: &str) -> bool {
         .contains("utf8")
 }
 
+const SEND_CAP: usize = 1024 * 1024;
+
+pub(crate) async fn submit(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    text: &str,
+    cx: &mut AsyncApp,
+) -> Result<String> {
+    if text.is_empty() {
+        return Err(OpError::Invalid("send needs text".into()));
+    }
+    if text.len() > SEND_CAP {
+        return Err(OpError::Invalid(format!(
+            "send is {} bytes; the cap is 1 MiB",
+            text.len()
+        )));
+    }
+    let (typed, written) = this
+        .update(cx, |workspace, _| match workspace.terminals.get(id) {
+            Some(Shown::Running(terminal)) => terminal
+                .submit(text)
+                .map_err(|error| OpError::Invalid(error.to_string())),
+            Some(Shown::Ended(_)) => Err(OpError::Invalid("the program has ended".into())),
+            None => Err(missing("terminal", id)),
+        })
+        .map_err(closed)??;
+    // A blocking recv would pin a background worker and starve Stop and the DB.
+    // Park on the executor timer; the writer must not wake GPUI tasks (the test scheduler forbids it).
+    let executor = cx.background_executor().clone();
+    cx.background_spawn(async move {
+        loop {
+            match written.try_recv() {
+                Ok(result) => break result,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    executor.timer(Duration::from_millis(2)).await;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    break Err(std::io::Error::other("terminal is closed"));
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|error| OpError::Invalid(error.to_string()))?;
+    Ok(typed)
+}
+
 pub(crate) fn run(
     this: &WeakEntity<Workspace>,
     op: ThreadOp,

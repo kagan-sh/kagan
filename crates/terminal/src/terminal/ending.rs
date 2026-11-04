@@ -1,18 +1,20 @@
-use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
 
 use portable_pty::{Child, MasterPty};
 
-use super::{Shared, lock};
+use super::{Outgoing, Shared, lock};
 
 pub(super) struct Ending {
     pub(super) child: Box<dyn Child + Send + Sync>,
     pub(super) master: Option<Box<dyn MasterPty + Send>>,
-    pub(super) input: Sender<Vec<u8>>,
+    pub(super) input: Sender<Outgoing>,
     pub(super) writer: Option<JoinHandle<()>>,
     pub(super) reader: Option<JoinHandle<()>>,
     pub(super) shared: Shared,
+    pub(super) write_stop: Arc<AtomicBool>,
 }
 
 impl Ending {
@@ -25,9 +27,11 @@ impl Ending {
         // the child is dead. The reader thread is still running here, so it
         // can drain the final frame while the console closes.
         #[cfg(windows)]
-        let _ = self.input.send(b"\x1b[1;1R".to_vec());
-        // An empty message closes the writer, which drops the pty's input.
-        let _ = self.input.send(Vec::new());
+        let _ = self.input.send(Outgoing::Bytes(b"\x1b[1;1R".to_vec()));
+        // A checked write waiting on a full pty must stop before we join. The
+        // writer polls write_stop between non-blocking writes on Unix.
+        self.write_stop.store(true, Ordering::Release);
+        let _ = self.input.send(Outgoing::Bytes(Vec::new()));
         if let Some(writer) = self.writer.take() {
             let _ = writer.join();
         }

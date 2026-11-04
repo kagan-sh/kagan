@@ -8,6 +8,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd};
 
 use crate::screen::{Edit, MIN_COLS, SNAPSHOT_MAX, Screen, SelectMode};
 
@@ -41,14 +43,24 @@ pub enum Exit {
     Signal(i32),
 }
 
+enum Outgoing {
+    Bytes(Vec<u8>),
+    Checked {
+        bytes: Vec<u8>,
+        done: Sender<io::Result<()>>,
+    },
+}
+
 pub struct Terminal {
     master: Option<Box<dyn MasterPty + Send>>,
-    input: Sender<Vec<u8>>,
+    input: Sender<Outgoing>,
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
     reader: Option<JoinHandle<()>>,
     writer: Option<JoinHandle<()>>,
     shared: Shared,
     ended: Arc<AtomicBool>,
+    /// Finish sets this so a non-blocking write waiting on a full pty can exit.
+    write_stop: Arc<AtomicBool>,
     process_id: u32,
     epoch: Instant,
     observed: OnceLock<(Exit, Duration)>,
@@ -58,6 +70,8 @@ pub struct Terminal {
     job: Option<kg_process::Job>,
     #[cfg(test)]
     clock: Option<Arc<AtomicU64>>,
+    #[cfg(test)]
+    fail_write: Arc<AtomicBool>,
 }
 
 /// How long output may keep arriving after the program exits. A background job that keeps the pty
@@ -73,6 +87,17 @@ impl Terminal {
         let pair = native_pty_system().openpty(size).map_err(io_error)?;
         let reader = pair.master.try_clone_reader().map_err(io_error)?;
         let writer = pair.master.take_writer().map_err(io_error)?;
+        // take_writer clones the master fd. Non-blocking writes let finish cancel a
+        // checked send that filled the buffer, instead of hanging in write_all.
+        // Each polling thread owns its own dup, because teardown closes the master before it joins the reader.
+        #[cfg(unix)]
+        let (reader_wait, writer_wait) = match pair.master.as_raw_fd() {
+            Some(fd) => {
+                set_nonblocking(fd)?;
+                (Some(dup_fd(fd)?), Some(dup_fd(fd)?))
+            }
+            None => (None, None),
+        };
         let mut command = CommandBuilder::new(launch.program);
         command.args(launch.args);
         if let Some(cwd) = launch.cwd {
@@ -112,6 +137,9 @@ impl Terminal {
             publish_gate: Arc::default(),
         };
         let ended = Arc::new(AtomicBool::new(false));
+        let write_stop = Arc::new(AtomicBool::new(false));
+        #[cfg(test)]
+        let fail_write = Arc::new(AtomicBool::new(false));
         let (input, queued) = mpsc::channel();
         Ok(Self {
             master: Some(pair.master),
@@ -120,12 +148,23 @@ impl Terminal {
                 shared.clone(),
                 input.clone(),
                 Arc::clone(&ended),
+                #[cfg(unix)]
+                reader_wait,
             )),
-            writer: Some(thread_write(writer, queued)),
+            writer: Some(thread_write(
+                writer,
+                queued,
+                Arc::clone(&write_stop),
+                #[cfg(unix)]
+                writer_wait,
+                #[cfg(test)]
+                Arc::clone(&fail_write),
+            )),
             input,
             child: Mutex::new(Some(child)),
             shared,
             ended,
+            write_stop,
             process_id,
             epoch: Instant::now(),
             observed: OnceLock::new(),
@@ -136,6 +175,8 @@ impl Terminal {
             job: kg_process::Job::assign(process_id).ok(),
             #[cfg(test)]
             clock: None,
+            #[cfg(test)]
+            fail_write,
         })
     }
 
@@ -175,7 +216,7 @@ impl Terminal {
             return Ok(());
         }
         self.input
-            .send(bytes)
+            .send(Outgoing::Bytes(bytes))
             .map_err(|_| io::Error::other("terminal is closed"))
     }
 
@@ -201,6 +242,38 @@ impl Terminal {
     pub fn paste(&self, text: &str) -> io::Result<()> {
         let bracketed = lock(&self.shared.screen).bracketed_paste();
         self.write(paste_text(text, bracketed).into_bytes())
+    }
+
+    /// Types `text` the way [`paste`](Self::paste) does, then presses Enter, as one write.
+    ///
+    /// The returned receiver settles when that write finishes. The caller records a message only
+    /// after it succeeds.
+    ///
+    /// # Errors
+    ///
+    /// The program has ended, the terminal is closed, or nothing non-control remains after the filter.
+    pub fn submit(&self, text: &str) -> io::Result<(String, mpsc::Receiver<io::Result<()>>)> {
+        if self.exited() {
+            return Err(io::Error::other("the program has ended"));
+        }
+        let typed: String = text.chars().filter(|c| !is_unsafe_control(*c)).collect();
+        if !typed.chars().any(|c| !c.is_control()) {
+            return Err(io::Error::other("send needs text"));
+        }
+        let bracketed = lock(&self.shared.screen).bracketed_paste();
+        let mut bytes = paste_text(&typed, bracketed).into_bytes();
+        bytes.push(b'\r');
+        self.edit(Edit::Bottom);
+        let (done, written) = mpsc::channel();
+        self.input
+            .send(Outgoing::Checked { bytes, done })
+            .map_err(|_| io::Error::other("terminal is closed"))?;
+        Ok((typed, written))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_write(&self) {
+        self.fail_write.store(true, Ordering::Release);
     }
 
     /// Moves the view back into history by `lines`, or forward when negative.
@@ -274,7 +347,7 @@ impl Terminal {
         };
         self.shared.publish(&screen);
         if !replies.is_empty() {
-            let _ = self.input.send(replies);
+            let _ = self.input.send(Outgoing::Bytes(replies));
         }
     }
 
@@ -401,6 +474,7 @@ impl Terminal {
             writer: self.writer.take(),
             reader: self.reader.take(),
             shared: self.shared.clone(),
+            write_stop: Arc::clone(&self.write_stop),
         })
     }
 }
@@ -421,17 +495,37 @@ impl Drop for Terminal {
 fn thread_read(
     mut reader: Box<dyn Read + Send>,
     shared: Shared,
-    replies: Sender<Vec<u8>>,
+    replies: Sender<Outgoing>,
     ended: Arc<AtomicBool>,
+    #[cfg(unix)] wait_fd: Option<OwnedFd>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
         let mut buf = [0_u8; 8192];
         // Keep reading until the pty closes: stopping early leaves the host's last frame unread.
-        while let Ok(n @ 1..) = reader.read(&mut buf) {
-            // The reply is sent after the lock is gone, so a client asking for a frame never waits on the pty.
-            let reply = shared.feed(&buf[..n]);
-            if !reply.is_empty() {
-                let _ = replies.send(reply);
+        // The master is non-blocking so a full-buffer write can be cancelled; WouldBlock is not EOF.
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    // The reply is sent after the lock is gone, so a client asking for a frame never waits on the pty.
+                    let reply = shared.feed(&buf[..n]);
+                    if !reply.is_empty() {
+                        let _ = replies.send(Outgoing::Bytes(reply));
+                    }
+                }
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    // O_NONBLOCK is shared across the master's dups; sleep would spin an idle pty.
+                    #[cfg(unix)]
+                    if let Some(fd) = &wait_fd {
+                        wait_ready(fd.as_raw_fd(), libc::POLLIN, -1);
+                    } else {
+                        std::thread::sleep(Duration::from_micros(100));
+                    }
+                    #[cfg(not(unix))]
+                    std::thread::sleep(Duration::from_micros(100));
+                }
+                Err(_) => break,
             }
         }
         #[cfg(test)]
@@ -442,22 +536,163 @@ fn thread_read(
     })
 }
 
+#[cfg(unix)]
+fn dup_fd(fd: std::os::fd::RawFd) -> io::Result<OwnedFd> {
+    // SAFETY: the master is open while spawn runs, so fd is valid for this borrow.
+    unsafe { BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()
+}
+
+#[cfg(unix)]
+fn set_nonblocking(fd: std::os::fd::RawFd) -> io::Result<()> {
+    // SAFETY: fcntl only reads and sets flags on fd; a bad fd fails with EBADF.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: as above. O_NONBLOCK is per open file description, so every dup of the master sees it.
+    if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+// A full pty never wakes a writer on its own, so writers check write_stop this often.
+#[cfg(unix)]
+const WRITE_WAIT_MS: libc::c_int = 10;
+
+#[cfg(unix)]
+fn wait_ready(fd: std::os::fd::RawFd, events: libc::c_short, timeout_ms: libc::c_int) {
+    loop {
+        let mut pfd = libc::pollfd {
+            fd,
+            events,
+            revents: 0,
+        };
+        // SAFETY: pfd is one valid pollfd; fd is a live pty master.
+        let n = unsafe { libc::poll(&raw mut pfd, 1, timeout_ms) };
+        if n >= 0 {
+            return;
+        }
+        if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+            return;
+        }
+    }
+}
+
 fn thread_write(
     mut writer: Box<dyn Write + Send>,
-    queued: mpsc::Receiver<Vec<u8>>,
+    queued: mpsc::Receiver<Outgoing>,
+    write_stop: Arc<AtomicBool>,
+    #[cfg(unix)] wait_fd: Option<OwnedFd>,
+    #[cfg(test)] fail_write: Arc<AtomicBool>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        for bytes in queued {
-            if bytes.is_empty()
-                || writer
-                    .write_all(&bytes)
-                    .and_then(|()| writer.flush())
-                    .is_err()
-            {
+        while let Ok(outgoing) = queued.recv() {
+            let (bytes, done) = match outgoing {
+                Outgoing::Bytes(bytes) => (bytes, None),
+                Outgoing::Checked { bytes, done } => (bytes, Some(done)),
+            };
+            let result = if bytes.is_empty() {
+                Err(io::Error::other("terminal is closed"))
+            } else {
+                #[cfg(test)]
+                if fail_write.swap(false, Ordering::AcqRel) {
+                    Err(io::Error::other("write failed"))
+                } else {
+                    write_bytes(
+                        &mut writer,
+                        &bytes,
+                        &write_stop,
+                        #[cfg(unix)]
+                        wait_fd.as_ref().map(AsRawFd::as_raw_fd),
+                    )
+                }
+                #[cfg(not(test))]
+                {
+                    write_bytes(
+                        &mut writer,
+                        &bytes,
+                        &write_stop,
+                        #[cfg(unix)]
+                        wait_fd.as_ref().map(AsRawFd::as_raw_fd),
+                    )
+                }
+            };
+            if let Some(done) = done {
+                let _ = done.send(match &result {
+                    Ok(()) => Ok(()),
+                    Err(error) => Err(io::Error::new(error.kind(), error.to_string())),
+                });
+            }
+            if result.is_err() {
+                // Finish may have queued several checked writes; settle each instead of
+                // dropping the channel and leaving the caller with Disconnected.
+                while let Ok(leftover) = queued.try_recv() {
+                    if let Outgoing::Checked { done, .. } = leftover {
+                        let _ = done.send(Err(io::Error::other("terminal is closed")));
+                    }
+                }
                 break;
             }
         }
     })
+}
+
+fn write_bytes(
+    writer: &mut dyn Write,
+    bytes: &[u8],
+    write_stop: &AtomicBool,
+    #[cfg(unix)] wait_fd: Option<std::os::fd::RawFd>,
+) -> io::Result<()> {
+    #[cfg(not(unix))]
+    {
+        let _ = write_stop;
+        return writer.write_all(bytes).and_then(|()| writer.flush());
+    }
+    #[cfg(unix)]
+    {
+        let mut offset = 0;
+        while offset < bytes.len() {
+            if write_stop.load(Ordering::Acquire) {
+                return Err(io::Error::other("terminal is closed"));
+            }
+            match writer.write(&bytes[offset..]) {
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "terminal is closed",
+                    ));
+                }
+                Ok(n) => offset += n,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    if let Some(fd) = wait_fd {
+                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
+                    } else {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        loop {
+            if write_stop.load(Ordering::Acquire) {
+                return Err(io::Error::other("terminal is closed"));
+            }
+            match writer.flush() {
+                Ok(()) => return Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    if let Some(fd) = wait_fd {
+                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
+                    } else {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
 }
 
 fn pty_size(cols: u16, rows: u16) -> io::Result<PtySize> {
