@@ -21,7 +21,7 @@ notice=$(dirname "$stdlib")/NOTICE
   echo "Third-party notices for the kg binary."
   echo "cargo-lock $lock"
   echo
-  echo "kagan itself is MIT. See LICENSE."
+  echo "kagan itself is Apache-2.0. See LICENSE."
   echo
   echo "The window, the terminal, and the wordmark use these fonts. Each is under the SIL Open Font License 1.1."
   echo

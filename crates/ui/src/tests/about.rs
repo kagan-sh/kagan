@@ -48,7 +48,7 @@ fn about_opens_its_own_window_with_the_name_version_and_footer(cx: &mut TestAppC
     );
     assert_eq!(
         label(cx, about, "about-footer"),
-        "© 2026 Altynbek Orumbayev (MakerX). MIT License."
+        "© 2026 Altynbek Orumbayev (MakerX). Apache-2.0 License."
     );
 }
 
