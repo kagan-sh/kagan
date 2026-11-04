@@ -230,7 +230,7 @@ pub fn store_dir(data: &Path, page: &str) -> PathBuf {
     data.join("pages").join(store_name(page))
 }
 
-/// Stable 16-byte id for a page store, kept under [`store_dir`].
+/// The page store's 16-byte id, written to `store.id` in [`store_dir`] on first use.
 ///
 /// # Errors
 ///
@@ -277,7 +277,7 @@ pub fn clear_stores(data: &Path) {
     let _ = std::fs::remove_dir_all(data.join("pages"));
 }
 
-/// Deletes `pages/<page>/` only when its `store.id` is in `removed`. Keeps the others so a later
+/// Deletes `pages/<page>/` only when its `store.id` is in `removed`. Other folders stay, so a later
 /// start can ask `WebKit` again.
 pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
     if removed.is_empty() {
@@ -313,14 +313,14 @@ pub struct StoreRemoval {
     pub warnings: Vec<String>,
 }
 
-/// How long a store delete waits for GPUI to drop the native `WebView` and frame mouse listener.
+/// Wait before a store delete so GPUI drops the native `WebView` and its frame mouse listener.
 pub(crate) const RELEASE_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
-// How long to keep retrying `InUse`. The first release wait does not count.
+// Retry budget for `InUse`. The first release wait is not counted.
 const RETRY_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
 const RETRY_START: std::time::Duration = std::time::Duration::from_millis(50);
 const RETRY_MAX: std::time::Duration = std::time::Duration::from_millis(250);
 
-/// The result of one delete try. `InUse` means `WebKit` still holds the store, so a retry may work.
+/// Result of one delete try. `InUse` means `WebKit` still holds the store; a retry may work.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum StoreAttempt {
     Removed,
@@ -361,8 +361,8 @@ impl Drop for RemoveHookGuard {
     }
 }
 
-/// Waits for the native view to release, then deletes each store, retrying `DataStoreInUse` with
-/// backoff for a few seconds. Ids still held stay out of `removed`, so their `store.id` files remain
+/// Waits for the native view to release, then deletes each store. Retries `DataStoreInUse` with
+/// backoff for a few seconds. Ids still held stay out of `removed`, so their `store.id` files stay
 /// for a later start.
 pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
@@ -376,7 +376,7 @@ pub(crate) async fn remove_web_stores_after_release(
     }
     #[cfg(target_os = "macos")]
     if macos_major() < 14 {
-        // Custom stores need macOS 14 or later. Older systems never made one, so no WebKit delete runs.
+        // Custom stores exist only on macOS 14 or later, so older systems have nothing to delete.
         return StoreRemoval {
             removed: ids,
             warnings: Vec::new(),
@@ -503,8 +503,8 @@ pub(crate) async fn remove_web_stores(
     StoreRemoval { removed, warnings }
 }
 
-/// Retries `WebKit` store deletion for plugin data folders whose plugin is no longer installed. An
-/// earlier remove may have left `store.id` behind while `WebKit` still held the view.
+/// Retries `WebKit` store deletion for data folders of plugins that are no longer installed. An
+/// earlier remove can leave `store.id` behind while `WebKit` still holds the view.
 pub(crate) async fn retry_orphan_stores(
     data_dir: &Path,
     known: &std::collections::BTreeSet<kg_domain::PluginId>,

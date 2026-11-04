@@ -165,15 +165,15 @@ pub(crate) fn macos_major() -> u32 {
     u32::try_from(version.majorVersion).unwrap_or(0)
 }
 
-/// The store id when macOS can give the page its own website data store, else None (the shared default).
+/// The store id on macOS 14 or later. Otherwise None, which means the shared default store.
 #[cfg(target_os = "macos")]
 #[must_use]
 pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 16]> {
     store.filter(|_| major >= 14)
 }
 
-/// Gives a page its own durable `WebKit` store when the plugin opted in and macOS can keep one.
-/// Must run after `page::private`: a durable store needs incognito off, and the last call wins.
+/// Gives a page its own durable store. Must run after `page::private`: a durable store needs
+/// incognito off, and the last call wins.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn with_store(
     builder: wry::WebViewBuilder<'_>,
