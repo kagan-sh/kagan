@@ -2,7 +2,7 @@ use objc2::{AnyThread, MainThreadMarker};
 use objc2_app_kit::{NSApplication, NSImage};
 use objc2_foundation::NSData;
 
-const ICON: &[u8] = include_bytes!("../../../assets/brand/png/kagan-app-icon-1024.png");
+const ICON: &[u8] = include_bytes!("../../../assets/brand/png/kagan-dock-icon-1024.png");
 
 pub(crate) fn install() {
     let Some(marker) = MainThreadMarker::new() else {
