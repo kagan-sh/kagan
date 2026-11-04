@@ -48,8 +48,23 @@ struct Built {
 
 pub(super) fn body(slot: &Slot, file: &str, window: &mut Window, cx: &mut App) -> AnyElement {
     let shown = place(slot, file, window, cx);
-    let note = shown.note.map(|note| sentence(&slot.id, &note, cx));
-    let page = shown.page.map(gpui_kit::IntoElement::into_any_element);
+    panel_body(
+        &slot.id,
+        shown.note.as_deref(),
+        shown.page.map(gpui_kit::IntoElement::into_any_element),
+        cx,
+    )
+}
+
+/// A warning alone fills the panel. A warning over a page takes only its own height, so the page keeps the rest.
+pub(super) fn panel_body(
+    id: &str,
+    note: Option<&str>,
+    page: Option<AnyElement>,
+    cx: &App,
+) -> AnyElement {
+    let fill = page.is_none();
+    let note = note.map(|note| sentence(id, note, fill, cx));
     match (note, page) {
         (Some(note), None) => note,
         (Some(note), Some(page)) => div()

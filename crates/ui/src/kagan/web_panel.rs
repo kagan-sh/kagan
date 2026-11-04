@@ -4,6 +4,7 @@
 //! The native view runs on macOS only. Other systems show a one-line notice.
 
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
     Role, SharedString, Styled as _, Window, div,
@@ -33,7 +34,7 @@ pub(super) fn body(slot: &Slot, window: &mut Window, cx: &mut App) -> AnyElement
     #[cfg(not(target_os = "macos"))]
     let content = {
         let _ = (file, window);
-        sentence(&slot.id, ONLY_MACOS, cx)
+        sentence(&slot.id, ONLY_MACOS, true, cx)
     };
     frame(&slot.id, &slot.title, content)
 }
@@ -112,9 +113,10 @@ fn frame(id: &str, title: &str, content: AnyElement) -> AnyElement {
         .into_any_element()
 }
 
-fn sentence(id: &str, note: &str, cx: &App) -> AnyElement {
+fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
     div()
-        .size_full()
+        .w_full()
+        .when(fill, gpui_kit::Styled::h_full)
         .flex()
         .items_center()
         .justify_center()
