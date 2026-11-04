@@ -2,6 +2,7 @@ mod approval;
 mod database;
 mod diagnostics;
 mod diff;
+mod dispatch;
 mod end;
 mod entity;
 mod environment;

@@ -15,7 +15,7 @@ fn named(name: &str) -> Result<String> {
         Ok(name.to_owned())
     }
 }
-pub(super) async fn section(
+pub(crate) async fn section(
     this: &WeakEntity<Workspace>,
     database: Database,
     op: SectionOp,

@@ -3,7 +3,7 @@ use kg_domain::{OpError, Project, ProjectId, ProjectKind};
 use crate::database::Result;
 use crate::workspace::{closed, id};
 
-pub(super) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Result<Project> {
+pub(crate) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Result<Project> {
     let path = dunce::canonicalize(path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::InvalidFilename {
             OpError::Invalid("the project path is too long".into())
@@ -82,7 +82,7 @@ fn without_credentials(url: &str) -> String {
     format!("{scheme}://{host}{path}")
 }
 
-pub(super) async fn remove(
+pub(crate) async fn remove(
     this: &gpui_kit::WeakEntity<crate::Workspace>,
     id: ProjectId,
     requester: Option<crate::Requester>,
@@ -245,7 +245,7 @@ async fn remove_worktrees(
     Ok(failures)
 }
 
-pub(super) fn reorder(
+pub(crate) fn reorder(
     store: &kg_store::Store,
     id: &ProjectId,
     before: Option<&ProjectId>,

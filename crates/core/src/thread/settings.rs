@@ -5,7 +5,7 @@ use crate::database::{Database, Result};
 use crate::workspace::closed;
 use crate::{PluginRequest, Workspace};
 
-pub(super) async fn theme(
+pub(crate) async fn theme(
     this: &WeakEntity<Workspace>,
     database: Database,
     op: ThemeOp,
@@ -77,7 +77,7 @@ const LAYOUT: &[&str] = &[
     "review-wrap",
 ];
 
-pub(super) async fn preference(
+pub(crate) async fn preference(
     this: &WeakEntity<Workspace>,
     database: Database,
     op: PreferenceOp,
@@ -173,7 +173,7 @@ fn known_preference(key: &str) -> Result<()> {
     }
 }
 
-pub(super) async fn keymap(
+pub(crate) async fn keymap(
     this: &WeakEntity<Workspace>,
     database: Database,
     op: KeymapOp,
