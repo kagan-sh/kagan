@@ -7,7 +7,6 @@ use kg_domain::{KeymapAction, KeymapOp, OpResult, PluginId, ProjectId, ThreadId}
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::jobs::Ended;
 use crate::{PluginHost, Result};
 
 #[derive(Clone, PartialEq, gpui_kit::Action)]
@@ -34,6 +33,9 @@ impl RunCommand {
 }
 
 pub(crate) const BINDINGS: &str = "$hotkeys";
+
+/// docs/plugin-api.md gives a command 10 s; tools and CLI calls get `TOOL_TIMEOUT`.
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -151,19 +153,14 @@ impl PluginHost {
                 };
                 if allowed { Ok(()) } else { Err(kg_domain::OpError::Invalid(format!("command {} needs a {:?} on screen", command.id, command.when))) }
             })?;
-            let jobs = host.update(cx, |host, cx| host.load(&plugin, cx))?;
             let fields = json!({ "kind": "command", "id": command, "threadId": thread_id, "projectId": project_id });
             let mut job = fields.as_object().cloned().unwrap_or_default();
             // Jobs own their request id; the command id has its own field.
-            let command = job.remove("id").unwrap_or(Value::Null);
-        job.insert("command".into(), command);
-            let (id, receive) = jobs.send(job).ok_or_else(|| kg_domain::OpError::Failed(format!("plugin {plugin} unloaded")))?;
-            let timer = cx.background_executor().timer(Duration::from_secs(10));
-            match jobs.settled(&id, &receive, timer).await {
-                Ok(reply) => reply.map_err(kg_domain::OpError::Failed).map(|_| OpResult::Done),
-                Err(Ended::Unloaded) => Err(kg_domain::OpError::Failed(format!("plugin {plugin} unloaded"))),
-                Err(Ended::TimedOut) => Err(kg_domain::OpError::Failed(format!("plugin {plugin} did not answer command within 10 s"))),
-            }
+            let command_value = job.remove("id").unwrap_or(Value::Null);
+            job.insert("command".into(), command_value);
+            let reply =
+                crate::host::call(&host, &plugin, &command, job, COMMAND_TIMEOUT, cx).await?;
+            reply.map_err(kg_domain::OpError::Failed).map(|_| OpResult::Done)
         })
     }
 }

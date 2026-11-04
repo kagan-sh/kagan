@@ -19,7 +19,7 @@ use kg_domain::{
 };
 use serde_json::{Map, Value};
 
-use crate::jobs::{Ended, Jobs};
+use crate::jobs::{Ended, Jobs, Reply};
 use crate::manifest::{self, AgentChoice, Grant, Manifest, Scope, Setting, Tool};
 use crate::{
     DropPages, HostUi, INSTRUCT_CAP, INSTRUCT_TIMEOUT, INSTRUCT_TOTAL, Level, PluginStatus,
@@ -650,6 +650,33 @@ async fn tools(
     }))
 }
 
+/// Sends one job to a plugin and waits for its reply, or says why the reply never came.
+pub(crate) async fn call(
+    host: &Entity<PluginHost>,
+    plugin: &PluginId,
+    name: &str,
+    job: Map<String, Value>,
+    timeout: Duration,
+    cx: &mut AsyncApp,
+) -> Result<Reply> {
+    let jobs = host.update(cx, |host, cx| host.load(plugin, cx))?;
+    let unloaded = || {
+        OpError::Failed(format!(
+            "plugin {plugin} was unloaded before it answered {name}"
+        ))
+    };
+    let (id, replied) = jobs.send(job).ok_or_else(unloaded)?;
+    let timer = cx.background_executor().timer(timeout);
+    match jobs.settled(&id, &replied, timer).await {
+        Ok(reply) => Ok(reply),
+        Err(Ended::Unloaded) => Err(unloaded()),
+        Err(Ended::TimedOut) => Err(OpError::Failed(format!(
+            "plugin {plugin} did not answer {name} within {} s",
+            timeout.as_secs()
+        ))),
+    }
+}
+
 async fn call_tool(
     host: &Entity<PluginHost>,
     thread_id: &ThreadId,
@@ -684,30 +711,13 @@ async fn call_tool(
             errors.join("; ")
         )));
     }
-    let jobs = host.update(cx, |host, cx| host.load(&plugin, cx))?;
     let job = Map::from_iter([
         ("kind".to_owned(), "tool".into()),
         ("name".to_owned(), name.into()),
         ("input".to_owned(), input),
         ("threadId".to_owned(), thread_id.0.clone().into()),
     ]);
-    let unloaded = || {
-        OpError::Failed(format!(
-            "plugin {plugin} was unloaded before it answered {name}"
-        ))
-    };
-    let (id, replied) = jobs.send(job).ok_or_else(unloaded)?;
-    let timer = cx.background_executor().timer(TOOL_TIMEOUT);
-    let reply = match jobs.settled(&id, &replied, timer).await {
-        Ok(reply) => reply,
-        Err(Ended::Unloaded) => return Err(unloaded()),
-        Err(Ended::TimedOut) => {
-            return Err(OpError::Failed(format!(
-                "plugin {plugin} did not answer {name} within {} s",
-                TOOL_TIMEOUT.as_secs()
-            )));
-        }
-    };
+    let reply = call(host, &plugin, name, job, TOOL_TIMEOUT, cx).await?;
     let secrets = host.read_with(cx, |host, _| host.secrets.clone());
     match reply {
         Err(message) => Ok(OpResult::ToolReply {

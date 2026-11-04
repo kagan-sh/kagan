@@ -1046,6 +1046,80 @@ fn a_job_without_an_answer_times_out(cx: &mut TestAppContext) {
     assert!(error.to_string().contains("did not answer hang"), "{error}");
 }
 
+fn cli_plugin() -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let mut value = manifest();
+    value["cli"] = json!([{ "name": "probe", "commands": [{ "name": "hang" }] }]);
+    write_plugin(dir.path(), &value);
+    dir
+}
+
+fn hanging_calls(cx: &mut TestAppContext) -> [gpui_kit::Task<Result<OpResult, OpError>>; 2] {
+    let tool = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::CallTool {
+                id: thread(),
+                name: "hang".into(),
+                input: json!({}),
+            }),
+            cx,
+        )
+    });
+    let cli = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Plugin(PluginOp::Cli {
+                name: "probe".into(),
+                command: "hang".into(),
+                argv: vec![],
+                cwd: "/work".into(),
+                thread_id: None,
+                project_id: None,
+            }),
+            cx,
+        )
+    });
+    [tool, cli]
+}
+
+#[gpui_kit::test]
+fn an_unloaded_plugin_reports_the_same_reason_to_tools_and_cli(cx: &mut TestAppContext) {
+    let plugin = cli_plugin();
+    open(cx, &[installed(plugin.path())]);
+    let calls = hanging_calls(cx);
+    cx.run_until_parked();
+    run(
+        cx,
+        Op::Plugin(PluginOp::Disable {
+            id: PluginId(ID.into()),
+        }),
+    )
+    .unwrap();
+    let expected = format!("plugin {ID} was unloaded before it answered hang");
+    for call in calls {
+        let error = cx.foreground_executor().block_test(call).unwrap_err();
+        assert_eq!(error.to_string(), expected);
+    }
+}
+
+#[gpui_kit::test]
+fn a_hung_plugin_reports_the_same_timeout_to_tools_and_cli(cx: &mut TestAppContext) {
+    let plugin = cli_plugin();
+    open(cx, &[installed(plugin.path())]);
+    let calls = hanging_calls(cx);
+    cx.run_until_parked();
+    cx.executor()
+        .advance_clock(TOOL_TIMEOUT + Duration::from_secs(1));
+    cx.run_until_parked();
+    let expected = format!(
+        "plugin {ID} did not answer hang within {} s",
+        TOOL_TIMEOUT.as_secs()
+    );
+    for call in calls {
+        let error = cx.foreground_executor().block_test(call).unwrap_err();
+        assert_eq!(error.to_string(), expected);
+    }
+}
+
 #[gpui_kit::test]
 fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
     let plugin = plugin_dir();

@@ -14,7 +14,7 @@ use crate::area::{from_host, to_host};
 use crate::page::MESSAGE_CAP;
 
 type Job = Map<String, Value>;
-type Reply = Result<Value, String>;
+pub(crate) type Reply = Result<Value, String>;
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex

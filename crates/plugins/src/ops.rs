@@ -10,7 +10,6 @@ use kg_domain::{
 };
 use serde_json::{Map, Value};
 
-use crate::jobs::Ended;
 use crate::manifest::{AgentChoice, Grant, Setting};
 
 pub(crate) fn approved(record: &Plugin) -> Result<Grant> {
@@ -205,7 +204,6 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
                 .map(|project| project.id)
         }
     };
-    let jobs = host.update(cx, |host, cx| host.load(&plugin, cx))?;
     let job = Map::from_iter([
         ("kind".to_owned(), "cli".into()),
         ("command".to_owned(), command.clone().into()),
@@ -214,23 +212,7 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
         ("threadId".to_owned(), thread_id.map(|id| id.0).into()),
         ("projectId".to_owned(), project_id.map(|id| id.0).into()),
     ]);
-    let unloaded = || {
-        OpError::Failed(format!(
-            "plugin {plugin} was unloaded before it answered {command}"
-        ))
-    };
-    let (id, replied) = jobs.send(job).ok_or_else(unloaded)?;
-    let timer = cx.background_executor().timer(crate::TOOL_TIMEOUT);
-    let reply = match jobs.settled(&id, &replied, timer).await {
-        Ok(reply) => reply,
-        Err(Ended::Unloaded) => return Err(unloaded()),
-        Err(Ended::TimedOut) => {
-            return Err(OpError::Failed(format!(
-                "plugin {plugin} did not answer {command} within {} s",
-                crate::TOOL_TIMEOUT.as_secs()
-            )));
-        }
-    };
+    let reply = crate::host::call(host, &plugin, &command, job, crate::TOOL_TIMEOUT, cx).await?;
     let secrets = host.read_with(cx, |host, _| host.secrets.clone());
     let value = reply.map_err(|error| OpError::Failed(secrets.redact(&plugin, &error)))?;
     let exit_code = value["exitCode"]
