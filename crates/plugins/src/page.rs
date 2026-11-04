@@ -320,7 +320,7 @@ const RETRY_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
 const RETRY_START: std::time::Duration = std::time::Duration::from_millis(50);
 const RETRY_MAX: std::time::Duration = std::time::Duration::from_millis(250);
 
-/// One attempt's outcome for a single store id.
+/// The result of one delete try. `InUse` means `WebKit` still holds the store, so a retry may work.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum StoreAttempt {
     Removed,

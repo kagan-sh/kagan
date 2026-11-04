@@ -165,7 +165,7 @@ pub(crate) fn macos_major() -> u32 {
     u32::try_from(version.majorVersion).unwrap_or(0)
 }
 
-/// Whether a store id will actually get its own website data store (not the shared default).
+/// The store id when macOS can give the page its own website data store, else None (the shared default).
 #[cfg(target_os = "macos")]
 #[must_use]
 pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 16]> {

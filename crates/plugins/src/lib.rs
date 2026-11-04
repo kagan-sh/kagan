@@ -272,7 +272,7 @@ pub struct PluginHost {
     next_activation: u64,
     permits: BTreeMap<PluginId, Arc<Mutex<Option<u64>>>>,
     components: gpui_shell::FrozenComponentRegistry,
-    /// UI drops native pages for a plugin so `WebKit` releases their stores before remove.
+    // UI drops native pages for a plugin so `WebKit` releases their stores before remove.
     drop_pages: Option<DropPages>,
     _events: Subscription,
     _watchdog: Task<()>,
@@ -1477,7 +1477,7 @@ impl PluginHost {
         })
     }
 
-    /// Whether that web panel keeps cookies and storage under the plugin data folder.
+    /// Whether the panel keeps cookies and storage. False unless the approved grant allows page data.
     #[must_use]
     pub fn web_store(&self, id: &PluginId, panel: &str) -> bool {
         self.active
