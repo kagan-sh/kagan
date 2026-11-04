@@ -30,7 +30,7 @@ struct Running {
 }
 
 impl Processes {
-    // Each receiver closes once its worker has killed the tree and dropped it.
+    // Each receiver closes when its worker has killed the process tree and dropped its sender.
     pub(crate) fn close(&mut self) -> Vec<Receiver<()>> {
         for running in self.running.values() {
             running.kill.close();
