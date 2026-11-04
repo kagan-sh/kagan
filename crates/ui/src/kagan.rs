@@ -41,7 +41,7 @@ mod tabs;
 mod update;
 mod web_panel;
 pub(crate) use web_panel::drop_plugin as drop_web_panel;
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
 
 use changes::Changes;

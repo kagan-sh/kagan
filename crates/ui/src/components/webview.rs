@@ -260,8 +260,8 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
         if !host.allows_page_store(&plugin) {
             return Ok(None);
         }
-        if crate::web::macos_major() < 14 {
-            return Err(crate::web::STORE_NEEDS_MACOS.to_owned());
+        if crate::page::macos_major() < 14 {
+            return Err(crate::page::STORE_NEEDS_MACOS.to_owned());
         }
         let data = host.plugin_data(&plugin);
         kg_plugins::keep_store(&data, id).map(Some)
@@ -334,7 +334,7 @@ fn owned(
         }
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         Gate::Open => match keep {
-            Some(Err(message)) if message == crate::web::STORE_NEEDS_MACOS => {
+            Some(Err(message)) if message == crate::page::STORE_NEEDS_MACOS => {
                 let mut shown = open_owned(
                     Open {
                         owner: owner.clone(),
@@ -487,7 +487,7 @@ fn build(
     let hosts = hosts.to_vec();
     let url = url.to_owned();
     crate::page::open(window, cx, move |builder| {
-        crate::web::with_store(builder, store)
+        crate::page::with_store(builder, store)
             .with_url(&url)
             .with_navigation_handler(move |target| allowed(&target, &hosts).is_ok())
     })
