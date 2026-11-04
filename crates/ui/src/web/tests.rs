@@ -1,10 +1,25 @@
 use std::path::Path;
 
-use super::{allows_navigation, csp, mime, page_event, page_url, serve};
+use super::{allows_navigation, csp, mime, page_event, page_url, refresh, serve, stylesheet};
 #[cfg(target_os = "macos")]
 use crate::web_page::durable_store;
 
 const PLUGIN: &str = "dev.kagan.page";
+
+#[test]
+fn the_stylesheet_and_the_refresh_script_share_every_token() {
+    let tokens = [
+        ("--bg", kg_domain::Color::new(0x0001_0203)),
+        ("--ink", kg_domain::Color::new(0x00aa_bbcc)),
+    ];
+    let css = stylesheet(&tokens, "dark");
+    let script = refresh(&tokens, "dark");
+    assert!(css.starts_with(":root{--bg:#010203;--ink:#aabbcc;color-scheme:dark}"));
+    for (name, color) in tokens {
+        assert!(script.contains(&format!("'{name}':'{}'", color.hex())));
+    }
+    assert!(script.contains("r.style.colorScheme='dark'"));
+}
 
 #[test]
 fn navigation_stays_on_the_plugin_origin() {

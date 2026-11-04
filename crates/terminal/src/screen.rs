@@ -355,12 +355,17 @@ impl Screen {
             };
         }
         let mut lines = self.history_rows();
-        let mut dropped = 0u32;
-        while !lines.is_empty() && packed(&lines, padding) + visible.len() > limit {
-            lines.remove(0);
-            dropped = dropped.saturating_add(1);
+        let mut size = packed(&lines, padding);
+        let mut dropped = 0;
+        while dropped < lines.len() && size + visible.len() > limit {
+            size -= lines[dropped].len();
+            dropped += 1;
+            if dropped == lines.len() {
+                size -= padding;
+            }
         }
-        let mut replay = Vec::with_capacity(packed(&lines, padding) + visible.len());
+        lines.drain(..dropped);
+        let mut replay = Vec::with_capacity(size + visible.len());
         for line in &lines {
             replay.extend_from_slice(line);
         }
@@ -374,7 +379,7 @@ impl Screen {
             cols,
             rows,
             replay,
-            history_dropped: dropped,
+            history_dropped: u32::try_from(dropped).unwrap_or(u32::MAX),
             screen_kept: true,
         }
     }

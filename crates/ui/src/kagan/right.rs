@@ -15,8 +15,8 @@ use kg_core::Workspace;
 use kg_domain::{Op, PluginId, PluginOp, SurfaceOp};
 
 use super::Kagan;
-use super::controls::{control, menu_popup};
-use super::installer::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
+use super::controls::{answer, control, menu_popup, send};
+use super::plugin_actions::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled};
 use super::surface::Slot;
 use super::tabs::{self, CloseTab, NewTerminal};
 use crate::components::fills_panel;
@@ -161,7 +161,9 @@ fn tab_body(
     }
     let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
     let page = slot.web.is_some() || slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
-    crate::components::note_inset(!page);
+    if !page {
+        crate::components::nudge_once(window, cx);
+    }
     Some(
         div()
             .id(ElementId::Name(format!("{}-body", slot.id).into()))

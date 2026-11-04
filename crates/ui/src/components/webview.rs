@@ -4,7 +4,6 @@
 //! leaves the tree, and that would reload the page. A native view also keeps its last place, so a
 //! panel that is off screen hides the page instead of leaving it where it was.
 
-use std::cell::Cell;
 use std::sync::Arc;
 
 use crate::theme::TypeScale as _;
@@ -29,14 +28,6 @@ pub(crate) const REFUSED_HOST: &str =
     "WebView only opens 127.0.0.1, localhost, or a host this plugin may fetch.";
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub(crate) const UNAVAILABLE: &str = "This page works on macOS and Windows only for now.";
-
-thread_local! {
-    static INSET: Cell<bool> = const { Cell::new(false) };
-}
-
-pub(crate) fn note_inset(inset: bool) {
-    INSET.set(inset);
-}
 
 /// The script's root is a `WebView`, so the panel can sit edge to edge.
 pub(crate) fn fills_panel(view: &Entity<ScriptView>, cx: &App) -> bool {
@@ -161,7 +152,6 @@ impl ComponentMaterializer for WebView {
         }
         request.with_window_app(move |window, cx| {
             let shown = place(&id, &url, store, window, cx);
-            nudge(window, cx);
             let mut element = frame(&id, &shown, cx);
             element.style().refine(&style);
             Ok(element.into_any_element())
@@ -573,10 +563,9 @@ fn find(cx: &App, owner: gpui_kit::EntityId, id: &str) -> Option<usize> {
         .position(|page| page.owner.entity_id() == owner && page.id == id)
 }
 
-fn nudge(window: &mut Window, cx: &mut App) {
-    if !INSET.get() {
-        return;
-    }
+/// Re-renders the window once after a plugin panel's first snapshot, so the panel can drop its
+/// padding when that snapshot fills it.
+pub(crate) fn nudge_once(window: &mut Window, cx: &mut App) {
     let owner = window.current_view();
     let pages = cx.default_global::<Pages>();
     if pages.nudged.contains(&owner) {
@@ -627,7 +616,6 @@ pub(crate) fn drop_stores(stores: &[[u8; 16]], cx: &mut App) {
 
 /// Hides a page whose panel is off screen, and drops one whose view is gone.
 pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
-    INSET.set(false);
     if !cx.has_global::<Pages>() {
         return;
     }

@@ -13,13 +13,13 @@ mod keys;
 mod layout;
 #[cfg(test)]
 pub(crate) use layout::read as layout_read;
-mod installer;
 pub(crate) mod menus;
 mod navigation;
 mod needs;
 mod notify;
 mod overlays;
 pub(crate) mod picker;
+mod plugin_actions;
 mod question;
 pub(crate) mod quit;
 mod replace;
@@ -45,9 +45,9 @@ pub(crate) use web_panel::drop_plugin as drop_web_panel;
 pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
 
 use changes::Changes;
-use installer::PluginInstaller;
 use kg_domain::ProjectOp;
 use layout::Layout;
+use plugin_actions::Plugins;
 use screen::{Activation, Side};
 use sidebar::{Event, Shows};
 use surface::ClosePage;
@@ -198,7 +198,7 @@ pub(crate) struct Kagan {
     tabs: tabs::Tabs,
     review_drafts: review::Drafts,
     replaced: replace::Replaced,
-    plugins: PluginInstaller,
+    plugins: Plugins,
     panels: Vec<right::Panel>,
     right_slots: Vec<surface::Slot>,
     right_tab: Option<String>,
@@ -485,7 +485,7 @@ impl Kagan {
             tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
             replaced: replace::Replaced::default(),
-            plugins: PluginInstaller::new(window, cx),
+            plugins: Plugins::new(window, cx),
             panels: right::built_in(),
             right_slots: Vec::new(),
             right_tab: None,

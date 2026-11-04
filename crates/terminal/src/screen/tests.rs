@@ -529,6 +529,21 @@ fn a_snapshot_stays_within_the_total_bound_and_names_the_dropped_history() {
 }
 
 #[test]
+fn a_snapshot_drops_every_history_line_when_only_the_screen_and_padding_fit() {
+    let mut screen = Screen::new(20, 3);
+    for index in 0..20 {
+        screen.feed(format!("line-{index:02}-xxxxxxxx\r\n").as_bytes());
+    }
+    let history = u32::try_from(screen.history_rows().len()).unwrap();
+    let limit = screen.visible_replay().len() + 4;
+    let snap = screen.snapshot_within(limit);
+    assert!(snap.screen_kept);
+    assert!(snap.replay.len() <= limit, "{}", snap.replay.len());
+    assert_eq!(snap.history_dropped, history);
+    assert!(!String::from_utf8_lossy(&snap.replay).contains("line-00"));
+}
+
+#[test]
 fn a_visible_screen_over_the_bound_is_not_stored_as_a_whole_screen() {
     let mut screen = Screen::new(8, 2);
     screen.feed(b"hello\r\n");

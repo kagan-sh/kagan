@@ -1,7 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use async_process::Child;
@@ -81,6 +81,39 @@ impl Process {
         }
         let _ = self.child.kill();
     }
+
+    /// Waits up to `limit` for the child to exit, then kills the tree and returns `None`.
+    ///
+    /// # Errors
+    /// When the child's status cannot be read.
+    pub fn wait_within(&mut self, limit: Duration) -> io::Result<Option<ExitStatus>> {
+        poll_child(
+            self,
+            |process| process.child.try_status(),
+            Process::kill,
+            limit,
+        )
+    }
+}
+
+/// Polls `try_wait` every 20 ms until the child exits or `limit` passes, then calls `kill`.
+fn poll_child<T>(
+    child: &mut T,
+    mut try_wait: impl FnMut(&mut T) -> io::Result<Option<ExitStatus>>,
+    mut kill: impl FnMut(&mut T),
+    limit: Duration,
+) -> io::Result<Option<ExitStatus>> {
+    let started = Instant::now();
+    loop {
+        match try_wait(child)? {
+            Some(status) => return Ok(Some(status)),
+            None if started.elapsed() > limit => {
+                kill(child);
+                return Ok(None);
+            }
+            None => std::thread::sleep(Duration::from_millis(20)),
+        }
+    }
 }
 
 impl Drop for Process {
@@ -131,21 +164,20 @@ pub fn capture_with_limit(command: &mut Command, limit: Duration) -> io::Result<
         .stderr
         .take()
         .map(|mut pipe| std::thread::spawn(move || read_pipe(&mut pipe)));
-    let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() > limit => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "the program ran too long",
-                ));
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(error) => return Err(error),
-        }
+    let status = poll_child(
+        &mut child,
+        std::process::Child::try_wait,
+        |child| {
+            let _ = child.kill();
+            let _ = child.wait();
+        },
+        limit,
+    )?;
+    let Some(status) = status else {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "the program ran too long",
+        ));
     };
     Ok(Captured {
         code: status.code().unwrap_or(1),
@@ -202,18 +234,16 @@ fn login_path() -> Option<OsString> {
         .stderr(std::process::Stdio::null())
         .spawn()
         .ok()?;
-    let deadline = std::time::Instant::now() + LOGIN_SHELL_TIMEOUT;
-    let status = loop {
-        if let Some(status) = child.try_wait().ok()? {
-            break status;
-        }
-        if std::time::Instant::now() >= deadline {
+    let status = poll_child(
+        &mut child,
+        std::process::Child::try_wait,
+        |child| {
             let _ = child.kill();
             let _ = child.wait();
-            return None;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    };
+        },
+        LOGIN_SHELL_TIMEOUT,
+    )
+    .ok()??;
     let mut path = Vec::new();
     child.stdout.take()?.read_to_end(&mut path).ok()?;
     (status.success() && !path.is_empty()).then(|| OsString::from_vec(path))
@@ -353,6 +383,29 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         Ok(())
+    }
+
+    #[test]
+    fn waiting_past_the_limit_kills_the_child() -> std::io::Result<()> {
+        let mut process =
+            Process::spawn(long_command(), Stdio::null(), Stdio::null(), Stdio::null())?;
+        assert!(process.wait_within(Duration::from_millis(50))?.is_none());
+        assert!(!wait(&mut process)?.success());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn long_command() -> std::process::Command {
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", "sleep 30"]);
+        command
+    }
+
+    #[cfg(windows)]
+    fn long_command() -> std::process::Command {
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/C", "ping -n 30 127.0.0.1 >NUL"]);
+        command
     }
 
     #[cfg(unix)]

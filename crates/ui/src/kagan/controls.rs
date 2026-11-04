@@ -1,15 +1,17 @@
-use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::button::Toggle;
+use gpui_kit::component::button::{Button, Toggle};
 use gpui_kit::component::h_flex;
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, Anchor, AnyElement, App, ClickEvent, Entity, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement as _, Role, SharedString, StatefulInteractiveElement as _,
-    Styled as _, Window, anchored, deferred, div,
+    Action, Anchor, AnyElement, App, ClickEvent, Context, ElementId, Entity, FocusHandle, Hsla,
+    InteractiveElement, IntoElement, ParentElement as _, Role, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div,
 };
+use kg_domain::PluginId;
 
+use super::Kagan;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -148,4 +150,66 @@ pub(super) fn tip(label: &str, action: &dyn Action, cx: &App) -> String {
     } else {
         format!("{label} ({keys})")
     }
+}
+
+/// An outline button that focuses `focus` and then sends `action` to its handlers.
+pub(super) fn act<A: Action + Clone>(
+    name: impl Into<String>,
+    label: &'static str,
+    focus: FocusHandle,
+    action: A,
+) -> AnyElement {
+    let name = name.into();
+    control(
+        name.clone(),
+        Facts::button(label),
+        Button::new(ElementId::Name(format!("button-{name}").into()))
+            .small()
+            .outline()
+            .label(label)
+            .on_click(move |_, window, cx| {
+                window.focus(&focus, cx);
+                window.dispatch_action(Box::new(action.clone()), cx);
+            }),
+    )
+    .into_any_element()
+}
+
+/// A small outline button that sends its action to the handlers on `focus`'s element. A key
+/// press keeps focus on the button; a mouse press moves focus to `focus`, because a press does
+/// not focus a button.
+pub(super) fn send<A: Action + Clone>(
+    name: impl Into<String>,
+    label: &'static str,
+    focus: &FocusHandle,
+    action: A,
+) -> AnyElement {
+    let name = name.into();
+    let focus = focus.clone();
+    control(
+        name.clone(),
+        Facts::button(label),
+        Button::new(ElementId::Name(format!("button-{name}").into()))
+            .small()
+            .outline()
+            .label(label)
+            .on_click(move |event, window, cx| {
+                if matches!(event, ClickEvent::Mouse(_)) {
+                    window.focus(&focus, cx);
+                }
+                window.dispatch_action(Box::new(action.clone()), cx);
+            }),
+    )
+    .into_any_element()
+}
+
+/// Answers one named action for a plugin row or card. Its keys and its buttons both reach it.
+pub(super) fn answer<A: Action, E: InteractiveElement>(
+    row: E,
+    id: &PluginId,
+    cx: &mut Context<Kagan>,
+    run: fn(&mut Kagan, &PluginId, &mut Context<Kagan>),
+) -> E {
+    let id = id.clone();
+    row.on_action(cx.listener(move |this, _: &A, _, cx| run(this, &id, cx)))
 }

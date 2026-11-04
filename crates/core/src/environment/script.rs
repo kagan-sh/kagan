@@ -287,28 +287,23 @@ enum Wait {
 }
 
 fn wait_child(process: &mut kg_process::Process, limit: Duration) -> Wait {
-    let started = Instant::now();
-    loop {
-        match process.child().try_status() {
-            Ok(Some(status)) => return Wait::Exited(status),
-            Ok(None) if started.elapsed() > limit => {
-                process.kill();
-                let deadline = Instant::now() + Duration::from_secs(2);
-                while Instant::now() < deadline {
-                    if process
-                        .child()
-                        .try_status()
-                        .is_ok_and(|status| status.is_some())
-                    {
-                        break;
-                    }
-                    std::thread::sleep(Duration::from_millis(20));
+    match process.wait_within(limit) {
+        Ok(Some(status)) => Wait::Exited(status),
+        Ok(None) => {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                if process
+                    .child()
+                    .try_status()
+                    .is_ok_and(|status| status.is_some())
+                {
+                    break;
                 }
-                return Wait::TimedOut;
+                std::thread::sleep(Duration::from_millis(20));
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(error) => return Wait::Failed(error.to_string()),
+            Wait::TimedOut
         }
+        Err(error) => Wait::Failed(error.to_string()),
     }
 }
 

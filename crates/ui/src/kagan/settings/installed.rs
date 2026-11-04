@@ -18,10 +18,10 @@ use kg_plugins::{PluginHost, PluginStatus};
 
 use super::Kagan;
 use super::row::{Group, Row, row, switch};
-use crate::kagan::controls::{control, dispatch};
-use crate::kagan::installer::{
+use crate::kagan::controls::{act, answer, control, dispatch};
+use crate::kagan::plugin_actions::{
     InstallPlugin, ReloadPlugin, RemovePlugin, ShowPluginLogs, ToggleInstallForm,
-    TogglePluginDetails, TogglePluginEnabled, UpdatePlugin, act, answer,
+    TogglePluginDetails, TogglePluginEnabled, UpdatePlugin,
 };
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;

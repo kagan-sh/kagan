@@ -1,18 +1,12 @@
-use gpui_kit::component::Sizable as _;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::input::InputState;
-use gpui_kit::{Action, ClickEvent, FocusHandle, InteractiveElement, KeyBinding, actions};
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, ElementId, Entity, IntoElement, PathPromptOptions, Task,
-    Window,
+    AppContext as _, Context, Entity, KeyBinding, PathPromptOptions, Task, Window, actions,
 };
 use kg_core::Workspace;
 use kg_domain::{Listing, Op, OpError, OpResult, PluginId, PluginOp};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
-use super::controls::control;
-use crate::ui_registry::Facts;
 
 const LOG_LINES: usize = 8;
 
@@ -47,7 +41,7 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
-pub(super) struct PluginInstaller {
+pub(super) struct Plugins {
     pub(super) source: Entity<InputState>,
     pub(super) form: bool,
     pub(super) expanded: Option<PluginId>,
@@ -63,7 +57,7 @@ pub(super) struct PluginInstaller {
     ops: Vec<Task<()>>,
 }
 
-impl PluginInstaller {
+impl Plugins {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Kagan>) -> Self {
         Self {
             source: cx.new(|cx| {
@@ -266,65 +260,4 @@ impl Kagan {
             cx,
         );
     }
-}
-
-pub(super) fn act<A: Action + Clone>(
-    name: impl Into<String>,
-    label: &'static str,
-    focus: FocusHandle,
-    action: A,
-) -> AnyElement {
-    let name = name.into();
-    control(
-        name.clone(),
-        Facts::button(label),
-        Button::new(ElementId::Name(format!("button-{name}").into()))
-            .small()
-            .outline()
-            .label(label)
-            .on_click(move |_, window, cx| {
-                window.focus(&focus, cx);
-                window.dispatch_action(Box::new(action.clone()), cx);
-            }),
-    )
-    .into_any_element()
-}
-
-/// Answers one named action for a plugin row or card. Its keys and its buttons both reach it.
-/// A small outline button that sends its action to the handlers on `focus`'s element. A key
-/// press keeps focus on the button; a mouse press moves focus to `focus`, because a press does
-/// not focus a button.
-pub(super) fn send<A: Action + Clone>(
-    name: impl Into<String>,
-    label: &'static str,
-    focus: &FocusHandle,
-    action: A,
-) -> AnyElement {
-    let name = name.into();
-    let focus = focus.clone();
-    control(
-        name.clone(),
-        Facts::button(label),
-        Button::new(ElementId::Name(format!("button-{name}").into()))
-            .small()
-            .outline()
-            .label(label)
-            .on_click(move |event, window, cx| {
-                if matches!(event, ClickEvent::Mouse(_)) {
-                    window.focus(&focus, cx);
-                }
-                window.dispatch_action(Box::new(action.clone()), cx);
-            }),
-    )
-    .into_any_element()
-}
-
-pub(super) fn answer<A: Action, E: InteractiveElement>(
-    row: E,
-    id: &PluginId,
-    cx: &mut Context<Kagan>,
-    run: fn(&mut Kagan, &PluginId, &mut Context<Kagan>),
-) -> E {
-    let id = id.clone();
-    row.on_action(cx.listener(move |this, _: &A, _, cx| run(this, &id, cx)))
 }
