@@ -19,7 +19,7 @@ pub const MESSAGE_CAP: usize = 1024 * 1024;
 // The largest file the page may read from the plugin folder.
 pub(crate) const FILE_CAP: u64 = 8 * 1024 * 1024;
 
-/// The custom-scheme name. The page origin is `kagan-plugin://<plugin-id>`.
+/// The URL scheme for plugin pages. A page's origin is `kagan-plugin://<plugin-id>`.
 pub const SCHEME: &str = "kagan-plugin";
 
 const RESERVED: &str = "__kagan";
@@ -43,7 +43,7 @@ impl std::fmt::Display for PageFileError {
 
 impl std::error::Error for PageFileError {}
 
-/// Reads one file inside `root`. `..`, an absolute path, and any symlink are refused.
+/// Reads one file inside `root`. A `..` part, an absolute path, or a symlink is refused.
 ///
 /// # Errors
 ///

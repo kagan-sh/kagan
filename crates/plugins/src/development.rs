@@ -211,7 +211,7 @@ fn constructs_button(source: &str) -> bool {
     false
 }
 
-// Whether any script under the plugin calls `.store(true)` on a view (opt-in page data).
+// Whether any script calls a `.store(...)` method with a `true` argument. The receiver is not checked.
 pub(crate) fn calls_webview_store(root: &Path) -> bool {
     plugin_scripts(root).is_ok_and(|scripts| {
         scripts
