@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use gpui_kit::{Modifiers, TestAppContext};
 
 use super::kagan::{
@@ -6,6 +8,24 @@ use super::kagan::{
 };
 use crate::kagan::changes::POLL;
 use crate::kagan::{NewTerminal, OpenLocalLink};
+
+// The shell prints in real time, which the test clock cannot speed up, so this wait gets no short
+// limit. The 120 s limit only stops a test that can never pass from hanging.
+fn wait_for_shell(cx: &mut TestAppContext, mut done: impl FnMut(&mut TestAppContext) -> bool) {
+    let hang = Instant::now() + Duration::from_secs(120);
+    loop {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        if done(cx) {
+            return;
+        }
+        assert!(
+            Instant::now() < hang,
+            "the shell never printed what the test waits for"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
 
 #[gpui_kit::test]
 fn a_secondary_click_on_a_printed_link_opens_it(cx: &mut TestAppContext) {
@@ -39,7 +59,7 @@ fn the_row_over_the_terminal_offers_the_newest_local_link(cx: &mut TestAppContex
         window,
         "printf 'Local: http%s\\nDocs: https://example.com\\n' '://localhost:3000/'\n",
     );
-    wait_until(cx, |cx| {
+    wait_for_shell(cx, |cx| {
         cx.executor().advance_clock(POLL);
         present(cx, window, "open-local-link")
     });
@@ -48,9 +68,9 @@ fn the_row_over_the_terminal_offers_the_newest_local_link(cx: &mut TestAppContex
     assert_eq!(cx.opened_url().as_deref(), Some("http://localhost:3000/"));
 
     cx.dispatch_action(window, NewTerminal);
-    wait_until(cx, |cx| present(cx, window, "right-tab-terminal-1"));
+    wait_for_shell(cx, |cx| present(cx, window, "right-tab-terminal-1"));
     cx.simulate_input(window, "printf 'http%s\\n' '://127.0.0.1:5173'\n");
-    wait_until(cx, |cx| {
+    wait_for_shell(cx, |cx| {
         cx.executor().advance_clock(POLL);
         label(cx, window, "open-local-link") == "Open 127.0.0.1:5173"
     });

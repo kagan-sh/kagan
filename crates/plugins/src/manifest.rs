@@ -277,7 +277,7 @@ impl Area {
             Self::Threads => (
                 "threads",
                 "Threads",
-                "reads, starts and changes your threads, reads their screen text, and reads their changed files",
+                "reads, starts and changes your threads, can type into threads and press Enter, reads their screen text, and reads their changed files",
             ),
             Self::Database => ("database", "Database", "keeps its own database"),
             Self::Process => (

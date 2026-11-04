@@ -283,6 +283,7 @@ Commands:
   copy          The text selected on the program's screen
   report        Send mouse-report bytes to the program, as decimal byte values such as `27 91 77 32 128 33`. Unlike `input`, it keeps a scrolled view where it is
   paste         Paste text into the program, bracketed when the program asks for that
+  send          Type text into the program and press Enter
   terminal      Extra terminals: login shells in the thread's folder
   details       The thread's folder, program, branch, base branch and last commits, read from git without fetching
   links         http and https links printed in the thread's terminals: the program's, then each extra one. A link printed again moves to the end
@@ -597,6 +598,25 @@ Options:
       --file <PATH>
           Read the paste from this path, or `-` for stdin
 
+  -h, --help
+          Print help
+```
+
+## `kg thread send`
+
+```text
+Type text into the program and press Enter
+
+Usage: kg thread send <ID> <TEXT>
+
+Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
+  <TEXT>
+          
+
+Options:
   -h, --help
           Print help
 ```

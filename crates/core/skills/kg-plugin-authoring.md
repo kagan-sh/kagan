@@ -64,7 +64,7 @@ Build a plugin in this order. Each step names the command to run.
    - `event` `{ type, threadId, projectId, data }`: reply nothing.
    - `cli` `{ command, argv, cwd, threadId?, projectId? }`: reply `{ exitCode, stdout, stderr }`.
 
-   Host calls come from `kagan/host` (`log`, `openPanel`, `openThread`, `toast`, `openUrl`), `kagan/threads`, and the other `kagan/*` modules named by `powers.areas`. `process.dataDir` is this plugin's data folder (read-write through `fs/promises`); `process.env` is empty.
+   Host calls come from `kagan/host` (`log`, `openPanel`, `openThread`, `toast`, `openUrl`), `kagan/threads`, and the other `kagan/*` modules named by `powers.areas`. `threads.send(id, text)` needs the `threads` area. It types the text and presses Enter in any running program, at most 1 MiB, into whatever that program is reading now, and writes a user `message` only after the write succeeds. It does not queue. Empty text, control-only text, and a program that is not running are refused. `process.dataDir` is this plugin's data folder (read-write through `fs/promises`); `process.env` is empty.
 
    Files under that folder need no extra power. A read outside it needs `powers.read` or a `folder` setting.
 

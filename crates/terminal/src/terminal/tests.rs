@@ -1,6 +1,8 @@
 use std::ffi::{OsStr, OsString};
+use std::io::{self, Write};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -742,6 +744,251 @@ fn every_control_byte_is_kept_out_of_a_paste() {
         assert_eq!(paste_text(&text, false), "ab", "{c:?}");
         assert_eq!(paste_text(&text, true), "\x1b[200~ab\x1b[201~", "{c:?}");
     }
+}
+
+#[test]
+fn submit_refuses_control_only_text() {
+    let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    for text in ["\r", "\n", "\t", "\r\n\t", "\u{1}"] {
+        let error = terminal.submit(text).unwrap_err();
+        assert!(
+            error.to_string().contains("send needs text"),
+            "{text:?}: {error}"
+        );
+    }
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}
+
+#[cfg(unix)]
+#[test]
+fn submit_refuses_an_exited_program_still_draining() {
+    let (release, gate) = std::sync::mpsc::channel();
+    let clock = Arc::new(AtomicU64::new(0));
+    let terminal = Terminal::spawn(sh("printf done; exit 0"), 80, 24)
+        .unwrap()
+        .controlled(gate, Arc::clone(&clock));
+    let reap = Reap(terminal.process_id());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !terminal.exited() {
+        assert!(Instant::now() < deadline, "the program never ended");
+        thread::sleep(Duration::from_millis(20));
+    }
+    let error = terminal.submit("NOPE").unwrap_err();
+    assert!(
+        error.to_string().contains("the program has ended"),
+        "{error}"
+    );
+    drop(release);
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}
+
+#[test]
+fn submit_reports_a_failed_write() {
+    let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    terminal.fail_next_write();
+    let (_, written) = terminal.submit("hello").unwrap();
+    let error = written.recv().unwrap().unwrap_err();
+    assert!(error.to_string().contains("write failed"), "{error}");
+    quit_within(terminal, Duration::from_secs(3));
+    drop(reap);
+}
+
+#[cfg(unix)]
+fn pty_pair() -> (std::fs::File, std::fs::File) {
+    use std::os::fd::FromRawFd;
+    let (mut master, mut slave) = (-1, -1);
+    // SAFETY: openpty writes one new fd through each out pointer; null name, termios and size mean defaults.
+    let opened = unsafe {
+        libc::openpty(
+            &raw mut master,
+            &raw mut slave,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(opened, 0, "openpty failed");
+    // SAFETY: an all-zero termios is valid storage that tcgetattr overwrites.
+    let mut term: libc::termios = unsafe { std::mem::zeroed() };
+    // SAFETY: tcgetattr and tcsetattr take the open slave fd and a valid termios.
+    unsafe {
+        assert_eq!(libc::tcgetattr(slave, &raw mut term), 0);
+        libc::cfmakeraw(&raw mut term);
+        assert_eq!(libc::tcsetattr(slave, libc::TCSANOW, &raw const term), 0);
+    }
+    // SAFETY: the two fds came from openpty and nothing else owns them.
+    unsafe {
+        (
+            std::fs::File::from_raw_fd(master),
+            std::fs::File::from_raw_fd(slave),
+        )
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_full_pty_write_is_cancelled_by_stop() {
+    use std::io::Read;
+    use std::os::fd::AsRawFd;
+    let (master, mut slave) = pty_pair();
+    set_nonblocking(master.as_raw_fd()).unwrap();
+    set_nonblocking(slave.as_raw_fd()).unwrap();
+    let mut writer = master.try_clone().unwrap();
+    let fd = writer.as_raw_fd();
+    // Nobody reads the slave, so once the pty is full the next write must wait.
+    while matches!(writer.write(&[0_u8; 8192]), Ok(n) if n > 0) {}
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = Arc::clone(&stop);
+    let (done, result) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        let _ = done.send(write_bytes(&mut writer, b"abc", &flag, Some(fd)));
+    });
+    thread::sleep(Duration::from_millis(100));
+    stop.store(true, Ordering::Release);
+    let observed = result.recv_timeout(Duration::from_secs(3));
+    // Drain only after the verdict, so a failing run still lets the worker finish.
+    let mut sink = [0_u8; 8192];
+    while matches!(slave.read(&mut sink), Ok(n) if n > 0) {}
+    worker.join().unwrap();
+    assert!(
+        matches!(observed, Ok(Err(_))),
+        "stop did not cancel the full write: {observed:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixStream;
+    let (reader, mut output) = pty_pair();
+    set_nonblocking(reader.as_raw_fd()).unwrap();
+    // Stands in for the master that teardown drops before it joins the reader.
+    let owner = reader.try_clone().unwrap();
+    let owner_fd = owner.as_raw_fd();
+    let wait = dup_fd(owner_fd).unwrap();
+    let shared = Shared::settled(Screen::new(80, 24));
+    let (replies, _received) = mpsc::channel();
+    let handle = thread_read(
+        Box::new(reader),
+        shared.clone(),
+        replies,
+        Arc::new(AtomicBool::new(false)),
+        Some(wait),
+    );
+    thread::sleep(Duration::from_millis(100));
+    // Made before the close, so its number cannot be owner_fd.
+    let (unrelated, mut peer) = UnixStream::pair().unwrap();
+    drop(owner);
+    // Reuse the number the closed master had. A reader still polling it now waits on this socket.
+    // SAFETY: owner_fd is a number this test just freed; dup2 makes it a copy of the socket.
+    assert_eq!(
+        unsafe { libc::dup2(unrelated.as_raw_fd(), owner_fd) },
+        owner_fd
+    );
+    output.write_all(b"FIRST").unwrap();
+    let end = Instant::now() + Duration::from_secs(1);
+    while !lock(&shared.screen).transcript().contains("FIRST") && Instant::now() < end {
+        thread::sleep(Duration::from_millis(5));
+    }
+    thread::sleep(Duration::from_millis(100));
+    output.write_all(b"SECOND").unwrap();
+    thread::sleep(Duration::from_millis(200));
+    let got = lock(&shared.screen).transcript();
+    // Wake a reader that waits on the socket, then close the slave so every reader ends.
+    peer.write_all(b"wake").unwrap();
+    drop(output);
+    let (joined, done) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = handle.join();
+        let _ = joined.send(());
+    });
+    let joined_in_time = done.recv_timeout(Duration::from_secs(3)).is_ok();
+    // SAFETY: this closes the copy that dup2 made; unrelated still owns its own number.
+    unsafe { libc::close(owner_fd) };
+    assert!(
+        got.contains("SECOND"),
+        "reader stopped seeing output after its fd number was reused: {got:?}"
+    );
+    assert!(joined_in_time, "reader did not join");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bad_fd_is_refused_when_made_nonblocking() {
+    let error = set_nonblocking(-1).unwrap_err();
+    assert_eq!(error.raw_os_error(), Some(libc::EBADF));
+}
+
+#[cfg(unix)]
+#[test]
+fn write_bytes_delivers_after_a_short_write() {
+    struct ShortWrite {
+        calls: usize,
+        got: Vec<u8>,
+    }
+
+    impl Write for ShortWrite {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.calls += 1;
+            match self.calls {
+                1 => {
+                    self.got.push(buf[0]);
+                    Ok(1)
+                }
+                2 => Err(io::Error::from(io::ErrorKind::WouldBlock)),
+                _ => {
+                    self.got.extend_from_slice(buf);
+                    Ok(buf.len())
+                }
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let mut writer = ShortWrite {
+        calls: 0,
+        got: Vec::new(),
+    };
+    let stop = AtomicBool::new(false);
+    write_bytes(&mut writer, b"abc", &stop, None).unwrap();
+    assert_eq!(writer.got, b"abc");
+}
+
+#[cfg(unix)]
+#[test]
+fn finish_settles_a_submit_blocked_on_a_full_pty() {
+    let terminal =
+        Terminal::spawn(sh("stty raw -echo; printf 'ready\\n'; sleep 30"), 80, 24).unwrap();
+    let reap = Reap(terminal.process_id());
+    wait_for(&terminal, "ready");
+    let chunk = "x".repeat(64 * 1024);
+    let pending: Vec<_> = (0..4)
+        .map(|n| {
+            let text = format!("{n}-{chunk}");
+            terminal.submit(&text).unwrap().1
+        })
+        .collect();
+    thread::sleep(Duration::from_millis(100));
+    let finished = terminal.finish();
+    for written in pending {
+        let result = written.recv_timeout(Duration::from_secs(3));
+        assert!(
+            matches!(result, Ok(Err(_))),
+            "blocked submit must settle when finish runs: {result:?}"
+        );
+    }
+    while !finished.settled() {
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(reap);
 }
 
 #[test]

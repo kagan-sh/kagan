@@ -2966,6 +2966,7 @@ export default class Plugin extends View {
           ["get", () => threads.get(id)],
           ["events", () => threads.events(id, { afterSeq: 0, limit: 1 })],
           ["settle", () => threads.wait(id, { timeoutMs: 1000 })],
+          ["send", () => threads.send(id, "hello")],
           ["output", () => threads.output(id)],
           ["wait", () => threads.waitEvent(id, { type: "nope", afterSeq: 0, timeoutMs: 1 })],
           ["pin", () => threads.setPinned(id, false)],
@@ -3081,6 +3082,7 @@ fn a_plugin_calls_every_thread_operation(cx: &mut TestAppContext) {
     }
     assert!(ok("events")["value"].is_array());
     assert_eq!(ok("settle")["value"], "exited");
+    err("send", "not found");
     err("output", "not found");
     let asked = &ok("ask")["value"];
     assert!(
@@ -4553,7 +4555,7 @@ fn an_approved_grant_reads_as_plain_lines() {
     assert_eq!(
         crate::power_lines(&approved).unwrap(),
         [
-            "reads, starts and changes your threads, reads their screen text, and reads their changed files",
+            "reads, starts and changes your threads, can type into threads and press Enter, reads their screen text, and reads their changed files",
             "reads a folder you choose (Notes)",
         ]
     );
