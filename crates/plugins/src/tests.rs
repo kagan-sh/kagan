@@ -5848,7 +5848,6 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
             .contains("cannot take another page message")
     );
 
-    // Timeouts free the cap and drop the bodies; refill must stay within 1 MiB.
     cx.executor().advance_clock(Duration::from_secs(10));
     cx.run_until_parked();
     assert_eq!(pending_page_bytes(cx), 0);

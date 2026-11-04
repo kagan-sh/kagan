@@ -1,4 +1,4 @@
-//! A web panel's files, navigation rules and theme, so they can be tested without a native page.
+//! Web panel files, navigation rules and theme, kept apart so tests run without a native page.
 //! The page setup itself is in `page.rs`, shared with the Browser and a plugin `WebView`.
 
 use std::path::{Component, Path};
@@ -19,7 +19,7 @@ pub(crate) struct Served {
     pub(crate) csp: String,
 }
 
-/// Whether a navigation may proceed. Only the plugin's own page origin is allowed.
+// Only the plugin's own origin passes, and on Windows its `http://kagan-plugin.<id>` form.
 pub(crate) fn allows_navigation(plugin: &str, target: &str) -> bool {
     let Ok(url) = url::Url::parse(target) else {
         return false;
@@ -49,8 +49,8 @@ fn windows_origin(_plugin: &str, _scheme: &str, _host: Option<&str>) -> bool {
     false
 }
 
-/// CSP for a plugin page. Scripts, images and styles come from the page itself.
-/// `connect-src` lists only `powers.fetch` hosts.
+// Only the page's own files load, plus fetch to the `powers.fetch` hosts.
+// A host that fails `host_token` is left out.
 pub(crate) fn csp(hosts: &[String]) -> String {
     let mut connect = String::from("'self'");
     for host in hosts {
@@ -167,17 +167,17 @@ pub(crate) fn serve(
     }
 }
 
-/// Builds `kagan-plugin://<plugin>/<file>` with a typed path so spaces, `#`, `?` and `%` round-trip.
+// Builds the page URL for `file`, encoding spaces, `#` and `?` so they stay in the path.
 pub(crate) fn page_url(plugin: &str, file: &str) -> Result<String, String> {
     let mut url = url::Url::parse(&format!("{SCHEME}://{plugin}/"))
         .map_err(|_| format!("plugin id {plugin:?} is not a page origin"))?;
-    // `set_path` leaves a bare `%` untouched; encode it so decode-once stays strict.
+    // `set_path` leaves a bare `%` alone. Encode it so the request path is decoded exactly once.
     url.set_path(&format!("/{}", file.replace('%', "%25")));
     Ok(url.to_string())
 }
 
-/// Percent-decodes the request path once, from the raw URL so `.` / `..` are not
-/// normalized away before confinement. Invalid encoding, traversal, backslashes and NULs are refused.
+// Reads the path from the raw URL and decodes it once.
+// A URL parser would strip `.` and `..` first, which hides traversal from the check.
 fn request_path(target: &str) -> Option<String> {
     let rest = target.split_once("://")?.1;
     let encoded = rest.split_once('/')?.1.split(['?', '#']).next()?;
@@ -221,7 +221,7 @@ fn percent_ok(encoded: &str) -> bool {
     true
 }
 
-/// The script that tells the page one JSON value, as a `kagan` event.
+// The message goes in as a string literal, so its quotes cannot break the script.
 pub(crate) fn page_event(message: &str) -> Option<String> {
     let literal = serde_json::to_string(message).ok()?;
     Some(format!(
@@ -231,7 +231,7 @@ pub(crate) fn page_event(message: &str) -> Option<String> {
 
 pub(crate) const BRIDGE: &str = r#"(function(){function post(message){var text;try{text=JSON.stringify(message);}catch(e){return;}if(typeof text!=="string")return;window.ipc.postMessage(text);}window.kagan=Object.freeze({post:post});var link=document.getElementById("kagan-theme");if(!link){link=document.createElement("link");link.id="kagan-theme";link.rel="stylesheet";link.href=new URL("/__kagan/theme.css",window.location.href).href;(document.head||document.documentElement).appendChild(link);}})();"#;
 
-/// Applies the live Workbench tokens in the page and reloads `/__kagan/theme.css`.
+// Sets the theme tokens, then changes the stylesheet's `?v=` so the view fetches it again.
 pub(crate) fn theme_refresh(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
@@ -285,9 +285,9 @@ fn host_token(host: &str) -> bool {
 #[path = "web_test.rs"]
 mod web_test;
 
-/// The stylesheet text the web view's protocol callback reads.
-///
-/// That callback is not a GPUI context, so the text cannot live in an entity.
+// The stylesheet text the web view's protocol callback reads.
+//
+// That callback is not a GPUI context, so the text cannot live in an entity.
 #[cfg(target_os = "macos")]
 mod theme_cell {
     #![allow(clippy::disallowed_types)]

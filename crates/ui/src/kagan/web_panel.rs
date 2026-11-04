@@ -1,7 +1,7 @@
 //! A plugin panel whose body is an HTML file in the plugin folder.
 //!
 //! The page is shown only while that panel is on screen, and dropped when the panel closes.
-//! The native view is macOS for now. Other systems show one sentence.
+//! The native view runs on macOS only. Other systems show a one-line notice.
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -32,7 +32,7 @@ pub(super) fn body(slot: &Slot, window: &mut Window, cx: &mut App) -> AnyElement
     frame(&slot.id, &slot.title, &shown, cx)
 }
 
-/// Delivers JSON from the plugin script to the open page.
+// Errors say why the page could not take the message, such as when it is off screen.
 pub(crate) fn post(
     plugin: &PluginId,
     panel: &str,
@@ -95,7 +95,7 @@ pub(crate) fn forget(slot: &str, cx: &mut App) {
     if let Some(index) = find(cx, slot) {
         let page = cx.default_global::<Pages>().pages.remove(index);
         page.ipc.close();
-        // Dropping the strong token expires any page job still waiting on next().
+        // Dropping the life token expires any page job still waiting in `next()`.
         drop(page.life);
     }
     #[cfg(not(target_os = "macos"))]
@@ -111,7 +111,7 @@ pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
     }
 }
 
-/// Pushes the live Workbench theme into every open page, even when the window is not drawing.
+// Pushes the live Workbench theme to every open page, even when the window is not drawing.
 pub(super) fn repaint(cx: &mut App) {
     #[cfg(target_os = "macos")]
     if cx.has_global::<Pages>() {
