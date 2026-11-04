@@ -6582,7 +6582,7 @@ async fn a_removal_refusal_is_not_reused_for_the_next_worktree(cx: &mut TestAppC
     let environment_id = started.environment_id.clone().unwrap();
     let folder = stop_archive_and_settle(&started.id, &environment_id, cx).await;
     assert!(folder.path.exists(), "{folder:?}");
-    let mut store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
     store.delete_thread(&started.id, Timestamp(1), &[]).unwrap();
     drop(store);
     let OpResult::Thread(fresh) = op(worktree_run(&fixture, Some("again"), None), cx)

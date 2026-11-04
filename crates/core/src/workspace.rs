@@ -758,7 +758,7 @@ impl Workspace {
     /// # Errors
     /// When the database is closed or removing the plugin fails.
     pub fn remove_plugin(&self, id: PluginId) -> impl Future<Output = Result<()>> + use<> {
-        self.call(move |store| store.remove_plugin(&id))
+        self.call(move |store| store.delete_plugin(&id))
     }
 
     /// # Errors
@@ -1202,7 +1202,7 @@ fn close_left_turn(
 
 fn clear_pending(store: &Store, id: &ThreadId) -> kg_store::Result<()> {
     for interaction in store.pending_interactions(id)? {
-        store.remove_pending_interaction(&interaction.id)?;
+        store.delete_pending_interaction(&interaction.id)?;
     }
     Ok(())
 }

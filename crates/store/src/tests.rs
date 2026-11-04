@@ -671,7 +671,7 @@ fn pending_interactions() {
         store.pending_interactions(&id("thr_1")).unwrap(),
         std::slice::from_ref(&interaction)
     );
-    store.remove_pending_interaction(&interaction.id).unwrap();
+    store.delete_pending_interaction(&interaction.id).unwrap();
     assert!(store.pending_interactions(&id("thr_1")).unwrap().is_empty());
 }
 
@@ -784,7 +784,7 @@ fn only_a_settled_turn_or_a_failure_needs_the_person() {
 
 #[test]
 fn plugin_thread_metadata_is_separate_and_deleted_with_its_thread() {
-    let mut store = store();
+    let store = store();
     let thread = thread("thr_1", 0);
     let one = PluginId("one".into());
     let two = PluginId("two".into());

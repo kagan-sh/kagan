@@ -264,7 +264,8 @@ fn write_metadata(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostErr
     as_thread(json!({
         "set-metadata": {
             "id": args.string(0)?,
-            "metadata": { "pluginId": plugin, "value": from_host(args.value(1)?) }
+            "pluginId": plugin,
+            "value": from_host(args.value(1)?)
         }
     }))
 }

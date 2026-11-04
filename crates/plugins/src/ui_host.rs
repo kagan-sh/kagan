@@ -510,7 +510,7 @@ fn declared_command(plugin: &PluginId, action: &ToastAction, cx: &App) -> bool {
         .read(cx)
         .commands()
         .iter()
-        .any(|command| command.plugin() == plugin && command.id() == action.command.as_str())
+        .any(|command| command.plugin == *plugin && command.id == action.command)
 }
 
 fn context_functions(module: HostModule, plugin: &PluginId) -> HostModule {

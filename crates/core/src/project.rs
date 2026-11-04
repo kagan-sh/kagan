@@ -194,7 +194,7 @@ pub(crate) async fn remove_project(
     let at = crate::workspace::time(this, cx)?;
     let lookup = id.clone();
     let events = database
-        .call(move |store| store.remove_project(&lookup, at))
+        .call(move |store| store.delete_project(&lookup, at))
         .await?;
     this.update(cx, |workspace, cx| {
         crate::thread::archive::forget_deleted(workspace, events, cx);

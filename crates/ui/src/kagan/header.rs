@@ -55,12 +55,12 @@ fn commands(cx: &App) -> Vec<(PluginId, String, String)> {
     host.read(cx)
         .commands()
         .into_iter()
-        .filter(|command| command.header() && command.when() == CommandWhen::Thread)
+        .filter(|command| command.header && command.when == CommandWhen::Thread)
         .map(|command| {
             (
-                command.plugin().clone(),
-                command.id().to_owned(),
-                command.title().to_owned(),
+                command.plugin.clone(),
+                command.id.clone(),
+                command.title.clone(),
             )
         })
         .collect()

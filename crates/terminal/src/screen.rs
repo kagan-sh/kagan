@@ -551,11 +551,13 @@ fn sgr((fg, bg, flags): (Color, Color, Flags)) -> String {
 fn color(color: Color, background: bool) -> String {
     let base = if background { 40 } else { 30 };
     match color {
-        Color::Named(name) => match name as usize {
-            index @ 0..8 => (base + index).to_string(),
-            index @ 8..16 => (base + 60 + index - 8).to_string(),
-            index @ 259..267 => (base + index - 259).to_string(),
-            _ => (base + 9).to_string(),
+        Color::Named(name) => match crate::grid::dim_index(name) {
+            Some(index) => (base + index).to_string(),
+            None => match name as usize {
+                index @ 0..8 => (base + index).to_string(),
+                index @ 8..16 => (base + 60 + index - 8).to_string(),
+                _ => (base + 9).to_string(),
+            },
         },
         Color::Indexed(index) => format!("{};5;{index}", base + 8),
         Color::Spec(Rgb { r, g, b }) => format!("{};2;{r};{g};{b}", base + 8),

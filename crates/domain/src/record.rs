@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -103,6 +104,15 @@ pub fn order_sidebar_projects(projects: &mut [Project]) {
             .then_with(|| left.name.cmp(&right.name))
             .then_with(|| left.id.0.cmp(&right.id.0))
     });
+}
+
+/// Newest first, then by id, so two threads created in the same tick keep one order.
+#[must_use]
+pub fn newest_first(left: &Thread, right: &Thread) -> Ordering {
+    right
+        .created_at
+        .cmp(&left.created_at)
+        .then_with(|| right.id.cmp(&left.id))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -257,12 +267,7 @@ impl Sidebar {
                 thread.visibility == Visibility::Visible && thread.archived_at.is_none()
             })
             .collect();
-        threads.sort_by(|left, right| {
-            right
-                .created_at
-                .cmp(&left.created_at)
-                .then_with(|| right.id.cmp(&left.id))
-        });
+        threads.sort_by(newest_first);
         Self {
             projects,
             sections,

@@ -9,28 +9,8 @@ use serde_json::Value;
 
 pub(crate) const FILE: &str = "kagan.json";
 
-// `icon` is read by the catalog.
-const KEYS: &[&str] = &[
-    "id",
-    "name",
-    "version",
-    "kagan",
-    "entry",
-    "icon",
-    "instructions",
-    "instruct",
-    "powers",
-    "settings",
-    "commands",
-    "ui",
-    "tools",
-    "cli",
-    "events",
-    "skills",
-    "themes",
-];
-
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Manifest {
     #[serde(default)]
     pub(crate) ui: crate::contributions::Contributions,
@@ -442,12 +422,9 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
     let text = std::fs::read_to_string(root.join(FILE))
         .map_err(|error| invalid(format!("cannot read it: {error}")))?;
     let value: Value = serde_json::from_str(&text).map_err(|error| invalid(error.to_string()))?;
-    let Value::Object(keys) = &value else {
+    let Value::Object(_) = &value else {
         return Err(invalid("must be a JSON object".into()));
     };
-    if let Some(key) = keys.keys().find(|key| !KEYS.contains(&key.as_str())) {
-        return Err(invalid(format!("unknown key {key:?}")));
-    }
     let mut manifest: Manifest =
         serde_json::from_str(&text).map_err(|error| invalid(error.to_string()))?;
     manifest.check(root, data_dir).map_err(invalid)?;

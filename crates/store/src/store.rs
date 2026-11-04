@@ -267,12 +267,8 @@ impl Store {
             .optional()?)
     }
 
-    pub fn remove_project(
-        &mut self,
-        id: &ProjectId,
-        at: Timestamp,
-    ) -> Result<Vec<(Event, ProjectId)>> {
-        let tx = self.conn.transaction()?;
+    pub fn delete_project(&self, id: &ProjectId, at: Timestamp) -> Result<Vec<(Event, ProjectId)>> {
+        let tx = self.conn.unchecked_transaction()?;
         let ids: Vec<ThreadId> = {
             let mut statement = tx.prepare("SELECT id FROM threads WHERE project_id = ?1")?;
             statement
@@ -653,12 +649,12 @@ impl Store {
     /// Deletes the thread, its lifecycle dependents and all their history, and marks `folders` destroyed in the same
     /// commit. `folders` must be what `personal_folders` returned; if it changed, nothing is deleted. Returns a `Deleted` event per thread and that thread's project, read before the row goes.
     pub fn delete_thread(
-        &mut self,
+        &self,
         id: &ThreadId,
         at: Timestamp,
         folders: &[EnvironmentId],
     ) -> Result<Vec<(Event, ProjectId)>> {
-        let tx = self.conn.transaction()?;
+        let tx = self.conn.unchecked_transaction()?;
         let owned = owned_threads(&tx, id)?;
         if owned.is_empty() {
             return Err(not_found("thread", id));
@@ -826,7 +822,7 @@ impl Store {
         Ok(interactions)
     }
 
-    pub fn remove_pending_interaction(&self, id: &PendingInteractionId) -> Result<()> {
+    pub fn delete_pending_interaction(&self, id: &PendingInteractionId) -> Result<()> {
         let changed = self
             .conn
             .execute("DELETE FROM pending_interactions WHERE id = ?1", [Text(id)])?;
@@ -923,7 +919,7 @@ impl Store {
         found(changed, "plugin", id)
     }
 
-    pub fn remove_plugin(&self, id: &PluginId) -> Result<()> {
+    pub fn delete_plugin(&self, id: &PluginId) -> Result<()> {
         let transaction = self.conn.unchecked_transaction()?;
         transaction.execute(
             "DELETE FROM plugin_values WHERE plugin_id = ?1",

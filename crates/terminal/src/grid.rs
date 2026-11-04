@@ -234,12 +234,24 @@ fn color(color: TermColor, colors: &Colors) -> Color {
             | NamedColor::Cursor,
         ) => return Color::Foreground,
         TermColor::Named(NamedColor::Background) => return Color::Background,
-        TermColor::Named(name) => match name as usize {
-            dim @ 259..267 => dim - 259,
-            index => index,
-        },
+        TermColor::Named(name) => dim_index(name).unwrap_or(name as usize),
     };
     colors[index].map_or_else(|| palette(index), rgb_color)
+}
+
+/// The standard color a dim variant stands for, `0..8`.
+pub(crate) fn dim_index(name: NamedColor) -> Option<usize> {
+    Some(match name {
+        NamedColor::DimBlack => 0,
+        NamedColor::DimRed => 1,
+        NamedColor::DimGreen => 2,
+        NamedColor::DimYellow => 3,
+        NamedColor::DimBlue => 4,
+        NamedColor::DimMagenta => 5,
+        NamedColor::DimCyan => 6,
+        NamedColor::DimWhite => 7,
+        _ => return None,
+    })
 }
 
 fn rgb_color(Rgb { r, g, b }: Rgb) -> Color {

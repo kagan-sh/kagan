@@ -39,18 +39,13 @@ fn terminal_bindings() -> Vec<KeyBinding> {
 
 pub(crate) fn chord_for(action: &str, keymap: &Keymap, platform: KeyPlatform) -> String {
     // A saved chord that does not parse would panic when bound, so it counts as no override.
-    if keymap
+    if let Some(saved) = keymap
         .binding(action)
-        .is_some_and(|saved| kg_core::parse_key(saved).is_ok())
+        .filter(|saved| kg_core::parse_key(saved).is_ok())
     {
-        return kg_domain::effective_chord(action, keymap, platform);
+        return saved.to_owned();
     }
-    kg_domain::SHORTCUTS
-        .iter()
-        .find(|shortcut| shortcut.name == action)
-        .map_or(String::new(), |shortcut| {
-            kg_domain::expand_secondary(shortcut.chord, platform)
-        })
+    kg_domain::default_chord(action, platform).unwrap_or_default()
 }
 
 /// The window's shortcuts, each on the chord `chord_for` gives it.

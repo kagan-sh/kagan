@@ -266,7 +266,7 @@ fn addition_note(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
         let commands = host
             .commands()
             .iter()
-            .filter(|command| command.plugin() == &id)
+            .filter(|command| command.plugin == id)
             .count();
         let settings = host.settings(&id).len();
         if settings > 0 {

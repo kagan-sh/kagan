@@ -9,8 +9,8 @@ use std::time::Duration;
 use gpui_kit::TestAppContext;
 use kg_core::Workspace;
 use kg_domain::{
-    ConfigOp, EnvironmentSpec, EventKind, IndexOp, KeymapOp, Metadata, Op, OpError, OpResult,
-    Plugin, PluginId, PluginOp, Project, ProjectId, ProjectKind, Run, Thread, ThreadId, ThreadOp,
+    ConfigOp, EnvironmentSpec, EventKind, IndexOp, KeymapOp, Op, OpError, OpResult, Plugin,
+    PluginId, PluginOp, Project, ProjectId, ProjectKind, Run, Thread, ThreadId, ThreadOp,
     ThreadStatus, Timestamp, TurnOutcome, Visibility,
 };
 use serde_json::{Value, json};
@@ -462,10 +462,10 @@ fn manifests_reject_unknown_keys_bad_ids_and_newer_requirements() {
         let error = read_manifest(dir.path()).unwrap_err().to_string();
         assert!(error.contains(expected), "{error}");
     };
-    rejected(&|value| value["extra"] = json!(1), "unknown key \"extra\"");
+    rejected(&|value| value["extra"] = json!(1), "unknown field `extra`");
     rejected(
         &|value| value["downloads"] = json!({}),
-        "unknown key \"downloads\"",
+        "unknown field `downloads`",
     );
     rejected(
         &|value| value["powers"]["spawn"] = json!([{ "program": "tool/bin/server" }]),
@@ -926,10 +926,8 @@ fn tools_follow_scope_and_thread_metadata(cx: &mut TestAppContext) {
         cx,
         Op::Thread(ThreadOp::SetMetadata {
             id: thread(),
-            metadata: Metadata {
-                plugin_id: PluginId(ID.into()),
-                value: json!({ "master": true }),
-            },
+            plugin_id: PluginId(ID.into()),
+            value: json!({ "master": true }),
         }),
     )
     .unwrap();
@@ -938,6 +936,32 @@ fn tools_follow_scope_and_thread_metadata(cx: &mut TestAppContext) {
         ["echo", "broken", "hang", "secret", "peek", "skill_load"]
     );
     assert!(!loaded(cx), "listing tools runs no plugin code");
+}
+
+#[gpui_kit::test]
+fn a_tool_name_two_plugins_share_is_a_note_naming_both(cx: &mut TestAppContext) {
+    let first = plugin_dir();
+    let second = tempfile::tempdir().unwrap();
+    let mut other = manifest();
+    other["id"] = json!("dev.test.echo.two");
+    other["name"] = json!("Echo Two");
+    write_plugin(second.path(), &other);
+    open(cx, &[installed(first.path()), installed_at(second.path())]);
+    let notes = cx.read(|cx| {
+        cx.global::<PluginHostGlobal>()
+            .0
+            .read(cx)
+            .status()
+            .into_iter()
+            .filter_map(|status| status.note.map(|note| (status.id.0, note)))
+            .collect::<Vec<_>>()
+    });
+    let [(id, note)] = notes.as_slice() else {
+        panic!("{notes:?}");
+    };
+    assert_eq!(id, "dev.test.echo.two");
+    assert!(note.contains(ID), "{note}");
+    assert!(note.contains("is also declared by plugin"), "{note}");
 }
 
 #[gpui_kit::test]
@@ -3114,7 +3138,7 @@ fn approved_areas_dispatch_core_and_keep_database_transactions(cx: &mut TestAppC
     )
     .unwrap();
     let commands = cx.update(|cx| crate::PluginHost::global(cx).read(cx).commands());
-    assert_eq!(commands[0].key(), Some("ctrl-alt-o"));
+    assert_eq!(commands[0].key.as_deref(), Some("ctrl-alt-o"));
 }
 
 const THREAD_OPS: &str = r#"

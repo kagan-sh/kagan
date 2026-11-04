@@ -534,11 +534,13 @@ fn dispatch(request: PluginRequest, cx: &mut App) -> Task<Result<OpResult>> {
     match request {
         PluginRequest::Warnings => Task::ready(Ok(OpResult::Warnings({
             let host = host.read(cx);
+            let tool_notes = host.tool_notes();
             host.records
                 .keys()
                 .filter_map(|id| {
                     host.failure(id)
                         .or_else(|| host.skipped.get(id).cloned())
+                        .or_else(|| tool_notes.get(id).cloned())
                         .map(|error| format!("plugin {id}: {error}"))
                 })
                 .collect()
@@ -1053,6 +1055,7 @@ impl PluginHost {
 
     #[must_use]
     pub fn status(&self) -> Vec<PluginStatus> {
+        let tool_notes = self.tool_notes();
         self.records
             .iter()
             .map(|(id, record)| {
@@ -1076,10 +1079,41 @@ impl PluginHost {
                     enabled: record.enabled,
                     slow: watchdog.is_some_and(|watchdog| watchdog.slow),
                     error: self.failure(id),
-                    note: self.skipped.get(id).cloned(),
+                    note: self
+                        .skipped
+                        .get(id)
+                        .cloned()
+                        .or_else(|| tool_notes.get(id).cloned()),
                 }
             })
             .collect()
+    }
+
+    /// Tool names are global to an agent, so a name two plugins declare reaches it once. The note
+    /// names the later plugin and the one that owns the name.
+    pub(crate) fn tool_notes(&self) -> BTreeMap<PluginId, String> {
+        let mut owners: BTreeMap<&str, &PluginId> = BTreeMap::new();
+        let mut notes = BTreeMap::new();
+        for (id, active) in &self.active {
+            for tool in &active.manifest.tools {
+                match owners.get(tool.name.as_str()) {
+                    Some(owner) if *owner != id => {
+                        notes.insert(
+                            id.clone(),
+                            format!(
+                                "tool {} is also declared by plugin {owner}; the agent sees one",
+                                tool.name
+                            ),
+                        );
+                    }
+                    Some(_) => {}
+                    None => {
+                        owners.insert(&tool.name, id);
+                    }
+                }
+            }
+        }
+        notes
     }
 
     /// The themes of enabled plugins.

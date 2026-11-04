@@ -99,12 +99,14 @@ pub(crate) async fn dispatch_thread(
             Workspace::refresh(this, cx).await?;
             Ok(OpResult::Done)
         }
-        ThreadOp::SetMetadata { id, metadata } => {
+        ThreadOp::SetMetadata {
+            id,
+            plugin_id,
+            value,
+        } => {
             thread(this, &id, cx)?;
             database
-                .call(move |store| {
-                    store.set_thread_metadata(&id, &metadata.plugin_id, &metadata.value)
-                })
+                .call(move |store| store.set_thread_metadata(&id, &plugin_id, &value))
                 .await?;
             this.update(cx, |_, cx| {
                 cx.emit(crate::WorkspaceEvent::Changed);

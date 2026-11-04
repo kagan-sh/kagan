@@ -523,17 +523,14 @@ impl std::fmt::Display for KeymapAction {
     }
 }
 
-/// The chord an action answers to. A saved override wins. Off macOS, `secondary` is Ctrl+Shift,
-/// because a bare Ctrl chord belongs to the program.
+/// The chord an action answers to when the person has not saved one. Off macOS, `secondary` is
+/// Ctrl+Shift, because a bare Ctrl chord belongs to the program.
 #[must_use]
-pub fn effective_chord(name: &str, keymap: &Keymap, platform: KeyPlatform) -> String {
-    if let Some(saved) = keymap.shared.get(name) {
-        return saved.clone();
-    }
-    let Some(shortcut) = SHORTCUTS.iter().find(|shortcut| shortcut.name == name) else {
-        return String::new();
-    };
-    expand_secondary(shortcut.chord, platform)
+pub fn default_chord(name: &str, platform: KeyPlatform) -> Option<String> {
+    SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.name == name)
+        .map(|shortcut| expand_secondary(shortcut.chord, platform))
 }
 
 /// `secondary` is the platform key on macOS and Ctrl+Shift elsewhere. A following `shift-` is already in Ctrl+Shift.
@@ -1240,8 +1237,12 @@ pub enum ThreadOp {
     SetMetadata {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
-        #[command(flatten)]
-        metadata: Metadata,
+        /// The plugin whose metadata this is
+        #[arg(long, value_name = "PLUGIN_ID")]
+        plugin_id: PluginId,
+        /// The metadata as JSON
+        #[arg(long, value_name = "JSON", value_parser = StringValueParser::new().map(json))]
+        value: Value,
     },
     /// A thread's events
     Events {
@@ -1615,16 +1616,20 @@ pub struct Run {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Args)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
+    /// The plugin whose metadata this is
     #[arg(
-        long = "metadata-plugin",
+        long = "plugin-id",
         id = "metadata_plugin",
+        value_name = "PLUGIN_ID",
         required = false,
         requires = "metadata_value"
     )]
     pub plugin_id: PluginId,
+    /// The metadata as JSON
     #[arg(
         long = "metadata",
         id = "metadata_value",
+        value_name = "JSON",
         required = false,
         requires = "metadata_plugin",
         value_parser = StringValueParser::new().map(json)

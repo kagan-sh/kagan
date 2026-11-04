@@ -99,17 +99,18 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
             .map(|command| {
                 let action = command.action();
                 let keys = command
-                    .key()
+                    .key
+                    .as_deref()
                     .filter(|_| !refused.iter().any(|refused| refused.action == action))
                     .map(parse)
                     .unwrap_or_default();
                 let shortcut = Shortcut {
                     target: KeymapAction::Plugin {
                         plugin: plugin.clone(),
-                        command: command.id().to_owned(),
+                        command: command.id.clone(),
                     },
-                    id: format!("plugin-{}-{}", plugin.0, command.id()),
-                    title: command.title().to_owned(),
+                    id: format!("plugin-{}-{}", plugin.0, command.id),
+                    title: command.title.clone(),
                     keys,
                 };
                 shortcut_row(kagan, &shortcut, &refused, &labels, window, cx)
@@ -148,7 +149,7 @@ pub(in crate::kagan) fn plugin_commands(
         .filter_map(|status| {
             let own: Vec<_> = commands
                 .iter()
-                .filter(|command| command.plugin() == &status.id)
+                .filter(|command| command.plugin == status.id)
                 .cloned()
                 .collect();
             (!own.is_empty()).then(|| (status.id.clone(), status.name.as_str().to_owned(), own))
@@ -165,7 +166,7 @@ fn labels(cx: &App) -> Labels {
         .flat_map(|(_, name, commands)| {
             commands
                 .into_iter()
-                .map(move |command| (command.action(), format!("{} in {name}", command.title())))
+                .map(move |command| (command.action(), format!("{} in {name}", command.title)))
         });
     built_in.chain(plugins).collect()
 }

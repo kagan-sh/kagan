@@ -409,11 +409,11 @@ Options:
       --lifecycle-owner-thread-id <LIFECYCLE_OWNER_THREAD_ID>
           
 
-      --metadata-plugin <metadata_plugin>
-          
+      --plugin-id <PLUGIN_ID>
+          The plugin whose metadata this is
 
-      --metadata <metadata_value>
-          
+      --metadata <JSON>
+          The metadata as JSON
 
   -h, --help
           Print help
@@ -877,18 +877,18 @@ Options:
 ```text
 Set a plugin's metadata on a thread
 
-Usage: kg thread set-metadata [OPTIONS] <ID>
+Usage: kg thread set-metadata --plugin-id <PLUGIN_ID> --value <JSON> <ID>
 
 Arguments:
   <ID>
           [env: KG_THREAD_ID=]
 
 Options:
-      --metadata-plugin <metadata_plugin>
-          
+      --plugin-id <PLUGIN_ID>
+          The plugin whose metadata this is
 
-      --metadata <metadata_value>
-          
+      --value <JSON>
+          The metadata as JSON
 
   -h, --help
           Print help

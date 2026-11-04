@@ -174,7 +174,7 @@ pub(crate) async fn withdraw(
         .map_err(closed)?;
     database
         .call(move |store| {
-            store.remove_pending_interaction(&raised.id)?;
+            store.delete_pending_interaction(&raised.id)?;
             if store
                 .thread(&raised.thread_id)?
                 .is_some_and(|thread| thread.latest_attention_at == raised.asked_at)
@@ -201,7 +201,7 @@ pub(crate) async fn remove_interactions(
     database
         .call(move |store| {
             for id in &ids {
-                store.remove_pending_interaction(id)?;
+                store.delete_pending_interaction(id)?;
             }
             Ok(())
         })
@@ -218,7 +218,7 @@ pub(crate) async fn clear_interactions(
     database
         .call(move |store| {
             for interaction in store.pending_interactions(&id)? {
-                store.remove_pending_interaction(&interaction.id)?;
+                store.delete_pending_interaction(&interaction.id)?;
             }
             Ok(())
         })
@@ -264,7 +264,7 @@ pub(crate) async fn answer(
     })
     .map_err(closed)??;
     database
-        .call(move |store| store.remove_pending_interaction(&interaction_id))
+        .call(move |store| store.delete_pending_interaction(&interaction_id))
         .await?;
     Workspace::events(
         this,

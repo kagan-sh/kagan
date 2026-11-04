@@ -60,22 +60,91 @@ pub(crate) async fn theme(
 }
 
 const KEYMAP: &str = "keymap";
-const PREFERENCES: &[&str] = &[
-    "confirm-archive",
-    "agent-integration",
-    "notify",
-    "update-check",
-    "terminal-font-size",
-    "slot.threads",
-    "slot.review",
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Preference {
+    ConfirmArchive,
+    AgentIntegration,
+    Notify,
+    UpdateCheck,
+    TerminalFontSize,
+    SlotThreads,
+    SlotReview,
+    ReviewViewed,
+    Sidebar,
+    Width,
+}
+
+const PREFERENCES: &[(&str, Preference)] = &[
+    ("confirm-archive", Preference::ConfirmArchive),
+    ("agent-integration", Preference::AgentIntegration),
+    ("notify", Preference::Notify),
+    ("update-check", Preference::UpdateCheck),
+    ("terminal-font-size", Preference::TerminalFontSize),
+    ("slot.threads", Preference::SlotThreads),
+    ("slot.review", Preference::SlotReview),
+    ("review-viewed", Preference::ReviewViewed),
 ];
-const LAYOUT: &[&str] = &[
-    "left-sidebar",
-    "left-width",
-    "right-sidebar",
-    "right-width",
-    "review-wrap",
+const LAYOUT: &[(&str, Preference)] = &[
+    ("left-sidebar", Preference::Sidebar),
+    ("left-width", Preference::Width),
+    ("right-sidebar", Preference::Sidebar),
+    ("right-width", Preference::Width),
+    ("review-wrap", Preference::Sidebar),
 ];
+
+impl Preference {
+    fn parse(key: &str) -> Option<Self> {
+        if let Some((_, preference)) = PREFERENCES.iter().find(|(name, _)| *name == key) {
+            return Some(*preference);
+        }
+        let name = window_layout(key)?;
+        LAYOUT
+            .iter()
+            .find(|(candidate, _)| *candidate == name)
+            .map(|(_, preference)| *preference)
+    }
+
+    fn accepts(self, key: &str, value: &serde_json::Value) -> Result<()> {
+        match self {
+            Self::TerminalFontSize => value
+                .as_u64()
+                .filter(|size| (9..=24).contains(size))
+                .map(|_| ())
+                .ok_or_else(|| {
+                    OpError::Invalid("terminal-font-size must be an integer from 9 to 24".into())
+                }),
+            Self::ConfirmArchive => serde_json::from_value::<bool>(value.clone())
+                .map(|_| ())
+                .map_err(|_| OpError::Invalid("confirm-archive must be a boolean".into())),
+            Self::Sidebar => serde_json::from_value::<bool>(value.clone())
+                .map(|_| ())
+                .map_err(|_| OpError::Invalid(format!("{key} must be a boolean"))),
+            Self::Width => serde_json::from_value::<f32>(value.clone())
+                .map(|_| ())
+                .map_err(|_| OpError::Invalid(format!("{key} must be a number of pixels"))),
+            Self::AgentIntegration => serde_json::from_value::<bool>(value.clone())
+                .map(|_| ())
+                .map_err(|_| OpError::Invalid("agent-integration must be a boolean".into())),
+            Self::SlotThreads | Self::SlotReview => {
+                serde_json::from_value::<kg_domain::SlotChoice>(value.clone())
+                    .map(|_| ())
+                    .map_err(|_| OpError::Invalid(format!("{key} must be a plugin id or kagan")))
+            }
+            Self::UpdateCheck => serde_json::from_value::<bool>(value.clone())
+                .map(|_| ())
+                .map_err(|_| OpError::Invalid("update-check must be a boolean".into())),
+            Self::Notify => serde_json::from_value::<bool>(value.clone())
+                .map(|_| ())
+                .map_err(|_| OpError::Invalid("notify must be a boolean".into())),
+            Self::ReviewViewed => {
+                serde_json::from_value::<std::collections::BTreeMap<String, String>>(value.clone())
+                    .map(|_| ())
+                    .map_err(|_| OpError::Invalid("review-viewed must be a map".into()))
+            }
+        }
+    }
+}
 
 pub(crate) async fn preference(
     this: &WeakEntity<Workspace>,
@@ -94,7 +163,6 @@ pub(crate) async fn preference(
             Ok(OpResult::Setting(value))
         }
         PreferenceOp::Set { key, value } => {
-            known_preference(&key)?;
             preference_value(&key, &value)?;
             let key = key.clone();
             let saved = value.clone();
@@ -112,46 +180,9 @@ pub(crate) async fn preference(
 }
 
 fn preference_value(key: &str, value: &serde_json::Value) -> Result<()> {
-    match window_layout(key).unwrap_or(key) {
-        "terminal-font-size" => value
-            .as_u64()
-            .filter(|size| (9..=24).contains(size))
-            .map(|_| ())
-            .ok_or_else(|| {
-                OpError::Invalid("terminal-font-size must be an integer from 9 to 24".into())
-            }),
-        "confirm-archive" => serde_json::from_value::<bool>(value.clone())
-            .map(|_| ())
-            .map_err(|_| OpError::Invalid("confirm-archive must be a boolean".into())),
-        "left-sidebar" | "right-sidebar" | "review-wrap" => {
-            serde_json::from_value::<bool>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid(format!("{key} must be a boolean")))
-        }
-        "left-width" | "right-width" => serde_json::from_value::<f32>(value.clone())
-            .map(|_| ())
-            .map_err(|_| OpError::Invalid(format!("{key} must be a number of pixels"))),
-        "agent-integration" => serde_json::from_value::<bool>(value.clone())
-            .map(|_| ())
-            .map_err(|_| OpError::Invalid("agent-integration must be a boolean".into())),
-        "slot.threads" | "slot.review" => {
-            serde_json::from_value::<kg_domain::SlotChoice>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid(format!("{key} must be a plugin id or kagan")))
-        }
-        "update-check" => serde_json::from_value::<bool>(value.clone())
-            .map(|_| ())
-            .map_err(|_| OpError::Invalid("update-check must be a boolean".into())),
-        "notify" => serde_json::from_value::<bool>(value.clone())
-            .map(|_| ())
-            .map_err(|_| OpError::Invalid("notify must be a boolean".into())),
-        "review-viewed" => {
-            serde_json::from_value::<std::collections::BTreeMap<String, String>>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid("review-viewed must be a map".into()))
-        }
-        _ => Err(OpError::Invalid(format!("unknown preference {key}"))),
-    }
+    Preference::parse(key)
+        .ok_or_else(|| OpError::Invalid(format!("unknown preference {key}")))?
+        .accepts(key, value)
 }
 
 /// The sidebar layout of one window. The layout is saved per window, as `<window>.<name>`, so
@@ -162,15 +193,13 @@ fn window_layout(key: &str) -> Option<&str> {
         && window
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
-    (window_ok && LAYOUT.contains(&name)).then_some(name)
+    (window_ok && LAYOUT.iter().any(|(candidate, _)| *candidate == name)).then_some(name)
 }
 
 fn known_preference(key: &str) -> Result<()> {
-    if PREFERENCES.contains(&key) || key == "review-viewed" || window_layout(key).is_some() {
-        Ok(())
-    } else {
-        Err(OpError::Invalid(format!("unknown preference {key}")))
-    }
+    Preference::parse(key)
+        .map(|_| ())
+        .ok_or_else(|| OpError::Invalid(format!("unknown preference {key}")))
 }
 
 pub(crate) async fn keymap(
@@ -348,7 +377,7 @@ mod review_wrap_tests {
             .lines()
             .find(|line| line.contains("Read or save a preference:"))
             .expect("the preference help in op.rs");
-        for key in PREFERENCES.iter().copied().chain(["review-viewed"]) {
+        for key in PREFERENCES.iter().map(|(name, _)| *name) {
             assert!(guide.contains(&format!("`{key}`")), "guide missing {key}");
             assert!(
                 behaviour.contains(&format!("`{key}`")),
@@ -356,7 +385,7 @@ mod review_wrap_tests {
             );
             assert!(help.contains(key), "help missing {key}");
         }
-        for key in LAYOUT {
+        for key in LAYOUT.iter().map(|(name, _)| *name) {
             assert!(
                 guide.contains(&format!("`<window>.{key}`")),
                 "guide missing {key}"

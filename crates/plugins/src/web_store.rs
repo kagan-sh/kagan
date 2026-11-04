@@ -150,19 +150,8 @@ pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
     cx: &mut AsyncApp,
 ) -> StoreRemoval {
-    if ids.is_empty() {
-        return StoreRemoval {
-            removed: Vec::new(),
-            warnings: Vec::new(),
-        };
-    }
-    #[cfg(target_os = "macos")]
-    if macos_major() < 14 {
-        // Custom stores exist only on macOS 14 or later, so older systems have nothing to delete.
-        return StoreRemoval {
-            removed: ids,
-            warnings: Vec::new(),
-        };
+    if let Some(done) = no_stores(&ids) {
+        return done;
     }
     cx.background_executor().timer(RELEASE_WAIT).await;
     let mut pending = ids;
@@ -175,28 +164,12 @@ pub(crate) async fn remove_web_stores_after_release(
         for id in pending {
             attempts.push((id, remove_one_store(id, cx).await));
         }
-        let still: Vec<[u8; 16]> = attempts
-            .into_iter()
-            .filter_map(|(id, attempt)| match attempt {
-                StoreAttempt::Removed => {
-                    removed.push(id);
-                    None
-                }
-                #[cfg(any(target_os = "macos", test))]
-                StoreAttempt::InUse => Some(id),
-                #[cfg(any(target_os = "macos", test))]
-                StoreAttempt::Failed(message) => {
-                    warnings.push(message);
-                    None
-                }
-            })
-            .collect();
+        let (done, still, failed) = tally(attempts);
+        removed.extend(done);
+        warnings.extend(failed);
         if still.is_empty() || waited >= RETRY_BUDGET + RELEASE_WAIT {
             for _ in &still {
-                warnings.push(
-                    "the plugin is removed, but WebKit still held a page store (DataStoreInUse)"
-                        .into(),
-                );
+                warnings.push(IN_USE_WARNING.into());
             }
             return StoreRemoval { removed, warnings };
         }
@@ -245,40 +218,56 @@ fn remove_one_native(
 
 // Deletes each store once, with no wait or retry.
 pub(crate) async fn remove_web_stores(ids: Vec<[u8; 16]>, cx: &mut AsyncApp) -> StoreRemoval {
-    if ids.is_empty() {
-        return StoreRemoval {
-            removed: Vec::new(),
-            warnings: Vec::new(),
-        };
-    }
-    #[cfg(target_os = "macos")]
-    if macos_major() < 14 {
-        return StoreRemoval {
-            removed: ids,
-            warnings: Vec::new(),
-        };
+    if let Some(done) = no_stores(&ids) {
+        return done;
     }
     let mut attempts = Vec::new();
     for id in ids {
         attempts.push((id, remove_one_store(id, cx).await));
     }
-    let mut removed = Vec::new();
-    let warnings = attempts
-        .into_iter()
-        .filter_map(|(id, attempt)| match attempt {
-            StoreAttempt::Removed => {
-                removed.push(id);
-                None
-            }
-            #[cfg(any(target_os = "macos", test))]
-            StoreAttempt::InUse => Some(
-                "the plugin is removed, but WebKit still held a page store (DataStoreInUse)".into(),
-            ),
-            #[cfg(any(target_os = "macos", test))]
-            StoreAttempt::Failed(message) => Some(message),
-        })
-        .collect();
+    let (removed, still, mut warnings) = tally(attempts);
+    for _ in &still {
+        warnings.push(IN_USE_WARNING.into());
+    }
     StoreRemoval { removed, warnings }
+}
+
+const IN_USE_WARNING: &str =
+    "the plugin is removed, but WebKit still held a page store (DataStoreInUse)";
+
+/// The answer for an empty list or an old macOS, where custom stores do not exist.
+fn no_stores(ids: &[[u8; 16]]) -> Option<StoreRemoval> {
+    if ids.is_empty() {
+        return Some(StoreRemoval {
+            removed: Vec::new(),
+            warnings: Vec::new(),
+        });
+    }
+    #[cfg(target_os = "macos")]
+    if macos_major() < 14 {
+        return Some(StoreRemoval {
+            removed: ids.to_vec(),
+            warnings: Vec::new(),
+        });
+    }
+    None
+}
+
+/// Splits attempts into deleted ids, ids `WebKit` still holds, and failures.
+fn tally(attempts: Vec<([u8; 16], StoreAttempt)>) -> (Vec<[u8; 16]>, Vec<[u8; 16]>, Vec<String>) {
+    let mut removed = Vec::new();
+    let mut still = Vec::new();
+    let mut warnings = Vec::new();
+    for (id, attempt) in attempts {
+        match attempt {
+            StoreAttempt::Removed => removed.push(id),
+            #[cfg(any(target_os = "macos", test))]
+            StoreAttempt::InUse => still.push(id),
+            #[cfg(any(target_os = "macos", test))]
+            StoreAttempt::Failed(message) => warnings.push(message),
+        }
+    }
+    (removed, still, warnings)
 }
 
 // Retries `WebKit` store deletion for data folders of plugins that are no longer installed. An

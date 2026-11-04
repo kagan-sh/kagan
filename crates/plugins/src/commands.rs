@@ -68,45 +68,20 @@ pub enum KeySource {
 
 #[derive(Clone, Debug)]
 pub struct CommandContribution {
-    plugin: PluginId,
-    command: Command,
-    key: Option<String>,
-    source: KeySource,
+    pub plugin: PluginId,
+    pub id: String,
+    pub title: String,
+    pub key: Option<String>,
+    pub when: CommandWhen,
+    pub header: bool,
+    pub source: KeySource,
 }
 
 impl CommandContribution {
-    #[must_use]
-    pub fn plugin(&self) -> &PluginId {
-        &self.plugin
-    }
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.command.id
-    }
-    #[must_use]
-    pub fn title(&self) -> &str {
-        &self.command.title
-    }
-    #[must_use]
-    pub fn key(&self) -> Option<&str> {
-        self.key.as_deref()
-    }
-    #[must_use]
-    pub fn when(&self) -> CommandWhen {
-        self.command.when
-    }
-    #[must_use]
-    pub fn header(&self) -> bool {
-        self.command.header
-    }
-    #[must_use]
-    pub fn source(&self) -> KeySource {
-        self.source
-    }
     /// The name `kg keymap` gives this command.
     #[must_use]
     pub fn action(&self) -> String {
-        format!("{}:{}", self.plugin, self.command.id)
+        format!("{}:{}", self.plugin, self.id)
     }
 }
 
@@ -123,9 +98,12 @@ impl PluginHost {
                     };
                     CommandContribution {
                         plugin: plugin.clone(),
+                        id: command.id.clone(),
+                        title: command.title.clone(),
                         key,
+                        when: command.when,
+                        header: command.header,
                         source,
-                        command: command.clone(),
                     }
                 })
             })
@@ -265,7 +243,7 @@ pub(crate) async fn keymap(
                     crate::keys::conflict(&crate::keys::window_keys(cx), &entered).or_else(|| {
                         commands
                             .iter()
-                            .filter(|item| item.plugin != plugin || item.command.id != command)
+                            .filter(|item| item.plugin != plugin || item.id != command)
                             .find(|item| {
                                 item.key.as_deref().is_some_and(|other| {
                                     crate::keys::overlaps(

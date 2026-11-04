@@ -27,7 +27,7 @@ pub use op::{
     SelectMode, SettingsOp, Shortcut, Skill, SkillOp, SkillSource, Slot, SlotChoice, SurfaceItem,
     SurfaceOp, SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThemeOp, ThemeSettings,
     ThreadOp, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
-    UiSnapshot, WaitOutcome, WindowOp, branch_slug, check, effective_chord, expand_secondary,
+    UiSnapshot, WaitOutcome, WindowOp, branch_slug, check, default_chord, expand_secondary,
     invalid_json, valid_theme_choice, valid_theme_id,
 };
 pub use program::{
@@ -36,8 +36,8 @@ pub use program::{
 pub use record::{
     AgentTool, Environment, EnvironmentProvider, EnvironmentStatus, Found, IndexEntry,
     InteractionOption, Listing, PendingInteraction, Plugin, Project, ProjectKind, Section, Sidebar,
-    Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span, order_sidebar_projects,
-    owned_thread_ids,
+    Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span, newest_first,
+    order_sidebar_projects, owned_thread_ids,
 };
 pub use review::{ReviewRow, review_rows};
 pub use theme::{Color, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError};

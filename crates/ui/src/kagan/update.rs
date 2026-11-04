@@ -52,6 +52,20 @@ fn say(message: String, cx: &mut App) {
     }
 }
 
+/// The sentence for an update that is arriving in the background, wherever it is shown.
+pub(super) fn progress_sentence(state: &UpdateState) -> Option<String> {
+    match state {
+        UpdateState::Downloading { version } => Some(format!("Downloading kagan {version}…")),
+        UpdateState::Ready {
+            version,
+            at_quit: true,
+            ..
+        } => Some(format!("kagan {version} installs when kagan quits.")),
+        UpdateState::Ready { version, .. } => Some(format!("kagan {version} is ready to install.")),
+        _ => None,
+    }
+}
+
 /// The quiet line over the center while a newer kagan waits.
 pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
     let hidden = cx.try_global::<Hidden>().map(|hidden| hidden.0.clone());
@@ -64,14 +78,7 @@ pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
                 _ => format!("kagan {version} is available."),
             }
         }
-        UpdateState::Downloading { version } => format!("Downloading kagan {version}…"),
-        UpdateState::Ready {
-            version,
-            at_quit: true,
-            ..
-        } => format!("kagan {version} installs when kagan quits."),
-        UpdateState::Ready { version, .. } => format!("kagan {version} is ready to install."),
-        _ => return None,
+        state => progress_sentence(state)?,
     };
     Some(
         h_flex()

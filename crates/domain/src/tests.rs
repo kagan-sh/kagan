@@ -567,9 +567,8 @@ fn reset_drops_the_saved_shortcut_and_ignores_old_platform_maps() {
 
 #[test]
 fn every_platform_keeps_the_same_effective_bindings() {
-    use crate::{KeyPlatform, Keymap, SHORTCUTS, effective_chord};
-    let keymap = Keymap::default();
-    let chord = |name, platform| effective_chord(name, &keymap, platform);
+    use crate::{KeyPlatform, SHORTCUTS, default_chord};
+    let chord = |name, platform| default_chord(name, platform).expect("a built-in shortcut");
     for shortcut in SHORTCUTS {
         assert_eq!(
             chord(shortcut.name, KeyPlatform::Windows),
@@ -599,7 +598,7 @@ fn every_platform_keeps_the_same_effective_bindings() {
 
 #[test]
 fn no_two_default_shortcuts_share_a_key_on_any_platform() {
-    use crate::{KeyPlatform, Keymap, SHORTCUTS, effective_chord};
+    use crate::{KeyPlatform, SHORTCUTS, default_chord};
     fn keys(chord: &str) -> (Vec<&str>, &str) {
         let mut modifiers = Vec::new();
         let mut rest = chord;
@@ -613,14 +612,13 @@ fn no_two_default_shortcuts_share_a_key_on_any_platform() {
         modifiers.sort_unstable();
         (modifiers, rest)
     }
-    let keymap = Keymap::default();
     for platform in [KeyPlatform::Mac, KeyPlatform::Windows, KeyPlatform::Linux] {
         let chords: Vec<_> = SHORTCUTS
             .iter()
             .map(|shortcut| {
                 (
                     shortcut.name,
-                    effective_chord(shortcut.name, &keymap, platform),
+                    default_chord(shortcut.name, platform).expect("a built-in shortcut"),
                 )
             })
             .collect();

@@ -129,7 +129,7 @@ fn cli_run_parses_a_program() {
         "prj_1",
         "--program",
         "codex",
-        "--metadata-plugin",
+        "--plugin-id",
         "p",
         "--metadata",
         r#"{"master":true}"#,
@@ -144,15 +144,7 @@ fn cli_run_parses_a_program() {
         })
     );
     assert!(
-        Cli::try_parse_from([
-            "kg",
-            "thread",
-            "set-metadata",
-            "t",
-            "--metadata-plugin",
-            "p"
-        ])
-        .is_err()
+        Cli::try_parse_from(["kg", "thread", "set-metadata", "t", "--plugin-id", "p"]).is_err()
     );
     assert!(
         Cli::try_parse_from(["kg", "thread", "spawn", "--project-id", "p", "--input", "x"])
