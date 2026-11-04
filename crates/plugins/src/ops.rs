@@ -416,8 +416,8 @@ async fn remove(
     let store_ids = crate::page::read_store_ids(&data);
     host.update(cx, |host, cx| {
         host.unload(&id, cx);
-        // Drop native pages now: they stay in a UI global until the next frame otherwise, and
-        // WebKit then refuses remove_data_store with DataStoreInUse.
+        // Drop native pages now. Otherwise they stay in a UI global until the next frame, and
+        // `WebKit` then refuses `remove_data_store` with `DataStoreInUse`.
         host.drop_pages(&id, &store_ids, cx);
         host.active.remove(&id);
         host.records.remove(&id);
@@ -426,8 +426,8 @@ async fn remove(
         host.identities.remove(&id);
         cx.notify();
     });
-    // The WKWebView and frame mouse listener hold the store until the next draw. Wait for that,
-    // then retry InUse before clearing store.id.
+    // The native view and its frame mouse listener keep the store until the next draw. Refresh
+    // so they let go, then retry while `WebKit` still holds it. A held store keeps its `store.id`.
     cx.update(gpui_kit::App::refresh_windows);
     let cleared = cx
         .spawn(async move |cx| crate::page::remove_web_stores_after_release(store_ids, cx).await)

@@ -610,7 +610,7 @@ struct Held {
     page: Option<Entity<crate::page::Page>>,
 }
 
-/// Drops native pages that hold these stores so `WebKit` releases them before remove.
+/// Drops native pages that hold these stores so `WebKit` releases them before removal.
 pub(crate) fn drop_stores(stores: &[[u8; 16]], cx: &mut App) {
     #[cfg(target_os = "macos")]
     if !stores.is_empty() && cx.has_global::<Pages>() {

@@ -64,7 +64,7 @@ pub(super) fn clear(cx: &mut App) {
     let _ = cx;
 }
 
-/// Drops every open page for a plugin so `WebKit` releases their stores before remove.
+/// Drops every open page for a plugin so `WebKit` releases their stores before removal.
 pub(crate) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
     #[cfg(target_os = "macos")]
     native::drop_plugin(plugin, cx);

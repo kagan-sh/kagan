@@ -315,7 +315,7 @@ pub struct StoreRemoval {
 
 /// How long a store delete waits for GPUI to drop the native `WebView` and frame mouse listener.
 pub(crate) const RELEASE_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
-// Longest time spent retrying `InUse`, not counting the first wait.
+// How long to keep retrying `InUse`. The first release wait does not count.
 const RETRY_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
 const RETRY_START: std::time::Duration = std::time::Duration::from_millis(50);
 const RETRY_MAX: std::time::Duration = std::time::Duration::from_millis(250);
@@ -362,7 +362,7 @@ impl Drop for RemoveHookGuard {
 }
 
 /// Waits for the native view to release, then deletes each store, retrying `DataStoreInUse` with
-/// backoff for a few seconds. Ids still held stay out of `removed` so their `store.id` files remain
+/// backoff for a few seconds. Ids still held stay out of `removed`, so their `store.id` files remain
 /// for a later start.
 pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
@@ -376,7 +376,7 @@ pub(crate) async fn remove_web_stores_after_release(
     }
     #[cfg(target_os = "macos")]
     if macos_major() < 14 {
-        // Custom stores need macOS 14+. Older systems never created one; drop the id files.
+        // Custom stores need macOS 14 or later. Older systems never made one, so no WebKit delete runs.
         return StoreRemoval {
             removed: ids,
             warnings: Vec::new(),
@@ -462,7 +462,7 @@ fn remove_one_native(
     std::future::ready(StoreAttempt::Removed)
 }
 
-/// Deletes each store once, with no wait or retry. The host-start orphan retry uses it.
+/// Deletes each store once, with no wait or retry. `retry_orphan_stores` uses it.
 pub(crate) async fn remove_web_stores(
     ids: Vec<[u8; 16]>,
     cx: &mut gpui_kit::AsyncApp,
@@ -503,8 +503,8 @@ pub(crate) async fn remove_web_stores(
     StoreRemoval { removed, warnings }
 }
 
-/// Retries `WebKit` store deletion for plugin data folders that are no longer installed. A prior
-/// remove may have left `store.id` when `WebKit` still held the view.
+/// Retries `WebKit` store deletion for plugin data folders whose plugin is no longer installed. An
+/// earlier remove may have left `store.id` behind while `WebKit` still held the view.
 pub(crate) async fn retry_orphan_stores(
     data_dir: &Path,
     known: &std::collections::BTreeSet<kg_domain::PluginId>,

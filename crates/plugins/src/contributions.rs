@@ -59,7 +59,7 @@ pub struct PanelContribution {
     pub(crate) view: Option<String>,
     #[serde(default)]
     pub(crate) web: Option<String>,
-    /// Keep the page's cookies and storage under this plugin's data folder.
+    /// The page keeps its cookies and storage under this plugin's data folder.
     #[serde(default)]
     pub(crate) store: bool,
     pub(crate) placement: Placement,

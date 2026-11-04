@@ -272,7 +272,7 @@ pub struct PluginHost {
     next_activation: u64,
     permits: BTreeMap<PluginId, Arc<Mutex<Option<u64>>>>,
     components: gpui_shell::FrozenComponentRegistry,
-    // UI drops native pages for a plugin so `WebKit` releases their stores before remove.
+    // The UI drops a plugin's native pages, so `WebKit` releases their stores before removal.
     drop_pages: Option<DropPages>,
     _events: Subscription,
     _watchdog: Task<()>,
