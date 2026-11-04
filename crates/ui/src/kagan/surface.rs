@@ -629,7 +629,7 @@ impl Kagan {
     fn surface_list(&self, window: &Window, cx: &App) -> Vec<SurfaceItem> {
         destinations(cx)
             .into_iter()
-            .filter_map(|declared| {
+            .map(|declared| {
                 let placement = declared.placement;
                 let current = matching_slot(
                     self.tool.as_ref(),
@@ -650,14 +650,14 @@ impl Kagan {
                     && committed.is_some_and(|slot| {
                         current.is_none_or(|current| current.generation == slot.generation)
                     });
-                Some(SurfaceItem {
+                SurfaceItem {
                     plugin: declared.plugin,
                     id: declared.id,
                     title: declared.title,
                     placement,
                     open,
                     visible,
-                })
+                }
             })
             .collect()
     }
@@ -700,8 +700,8 @@ impl Declared {
     pub(super) fn from(plugin: PluginId, panel: &kg_plugins::PanelContribution) -> Option<Self> {
         Some(Self {
             plugin,
-            id: panel.id.to_owned(),
-            title: panel.title.to_owned(),
+            id: panel.id.clone(),
+            title: panel.title.clone(),
             placement: drawn(panel.placement)?,
         })
     }

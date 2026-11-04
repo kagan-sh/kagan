@@ -827,8 +827,6 @@ pub(crate) struct Grant {
     pub(crate) instruct: bool,
     #[serde(default)]
     pub(crate) skills: bool,
-    #[serde(default)]
-    pub(crate) open_url: bool,
 }
 
 impl Grant {
@@ -854,7 +852,6 @@ impl Grant {
                 || crate::development::calls_webview_store(root),
             instruct: manifest.instruct,
             skills: !manifest.skills.is_empty(),
-            open_url: manifest.powers.open_url,
         }
     }
 
@@ -923,7 +920,6 @@ impl Grant {
             page_store: self.page_store && other.page_store,
             instruct: self.instruct && other.instruct,
             skills: self.skills && other.skills,
-            open_url: self.open_url && other.open_url,
         }
     }
 
@@ -952,7 +948,6 @@ impl Grant {
             && (!self.page_store || approved.page_store)
             && (!self.instruct || approved.instruct)
             && (!self.skills || approved.skills)
-            && (!self.open_url || approved.open_url)
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -1018,7 +1013,7 @@ impl Grant {
         if self.skills {
             lines.push("adds skills an agent can load".into());
         }
-        if self.open_url {
+        if powers.open_url {
             lines.push("opens links in your browser".into());
         }
         lines

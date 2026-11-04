@@ -185,7 +185,7 @@ impl Kagan {
                 .read(cx)
                 .status()
                 .iter()
-                .any(|status| *&status.id == plugin)
+                .any(|status| status.id == plugin)
         {
             host.read(cx).report(&plugin, &line);
         }

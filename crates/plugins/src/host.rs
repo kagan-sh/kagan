@@ -110,7 +110,7 @@ impl PluginHost {
     pub fn allows_open_url(&self, id: &PluginId) -> bool {
         self.active
             .get(id)
-            .is_some_and(|active| active.grant.open_url)
+            .is_some_and(|active| active.grant.powers.open_url)
     }
 
     #[must_use]

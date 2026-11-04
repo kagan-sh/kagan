@@ -257,7 +257,7 @@ fn added(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
         for panel in &ui.panels {
             match (panel.replaces, panel.placement) {
                 (Some(slot), _) => parts.push(format!("offers a {}", slot.name())),
-                (None, _) => parts.push(panel.title.to_owned()),
+                (None, _) => parts.push(panel.title.clone()),
             }
         }
     }
