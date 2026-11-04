@@ -4358,6 +4358,22 @@ async fn a_program_that_cannot_start_fails_the_thread(cx: &mut TestAppContext) {
     assert!(pid_of(&threads[0].id, cx).is_none());
 }
 
+#[test]
+fn a_data_dir_that_cannot_be_made_is_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("not-a-folder");
+    std::fs::write(&file, "x").unwrap();
+    let data_dir = file.join("kagan");
+    let Err(error) = crate::workspace::open_data(&data_dir) else {
+        panic!("opened");
+    };
+    let message = error.to_string();
+    assert!(
+        message.contains(&data_dir.display().to_string()),
+        "{message}"
+    );
+}
+
 #[gpui_kit::test]
 async fn quitting_ends_every_program(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use gpui_kit::{App, AppContext, AsyncApp, Context, Entity, WeakEntity};
@@ -95,17 +95,22 @@ async fn spawn(
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
         env.push(("LANG".into(), locale.into()));
     }
-    Terminal::spawn(
-        Launch {
-            program: program.path.into(),
-            args,
-            cwd: Some(folder),
-            env,
-        },
-        cols,
-        rows,
+    let launch = Launch {
+        program: program.path.clone().into(),
+        args,
+        cwd: Some(folder.clone()),
+        env,
+    };
+    Terminal::spawn(launch, cols, rows)
+        .map_err(|error| start_failure(&program.path, &folder, &error))
+}
+
+fn start_failure(program: &Path, folder: &Path, error: &std::io::Error) -> String {
+    format!(
+        "could not start {} in {}: {error}",
+        program.display(),
+        folder.display()
     )
-    .map_err(|error| error.to_string())
 }
 
 #[cfg(not(unix))]

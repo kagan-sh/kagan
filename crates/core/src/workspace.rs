@@ -37,7 +37,8 @@ impl Permit {
 
 fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
     let personal = data_dir.join("personal");
-    std::fs::create_dir_all(&personal)?;
+    std::fs::create_dir_all(&personal)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", personal.display())))?;
     if store
         .project(&kg_domain::ProjectId("personal".into()))
         .map_err(closed)?
@@ -48,13 +49,26 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
                 id: kg_domain::ProjectId("personal".into()),
                 kind: kg_domain::ProjectKind::Personal,
                 name: "Personal".into(),
-                path: dunce::canonicalize(&personal)?,
+                path: dunce::canonicalize(&personal)
+                    .map_err(|error| OpError::Failed(format!("{}: {error}", personal.display())))?,
                 git_remote_url: None,
                 sort: 0,
             })
             .map_err(closed)?;
     }
     Ok(())
+}
+
+pub(crate) fn open_data(data_dir: &Path) -> Result<(Store, PathBuf)> {
+    std::fs::create_dir_all(data_dir)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", data_dir.display())))?;
+    let data_dir = dunce::canonicalize(data_dir)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", data_dir.display())))?;
+    let database = data_dir.join("kagan.sqlite3");
+    let store = Store::open(&database)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", database.display())))?;
+    ensure_personal(&data_dir, &store)?;
+    Ok((store, data_dir))
 }
 
 pub(crate) enum Request {
@@ -229,14 +243,7 @@ impl Workspace {
     /// Returns an error if the data folder or database cannot be opened.
     pub fn open(data_dir: PathBuf, cli: PathBuf, cx: &mut App) -> Task<Result<Entity<Self>>> {
         let executor = cx.background_executor().clone();
-        let opened = executor.spawn(async move {
-            std::fs::create_dir_all(&data_dir)?;
-            let data_dir = dunce::canonicalize(&data_dir)?;
-            let store = Store::open(data_dir.join("kagan.sqlite3"))
-                .map_err(|error| OpError::Failed(error.to_string()))?;
-            ensure_personal(&data_dir, &store)?;
-            Ok::<_, OpError>((store, data_dir))
-        });
+        let opened = executor.spawn(async move { open_data(&data_dir) });
         cx.spawn(async move |cx| {
             let (store, data_dir) = opened.await?;
             let (database, database_task) = Database::new(store, &executor);
