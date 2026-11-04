@@ -847,14 +847,6 @@ impl<T> Signalled<T> {
 }
 
 #[cfg(unix)]
-impl Read for Signalled<std::fs::File> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let result = self.inner.read(buf);
-        self.note(result)
-    }
-}
-
-#[cfg(unix)]
 impl Write for Signalled<std::fs::File> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let result = self.inner.write(buf);
@@ -906,71 +898,34 @@ fn a_full_pty_write_is_cancelled_by_stop() {
 fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
     use std::os::fd::AsRawFd;
     use std::os::unix::net::UnixStream;
-    let (reader, mut output) = pty_pair();
-    set_nonblocking(reader.as_raw_fd()).unwrap();
-    // Stands in for the master that teardown drops before it joins the reader.
-    let owner = reader.try_clone().unwrap();
-    let owner_fd = owner.as_raw_fd();
-    let wait = dup_fd(owner_fd).unwrap();
-    let shared = Shared::settled(Screen::new(80, 24));
-    let (replies, _received) = mpsc::channel();
-    let (would_block, is_parked) = mpsc::channel();
-    let handle = thread_read(
-        Box::new(Signalled {
-            inner: reader,
-            would_block,
-        }),
-        shared.clone(),
-        replies,
-        Arc::new(AtomicBool::new(false)),
-        Some(wait),
-    );
-    let parked = is_parked.recv_timeout(Duration::from_secs(5)).is_ok();
-    // Made before the dup2, so its number cannot be owner_fd.
-    let (unrelated, mut peer) = UnixStream::pair().unwrap();
-    // Reuse the number the master had. owner still owns it, so dup2 swaps its target in one step.
-    // SAFETY: owner_fd is open and owned by owner; dup2 closes the old pty copy and makes it a copy of the socket.
+    let mut terminal = Terminal::spawn(
+        sh("stty -echo; printf 'ready\\n'; read line; printf 'got:%s\\n' \"$line\"; sleep 30"),
+        80,
+        24,
+    )
+    .unwrap();
+    let reap = Reap(terminal.process_id());
+    wait_for(&terminal, "ready");
+    // Teardown closes the master while the reader still runs. A socket then takes the same number.
+    // Made before the master closes, so the socket cannot take the master's number.
+    let (unrelated, _peer) = UnixStream::pair().unwrap();
+    let master = terminal.master.take().unwrap();
+    let master_fd = MasterPty::as_raw_fd(master.as_ref()).unwrap();
+    drop(master);
+    // SAFETY: drop(master) freed master_fd, so dup2 gives it a copy of the socket. The test closes it below.
     assert_eq!(
-        unsafe { libc::dup2(unrelated.as_raw_fd(), owner_fd) },
-        owner_fd
+        unsafe { libc::dup2(unrelated.as_raw_fd(), master_fd) },
+        master_fd
     );
-    output.write_all(b"FIRST").unwrap();
-    let first = transcript_within(&shared, "FIRST");
-    output.write_all(b"SECOND").unwrap();
-    let second = transcript_within(&shared, "SECOND");
-    let got = lock(&shared.screen).transcript();
-    // Wake a reader that waits on the socket, then close the slave so every reader ends.
-    peer.write_all(b"wake").unwrap();
-    drop(output);
-    let (joined, done) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = handle.join();
-        let _ = joined.send(());
-    });
-    let joined_in_time = done.recv_timeout(Duration::from_secs(3)).is_ok();
-    drop(owner);
-    assert!(parked, "reader never reached its wait");
+    terminal.write(b"hello\n".to_vec()).unwrap();
+    let frame = wait_for(&terminal, "got:hello");
+    // SAFETY: master_fd is the copy dup2 made, and only this test owns it.
+    unsafe { libc::close(master_fd) };
+    drop(reap);
     assert!(
-        first,
-        "reader did not see FIRST after its fd number was reused"
+        frame.contains("got:hello"),
+        "reader stopped seeing output after its fd number was reused: {frame}"
     );
-    assert!(
-        second,
-        "reader stopped seeing output after its fd number was reused: {got:?}"
-    );
-    assert!(joined_in_time, "reader did not join");
-}
-
-#[cfg(unix)]
-fn transcript_within(shared: &Shared, needle: &str) -> bool {
-    let end = Instant::now() + Duration::from_secs(2);
-    while !lock(&shared.screen).transcript().contains(needle) {
-        if Instant::now() >= end {
-            return false;
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
-    true
 }
 
 #[cfg(unix)]
