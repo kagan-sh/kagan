@@ -427,7 +427,7 @@ async fn remove(
         cx.notify();
     });
     // The native view and its frame mouse listener hold the store until the next draw. Refresh
-    // so they let go; the retry then waits while `WebKit` holds it. A held store keeps `store.id`.
+    // so they let go. Then the retry waits while `WebKit` holds it. A held store keeps `store.id`.
     cx.update(gpui_kit::App::refresh_windows);
     let cleared = cx
         .spawn(async move |cx| crate::page::remove_web_stores_after_release(store_ids, cx).await)

@@ -315,7 +315,7 @@ pub struct StoreRemoval {
 
 /// Wait before a store delete so GPUI drops the native `WebView` and its frame mouse listener.
 pub(crate) const RELEASE_WAIT: std::time::Duration = std::time::Duration::from_millis(50);
-// Retry budget for `InUse`. The first release wait is not counted.
+// Time allowed for retries after `InUse`. The first release wait does not count.
 const RETRY_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
 const RETRY_START: std::time::Duration = std::time::Duration::from_millis(50);
 const RETRY_MAX: std::time::Duration = std::time::Duration::from_millis(250);
@@ -361,9 +361,9 @@ impl Drop for RemoveHookGuard {
     }
 }
 
-/// Waits for the native view to release, then deletes each store. Retries `DataStoreInUse` with
-/// backoff for a few seconds. Ids still held stay out of `removed`, so their `store.id` files stay
-/// for a later start.
+/// Waits for the native view to release, then deletes each store. Retries `DataStoreInUse`
+/// with growing waits for up to 3 seconds. Ids still held stay out of `removed`, so their
+/// `store.id` files stay for a later start.
 pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
     cx: &mut gpui_kit::AsyncApp,
@@ -416,7 +416,7 @@ pub(crate) async fn remove_web_stores_after_release(
                         .into(),
                 );
             }
-            // Keep store.id for the ones still in use.
+            // Ids still held keep their `store.id` file.
             return StoreRemoval { removed, warnings };
         }
         cx.background_executor().timer(delay).await;
