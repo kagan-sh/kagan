@@ -49,8 +49,8 @@ CREATE TABLE threads (
     environment_id TEXT REFERENCES environments(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     provider TEXT NOT NULL,
-    model TEXT NOT NULL,
-    reasoning_level TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    reasoning_level TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     visibility TEXT NOT NULL,
     parent_thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,
@@ -131,6 +131,7 @@ CREATE TABLE plugin_values (
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
 ",
     "ALTER TABLE threads ADD COLUMN conversation TEXT;",
+    "ALTER TABLE threads DROP COLUMN model; ALTER TABLE threads DROP COLUMN reasoning_level;",
     r"
 ALTER TABLE projects ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;
 UPDATE projects SET sort = (
@@ -161,10 +162,9 @@ pub struct ScreenRow {
     pub screen_kept: bool,
 }
 
-const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, model, \
-    reasoning_level, status, visibility, parent_thread_id, lifecycle_owner_thread_id, \
-    section_id, pinned, last_read_at, latest_attention_at, archived_at, created_at, \
-    updated_at, title_locked, done";
+const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, status, \
+    visibility, parent_thread_id, lifecycle_owner_thread_id, section_id, pinned, last_read_at, \
+    latest_attention_at, archived_at, created_at, updated_at, title_locked, done";
 
 const OWNED_THREADS: &str = "WITH RECURSIVE owned(id) AS ( \
     SELECT id FROM threads WHERE id = ?1 \
@@ -1234,25 +1234,23 @@ fn thread(row: &Row) -> rusqlite::Result<Thread> {
         environment_id: row.get::<_, Text<_>>(2)?.0,
         title: row.get(3)?,
         provider: row.get(4)?,
-        model: row.get(5)?,
-        reasoning_level: row.get(6)?,
-        status: row.get::<_, Text<_>>(7)?.0,
-        visibility: row.get::<_, Text<_>>(8)?.0,
-        parent_thread_id: row.get::<_, Text<_>>(9)?.0,
-        lifecycle_owner_thread_id: row.get::<_, Text<_>>(10)?.0,
-        section_id: row.get::<_, Text<_>>(11)?.0,
-        pinned: row.get(12)?,
-        last_read_at: row.get::<_, Option<i64>>(13)?.map(Timestamp),
-        latest_attention_at: Timestamp(row.get(14)?),
-        mark: if row.get(19)? {
+        status: row.get::<_, Text<_>>(5)?.0,
+        visibility: row.get::<_, Text<_>>(6)?.0,
+        parent_thread_id: row.get::<_, Text<_>>(7)?.0,
+        lifecycle_owner_thread_id: row.get::<_, Text<_>>(8)?.0,
+        section_id: row.get::<_, Text<_>>(9)?.0,
+        pinned: row.get(10)?,
+        last_read_at: row.get::<_, Option<i64>>(11)?.map(Timestamp),
+        latest_attention_at: Timestamp(row.get(12)?),
+        mark: if row.get(17)? {
             ThreadMark::Done
         } else {
             ThreadMark::None
         },
-        archived_at: row.get::<_, Option<i64>>(15)?.map(Timestamp),
-        created_at: Timestamp(row.get(16)?),
-        updated_at: Timestamp(row.get(17)?),
-        title_locked: row.get(18)?,
+        archived_at: row.get::<_, Option<i64>>(13)?.map(Timestamp),
+        created_at: Timestamp(row.get(14)?),
+        updated_at: Timestamp(row.get(15)?),
+        title_locked: row.get(16)?,
     })
 }
 
@@ -1260,12 +1258,11 @@ fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
     conn.execute(
         &format!(
             "INSERT INTO threads ({THREAD_COLUMNS})
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
              ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id,
                 environment_id = excluded.environment_id, title = excluded.title,
                 title_locked = excluded.title_locked,
-                provider = excluded.provider, model = excluded.model,
-                reasoning_level = excluded.reasoning_level, status = excluded.status,
+                provider = excluded.provider, status = excluded.status,
                 visibility = excluded.visibility, parent_thread_id = excluded.parent_thread_id,
                 lifecycle_owner_thread_id = excluded.lifecycle_owner_thread_id,
                 section_id = excluded.section_id, pinned = excluded.pinned,
@@ -1280,8 +1277,6 @@ fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
             Text(&thread.environment_id),
             thread.title,
             thread.provider,
-            thread.model,
-            thread.reasoning_level,
             Text(thread.status),
             Text(thread.visibility),
             Text(&thread.parent_thread_id),

@@ -670,8 +670,6 @@ fn sample(
         title: id.into(),
         title_locked: false,
         provider: String::new(),
-        model: String::new(),
-        reasoning_level: String::new(),
         status: ThreadStatus::Idle,
         visibility,
         parent_thread_id: None,

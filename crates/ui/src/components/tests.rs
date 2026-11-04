@@ -261,8 +261,6 @@ fn seed_thread(dir: &std::path::Path) {
             title: "Swap thread".into(),
             title_locked: false,
             provider: "demo".into(),
-            model: String::new(),
-            reasoning_level: String::new(),
             status: ThreadStatus::Idle,
             visibility: Visibility::Visible,
             parent_thread_id: None,

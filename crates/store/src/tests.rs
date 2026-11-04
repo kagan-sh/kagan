@@ -31,8 +31,6 @@ fn thread(id: &str, created_at: i64) -> Thread {
         title: id.into(),
         title_locked: false,
         provider: "claude-code".into(),
-        model: "opus".into(),
-        reasoning_level: "high".into(),
         status: ThreadStatus::Idle,
         visibility: Visibility::Visible,
         parent_thread_id: None,

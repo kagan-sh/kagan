@@ -379,8 +379,6 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             title,
             title_locked: _,
             provider: _,
-            model: _,
-            reasoning_level: _,
             status,
             visibility,
             parent_thread_id,

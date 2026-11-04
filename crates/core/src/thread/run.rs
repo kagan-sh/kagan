@@ -177,8 +177,6 @@ pub(crate) async fn commit(
         title,
         title_locked,
         provider: program,
-        model: String::new(),
-        reasoning_level: String::new(),
         status: ThreadStatus::Starting,
         visibility,
         parent_thread_id,

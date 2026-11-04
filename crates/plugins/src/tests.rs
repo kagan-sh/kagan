@@ -249,8 +249,6 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
             title: "Thread".into(),
             title_locked: false,
             provider: "claude-code".into(),
-            model: String::new(),
-            reasoning_level: String::new(),
             status: ThreadStatus::Idle,
             visibility: Visibility::Visible,
             parent_thread_id: None,

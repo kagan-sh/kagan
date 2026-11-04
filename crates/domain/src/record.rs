@@ -140,8 +140,6 @@ pub struct Thread {
     #[serde(default)]
     pub title_locked: bool,
     pub provider: String,
-    pub model: String,
-    pub reasoning_level: String,
     pub status: ThreadStatus,
     pub visibility: Visibility,
     pub parent_thread_id: Option<ThreadId>,

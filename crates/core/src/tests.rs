@@ -5215,8 +5215,6 @@ fn idle_thread(id: &str, project: ProjectId) -> Thread {
         title: id.into(),
         title_locked: false,
         provider: "sh".into(),
-        model: String::new(),
-        reasoning_level: String::new(),
         status: ThreadStatus::Idle,
         visibility: Visibility::Visible,
         parent_thread_id: None,

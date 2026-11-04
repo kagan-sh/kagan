@@ -111,8 +111,6 @@ fn running() -> kg_domain::Thread {
         title: "claude".into(),
         title_locked: false,
         provider: "claude".into(),
-        model: String::new(),
-        reasoning_level: String::new(),
         status: ThreadStatus::Active,
         visibility: Visibility::Visible,
         parent_thread_id: None,
