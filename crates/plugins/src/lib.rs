@@ -8,8 +8,6 @@ mod development;
 mod files;
 mod host;
 mod index;
-#[cfg(test)]
-mod index_test;
 mod jobs;
 pub mod keys;
 mod log;
@@ -18,8 +16,6 @@ pub(crate) use log::{Level, log};
 mod manifest;
 mod ops;
 mod page;
-#[cfg(test)]
-mod page_test;
 mod process;
 mod program;
 mod secret;

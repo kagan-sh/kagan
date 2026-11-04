@@ -1,3 +1,5 @@
+mod index;
+mod page;
 mod secret;
 
 use std::path::Path;

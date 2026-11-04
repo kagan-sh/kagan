@@ -6,8 +6,6 @@ mod program;
 mod record;
 mod review;
 #[cfg(test)]
-mod review_test;
-#[cfg(test)]
 mod tests;
 mod theme;
 mod update;
