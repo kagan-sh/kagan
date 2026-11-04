@@ -128,12 +128,12 @@ Find, read and create skills
 Usage: kg skill [OPTIONS] <COMMAND>
 
 Commands:
-  list    
-  show    
-  files   
-  new     
-  add     
-  remove  
+  list    List skills
+  show    Show one skill
+  files   List a skill's files
+  new     Create a skill
+  add     Add a skill from a folder
+  remove  Remove a skill
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -147,10 +147,14 @@ Options:
 ## `kg skill list`
 
 ```text
+List skills
+
 Usage: kg skill list [OPTIONS]
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -160,14 +164,18 @@ Options:
 ## `kg skill show`
 
 ```text
+Show one skill
+
 Usage: kg skill show [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -177,14 +185,18 @@ Options:
 ## `kg skill files`
 
 ```text
+List a skill's files
+
 Usage: kg skill files [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -194,17 +206,21 @@ Options:
 ## `kg skill new`
 
 ```text
+Create a skill
+
 Usage: kg skill new [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name, lowercase and hyphenated
 
 Options:
       --project
-          
+          Create it in the project folder instead of the user folder
 
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -214,17 +230,21 @@ Options:
 ## `kg skill add`
 
 ```text
+Add a skill from a folder
+
 Usage: kg skill add [OPTIONS] <PATH>
 
 Arguments:
   <PATH>
-          
+          Folder to read the skill from
 
 Options:
       --project
-          
+          Add it to the project folder instead of the user folder
 
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -234,14 +254,18 @@ Options:
 ## `kg skill remove`
 
 ```text
+Remove a skill
+
 Usage: kg skill remove [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help

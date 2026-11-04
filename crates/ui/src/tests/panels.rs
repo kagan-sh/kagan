@@ -519,9 +519,9 @@ fn plugin_enabled(cx: &mut TestAppContext, id: &str) -> bool {
             .read(cx)
             .status()
             .iter()
-            .find(|status| status.id().0 == id)
+            .find(|status| status.id.0 == id)
             .expect("plugin listed")
-            .is_enabled()
+            .enabled
     })
 }
 

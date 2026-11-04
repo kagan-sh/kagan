@@ -1,5 +1,4 @@
 #[cfg(test)]
-#[path = "../tests/layout_read.rs"]
 pub(crate) mod read;
 use crate::theme::TypeScale as _;
 use std::future::Future;

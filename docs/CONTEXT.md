@@ -123,7 +123,7 @@ What an agent remembers of a thread's program: what was said and done. Kagan giv
 _Avoid_: Session, chat
 
 **Browser**:
-A tab of the right sidebar that shows one web page on macOS. Plugins cannot use it.
+A tab of the right sidebar that shows one web page on macOS and Windows. Plugins cannot use it.
 _Avoid_: Web view, preview, embedded browser
 
 **Panel**:

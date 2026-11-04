@@ -298,7 +298,7 @@ async fn store_bindings(
     };
     let value = serde_json::to_value(bindings)?;
     let workspace = cx.update(|cx| Workspace::global(cx));
-    let wrote = workspace
+    workspace
         .read_with(cx, |workspace, _| {
             workspace.commit_plugin_config(
                 plugin.clone(),
@@ -310,11 +310,5 @@ async fn store_bindings(
             )
         })
         .await?;
-    if wrote {
-        Ok(())
-    } else {
-        Err(kg_domain::OpError::Invalid(format!(
-            "plugin {plugin} changed while this was saving"
-        )))
-    }
+    Ok(())
 }

@@ -7,7 +7,7 @@ use kg_core::Updater;
 use kg_domain::{Op, PreferenceOp, UpdateState};
 use serde_json::json;
 
-use super::pages::{Group, group, row, save, switch};
+use super::row::{Group, group, row, save, switch};
 use crate::kagan::shown::control;
 use crate::ui_registry::Facts;
 

@@ -1,6 +1,7 @@
 mod agent;
 mod archive;
 mod conversation;
+mod details;
 mod extra;
 mod halt;
 mod interaction;
@@ -11,7 +12,6 @@ mod search;
 mod section;
 mod settings;
 mod terminal;
-mod turn;
 
 pub(crate) use agent::{note, note_with};
 pub(crate) use extra::{Extras, end as end_extras};
@@ -29,7 +29,6 @@ pub(crate) use terminal::exited;
 pub(crate) use terminal::remember;
 pub(crate) use terminal::start as start_terminal;
 pub(crate) use terminal::{Shown, release_ended};
-pub(crate) use turn::child_notice;
 
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{
@@ -54,7 +53,7 @@ fn read_sidebar(store: &mut kg_store::Store) -> kg_store::Result<OpResult> {
         projects,
         sections: store.sections()?,
         threads: store
-            .threads(None, None, None, None)?
+            .all_threads()?
             .into_iter()
             .filter(|thread| {
                 thread.visibility == kg_domain::Visibility::Visible && thread.archived_at.is_none()
@@ -69,9 +68,7 @@ pub(crate) async fn execute(
     requester: Option<Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     match op {
         Op::Guide { chapter } => Ok(crate::guide::read(chapter)),
         Op::Skill(op) => crate::skill::run(this, op, cx).await,
@@ -116,12 +113,12 @@ pub(crate) async fn execute(
             Ok(OpResult::Environment(result))
         }
         Op::Environment(EnvironmentOp::Branches { id }) => {
-            crate::changes::branches(&database, id, cx).await
+            crate::git::branches(&database, id, cx).await
         }
         Op::Program(ProgramOp::List) => crate::program::list(this, &database, true, cx).await,
         Op::Program(ProgramOp::Discover) => crate::program::list(this, &database, false, cx).await,
         Op::Environment(EnvironmentOp::SetBase { id, base }) => {
-            crate::changes::set_base(this, &database, id, base, cx).await
+            crate::git::set_base(this, &database, id, base, cx).await
         }
         Op::Environment(EnvironmentOp::Remove { id }) => {
             crate::environment::remove_again(this, id, cx).await
@@ -294,7 +291,7 @@ async fn dispatch_thread(
             Ok(OpResult::Done)
         }
         ThreadOp::Terminal(op) => extra::run(this, op, cx).await,
-        ThreadOp::Details { id } => crate::details::read(database, id, cx).await,
+        ThreadOp::Details { id } => details::read(database, id, cx).await,
         ThreadOp::Links { id } => extra::links(this, id, cx).await,
         ThreadOp::Archive { id } => archive(this, database, id, cx).await,
         ThreadOp::Unarchive { id } => unarchive(this, database, id, cx).await,
@@ -374,15 +371,13 @@ pub(crate) async fn forward(
     }
 }
 
-pub(crate) async fn rename_from_socket(
+pub(crate) async fn rename_once(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
     title: String,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     rename(this, database, id, title, false, cx).await
 }
 
@@ -434,4 +429,13 @@ pub(crate) fn thread(
     this.update(cx, |workspace, _| workspace.threads.get(id).cloned())
         .map_err(closed)?
         .ok_or_else(|| missing("thread", id))
+}
+
+pub(crate) fn child_notice(title: &str, error: Option<&str>, before_turn: bool) -> String {
+    let because = error.map(|error| format!(": {error}")).unwrap_or_default();
+    if before_turn {
+        format!("Child thread \"{title}\" failed before its first turn{because}.")
+    } else {
+        format!("Child thread \"{title}\" failed{because}.")
+    }
 }

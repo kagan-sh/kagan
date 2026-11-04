@@ -80,7 +80,12 @@ fn a_page_message_is_json_within_the_cap() {
     assert_eq!(parse_message(r#"{"ok":true}"#).unwrap()["ok"], true);
     assert!(parse_message("not json").is_err());
     let huge = format!("\"{}\"", "x".repeat(MESSAGE_CAP));
-    assert!(parse_message(&huge).unwrap_err().contains("over the"));
+    assert!(
+        parse_message(&huge)
+            .unwrap_err()
+            .to_string()
+            .contains("over the")
+    );
 }
 
 #[test]

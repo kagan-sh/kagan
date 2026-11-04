@@ -1201,7 +1201,7 @@ fn thread_search_takes_text_a_limit_and_archived() {
 
 #[test]
 fn a_setting_left_off_the_command_line_is_read_as_text_and_never_parsed() {
-    use crate::development::take_value_with;
+    use crate::cli::take_value_with;
     let set = |value| {
         Op::Plugin(PluginOp::Config {
             id: PluginId("p".into()),
@@ -1243,7 +1243,7 @@ fn a_setting_left_off_the_command_line_is_read_as_text_and_never_parsed() {
 
 #[test]
 fn paste_reads_a_file_or_stdin_and_sends_the_text() {
-    use crate::development::take_paste_from;
+    use crate::cli::take_paste_from;
     let id = ThreadId("thr_1".into());
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("note.txt");
@@ -1333,7 +1333,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
 
 #[test]
 fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
-    use crate::development::take_paste_from;
+    use crate::cli::take_paste_from;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad");
     std::fs::write(&path, [0xff, 0xfe]).unwrap();
@@ -1363,7 +1363,7 @@ fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
 fn paste_rejects_a_fifo_past_the_cap() {
     use std::io::Write;
 
-    use crate::development::take_paste_from;
+    use crate::cli::take_paste_from;
     let dir = tempfile::tempdir().unwrap();
     let fifo = dir.path().join("paste.fifo");
     assert!(
@@ -1405,7 +1405,7 @@ fn paste_rejects_a_fifo_past_the_cap() {
 
 #[test]
 fn install_sends_a_bare_name_to_the_indexes_and_a_folder_as_its_path() {
-    use crate::development::paths;
+    use crate::cli::paths;
     let source = |args: &[&str]| match paths(parse(args)).unwrap() {
         Op::Plugin(PluginOp::Install { source, .. }) => source,
         Op::Plugin(PluginOp::Index {

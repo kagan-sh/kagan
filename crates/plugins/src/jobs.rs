@@ -16,6 +16,12 @@ use crate::page::MESSAGE_CAP;
 type Job = Map<String, Value>;
 type Reply = Result<Value, String>;
 
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 // A page job is refused once this many are waiting for `next()`.
 pub(crate) const PAGE_PENDING_CAP: usize = 32;
 // A page job is refused if it would take waiting bytes past this.
@@ -137,19 +143,16 @@ impl Jobs {
         let pending = Arc::new(AtomicBool::new(true));
         let (reply, replied) = async_channel::bounded(1);
         self.open.borrow_mut().insert(id.clone(), reply);
-        self.page_waiting
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(
-                id.clone(),
-                PageTicket {
-                    job,
-                    alive,
-                    pending,
-                    bytes,
-                    bounds: self.bounds.clone(),
-                },
-            );
+        lock(&self.page_waiting).insert(
+            id.clone(),
+            PageTicket {
+                job,
+                alive,
+                pending,
+                bytes,
+                bounds: self.bounds.clone(),
+            },
+        );
         if self.queue.0.try_send(Queued::Page(id.clone())).is_err() {
             self.free_page(&id);
             self.forget(&id);
@@ -170,10 +173,7 @@ impl Jobs {
     ) -> Result<Reply, Ended> {
         match futures::future::select(pin!(replied.recv()), pin!(timer)).await {
             futures::future::Either::Left((reply, _)) => {
-                self.page_waiting
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .remove(id);
+                lock(&self.page_waiting).remove(id);
                 self.forget(id);
                 reply.map_err(|_| Ended::Unloaded)
             }
@@ -189,22 +189,14 @@ impl Jobs {
     pub(crate) fn close(&self) {
         self.queue.0.close();
         self.open.borrow_mut().clear();
-        let waiting = std::mem::take(
-            &mut *self
-                .page_waiting
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        );
+        let waiting = std::mem::take(&mut *lock(&self.page_waiting));
         for (_, ticket) in waiting {
             ticket.release_bounds();
         }
     }
 
     fn settle(&self, id: &str, reply: Reply) -> Result<HostValue, HostError> {
-        self.page_waiting
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(id);
+        lock(&self.page_waiting).remove(id);
         let sender = self
             .open
             .borrow_mut()
@@ -219,12 +211,7 @@ impl Jobs {
     }
 
     fn free_page(&self, id: &str) {
-        if let Some(ticket) = self
-            .page_waiting
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(id)
-        {
+        if let Some(ticket) = lock(&self.page_waiting).remove(id) {
             ticket.release_bounds();
         }
     }
@@ -252,11 +239,7 @@ impl Jobs {
                         match queued {
                             Queued::Job(job) => return Ok(to_host(Value::Object(job))),
                             Queued::Page(id) => {
-                                let Some(ticket) = waiting
-                                    .lock()
-                                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                    .remove(&id)
-                                else {
+                                let Some(ticket) = lock(&waiting).remove(&id) else {
                                     continue;
                                 };
                                 let live = ticket.alive.upgrade().is_some();

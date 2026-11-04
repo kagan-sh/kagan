@@ -98,7 +98,6 @@ enum Focus {
     Tool,
     Right,
     Work,
-    None,
 }
 
 pub(crate) fn bindings() -> Vec<KeyBinding> {
@@ -130,7 +129,7 @@ impl Kagan {
     pub(super) fn sync_slots(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.right_panels = panels(cx)
             .into_iter()
-            .filter(|item| item.placement == Placement::Right)
+            .filter(|item| item.placement == SurfacePlacement::Right)
             .collect();
         let tool_held = holds_focus(self.tool.as_ref(), window, cx);
         let page_held = holds_focus(self.screen.page(), window, cx);
@@ -197,7 +196,7 @@ impl Kagan {
                 PluginHost::try_global(cx).and_then(|host| host.read(cx).generation(&slot.plugin));
             if declared
                 .as_ref()
-                .is_some_and(|declared| declared.placement == Placement::Right)
+                .is_some_and(|declared| declared.placement == SurfacePlacement::Right)
                 && (generation == Some(slot.generation)
                     || (generation.is_none() && slot.error.is_some()))
             {
@@ -205,7 +204,9 @@ impl Kagan {
                 continue;
             }
             changed = true;
-            if let Some(declared) = declared.filter(|item| item.placement == Placement::Right) {
+            if let Some(declared) =
+                declared.filter(|item| item.placement == SurfacePlacement::Right)
+            {
                 next.push(mount(&declared, slot.details, window, cx));
             }
         }
@@ -270,8 +271,9 @@ impl Kagan {
         };
         self.screen.begin();
         if let SurfaceOp::Open { plugin, id } = &op
-            && find_declared(plugin, id, cx)
-                .is_some_and(|item| item.placement == Placement::Center && !self.is_open(&item))
+            && find_declared(plugin, id, cx).is_some_and(|item| {
+                item.placement == SurfacePlacement::Center && !self.is_open(&item)
+            })
         {
             self.screen.remember_center(window, cx);
         }
@@ -321,7 +323,6 @@ impl Kagan {
                 Focus::Tool => self.focus_tool_or_work(window, cx),
                 Focus::Right => self.focus_right_tab(window, cx),
                 Focus::Work => self.return_focus(super::screen::FocusReturn::Center, window, cx),
-                Focus::None => {}
             }
             if let Some(plugin) = &expect.plugin
                 && let Some(props) = expect.props.clone()
@@ -393,8 +394,7 @@ impl Kagan {
             }
             self.drop_page(&declared, cx);
             match declared.placement {
-                Placement::Bottom => {}
-                Placement::Right => {
+                SurfacePlacement::Right => {
                     let surface = declared.surface_id();
                     self.right_slots.retain(|slot| {
                         !(slot.plugin == declared.plugin && slot.contribution == declared.id)
@@ -403,13 +403,13 @@ impl Kagan {
                         self.right_tab = self.default_right_tab(cx);
                     }
                 }
-                Placement::Left => {
+                SurfacePlacement::Left => {
                     let row = row_id(&declared.plugin, &declared.id);
                     self.sidebar
                         .update(cx, |sidebar, _| sidebar.set_return_tool(Some(row)));
                     self.tool = None;
                 }
-                Placement::Center => {
+                SurfacePlacement::Center => {
                     self.screen.close();
                     self.read_shown(cx);
                 }
@@ -417,27 +417,25 @@ impl Kagan {
             cx.notify();
             return Ok(expect_of(&declared, false, None, None));
         }
-        if declared.placement == Placement::Bottom {
-            return Err(OpError::Invalid(
-                "bottom panels are not in this version of kagan".into(),
-            ));
-        }
-        if matches!(declared.placement, Placement::Left | Placement::Center) {
+        if matches!(
+            declared.placement,
+            SurfacePlacement::Left | SurfacePlacement::Center
+        ) {
             self.right_fill = super::right::Fill::Column;
         }
-        if declared.placement == Placement::Left {
+        if declared.placement == SurfacePlacement::Left {
             if self.in_settings() {
                 let work = self.screen.shown().clone();
                 self.open_center(Center::Work(work), window, cx);
             }
             self.show_left(window, cx);
         }
-        if declared.placement == Placement::Right {
+        if declared.placement == SurfacePlacement::Right {
             self.show_right(window, cx);
         }
         self.sync_panels_keeping_widths(window, cx);
         match declared.placement {
-            Placement::Center => {
+            SurfacePlacement::Center => {
                 if !self
                     .screen
                     .page()
@@ -447,7 +445,7 @@ impl Kagan {
                     self.open_center(Center::Page(Box::new(page)), window, cx);
                 }
             }
-            Placement::Left => {
+            SurfacePlacement::Left => {
                 if !self
                     .tool
                     .as_ref()
@@ -456,7 +454,7 @@ impl Kagan {
                     self.tool = Some(mount(&declared, false, window, cx));
                 }
             }
-            Placement::Right => {
+            SurfacePlacement::Right => {
                 if let Some(ix) = self.right_slots.iter().position(|slot| {
                     slot.plugin == declared.plugin && slot.contribution == declared.id
                 }) {
@@ -471,17 +469,15 @@ impl Kagan {
                     self.right_slots.push(slot);
                 }
             }
-            Placement::Bottom => {}
         }
         Ok(expect_of(&declared, true, Some(plugin), props))
     }
 
     fn drop_page(&self, declared: &Declared, cx: &mut Context<Self>) {
         let id = match declared.placement {
-            Placement::Right => Some(declared.surface_id()),
-            Placement::Left => self.tool.as_ref().map(|slot| slot.id.clone()),
-            Placement::Center => self.screen.page().map(|slot| slot.id.clone()),
-            Placement::Bottom => None,
+            SurfacePlacement::Right => Some(declared.surface_id()),
+            SurfacePlacement::Left => self.tool.as_ref().map(|slot| slot.id.clone()),
+            SurfacePlacement::Center => self.screen.page().map(|slot| slot.id.clone()),
         };
         if let Some(id) = id {
             super::web_panel::forget(&id, cx);
@@ -604,7 +600,8 @@ impl Kagan {
             .or(closed.filter(|id| sidebar.row_focus(id).is_some()))
             .or_else(|| {
                 destinations(cx).into_iter().find_map(|item| {
-                    (item.placement == Placement::Left).then(|| row_id(&item.plugin, &item.id))
+                    (item.placement == SurfacePlacement::Left)
+                        .then(|| row_id(&item.plugin, &item.id))
                 })
             })
             .filter(|id| sidebar.row_focus(id).is_some());
@@ -633,7 +630,7 @@ impl Kagan {
         destinations(cx)
             .into_iter()
             .filter_map(|declared| {
-                let placement = drawn(declared.placement)?;
+                let placement = declared.placement;
                 let current = matching_slot(
                     self.tool.as_ref(),
                     self.screen.page(),
@@ -696,17 +693,17 @@ pub(super) struct Declared {
     pub(super) plugin: PluginId,
     pub(super) id: String,
     pub(super) title: String,
-    placement: Placement,
+    placement: SurfacePlacement,
 }
 
 impl Declared {
-    pub(super) fn from(plugin: PluginId, panel: &kg_plugins::PanelContribution) -> Self {
-        Self {
+    pub(super) fn from(plugin: PluginId, panel: &kg_plugins::PanelContribution) -> Option<Self> {
+        Some(Self {
             plugin,
-            id: panel.id().to_owned(),
-            title: panel.title().to_owned(),
-            placement: panel.placement(),
-        }
+            id: panel.id.to_owned(),
+            title: panel.title.to_owned(),
+            placement: drawn(panel.placement)?,
+        })
     }
 
     fn surface_id(&self) -> String {
@@ -729,7 +726,7 @@ pub(super) fn nav_items(cx: &App) -> Vec<NavItem> {
     destinations(cx)
         .into_iter()
         .filter_map(|item| {
-            let placement = drawn(item.placement)?;
+            let placement = item.placement;
             if matches!(placement, SurfacePlacement::Right) {
                 return None;
             }
@@ -750,10 +747,10 @@ fn panels(cx: &App) -> Vec<Declared> {
     };
     list.into_iter()
         .flat_map(|(plugin, ui)| {
-            ui.panels()
+            ui.panels
                 .iter()
-                .filter(|panel| panel.replaces().is_none())
-                .map(|panel| Declared::from(plugin.clone(), panel))
+                .filter(|panel| panel.replaces.is_none())
+                .filter_map(|panel| Declared::from(plugin.clone(), panel))
                 .collect::<Vec<_>>()
         })
         .collect()
@@ -761,14 +758,6 @@ fn panels(cx: &App) -> Vec<Declared> {
 
 fn destinations(cx: &App) -> Vec<Declared> {
     panels(cx)
-        .into_iter()
-        .filter(|item| {
-            matches!(
-                item.placement,
-                Placement::Left | Placement::Center | Placement::Right
-            )
-        })
-        .collect()
 }
 
 fn drawn(placement: Placement) -> Option<SurfacePlacement> {
@@ -850,20 +839,18 @@ fn matching_slot<'a>(
 ) -> Option<&'a Slot> {
     let same = |slot: &&Slot| slot.contribution == declared.id && slot.plugin == declared.plugin;
     match declared.placement {
-        Placement::Left => tool.filter(same),
-        Placement::Center => page.filter(same),
-        Placement::Right => right.iter().find(same),
-        Placement::Bottom => None,
+        SurfacePlacement::Left => tool.filter(same),
+        SurfacePlacement::Center => page.filter(same),
+        SurfacePlacement::Right => right.iter().find(same),
     }
 }
 
-fn focus_for(placement: Placement, open: bool) -> Focus {
+fn focus_for(placement: SurfacePlacement, open: bool) -> Focus {
     match (placement, open) {
-        (Placement::Center, true) => Focus::Page,
-        (Placement::Center, false) => Focus::Work,
-        (Placement::Left, _) => Focus::Tool,
-        (Placement::Right, _) => Focus::Right,
-        (Placement::Bottom, _) => Focus::None,
+        (SurfacePlacement::Center, true) => Focus::Page,
+        (SurfacePlacement::Center, false) => Focus::Work,
+        (SurfacePlacement::Left, _) => Focus::Tool,
+        (SurfacePlacement::Right, _) => Focus::Right,
     }
 }
 

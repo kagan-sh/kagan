@@ -12,13 +12,13 @@ mod keys;
 mod layout;
 #[cfg(test)]
 pub(crate) use layout::read as layout_read;
+mod installer;
 pub(crate) mod menus;
 mod navigation;
 mod needs;
 mod notify;
 mod overlays;
 pub(crate) mod picker;
-mod plugins_box;
 mod question;
 pub(crate) mod quit;
 mod replace;
@@ -30,7 +30,6 @@ pub(crate) use review::read as review_read;
 mod right;
 mod screen;
 #[cfg(test)]
-#[path = "tests/screen_read.rs"]
 pub(crate) mod screen_read;
 mod settings;
 mod shown;
@@ -45,9 +44,9 @@ pub(crate) use web_panel::drop_plugin as drop_web_panel;
 pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
 
 use changes::Changes;
+use installer::PluginInstaller;
 use kg_domain::ProjectOp;
 use layout::Layout;
-use plugins_box::PluginsBox;
 use screen::{Activation, Side};
 use sidebar::{Event, Shows};
 use surface::ClosePage;
@@ -198,7 +197,7 @@ pub(crate) struct Kagan {
     tabs: tabs::Tabs,
     review_drafts: review::Drafts,
     replaced: replace::Replaced,
-    plugins: PluginsBox,
+    plugins: PluginInstaller,
     panels: Vec<right::Panel>,
     right_slots: Vec<surface::Slot>,
     right_tab: Option<String>,
@@ -485,7 +484,7 @@ impl Kagan {
             tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
             replaced: replace::Replaced::default(),
-            plugins: PluginsBox::new(window, cx),
+            plugins: PluginInstaller::new(window, cx),
             panels: right::built_in(),
             right_slots: Vec::new(),
             right_tab: None,
@@ -654,9 +653,9 @@ impl Kagan {
             .map(|list| {
                 list.into_iter()
                     .filter(|(_, ui)| {
-                        ui.panels()
+                        ui.panels
                             .iter()
-                            .any(|panel| matches!(panel.follows(), Some(Follows::Thread)))
+                            .any(|panel| matches!(panel.follows, Some(Follows::Thread)))
                     })
                     .map(|(plugin, _)| plugin)
                     .collect()
@@ -1347,29 +1346,14 @@ impl Kagan {
 
 // Unarchive fails while the owner is still archived, so the owner is listed first.
 fn archived_with(threads: &[Thread], id: &ThreadId) -> Vec<ThreadId> {
-    let mut placed = BTreeSet::from([id.clone()]);
     let mut ids = vec![id.clone()];
-    loop {
-        let mut progressed = false;
-        for thread in threads {
-            if placed.contains(&thread.id) {
-                continue;
-            }
-            let in_tree = thread
-                .lifecycle_owner_thread_id
-                .as_ref()
-                .is_some_and(|owner| placed.contains(owner));
-            if !in_tree {
-                continue;
-            }
-            placed.insert(thread.id.clone());
-            if thread.archived_at.is_none() {
-                ids.push(thread.id.clone());
-            }
-            progressed = true;
-        }
-        if !progressed {
-            break;
+    for owned in kg_domain::owned_thread_ids(threads, id).into_iter().skip(1) {
+        if threads
+            .iter()
+            .find(|thread| thread.id == owned)
+            .is_some_and(|thread| thread.archived_at.is_none())
+        {
+            ids.push(owned);
         }
     }
     ids

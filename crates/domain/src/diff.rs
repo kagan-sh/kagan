@@ -187,9 +187,28 @@ pub struct DiffFileView {
     /// The new side is too large to return as text.
     pub too_large: bool,
     pub hunks: Vec<DiffHunk>,
+    /// The new side's text, when the patch is too large to return as hunks.
     pub file: Option<String>,
     pub added: u32,
     pub removed: u32,
+}
+
+impl DiffFileView {
+    /// A file with no patch: no revision, no hunks, and no changed lines.
+    #[must_use]
+    pub fn empty(path: &str) -> Self {
+        Self {
+            path: path.to_owned(),
+            revision: String::new(),
+            binary: false,
+            truncated: false,
+            too_large: false,
+            hunks: Vec::new(),
+            file: None,
+            added: 0,
+            removed: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

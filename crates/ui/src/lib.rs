@@ -3,7 +3,6 @@ mod brand;
 mod components;
 mod failed;
 mod kagan;
-mod page;
 mod plugins;
 mod synthetic;
 mod terminal;
@@ -16,6 +15,7 @@ mod ui_observe;
 mod ui_registry;
 #[cfg(target_os = "macos")]
 mod web;
+mod web_page;
 
 use gpui_kit::App;
 
@@ -25,7 +25,11 @@ pub use brand::{Assets, prepare_window};
 /// and `gpui_kit::init`, before the first [`open_window`].
 pub fn init(cx: &mut App) {
     theme::load_fonts(cx);
-    theme::init(cx);
+    let themes = kg_core::Workspace::global(cx)
+        .read(cx)
+        .data_dir()
+        .join("themes");
+    theme::init_in(themes, cx);
     // A popover binds space to confirm, which would swallow it while typing in a list's search.
     cx.bind_keys([gpui_kit::KeyBinding::new(
         "space",
@@ -46,9 +50,14 @@ pub fn init(cx: &mut App) {
         }
     })
     .detach();
-    plugins::init(cx);
     kagan::watch_waiting(cx);
     ui_driver::install(cx);
+}
+
+/// Installs plugin command bindings. Call once `kg_plugins::init` has made the host global, so
+/// plugin commands work before the first window opens.
+pub fn plugins_ready(cx: &mut App) {
+    plugins::init(cx);
 }
 
 /// Shows the Kagan window. An open window comes forward and the app comes to the front; a new

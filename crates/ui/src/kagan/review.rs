@@ -1,5 +1,4 @@
 #[cfg(test)]
-#[path = "../tests/review_read.rs"]
 pub(crate) mod read;
 use crate::theme::TypeScale as _;
 mod actions;

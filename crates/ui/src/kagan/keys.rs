@@ -154,7 +154,7 @@ pub(crate) fn install_keys(cx: &mut App) {
     cx.bind_keys(super::archived::bindings());
     cx.bind_keys(settings::bindings());
     cx.bind_keys(super::changes::bindings());
-    cx.bind_keys(super::plugins_box::bindings());
+    cx.bind_keys(super::installer::bindings());
     cx.bind_keys(super::right::bindings());
     cx.bind_keys(super::surface::bindings());
     cx.bind_keys([

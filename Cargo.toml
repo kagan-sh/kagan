@@ -21,11 +21,19 @@ kg-ui = { path = "crates/ui" }
 anyhow = "=1.0.104"
 async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
+dunce = "=1.0.5"
+futures = "=0.3.34"
 gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "b86182e9aebe7ed2b9c730bc17bc19379dabab1f", features = ["tree-sitter-diff"] }
 gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "b86182e9aebe7ed2b9c730bc17bc19379dabab1f", default-features = false, features = ["quickjs", "components"] }
 gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "b86182e9aebe7ed2b9c730bc17bc19379dabab1f", default-features = false, features = ["gpui-fast"] }
 interprocess = "=2.4.4"
 keyring-core = "=1.0.1"
+libc = "=0.2.191"
+objc2 = "=0.6.4"
+semver = "=1.0.28"
+sha2 = "=0.10.9"
+tempfile = "=3.27.0"
+url = "=2.5.8"
 rusqlite = { version = "=0.40.2", features = ["bundled", "fallible_uint"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

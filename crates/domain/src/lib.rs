@@ -39,6 +39,7 @@ pub use record::{
     AgentTool, Environment, EnvironmentProvider, EnvironmentStatus, Found, IndexEntry,
     InteractionOption, Listing, PendingInteraction, Plugin, Project, ProjectKind, Section, Sidebar,
     Snippet, Thread, ThreadMark, ThreadStatus, Visibility, archive_span, order_sidebar_projects,
+    owned_thread_ids,
 };
 pub use review::{ReviewRow, review_rows};
 pub use theme::{Color, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError};

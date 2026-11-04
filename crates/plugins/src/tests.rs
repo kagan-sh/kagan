@@ -522,6 +522,7 @@ fn manifests_reject_unknown_keys_bad_ids_and_newer_requirements() {
         "unknown variant",
     );
     let mut value = manifest();
+    value["powers"]["areas"] = json!(["threads"]);
     value["events"] = json!(["thread.idle", "thread.turn.ended"]);
     std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
     let read = read_manifest(dir.path()).unwrap();
@@ -753,7 +754,7 @@ fn a_grant_grows_only_when_it_asks_for_more() {
             "runs gh",
             "talks to api.github.com (GET, POST)",
             "writes to your clipboard",
-            "reads a folder you choose (Notes)"
+            "reads a folder you choose (Notes)",
         ]
     );
 }
@@ -806,6 +807,29 @@ fn local_fetch_grants_http_on_that_port_and_install_line() {
 }
 
 #[test]
+fn thread_events_need_the_threads_area() {
+    let dir = plugin_dir();
+    let mut value = manifest();
+    value["events"] = json!(["thread.message"]);
+    std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+    let error = read_manifest(dir.path()).unwrap_err().to_string();
+    assert!(error.contains("threads area"), "{error}");
+}
+
+#[test]
+fn a_shown_source_has_no_credentials() {
+    assert_eq!(
+        crate::index::shown("git:https://user:token@example.com/acme/plugin@main"),
+        "git:https://example.com/acme/plugin@main"
+    );
+    assert_eq!(
+        crate::index::shown("git:ssh://git@example.com/acme/plugin@main"),
+        "git:ssh://git@example.com/acme/plugin@main"
+    );
+    assert_eq!(crate::index::shown("/local/plugin"), "/local/plugin");
+}
+
+#[test]
 fn local_fetch_hosts_are_checked() {
     let dir = plugin_dir();
     let rejected = |host: &str, expected: &str| {
@@ -835,6 +859,8 @@ fn local_fetch_hosts_are_checked() {
         "hostname, or http://127.0.0.1:<port>",
     );
     rejected("http://[::1]:3847", "only for 127.0.0.1 or localhost");
+    rejected("127.0.0.1:3847", "hostname, or http://127.0.0.1:<port>");
+    rejected("example.com:443", "hostname, or http://127.0.0.1:<port>");
 
     for host in ["http://127.0.0.1:80", "http://localhost:80"] {
         let mut value = manifest();
@@ -2893,6 +2919,54 @@ export default class Plugin extends View {
 }
 "#;
 
+const RENAME_PROBE: &str = r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+import * as threads from "kagan/threads";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        try {
+          await threads.rename(job.threadId, "Agent");
+          reply(job.id, { text: "renamed" });
+        } catch (error) {
+          reply(job.id, { text: String(error) });
+        }
+      }
+    });
+  }
+  render() { return "probe"; }
+}
+"#;
+
+#[gpui_kit::test]
+fn a_plugin_rename_keeps_a_locked_title(cx: &mut TestAppContext) {
+    let plugin = probe_plugin(&["threads"], RENAME_PROBE);
+    open(cx, &[installed(plugin.path())]);
+    let OpResult::Thread(named) = run(
+        cx,
+        Op::Thread(ThreadOp::Rename {
+            id: thread(),
+            title: "Named".into(),
+        }),
+    )
+    .unwrap() else {
+        panic!("window rename")
+    };
+    assert!(named.title_locked);
+    let OpResult::ToolReply { text, .. } = real_call(cx, "probe").unwrap() else {
+        panic!("tool reply")
+    };
+    assert!(text.contains("the title is kept"), "{text}");
+    let OpResult::Thread(kept) = run(cx, Op::Thread(ThreadOp::Get { id: thread() })).unwrap()
+    else {
+        panic!("thread")
+    };
+    assert_eq!(kept.title, "Named");
+}
+
 #[gpui_kit::test]
 fn approved_areas_dispatch_core_and_keep_database_transactions(cx: &mut TestAppContext) {
     let plugin = probe_plugin(&["threads", "database"], AREAS_PROBE);
@@ -4214,11 +4288,11 @@ fn a_right_panel_loads_without_a_skip_note(cx: &mut TestAppContext) {
             let status = host
                 .status()
                 .into_iter()
-                .find(|status| status.id().0 == ID)
+                .find(|status| status.id.0 == ID)
                 .expect("status");
             (
-                status.error().map(str::to_owned),
-                status.note().map(str::to_owned),
+                status.error.clone(),
+                status.note.as_deref().map(str::to_owned),
                 host.failure(&PluginId(ID.into())),
             )
         })
@@ -4252,7 +4326,7 @@ fn an_overlay_names_one_exported_view() {
     declared["ui"]["overlay"] = json!("Plate");
     write_plugin(plugin.path(), &declared);
     let read = read_manifest(plugin.path()).unwrap();
-    assert_eq!(read.ui.overlay(), Some("Plate"));
+    assert_eq!(read.ui.overlay.as_deref(), Some("Plate"));
     for overlay in [json!(""), json!(["Plate"]), json!({ "view": "Plate" })] {
         declared["ui"]["overlay"] = overlay;
         write_plugin(plugin.path(), &declared);
@@ -4946,7 +5020,8 @@ fn event_plugin(id: &str, events: &[&str]) -> TempDir {
         "name": "Events",
         "version": "1.0.0",
         "kagan": ">=0.1.0",
-        "entry": "main.js"
+        "entry": "main.js",
+        "powers": { "areas": ["threads"] }
     });
     manifest["events"] = json!(events);
     std::fs::write(dir.path().join(manifest::FILE), manifest.to_string()).unwrap();
@@ -5290,11 +5365,11 @@ fn a_disabled_plugin_keeps_its_name_and_version_from_its_manifest(cx: &mut TestA
             .read(cx)
             .status()
             .into_iter()
-            .find(|status| status.id().0 == ID)
+            .find(|status| status.id.0 == ID)
             .expect("the plugin is listed")
     });
-    assert!(!status.is_enabled());
-    assert_eq!(status.name(), "Echo");
+    assert!(!status.enabled);
+    assert_eq!(status.name.as_str(), "Echo");
     assert_eq!(status.version.as_deref(), Some("1.0.0"));
 }
 
@@ -5885,7 +5960,7 @@ fn open_page(cx: &mut TestAppContext) -> PageRun {
     }
 }
 
-fn deliver_page(cx: &mut TestAppContext, run: &PageRun, raw: &str) -> Result<(), String> {
+fn deliver_page(cx: &mut TestAppContext, run: &PageRun, raw: &str) -> Result<(), OpError> {
     let alive = std::sync::Arc::downgrade(&run.life);
     cx.update(|cx| {
         crate::PluginHost::global(cx).update(cx, |host, cx| {
@@ -5925,7 +6000,7 @@ fn a_page_message_round_trips_through_the_plugin(cx: &mut TestAppContext) {
 fn a_page_message_over_the_cap_is_refused(cx: &mut TestAppContext) {
     let run = open_page(cx);
     let over = deliver_page(cx, &run, &format!("\"{}\"", "y".repeat(crate::MESSAGE_CAP)));
-    assert!(over.unwrap_err().contains("over the"));
+    assert!(over.unwrap_err().to_string().contains("over the"));
     deliver_page(cx, &run, r#"{"big":true}"#).unwrap();
     for _ in 0..2000 {
         cx.run_until_parked();
@@ -6011,7 +6086,11 @@ export default class Plugin extends View {{
     plugin
 }
 
-fn flood_page(cx: &mut TestAppContext, life: &std::sync::Arc<()>, raw: &str) -> Result<(), String> {
+fn flood_page(
+    cx: &mut TestAppContext,
+    life: &std::sync::Arc<()>,
+    raw: &str,
+) -> Result<(), OpError> {
     let alive = std::sync::Arc::downgrade(life);
     cx.update(|cx| {
         crate::PluginHost::global(cx).update(cx, |host, cx| {
@@ -6039,7 +6118,9 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
             Ok(()) => accepted += 1,
             Err(error) => {
                 assert!(
-                    error.contains("cannot take another page message"),
+                    error
+                        .to_string()
+                        .contains("cannot take another page message"),
                     "{error}"
                 );
                 break;
@@ -6055,6 +6136,7 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
     assert!(
         flood_page(cx, &life, r#"{"n":"over"}"#)
             .unwrap_err()
+            .to_string()
             .contains("cannot take another page message")
     );
 
@@ -6068,7 +6150,9 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
             Ok(()) => after += 1,
             Err(error) => {
                 assert!(
-                    error.contains("cannot take another page message"),
+                    error
+                        .to_string()
+                        .contains("cannot take another page message"),
                     "{error}"
                 );
                 break;

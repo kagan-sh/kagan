@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 clap.workspace = true
-serde_yaml = "=0.9.34"
+serde_yaml_ng = "=0.10.0"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

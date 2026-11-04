@@ -110,36 +110,55 @@ pub enum GuideChapter {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum SkillOp {
+    /// List skills
     List {
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Show one skill
     Show {
+        /// Skill name
         name: String,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// List a skill's files
     Files {
+        /// Skill name
         name: String,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Create a skill
     New {
+        /// Skill name, lowercase and hyphenated
         name: String,
+        /// Create it in the project folder instead of the user folder
         #[arg(long)]
         project: bool,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Add a skill from a folder
     Add {
+        /// Folder to read the skill from
         path: PathBuf,
+        /// Add it to the project folder instead of the user folder
         #[arg(long)]
         project: bool,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Remove a skill
     Remove {
+        /// Skill name
         name: String,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
@@ -1797,7 +1816,7 @@ impl Skill {
             .and_then(|text| text.split_once("\n---\n"))
             .ok_or_else(|| OpError::Invalid("SKILL.md needs YAML frontmatter".into()))?;
         let header: Header =
-            serde_yaml::from_str(yaml).map_err(|error| OpError::Invalid(error.to_string()))?;
+            serde_yaml_ng::from_str(yaml).map_err(|error| OpError::Invalid(error.to_string()))?;
         let valid = !name.is_empty()
             && name.split('-').all(|part| {
                 !part.is_empty()
@@ -2026,12 +2045,14 @@ pub const SEARCH_TEXT_MAX: usize = 256;
 /// The rows a terminal may have.
 pub const TERMINAL_ROWS: std::ops::RangeInclusive<u16> = 1..=500;
 
-/// Rejects an op a client must not send: a thread id that is not a plain identifier, or a
-/// terminal size outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`].
+/// Rejects an op a client must not send.
 ///
 /// # Errors
 ///
-/// Returns an error when any thread id on `op` is empty or contains a character other than an ASCII letter, digit, `_`, or `-`, or when a resize is outside those ranges.
+/// Returns an error when a thread, plugin, section, environment, or surface id is not a plain
+/// identifier (at most 128 ASCII letters, digits, `_`, or `-`), when a search is empty, longer
+/// than [`SEARCH_TEXT_MAX`], or names a limit outside [`SEARCH_LIMIT`], when a resize is outside
+/// [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], or when a window index is outside 1 to 9.
 pub fn check(op: &Op) -> Result<(), &'static str> {
     match op {
         Op::Window(WindowOp::Thread { index }) if !(1..=9).contains(index) => {

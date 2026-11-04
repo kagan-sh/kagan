@@ -18,7 +18,7 @@ use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS};
 use kg_plugins::{CommandContribution, PluginHost, RunCommand};
 
 use super::Kagan;
-use super::pages::{Group, Row, group, row};
+use super::row::{Group, Row, group, row};
 use crate::plugins::{Refused, Why, refused};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -144,14 +144,14 @@ pub(in crate::kagan) fn plugin_commands(
     let commands = host.commands();
     host.status()
         .iter()
-        .filter(|status| status.is_enabled())
+        .filter(|status| status.enabled)
         .filter_map(|status| {
             let own: Vec<_> = commands
                 .iter()
-                .filter(|command| command.plugin() == status.id())
+                .filter(|command| command.plugin() == &status.id)
                 .cloned()
                 .collect();
-            (!own.is_empty()).then(|| (status.id().clone(), status.name().to_owned(), own))
+            (!own.is_empty()).then(|| (status.id.clone(), status.name.as_str().to_owned(), own))
         })
         .collect()
 }

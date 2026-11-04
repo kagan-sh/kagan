@@ -5,7 +5,6 @@ use crate::theme::TypeScale as _;
 
 use gpui_kit::component::ThemeMode;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, h_flex, v_flex,
 };
@@ -14,7 +13,6 @@ use gpui_kit::{
     ParentElement as _, Pixels, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
     Window, div, rems,
 };
-use kg_core::Workspace;
 use kg_domain::{Appearance, Op, PluginId, PreferenceOp, Slot, ThemeFile, ThemeOp};
 use kg_plugins::{PluginHost, Setting};
 use serde_json::json;
@@ -22,31 +20,12 @@ use serde_json::json;
 use super::indexes;
 use super::installed;
 use super::plugins;
+use super::row::{Group, Row, group, row, save, switch};
 use super::{ActivateItem, ITEM, Kagan};
 use crate::kagan::shown::control;
 use crate::theme::{CatalogEntry, Source, ThemeState, swatches};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
-
-/// One row: a title, a muted line, and its control on the right.
-pub(super) struct Row {
-    pub(super) id: SharedString,
-    pub(super) title: SharedString,
-    pub(super) note: SharedString,
-    pub(super) note_content: Option<AnyElement>,
-    pub(super) control: AnyElement,
-    /// A wide control stacks under the title
-    pub(super) wide: bool,
-}
-
-/// A titled card of rows.
-pub(super) struct Group {
-    /// Names the group's container, so it can be found. Plugin groups are keyed by plugin id.
-    pub(super) key: SharedString,
-    pub(super) title: SharedString,
-    pub(super) rows: Vec<Row>,
-    pub(super) headed: bool,
-}
 
 pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> Vec<Group> {
     let (agent, notify, update_check) = {
@@ -92,7 +71,7 @@ pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
     let views: Vec<PluginId> = kg_plugins::contributions(cx)
         .map(|list| {
             list.into_iter()
-                .filter(|(_, ui)| ui.settings().is_some())
+                .filter(|(_, ui)| ui.settings.as_deref().is_some())
                 .map(|(id, _)| id)
                 .collect()
         })
@@ -100,15 +79,15 @@ pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
     let host = host.read(cx);
     host.status()
         .iter()
-        .filter(|status| status.is_enabled())
+        .filter(|status| status.enabled)
         .filter(|status| {
-            views.contains(status.id())
+            views.contains(&status.id)
                 || host
-                    .settings(status.id())
+                    .settings(&status.id)
                     .iter()
                     .any(|(_, setting, _)| !matches!(setting, Setting::Provider { .. }))
         })
-        .map(|status| (status.id().clone(), status.name().to_owned()))
+        .map(|status| (status.id.clone(), status.name.as_str().to_owned()))
         .collect()
 }
 
@@ -443,54 +422,4 @@ fn mode_group(cx: &mut App) -> Group {
 
 fn current_mode(cx: &App) -> Appearance {
     ThemeState::global(cx).read(cx).settings.mode
-}
-
-/// One row, with its id, its title, its muted line, and its control.
-pub(super) fn row(id: &str, title: &str, note: &str, control: AnyElement) -> Row {
-    Row {
-        id: SharedString::from(format!("setting-row-{id}")),
-        title: title.to_owned().into(),
-        note: note.to_owned().into(),
-        note_content: None,
-        control,
-        wide: false,
-    }
-}
-
-pub(super) fn group(
-    key: impl Into<SharedString>,
-    title: impl Into<SharedString>,
-    rows: Vec<Row>,
-) -> Group {
-    Group {
-        key: key.into(),
-        title: title.into(),
-        rows,
-        headed: false,
-    }
-}
-
-/// A switch that reports its new value. It takes the theme's colors.
-pub(super) fn switch(
-    id: &str,
-    title: &str,
-    on: bool,
-    set: impl Fn(bool, &mut Window, &mut App) + 'static,
-) -> AnyElement {
-    control(
-        id.to_owned(),
-        Facts {
-            role: Role::Switch,
-            value: Some(if on { "on" } else { "off" }.into()),
-            ..Facts::button(title)
-        },
-        Switch::new(ElementId::Name(format!("{id}-switch").into()))
-            .checked(on)
-            .on_click(move |checked: &bool, window, cx: &mut App| set(*checked, window, cx)),
-    )
-    .into_any_element()
-}
-
-pub(super) fn save(op: Op, cx: &mut App) {
-    Workspace::dispatch(op, cx).detach();
 }

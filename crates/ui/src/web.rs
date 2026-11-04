@@ -260,8 +260,7 @@ fn host_token(host: &str) -> bool {
 }
 
 #[cfg(test)]
-#[path = "web_test.rs"]
-mod web_test;
+mod tests;
 
 // The stylesheet text the web view's protocol callback reads.
 //

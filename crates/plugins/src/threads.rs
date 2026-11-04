@@ -305,8 +305,14 @@ pub(crate) fn error(error: impl std::fmt::Display) -> HostError {
 pub(crate) fn dispatch(
     op: Op,
 ) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send, HostError> {
-    let receive = gpui_shell::with_current_app(|cx| watch(Workspace::dispatch(op, cx), cx))
-        .ok_or_else(|| HostError::new("no kagan app context"))?;
+    let receive = gpui_shell::with_current_app(|cx| {
+        let task = match op {
+            Op::Thread(ThreadOp::Rename { id, title }) => Workspace::rename_once(id, title, cx),
+            op => Workspace::dispatch(op, cx),
+        };
+        watch(task, cx)
+    })
+    .ok_or_else(|| HostError::new("no kagan app context"))?;
     Ok(finish(receive))
 }
 

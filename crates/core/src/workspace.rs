@@ -74,7 +74,7 @@ pub(crate) enum Request {
         exit: kg_terminal::Exit,
     },
     /// A locked title stays, and the rename fails.
-    SocketRename {
+    RenameOnce {
         id: ThreadId,
         title: String,
     },
@@ -143,7 +143,7 @@ pub struct Workspace {
     keymap: kg_domain::Keymap,
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
-    pub(crate) program_environment: Option<crate::program::Environment>,
+    pub(crate) program_environment: Option<crate::program::ProgramEnvironment>,
     /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
     pub(crate) claude_config: Option<std::path::PathBuf>,
     /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
@@ -365,8 +365,8 @@ impl Workspace {
             Request::Exited { thread_id, exit } => {
                 crate::thread::exited(this, thread_id, exit, cx).await
             }
-            Request::SocketRename { id, title } => {
-                crate::thread::rename_from_socket(this, id, title, cx).await
+            Request::RenameOnce { id, title } => {
+                crate::thread::rename_once(this, id, title, cx).await
             }
         }
     }
@@ -390,13 +390,13 @@ impl Workspace {
     /// PATH and the shell. A test calls this so its program list does not depend on the machine.
     #[cfg(any(test, feature = "test-support"))]
     pub fn use_program_environment(&mut self, path: &std::path::Path, shell: &std::path::Path) {
-        self.program_environment = Some(crate::program::Environment {
+        self.program_environment = Some(crate::program::ProgramEnvironment {
             path: path.as_os_str().to_owned(),
             shell: shell.as_os_str().to_owned(),
         });
     }
 
-    pub fn rename_from_socket(id: ThreadId, title: String, cx: &mut App) -> Task<Result<OpResult>> {
+    pub fn rename_once(id: ThreadId, title: String, cx: &mut App) -> Task<Result<OpResult>> {
         let op = Op::Thread(kg_domain::ThreadOp::Rename {
             id: id.clone(),
             title: title.clone(),
@@ -407,10 +407,7 @@ impl Workspace {
         let Some(global) = cx.try_global::<WorkspaceGlobal>() else {
             return Task::ready(Err(OpError::Failed("workspace is not open".into())));
         };
-        let submitted = global
-            .0
-            .read(cx)
-            .submit(Request::SocketRename { id, title });
+        let submitted = global.0.read(cx).submit(Request::RenameOnce { id, title });
         cx.spawn(async move |_| submitted.await)
     }
 
@@ -780,9 +777,9 @@ impl Workspace {
         folder: Option<String>,
         permit: Arc<Mutex<Option<u64>>>,
         activation: u64,
-    ) -> impl Future<Output = Result<bool>> + use<> {
+    ) -> impl Future<Output = Result<()>> + use<> {
         self.call(move |store| {
-            write_plugin_config(
+            if write_plugin_config(
                 store,
                 &id,
                 &key,
@@ -790,7 +787,13 @@ impl Workspace {
                 folder.as_deref(),
                 &permit,
                 activation,
-            )
+            )? {
+                Ok(())
+            } else {
+                Err(kg_store::Error::Conflict(format!(
+                    "plugin {id} changed while this was saving"
+                )))
+            }
         })
     }
 
@@ -970,7 +973,7 @@ impl Workspace {
                 Ok((
                     projects,
                     environments,
-                    store.threads(None, None, None, None)?,
+                    store.all_threads()?,
                     store.sections()?,
                     store.endings()?,
                     store.screens()?,
@@ -1169,14 +1172,9 @@ impl Workspace {
 
 fn interrupted(store: &mut Store) -> kg_store::Result<()> {
     let at = now();
-    for mut record in store.threads(None, None, None, None)? {
+    for mut record in store.all_threads()? {
         close_left_turn(store, &mut record, at)?;
-        if !matches!(
-            record.status,
-            kg_domain::ThreadStatus::Starting | kg_domain::ThreadStatus::Active
-        ) {
-            clear_pending(store, &record.id)?;
-        }
+        clear_pending(store, &record.id)?;
     }
     close_left_environments(store)
 }
@@ -1218,7 +1216,7 @@ fn clear_pending(store: &Store, id: &ThreadId) -> kg_store::Result<()> {
 }
 
 fn close_left_environments(store: &mut Store) -> kg_store::Result<()> {
-    let threads = store.threads(None, None, None, None)?;
+    let threads = store.all_threads()?;
     for project in store.projects()? {
         for mut environment in store.environments(&project.id)? {
             if matches!(
@@ -1331,6 +1329,11 @@ fn remember(
         }
     }
     losses
+}
+
+pub(crate) fn database(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Result<Database> {
+    this.update(cx, |workspace, _| workspace.database.clone())
+        .map_err(closed)
 }
 
 pub(crate) fn time(

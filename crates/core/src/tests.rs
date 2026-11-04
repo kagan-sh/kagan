@@ -564,8 +564,7 @@ async fn a_title_set_at_run_rejects_a_socket_rename(cx: &mut TestAppContext) {
 async fn socket_rename(id: &ThreadId, title: &str, cx: &mut TestAppContext) -> Result<OpResult> {
     let id = id.clone();
     let title = title.to_owned();
-    cx.update(|cx| Workspace::rename_from_socket(id, title, cx))
-        .await
+    cx.update(|cx| Workspace::rename_once(id, title, cx)).await
 }
 
 async fn environment_branch(id: &EnvironmentId, cx: &mut TestAppContext) -> Option<String> {
@@ -6092,7 +6091,7 @@ impl GitTrack {
             permissions.set_mode(0o755);
             std::fs::set_permissions(&program, permissions).unwrap();
         }
-        crate::changes::set_program(cwd, "git", Some(program));
+        crate::git::set_program(cwd, "git", Some(program));
         (
             log,
             Self {
@@ -6113,7 +6112,7 @@ fn which_git() -> std::path::PathBuf {
 
 impl Drop for GitTrack {
     fn drop(&mut self) {
-        crate::changes::set_program(&self.cwd, "git", None);
+        crate::git::set_program(&self.cwd, "git", None);
     }
 }
 
@@ -6956,7 +6955,7 @@ fn queue_folder_write(
     cx: &mut TestAppContext,
     fixture: &Fixture,
     permit: std::sync::Arc<std::sync::Mutex<Option<u64>>>,
-) -> impl std::future::Future<Output = Result<bool>> + use<> {
+) -> impl std::future::Future<Output = crate::database::Result<()>> + use<> {
     fixture.workspace.read_with(cx, |workspace, _| {
         workspace.commit_plugin_config(
             PluginId("demo-plugin".into()),
@@ -6997,7 +6996,7 @@ async fn a_queued_plugin_write_is_refused_once_its_permit_is_cleared(cx: &mut Te
     let mut context = std::task::Context::from_waker(&waker);
     assert!(write.as_mut().poll(&mut context).is_pending());
     *permit.lock().unwrap() = None;
-    assert!(!cx.foreground_executor().block_test(write).unwrap());
+    assert!(cx.foreground_executor().block_test(write).is_err());
     assert_folder_write_absent(&fixture);
 }
 
@@ -7009,7 +7008,7 @@ async fn a_queued_plugin_write_lands_while_its_permit_holds(cx: &mut TestAppCont
     let waker = futures::task::noop_waker();
     let mut context = std::task::Context::from_waker(&waker);
     assert!(write.as_mut().poll(&mut context).is_pending());
-    assert!(cx.foreground_executor().block_test(write).unwrap());
+    cx.foreground_executor().block_test(write).unwrap();
     assert_folder_write_landed(&fixture);
 }
 

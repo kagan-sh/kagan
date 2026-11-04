@@ -84,15 +84,6 @@ fn folder_tree<'a>(files: &[&'a DiffFile]) -> Folder<'a> {
     root
 }
 
-fn status_label(status: DiffStatus) -> &'static str {
-    match status {
-        DiffStatus::Added => "A",
-        DiffStatus::Modified => "M",
-        DiffStatus::Deleted => "D",
-        DiffStatus::Renamed => "R",
-    }
-}
-
 fn compact_folder<'a>(
     name: &str,
     child: &'a Folder<'a>,
@@ -531,7 +522,7 @@ impl Kagan {
         let focused = focus.is_focused(window);
         let click_focus = focus.clone();
         let selected = self.screen.review().map(|review| &review.path) == Some(&path);
-        let kind = status_label(file.status);
+        let kind = crate::kagan::changes::kind(file.status);
         let viewed = self.is_viewed(&file.path, cx);
         let (base, folder) = name
             .rsplit_once('/')

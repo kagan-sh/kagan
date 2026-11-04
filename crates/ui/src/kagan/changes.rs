@@ -96,7 +96,7 @@ pub(super) fn line(
         .child(text.into())
 }
 
-fn kind(status: DiffStatus) -> &'static str {
+pub(super) fn kind(status: DiffStatus) -> &'static str {
     match status {
         DiffStatus::Added => "A",
         DiffStatus::Modified => "M",

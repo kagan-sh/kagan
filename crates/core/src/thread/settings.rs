@@ -240,9 +240,7 @@ async fn set_built_in(
 }
 
 pub(crate) async fn remember_keymap(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Result<()> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let overrides = load_keymap(&database).await?;
     this.update(cx, |workspace, cx| {
         workspace.set_keymap(overrides);

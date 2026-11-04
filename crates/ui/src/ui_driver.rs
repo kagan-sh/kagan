@@ -6,18 +6,22 @@ use std::time::Duration;
 
 use gpui_kit::{AnyWindowHandle, App, AppContext as _, ElementId, ScrollDelta, point, px};
 use kg_core::{UiJob, Workspace};
-use kg_domain::{OpError, OpResult, SurfaceOp, UI_PERSON_ONLY, UI_UNAVAILABLE};
+use kg_domain::{OpError, OpResult, SurfaceOp, UI_PERSON_ONLY, UI_UNAVAILABLE, UiOp};
 
 pub(crate) fn install(cx: &mut App) {
     Workspace::global(cx).update(cx, |workspace, _| {
         workspace.set_ui_driver(Rc::new(|job, cx| match job {
             UiJob::NewTheme { id, from } => crate::theme::new_theme(&id, from.as_deref(), cx),
-            job => cx.spawn(async |cx| match job {
-                UiJob::Screenshot { window, path } => capture_after_present(window, path, cx).await,
-                job => drive(job, cx),
-            }),
+            UiJob::Op(UiOp::Screenshot { window, path }) => {
+                cx.spawn(async move |cx| capture_after_present(window, path, cx).await)
+            }
+            job => cx.spawn(async move |cx| drive(job, cx)),
         }));
     });
+}
+
+fn closed() -> OpError {
+    OpError::Failed("window closed".into())
 }
 
 fn drive(job: UiJob, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
@@ -33,7 +37,7 @@ fn drive(job: UiJob, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
         .update_window(handle, |_, window, cx| {
             crate::synthetic::with_active(|| run_job(job, window, cx))
         })
-        .map_err(|_| OpError::Failed("window closed".into()))?;
+        .map_err(|_| closed())?;
     if crate::synthetic::take_person_blocked() {
         return Err(OpError::Invalid(UI_PERSON_ONLY.into()));
     }
@@ -55,7 +59,7 @@ fn drive_surface(op: SurfaceOp, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult,
             }
         }) {
             Ok(inner) => inner,
-            Err(_) => Err(OpError::Failed("window closed".into())),
+            Err(_) => Err(closed()),
         }
     })
 }
@@ -93,11 +97,11 @@ async fn capture_after_present(
             crate::ui_dispatch::render_frame(window, cx);
             window.is_visible()
         })
-        .map_err(|_| OpError::Failed("window closed".into()))?;
+        .map_err(|_| closed())?;
     if !visible {
         return cx
             .update_window(handle, |_, window, _| captured(window, &path, false))
-            .map_err(|_| OpError::Failed("window closed".into()))?;
+            .map_err(|_| closed())?;
     }
     let (sender, receiver) = async_channel::bounded(1);
     let claimed = Arc::new(AtomicBool::new(false));
@@ -117,7 +121,7 @@ async fn capture_after_present(
             });
         }
     })
-    .map_err(|_| OpError::Failed("window closed".into()))?;
+    .map_err(|_| closed())?;
     cx.spawn({
         let sender = sender.clone();
         let claimed = Arc::clone(&claimed);
@@ -128,7 +132,7 @@ async fn capture_after_present(
             }
             let result = cx
                 .update_window(handle, |_, window, _| captured(window, &path, false))
-                .unwrap_or_else(|_| Err(OpError::Failed("window closed".into())));
+                .unwrap_or_else(|_| Err(closed()));
             let _ = sender.try_send(result);
         }
     })
@@ -147,16 +151,18 @@ fn captured(window: &gpui_kit::Window, path: &Path, current: bool) -> Result<OpR
 }
 
 fn window_index(job: &UiJob) -> u32 {
-    match job {
-        UiJob::Snapshot { window }
-        | UiJob::Click { window, .. }
-        | UiJob::Type { window, .. }
-        | UiJob::Key { window, .. }
-        | UiJob::Scroll { window, .. }
-        | UiJob::Drag { window, .. }
-        | UiJob::Drop { window }
-        | UiJob::Screenshot { window, .. } => *window,
-        UiJob::Surface(_) | UiJob::NewTheme { .. } => 0,
+    let UiJob::Op(op) = job else {
+        return 0;
+    };
+    match op {
+        UiOp::Snapshot { window }
+        | UiOp::Click { window, .. }
+        | UiOp::Type { window, .. }
+        | UiOp::Key { window, .. }
+        | UiOp::Scroll { window, .. }
+        | UiOp::Drag { window, .. }
+        | UiOp::Drop { window }
+        | UiOp::Screenshot { window, .. } => *window,
     }
 }
 
@@ -168,11 +174,14 @@ fn window_at(cx: &App, index: u32) -> Option<AnyWindowHandle> {
 
 fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpResult, OpError> {
     crate::ui_dispatch::render_frame(window, cx);
-    match job {
-        UiJob::Snapshot { window: index } => {
+    let UiJob::Op(op) = job else {
+        return Err(OpError::Failed(UI_UNAVAILABLE.into()));
+    };
+    match op {
+        UiOp::Snapshot { window: index } => {
             Ok(OpResult::Ui(crate::ui_dispatch::snapshot(window, index)))
         }
-        UiJob::Click {
+        UiOp::Click {
             element_id, within, ..
         } => {
             let element_id = ElementId::from(element_id);
@@ -181,16 +190,16 @@ fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<Op
             flush(window, cx);
             Ok(OpResult::Done)
         }
-        UiJob::Type { text, .. } => {
+        UiOp::Type { text, .. } => {
             crate::ui_dispatch::input(window, &text, cx)?;
             Ok(OpResult::Done)
         }
-        UiJob::Key { keystroke, .. } => {
+        UiOp::Key { keystroke, .. } => {
             crate::ui_dispatch::press(window, &keystroke, cx)?;
             flush(window, cx);
             Ok(OpResult::Done)
         }
-        UiJob::Scroll {
+        UiOp::Scroll {
             element_id,
             within,
             dy,
@@ -202,7 +211,7 @@ fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<Op
             crate::ui_dispatch::scroll_within(window, &element_id, within.as_ref(), delta, cx)?;
             Ok(OpResult::Done)
         }
-        UiJob::Drag {
+        UiOp::Drag {
             from,
             to,
             at,
@@ -223,14 +232,12 @@ fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<Op
             flush(window, cx);
             Ok(OpResult::Done)
         }
-        UiJob::Drop { .. } => {
+        UiOp::Drop { .. } => {
             crate::ui_dispatch::drop_held(window, cx)?;
             flush(window, cx);
             Ok(OpResult::Done)
         }
-        UiJob::Surface(_) | UiJob::Screenshot { .. } | UiJob::NewTheme { .. } => {
-            Err(OpError::Failed(UI_UNAVAILABLE.into()))
-        }
+        UiOp::Screenshot { .. } => Err(OpError::Failed(UI_UNAVAILABLE.into())),
     }
 }
 
@@ -296,7 +303,7 @@ mod macos {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
             _ => Path::new("."),
         };
-        std::fs::create_dir_all(folder).map_err(|error| OpError::Failed(error.to_string()))?;
+        std::fs::create_dir_all(folder)?;
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_nanos());
@@ -323,7 +330,7 @@ mod macos {
                 path.display()
             )));
         }
-        std::fs::rename(staged, path).map_err(|error| OpError::Failed(error.to_string()))
+        std::fs::rename(staged, path).map_err(OpError::from)
     }
 
     /// The reason `screencapture` gave in its own words, or its exit status when it gave none.
@@ -450,6 +457,7 @@ mod windows {
             _ => return Err(OpError::Failed("not a Win32 window".into())),
         };
         let mut rect = windows::Win32::Foundation::RECT::default();
+        // SAFETY: `hwnd` is GPUI's live window handle and `rect` is a writable RECT.
         unsafe { GetWindowRect(hwnd, &raw mut rect) }
             .map_err(|error| OpError::Failed(error.to_string()))?;
         let width = rect.right - rect.left;
@@ -457,13 +465,18 @@ mod windows {
         if width <= 0 || height <= 0 {
             return Err(OpError::Failed("window has no size".into()));
         }
+        // SAFETY: `hwnd` is a live window handle; the DC is released below.
         let hdc = unsafe { GetWindowDC(Some(hwnd)) };
         if hdc.is_invalid() {
             return Err(OpError::Failed("GetWindowDC failed".into()));
         }
+        // SAFETY: `hdc` was checked above and the memory DC is deleted below.
         let mem_dc = unsafe { CreateCompatibleDC(Some(hdc)) };
+        // SAFETY: both handles are live and the bitmap is deleted below.
         let bitmap = unsafe { CreateCompatibleBitmap(hdc, width, height) };
+        // SAFETY: both handles are live and the bitmap is compatible with the DC.
         let _ = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) };
+        // SAFETY: `hwnd` is live and `mem_dc` is a compatible memory DC.
         let printed =
             unsafe { PrintWindow(hwnd, mem_dc, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)) };
         let header = BITMAPINFOHEADER {
@@ -482,6 +495,7 @@ mod windows {
         };
         let stride = (width.cast_unsigned() as usize) * 4;
         let mut pixels = vec![0u8; stride * (height.cast_unsigned() as usize)];
+        // SAFETY: `pixels` is writable for `height` rows of `stride` bytes and `info` describes that buffer.
         let lines = unsafe {
             GetDIBits(
                 mem_dc,
@@ -493,6 +507,7 @@ mod windows {
                 windows::Win32::Graphics::Gdi::DIB_RGB_COLORS,
             )
         };
+        // SAFETY: each handle was created above and is released exactly once here.
         let _ = unsafe { DeleteObject(HGDIOBJ(bitmap.0)) };
         let _ = unsafe { DeleteDC(mem_dc) };
         let _ = unsafe { ReleaseDC(Some(hwnd), hdc) };
@@ -509,7 +524,7 @@ mod windows {
             image::RgbaImage::from_raw(width.cast_unsigned(), height.cast_unsigned(), pixels)
                 .ok_or_else(|| OpError::Failed("screenshot buffer is invalid".into()))?;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| OpError::Failed(error.to_string()))?;
+            std::fs::create_dir_all(parent)?;
         }
         image
             .save(path)

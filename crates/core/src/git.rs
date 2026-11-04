@@ -1,11 +1,10 @@
 #[cfg(test)]
 use std::collections::HashMap;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
@@ -16,7 +15,7 @@ use crate::Workspace;
 use crate::database::{Database, Result};
 use crate::workspace::missing;
 
-const GIT_LIMIT: Duration = Duration::from_secs(20);
+pub(crate) const GIT_LIMIT: Duration = Duration::from_secs(20);
 
 enum ToolError {
     Missing,
@@ -66,7 +65,7 @@ fn program(name: &str, _: &Path) -> Option<PathBuf> {
 fn find_program(name: &str) -> Option<PathBuf> {
     kg_process::find_program(
         Path::new(name),
-        std::env::var_os("PATH").as_deref(),
+        kg_process::user_path().as_deref(),
         kg_process::pathext().as_deref(),
     )
 }
@@ -76,84 +75,35 @@ fn run(
     cwd: &Path,
     args: &[&str],
     limit: Duration,
-) -> std::result::Result<std::process::Output, ToolError> {
+) -> std::result::Result<kg_process::Captured, ToolError> {
     let program = program(name, cwd).ok_or(ToolError::Missing)?;
     let mut command = Command::new(program);
-    command
-        .current_dir(cwd)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.current_dir(cwd).args(args);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt as _;
         command.creation_flags(0x0800_0000);
     }
-    let mut child = command.spawn().map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound {
-            ToolError::Missing
-        } else {
-            ToolError::Failed(error.to_string())
-        }
-    })?;
-    let stdout = child
-        .stdout
-        .take()
-        .map(|mut pipe| std::thread::spawn(move || read_pipe(&mut pipe)));
-    let stderr = child
-        .stderr
-        .take()
-        .map(|mut pipe| std::thread::spawn(move || read_pipe(&mut pipe)));
-    let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() > limit => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(ToolError::TimedOut);
-            }
-            Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(error) => return Err(ToolError::Failed(error.to_string())),
-        }
-    };
-    Ok(std::process::Output {
-        status,
-        stdout: join_pipe(stdout),
-        stderr: join_pipe(stderr),
+    kg_process::capture_with_limit(&mut command, limit).map_err(|error| match error.kind() {
+        std::io::ErrorKind::NotFound => ToolError::Missing,
+        std::io::ErrorKind::TimedOut => ToolError::TimedOut,
+        _ => ToolError::Failed(error.to_string()),
     })
-}
-
-fn read_pipe(pipe: &mut impl Read) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    let _ = pipe.read_to_end(&mut bytes);
-    bytes
-}
-
-fn join_pipe(handle: Option<std::thread::JoinHandle<Vec<u8>>>) -> Vec<u8> {
-    handle
-        .and_then(|handle| handle.join().ok())
-        .unwrap_or_default()
 }
 
 /// What `program` prints with `args`, or None when it is missing, fails, or runs past `limit`.
 pub(crate) fn program_stdout(program: &Path, args: &[&str], limit: Duration) -> Option<String> {
     let output = run(&program.display().to_string(), Path::new("."), args, limit).ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    (output.code == 0).then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 pub(crate) fn git(cwd: &Path, args: &[&str]) -> Result<String> {
     let output = run("git", cwd, args, GIT_LIMIT).map_err(tool_error("git"))?;
-    if !output.status.success() {
-        let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Err(OpError::Failed(if message.is_empty() {
+    if output.code != 0 {
+        return Err(OpError::Failed(if output.stderr.is_empty() {
             "git failed".into()
         } else {
-            message
+            output.stderr
         }));
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())

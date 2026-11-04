@@ -13,8 +13,8 @@ use kg_domain::{IndexOp, OpResult, PluginOp};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
-use super::pages::{Group, Row, group, row};
-use crate::kagan::plugins_box::{AddIndex, SearchIndexes};
+use super::row::{Group, Row, group, row};
+use crate::kagan::installer::{AddIndex, SearchIndexes};
 use crate::kagan::shown::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -23,7 +23,7 @@ pub(super) fn indexes_group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
     let saved = PluginHost::try_global(cx).map_or(Ok(Vec::new()), |host| host.read(cx).indexes());
     let (locations, broken) = match saved {
         Ok(locations) => (locations, None),
-        Err(error) => (Vec::new(), Some(error)),
+        Err(error) => (Vec::new(), Some(error.to_string())),
     };
     let mut rows: Vec<Row> = locations
         .iter()

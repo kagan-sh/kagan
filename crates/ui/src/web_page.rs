@@ -49,12 +49,12 @@ fn sweep_page_dirs(data: &std::path::Path) {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-pub(crate) struct Page {
+pub(crate) struct WebPage {
     view: Entity<gpui_webview::WebView>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-impl Page {
+impl WebPage {
     pub(crate) fn load_url(&self, url: &str, cx: &mut App) {
         self.view.update(cx, |view, _| view.load_url(url));
     }
@@ -73,7 +73,7 @@ impl Page {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-impl Render for Page {
+impl Render for WebPage {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.view.clone()
     }
@@ -84,7 +84,7 @@ pub(crate) fn open(
     window: &mut Window,
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
-) -> Result<Entity<Page>, String> {
+) -> Result<Entity<WebPage>, String> {
     #[cfg(target_os = "windows")]
     {
         open_windows(window, cx, configure)
@@ -108,7 +108,7 @@ fn open_windows(
     window: &mut Window,
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
-) -> Result<Entity<Page>, String> {
+) -> Result<Entity<WebPage>, String> {
     let data = kg_core::Workspace::global(cx)
         .read(cx)
         .data_dir()
@@ -130,7 +130,7 @@ fn open_windows(
     };
     view.remove_user_data_when_closed(storage);
     let view = cx.new(|_| view);
-    Ok(cx.new(|_| Page { view }))
+    Ok(cx.new(|_| WebPage { view }))
 }
 
 #[cfg(target_os = "macos")]
@@ -138,10 +138,10 @@ fn build(
     builder: wry::WebViewBuilder<'_>,
     window: &mut Window,
     cx: &mut App,
-) -> Result<Entity<Page>, String> {
+) -> Result<Entity<WebPage>, String> {
     let view = build_view(builder, window, cx)?;
     let view = cx.new(|_| view);
-    Ok(cx.new(|_| Page { view }))
+    Ok(cx.new(|_| WebPage { view }))
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]

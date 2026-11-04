@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -164,26 +165,39 @@ impl Thread {
     }
 }
 
+/// `id` first, then every thread whose lifecycle owner is already in the list.
+#[must_use]
+pub fn owned_thread_ids(threads: &[Thread], id: &ThreadId) -> Vec<ThreadId> {
+    let mut placed = BTreeSet::from([id.clone()]);
+    let mut ids = vec![id.clone()];
+    loop {
+        let mut progressed = false;
+        for thread in threads {
+            if placed.contains(&thread.id) {
+                continue;
+            }
+            if thread
+                .lifecycle_owner_thread_id
+                .as_ref()
+                .is_some_and(|owner| placed.contains(owner))
+            {
+                placed.insert(thread.id.clone());
+                ids.push(thread.id.clone());
+                progressed = true;
+            }
+        }
+        if !progressed {
+            break;
+        }
+    }
+    ids
+}
+
 /// Visible, unarchived threads archived with `id` because it owns their lifetime.
 /// A hidden or archived owner is not counted, and still links its visible descendants.
 #[must_use]
 pub fn archive_span(threads: &[Thread], id: &ThreadId) -> usize {
-    let mut owned = std::collections::BTreeSet::from([id.clone()]);
-    loop {
-        let before = owned.len();
-        for thread in threads {
-            if thread
-                .lifecycle_owner_thread_id
-                .as_ref()
-                .is_some_and(|owner| owned.contains(owner))
-            {
-                owned.insert(thread.id.clone());
-            }
-        }
-        if owned.len() == before {
-            break;
-        }
-    }
+    let owned = owned_thread_ids(threads, id);
     threads
         .iter()
         .filter(|thread| {
@@ -217,6 +231,13 @@ pub struct PendingInteraction {
 pub struct InteractionOption {
     pub id: String,
     pub label: String,
+}
+
+impl InteractionOption {
+    /// The answer that lets a permission question proceed.
+    pub const APPROVE: &str = "approve";
+    /// The answer that cancels a permission question.
+    pub const DECLINE: &str = "decline";
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

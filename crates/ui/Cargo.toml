@@ -15,7 +15,7 @@ async-channel.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-url = "=2.5.8"
+url.workspace = true
 percent-encoding = "=2.3.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -31,20 +31,20 @@ wry = { version = "=0.53.3", package = "lb-wry" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSString", "NSProcessInfo"] }
-objc2 = "=0.6.4"
+objc2.workspace = true
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSApplication", "NSDockTile", "NSImage", "NSBitmapImageRep", "NSImageRep", "std"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-tempfile = "=3.27.0"
+tempfile.workspace = true
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 windows = { version = "=0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_Xps", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_WindowsAndMessaging"] }
 gpui-webview = { workspace = true, features = ["windows-composition"] }
 
 [dev-dependencies]
-dunce = "=1.0.5"
+dunce.workspace = true
 kg-core = { workspace = true, features = ["test-support"] }
 kg-store.workspace = true
-tempfile = "=3.27.0"
+tempfile.workspace = true
 gpui-kit = { workspace = true, features = ["test-support", "tree-sitter-diff"] }
 
 [lints]

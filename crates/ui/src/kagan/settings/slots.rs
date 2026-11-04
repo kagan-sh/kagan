@@ -5,7 +5,7 @@ use kg_domain::{Op, PluginId, PluginOp, Slot, SlotChoice};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
-use super::pages::{self, Row, save};
+use super::row::{Row, save};
 use crate::kagan::shown::control;
 use crate::ui_registry::Facts;
 
@@ -20,7 +20,7 @@ pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
             host.read(cx)
                 .status()
                 .into_iter()
-                .map(|status| (status.id().clone(), status.name().to_owned()))
+                .map(|status| (status.id.clone(), status.name.as_str().to_owned()))
                 .collect()
         })
         .unwrap_or_default();
@@ -85,7 +85,7 @@ pub(super) fn row(kagan: &Kagan, slot: Slot, cx: &App) -> Row {
             "A plugin can draw the changes of a review. Kagan’s footer still sends and discards.",
         ),
     };
-    pages::row(
+    super::row::row(
         &format!("slot-{}", slot.id()),
         title,
         note,

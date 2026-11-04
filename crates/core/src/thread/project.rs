@@ -47,7 +47,7 @@ pub(super) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Re
         name,
         // `get-url` applies url.*.insteadOf, so a machine's https token rewrite
         // would store an ssh origin as https. The repo config is the origin.
-        git_remote_url: crate::changes::git(
+        git_remote_url: crate::git::git(
             &path,
             &["config", "--local", "--get", "remote.origin.url"],
         )
@@ -88,9 +88,7 @@ pub(super) async fn remove(
     requester: Option<crate::Requester>,
     cx: &mut gpui_kit::AsyncApp,
 ) -> Result<kg_domain::OpResult> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let lookup = id.clone();
     let (project, threads) = database
         .call(move |store| {

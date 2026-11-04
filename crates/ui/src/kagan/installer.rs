@@ -47,7 +47,7 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
-pub(super) struct PluginsBox {
+pub(super) struct PluginInstaller {
     pub(super) source: Entity<InputState>,
     pub(super) form: bool,
     pub(super) expanded: Option<PluginId>,
@@ -63,7 +63,7 @@ pub(super) struct PluginsBox {
     ops: Vec<Task<()>>,
 }
 
-impl PluginsBox {
+impl PluginInstaller {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Kagan>) -> Self {
         Self {
             source: cx.new(|cx| {
@@ -133,7 +133,7 @@ impl Kagan {
                 host.read(cx)
                     .status()
                     .into_iter()
-                    .map(|status| status.id().clone())
+                    .map(|status| status.id.clone())
                     .collect()
             })
             .unwrap_or_default();
@@ -149,8 +149,8 @@ impl Kagan {
                     host.read(cx)
                         .status()
                         .into_iter()
-                        .find(|status| !before.contains(status.id()))
-                        .map(|status| status.id().clone())
+                        .find(|status| !before.contains(&status.id))
+                        .map(|status| status.id.clone())
                 });
                 this.plugins.focus = id;
                 let window = this.window;
@@ -230,7 +230,7 @@ impl Kagan {
             host.read(cx)
                 .status()
                 .iter()
-                .any(|status| status.id() == id && status.is_enabled())
+                .any(|status| &status.id == id && status.enabled)
         });
         let op = if on {
             PluginOp::Disable { id: id.clone() }

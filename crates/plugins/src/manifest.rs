@@ -78,6 +78,8 @@ pub(crate) struct Powers {
     pub(crate) clipboard: Clipboard,
     pub(crate) areas: BTreeSet<Area>,
     pub(crate) read: Vec<String>,
+    #[serde(default, rename = "openUrl")]
+    pub(crate) open_url: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,7 +203,11 @@ fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
             })
         }
         Err(_)
-            if raw.contains("://") || raw.is_empty() || raw.contains('/') || raw.contains(' ') =>
+            if raw.contains("://")
+                || raw.contains(':')
+                || raw.is_empty()
+                || raw.contains('/')
+                || raw.contains(' ') =>
         {
             Err(format!(
                 "fetch host {raw:?} must be a hostname, or http://127.0.0.1:<port>"
@@ -458,8 +464,8 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
 impl Manifest {
     fn check(&self, root: &Path, data_dir: &Path) -> Result<(), String> {
         self.ui.check()?;
-        for panel in self.ui.panels() {
-            if let Some(web) = panel.web() {
+        for panel in &self.ui.panels {
+            if let Some(web) = panel.web.as_deref() {
                 crate::page::require_html(root, web)?;
             }
         }
@@ -588,9 +594,12 @@ impl Manifest {
             let Some(kind) = event.strip_prefix("thread.") else {
                 return Err(format!("unknown event {event:?}"));
             };
-            if !kg_domain::EventKind::TYPES.contains(&kind) {
+            if !kg_domain::EventKind::LIVE_TYPES.contains(&kind) {
                 return Err(format!("unknown event {event:?}"));
             }
+        }
+        if !self.events.is_empty() && !self.powers.areas.contains(&Area::Threads) {
+            return Err("thread events need the threads area".into());
         }
         Ok(())
     }
@@ -816,6 +825,10 @@ pub(crate) struct Grant {
     pub(crate) page_store: bool,
     #[serde(default)]
     pub(crate) instruct: bool,
+    #[serde(default)]
+    pub(crate) skills: bool,
+    #[serde(default)]
+    pub(crate) open_url: bool,
 }
 
 impl Grant {
@@ -837,13 +850,11 @@ impl Grant {
                 })
                 .collect(),
             paths: BTreeMap::new(),
-            page_store: manifest
-                .ui
-                .panels()
-                .iter()
-                .any(crate::contributions::PanelContribution::store)
+            page_store: manifest.ui.panels.iter().any(|panel| panel.store)
                 || crate::development::calls_webview_store(root),
             instruct: manifest.instruct,
+            skills: !manifest.skills.is_empty(),
+            open_url: manifest.powers.open_url,
         }
     }
 
@@ -900,6 +911,7 @@ impl Grant {
                     .filter(|entry| mine.read.iter().any(|approved| approved == *entry))
                     .cloned()
                     .collect(),
+                open_url: mine.open_url && theirs.open_url,
             },
             paths: self
                 .paths
@@ -910,6 +922,8 @@ impl Grant {
             folders,
             page_store: self.page_store && other.page_store,
             instruct: self.instruct && other.instruct,
+            skills: self.skills && other.skills,
+            open_url: self.open_url && other.open_url,
         }
     }
 
@@ -937,6 +951,8 @@ impl Grant {
                 .all(|key| approved.folders.contains_key(key))
             && (!self.page_store || approved.page_store)
             && (!self.instruct || approved.instruct)
+            && (!self.skills || approved.skills)
+            && (!self.open_url || approved.open_url)
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -998,6 +1014,12 @@ impl Grant {
         }
         if self.instruct {
             lines.push("adds instructions to a thread's program".into());
+        }
+        if self.skills {
+            lines.push("adds skills an agent can load".into());
+        }
+        if self.open_url {
+            lines.push("opens links in your browser".into());
         }
         lines
     }

@@ -143,6 +143,32 @@ impl EventKind {
         "reconnecting",
     ];
 
+    /// The kinds kagan still writes. The retired `file.*` kinds stay in [`Self::TYPES`] so old
+    /// logs load, but no wait or subscription should accept them.
+    pub const LIVE_TYPES: [&'static str; 21] = [
+        "created",
+        "started",
+        "exited",
+        "stopped",
+        "idle",
+        "waiting",
+        "failed",
+        "archived",
+        "unarchived",
+        "deleted",
+        "turn.started",
+        "turn.ended",
+        "message",
+        "tool",
+        "restore.failed",
+        "snapshot.failed",
+        "notice",
+        "answered",
+        "opened",
+        "rewound",
+        "reconnecting",
+    ];
+
     #[must_use]
     pub fn type_name(&self) -> &'static str {
         match self {

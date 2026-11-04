@@ -21,14 +21,14 @@ keyring-core.workspace = true
 rpassword = "=7.5.4"
 serde.workspace = true
 serde_json.workspace = true
-sha2 = "=0.10.9"
+sha2.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.191"
+libc.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"] }
-objc2 = "=0.6.4"
+objc2.workspace = true
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
     "NSApplication",
     "NSImage",
@@ -48,8 +48,8 @@ zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["rt-async-
 embed-resource = "=3.0.11"
 
 [dev-dependencies]
-sha2 = "=0.10.9"
-tempfile = "=3.27.0"
+sha2.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

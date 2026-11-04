@@ -7,6 +7,7 @@ mod installed;
 mod keyboard;
 mod pages;
 mod plugins;
+mod row;
 mod slots;
 mod updates;
 
@@ -169,7 +170,7 @@ impl Kagan {
         let export = kg_plugins::contributions(cx).ok().and_then(|list| {
             list.into_iter()
                 .find(|(plugin, _)| plugin == id)
-                .and_then(|(_, ui)| ui.settings().map(str::to_owned))
+                .and_then(|(_, ui)| ui.settings.as_deref().map(str::to_owned))
         });
         let Some(export) = export else {
             self.settings_views.remove(id);
@@ -343,7 +344,7 @@ fn settings_header(window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
         .into_any_element()
 }
 
-fn group_block(group: pages::Group, cx: &App) -> AnyElement {
+fn group_block(group: row::Group, cx: &App) -> AnyElement {
     let radius = cx.theme().radius;
     let line = cx.theme().border;
     let card = cx.theme().group_box;
@@ -411,7 +412,7 @@ fn group_block(group: pages::Group, cx: &App) -> AnyElement {
 
 /// One row of a card. A wide control, such as the theme cards, sits under its title instead of
 /// beside it, so the title keeps its width.
-fn row_element(row: pages::Row, last: bool, line: Hsla, muted: Hsla, shortcut: bool) -> AnyElement {
+fn row_element(row: row::Row, last: bool, line: Hsla, muted: Hsla, shortcut: bool) -> AnyElement {
     let show_text = row.id != "setting-row-install-form";
     let noted = !row.note.is_empty();
     let alias = if row.id == "setting-row-theme" {

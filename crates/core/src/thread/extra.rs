@@ -71,7 +71,8 @@ async fn open(this: &WeakEntity<Workspace>, id: ThreadId, cx: &mut AsyncApp) -> 
         })
         .map_err(closed)?;
     let folder = folder.ok_or_else(|| OpError::Invalid("its folder is not ready".into()))?;
-    let shell = crate::program::login_shell(crate::program::environment_of(this, cx).as_ref());
+    let shell =
+        crate::program::login_shell(crate::program::program_environment_of(this, cx).as_ref());
     let mut env = super::agent::variables(this, &record, cx)?;
     if let Some(locale) = cx
         .background_spawn(async { super::terminal::utf8_locale() })
@@ -192,7 +193,10 @@ pub(super) async fn links(
 /// Ends every extra terminal of a thread and forgets its numbers. Dropping a terminal ends its
 /// program. Returns whether the thread had any.
 pub(crate) fn end(workspace: &mut Workspace, id: &ThreadId) -> bool {
-    workspace.extras.remove(id).is_some()
+    workspace
+        .extras
+        .get_mut(id)
+        .is_some_and(|extras| !std::mem::take(&mut extras.open).is_empty())
 }
 
 /// Sends their screen changes and closes the ones whose shell exited. Returns whether any are open.

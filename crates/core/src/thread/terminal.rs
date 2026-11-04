@@ -85,7 +85,7 @@ async fn spawn(
     start: Start,
     cx: &mut AsyncApp,
 ) -> std::result::Result<Terminal, String> {
-    let environment = crate::program::environment_of(this, cx);
+    let environment = crate::program::program_environment_of(this, cx);
     let program = resolve_program(&record.provider, environment.as_ref())?;
     let integration = agent::integrate(this, record, &program, &folder, start, cx)
         .await
@@ -161,7 +161,7 @@ fn is_utf8(locale: &str) -> bool {
         .contains("utf8")
 }
 
-const SEND_CAP: usize = 1024 * 1024;
+const TEXT_CAP: usize = 1024 * 1024;
 
 pub(crate) async fn submit(
     this: &WeakEntity<Workspace>,
@@ -172,7 +172,7 @@ pub(crate) async fn submit(
     if text.is_empty() {
         return Err(OpError::Invalid("send needs text".into()));
     }
-    if text.len() > SEND_CAP {
+    if text.len() > TEXT_CAP {
         return Err(OpError::Invalid(format!(
             "send is {} bytes; the cap is 1 MiB",
             text.len()
@@ -217,8 +217,14 @@ pub(crate) fn run(
         if file.is_some() {
             return Err(OpError::Invalid("paste carries text, not a path".into()));
         }
-        if text.is_none() {
+        let Some(text) = text else {
             return Err(OpError::Invalid("paste needs text".into()));
+        };
+        if text.len() > TEXT_CAP {
+            return Err(OpError::Invalid(format!(
+                "paste is {} bytes; the cap is 1 MiB",
+                text.len()
+            )));
         }
     }
     let (ThreadOp::Input { id, terminal, .. }
@@ -304,7 +310,7 @@ fn act_ended(finished: &Finished, op: &ThreadOp) -> std::io::Result<OpResult> {
             || finished.transcript(),
             || finished.screen(),
         ),
-        _ => Ok(OpResult::Screen(finished.screen())),
+        _ => Err(std::io::Error::other("not a terminal operation")),
     }
 }
 
@@ -339,7 +345,7 @@ fn act_running(terminal: &Terminal, op: ThreadOp) -> std::io::Result<OpResult> {
             || terminal.transcript(),
             || terminal.screen(),
         ),
-        _ => Ok(OpResult::Screen(terminal.screen())),
+        _ => Err(std::io::Error::other("not a terminal operation")),
     }
 }
 
@@ -637,9 +643,7 @@ pub(crate) async fn start_again(
     if thread.read_with(cx, |thread, _| thread.running()) {
         return Err(OpError::Invalid("the program is still running".into()));
     }
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let folder = record.environment_id.clone();
     let ready = match folder {
         Some(folder) => database
@@ -836,9 +840,7 @@ async fn done(
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     let saved = id.clone();
     database.call(move |store| store.mark_done(&saved)).await?;

@@ -1,5 +1,4 @@
 #[cfg(test)]
-#[path = "../tests/replace_read.rs"]
 pub(crate) mod read;
 
 use std::collections::BTreeMap;
@@ -143,14 +142,14 @@ impl Kagan {
             .read(cx)
             .status()
             .into_iter()
-            .find(|status| status.id() == plugin)
-            .and_then(|status| status.error().map(str::to_owned))
+            .find(|status| &status.id == plugin)
+            .and_then(|status| status.error.clone())
         {
             return Err(Lost::Stopped(error));
         }
         let generation = host.read(cx).generation(plugin);
         if let Some(mounted) = self.replaced.mounted.get(&slot)
-            && mounted.contribution == panel.id()
+            && mounted.contribution == panel.id
             && generation == Some(mounted.generation)
         {
             return match &mounted.view {
@@ -158,12 +157,10 @@ impl Kagan {
                 None => Ok(()),
             };
         }
-        let mounted = surface::mount(
-            &surface::Declared::from(plugin.clone(), &panel),
-            false,
-            window,
-            cx,
-        );
+        let Some(declared) = surface::Declared::from(plugin.clone(), &panel) else {
+            return Err(Lost::Unoffered);
+        };
+        let mounted = surface::mount(&declared, false, window, cx);
         if let Some(error) = &mounted.error {
             return Err(Lost::Unloaded(first_line(error).to_owned()));
         }
@@ -188,7 +185,7 @@ impl Kagan {
                 .read(cx)
                 .status()
                 .iter()
-                .any(|status| *status.id() == plugin)
+                .any(|status| *&status.id == plugin)
         {
             host.read(cx).report(&plugin, &line);
         }

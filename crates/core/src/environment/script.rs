@@ -135,13 +135,13 @@ fn commit_id(base: &str) -> bool {
 }
 
 fn worktree_head(root: &Path) -> Result<String> {
-    Ok(crate::changes::git(root, &["rev-parse", "HEAD"])?
+    Ok(crate::git::git(root, &["rev-parse", "HEAD"])?
         .trim()
         .to_owned())
 }
 
 fn listed(root: &Path, rev: &str, name: &str) -> std::result::Result<Option<Object>, Check> {
-    let text = crate::changes::git(root, &["ls-tree", rev, "--", name])?;
+    let text = crate::git::git(root, &["ls-tree", rev, "--", name])?;
     let line = text.lines().next().unwrap_or("").trim();
     if line.is_empty() {
         return Ok(None);
@@ -180,7 +180,7 @@ fn working_object(root: &Path, name: &str) -> Result<Option<Object>> {
 
 fn hash_file(path: &Path) -> Result<String> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let text = crate::changes::git(parent, &["hash-object", "--", &path.display().to_string()])?;
+    let text = crate::git::git(parent, &["hash-object", "--", &path.display().to_string()])?;
     Ok(text.trim().to_owned())
 }
 
@@ -192,7 +192,7 @@ fn hash_bytes(bytes: &[u8]) -> Result<String> {
     ));
     std::fs::write(&path, bytes)?;
     let dir = std::env::temp_dir();
-    let hashed = crate::changes::git(&dir, &["hash-object", "--", &path.display().to_string()]);
+    let hashed = crate::git::git(&dir, &["hash-object", "--", &path.display().to_string()]);
     let _ = std::fs::remove_file(&path);
     Ok(hashed?.trim().to_owned())
 }

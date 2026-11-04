@@ -187,8 +187,8 @@ fn the_paste_key_sends_the_clipboard(cx: &mut TestAppContext) {
 #[cfg(unix)]
 #[gpui_kit::test]
 fn the_start_again_shortcut_runs_a_stopped_program_again(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
-    let flag = format!("/tmp/kg-start-again-{}", std::process::id());
+    let (_kagan, window, data) = open(cx);
+    let flag = data.path().join("start-again").display().to_string();
     let id = finished_program(
         cx,
         &format!("/bin/sh -c \"if [ -f {flag} ]; then sleep 30; else touch {flag}; fi\""),
@@ -202,8 +202,8 @@ fn the_start_again_shortcut_runs_a_stopped_program_again(cx: &mut TestAppContext
 #[cfg(unix)]
 #[gpui_kit::test]
 fn the_start_again_button_runs_a_stopped_program_again(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open(cx);
-    let flag = format!("/tmp/kg-start-again-button-{}", std::process::id());
+    let (_kagan, window, data) = open(cx);
+    let flag = data.path().join("start-again-button").display().to_string();
     let id = finished_program(
         cx,
         &format!("/bin/sh -c \"if [ -f {flag} ]; then sleep 30; else touch {flag}; fi\""),
@@ -217,8 +217,8 @@ fn the_start_again_button_runs_a_stopped_program_again(cx: &mut TestAppContext) 
 #[cfg(unix)]
 #[gpui_kit::test]
 fn a_started_again_program_takes_the_size_the_open_window_fitted(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open(cx);
-    let flag = format!("/tmp/kg-start-again-size-{}", std::process::id());
+    let (kagan, window, data) = open(cx);
+    let flag = data.path().join("start-again-size").display().to_string();
     let id = run_program(
         cx,
         &format!("/bin/sh -c \"if [ -f {flag} ]; then sleep 30; else touch {flag}; exit 7; fi\""),

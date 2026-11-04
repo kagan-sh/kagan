@@ -21,7 +21,7 @@ use kg_plugins::{PluginHost, Setting};
 use serde_json::{Value, json};
 
 use super::Kagan;
-use super::pages::{Group, Row, group, row, switch};
+use super::row::{Group, Row, group, row, switch};
 use crate::kagan::shown::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -79,13 +79,10 @@ pub(super) fn sync(drafts: &mut Drafts, window: &mut Window, cx: &mut Context<Ka
     };
     let secrets: Vec<(PluginId, String)> = {
         let host = host.read(cx);
-        let enabled = host
-            .status()
-            .into_iter()
-            .filter(kg_plugins::PluginStatus::is_enabled);
+        let enabled = host.status().into_iter().filter(|status| status.enabled);
         enabled
             .flat_map(|status| {
-                let id = status.id().clone();
+                let id = status.id.clone();
                 let settings = host.settings(&id).into_iter();
                 settings.filter_map(move |(key, setting, _)| {
                     matches!(setting, Setting::Secret { .. }).then(|| (id.clone(), key))
@@ -114,9 +111,9 @@ pub(super) fn sync(drafts: &mut Drafts, window: &mut Window, cx: &mut Context<Ka
 fn text_rows(host: &PluginHost) -> Vec<(PluginId, String, FieldKind, String)> {
     host.status()
         .into_iter()
-        .filter(kg_plugins::PluginStatus::is_enabled)
+        .filter(|status| status.enabled)
         .flat_map(|status| {
-            let id = status.id().clone();
+            let id = status.id.clone();
             host.settings(&id)
                 .into_iter()
                 .filter_map(|(key, setting, value)| match setting {
@@ -207,8 +204,8 @@ pub(super) fn plugin_groups(kagan: &Kagan, id: &PluginId, cx: &mut Context<Kagan
         .read(cx)
         .status()
         .into_iter()
-        .find(|status| status.id() == id)
-        .map_or_else(|| id.0.clone(), |status| status.name().to_owned());
+        .find(|status| &status.id == id)
+        .map_or_else(|| id.0.clone(), |status| status.name.clone());
     let weak = cx.entity().downgrade();
     let rows: Vec<Row> = settings
         .into_iter()
@@ -1167,9 +1164,9 @@ fn live_scopes(cx: &App) -> BTreeMap<String, (Option<u64>, Value)> {
     let host = host.read(cx);
     host.status()
         .into_iter()
-        .filter(kg_plugins::PluginStatus::is_enabled)
+        .filter(|status| status.enabled)
         .flat_map(|status| {
-            let id = status.id().clone();
+            let id = status.id.clone();
             let life = host.activation(&id);
             host.settings(&id)
                 .into_iter()

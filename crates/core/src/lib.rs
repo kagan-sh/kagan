@@ -1,12 +1,11 @@
 mod approval;
-mod changes;
 mod database;
-mod details;
 mod diagnostics;
 mod diff;
 mod end;
 mod entity;
 mod environment;
+mod git;
 mod guide;
 mod keys;
 mod program;

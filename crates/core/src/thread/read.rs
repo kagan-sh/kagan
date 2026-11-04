@@ -20,10 +20,10 @@ pub(crate) fn wait_event(
     cx: &mut App,
 ) -> Task<Result<OpResult>> {
     let kind = kind.strip_prefix("thread.").unwrap_or(kind);
-    let Some(kind) = EventKind::TYPES.into_iter().find(|name| *name == kind) else {
+    let Some(kind) = EventKind::LIVE_TYPES.into_iter().find(|name| *name == kind) else {
         return Task::ready(Err(OpError::Invalid(format!(
             "unknown event type {kind}; expected one of {}",
-            EventKind::TYPES.join(", ")
+            EventKind::LIVE_TYPES.join(", ")
         ))));
     };
     let database = workspace.read(cx).database.clone();

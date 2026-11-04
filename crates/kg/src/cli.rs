@@ -96,12 +96,12 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
                 eprintln!("{notice}. kagan may ask for your OK in its window.");
             }
             let result = client.call(&op)?;
-            print_development(&result, next, json)
+            print_result(&result, next, json)
         }
     }
 }
 
-fn print_development(
+fn print_result(
     result: &OpResult,
     next: Option<(bool, PathBuf)>,
     json: bool,

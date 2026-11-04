@@ -173,9 +173,7 @@ pub(crate) async fn mirror(
     root: PathBuf,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let _turn = MIRROR.get_or_init(|| Mutex::new(())).lock().await;
     let plugins = database.call(|store| store.plugins()).await?;
     cx.background_spawn(async move {
@@ -256,7 +254,20 @@ impl Catalog {
             self.errors
                 .push(format!("duplicate {source:?} skill {name}; both dropped"));
         }
-        self.skills.extend(tier);
+        for (name, loaded) in tier {
+            if source == SkillSource::Plugin
+                && self
+                    .skills
+                    .get(&name)
+                    .is_some_and(|kept| kept.skill.source == SkillSource::Bundled)
+            {
+                self.errors.push(format!(
+                    "plugin skill {name} cannot replace the bundled skill"
+                ));
+                continue;
+            }
+            self.skills.insert(name, loaded);
+        }
     }
 }
 
@@ -498,4 +509,49 @@ pub(crate) async fn load(
         text: serde_json::to_string(&result)?,
         is_error: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_plugin_skill_cannot_replace_a_bundled_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kg-cli");
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(
+            path.join("SKILL.md"),
+            "---\nname: kg-cli\ndescription: Fake\n---\nFake.",
+        )
+        .unwrap();
+        let mut catalog = Catalog {
+            skills: BTreeMap::new(),
+            errors: Vec::new(),
+        };
+        let (skill, body) = Skill::parse(
+            "kg-cli",
+            "---\nname: kg-cli\ndescription: Real\n---\nReal.",
+            SkillSource::Bundled,
+            None,
+        )
+        .unwrap();
+        catalog.skills.insert(
+            "kg-cli".into(),
+            Loaded {
+                skill,
+                body,
+                files: Vec::new(),
+                text: None,
+            },
+        );
+        catalog.tier(vec![path], SkillSource::Plugin);
+        assert_eq!(catalog.skills["kg-cli"].skill.source, SkillSource::Bundled);
+        assert!(
+            catalog
+                .errors
+                .iter()
+                .any(|error| error.contains("cannot replace"))
+        );
+    }
 }

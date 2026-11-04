@@ -363,7 +363,7 @@ fn provision(
         Provider::Project => {}
         Provider::Personal => std::fs::create_dir_all(&environment.path)?,
         Provider::Worktree => {
-            if !crate::changes::repository(project) {
+            if !crate::git::repository(project) {
                 return Err(OpError::Invalid(format!(
                     "{} is not a git repository, so it has no worktree; run in the project folder instead (--environment project-default)",
                     project.display()
@@ -374,16 +374,16 @@ fn provision(
                 .branch
                 .clone()
                 .ok_or_else(|| OpError::Invalid("worktree has no branch".into()))?;
-            if !crate::changes::valid_branch(&requested) {
+            if !crate::git::valid_branch(&requested) {
                 return Err(
                     OpError::Invalid(format!("branch name {requested} is not allowed")).into(),
                 );
             }
-            let branches = crate::changes::branch_list(project)?;
+            let branches = crate::git::branch_list(project)?;
             if let Some(base) = environment.base_branch.as_deref() {
                 // A branch, or a commit when HEAD is detached.
                 let known = branches.names.iter().any(|name| name == base)
-                    || crate::changes::git(
+                    || crate::git::git(
                         project,
                         &[
                             "rev-parse",
@@ -393,7 +393,7 @@ fn provision(
                         ],
                     )
                     .is_ok();
-                if !crate::changes::valid_branch(base) || !known {
+                if !crate::git::valid_branch(base) || !known {
                     return Err(OpError::Invalid(format!(
                         "base {base} is not a branch or commit in this repository"
                     ))
@@ -460,17 +460,17 @@ fn git(project: &Path, args: &[&str], path: Option<&Path>, trailing: Option<&str
         owned.push(trailing.to_owned());
     }
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    crate::changes::git(project, &refs).map(|_| ())
+    crate::git::git(project, &refs).map(|_| ())
 }
 
 fn unique_branch(project: &Path, name: &str) -> Result<String> {
-    let names = crate::changes::branch_list(project)?.names;
+    let names = crate::git::branch_list(project)?.names;
     if !names.iter().any(|branch| branch == name) {
         return Ok(name.to_owned());
     }
     for suffix in 2..100 {
         let candidate = format!("{name}-{suffix}");
-        if crate::changes::valid_branch(&candidate) && !names.contains(&candidate) {
+        if crate::git::valid_branch(&candidate) && !names.contains(&candidate) {
             return Ok(candidate);
         }
     }
@@ -495,9 +495,7 @@ pub(crate) async fn restore(
     thread_id: ThreadId,
     cx: &mut AsyncApp,
 ) -> Result<Environment> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let lookup = thread_id.clone();
     let record = database
         .call(move |store| store.thread(&lookup))
@@ -584,7 +582,7 @@ fn check_kept_worktree(
     others: &[Environment],
 ) -> Result<()> {
     let path = dunce::canonicalize(&environment.path)?;
-    let listed = crate::changes::git(project, &["worktree", "list", "--porcelain"])?;
+    let listed = crate::git::git(project, &["worktree", "list", "--porcelain"])?;
     let is_worktree = listed
         .lines()
         .filter_map(|line| line.strip_prefix("worktree "))
@@ -610,7 +608,7 @@ fn check_kept_worktree(
         .branch
         .as_deref()
         .ok_or_else(|| OpError::Invalid("worktree has no branch".into()))?;
-    let head = crate::changes::git(&path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let head = crate::git::git(&path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
     if head.trim() != recorded {
         return Err(OpError::Failed(format!(
             "the worktree is on {}, not {recorded}",
@@ -629,9 +627,7 @@ pub(crate) async fn sweep(
     this: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,
 ) -> Result<(bool, Vec<Retirement>)> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let (records, environments) = database
         .call(|store| {
             let mut environments = Vec::new();
@@ -640,7 +636,7 @@ pub(crate) async fn sweep(
                     environments.push((environment, project.path.clone()));
                 }
             }
-            Ok((store.threads(None, None, None, None)?, environments))
+            Ok((store.all_threads()?, environments))
         })
         .await?;
     let at = time(this, cx)?;
@@ -730,7 +726,7 @@ pub(crate) async fn leftovers(
         .map_err(closed)?;
     let destroyed = database
         .call(move |store| {
-            let threads = store.threads(None, None, None, None)?;
+            let threads = store.all_threads()?;
             let mut destroyed = Vec::new();
             for project in store.projects()? {
                 for environment in store.environments(&project.id)? {
@@ -769,9 +765,7 @@ pub(crate) async fn remove_again(
     id: EnvironmentId,
     cx: &mut AsyncApp,
 ) -> Result<kg_domain::OpResult> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let lookup = id.clone();
     let found = database
         .call(move |store| {
@@ -884,7 +878,7 @@ async fn tell_removal(
     let Ok(thread) = database
         .call(move |store| {
             Ok(store
-                .threads(None, None, None, None)?
+                .all_threads()?
                 .into_iter()
                 .find(|thread| thread.environment_id.as_ref() == Some(&lookup))
                 .map(|thread| thread.id))
@@ -917,9 +911,7 @@ pub(crate) async fn finish_removal(
         workspace.removing.remove(&id);
     })
     .map_err(closed)?;
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     if let Err(error) = &outcome {
         let reason = removal_refusal(&environment.path, error, RETRY);
         let lookup = id.clone();
@@ -967,7 +959,7 @@ pub(crate) fn removal_refusal(root: &Path, error: &OpError, next: &str) -> Strin
     if !raw.contains("modified or untracked") {
         return raw;
     }
-    let names = crate::changes::git(root, &["status", "--porcelain", "-uall"])
+    let names = crate::git::git(root, &["status", "--porcelain", "-uall"])
         .ok()
         .map(|text| {
             text.lines()

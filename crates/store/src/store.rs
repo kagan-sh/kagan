@@ -439,6 +439,11 @@ impl Store {
     }
 
     /// Newest first by `created_at`; `archived` and `before` filter only when given.
+    /// Every thread, visible or hidden, archived or live.
+    pub fn all_threads(&self) -> Result<Vec<Thread>> {
+        self.threads(None, None, None, None)
+    }
+
     pub fn threads(
         &self,
         project_id: Option<&ProjectId>,
@@ -578,7 +583,6 @@ impl Store {
         found(changed, "thread", id)
     }
 
-    /// Archives the thread and its lifecycle dependents; returns those that were not archived yet.
     /// Archives the thread and its lifecycle dependents; returns an `Archived` event per thread it archived.
     pub fn archive_thread(&mut self, id: &ThreadId, at: Timestamp) -> Result<Vec<Event>> {
         let tx = self.conn.transaction()?;
@@ -961,14 +965,12 @@ impl Store {
             ));
         }
         let transaction = self.conn.unchecked_transaction()?;
-        let latest: Option<u64> = transaction
-            .query_row(
-                "SELECT MAX(seq) FROM events \
-                 WHERE thread_id = ?1 AND json_extract(kind, '$.type') = 'started'",
-                [Text(&row.thread_id)],
-                |row| row.get(0),
-            )
-            .optional()?;
+        let latest: Option<u64> = transaction.query_row(
+            "SELECT MAX(seq) FROM events \
+             WHERE thread_id = ?1 AND json_extract(kind, '$.type') = 'started'",
+            [Text(&row.thread_id)],
+            |row| row.get(0),
+        )?;
         if latest != Some(row.started_seq) {
             transaction.commit()?;
             return Ok(false);

@@ -12,6 +12,15 @@ use serde_json::{Map, Value};
 
 use crate::jobs::Ended;
 use crate::manifest::{AgentChoice, Grant, Setting};
+
+pub(crate) fn approved(record: &Plugin) -> Result<Grant> {
+    serde_json::from_value(record.approved.clone()).map_err(|error| {
+        OpError::Invalid(format!(
+            "plugin {}: the stored approval cannot be read; approve it again ({error})",
+            record.id
+        ))
+    })
+}
 use crate::source::{Fetched, Source, checkout, fetch};
 use crate::{Discovered, PluginHost, Result, activate};
 
@@ -281,6 +290,7 @@ async fn develop(
                 .values()
                 .map(|record| Plugin {
                     error: host.failure(&record.id),
+                    source: crate::index::shown(&record.source),
                     ..record.clone()
                 })
                 .collect()
@@ -466,7 +476,7 @@ async fn dev(
     let root = cx
         .background_spawn(async move { dunce::canonicalize(path) })
         .await?;
-    let record = host
+    let mut record = host
         .read_with(cx, |host, _| {
             host.records
                 .values()
@@ -486,6 +496,7 @@ async fn dev(
         )));
     }
     reload(host, record.clone(), thread_id, requester, cx).await?;
+    record.source = crate::index::shown(&record.source);
     Ok(OpResult::Plugins(vec![record]))
 }
 
@@ -518,7 +529,7 @@ async fn reload(
         ));
     }
     let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
-    let approved: Grant = serde_json::from_value(record.approved.clone())?;
+    let approved = approved(&record)?;
     if !grant.within(&approved) {
         let thread_id = thread_id.ok_or_else(|| OpError::Invalid(NO_THREAD.into()))?;
         approve(
@@ -549,7 +560,6 @@ async fn reload(
     Ok(result)
 }
 
-/// Frees the plugin host's install slot when the install ends, even when it is cancelled.
 /// Holds the install slot. Dropping it frees the slot, even when the install is cancelled, and
 /// tells the windows, which read the slot from the host.
 struct Claim {
@@ -584,7 +594,7 @@ async fn install(
             "{running} is already installing; answer it in Questions first"
         )));
     }
-    *slot.borrow_mut() = Some(source.clone());
+    *slot.borrow_mut() = Some(crate::index::shown(&source));
     host.update(cx, |_, cx| cx.notify());
     let stops = host.read_with(cx, |host, _| host.install_stop.clone());
     let _claim = Claim {
@@ -715,7 +725,7 @@ async fn update(
         )));
     }
     let grant = Grant::of(manifest, &fetched.root);
-    let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
+    let approved = approved(&record)?;
     let within = grant.within(&approved);
     if within && fetched.commit.is_some() && fetched.commit == record.commit {
         return Ok(OpResult::Done);
@@ -838,11 +848,11 @@ async fn approve(
 fn permission_options() -> Vec<InteractionOption> {
     vec![
         InteractionOption {
-            id: "approve".into(),
+            id: InteractionOption::APPROVE.into(),
             label: "Approve".into(),
         },
         InteractionOption {
-            id: "decline".into(),
+            id: InteractionOption::DECLINE.into(),
             label: "Decline".into(),
         },
     ]
@@ -851,11 +861,11 @@ fn permission_options() -> Vec<InteractionOption> {
 fn removal_options() -> Vec<InteractionOption> {
     vec![
         InteractionOption {
-            id: "decline".into(),
+            id: InteractionOption::DECLINE.into(),
             label: "Cancel".into(),
         },
         InteractionOption {
-            id: "approve".into(),
+            id: InteractionOption::APPROVE.into(),
             label: "Remove".into(),
         },
     ]
@@ -872,7 +882,7 @@ async fn choose(
     let answer = cx
         .update(|cx| Workspace::ask_for_person(thread_id, requester, title, options, cx))
         .await?;
-    if answer == "approve" {
+    if answer == InteractionOption::APPROVE {
         Ok(())
     } else {
         Err(OpError::Invalid(format!("declined: {question}")))
@@ -1016,7 +1026,7 @@ async fn write_setting(
     if let Some(hold) = host.update(cx, |host, _| host.write_hold.take()) {
         let _ = hold.recv().await;
     }
-    let wrote = workspace
+    workspace
         .read_with(cx, |workspace, _| {
             workspace.commit_plugin_config(
                 id.clone(),
@@ -1028,11 +1038,6 @@ async fn write_setting(
             )
         })
         .await?;
-    if !wrote {
-        return Err(OpError::Invalid(format!(
-            "plugin {id} changed while this was saving"
-        )));
-    }
     host.update(cx, |host, cx| {
         remember_setting(host, id, key, &value, folder, activation, cx)
     })?;
@@ -1079,8 +1084,7 @@ fn remember_setting(
             active.grant.paths.insert(key.to_owned(), path.clone());
         }
         if let Some(record) = host.records.get_mut(id) {
-            let mut approved: Grant =
-                serde_json::from_value(record.approved.clone()).unwrap_or_default();
+            let mut approved = approved(record)?;
             approved.paths.insert(key.to_owned(), path.clone());
             record.approved = serde_json::to_value(&approved)?;
         }
@@ -1111,7 +1115,7 @@ fn stage(host: &PluginHost, id: &PluginId, key: &str, folder: Option<&PathBuf>) 
         .records
         .get(id)
         .ok_or_else(|| OpError::Invalid(format!("plugin {id} was removed while this waited")))?;
-    let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
+    let approved = approved(record)?;
     let still_folder = approved.folders.contains_key(key)
         && host.active.get(id).is_some_and(|active| {
             matches!(

@@ -14,11 +14,11 @@ kg-process.workspace = true
 windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.191"
+libc.workspace = true
 rustix = { version = "=1.1.5", features = ["process"] }
 
 [dev-dependencies]
-tempfile = "=3.27.0"
+tempfile.workspace = true
 
 [lints]
 workspace = true

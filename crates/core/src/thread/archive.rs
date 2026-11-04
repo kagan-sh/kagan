@@ -181,11 +181,11 @@ pub(super) async fn approve(
 ) -> Result<()> {
     let options = vec![
         InteractionOption {
-            id: "decline".into(),
+            id: InteractionOption::DECLINE.into(),
             label: "Cancel".into(),
         },
         InteractionOption {
-            id: "approve".into(),
+            id: InteractionOption::APPROVE.into(),
             label: verb.into(),
         },
     ];
@@ -194,7 +194,7 @@ pub(super) async fn approve(
             Workspace::ask_for_person(thread_id.as_ref(), requester, question.clone(), options, cx)
         })
         .await?;
-    if answer == "approve" {
+    if answer == InteractionOption::APPROVE {
         Ok(())
     } else {
         Err(OpError::Invalid(format!("declined: {question}")))

@@ -15,7 +15,7 @@ use kg_core::Workspace;
 use kg_domain::{Op, PluginId, PluginOp, SurfaceOp};
 
 use super::Kagan;
-use super::plugins_box::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
+use super::installer::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
 use super::shown::{control, menu_popup};
 use super::surface::Slot;
 use super::tabs::{self, CloseTab, NewTerminal};

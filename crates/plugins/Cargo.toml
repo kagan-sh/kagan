@@ -12,23 +12,23 @@ kg-domain.workspace = true
 async-channel.workspace = true
 cap-std = "=4.0.3"
 async-io = "=2.6.0"
-dunce = "=1.0.5"
-futures = "=0.3.34"
+dunce.workspace = true
+futures.workspace = true
 gpui-kit.workspace = true
 gpui-shell.workspace = true
 indexmap = { version = "=2.14.2", features = ["serde"] }
 jsonschema = { version = "=0.58.3", default-features = false }
 keyring-core.workspace = true
-semver = "=1.0.28"
+semver.workspace = true
 rusqlite = { workspace = true, features = ["hooks"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tempfile = "=3.27.0"
+tempfile.workspace = true
 uuid = { version = "=1.26.1", features = ["v4"] }
 tree-sitter = "=0.26.13"
 tree-sitter-javascript = "=0.25.0"
-url = "=2.5.8"
+url.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wry = { version = "=0.53.3", package = "lb-wry" }

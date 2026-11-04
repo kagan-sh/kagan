@@ -7,7 +7,7 @@ use std::sync::Weak;
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use gpui_shell::{HostError, HostModule, HostValue};
-use kg_domain::PluginId;
+use kg_domain::{OpError, PluginId};
 use serde_json::{Map, Value};
 
 use crate::area::from_host;
@@ -72,14 +72,14 @@ pub(crate) fn require_html(root: &Path, relative: &str) -> Result<(), String> {
 /// # Errors
 ///
 /// The text is over that cap, or it is not JSON.
-pub fn parse_message(raw: &str) -> Result<Value, String> {
+pub fn parse_message(raw: &str) -> Result<Value, OpError> {
     if raw.len() > MESSAGE_CAP {
-        return Err(format!(
+        return Err(OpError::Invalid(format!(
             "a page message is {} bytes, over the {MESSAGE_CAP}-byte limit",
             raw.len()
-        ));
+        )));
     }
-    serde_json::from_str(raw).map_err(|_| "a page message must be JSON".to_owned())
+    serde_json::from_str(raw).map_err(|_| OpError::Invalid("a page message must be JSON".into()))
 }
 
 pub(crate) fn module(plugin: &PluginId) -> HostModule {
@@ -94,7 +94,7 @@ pub(crate) fn module(plugin: &PluginId) -> HostModule {
             let message = from_host(arguments.get(1).unwrap_or(&HostValue::Null));
             let text = serde_json::to_string(&message)
                 .map_err(|_| HostError::new("a page message must be JSON"))?;
-            parse_message(&text).map_err(HostError::new)?;
+            parse_message(&text).map_err(|error| HostError::new(error.to_string()))?;
             let (reply, replied) = async_channel::bounded(1);
             let plugin = owner.clone();
             ui_host::app(|ui, cx| {
@@ -234,9 +234,10 @@ pub fn store_dir(data: &Path, page: &str) -> PathBuf {
 /// # Errors
 ///
 /// The folder cannot be created, or the id file cannot be written.
-pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], String> {
+pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], OpError> {
     let dir = store_dir(data, page);
-    std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", dir.display())))?;
     let path = dir.join("store.id");
     if let Ok(bytes) = std::fs::read(&path)
         && bytes.len() == 16
@@ -246,7 +247,8 @@ pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], String> {
         return Ok(id);
     }
     let id = *uuid::Uuid::new_v4().as_bytes();
-    std::fs::write(&path, id).map_err(|error| error.to_string())?;
+    std::fs::write(&path, id)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", path.display())))?;
     Ok(id)
 }
 

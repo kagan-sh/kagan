@@ -25,7 +25,9 @@ pub(super) fn watch(
                 }
                 if let Some(host) = PluginHost::try_global(cx) {
                     host.update(cx, |host, cx| {
-                        let _ = host.deliver_page(&plugin, &panel, &raw, alive, cx);
+                        if let Err(error) = host.deliver_page(&plugin, &panel, &raw, alive, cx) {
+                            eprintln!("kg: the page message was not delivered: {error}");
+                        }
                     });
                 }
             });

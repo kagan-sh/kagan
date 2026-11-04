@@ -172,7 +172,7 @@ impl ComponentMaterializer for WebView {
 struct Shown {
     note: Option<String>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    page: Option<Entity<crate::page::Page>>,
+    page: Option<Entity<crate::web_page::WebPage>>,
 }
 
 fn frame(
@@ -256,11 +256,13 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
         if !host.allows_page_store(&plugin) {
             return Ok(None);
         }
-        if crate::page::macos_major() < 14 {
-            return Err(crate::page::STORE_NEEDS_MACOS.to_owned());
+        if crate::web_page::macos_major() < 14 {
+            return Err(crate::web_page::STORE_NEEDS_MACOS.to_owned());
         }
         let data = host.plugin_data(&plugin);
-        kg_plugins::keep_store(&data, id).map(Some)
+        kg_plugins::keep_store(&data, id)
+            .map(Some)
+            .map_err(|error| error.to_string())
     });
     #[cfg(not(target_os = "macos"))]
     let keep = {
@@ -335,7 +337,7 @@ fn owned(
         }
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         Gate::Open => match keep {
-            Some(Err(message)) if message == crate::page::STORE_NEEDS_MACOS => {
+            Some(Err(message)) if message == crate::web_page::STORE_NEEDS_MACOS => {
                 let mut shown = open_owned(
                     Open {
                         owner: owner.clone(),
@@ -407,7 +409,7 @@ fn noted(reason: &str) -> Shown {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn page_shown(page: Entity<crate::page::Page>) -> Shown {
+fn page_shown(page: Entity<crate::web_page::WebPage>) -> Shown {
     Shown {
         note: None,
         page: Some(page),
@@ -484,25 +486,25 @@ fn build(
     store: Option<[u8; 16]>,
     window: &mut Window,
     cx: &mut App,
-) -> Result<Entity<crate::page::Page>, String> {
+) -> Result<Entity<crate::web_page::WebPage>, String> {
     let hosts = hosts.to_vec();
     let url = url.to_owned();
-    crate::page::open(window, cx, move |builder| {
-        crate::page::with_store(builder, store)
+    crate::web_page::open(window, cx, move |builder| {
+        crate::web_page::with_store(builder, store)
             .with_url(&url)
             .with_navigation_handler(move |target| allowed(&target, &hosts).is_ok())
     })
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn reveal(page: &Entity<crate::page::Page>, cx: &mut App) {
+fn reveal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if !page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.show(cx));
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn conceal(page: &Entity<crate::page::Page>, cx: &mut App) {
+fn conceal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.hide(cx));
     }
@@ -526,7 +528,7 @@ fn write(cx: &mut App, index: usize, url: &str, note: Option<String>) {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn write_page(cx: &mut App, index: usize, url: &str, page: Entity<crate::page::Page>) {
+fn write_page(cx: &mut App, index: usize, url: &str, page: Entity<crate::web_page::WebPage>) {
     let slot = &mut cx.default_global::<Pages>().pages[index];
     url.clone_into(&mut slot.url);
     slot.note = None;
@@ -540,7 +542,7 @@ fn held(
     url: &str,
     hosts: &[String],
     store: Option<[u8; 16]>,
-    page: Option<Entity<crate::page::Page>>,
+    page: Option<Entity<crate::web_page::WebPage>>,
     note: Option<String>,
 ) -> Held {
     Held {
@@ -607,7 +609,7 @@ struct Held {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     store: Option<[u8; 16]>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    page: Option<Entity<crate::page::Page>>,
+    page: Option<Entity<crate::web_page::WebPage>>,
 }
 
 // Drops native pages that hold these stores so `WebKit` releases them before removal.
