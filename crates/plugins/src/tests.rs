@@ -641,7 +641,12 @@ fn page_store_is_an_install_line_and_needs_approval_again() {
     std::fs::create_dir_all(&html).unwrap();
     std::fs::write(html.join("index.html"), "<p>hi</p>").unwrap();
     let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
-    assert!(!base.lines().iter().any(|line| line == "keeps page data"));
+    assert!(
+        !base
+            .lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later")
+    );
     let mut value = manifest();
     value["ui"]["panels"] = json!([{
         "id": "board",
@@ -653,7 +658,9 @@ fn page_store_is_an_install_line_and_needs_approval_again() {
     write_plugin(plugin.path(), &value);
     let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     assert!(
-        with.lines().iter().any(|line| line == "keeps page data"),
+        with.lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later"),
         "{:?}",
         with.lines()
     );
@@ -679,7 +686,10 @@ export default class Plugin extends View {
     .unwrap();
     let grant = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     assert!(
-        grant.lines().iter().any(|line| line == "keeps page data"),
+        grant
+            .lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later"),
         "{:?}",
         grant.lines()
     );

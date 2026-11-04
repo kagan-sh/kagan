@@ -995,7 +995,7 @@ impl Grant {
             lines.push(format!("reads a folder you choose ({title})"));
         }
         if self.page_store {
-            lines.push("keeps page data".into());
+            lines.push("keeps page data on macOS 14 or later".into());
         }
         if self.instruct {
             lines.push("adds instructions to a thread's program".into());
