@@ -111,16 +111,8 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
         permits: BTreeMap::new(),
         components,
         drop_pages: None,
-        _events: cx.subscribe(&workspace, |_host, _, event, cx| {
-            let kg_core::WorkspaceEvent::Event { event, project_id } = event else {
-                return;
-            };
-            let event = event.clone();
-            let project_id = project_id.clone();
-            cx.spawn(async move |host, cx| {
-                let _ = host.update(cx, |host, cx| host.deliver_event(&event, &project_id, cx));
-            })
-            .detach();
+        _events: cx.subscribe(&workspace, |_, _, event, cx| {
+            PluginHost::deliver_workspace_event(event, cx);
         }),
         _watchdog: cx.spawn(async move |host, cx| {
             loop {
@@ -142,6 +134,7 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
                 }
             }
         }),
+        _quit: cx.on_app_quit(PluginHost::stop_programs),
         #[cfg(test)]
         keep_hold: None,
         #[cfg(test)]
@@ -275,6 +268,7 @@ pub struct PluginHost {
     drop_pages: Option<DropPages>,
     _events: Subscription,
     _watchdog: Task<()>,
+    _quit: Subscription,
     #[cfg(test)]
     pub(crate) keep_hold: Option<async_channel::Receiver<()>>,
     #[cfg(test)]
@@ -1738,6 +1732,40 @@ impl PluginHost {
         .detach();
         cx.notify();
         true
+    }
+
+    fn deliver_workspace_event(event: &kg_core::WorkspaceEvent, cx: &mut Context<Self>) {
+        let kg_core::WorkspaceEvent::Event { event, project_id } = event else {
+            return;
+        };
+        let event = event.clone();
+        let project_id = project_id.clone();
+        cx.spawn(async move |host, cx| {
+            let _ = host.update(cx, |host, cx| host.deliver_event(&event, &project_id, cx));
+        })
+        .detach();
+    }
+
+    fn stop_programs(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> impl std::future::Future<Output = ()> + use<> {
+        let finished: Vec<_> = self
+            .active
+            .values()
+            .filter_map(|active| active.loaded.as_ref())
+            .flat_map(|loaded| {
+                loaded
+                    .processes
+                    .update(cx, |processes, _| processes.close())
+            })
+            .collect();
+        async move {
+            futures::future::join_all(finished.into_iter().map(|finished| async move {
+                let _ = finished.recv().await;
+            }))
+            .await;
+        }
     }
 
     fn unload(&mut self, id: &PluginId, cx: &mut App) {
