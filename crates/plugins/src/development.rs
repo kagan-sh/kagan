@@ -220,6 +220,33 @@ pub(crate) fn calls_webview_store(root: &Path) -> bool {
     })
 }
 
+/// True when the receiver is `new WebView(...)`, optionally followed by more calls such as `.url(...)`.
+fn is_webview_chain(node: tree_sitter::Node, source: &str) -> bool {
+    let mut node = node;
+    loop {
+        match node.kind() {
+            "call_expression" => {
+                let Some(function) = node.child_by_field_name("function") else {
+                    return false;
+                };
+                if function.kind() != "member_expression" {
+                    return false;
+                }
+                let Some(object) = function.child_by_field_name("object") else {
+                    return false;
+                };
+                node = object;
+            }
+            "new_expression" => {
+                return node
+                    .child_by_field_name("constructor")
+                    .is_some_and(|constructor| &source[constructor.byte_range()] == "WebView");
+            }
+            _ => return false,
+        }
+    }
+}
+
 fn calls_store_true(source: &str) -> bool {
     let mut parser = tree_sitter::Parser::new();
     if parser
@@ -241,6 +268,9 @@ fn calls_store_true(source: &str) -> bool {
                         && function
                             .child_by_field_name("property")
                             .is_some_and(|property| &source[property.byte_range()] == "store")
+                        && function
+                            .child_by_field_name("object")
+                            .is_some_and(|object| is_webview_chain(object, source))
                 })
             && node
                 .child_by_field_name("arguments")

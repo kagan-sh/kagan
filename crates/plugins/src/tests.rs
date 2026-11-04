@@ -696,6 +696,34 @@ export default class Plugin extends View {
 }
 
 #[test]
+fn store_true_on_something_other_than_a_webview_asks_for_nothing() {
+    let plugin = plugin_dir();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        r#"
+import { View } from "gpui-kit";
+export default class Plugin extends View {
+  render() {
+    const cache = new Map();
+    cache.store(true);
+    return null;
+  }
+}
+"#,
+    )
+    .unwrap();
+    let grant = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        !grant
+            .lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later"),
+        "{:?}",
+        grant.lines()
+    );
+}
+
+#[test]
 fn a_grant_grows_only_when_it_asks_for_more() {
     let dir = plugin_dir();
     let grant = |edit: &dyn Fn(&mut Value)| {
