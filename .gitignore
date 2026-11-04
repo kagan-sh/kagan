@@ -12,3 +12,5 @@ plugins/**/jsconfig.json
 /.playwright-mcp/
 
 .superpowers/
+
+/.desloppify/
