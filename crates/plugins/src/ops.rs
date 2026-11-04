@@ -426,8 +426,8 @@ async fn remove(
         host.identities.remove(&id);
         cx.notify();
     });
-    // The WKWebView stays in a queued foreground release and the frame mouse listener until the
-    // next draw, so wait for that release and retry InUse before clearing store.id.
+    // The WKWebView and frame mouse listener hold the store until the next draw. Wait for that,
+    // then retry InUse before clearing store.id.
     cx.update(gpui_kit::App::refresh_windows);
     let cleared = cx
         .spawn(async move |cx| crate::page::remove_web_stores_after_release(store_ids, cx).await)

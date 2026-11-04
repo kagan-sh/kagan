@@ -155,7 +155,6 @@ fn a_warning_alone_fills_the_panel(cx: &mut gpui_kit::TestAppContext) {
     let (_themes, mut visual) = drawn(cx, Some("Saving page data needs macOS 14 or later."), false);
     visual.update(|window, cx| {
         window.draw(cx).clear(cx);
-        // The label sits in the middle of the full 300 px panel, so its top is well below zero.
         let (top, _) = placed(window, "web-panel-panel-note").expect("the warning is drawn");
         assert!(
             top > 100.,
