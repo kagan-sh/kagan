@@ -1,5 +1,7 @@
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
-use kg_domain::{KeymapAction, KeymapOp, OpError, OpResult, PreferenceOp, ThemeOp, ThemeSettings};
+use kg_domain::{
+    KeymapAction, KeymapOp, OpError, OpResult, PreferenceOp, Slot, ThemeOp, ThemeSettings,
+};
 
 use crate::database::{Database, Result};
 use crate::workspace::closed;
@@ -81,8 +83,8 @@ const PREFERENCES: &[(&str, Preference)] = &[
     ("notify", Preference::Notify),
     ("update-check", Preference::UpdateCheck),
     ("terminal-font-size", Preference::TerminalFontSize),
-    ("slot.threads", Preference::SlotThreads),
-    ("slot.review", Preference::SlotReview),
+    (Slot::Threads.preference(), Preference::SlotThreads),
+    (Slot::Review.preference(), Preference::SlotReview),
     ("review-viewed", Preference::ReviewViewed),
 ];
 const LAYOUT: &[(&str, Preference)] = &[

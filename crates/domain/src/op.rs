@@ -727,8 +727,11 @@ impl Slot {
 
     /// The preference that holds the plugin id filling this slot, or `kagan`.
     #[must_use]
-    pub fn preference(self) -> String {
-        format!("slot.{}", self.id())
+    pub const fn preference(self) -> &'static str {
+        match self {
+            Self::Threads => "slot.threads",
+            Self::Review => "slot.review",
+        }
     }
 
     /// What a person reads: "replaceable sidebar" or "replaceable review".

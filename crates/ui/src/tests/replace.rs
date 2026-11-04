@@ -266,7 +266,7 @@ fn saved(cx: &mut TestAppContext, slot: Slot) -> serde_json::Value {
     match run(
         cx,
         Op::Preference(PreferenceOp::Get {
-            key: slot.preference(),
+            key: slot.preference().to_owned(),
         }),
     )
     .unwrap()
@@ -322,7 +322,7 @@ fn only_the_persons_choice_switches_a_slot(cx: &mut TestAppContext) {
     let escape = run(
         cx,
         Op::Preference(PreferenceOp::Set {
-            key: Slot::Threads.preference(),
+            key: Slot::Threads.preference().to_owned(),
             value: json!("../../outside"),
         }),
     )
@@ -812,7 +812,7 @@ fn a_request_from_outside_the_window_asks_the_person(cx: &mut TestAppContext) {
     let set = from_terminal(
         cx,
         Op::Preference(PreferenceOp::Set {
-            key: Slot::Threads.preference(),
+            key: Slot::Threads.preference().to_owned(),
             value: json!(SWAP),
         }),
     );

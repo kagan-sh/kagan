@@ -2583,7 +2583,19 @@ fn reload_and_dev_wait_for_app_approval_for_added_powers(cx: &mut TestAppContext
         id: PluginId(ID.into()),
         thread_id,
     };
-    assert!(run(cx, Op::Plugin(reload(None))).is_err());
+    let declined = plugin_op(cx, reload(None));
+    let approval = cx.read(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .cloned()
+            .expect("a standalone approval")
+    });
+    assert!(approval.title.contains("reads your clipboard"));
+    assert_eq!(approval.options[0].label, "Cancel");
+    answer_standalone(cx, "decline");
+    assert!(cx.foreground_executor().block_test(declined).is_err());
     let pending = plugin_op(cx, reload(Some(thread())));
     assert!(answer(cx, "decline").contains("reads your clipboard"));
     assert!(cx.foreground_executor().block_test(pending).is_err());
@@ -3189,14 +3201,7 @@ export default class Plugin extends View {
               { id: "yes", label: "Yes" },
               { id: "no", label: "No" },
             ]);
-            let refused = "";
-            try {
-              await threads.answer(id, interaction, "yes");
-              refused = "answered";
-            } catch (error) {
-              refused = String(error);
-            }
-            return { interaction, refused };
+            return { interaction };
           }],
           ["stop", () => threads.stop(id)],
           ["archive", () => threads.archive(id)],
@@ -3293,14 +3298,6 @@ fn a_plugin_calls_every_thread_operation(cx: &mut TestAppContext) {
             .unwrap()
             .starts_with("interaction_")
     );
-    assert!(
-        asked["refused"]
-            .as_str()
-            .unwrap()
-            .contains("a person answers this"),
-        "{}",
-        asked["refused"]
-    );
     err("wait", "unknown event type");
     ok("pin");
     ok("read");
@@ -3350,192 +3347,6 @@ fn hides_agent(value: &Value) {
         );
     }
     assert!(!value.to_string().contains("claude-code"), "{value}");
-}
-
-const ANSWER_PLUGIN: &str = r#"
-import { View } from "gpui-kit";
-import { next, reply } from "kagan/jobs";
-import * as threads from "kagan/threads";
-export default class Plugin extends View {
-  init(_props, cx) {
-    cx.spawn(async () => {
-      for (;;) {
-        const job = await next();
-        try {
-          const value = await threads.answer(job.input.thread, job.input.interaction, job.input.option);
-          reply(job.id, { text: JSON.stringify({ ok: true, value }) });
-        } catch (error) {
-          reply(job.id, { text: JSON.stringify({ ok: false, error: String(error) }) });
-        }
-      }
-    });
-  }
-  render() { return "answer"; }
-}
-"#;
-
-fn questions(cx: &mut TestAppContext) -> Vec<(String, String)> {
-    let Ok(OpResult::Interactions(rows)) =
-        run(cx, Op::Thread(ThreadOp::Interactions { id: thread() }))
-    else {
-        panic!("interactions")
-    };
-    rows.into_iter().map(|row| (row.id.0, row.title)).collect()
-}
-
-fn answered_events(cx: &mut TestAppContext) -> Vec<(String, String)> {
-    let Ok(OpResult::Events(events)) = run(
-        cx,
-        Op::Thread(ThreadOp::Events {
-            id: thread(),
-            after_seq: None,
-            limit: None,
-            order: None,
-        }),
-    ) else {
-        panic!("events")
-    };
-    events
-        .into_iter()
-        .filter_map(|event| match event.kind {
-            EventKind::Answered { title, option } => Some((title, option)),
-            _ => None,
-        })
-        .collect()
-}
-
-fn choice(id: &str, label: &str) -> kg_domain::InteractionOption {
-    kg_domain::InteractionOption {
-        id: id.into(),
-        label: label.into(),
-    }
-}
-
-fn plugin_refuses(cx: &mut TestAppContext, interaction: &str) {
-    let rows = questions(cx);
-    let refused = plugin_answer(cx, interaction, "approve");
-    assert_eq!(refused["ok"], false, "{refused}");
-    assert!(
-        refused["error"]
-            .as_str()
-            .unwrap()
-            .contains("a person answers this"),
-        "{refused}"
-    );
-    assert_eq!(questions(cx), rows);
-}
-
-fn person_declines(cx: &mut TestAppContext, interaction: &str) {
-    cx.foreground_executor()
-        .block_test(cx.update(|cx| {
-            Workspace::answer(
-                &thread(),
-                kg_domain::PendingInteractionId(interaction.to_owned()),
-                "decline".into(),
-                cx,
-            )
-        }))
-        .unwrap();
-}
-
-fn plugin_answer(cx: &mut TestAppContext, interaction: &str, option: &str) -> Value {
-    let OpResult::ToolReply { text, is_error } = call(
-        cx,
-        "probe",
-        json!({ "thread": THREAD, "interaction": interaction, "option": option }),
-    )
-    .unwrap() else {
-        panic!("reply")
-    };
-    assert!(!is_error, "{text}");
-    serde_json::from_str(&text).unwrap()
-}
-
-#[gpui_kit::test]
-fn a_plugin_answers_a_question_and_leaves_person_approvals(cx: &mut TestAppContext) {
-    let plugin = probe_plugin(&["threads"], ANSWER_PLUGIN);
-    open(cx, &[installed(plugin.path())]);
-
-    let asked =
-        cx.update(|cx| Workspace::ask(&thread(), "Ship it".into(), vec![choice("yes", "Yes")], cx));
-    cx.run_until_parked();
-    let rows = questions(cx);
-    assert_eq!(rows.len(), 1, "{rows:?}");
-    let replied = plugin_answer(cx, &rows[0].0, "yes");
-    assert_eq!(replied["ok"], true, "{replied}");
-    assert!(questions(cx).is_empty());
-    assert_eq!(cx.foreground_executor().block_test(asked).unwrap(), "yes");
-    assert_eq!(answered_events(cx), vec![("Ship it".into(), "yes".into())]);
-
-    let removing = plugin_op(
-        cx,
-        PluginOp::Remove {
-            id: PluginId(ID.into()),
-            thread_id: Some(thread()),
-        },
-    );
-    cx.run_until_parked();
-    let rows = questions(cx);
-    assert!(rows[0].1.starts_with("Remove "), "{rows:?}");
-    plugin_refuses(cx, &rows[0].0);
-    assert_eq!(answered_events(cx), vec![("Ship it".into(), "yes".into())]);
-    person_declines(cx, &rows[0].0);
-    assert!(
-        cx.foreground_executor()
-            .block_test(removing)
-            .unwrap_err()
-            .to_string()
-            .contains("declined")
-    );
-
-    let deleting = cx.update(|cx| {
-        Workspace::dispatch(
-            Op::Thread(ThreadOp::Delete {
-                id: thread(),
-                approval_thread_id: Some(thread()),
-            }),
-            cx,
-        )
-    });
-    cx.run_until_parked();
-    let rows = questions(cx);
-    assert!(rows[0].1.starts_with("Delete "), "{rows:?}");
-    plugin_refuses(cx, &rows[0].0);
-    person_declines(cx, &rows[0].0);
-    assert!(
-        cx.foreground_executor()
-            .block_test(deleting)
-            .unwrap_err()
-            .to_string()
-            .contains("declined")
-    );
-
-    let standalone = cx.update(|cx| {
-        Workspace::ask_for_person(
-            None,
-            None,
-            "Install powers?".into(),
-            vec![choice("approve", "Approve"), choice("decline", "Decline")],
-            cx,
-        )
-    });
-    cx.run_until_parked();
-    let approval = cx.read(|cx| {
-        Workspace::global(cx)
-            .read(cx)
-            .approvals()
-            .next()
-            .unwrap()
-            .id
-            .clone()
-    });
-    plugin_refuses(cx, &approval.0);
-    assert!(cx.read(|cx| Workspace::global(cx).read(cx).approvals().next().is_some()));
-    answer_standalone(cx, "decline");
-    assert_eq!(
-        cx.foreground_executor().block_test(standalone).unwrap(),
-        "decline"
-    );
 }
 
 #[test]

@@ -145,6 +145,13 @@ async fn project_op(
     }
 }
 
+/// Whether `op` runs on the one-at-a-time request queue.
+///
+/// A serialized handler must finish without waiting for a person or for another request:
+/// `Workspace::handle` awaits it before the loop reads the next envelope. An op that asks
+/// (`ProjectOp::Remove`, `ThreadOp::Delete`, and the plugin ops that approve powers or a
+/// removal) is detached, and a detached handler submits its request only after the person
+/// answers. `UiOp::Snapshot` is serialized because a window job never submits a request.
 pub(crate) fn serialized(op: &Op) -> bool {
     match op {
         Op::Status { .. }
@@ -161,7 +168,6 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Keymap(KeymapOp::Get)
         | Op::Preference(PreferenceOp::Get { .. })
         | Op::Plugin(_)
-        | Op::Ui(kg_domain::UiOp::Snapshot { .. })
         | Op::Diff(_)
         | Op::Diagnostics(_)
         | Op::Update(_) => false,

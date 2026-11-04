@@ -451,7 +451,10 @@ impl Workspace {
         let this = workspace.downgrade();
         match op {
             Op::Preference(kg_domain::PreferenceOp::Set { key, .. })
-                if requester.is_some() && key.starts_with("slot.") =>
+                if requester.is_some()
+                    && kg_domain::Slot::ALL
+                        .iter()
+                        .any(|slot| slot.preference() == key.as_str()) =>
             {
                 Task::ready(Err(OpError::Invalid(format!(
                     "{key} is set in Settings, or with kg plugin use, which asks a person"
@@ -804,7 +807,7 @@ impl Workspace {
     }
 
     /// Answers a pending question. Not an `Op`, so the socket and MCP cannot answer.
-    /// The threads host calls this for a question a plugin may answer.
+    /// Only the window calls this, as a person's choice.
     pub fn answer(
         thread_id: &ThreadId,
         interaction_id: PendingInteractionId,
@@ -824,7 +827,7 @@ impl Workspace {
     }
 
     /// Raises a question on the thread and resolves with the chosen option id.
-    /// [`Self::answer`] answers it, including from a plugin. Fails when the thread
+    /// [`Self::answer`] answers it. Fails when the thread
     /// stops or the question is otherwise cancelled.
     #[cfg(any(test, feature = "test-support"))]
     pub fn ask(

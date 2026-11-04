@@ -134,7 +134,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Allowed when**: the thread exists and is not archived [op.rs].
 - **Changes**: stores a question with that title and those options, for the person to answer. A second ask while that question is open does not add another [op.rs].
 - **Shows**: the interaction id at once. The person's choice is an `answered` event (`title` and the option id) [event.rs]. Questions draws that title and those options from the pending row.
-- **Refused when**: an empty title, or fewer than two options — `invalid` [op.rs]. Nothing is stored. A missing thread — `not-found` [op.rs]. An archived thread — `invalid` [op.rs]. `threads.answer` on this question fails with "a person answers this", and the card stays [docs:plugin-api].
+- **Refused when**: an empty title, or fewer than two options — `invalid` [op.rs]. Nothing is stored. A missing thread — `not-found` [op.rs]. An archived thread — `invalid` [op.rs]. A plugin cannot answer it, and the card stays for the person [docs:plugin-api].
 
 ### `Tools`
 
@@ -572,7 +572,7 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 ## Cross-Op rules
 
 - `KG_SOCKET` names the socket. When it is unset and `KG_DATA_DIR` is set, that folder is made absolute and the socket follows it: `<data>/kg.sock` on macOS and Linux, or `/tmp/kagan-<sha256>/kg.sock` when that path does not fit a local socket. The `/tmp` folder must be mode `0700`, owned by this user, and not a symlink, or the connection is refused. On Windows the pipe name is derived from the absolute folder. A file that is not a socket is not removed. It is not the default socket of the app that uses `~/.kagan` [decision 124] [book:data]. `KG_SOCKET` still overrides. With both unset, the socket stays the platform default.
-- Only a person answers an install, a thread delete, or a standalone approval. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin may answer another pending question on a thread through `Workspace::answer`. That removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title and the chosen option. That is the trace of an approval on the thread [docs:architecture] [event.rs].
+- Only a person answers a pending question. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin cannot answer either. An answer removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title and the chosen option. That is the trace of an approval on the thread [docs:architecture] [event.rs].
 - Archive, unarchive, and stop never ask [decision 12] [docs:architecture] [docs:plugin-api].
 - The database is the truth for thread rows and the event log [decision 5] [docs:architecture].
 - Opening the app does not resume a program. A thread left active is marked failed with "kagan quit while the program was running". A thread left starting is marked failed with "kagan stopped while the thread was starting". A thread left stopping is marked failed. Archive and environment-removal deadlines resume [docs:architecture].

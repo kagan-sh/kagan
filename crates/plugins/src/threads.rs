@@ -2,8 +2,8 @@ use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use kg_core::Workspace;
 use kg_domain::{
     DiffOp, DiffQuery, DiffScope, EnvironmentId, EnvironmentOp, EnvironmentSpec, InteractionOption,
-    Metadata, Op, OpError, OpResult, PendingInteractionId, PluginId, Project, ProjectId, ProjectOp,
-    Run, Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
+    Metadata, Op, OpError, OpResult, PluginId, Project, ProjectId, ProjectOp, Run, Section,
+    SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -52,7 +52,6 @@ pub(crate) fn module(plugin: &PluginId, _agents: &Agents) -> HostModule {
         });
     let owner = plugin.clone();
     module = module.async_function("spawn", move |args| dispatch(spawn_thread(args, &owner)?));
-    module = module.async_function("answer", answer_question);
     module = module.async_function("output", read_output);
     module = module.async_function("changes", |args| dispatch(shown_diff(args, None)?));
     module = module.async_function("diff", |args| {
@@ -157,28 +156,6 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
             value,
         }),
     })))
-}
-
-fn answer_question(
-    args: &HostArguments,
-) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
-    let thread_id = ThreadId(args.string(0)?.to_owned());
-    let interaction_id = PendingInteractionId(args.string(1)?.to_owned());
-    let option_id = args.string(2)?.to_owned();
-    let receive = gpui_shell::with_current_app(|cx| {
-        if Workspace::global(cx)
-            .read(cx)
-            .needs_a_person(&interaction_id)
-        {
-            return Err(HostError::new("a person answers this"));
-        }
-        Ok(watch(
-            Workspace::answer(&thread_id, interaction_id, option_id, cx),
-            cx,
-        ))
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))??;
-    Ok(finish(receive))
 }
 
 // A plugin reads the changes of a thread kagan lists, never of a hidden or archived one.

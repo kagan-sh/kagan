@@ -86,7 +86,7 @@ impl Kagan {
         let reads = Slot::ALL.map(|slot| {
             (
                 slot,
-                super::layout::read::<SlotChoice>(&slot.preference(), cx),
+                super::layout::read::<SlotChoice>(slot.preference(), cx),
             )
         });
         let handle = self.window;

@@ -7095,6 +7095,33 @@ async fn remove_project_asks_and_keeps_the_folder(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn a_serialized_request_runs_while_a_removal_waits_for_a_person(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let remove = Op::Project(ProjectOp::Remove {
+        id: fixture.project.clone(),
+    });
+    assert!(!crate::dispatch::serialized(&remove));
+    let snapshot = Op::Ui(UiOp::Snapshot { window: 0 });
+    assert!(crate::dispatch::serialized(&snapshot));
+    let removing = cx.update(|cx| Workspace::dispatch(remove, cx));
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+
+    // The queue is one request wide: a handler that awaited this answer would hold every
+    // `kg` command until the person answered.
+    assert!(op(Op::Sidebar, cx).await.is_ok());
+    assert!(matches!(
+        op(snapshot, cx).await,
+        Err(OpError::Failed(message)) if message == UI_UNAVAILABLE
+    ));
+
+    cx.update(|cx| Workspace::answer_standalone(approval, "decline".into(), cx))
+        .await
+        .unwrap();
+    assert!(removing.await.is_err());
+}
+
+#[gpui_kit::test]
 async fn a_stopped_command_takes_its_project_removal_question_with_it(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let remove = |requester| {

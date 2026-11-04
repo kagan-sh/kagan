@@ -23,8 +23,6 @@ pub(crate) fn approved(record: &Plugin) -> Result<Grant> {
 use crate::source::{Fetched, Source, checkout, fetch};
 use crate::{Discovered, PluginHost, Result, activate};
 
-const NO_THREAD: &str = "reload from a thread";
-
 pub(crate) async fn run(
     host: &Entity<PluginHost>,
     op: PluginOp,
@@ -132,7 +130,7 @@ async fn use_slot(
     let set = cx.update(|cx| {
         Workspace::dispatch(
             Op::Preference(PreferenceOp::Set {
-                key: slot.preference(),
+                key: slot.preference().to_owned(),
                 value: Value::String(choice.to_string()),
             }),
             cx,
@@ -515,9 +513,8 @@ async fn reload(
     let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
     let approved = approved(&record)?;
     if !grant.within(&approved) {
-        let thread_id = thread_id.ok_or_else(|| OpError::Invalid(NO_THREAD.into()))?;
         approve(
-            Some(&thread_id),
+            thread_id.as_ref(),
             requester,
             format!(
                 "Reload {} ({})?",
@@ -823,8 +820,7 @@ async fn approve(
     };
     let mut options = permission_options();
     if install {
-        options[0].label = "Install".into();
-        options[1].label = "Cancel".into();
+        options[1].label = "Install".into();
     }
     choose(thread_id, requester, title, &question, options, cx).await
 }
@@ -832,12 +828,12 @@ async fn approve(
 fn permission_options() -> Vec<InteractionOption> {
     vec![
         InteractionOption {
-            id: InteractionOption::APPROVE.into(),
-            label: "Approve".into(),
+            id: InteractionOption::DECLINE.into(),
+            label: "Cancel".into(),
         },
         InteractionOption {
-            id: InteractionOption::DECLINE.into(),
-            label: "Decline".into(),
+            id: InteractionOption::APPROVE.into(),
+            label: "Approve".into(),
         },
     ]
 }
