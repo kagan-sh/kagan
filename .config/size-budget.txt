@@ -1,5 +1,5 @@
 target 35000
-total 56766
+total 56809
 allow_expect 5
 crates/core/src/diff.rs 916
 crates/core/src/environment.rs 1023
@@ -7,7 +7,7 @@ crates/core/src/thread/agent.rs 623
 crates/core/src/thread/terminal.rs 876
 crates/core/src/workspace.rs 1427
 crates/domain/src/op.rs 2209
-crates/plugins/src/lib.rs 1706
+crates/plugins/src/lib.rs 1734
 crates/plugins/src/manifest.rs 991
 crates/plugins/src/ops.rs 1173
 crates/store/src/store.rs 1368

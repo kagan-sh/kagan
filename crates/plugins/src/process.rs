@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::Duration;
 
-use async_channel::Sender;
+use async_channel::{Receiver, Sender};
 use futures::FutureExt as _;
 use futures::io::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 use gpui_kit::{Entity, Task};
@@ -25,18 +25,24 @@ pub(crate) struct Processes {
 
 struct Running {
     kill: Sender<()>,
+    finished: Receiver<()>,
     task: Task<()>,
 }
 
 impl Processes {
-    pub(crate) fn close(&mut self) {
+    // Each receiver closes once its worker has killed the tree and dropped it.
+    pub(crate) fn close(&mut self) -> Vec<Receiver<()>> {
         for running in self.running.values() {
             running.kill.close();
         }
         // Keep workers alive to reap their children after they kill the tree.
-        for (_, running) in std::mem::take(&mut self.running) {
-            running.task.detach();
-        }
+        std::mem::take(&mut self.running)
+            .into_values()
+            .map(|running| {
+                running.task.detach();
+                running.finished
+            })
+            .collect()
     }
 }
 
@@ -171,10 +177,12 @@ fn run(module: HostModule, owner: &Entity<Processes>, grant: &Grant, root: &Path
             )
             .map_err(error)?;
         let (kill, killed) = async_channel::bounded(1);
+        let (finish, exited) = async_channel::bounded::<()>(1);
         let task = with_app(|cx| {
             let executor = cx.background_executor().clone();
             let timer_executor = executor.clone();
             let task = executor.spawn(async move {
+                let _finish = finish;
                 if killed.is_closed() {
                     return Err(HostError::new("the plugin was unloaded"));
                 }
@@ -232,7 +240,14 @@ fn run(module: HostModule, owner: &Entity<Processes>, grant: &Grant, root: &Path
                 });
             });
             run_owner.update(cx, |owner, _| {
-                owner.running.insert(id, Running { kill, task });
+                owner.running.insert(
+                    id,
+                    Running {
+                        kill,
+                        finished: exited,
+                        task,
+                    },
+                );
             });
             reply
         })?;
