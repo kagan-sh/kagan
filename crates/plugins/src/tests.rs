@@ -4613,28 +4613,7 @@ fn unloading_a_plugin_ends_its_running_command_and_kills_the_process_tree(cx: &m
     cx.executor().allow_parking();
     let (name, _) = shell();
     let _plugin = forwarding(cx, json!({ "run": [{ "program": name }] }));
-    let marks = tempfile::tempdir().unwrap();
-    let script = format!(
-        "sleep 30 & echo $! > {0}/child; echo $$ > {0}/parent; wait",
-        marks.path().display()
-    );
-    let receive = dispatched(
-        cx,
-        forwarded("process", "run", &json!([name, ["-c", script]])),
-    );
-    let mut pids = Vec::new();
-    for _ in 0..2000 {
-        cx.run_until_parked();
-        pids = ["parent", "child"]
-            .map(|name| std::fs::read_to_string(marks.path().join(name)).unwrap_or_default())
-            .map(|text| text.trim().to_owned())
-            .into();
-        if pids.iter().all(|pid| !pid.is_empty()) {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(pids.iter().all(|pid| alive(pid)), "{pids:?}");
+    let (pids, receive) = start_tree(cx, name);
     run(
         cx,
         Op::Plugin(PluginOp::Disable {
@@ -4651,6 +4630,56 @@ fn unloading_a_plugin_ends_its_running_command_and_kills_the_process_tree(cx: &m
         std::thread::sleep(Duration::from_millis(5));
     }
     panic!("the process tree outlived the plugin: {pids:?}");
+}
+
+#[cfg(unix)]
+fn start_tree(
+    cx: &mut TestAppContext,
+    name: &str,
+) -> (
+    Vec<String>,
+    async_channel::Receiver<Result<OpResult, OpError>>,
+) {
+    let marks = tempfile::tempdir().unwrap();
+    let script = format!(
+        "sleep 30 & echo $! > {0}/child; echo $$ > {0}/parent; wait",
+        marks.path().display()
+    );
+    let receive = dispatched(
+        cx,
+        forwarded("process", "run", &json!([name, ["-c", script]])),
+    );
+    let mut pids = Vec::new();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        pids = ["parent", "child"]
+            .map(|file| std::fs::read_to_string(marks.path().join(file)).unwrap_or_default())
+            .map(|text| text.trim().to_owned())
+            .into();
+        if pids.iter().all(|pid| !pid.is_empty()) {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(pids.iter().all(|pid| alive(pid)), "{pids:?}");
+    (pids, receive)
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn quitting_the_app_ends_a_running_command_and_kills_the_process_tree(cx: &mut TestAppContext) {
+    cx.executor().allow_parking();
+    let (name, _) = shell();
+    let _plugin = forwarding(cx, json!({ "run": [{ "program": name }] }));
+    let (pids, _receive) = start_tree(cx, name);
+    cx.quit();
+    for _ in 0..2000 {
+        if pids.iter().all(|pid| !alive(pid)) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    panic!("the process tree outlived the app: {pids:?}");
 }
 
 #[gpui_kit::test]
