@@ -1,3 +1,5 @@
+//! The plugin host: discovery, activation, contributions, and the panels and pages plugins add.
+
 mod area;
 mod catalog;
 mod clipboard;

@@ -1,3 +1,5 @@
+//! The Kagan window: theme, components, terminal, review, settings, and plugin surfaces.
+
 mod about;
 mod brand;
 mod components;

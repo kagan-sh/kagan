@@ -1,3 +1,5 @@
+//! The workspace: projects, threads, environments, and the `Op` dispatch that drives them.
+
 mod approval;
 mod database;
 mod diagnostics;

@@ -68,7 +68,7 @@ pub enum Op {
     /// Keyboard shortcuts: built-in ones and plugin commands
     #[command(subcommand)]
     Keymap(KeymapOp),
-    /// Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's <window>.left-sidebar, <window>.left-width, <window>.right-sidebar, <window>.right-width and <window>.review-wrap, where <window> is a window id such as main
+    /// Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
     #[command(subcommand)]
     Preference(PreferenceOp),
     /// Native window for QA and agents
@@ -840,7 +840,7 @@ pub enum ThemeOp {
         #[arg(value_enum)]
         mode: Appearance,
     },
-    /// Copy a theme to <dataDir>/themes/<id>.json and print its path
+    /// Copy a theme to `<dataDir>/themes/<id>.json` and print its path
     New {
         /// The new file's id: lowercase letters, digits and dashes
         #[arg(value_parser = theme_id)]
@@ -1599,7 +1599,7 @@ pub struct Run {
     pub program: String,
     #[arg(long)]
     pub title: Option<String>,
-    /// project-default, personal, worktree[:<base>[:<branch>]] or reuse:<environment-id>
+    /// project-default, personal, `worktree[:<base>[:<branch>]]` or `reuse:<environment-id>`
     #[arg(long, value_parser = environment_spec, default_value = "worktree")]
     pub environment: EnvironmentSpec,
     #[arg(long, value_enum)]

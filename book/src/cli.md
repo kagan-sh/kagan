@@ -29,7 +29,7 @@ Commands:
   window       The application menu and the window
   surface      Plugin surfaces in the window
   keymap       Keyboard shortcuts: built-in ones and plugin commands
-  preference   Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's <window>.left-sidebar, <window>.left-width, <window>.right-sidebar, <window>.right-width and <window>.review-wrap, where <window> is a window id such as main
+  preference   Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   ui           Native window for QA and agents
   diff         A thread environment's diff. Reads git and never writes the worktree
   diagnostics  Write a local diagnostics file
@@ -396,7 +396,7 @@ Options:
           
 
       --environment <ENVIRONMENT>
-          project-default, personal, worktree[:<base>[:<branch>]] or reuse:<environment-id>
+          project-default, personal, `worktree[:<base>[:<branch>]]` or `reuse:<environment-id>`
           
           [default: worktree]
 
@@ -1938,7 +1938,7 @@ Usage: kg theme [OPTIONS] <COMMAND>
 Commands:
   get     Selected theme and mode
   set     Select a theme and mode
-  new     Copy a theme to <dataDir>/themes/<id>.json and print its path
+  new     Copy a theme to `<dataDir>/themes/<id>.json` and print its path
   folder  Print the folder of your own theme files, making it when missing
   help    Print this message or the help of the given subcommand(s)
 
@@ -1987,7 +1987,7 @@ Options:
 ## `kg theme new`
 
 ```text
-Copy a theme to <dataDir>/themes/<id>.json and print its path
+Copy a theme to `<dataDir>/themes/<id>.json` and print its path
 
 Usage: kg theme new [OPTIONS] <ID>
 
@@ -2473,7 +2473,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's <window>.left-sidebar, <window>.left-width, <window>.right-sidebar, <window>.right-width and <window>.review-wrap, where <window> is a window id such as main
+Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 

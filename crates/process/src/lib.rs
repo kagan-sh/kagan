@@ -1,3 +1,5 @@
+//! An owned process tree, and the Windows job object that ends it.
+
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::{Path, PathBuf};

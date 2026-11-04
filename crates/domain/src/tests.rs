@@ -623,11 +623,13 @@ fn no_two_default_shortcuts_share_a_key_on_any_platform() {
             })
             .collect();
         let mut seen = std::collections::HashMap::new();
-        for (name, chord) in &chords {
-            if let Some(other) = seen.insert(keys(chord), name) {
-                panic!("{other} and {name} share {chord} on {platform:?}");
-            }
-        }
+        let duplicate = chords
+            .iter()
+            .find_map(|(name, chord)| seen.insert(keys(chord), name).map(|other| (other, name)));
+        assert!(
+            duplicate.is_none(),
+            "duplicate shortcut on {platform:?}: {duplicate:?}"
+        );
     }
 }
 

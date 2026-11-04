@@ -1,3 +1,5 @@
+//! IDs, records, statuses, the `Op` the CLI and window share, and the theme file format. No GPUI.
+
 mod diff;
 mod event;
 mod id;
