@@ -20,7 +20,7 @@ use gpui_shell::{
     MaterializeRequest, MethodDescriptor, RegistryError, anyhow,
 };
 
-use super::fail::ComponentError;
+use super::component_error::ComponentError;
 
 pub(super) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     registry

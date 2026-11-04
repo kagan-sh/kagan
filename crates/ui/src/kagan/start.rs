@@ -91,7 +91,7 @@ pub(super) struct StartState {
 
 impl StartState {
     /// Forgets the last project's pick. A start still preparing is kept, so a second one waits.
-    pub(super) fn show(&mut self) {
+    pub(super) fn reset(&mut self) {
         self.folder = None;
         self.branches = Branches::Loading;
         self.setup = None;

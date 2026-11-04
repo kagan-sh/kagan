@@ -41,7 +41,7 @@ use kg_domain::{OpError, PluginId, ThemeFile};
 use serde_json::Value;
 
 use crate::manifest::{Fetch, Grant};
-pub use catalog::{Example, capabilities, examples, kinds_in, matched};
+pub use catalog::{Example, capabilities, capabilities_in, examples, kinds_in};
 pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
 pub(crate) use host::{Agents, Discovered, PluginHostGlobal, activate, discover};
 pub use host::{MountError, PluginHost, PluginHostEvent, init};

@@ -1094,7 +1094,7 @@ impl Kagan {
         self.show_work(Shown::Start(project.clone()), window, cx);
         self.sidebar
             .update(cx, |sidebar, _| sidebar.choose(Some(project.clone())));
-        self.start.show();
+        self.start.reset();
         self.load_branches(project, cx);
         self.picker.update(cx, |picker, cx| picker.load(window, cx));
         self.picker

@@ -117,7 +117,7 @@ fn tool_error(name: &str) -> impl Fn(ToolError) -> OpError + '_ {
     }
 }
 
-pub(crate) fn repository(cwd: &Path) -> bool {
+pub(crate) fn is_repository(cwd: &Path) -> bool {
     git(cwd, &["rev-parse", "--is-inside-work-tree"]).is_ok_and(|text| text.trim() == "true")
 }
 
@@ -131,7 +131,7 @@ pub(crate) fn current_branch(cwd: &Path) -> Option<String> {
     }
 }
 
-fn lock_suffix(name: &str) -> bool {
+fn is_lock_suffix(name: &str) -> bool {
     let bytes = name.as_bytes();
     bytes.len() >= 5 && bytes[bytes.len() - 5..].eq_ignore_ascii_case(b".lock")
 }
@@ -147,7 +147,7 @@ pub(crate) fn valid_branch(name: &str) -> bool {
         && !name.ends_with('.')
         && name
             .split('/')
-            .all(|part| !part.starts_with('.') && !lock_suffix(part))
+            .all(|part| !part.starts_with('.') && !is_lock_suffix(part))
         && !name.contains("//")
         && !name.contains("..")
         && !name.contains("@{")
@@ -179,7 +179,7 @@ pub(crate) fn branch_list(path: &Path) -> Result<BranchList> {
     if !path.exists() {
         return Err(OpError::Failed(format!("{} is gone", path.display())));
     }
-    if !repository(path) {
+    if !is_repository(path) {
         return Ok(BranchList {
             current: None,
             head: None,

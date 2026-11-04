@@ -163,9 +163,9 @@ fn plugin_rows(
     if let Some(note) = status.note.as_deref() {
         parts.push(note.to_owned());
     }
-    let added = added(status, cx);
-    if !added.is_empty() {
-        parts.push(added);
+    let addition = addition_note(status, cx);
+    if !addition.is_empty() {
+        parts.push(addition);
     }
     let note = parts.join(" · ");
     let focus = super::super::tab_stop(
@@ -205,7 +205,7 @@ fn plugin_rows(
         })
         .track_focus(&focus)
         .tab_stop(true)
-        .key_context(if git_source(&status.source) {
+        .key_context(if is_git_source(&status.source) {
             "PluginRow PluginUpdate"
         } else {
             "PluginRow"
@@ -216,7 +216,7 @@ fn plugin_rows(
         .type_small()
         .text_color(cx.theme().muted_foreground)
         .child("•");
-    let anchor = row_keys(anchor, &id, git_source(&status.source), cx);
+    let anchor = row_keys(anchor, &id, is_git_source(&status.source), cx);
     let head = h_flex()
         .gap_2()
         .items_center()
@@ -241,11 +241,11 @@ fn plugin_rows(
     rows
 }
 
-fn git_source(source: &str) -> bool {
+fn is_git_source(source: &str) -> bool {
     source.starts_with("git:")
 }
 
-fn added(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
+fn addition_note(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
     if !status.enabled {
         return String::new();
     }
@@ -344,7 +344,7 @@ fn details_row(status: &PluginStatus, focus: &gpui_kit::FocusHandle) -> Row {
     if let Some(extra) = status.note.as_deref() {
         note = format!("{note} · {extra}");
     }
-    let git = git_source(&status.source);
+    let git = is_git_source(&status.source);
     let mut actions = h_flex().gap_2().flex_wrap();
     if git {
         actions = actions.child(act(

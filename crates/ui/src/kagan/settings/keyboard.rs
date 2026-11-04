@@ -256,7 +256,7 @@ fn controls(
                 this.keyboard.recording = None;
                 cx.notify();
             } else {
-                this.record_shortcut(record.clone(), window, cx);
+                this.begin_shortcut(record.clone(), window, cx);
             }
         },
     ));
@@ -375,7 +375,7 @@ fn keys_text(strokes: &[Keystroke]) -> String {
 
 impl Kagan {
     // Escape stops without saving. Only this window's keys count: About has its own.
-    fn record_shortcut(&mut self, action: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn begin_shortcut(&mut self, action: String, window: &mut Window, cx: &mut Context<Self>) {
         let kagan = cx.entity().downgrade();
         let here = window.window_handle();
         let intercept = cx.intercept_keystrokes(move |event, window, cx| {
@@ -390,7 +390,7 @@ impl Kagan {
             }
             let key = key.clone();
             if kagan
-                .update(cx, |this, cx| this.recorded_shortcut(&key, cx))
+                .update(cx, |this, cx| this.finish_shortcut(&key, cx))
                 .unwrap_or(false)
             {
                 cx.stop_propagation();
@@ -404,7 +404,7 @@ impl Kagan {
     }
 
     // A key pressed after Settings closed some other way still reaches the window.
-    fn recorded_shortcut(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
+    fn finish_shortcut(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
         let Some((action, _)) = self.keyboard.recording.take() else {
             return false;
         };

@@ -130,7 +130,7 @@ fn cached<T>(
 }
 
 fn files(cache: &Cache, root: &Path, hint: Option<&str>, query: &DiffQuery) -> Result<DiffList> {
-    if !crate::git::repository(root) {
+    if !crate::git::is_repository(root) {
         return Ok(DiffList {
             files: Vec::new(),
             added: 0,
@@ -238,7 +238,7 @@ fn file(
             "the diff path must be inside the repository".into(),
         ));
     }
-    if !crate::git::repository(root) {
+    if !crate::git::is_repository(root) {
         return Ok(DiffFileView::empty(path));
     }
     let (left, right, base) = trees(root, hint, query)?;
@@ -299,7 +299,7 @@ fn file_revision(
 }
 
 fn commits(root: &Path) -> Result<Vec<DiffCommit>> {
-    if !crate::git::repository(root) {
+    if !crate::git::is_repository(root) {
         return Ok(Vec::new());
     }
     let stdout = git_ok(root, &["log", "--format=%H%x09%s", "-n", "50"], None)?;

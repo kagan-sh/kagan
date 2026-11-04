@@ -22,7 +22,7 @@ use gpui_shell::{
     MaterializeRequest, MethodDescriptor, RegistryError, ScriptView, anyhow,
 };
 
-use super::fail::ComponentError;
+use super::component_error::ComponentError;
 
 pub(crate) const REFUSED_SCHEME: &str = "WebView only opens an http or https page.";
 pub(crate) const REFUSED_HOST: &str =

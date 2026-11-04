@@ -620,8 +620,8 @@ async fn install(
         host.read_with(cx, |host, _| (host.data_dir.clone(), host.indexes.clone()));
     let plugins = data_dir.join("plugins");
     let (stop, stopped) = async_channel::bounded::<()>(1);
-    let named = crate::index::named(&source);
-    if named || source.starts_with("git:") {
+    let by_name = crate::index::names_an_index(&source);
+    if by_name || source.starts_with("git:") {
         *stops.borrow_mut() = Some(stop);
         host.update(cx, |_, cx| cx.notify());
     }

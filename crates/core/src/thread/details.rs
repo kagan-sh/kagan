@@ -4,7 +4,7 @@ use gpui_kit::{AppContext as _, AsyncApp};
 use kg_domain::{BaseBranch, DiffCommit, GitDetails, OpError, OpResult, ThreadDetails, ThreadId};
 
 use crate::database::{Database, Result};
-use crate::git::{current_branch, git, repository};
+use crate::git::{current_branch, git, is_repository};
 use crate::workspace::missing;
 
 const COMMITS: &str = "5";
@@ -42,7 +42,7 @@ pub(crate) async fn read(database: Database, id: ThreadId, cx: &mut AsyncApp) ->
 }
 
 fn git_details(root: &Path, hint: Option<&str>) -> Option<GitDetails> {
-    if !repository(root) {
+    if !is_repository(root) {
         return None;
     }
     let base = crate::diff::resolve_base(root, None, hint)

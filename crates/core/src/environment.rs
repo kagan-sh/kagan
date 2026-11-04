@@ -363,7 +363,7 @@ fn provision(
         Provider::Project => {}
         Provider::Personal => std::fs::create_dir_all(&environment.path)?,
         Provider::Worktree => {
-            if !crate::git::repository(project) {
+            if !crate::git::is_repository(project) {
                 return Err(OpError::Invalid(format!(
                     "{} is not a git repository, so it has no worktree; run in the project folder instead (--environment project-default)",
                     project.display()

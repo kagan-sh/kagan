@@ -3,7 +3,7 @@ use std::path::Path;
 use kg_domain::IndexEntry;
 use serde_json::{Value, json};
 
-use crate::index::{named, origin, parse, place, public, read, shown};
+use crate::index::{names_an_index, origin, parse, public, read, shown, source_place};
 
 fn index(plugins: &Value) -> String {
     json!({ "schemaVersion": 1, "name": "acme", "plugins": plugins }).to_string()
@@ -141,10 +141,10 @@ fn a_bad_index_is_refused_with_the_reason() {
 
 #[test]
 fn a_bare_name_is_looked_up_and_a_path_or_git_source_is_not() {
-    assert!(named("canvas"));
-    assert!(!named("git:https://e.com/p@v1"));
+    assert!(names_an_index("canvas"));
+    assert!(!names_an_index("git:https://e.com/p@v1"));
     let absolute = std::env::temp_dir().join("canvas");
-    assert!(!named(&absolute.display().to_string()));
+    assert!(!names_an_index(&absolute.display().to_string()));
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn the_card_names_the_address_ref_and_commit_and_cautions_off_an_index_host_and_
             "Caution: a folder on this computer is not pinned to a commit.".into()
         ]
     );
-    let place = |source: &str| place(source).map(|(host, owner)| format!("{host}/{owner}"));
+    let place = |source: &str| source_place(source).map(|(host, owner)| format!("{host}/{owner}"));
     assert_eq!(
         place("git:git@GitHub.com:O/r@v1").as_deref(),
         Some("github.com/o")
