@@ -468,7 +468,7 @@ pub(crate) async fn tools(
         _ => crate::thread::note(&id.0),
     };
     let result =
-        crate::thread::forward(this, crate::PluginRequest::Tools { thread_id: id }, cx).await?;
+        crate::dispatch::forward(this, crate::PluginRequest::Tools { thread_id: id }, cx).await?;
     let OpResult::Tools {
         instructions,
         mut tools,

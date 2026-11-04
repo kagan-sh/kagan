@@ -29,12 +29,12 @@ libc.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"] }
 objc2.workspace = true
-objc2-app-kit = { version = "=0.3.2", default-features = false, features = [
+objc2-app-kit = { workspace = true, features = [
     "NSApplication",
     "NSImage",
     "NSResponder",
 ] }
-objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSData"] }
+objc2-foundation = { workspace = true, features = ["NSData"] }
 
 [target.'cfg(windows)'.dependencies]
 widestring.workspace = true

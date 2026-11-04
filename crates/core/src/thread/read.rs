@@ -8,7 +8,8 @@ use crate::database::{Database, Result};
 use crate::workspace::{closed, missing};
 use crate::{PluginRequest, Workspace};
 
-use super::forward;
+use crate::dispatch::forward;
+
 use super::thread;
 
 pub(crate) fn wait_event(

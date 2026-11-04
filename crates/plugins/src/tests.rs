@@ -6315,7 +6315,7 @@ fn ask_instruct(cx: &mut TestAppContext) -> String {
     let host = cx.update(|cx| cx.global::<PluginHostGlobal>().0.clone());
     let task = cx.update(|cx| {
         cx.spawn(async move |cx| {
-            crate::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
+            crate::host::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
         })
     });
     cx.run_until_parked();
@@ -6376,7 +6376,7 @@ export default class Plugin extends View {
     let host = cx.update(|cx| cx.global::<PluginHostGlobal>().0.clone());
     let pending = cx.update(|cx| {
         cx.spawn(async move |cx| {
-            crate::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
+            crate::host::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
         })
     });
     cx.run_until_parked();

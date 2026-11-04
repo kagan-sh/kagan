@@ -109,7 +109,8 @@ pub(crate) fn public(url: &str) -> String {
 }
 
 /// An index location as people and agents see it: a `git:` address without a password.
-pub(crate) fn shown(location: &str) -> String {
+#[must_use]
+pub fn shown(location: &str) -> String {
     match Source::parse(location) {
         Ok(Source::Git { url, reference }) => format!("git:{}@{reference}", public(&url)),
         _ => location.to_owned(),

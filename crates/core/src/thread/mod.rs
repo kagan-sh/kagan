@@ -10,7 +10,6 @@ mod run;
 mod search;
 mod terminal;
 
-pub(crate) use crate::dispatch::{execute, forward, serialized};
 pub(crate) use agent::{note, note_with};
 pub(crate) use extra::{Extras, end as end_extras};
 pub(crate) use halt::{retire, stop};

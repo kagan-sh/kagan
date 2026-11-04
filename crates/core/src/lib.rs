@@ -28,4 +28,6 @@ pub use kg_terminal::{Ansi, Cell, Color, Cursor, Grid, Motion, Mouse, Weight};
 pub use ui::{UiDispatch, UiJob};
 pub use update::{Target, Updater};
 
-pub use workspace::{PluginDispatch, PluginRequest, SocketLocation, Workspace, WorkspaceEvent};
+pub use workspace::{
+    Permit, PluginDispatch, PluginRequest, SocketLocation, Workspace, WorkspaceEvent,
+};

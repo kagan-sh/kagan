@@ -682,7 +682,7 @@ fn a_program_that_asks_for_mouse_gets_the_click_and_shift_selects_instead(cx: &m
     click(cx, window, &format!("thread-{}", id.0));
     cx.simulate_input(window, "printf '\\033[?1000h\\033[?1006h'");
     cx.simulate_keystrokes(window, "enter");
-    wait_until(cx, |cx| {
+    wait_for_shell(cx, |cx| {
         cx.update(|cx| screen_read::terminal_grid(kagan.read(cx), cx))
             .is_some_and(|grid| grid.mouse.is_some())
     });
@@ -3959,6 +3959,27 @@ pub(super) fn wait_until(
         assert!(
             Instant::now() < deadline,
             "timed out waiting for the screen"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+// The shell prints in real time, which the test clock cannot speed up, so this wait gets no short
+// limit. The 120 s limit only stops a test that can never pass from hanging.
+pub(super) fn wait_for_shell(
+    cx: &mut TestAppContext,
+    mut done: impl FnMut(&mut TestAppContext) -> bool,
+) {
+    let hang = Instant::now() + Duration::from_secs(120);
+    loop {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        if done(cx) {
+            return;
+        }
+        assert!(
+            Instant::now() < hang,
+            "the shell never printed what the test waits for"
         );
         std::thread::sleep(Duration::from_millis(20));
     }

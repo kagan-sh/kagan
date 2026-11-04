@@ -267,7 +267,7 @@ async fn collect_instruct(
     record: &kg_domain::Thread,
     cx: &mut AsyncApp,
 ) -> String {
-    let text = match super::forward(
+    let text = match crate::dispatch::forward(
         this,
         PluginRequest::Instruct {
             thread_id: record.id.clone(),

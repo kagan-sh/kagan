@@ -51,7 +51,7 @@ pub(crate) async fn status(
         })
         .map_err(crate::workspace::closed)?;
     let OpResult::Warnings(warnings) =
-        crate::thread::forward(this, crate::PluginRequest::Warnings, cx).await?
+        crate::dispatch::forward(this, crate::PluginRequest::Warnings, cx).await?
     else {
         return Err(kg_domain::OpError::Failed(
             "plugin host returned no warnings".into(),

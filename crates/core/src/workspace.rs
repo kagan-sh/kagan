@@ -22,6 +22,19 @@ use crate::{Environment, Project, Requester, Thread};
 pub(crate) const GRACE: i64 = 10_000;
 const QUIT_DEADLINE: Duration = Duration::from_secs(3);
 
+/// The activation a plugin setting write belongs to, and the gate that can revoke it.
+pub struct Permit {
+    activation: u64,
+    gate: Arc<Mutex<Option<u64>>>,
+}
+
+impl Permit {
+    #[must_use]
+    pub fn new(activation: u64, gate: Arc<Mutex<Option<u64>>>) -> Self {
+        Self { activation, gate }
+    }
+}
+
 fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
     let personal = data_dir.join("personal");
     std::fs::create_dir_all(&personal)?;
@@ -323,7 +336,7 @@ impl Workspace {
         cx: &mut AsyncApp,
     ) -> Result<OpResult> {
         match request {
-            Request::Op(op) => crate::thread::execute(this, op, None, cx).await,
+            Request::Op(op) => crate::dispatch::execute(this, op, None, cx).await,
             Request::RemoveProject { id, threads } => {
                 this.update(cx, |workspace, _| {
                     if workspace.preparing_projects.contains_key(&id) {
@@ -491,12 +504,12 @@ impl Workspace {
                     result
                 })
             }
-            op if crate::thread::serialized(&op) => {
+            op if crate::dispatch::serialized(&op) => {
                 let submitted = workspace.read(cx).submit(Request::Op(op));
                 cx.spawn(async move |_| submitted.await)
             }
             op => detached(cx, async move |cx| {
-                crate::thread::execute(&this, op, requester, cx).await
+                crate::dispatch::execute(&this, op, requester, cx).await
             }),
         }
     }
@@ -762,38 +775,24 @@ impl Workspace {
         self.call(move |store| store.set_plugin_value(&id, &key, &value))
     }
 
-    /// Writes the setting value only while `permit` is `Some(activation)`. A folder save
-    /// also writes that path on `approved` when the key is still a folder, and does not
-    /// change `root`, `source`, `commit`, or `enabled`. When that path cannot be written,
-    /// it writes nothing.
+    /// Writes the setting value only while `permit` still names the plugin's activation. A
+    /// folder save also writes that path on `approved` when the key is still a folder, and
+    /// does not change `root`, `source`, `commit`, or `enabled`. When that path cannot be
+    /// written, it writes nothing.
     ///
     /// # Errors
-    /// When the database is closed or the query fails.
+    /// When the database is closed or the query fails, or the permit is stale, the plugin is
+    /// gone, or the key is no longer a folder setting.
     pub fn commit_plugin_config(
         &self,
         id: PluginId,
         key: String,
         value: Value,
         folder: Option<String>,
-        permit: Arc<Mutex<Option<u64>>>,
-        activation: u64,
+        permit: Permit,
     ) -> impl Future<Output = Result<()>> + use<> {
         self.call(move |store| {
-            if write_plugin_config(
-                store,
-                &id,
-                &key,
-                &value,
-                folder.as_deref(),
-                &permit,
-                activation,
-            )? {
-                Ok(())
-            } else {
-                Err(kg_store::Error::Conflict(format!(
-                    "plugin {id} changed while this was saving"
-                )))
-            }
+            write_plugin_config(store, &id, &key, &value, folder.as_deref(), &permit)
         })
     }
 
@@ -1363,26 +1362,33 @@ fn write_plugin_config(
     key: &str,
     value: &Value,
     folder: Option<&str>,
-    permit: &Mutex<Option<u64>>,
-    activation: u64,
-) -> kg_store::Result<bool> {
+    permit: &Permit,
+) -> kg_store::Result<()> {
     let guard = permit
+        .gate
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if *guard != Some(activation) {
-        return Ok(false);
+    if *guard != Some(permit.activation) {
+        return Err(kg_store::Error::Conflict(format!(
+            "plugin {id} changed while this was saving"
+        )));
     }
     if let Some(path) = folder {
         let Some(mut row) = store.plugins()?.into_iter().find(|plugin| plugin.id == *id) else {
-            return Ok(false);
+            return Err(kg_store::Error::NotFound {
+                what: "plugin",
+                id: id.to_string(),
+            });
         };
         if !patch_folder(&mut row, key, path) {
-            return Ok(false);
+            return Err(kg_store::Error::Conflict(format!(
+                "plugin {id} setting {key} is no longer a folder"
+            )));
         }
         store.set_plugin_approved(&row.id, &row.approved)?;
     }
     store.set_plugin_value(id, key, value)?;
-    Ok(true)
+    Ok(())
 }
 
 fn copy_kept_paths(approved: &mut Value, existing: &Value) {

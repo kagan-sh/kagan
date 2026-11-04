@@ -1033,8 +1033,7 @@ async fn write_setting(
                 key.to_owned(),
                 value.clone(),
                 folder.map(|path| path.display().to_string()),
-                permit,
-                activation,
+                kg_core::Permit::new(activation, permit),
             )
         })
         .await?;

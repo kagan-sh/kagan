@@ -1279,10 +1279,10 @@ async fn a_theme_set_after_the_migration_stays(cx: &mut TestAppContext) {
 
 #[test]
 fn a_stop_waits_in_the_queue_and_a_run_does_not() {
-    assert!(crate::thread::serialized(&Op::Thread(ThreadOp::Stop {
+    assert!(crate::dispatch::serialized(&Op::Thread(ThreadOp::Stop {
         id: ThreadId("thr_a".into()),
     })));
-    assert!(!crate::thread::serialized(&Op::Thread(ThreadOp::Run(
+    assert!(!crate::dispatch::serialized(&Op::Thread(ThreadOp::Run(
         Run {
             project_id: ProjectId("project".into()),
             program: "sh".into(),
@@ -6960,8 +6960,7 @@ fn queue_folder_write(
             "notes".into(),
             json!("/notes"),
             Some("/notes".into()),
-            permit,
-            1,
+            crate::Permit::new(1, permit),
         )
     })
 }

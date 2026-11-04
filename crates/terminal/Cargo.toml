@@ -15,7 +15,7 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
-rustix = { version = "=1.1.5", features = ["process"] }
+rustix.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -17,7 +17,9 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
         _ => None,
     };
     let notice = match &op {
-        Op::Plugin(PluginOp::Install { source, .. }) => Some(format!("Installing {source}")),
+        Op::Plugin(PluginOp::Install { source, .. }) => {
+            Some(format!("Installing {}", kg_plugins::shown(source)))
+        }
         Op::Plugin(PluginOp::Remove { id, .. }) => Some(format!("Removing {id}")),
         Op::Project(kg_domain::ProjectOp::Remove { id, .. }) => Some(format!("Removing {id}")),
         _ => None,

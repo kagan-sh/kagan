@@ -190,8 +190,8 @@ pub(super) async fn links(
     Ok(OpResult::Links(found))
 }
 
-/// Ends every extra terminal of a thread and forgets its numbers. Dropping a terminal ends its
-/// program. Returns whether the thread had any.
+/// Ends every extra terminal of a thread and keeps its numbers so they are never reused.
+/// Dropping a terminal ends its program. Returns whether the thread had any.
 pub(crate) fn end(workspace: &mut Workspace, id: &ThreadId) -> bool {
     workspace
         .extras

@@ -288,10 +288,13 @@ async fn store_bindings(
     bindings: &BTreeMap<String, Option<String>>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let stamped = host.read_with(cx, |host, _| {
-        Some((host.activation(&plugin)?, host.permit(&plugin)?))
+    let permit = host.read_with(cx, |host, _| {
+        Some(kg_core::Permit::new(
+            host.activation(&plugin)?,
+            host.permit(&plugin)?,
+        ))
     });
-    let Some((activation, permit)) = stamped else {
+    let Some(permit) = permit else {
         return Err(kg_domain::OpError::Invalid(format!(
             "plugin {plugin} changed while this was saving"
         )));
@@ -300,14 +303,7 @@ async fn store_bindings(
     let workspace = cx.update(|cx| Workspace::global(cx));
     workspace
         .read_with(cx, |workspace, _| {
-            workspace.commit_plugin_config(
-                plugin.clone(),
-                BINDINGS.into(),
-                value,
-                None,
-                permit,
-                activation,
-            )
+            workspace.commit_plugin_config(plugin.clone(), BINDINGS.into(), value, None, permit)
         })
         .await?;
     Ok(())

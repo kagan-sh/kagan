@@ -1,31 +1,11 @@
-use std::time::{Duration, Instant};
-
 use gpui_kit::{Modifiers, TestAppContext};
 
 use super::kagan::{
     cell_point, click, grid_text, label, open, present, press, release, run_shell, shown_row,
-    wait_until,
+    wait_for_shell, wait_until,
 };
 use crate::kagan::changes::POLL;
 use crate::kagan::{NewTerminal, OpenLocalLink};
-
-// The shell prints in real time, which the test clock cannot speed up, so this wait gets no short
-// limit. The 120 s limit only stops a test that can never pass from hanging.
-fn wait_for_shell(cx: &mut TestAppContext, mut done: impl FnMut(&mut TestAppContext) -> bool) {
-    let hang = Instant::now() + Duration::from_secs(120);
-    loop {
-        cx.executor().advance_clock(Duration::from_millis(50));
-        cx.run_until_parked();
-        if done(cx) {
-            return;
-        }
-        assert!(
-            Instant::now() < hang,
-            "the shell never printed what the test waits for"
-        );
-        std::thread::sleep(Duration::from_millis(20));
-    }
-}
 
 #[gpui_kit::test]
 fn a_secondary_click_on_a_printed_link_opens_it(cx: &mut TestAppContext) {
