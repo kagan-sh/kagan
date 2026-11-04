@@ -299,7 +299,7 @@ pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 
     store.filter(|_| major >= 14)
 }
 
-/// Gives a page its own durable WebKit store when the plugin opted in and macOS can keep one.
+/// Gives a page its own durable `WebKit` store when the plugin opted in and macOS can keep one.
 /// Must run after `page::private`: a durable store needs incognito off, and the last call wins.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn with_store(

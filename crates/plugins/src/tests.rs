@@ -734,7 +734,7 @@ fn local_fetch_grants_http_on_that_port_and_install_line() {
         { "host": "api.github.com", "methods": ["GET"] }
     ]);
     std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
-    let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+    let grant = Grant::of(&read_manifest(dir.path()).unwrap(), dir.path());
     assert_eq!(
         grant.lines(),
         vec![
@@ -802,7 +802,7 @@ fn local_fetch_hosts_are_checked() {
         let mut value = manifest();
         value["powers"]["fetch"] = json!([{ "host": host, "methods": ["GET"] }]);
         std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
-        let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+        let grant = Grant::of(&read_manifest(dir.path()).unwrap(), dir.path());
         assert!(
             grant.lines().iter().any(|line| line.contains("port 80")),
             "{host}: {:?}",
@@ -6119,7 +6119,7 @@ fn a_project_setting_takes_a_live_project_id(cx: &mut TestAppContext) {
 #[test]
 fn instruct_is_an_install_line_and_needs_approval_again() {
     let plugin = plugin_dir();
-    let base = Grant::of(&read_manifest(plugin.path()).unwrap());
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     assert!(
         !base
             .lines()
@@ -6129,7 +6129,7 @@ fn instruct_is_an_install_line_and_needs_approval_again() {
     let mut value = manifest();
     value["instruct"] = json!(true);
     write_plugin(plugin.path(), &value);
-    let with = Grant::of(&read_manifest(plugin.path()).unwrap());
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     assert!(
         with.lines()
             .iter()

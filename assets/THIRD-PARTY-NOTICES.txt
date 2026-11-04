@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock ab113ee2c6579fec2269ff678d51f8ad4b793973f01292adf54d282e08d6b4ff
+cargo-lock ddceb0f9ab882f9e3e28820bcbf893e166a8b1016054ce760b01e8b70bf3a06d
 
 kagan itself is MIT. See LICENSE.
 
@@ -2338,7 +2338,6 @@ windows-strings 0.3.1
 windows-strings 0.4.2
 windows-strings 0.5.1
 windows-sys 0.48.0
-windows-sys 0.52.0
 windows-sys 0.59.0
 windows-sys 0.60.2
 windows-sys 0.61.2
