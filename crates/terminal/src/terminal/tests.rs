@@ -1,5 +1,5 @@
 use std::ffi::{OsStr, OsString};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, mpsc};
@@ -829,31 +829,72 @@ fn pty_pair() -> (std::fs::File, std::fs::File) {
     }
 }
 
+// Reports each WouldBlock, so a test can wait for the real blocked state instead of sleeping.
+#[cfg(unix)]
+struct Signalled<T> {
+    inner: T,
+    would_block: mpsc::Sender<()>,
+}
+
+#[cfg(unix)]
+impl<T> Signalled<T> {
+    fn note<R>(&self, result: io::Result<R>) -> io::Result<R> {
+        if matches!(&result, Err(error) if error.kind() == io::ErrorKind::WouldBlock) {
+            let _ = self.would_block.send(());
+        }
+        result
+    }
+}
+
+#[cfg(unix)]
+impl Read for Signalled<std::fs::File> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let result = self.inner.read(buf);
+        self.note(result)
+    }
+}
+
+#[cfg(unix)]
+impl Write for Signalled<std::fs::File> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let result = self.inner.write(buf);
+        self.note(result)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn a_full_pty_write_is_cancelled_by_stop() {
-    use std::io::Read;
     use std::os::fd::AsRawFd;
     let (master, mut slave) = pty_pair();
     set_nonblocking(master.as_raw_fd()).unwrap();
     set_nonblocking(slave.as_raw_fd()).unwrap();
-    let mut writer = master.try_clone().unwrap();
-    let fd = writer.as_raw_fd();
-    // Nobody reads the slave, so once the pty is full the next write must wait.
-    while matches!(writer.write(&[0_u8; 8192]), Ok(n) if n > 0) {}
+    let (would_block, is_blocked) = mpsc::channel();
+    let mut writer = Signalled {
+        inner: master.try_clone().unwrap(),
+        would_block,
+    };
+    let fd = writer.inner.as_raw_fd();
+    // Nobody reads the slave, so 1 MiB can never fit: this write ends only by stop or by error.
+    let payload = vec![0_u8; 1 << 20];
     let stop = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&stop);
     let (done, result) = mpsc::channel();
     let worker = thread::spawn(move || {
-        let _ = done.send(write_bytes(&mut writer, b"abc", &flag, Some(fd)));
+        let _ = done.send(write_bytes(&mut writer, &payload, &flag, Some(fd)));
     });
-    thread::sleep(Duration::from_millis(100));
+    let blocked = is_blocked.recv_timeout(Duration::from_secs(5)).is_ok();
     stop.store(true, Ordering::Release);
     let observed = result.recv_timeout(Duration::from_secs(3));
     // Drain only after the verdict, so a failing run still lets the worker finish.
     let mut sink = [0_u8; 8192];
     while matches!(slave.read(&mut sink), Ok(n) if n > 0) {}
     worker.join().unwrap();
+    assert!(blocked, "the write never reached a full pty");
     assert!(
         matches!(observed, Ok(Err(_))),
         "stop did not cancel the full write: {observed:?}"
@@ -873,31 +914,30 @@ fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
     let wait = dup_fd(owner_fd).unwrap();
     let shared = Shared::settled(Screen::new(80, 24));
     let (replies, _received) = mpsc::channel();
+    let (would_block, is_parked) = mpsc::channel();
     let handle = thread_read(
-        Box::new(reader),
+        Box::new(Signalled {
+            inner: reader,
+            would_block,
+        }),
         shared.clone(),
         replies,
         Arc::new(AtomicBool::new(false)),
         Some(wait),
     );
-    thread::sleep(Duration::from_millis(100));
-    // Made before the close, so its number cannot be owner_fd.
+    let parked = is_parked.recv_timeout(Duration::from_secs(5)).is_ok();
+    // Made before the dup2, so its number cannot be owner_fd.
     let (unrelated, mut peer) = UnixStream::pair().unwrap();
-    drop(owner);
-    // Reuse the number the closed master had. A reader still polling it now waits on this socket.
-    // SAFETY: owner_fd is a number this test just freed; dup2 makes it a copy of the socket.
+    // Reuse the number the master had. owner still owns it, so dup2 swaps its target in one step.
+    // SAFETY: owner_fd is open and owned by owner; dup2 closes the old pty copy and makes it a copy of the socket.
     assert_eq!(
         unsafe { libc::dup2(unrelated.as_raw_fd(), owner_fd) },
         owner_fd
     );
     output.write_all(b"FIRST").unwrap();
-    let end = Instant::now() + Duration::from_secs(1);
-    while !lock(&shared.screen).transcript().contains("FIRST") && Instant::now() < end {
-        thread::sleep(Duration::from_millis(5));
-    }
-    thread::sleep(Duration::from_millis(100));
+    let first = transcript_within(&shared, "FIRST");
     output.write_all(b"SECOND").unwrap();
-    thread::sleep(Duration::from_millis(200));
+    let second = transcript_within(&shared, "SECOND");
     let got = lock(&shared.screen).transcript();
     // Wake a reader that waits on the socket, then close the slave so every reader ends.
     peer.write_all(b"wake").unwrap();
@@ -908,13 +948,29 @@ fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
         let _ = joined.send(());
     });
     let joined_in_time = done.recv_timeout(Duration::from_secs(3)).is_ok();
-    // SAFETY: this closes the copy that dup2 made; unrelated still owns its own number.
-    unsafe { libc::close(owner_fd) };
+    drop(owner);
+    assert!(parked, "reader never reached its wait");
     assert!(
-        got.contains("SECOND"),
+        first,
+        "reader did not see FIRST after its fd number was reused"
+    );
+    assert!(
+        second,
         "reader stopped seeing output after its fd number was reused: {got:?}"
     );
     assert!(joined_in_time, "reader did not join");
+}
+
+#[cfg(unix)]
+fn transcript_within(shared: &Shared, needle: &str) -> bool {
+    let end = Instant::now() + Duration::from_secs(2);
+    while !lock(&shared.screen).transcript().contains(needle) {
+        if Instant::now() >= end {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    true
 }
 
 #[cfg(unix)]
