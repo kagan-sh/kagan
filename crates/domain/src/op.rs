@@ -1691,10 +1691,36 @@ pub struct BranchList {
     pub names: Vec<String>,
 }
 
+/// Why a wait returned. `kg thread wait` prints these words, and so does the plugin API.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WaitOutcome {
+    Waiting,
+    Exited,
+    Failed,
+    NotBusy,
+    Timeout,
+}
+
+impl std::fmt::Display for WaitOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Waiting => "waiting",
+            Self::Exited => "exited",
+            Self::Failed => "failed",
+            Self::NotBusy => "not-busy",
+            Self::Timeout => "timeout",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum OpResult {
     Text(String),
+    /// Serialized as `text` so `kg thread wait --json` keeps the key it printed before.
+    #[serde(rename(serialize = "text", deserialize = "wait"))]
+    Wait(WaitOutcome),
     Diagnostics {
         path: PathBuf,
     },

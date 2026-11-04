@@ -89,6 +89,7 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
         op @ Op::Thread(ThreadOp::Ask { .. } | ThreadOp::Wait { .. }) if !json => {
             match client.call(&op)? {
                 OpResult::Text(text) => println!("{text}"),
+                OpResult::Wait(outcome) => println!("{outcome}"),
                 result => print(&result, false)?,
             }
             Ok(())
@@ -148,6 +149,10 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
             OpResult::Text(text) | OpResult::Logs { text, .. } => {
                 use std::io::Write as _;
                 std::io::stdout().lock().write_all(text.as_bytes())?;
+                return Ok(());
+            }
+            OpResult::Wait(outcome) => {
+                println!("{outcome}");
                 return Ok(());
             }
             OpResult::Shared { entry, install } => {

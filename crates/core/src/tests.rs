@@ -2739,13 +2739,13 @@ async fn wait_on_an_ended_program_returns_at_once(cx: &mut TestAppContext) {
         panic!("thread")
     };
     wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
-    assert_eq!(settle(&started.id, 5_000, cx).await, "exited");
+    assert_eq!(settle(&started.id, 5_000, cx).await, WaitOutcome::Exited);
     let failed = op(fixture.run("/bin/sh -c \"exit 7\""), cx).await.unwrap();
     let OpResult::Thread(failed) = failed else {
         panic!("thread")
     };
     wait_for_status(&failed.id, ThreadStatus::Error, cx).await;
-    assert_eq!(settle(&failed.id, 5_000, cx).await, "failed");
+    assert_eq!(settle(&failed.id, 5_000, cx).await, WaitOutcome::Failed);
 }
 
 #[cfg(unix)]
@@ -2763,7 +2763,7 @@ async fn a_quiet_program_is_not_busy_only_after_the_arm(cx: &mut TestAppContext)
     cx.executor()
         .advance_clock(std::time::Duration::from_secs(1));
     cx.run_until_parked();
-    assert_eq!(text(task.await.unwrap()), "not-busy");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::NotBusy);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
 }
 
@@ -2778,7 +2778,7 @@ async fn a_timeout_leaves_the_thread_alone(cx: &mut TestAppContext) {
     cx.executor()
         .advance_clock(std::time::Duration::from_millis(200));
     cx.run_until_parked();
-    assert_eq!(text(task.await.unwrap()), "timeout");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Timeout);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
     assert_eq!(kinds_of(&id, cx).await, before);
 }
@@ -2790,13 +2790,13 @@ async fn an_exit_during_the_wait_names_exited_or_failed(cx: &mut TestAppContext)
     let (id, _reap) = started(&fixture, "/bin/sh -c \"sleep 0.2; exit 0\"", cx).await;
     let task = begin_wait(&id, 10_000, cx);
     finish_wait(&task, cx);
-    assert_eq!(text(task.await.unwrap()), "exited");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Exited);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
 
     let (id, _reap) = started(&fixture, "/bin/sh -c \"sleep 0.2; exit 7\"", cx).await;
     let task = begin_wait(&id, 10_000, cx);
     finish_wait(&task, cx);
-    assert_eq!(text(task.await.unwrap()), "failed");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Failed);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
 }
 
@@ -2811,7 +2811,7 @@ async fn stop_during_the_wait_returns_exited(cx: &mut TestAppContext) {
         .await
         .unwrap();
     finish_wait(&task, cx);
-    assert_eq!(text(task.await.unwrap()), "exited");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Exited);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
 }
 
@@ -2830,7 +2830,7 @@ async fn stop_while_starting_returns_exited(cx: &mut TestAppContext) {
         .unwrap();
     cx.run_until_parked();
     assert!(task.is_ready());
-    assert_eq!(text(task.await.unwrap()), "exited");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Exited);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
     assert_eq!(kinds_of(&id, cx).await, before);
 }
@@ -2839,12 +2839,19 @@ async fn stop_while_starting_returns_exited(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 async fn an_end_logged_before_the_wait_returns_when_the_row_changes(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    row_end_after_its_event(&fixture, EventKind::Idle, ThreadStatus::Idle, "exited", cx).await;
+    row_end_after_its_event(
+        &fixture,
+        EventKind::Idle,
+        ThreadStatus::Idle,
+        WaitOutcome::Exited,
+        cx,
+    )
+    .await;
     row_end_after_its_event(
         &fixture,
         EventKind::Failed { error: None },
         ThreadStatus::Error,
-        "failed",
+        WaitOutcome::Failed,
         cx,
     )
     .await;
@@ -2910,7 +2917,7 @@ async fn a_spinner_returns_waiting_only_after_the_quiet(cx: &mut TestAppContext)
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     assert!(task.is_ready());
-    assert_eq!(text(task.await.unwrap()), "waiting");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Waiting);
     assert_eq!(waiting_count(&id, cx).await, 1);
 }
 
@@ -2931,7 +2938,7 @@ async fn row_end_after_its_event(
     fixture: &Fixture,
     kind: EventKind,
     status: ThreadStatus,
-    reason: &str,
+    reason: WaitOutcome,
     cx: &mut TestAppContext,
 ) {
     let (id, _reap) = started(fixture, "/bin/sh -c \"sleep 30\"", cx).await;
@@ -2948,7 +2955,7 @@ async fn row_end_after_its_event(
     set_row_status(fixture, &id, status, cx);
     cx.run_until_parked();
     assert!(task.is_ready(), "{reason} waited out the end of the row");
-    assert_eq!(text(task.await.unwrap()), reason);
+    assert_eq!(outcome(&task.await.unwrap()), reason);
 }
 
 #[cfg(unix)]
@@ -2976,9 +2983,9 @@ fn finish_wait(task: &gpui_kit::Task<Result<OpResult>>, cx: &mut TestAppContext)
 }
 
 #[cfg(unix)]
-async fn settle(id: &ThreadId, timeout_ms: u64, cx: &mut TestAppContext) -> String {
-    text(
-        op(
+async fn settle(id: &ThreadId, timeout_ms: u64, cx: &mut TestAppContext) -> WaitOutcome {
+    outcome(
+        &op(
             Op::Thread(ThreadOp::Wait {
                 id: id.clone(),
                 timeout_ms,
@@ -2990,11 +2997,11 @@ async fn settle(id: &ThreadId, timeout_ms: u64, cx: &mut TestAppContext) -> Stri
     )
 }
 
-fn text(result: OpResult) -> String {
-    let OpResult::Text(reason) = result else {
+fn outcome(result: &OpResult) -> WaitOutcome {
+    let OpResult::Wait(outcome) = result else {
         panic!("wait returned {result:?}");
     };
-    reason
+    *outcome
 }
 
 fn ask_options() -> Vec<InteractionOption> {

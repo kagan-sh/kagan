@@ -29,8 +29,8 @@ pub use op::{
     SelectMode, SettingsOp, Shortcut, Skill, SkillOp, SkillSource, Slot, SlotChoice, SurfaceItem,
     SurfaceOp, SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThemeOp, ThemeSettings,
     ThreadOp, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
-    UiSnapshot, WindowOp, branch_slug, check, effective_chord, expand_secondary, invalid_json,
-    valid_theme_choice, valid_theme_id,
+    UiSnapshot, WaitOutcome, WindowOp, branch_slug, check, effective_chord, expand_secondary,
+    invalid_json, valid_theme_choice, valid_theme_id,
 };
 pub use program::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, Program, ProgramList, ProgramSource, split_program,

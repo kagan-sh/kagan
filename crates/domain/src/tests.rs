@@ -2,7 +2,7 @@ use crate::{
     AgentTool, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event, EventKind,
     InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId, PluginId,
     PluginOp, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, TurnOutcome, Visibility,
-    branch_slug, format_notes, invalid_json, parse_notes,
+    WaitOutcome, branch_slug, format_notes, invalid_json, parse_notes,
 };
 use serde_json::{Value, json};
 
@@ -234,6 +234,24 @@ fn error_wire() {
     let done = serde_json::to_value(OpResult::Done).unwrap();
     assert!(done.get("ok").is_none());
     assert!(done.get("hint").is_none());
+}
+
+#[test]
+fn wait_outcome_wire() {
+    for (outcome, wire) in [
+        (WaitOutcome::Waiting, "waiting"),
+        (WaitOutcome::Exited, "exited"),
+        (WaitOutcome::Failed, "failed"),
+        (WaitOutcome::NotBusy, "not-busy"),
+        (WaitOutcome::Timeout, "timeout"),
+    ] {
+        round_trip(&outcome, &json!(wire));
+        assert_eq!(outcome.to_string(), wire);
+    }
+    assert_eq!(
+        serde_json::to_value(OpResult::Wait(WaitOutcome::NotBusy)).unwrap(),
+        json!({ "text": "not-busy" })
+    );
 }
 
 #[test]
