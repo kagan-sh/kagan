@@ -165,7 +165,7 @@ pub(crate) fn macos_major() -> u32 {
     u32::try_from(version.majorVersion).unwrap_or(0)
 }
 
-// The store id on macOS 14 or later. Otherwise None, and the page stays private.
+// Keeps the store id only on macOS 14 or later. Older systems get None, so the page stays private.
 #[cfg(target_os = "macos")]
 #[must_use]
 pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 16]> {

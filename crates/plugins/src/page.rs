@@ -318,7 +318,7 @@ const RETRY_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
 const RETRY_START: std::time::Duration = std::time::Duration::from_millis(50);
 const RETRY_MAX: std::time::Duration = std::time::Duration::from_millis(250);
 
-// Result of one delete try. `InUse` means `WebKit` still holds the store; a retry may work.
+// `InUse` means `WebKit` still holds the store; a retry may work.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum StoreAttempt {
     Removed,
@@ -336,7 +336,7 @@ thread_local! {
     static REMOVE_HOOK: std::cell::RefCell<Option<RemoveHook>> = const { std::cell::RefCell::new(None) };
 }
 
-// Installs a fake `remove_data_store` for tests. Cleared when the guard drops.
+// Replaces `remove_data_store` in tests until the guard drops.
 #[cfg(test)]
 pub(crate) fn set_remove_hook(
     hook: impl FnMut([u8; 16]) -> StoreAttempt + 'static,
@@ -359,9 +359,9 @@ impl Drop for RemoveHookGuard {
     }
 }
 
-// Waits for the native view to release, then deletes each store. Retries `DataStoreInUse`
-// with growing waits for about 3 seconds. Ids still held stay out of `removed`, so their
-// `store.id` files stay for a later start.
+// Retries `DataStoreInUse` with growing waits, for about 3 seconds after the first release wait.
+// Ids still held stay out of `removed`, so their `store.id` files
+// stay for a later start.
 pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
     cx: &mut gpui_kit::AsyncApp,

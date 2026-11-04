@@ -211,7 +211,7 @@ fn constructs_button(source: &str) -> bool {
     false
 }
 
-// Whether any script calls a `.store(...)` method with a `true` argument. The receiver is not checked.
+// Whether any script calls `.store(true)` on a chain that starts at `new WebView(...)`.
 pub(crate) fn calls_webview_store(root: &Path) -> bool {
     plugin_scripts(root).is_ok_and(|scripts| {
         scripts
@@ -220,7 +220,7 @@ pub(crate) fn calls_webview_store(root: &Path) -> bool {
     })
 }
 
-/// True when the receiver is `new WebView(...)`, optionally followed by more calls such as `.url(...)`.
+// True when the chain starts at `new WebView(...)`, optionally followed by more calls such as `.url(...)`.
 fn is_webview_chain(node: tree_sitter::Node, source: &str) -> bool {
     let mut node = node;
     loop {
