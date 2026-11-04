@@ -33,6 +33,14 @@ pub(super) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Re
         || path.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
     );
+    let sort = store
+        .projects()
+        .map_err(closed)?
+        .iter()
+        .filter(|project| project.kind == ProjectKind::Standard)
+        .map(|project| project.sort)
+        .max()
+        .map_or(0, |sort| sort.saturating_add(1));
     let project = Project {
         id: ProjectId(id("prj")),
         kind: ProjectKind::Standard,
@@ -46,6 +54,7 @@ pub(super) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Re
         .ok()
         .map(|url| without_credentials(url.trim())),
         path,
+        sort,
     };
     if store.removal_pending(&project.path).map_err(closed)? {
         return Err(OpError::Invalid("that folder is being removed".into()));
@@ -236,6 +245,24 @@ async fn remove_worktrees(
         crate::environment::finish_removal(this, environment, outcome, cx).await?;
     }
     Ok(failures)
+}
+
+pub(super) fn reorder(
+    store: &kg_store::Store,
+    id: &ProjectId,
+    before: Option<&ProjectId>,
+) -> kg_store::Result<kg_domain::OpResult> {
+    if let Some(before) = before
+        && store
+            .project(before)?
+            .is_some_and(|project| project.kind == ProjectKind::Personal)
+    {
+        return Err(kg_store::Error::Conflict(
+            "Personal stays last; omit --before to move to the end".into(),
+        ));
+    }
+    store.reorder_project(id, before)?;
+    Ok(kg_domain::OpResult::Done)
 }
 
 fn removable(project: &Project, threads: &[kg_domain::Thread]) -> Result<()> {

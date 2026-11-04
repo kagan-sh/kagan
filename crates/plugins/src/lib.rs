@@ -17,6 +17,9 @@ mod log;
 pub(crate) use log::{Level, log};
 mod manifest;
 mod ops;
+mod page;
+#[cfg(test)]
+mod page_test;
 mod process;
 mod program;
 mod secret;
@@ -42,14 +45,17 @@ use gpui_kit::{
 use gpui_shell::policy::{self, Policy};
 use gpui_shell::{Capabilities, HttpRequestGrant, LoadedApplication, ScriptView, ShellRuntime};
 use kg_core::{PluginRequest, Workspace};
-use kg_domain::{AgentTool, Event, Op, OpError, OpResult, PluginId, ThemeFile, ThreadId, ThreadOp};
+use kg_domain::{
+    AgentTool, Event, Op, OpError, OpResult, PluginId, ProjectId, ThemeFile, ThreadId, ThreadOp,
+};
 use serde_json::{Map, Value};
 
 use crate::jobs::{Ended, Jobs};
-use crate::manifest::{Grant, Manifest, Method, Scope, Tool};
+use crate::manifest::{Fetch, Grant, Manifest, Scope, Tool};
 pub use catalog::{Example, capabilities, examples, kinds_in, matched};
 pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
 pub use manifest::{AgentChoice, Setting};
+pub use page::{MESSAGE_CAP, PageFileError, SCHEME, parse_message, read_plugin_file};
 pub use ui_host::{HostContext, HostUi, HostUiEvent, ReviewComment, ToastAction};
 pub use watchdog::PluginStatus;
 
@@ -62,7 +68,14 @@ fn event_data(kind: &kg_domain::EventKind) -> Value {
         .unwrap_or(Value::Null)
 }
 
+fn http_grants(fetch: &[Fetch]) -> std::result::Result<Vec<HttpRequestGrant>, String> {
+    fetch.iter().map(Fetch::http_grant).collect()
+}
+
 const TOOL_TIMEOUT: Duration = Duration::from_mins(2);
+const INSTRUCT_TIMEOUT: Duration = Duration::from_secs(2);
+const INSTRUCT_CAP: usize = 4096;
+const INSTRUCT_TOTAL: usize = 16 * 1024;
 /// What every reader but the plugin sees for a secret setting that holds a value.
 const SET: &str = "set";
 
@@ -519,6 +532,18 @@ async fn stored_settings(
                 }
                 settings.insert(key.clone(), Value::Null);
             }
+            Setting::Project { .. } => {
+                let value = stored
+                    .filter(|value| value.is_null() || value.is_string())
+                    .unwrap_or_else(|| setting.default_value());
+                settings.insert(key.clone(), value);
+            }
+            Setting::Number { .. } => {
+                let value = stored
+                    .and_then(number_value)
+                    .unwrap_or_else(|| setting.default_value());
+                settings.insert(key.clone(), value);
+            }
             Setting::String { .. }
             | Setting::Boolean { .. }
             | Setting::Select { .. }
@@ -529,6 +554,21 @@ async fn stored_settings(
         }
     }
     Ok((settings, agents))
+}
+
+fn number_value(value: Value) -> Option<Value> {
+    match value {
+        Value::Number(number) if number.as_f64().is_some_and(f64::is_finite) => {
+            Some(Value::Number(number))
+        }
+        Value::String(text) => match serde_json::from_str::<Value>(text.trim()) {
+            Ok(Value::Number(number)) if number.as_f64().is_some_and(f64::is_finite) => {
+                Some(Value::Number(number))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// A secret the keychain will not give is left unset and named in the plugin log.
@@ -591,6 +631,10 @@ fn dispatch(request: PluginRequest, cx: &mut App) -> Task<Result<OpResult>> {
             name,
             input,
         } => cx.spawn(async move |cx| call_tool(&host, &thread_id, &name, input, cx).await),
+        PluginRequest::Instruct {
+            thread_id,
+            project_id,
+        } => cx.spawn(async move |cx| instruct(&host, &thread_id, &project_id, cx).await),
         PluginRequest::Plugin(op, requester) => {
             cx.spawn(async move |cx| ops::run(&host, op, requester, cx).await)
         }
@@ -763,6 +807,93 @@ async fn call_tool(
     }
 }
 
+async fn instruct(
+    host: &Entity<PluginHost>,
+    thread_id: &ThreadId,
+    project_id: &ProjectId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let plugins: Vec<PluginId> = host.read_with(cx, |host, _| {
+        host.active
+            .iter()
+            .filter(|(_, active)| active.manifest.instruct)
+            .map(|(id, _)| id.clone())
+            .collect()
+    });
+    if plugins.is_empty() {
+        return Ok(OpResult::Output(Some(String::new())));
+    }
+    let secrets = host.read_with(cx, |host, _| host.secrets.clone());
+    let mut tasks = Vec::with_capacity(plugins.len());
+    for plugin in plugins {
+        let Ok(jobs) = host.update(cx, |host, cx| host.load(&plugin, cx)) else {
+            continue;
+        };
+        let job = Map::from_iter([
+            ("kind".to_owned(), "instruct".into()),
+            ("threadId".to_owned(), thread_id.0.clone().into()),
+            ("projectId".to_owned(), project_id.0.clone().into()),
+        ]);
+        let Some((id, replied)) = jobs.send(job) else {
+            continue;
+        };
+        let timer = cx.background_executor().timer(INSTRUCT_TIMEOUT);
+        let secrets = secrets.clone();
+        tasks.push(async move {
+            let Ok(Ok(reply)) = jobs.settled(&id, &replied, timer).await else {
+                return String::new();
+            };
+            let text = instruct_text(&reply);
+            if text.is_empty() {
+                return String::new();
+            }
+            let text = secrets.redact(&plugin, &text);
+            let text = truncate(&text, INSTRUCT_CAP);
+            format!("Plugin {plugin}:\n{text}")
+        });
+    }
+    let parts = futures::future::join_all(tasks).await;
+    let mut joined = String::new();
+    for part in parts.into_iter().filter(|text| !text.is_empty()) {
+        let next = if joined.is_empty() {
+            part.len()
+        } else {
+            joined.len() + 2 + part.len()
+        };
+        if next > INSTRUCT_TOTAL {
+            break;
+        }
+        if !joined.is_empty() {
+            joined.push_str("\n\n");
+        }
+        joined.push_str(&part);
+    }
+    Ok(OpResult::Output(Some(joined)))
+}
+
+fn instruct_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Object(map) => map
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::Array(_) => String::new(),
+    }
+}
+
+fn truncate(text: &str, cap: usize) -> String {
+    if text.len() <= cap {
+        return text.to_owned();
+    }
+    let mut end = cap;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_owned()
+}
+
 type Prepared = (Policy, Entity<process::Processes>);
 
 impl Active {
@@ -827,17 +958,7 @@ impl Active {
             .storage(true)
             .clipboard_read(powers.clipboard.read)
             .clipboard_write(powers.clipboard.write)
-            .http_requests(powers.fetch.iter().map(|fetch| {
-                HttpRequestGrant::new(
-                    fetch.host.clone(),
-                    fetch.methods.iter().map(|method| match method {
-                        Method::Get => "GET",
-                        Method::Post => "POST",
-                    }),
-                    Vec::<String>::new(),
-                    ["/"],
-                )
-            }));
+            .http_requests(http_grants(&powers.fetch).map_err(|error| failed(&error))?);
 
         let processes = cx.new(|_| process::Processes::default());
         let policy = Policy::new()
@@ -1049,7 +1170,7 @@ impl PluginHost {
                     .powers
                     .fetch
                     .iter()
-                    .map(|fetch| fetch.host.clone())
+                    .filter_map(|fetch| fetch.view_host().ok())
                     .collect();
                 return Some((view, hosts));
             }
@@ -1276,20 +1397,126 @@ impl PluginHost {
         window: &mut gpui_kit::Window,
         cx: &mut Context<Self>,
     ) -> std::result::Result<Entity<ScriptView>, MountError> {
-        let export = self
+        let found = self.active.get(id).and_then(|active| {
+            active
+                .manifest
+                .ui
+                .panels()
+                .iter()
+                .find(|item| item.id() == panel)
+                .map(|item| item.view().map(str::to_owned))
+        });
+        let Some(export) = found else {
+            return Err(MountError::Missing(format!(
+                "plugin {id} has no panel {panel}"
+            )));
+        };
+        let Some(export) = export else {
+            return Err(MountError::Missing(format!("panel {panel} is a web panel")));
+        };
+        self.mount_named_view(id, &export, window, cx)
+    }
+
+    /// Loads the plugin so its script can serve a web panel. The page itself is not a view.
+    ///
+    /// # Errors
+    ///
+    /// [`MountError::Failed`] when the runtime refuses the entry.
+    pub fn load_plugin(
+        &mut self,
+        id: &PluginId,
+        cx: &mut Context<Self>,
+    ) -> std::result::Result<(), MountError> {
+        self.load(id, cx)
+            .map(|_| ())
+            .map_err(|error| MountError::Failed(error.to_string()))
+    }
+
+    /// The HTML file panel `panel` shows, when that panel is a web panel.
+    #[must_use]
+    pub fn web_file(&self, id: &PluginId, panel: &str) -> Option<String> {
+        self.active.get(id).and_then(|active| {
+            active
+                .manifest
+                .ui
+                .panels()
+                .iter()
+                .find(|item| item.id() == panel)
+                .and_then(|item| item.web().map(str::to_owned))
+        })
+    }
+
+    /// The plugin folder, for serving that plugin's own page.
+    #[must_use]
+    pub fn plugin_root(&self, id: &PluginId) -> Option<PathBuf> {
+        self.active.get(id).map(|active| active.root.clone())
+    }
+
+    /// Hosts this plugin's `powers.fetch` names.
+    #[must_use]
+    pub fn fetch_hosts(&self, id: &PluginId) -> Vec<String> {
+        self.active
+            .get(id)
+            .map(|active| {
+                active
+                    .grant
+                    .powers
+                    .fetch
+                    .iter()
+                    .map(|fetch| fetch.host.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Delivers one JSON page message to the plugin script as a `page` job.
+    ///
+    /// `alive` is the open page; when it drops, a still-queued job is discarded before `next()`.
+    ///
+    /// # Errors
+    ///
+    /// The text is over the size cap, is not JSON, the plugin has no such web panel loaded,
+    /// the page is gone, or too many page jobs are already waiting.
+    pub fn deliver_page(
+        &mut self,
+        id: &PluginId,
+        panel: &str,
+        raw: &str,
+        alive: std::sync::Weak<()>,
+        cx: &mut Context<Self>,
+    ) -> std::result::Result<(), String> {
+        let message = crate::page::parse_message(raw)?;
+        if self.web_file(id, panel).is_none() {
+            return Err(format!("plugin {id} has no web panel {panel}"));
+        }
+        if alive.upgrade().is_none() {
+            return Err("the web panel is not on screen".into());
+        }
+        let jobs = self
             .active
             .get(id)
-            .and_then(|active| {
-                active
-                    .manifest
-                    .ui
-                    .panels()
-                    .iter()
-                    .find(|item| item.id() == panel)
-                    .map(|item| item.view().to_owned())
-            })
-            .ok_or_else(|| MountError::Missing(format!("plugin {id} has no panel {panel}")))?;
-        self.mount_named_view(id, &export, window, cx)
+            .and_then(|active| active.loaded.as_ref())
+            .map(|loaded| loaded.jobs.clone())
+            .ok_or_else(|| format!("plugin {id} is not loaded"))?;
+        let Some((job, replied)) = crate::page::enqueue(&jobs, panel, message, alive, raw.len())
+        else {
+            return Err(format!("plugin {id} cannot take another page message"));
+        };
+        cx.spawn(async move |_, cx| {
+            let timer = cx.background_executor().timer(Duration::from_secs(10));
+            let _ = jobs.settled(&job, &replied, timer).await;
+        })
+        .detach();
+        Ok(())
+    }
+
+    /// Bytes of page payloads still held for `next()` on this plugin.
+    #[must_use]
+    pub fn pending_page_bytes(&self, id: &PluginId) -> usize {
+        self.active
+            .get(id)
+            .and_then(|active| active.loaded.as_ref())
+            .map_or(0, |loaded| loaded.jobs.pending_page_bytes())
     }
 
     /// Writes a line to the plugin's log: something kagan did with the plugin's request, such as
@@ -1396,7 +1623,10 @@ impl PluginHost {
             return false;
         };
         let named = |view: &str| view == export;
-        ui.panels().iter().any(|panel| named(panel.view())) || ui.settings().is_some_and(named)
+        ui.panels()
+            .iter()
+            .any(|panel| panel.view().is_some_and(named))
+            || ui.settings().is_some_and(named)
     }
 
     pub fn disable_loaded(&mut self, id: &PluginId, cx: &mut Context<Self>) {

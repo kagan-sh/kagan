@@ -37,6 +37,7 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
                 name: "Personal".into(),
                 path: dunce::canonicalize(&personal)?,
                 git_remote_url: None,
+                sort: 0,
             })
             .map_err(closed)?;
     }
@@ -90,6 +91,10 @@ pub enum PluginRequest {
         thread_id: ThreadId,
         name: String,
         input: Value,
+    },
+    Instruct {
+        thread_id: ThreadId,
+        project_id: ProjectId,
     },
     Plugin(PluginOp, Option<Requester>),
     /// A shortcut of a plugin's command, named `<plugin-id>:<command>`
@@ -1049,6 +1054,23 @@ impl Workspace {
         };
         terminal.set_snapshot_bound(bound);
         true
+    }
+
+    /// Clones `Lines` on the foreground and builds the newest `cap` bytes of plain text on
+    /// the background executor.
+    pub fn thread_output(id: &ThreadId, cap: usize, cx: &mut App) -> Task<Result<String>> {
+        let lines = Self::global(cx)
+            .read(cx)
+            .terminals
+            .get(id)
+            .map(|shown| match shown {
+                crate::thread::Shown::Running(terminal) => terminal.lines(),
+                crate::thread::Shown::Ended(finished) => finished.lines(),
+            });
+        match lines {
+            None => Task::ready(Err(missing("terminal", id))),
+            Some(lines) => cx.background_spawn(async move { Ok(lines.tail(cap)) }),
+        }
     }
 
     /// A stop or any exit code. A signal, a quit, a failure, or an interrupted start does

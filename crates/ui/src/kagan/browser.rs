@@ -1,6 +1,3 @@
-//! The Browser tab of the right sidebar: an address field and one web page, drawn by the native
-//! web view. The page is macOS only for now (`WKWebView`). Other systems show a note instead.
-
 use crate::theme::TypeScale as _;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{ActiveTheme as _, v_flex};
@@ -14,13 +11,13 @@ use super::Kagan;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-#[cfg(target_os = "macos")]
-use gpui_webview::WebView;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use crate::page::Page;
 
 pub(super) struct Browser {
     address: Entity<InputState>,
-    #[cfg(target_os = "macos")]
-    page: Option<Entity<WebView>>,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    page: Option<Entity<Page>>,
     note: Option<String>,
     _enter: Subscription,
 }
@@ -36,47 +33,54 @@ impl Browser {
         });
         Self {
             address,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             page: None,
             note: None,
             _enter: enter,
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn open(&mut self, url: &url::Url, window: &mut Window, cx: &mut Context<Kagan>) {
         if let Some(page) = &self.page {
-            page.update(cx, |page, _| page.load_url(url.as_str()));
+            page.update(cx, |page, cx| page.load_url(url.as_str(), cx));
             return;
         }
         // Links and redirects inside the page are held to the same rule as the address field.
         // Private: cookies and logins end with the page, and nothing lands outside kagan's data.
-        let builder = wry::WebViewBuilder::new()
-            .with_url(url.as_str())
-            .with_incognito(true)
-            .with_navigation_handler(|target| is_web(&target));
-        match WebView::build(builder, window, cx) {
-            Ok(view) => self.page = Some(cx.new(|_| view)),
-            Err(error) => self.note = Some(format!("The page could not open: {error}")),
+        let url = url.as_str().to_owned();
+        match crate::page::open(window, cx, move |builder| {
+            builder
+                .with_url(&url)
+                .with_navigation_handler(|target| is_web(&target))
+        }) {
+            Ok(view) => self.page = Some(view),
+            Err(error) => self.note = Some(error),
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     fn open(&mut self, _: &url::Url, _: &mut Window, _: &mut Context<Kagan>) {
         self.note = Some(UNSUPPORTED.into());
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn sync_page(&self, shown: bool, cx: &mut App) {
         let Some(page) = &self.page else { return };
-        if page.read(cx).visible() != shown {
-            page.update(cx, |page, _| if shown { page.show() } else { page.hide() });
+        if page.read(cx).visible(cx) != shown {
+            page.update(cx, |page, cx| {
+                if shown {
+                    page.show(cx);
+                } else {
+                    page.hide(cx);
+                }
+            });
         }
     }
 
     /// Drops the page and its address, so nothing on it keeps running once its tab is gone.
     pub(super) fn close(&mut self, window: &mut Window, cx: &mut App) {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
             self.page = None;
         }
@@ -86,7 +90,7 @@ impl Browser {
         });
     }
 
-    #[cfg(all(test, target_os = "macos"))]
+    #[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
     pub(super) fn address(&self, cx: &App) -> String {
         self.address.read(cx).value().to_string()
     }
@@ -100,8 +104,8 @@ impl Browser {
     }
 }
 
-const WEB: bool = cfg!(target_os = "macos");
-const UNSUPPORTED: &str = "The browser works on macOS only for now.";
+const WEB: bool = cfg!(any(target_os = "macos", target_os = "windows"));
+const UNSUPPORTED: &str = "The browser works on macOS and Windows only for now.";
 
 pub(super) fn page_url(typed: &str) -> Option<url::Url> {
     let typed = typed.trim();
@@ -122,14 +126,14 @@ fn is_web(url: &str) -> bool {
 }
 
 impl Kagan {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) fn browser_drawn(&self, cx: &App) -> bool {
         self.right_drawn()
             && super::right::selected_tab(self, cx).as_deref() == Some(super::tabs::BROWSER)
     }
 
     /// Hides or shows the native page to match whether the Browser tab is on screen.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) fn sync_browser(&self, cx: &mut App) {
         let shown = self.browser_drawn(cx);
         self.browser.sync_page(shown, cx);
@@ -147,9 +151,9 @@ impl Kagan {
                 .text_color(cx.theme().danger)
                 .child(note)
         });
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         let page = self.browser.page.clone();
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let page: Option<AnyElement> = None;
         let hint = if WEB {
             "Type an address and press Enter."

@@ -23,6 +23,8 @@ export function spawn(options: Spawn): Promise<Thread>;
 export function stop(id: string): Promise<void>;
 /** Types `text` into the running program and presses Enter. At most 1 MiB. */
 export function send(id: string, text: string): Promise<void>;
+/** The program's kept scrollback as plain text, at most 256 KiB. */
+export function output(id: string): Promise<{ output: string }>;
 export function archive(id: string): Promise<void>;
 export function answer(id: string, interactionId: string, optionId: string): Promise<void>;
 export function unarchive(id: string): Promise<void>;

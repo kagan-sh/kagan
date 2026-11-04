@@ -1342,6 +1342,13 @@ pub enum ProjectOp {
         /// Project to remove
         id: ProjectId,
     },
+    /// Move a project in the sidebar
+    Reorder {
+        id: ProjectId,
+        /// Place before this project; omit to move to the end, still above Personal
+        #[arg(long)]
+        before: Option<ProjectId>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
@@ -1535,11 +1542,11 @@ pub enum ConfigOp {
     Set {
         key: String,
         /// Omit it to type it at a prompt that does not show it, or to pipe it on stdin. Do that for a secret, so it stays out of your shell history
-        #[arg(value_parser = StringValueParser::new().map(json))]
+        #[arg(allow_negative_numbers = true, value_parser = StringValueParser::new().map(json))]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<Value>,
     },
-    /// Forget a secret setting
+    /// Forget a secret, or clear a project setting
     Clear { key: String },
 }
 

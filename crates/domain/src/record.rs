@@ -88,16 +88,19 @@ pub struct Project {
     pub name: String,
     pub path: PathBuf,
     pub git_remote_url: Option<String>,
+    /// Rank among standard projects; Personal stays last regardless.
+    #[serde(default)]
+    pub sort: i64,
 }
 
-/// Groups by kind, then by name. A standard project whose name sorts after Personal still
-/// precedes every personal project.
 pub fn order_sidebar_projects(projects: &mut [Project]) {
     projects.sort_by(|left, right| {
         let personal = |project: &Project| u8::from(matches!(project.kind, ProjectKind::Personal));
         personal(left)
             .cmp(&personal(right))
+            .then_with(|| left.sort.cmp(&right.sort))
             .then_with(|| left.name.cmp(&right.name))
+            .then_with(|| left.id.0.cmp(&right.id.0))
     });
 }
 

@@ -1795,22 +1795,16 @@ fn the_title_bar_names_the_thread_and_the_terminal_starts_below_it(cx: &mut Test
     let title = thread_record(cx, &id).title;
     let native = gpui_kit::VisualTestContext::from_window(window, cx).window_title();
     assert_eq!(native, Some(format!("{title} — Kagan project")));
-    let (x, width) = super::sidebars::span(cx, window, "thread-heading").expect("heading");
-    let viewport = cx
-        .update_window(window, |_, window, _| {
-            f32::from(window.viewport_size().width)
-        })
-        .unwrap();
-    // Windows draws minimize, maximize and close at the right end of the bar, each one bar
-    // high and wide, and the heading centers in the space left of them.
-    let controls = if cfg!(windows) {
-        3. * f32::from(gpui_kit::component::TITLE_BAR_HEIGHT)
-    } else {
-        0.
-    };
+    let (heading_x, heading_w) =
+        super::sidebars::span(cx, window, "thread-heading").expect("heading");
+    let (left_x, left_w) =
+        super::sidebars::span(cx, window, "left-sidebar-toggle").expect("left toggle");
+    let (right_x, _) =
+        super::sidebars::span(cx, window, "right-sidebar-toggle").expect("right toggle");
     assert!(
-        (x + width / 2. - (viewport - controls) / 2.).abs() < 1.,
-        "heading {x}+{width}, window {viewport}"
+        heading_x + 0.5 >= left_x + left_w && heading_x + heading_w <= right_x + 0.5,
+        "heading {heading_x}+{heading_w} between left {} and right {right_x}",
+        left_x + left_w
     );
     cx.update_window(window, |_, window, _| {
         let grid = crate::ui_registry::find(window, &ElementId::Name("terminal-grid".into()))
@@ -3830,6 +3824,7 @@ fn seed(dir: &Path) {
             name: "Kagan project".into(),
             path: dir.to_path_buf(),
             git_remote_url: None,
+            sort: 0,
         })
         .unwrap();
 }

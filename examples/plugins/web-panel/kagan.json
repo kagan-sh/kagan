@@ -1,0 +1,20 @@
+{
+  "id": "dev.kagan.web-panel",
+  "name": "Web panel",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Shows an HTML page in the right sidebar and echoes a message from it.",
+  "powers": {},
+  "ui": {
+    "panels": [
+      {
+        "id": "page",
+        "title": "Web panel",
+        "web": "ui/index.html",
+        "placement": "right"
+      }
+    ]
+  }
+}

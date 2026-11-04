@@ -34,6 +34,23 @@ impl Lines {
     pub fn kept(&self) -> Kept {
         self.0.drained(Screen::kept)
     }
+
+    #[must_use]
+    pub fn tail(&self, cap: usize) -> String {
+        newest(self.0.drained(Screen::transcript), cap)
+    }
+}
+
+#[must_use]
+pub(crate) fn newest(text: String, cap: usize) -> String {
+    if text.len() <= cap {
+        return text;
+    }
+    let mut start = text.len() - cap;
+    while start < text.len() && !text.is_char_boundary(start) {
+        start += 1;
+    }
+    text[start..].to_owned()
 }
 
 impl Terminal {
@@ -47,5 +64,25 @@ impl Finished {
     #[must_use]
     pub fn lines(&self) -> Lines {
         Lines(self.shared.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::newest;
+
+    #[test]
+    fn newest_keeps_the_end_on_a_char_boundary() {
+        let capped = newest(format!("{}y", "x".repeat(10)), 10);
+        assert_eq!(capped, format!("{}y", "x".repeat(9)));
+
+        let mut text = "a".repeat(10);
+        text.push('€');
+        text.push_str(&"b".repeat(8));
+        let capped = newest(text, 10);
+        assert!(capped.len() <= 10);
+        assert!(capped.is_char_boundary(0));
+        assert!(capped.starts_with('b') && capped.ends_with('b'));
+        assert!(!capped.contains('a') && !capped.contains('€'));
     }
 }

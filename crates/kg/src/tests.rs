@@ -161,6 +161,20 @@ fn cli_run_parses_a_program() {
 }
 
 #[test]
+fn cli_config_set_takes_negative_numbers_without_a_separator() {
+    for text in ["-0", "-2.5", "-1e2"] {
+        let Op::Plugin(PluginOp::Config {
+            op: ConfigOp::Set { value, .. },
+            ..
+        }) = parse(&["plugin", "config", "p", "set", "retries", text])
+        else {
+            panic!("{text} is not a config set");
+        };
+        assert_eq!(value, Some(serde_json::from_str(text).unwrap()), "{text}");
+    }
+}
+
+#[test]
 fn cli_plugin_commands() {
     assert_eq!(
         parse(&[

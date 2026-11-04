@@ -12,7 +12,7 @@ open: `kg open`.
 
 thread: `kg thread get`, `kg thread list`, `kg thread run`, `kg thread stop`, `kg thread input`, `kg thread resize`, `kg thread screen`, `kg thread scroll`, `kg thread select`, `kg thread copy`, `kg thread report`, `kg thread paste`, `kg thread send`, `kg thread terminal new`, `kg thread terminal list`, `kg thread terminal close`, `kg thread details`, `kg thread links`, `kg thread archive`, `kg thread unarchive`, `kg thread delete`, `kg thread set-pinned`, `kg thread rename`, `kg thread mark-read`, `kg thread metadata`, `kg thread set-metadata`, `kg thread events`, `kg thread wait-event`, `kg thread wait`, `kg thread ask`, `kg thread start-again`, `kg thread tools`, `kg thread call-tool`, `kg thread interactions`, `kg thread search`.
 
-project: `kg project list`, `kg project get`, `kg project add`, `kg project remove`.
+project: `kg project list`, `kg project get`, `kg project add`, `kg project remove`, `kg project reorder`.
 
 program: `kg program list`.
 

@@ -3,6 +3,7 @@ mod brand;
 mod components;
 mod failed;
 mod kagan;
+mod page;
 mod plugins;
 mod synthetic;
 mod terminal;
@@ -13,6 +14,8 @@ mod ui_dispatch;
 mod ui_driver;
 mod ui_observe;
 mod ui_registry;
+#[cfg(target_os = "macos")]
+mod web;
 
 use gpui_kit::App;
 

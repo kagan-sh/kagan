@@ -115,7 +115,7 @@ _Avoid_: Marketplace (the decision-3 goal, not the file), catalog, store, regist
 A packaged set of instructions an agent can load for one kind of task.
 
 **Agent integration**:
-What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude` and `cursor-agent`, kagan's skills, from `<dataDir>/agent`. For `cursor-agent`, the note is a rule in that folder. For `codex`, the skill `kg-threads` linked into the thread folder, where Codex looks. For `claude`, `codex`, `cursor-agent`, and `agent`, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. For `cursor-agent` and `agent`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The link in the thread folder stays. The person can turn the extra arguments off with the `agent-integration` preference.
+What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, kagan's skills from `<dataDir>/agent`. For `cursor-agent`, a per-thread plugin dir under `<dataDir>/agent/threads/<id>/cursor` (skills linked from `<dataDir>/agent/skills`, note as a rule there). For `codex`, the skill `kg-threads` linked into the thread folder, where Codex looks. Plugins that declare `instruct` may append text to that note for the current start only. For `claude`, `codex`, `cursor-agent`, and `agent`, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. For `cursor-agent` and `agent`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The link in the thread folder stays. The person can turn the extra arguments off with the `agent-integration` preference.
 _Avoid_: Injection, agent setup, wrapper
 
 **Conversation**:
@@ -161,6 +161,10 @@ _Avoid_: Textarea (when `kg ui` must see the field)
 **WebView**:
 The page a plugin panel shows. It loads one http or https URL on `127.0.0.1`, `localhost`, or a host the plugin may fetch, and it fills the panel. The Browser tab is separate.
 _Avoid_: address bar, embedded browser
+
+**Web panel**:
+A plugin panel whose body is an HTML file in the plugin folder. The page loads only that folder, talks to its plugin script, and uses the Workbench theme. `kg ui` can see the panel and cannot drive the page.
+_Avoid_: iframe, embedded browser, address bar
 
 **Agent tool**:
 A function a plugin or kagan offers to agents in threads.
