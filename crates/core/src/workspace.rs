@@ -906,32 +906,17 @@ impl Workspace {
 
     #[must_use]
     pub fn sidebar(&self, cx: &App) -> kg_domain::Sidebar {
-        let mut sidebar = kg_domain::Sidebar {
-            projects: self
-                .projects
+        kg_domain::Sidebar::new(
+            self.projects
                 .values()
                 .map(|project| project.read(cx).record().clone())
                 .collect(),
-            sections: self.sections.clone(),
-            threads: self
-                .threads
+            self.sections.clone(),
+            self.threads
                 .values()
-                .map(|thread| thread.read(cx).record())
-                .filter(|thread| {
-                    thread.visibility == kg_domain::Visibility::Visible
-                        && thread.archived_at.is_none()
-                })
-                .cloned()
+                .map(|thread| thread.read(cx).record().clone())
                 .collect(),
-        };
-        kg_domain::order_sidebar_projects(&mut sidebar.projects);
-        sidebar.threads.sort_by(|left, right| {
-            right
-                .created_at
-                .cmp(&left.created_at)
-                .then_with(|| right.id.cmp(&left.id))
-        });
-        sidebar
+        )
     }
 
     #[must_use]

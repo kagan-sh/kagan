@@ -15,19 +15,11 @@ use crate::workspace::{closed, missing};
 use crate::{PluginRequest, Requester, Workspace};
 
 fn read_sidebar(store: &mut kg_store::Store) -> kg_store::Result<OpResult> {
-    let mut projects = store.projects()?;
-    kg_domain::order_sidebar_projects(&mut projects);
-    Ok(OpResult::Sidebar(Sidebar {
-        projects,
-        sections: store.sections()?,
-        threads: store
-            .all_threads()?
-            .into_iter()
-            .filter(|thread| {
-                thread.visibility == kg_domain::Visibility::Visible && thread.archived_at.is_none()
-            })
-            .collect(),
-    }))
+    Ok(OpResult::Sidebar(Sidebar::new(
+        store.projects()?,
+        store.sections()?,
+        store.all_threads()?,
+    )))
 }
 
 pub(crate) async fn execute(

@@ -423,7 +423,7 @@ async fn remove(
         return Err(error);
     }
     let data = host.read_with(cx, |host, _| host.plugin_data(&id));
-    let store_ids = crate::page::read_store_ids(&data);
+    let store_ids = crate::web_store::read_store_ids(&data);
     host.update(cx, |host, cx| {
         host.unload(&id, cx);
         // Drop native pages first. They stay in a UI global until the next frame, and until then
@@ -440,9 +440,11 @@ async fn remove(
     // so they let go. A store that is still held keeps its `store.id` file.
     cx.update(gpui_kit::App::refresh_windows);
     let cleared = cx
-        .spawn(async move |cx| crate::page::remove_web_stores_after_release(store_ids, cx).await)
+        .spawn(async move |cx| {
+            crate::web_store::remove_web_stores_after_release(store_ids, cx).await
+        })
         .await;
-    crate::page::clear_removed_stores(&data, &cleared.removed);
+    crate::web_store::clear_removed_stores(&data, &cleared.removed);
     let mut warnings = cleared.warnings;
     let store = host.read_with(cx, |host, _| host.secrets.clone());
     let forgotten = cx

@@ -24,7 +24,7 @@ use crate::manifest::{self, AgentChoice, Grant, Manifest, Scope, Setting, Tool};
 use crate::{
     DropPages, HostUi, INSTRUCT_CAP, INSTRUCT_TIMEOUT, INSTRUCT_TOTAL, Level, PluginStatus,
     PluginTheme, Result, SET, TOOL_TIMEOUT, area, commands, event_data, http_grants, index, ops,
-    page, process, secret, source, watchdog,
+    process, secret, source, watchdog, web_store,
 };
 
 #[derive(Clone, Debug)]
@@ -121,7 +121,7 @@ async fn boot(
         .await;
     let records = records.await?;
     let known: BTreeSet<_> = records.iter().map(|record| record.id.clone()).collect();
-    page::retry_orphan_stores(&data_dir, &known, cx).await;
+    web_store::retry_orphan_stores(&data_dir, &known, cx).await;
     for record in records {
         let root = record.root.clone();
         let data = identity_dir.clone();
@@ -622,7 +622,7 @@ async fn tools(
 ) -> Result<OpResult> {
     let offers = offered(host, thread_id, cx).await?;
     Ok(host.read_with(cx, |host, _| {
-        let mut instructions: Vec<&str> = Vec::new();
+        let mut instructions: Vec<String> = Vec::new();
         let mut tools = Vec::new();
         for (plugin, name) in &offers {
             let Some(active) = host.active.get(plugin) else {
@@ -631,10 +631,11 @@ async fn tools(
             let Some((tool, schema)) = active.tool(name) else {
                 continue;
             };
-            if let Some(text) = &active.manifest.instructions
-                && !instructions.contains(&text.as_str())
-            {
-                instructions.push(text);
+            if let Some(text) = &active.manifest.instructions {
+                let block = format!("Plugin {plugin}:\n{text}");
+                if !instructions.contains(&block) {
+                    instructions.push(block);
+                }
             }
             tools.push(AgentTool {
                 name: tool.name.clone(),

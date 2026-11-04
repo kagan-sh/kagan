@@ -890,7 +890,9 @@ fn tools_follow_scope_and_thread_metadata(cx: &mut TestAppContext) {
     open(cx, &[installed(plugin.path())]);
 
     let (instructions, names) = tool_names(cx);
-    assert!(instructions.unwrap().starts_with("Echo things back."));
+    let instructions = instructions.unwrap();
+    assert!(instructions.starts_with("Plugin "));
+    assert!(instructions.contains("Echo things back."));
     assert_eq!(names, ["echo", "broken", "hang", "peek", "skill_load"]);
 
     run(
@@ -2539,13 +2541,13 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
     });
     let attempts = Rc::new(Cell::new(0));
     let count = attempts.clone();
-    let _hook = crate::page::set_remove_hook(move |_| {
+    let _hook = crate::web_store::set_remove_hook(move |_| {
         let n = count.get() + 1;
         count.set(n);
         if n < 3 {
-            crate::page::StoreAttempt::InUse
+            crate::web_store::StoreAttempt::InUse
         } else {
-            crate::page::StoreAttempt::Removed
+            crate::web_store::StoreAttempt::Removed
         }
     });
     let data = cx.update(|cx| {
@@ -2574,7 +2576,7 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
         "store.id stays until WebKit accepts the delete"
     );
     cx.executor().advance_clock(
-        crate::page::RELEASE_WAIT
+        crate::web_store::RELEASE_WAIT
             .checked_sub(Duration::from_millis(1))
             .expect("release wait"),
     );
@@ -6491,13 +6493,16 @@ export default class Plugin extends View {{
 
 #[gpui_kit::test]
 fn a_failed_store_delete_keeps_its_id_and_says_why(cx: &mut TestAppContext) {
-    let _hook = crate::page::set_remove_hook(|_| {
-        crate::page::StoreAttempt::Failed("the store is locked".into())
+    let _hook = crate::web_store::set_remove_hook(|_| {
+        crate::web_store::StoreAttempt::Failed("the store is locked".into())
     });
     let mut async_cx = cx.to_async();
     let removal = cx
         .foreground_executor()
-        .block_test(crate::page::remove_web_stores(vec![[7; 16]], &mut async_cx));
+        .block_test(crate::web_store::remove_web_stores(
+            vec![[7; 16]],
+            &mut async_cx,
+        ));
     assert!(removal.removed.is_empty(), "a failed delete keeps store.id");
     assert_eq!(removal.warnings, vec!["the store is locked".to_owned()]);
 }

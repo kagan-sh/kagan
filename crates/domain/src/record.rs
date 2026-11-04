@@ -246,6 +246,31 @@ pub struct Sidebar {
     pub threads: Vec<Thread>,
 }
 
+impl Sidebar {
+    #[must_use]
+    pub fn new(projects: Vec<Project>, sections: Vec<Section>, threads: Vec<Thread>) -> Self {
+        let mut projects = projects;
+        order_sidebar_projects(&mut projects);
+        let mut threads: Vec<Thread> = threads
+            .into_iter()
+            .filter(|thread| {
+                thread.visibility == Visibility::Visible && thread.archived_at.is_none()
+            })
+            .collect();
+        threads.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then_with(|| right.id.cmp(&left.id))
+        });
+        Self {
+            projects,
+            sections,
+            threads,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentTool {
