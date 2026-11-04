@@ -8,7 +8,7 @@ use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::switch::Switch;
-use gpui_kit::component::{Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{FocusTrapElement as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
     IntoElement, ParentElement as _, Styled as _, Window, actions, div, px,
@@ -16,7 +16,8 @@ use gpui_kit::{
 use kg_domain::{ASK_TEXT_MAX_CHARS, AskField, PendingInteraction, PendingInteractionId, ThreadId};
 use serde_json::{Value, json};
 
-use super::Kagan;
+use super::screen::Center;
+use super::{Kagan, Shown};
 use crate::kagan::shown::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -51,13 +52,7 @@ impl Kagan {
             })
             .collect();
         self.ask_drafts.retain(|id, _| live.contains_key(id));
-        if self
-            .ask_hidden
-            .as_ref()
-            .is_some_and(|id| !live.contains_key(id))
-        {
-            self.ask_hidden = None;
-        }
+        self.ask_hidden.retain(|id| live.contains_key(id));
         for (id, fields) in live {
             self.ask_drafts
                 .entry(id)
@@ -70,14 +65,14 @@ impl Kagan {
             cx.defer_in(window, move |_, window, cx| {
                 window.focus(&focus, cx);
             });
-        } else if !open && self.ask_popup.take().is_some() {
+        } else if !open && self.ask_popup.take().is_some() && self.terminal_thread(cx).is_some() {
             self.focus_work(window, cx);
         }
     }
 
     pub(super) fn dismiss_ask_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.popup_ask(cx).map(|asked| asked.id.clone()) {
-            self.ask_hidden = Some(id);
+            self.ask_hidden.insert(id);
             self.ask_popup = None;
             self.focus_work(window, cx);
             cx.notify();
@@ -88,13 +83,21 @@ impl Kagan {
         if !self.center_drawn() {
             return None;
         }
-        let shown = self.shown_thread(cx)?;
+        let shown = self.terminal_thread(cx)?;
         self.questions
             .read(cx)
             .questions
             .iter()
             .find(|asked| asked.thread_id == shown && asked.fields.is_some())
-            .filter(|asked| self.ask_hidden.as_ref() != Some(&asked.id))
+            .filter(|asked| !self.ask_hidden.contains(&asked.id))
+    }
+
+    /// The thread whose terminal is the center. A review, a page, Archived or Settings covers it.
+    pub(super) fn terminal_thread(&self, cx: &App) -> Option<kg_domain::ThreadId> {
+        match self.screen.current() {
+            Center::Work(Shown::Thread(view)) => Some(view.read(cx).thread().clone()),
+            _ => None,
+        }
     }
 }
 
@@ -482,7 +485,7 @@ pub(super) fn popup(
                     .max_w(px(560.))
                     .max_h(px(520.))
                     .overflow_y_scrollbar()
-                    .child(card),
+                    .child(div().focus_trap("ask-popup-trap", &focus).child(card)),
             )
             .into_any_element(),
     )

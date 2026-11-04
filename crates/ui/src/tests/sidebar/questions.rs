@@ -693,3 +693,103 @@ fn a_required_select_has_no_none_item(cx: &mut TestAppContext) {
     });
     assert!(!shows(cx, window, &format!("ask-none-{interaction}-mode")));
 }
+
+fn focus_inside_popup(
+    cx: &mut TestAppContext,
+    window: gpui_kit::AnyWindowHandle,
+    interaction: &str,
+) -> bool {
+    [
+        "ask-popup".to_owned(),
+        format!("ask-field-{interaction}-retries"),
+        format!("answer-{interaction}-yes"),
+        format!("answer-{interaction}-no"),
+    ]
+    .iter()
+    .any(|name| focused_of(cx, window, name) == Some(true))
+}
+
+#[gpui_kit::test]
+fn tab_and_shift_tab_stay_in_the_ask_popup(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let interaction = ask_fields(
+        cx,
+        &id,
+        serde_json::json!([{ "type": "number", "id": "retries", "label": "Retries" }]),
+    );
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    for _ in 0..6 {
+        press_key(cx, window, "tab");
+        assert!(
+            focus_inside_popup(cx, window, &interaction),
+            "Tab left the ask popup"
+        );
+    }
+    for _ in 0..6 {
+        press_key(cx, window, "shift-tab");
+        assert!(
+            focus_inside_popup(cx, window, &interaction),
+            "Shift-Tab left the ask popup"
+        );
+    }
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    wait_until(cx, |cx| focused_of(cx, window, "terminal") == Some(true));
+}
+
+#[gpui_kit::test]
+fn an_ask_does_not_cover_a_file_review_of_its_thread(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (thread, _repo) = repo_thread(cx, window, data.path());
+    wait_until(cx, |cx| shows(cx, window, "change-notes.txt"));
+    click(cx, window, "change-notes.txt");
+    wait_until(cx, |cx| shows(cx, window, "review"));
+    assert!(
+        !shows(cx, window, "terminal"),
+        "the review covers the terminal"
+    );
+    ask_fields(
+        cx,
+        &thread,
+        serde_json::json!([{ "type": "boolean", "id": "notify", "label": "Notify" }]),
+    );
+    cx.run_until_parked();
+    assert!(
+        !shows(cx, window, "ask-popup"),
+        "the popup covers the review"
+    );
+    assert_eq!(
+        cx.update(|cx| kagan.read(cx).question_titles(cx)),
+        ["Ship it?"]
+    );
+}
+
+#[gpui_kit::test]
+fn dismissing_one_ask_keeps_another_dismissed(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let first = run_shell(cx);
+    let second = run_shell(cx);
+    let notify = serde_json::json!([{ "type": "boolean", "id": "notify", "label": "Notify" }]);
+    click(cx, window, &format!("thread-{}", first.0));
+    let first_ask = ask_fields(cx, &first, notify.clone());
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-field-{first_ask}-notify"))
+    });
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    click(cx, window, &format!("thread-{}", second.0));
+    let second_ask = ask_fields(cx, &second, notify);
+    wait_until(cx, |cx| {
+        shows(cx, window, &format!("ask-field-{second_ask}-notify"))
+    });
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    click(cx, window, &format!("thread-{}", first.0));
+    cx.run_until_parked();
+    assert!(
+        !shows(cx, window, "ask-popup"),
+        "the first ask reopened after its dismissal"
+    );
+}
