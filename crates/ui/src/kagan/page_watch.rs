@@ -4,7 +4,7 @@ use gpui_kit::App;
 use kg_domain::PluginId;
 use kg_plugins::PluginHost;
 
-use super::Pages;
+use super::native::Pages;
 
 pub(super) fn watch(
     receiver: async_channel::Receiver<String>,

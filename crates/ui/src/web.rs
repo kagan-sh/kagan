@@ -7,9 +7,6 @@ use kg_plugins::{PageFileError, SCHEME};
 
 use crate::theme::ThemeState;
 
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub(crate) const ONLY_MACOS: &str = "This page works on macOS only for now.";
-
 const THEME_FILE: &str = "__kagan/theme.css";
 
 pub(crate) struct Served {
@@ -19,7 +16,7 @@ pub(crate) struct Served {
     pub(crate) csp: String,
 }
 
-// Only the plugin's own origin passes, and on Windows its `http://kagan-plugin.<id>` form.
+// Only the plugin's own origin passes.
 pub(crate) fn allows_navigation(plugin: &str, target: &str) -> bool {
     let Ok(url) = url::Url::parse(target) else {
         return false;
@@ -27,26 +24,7 @@ pub(crate) fn allows_navigation(plugin: &str, target: &str) -> bool {
     if !url.username().is_empty() || url.password().is_some() || url.port().is_some() {
         return false;
     }
-    own_origin(plugin, &url)
-}
-
-fn own_origin(plugin: &str, url: &url::Url) -> bool {
-    let host = url.host_str();
-    if url.scheme() == SCHEME {
-        return host == Some(plugin);
-    }
-    windows_origin(plugin, url.scheme(), host)
-}
-
-#[cfg(target_os = "windows")]
-fn windows_origin(plugin: &str, scheme: &str, host: Option<&str>) -> bool {
-    let expected = format!("{SCHEME}.{plugin}");
-    scheme == "http" && host == Some(expected.as_str())
-}
-
-#[cfg(not(target_os = "windows"))]
-fn windows_origin(_plugin: &str, _scheme: &str, _host: Option<&str>) -> bool {
-    false
+    url.scheme() == SCHEME && url.host_str() == Some(plugin)
 }
 
 // Only the page's own files load, plus fetch to the `powers.fetch` hosts.
@@ -288,7 +266,6 @@ mod web_test;
 // The stylesheet text the web view's protocol callback reads.
 //
 // That callback is not a GPUI context, so the text cannot live in an entity.
-#[cfg(target_os = "macos")]
 mod theme_cell {
     #![allow(clippy::disallowed_types)]
 
@@ -318,5 +295,4 @@ mod theme_cell {
     }
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) use theme_cell::ThemeCss;
