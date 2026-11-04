@@ -3060,7 +3060,10 @@ fn a_plugin_rename_keeps_a_locked_title(cx: &mut TestAppContext) {
     let OpResult::ToolReply { text, .. } = real_call(cx, "probe").unwrap() else {
         panic!("tool reply")
     };
-    assert!(text.contains("the title is kept"), "{text}");
+    assert!(
+        text.contains("the title is kept; rename it in the window"),
+        "{text}"
+    );
     let OpResult::Thread(kept) = run(cx, Op::Thread(ThreadOp::Get { id: thread() })).unwrap()
     else {
         panic!("thread")

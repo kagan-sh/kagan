@@ -338,6 +338,8 @@ mod tests {
             ("xdg_runtime_dir", "folded-xdg"),
             ("KG_DATA_DIR", "data"),
             ("kg_data_dir", "folded-data"),
+            ("KG_SOCKET", "socket"),
+            ("kg_socket", "folded-socket"),
             ("GH_TOKEN", "gh"),
             ("gh_token", "folded-gh"),
             ("SECRET", "no"),
@@ -368,6 +370,8 @@ mod tests {
             ("xdg_runtime_dir", "folded-xdg"),
             ("KG_DATA_DIR", "data"),
             ("kg_data_dir", "folded-data"),
+            ("KG_SOCKET", "socket"),
+            ("kg_socket", "folded-socket"),
             ("GH_TOKEN", "gh"),
             ("gh_token", "folded-gh"),
         ];
@@ -377,6 +381,7 @@ mod tests {
             ("PATH", "path"),
             ("XDG_RUNTIME_DIR", "xdg"),
             ("KG_DATA_DIR", "data"),
+            ("KG_SOCKET", "socket"),
             ("GH_TOKEN", "gh"),
         ];
         assert_eq!(

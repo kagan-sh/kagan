@@ -219,9 +219,9 @@ impl Kagan {
         let update = super::layout::read::<bool>("update-check", cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
-            let on = agent.await.unwrap_or(true);
-            let notifications = notify.await.unwrap_or(true);
-            let update_check = update.await.unwrap_or(false);
+            let on = agent.await.ok().flatten().unwrap_or(true);
+            let notifications = notify.await.ok().flatten().unwrap_or(true);
+            let update_check = update.await.ok().flatten().unwrap_or(false);
             prefs.update(cx, |prefs, cx| {
                 prefs.agent_integration = on;
                 prefs.notify = notifications;

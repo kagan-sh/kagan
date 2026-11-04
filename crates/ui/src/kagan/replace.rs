@@ -93,7 +93,7 @@ impl Kagan {
         cx.spawn(async move |this, cx| {
             let mut saved = BTreeMap::new();
             for (slot, read) in reads {
-                if let Some(SlotChoice::Plugin(id)) = read.await {
+                if let Ok(Some(SlotChoice::Plugin(id))) = read.await {
                     saved.insert(slot, id);
                 }
             }

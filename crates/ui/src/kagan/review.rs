@@ -182,7 +182,10 @@ impl Kagan {
                 cx,
             );
             cx.spawn(async move |this, cx| {
-                let marks = loaded.await.unwrap_or_default();
+                let Ok(marks) = loaded.await else {
+                    return;
+                };
+                let marks = marks.unwrap_or_default();
                 _ = this.update(cx, |this, cx| {
                     if this.changes.viewed_checking.is_none() {
                         this.changes.viewed = marks;

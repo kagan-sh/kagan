@@ -2778,6 +2778,18 @@ fn the_right_sidebar_open_state_is_saved(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_failed_preference_read_is_not_an_unset_value(cx: &mut TestAppContext) {
+    let (_kagan, _window, _data) = open(cx);
+    let unset = cx.update(|cx| crate::kagan::layout_read::<u8>("terminal-font-size", cx));
+    assert_eq!(cx.foreground_executor().block_test(unset), Ok(None));
+    set_preference(cx, "main.left-width", serde_json::json!(320.0));
+    let wrong_shape = cx.update(|cx| crate::kagan::layout_read::<String>("main.left-width", cx));
+    assert!(cx.foreground_executor().block_test(wrong_shape).is_err());
+    let unknown = cx.update(|cx| crate::kagan::layout_read::<bool>("no-such-preference", cx));
+    assert!(cx.foreground_executor().block_test(unknown).is_err());
+}
+
+#[gpui_kit::test]
 fn a_question_on_a_hidden_thread_waits_in_needs_you(cx: &mut TestAppContext) {
     let (kagan, _window, _data) = open(cx);
     let id = run_hidden_shell(cx);

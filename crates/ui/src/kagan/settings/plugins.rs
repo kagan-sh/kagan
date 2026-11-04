@@ -195,7 +195,7 @@ fn sync_text(
 }
 
 /// A plugin's declared settings, as one group named after the plugin.
-pub(super) fn plugin_groups(kagan: &Kagan, id: &PluginId, cx: &mut Context<Kagan>) -> Vec<Group> {
+pub(super) fn groups(kagan: &Kagan, id: &PluginId, cx: &mut Context<Kagan>) -> Vec<Group> {
     let Some(host) = PluginHost::try_global(cx) else {
         return Vec::new();
     };

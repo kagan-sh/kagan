@@ -13,13 +13,13 @@ use kg_domain::{IndexOp, OpResult, PluginOp};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
-use super::row::{Group, Row, group, row};
+use super::row::{Group, Row, group as row_group, row};
 use crate::kagan::controls::control;
 use crate::kagan::installer::{AddIndex, SearchIndexes};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-pub(super) fn indexes_group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
+pub(super) fn group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
     let saved = PluginHost::try_global(cx).map_or(Ok(Vec::new()), |host| host.read(cx).indexes());
     let (locations, broken) = match saved {
         Ok(locations) => (locations, None),
@@ -111,7 +111,7 @@ pub(super) fn indexes_group(kagan: &Kagan, cx: &mut Context<Kagan>) -> Group {
         });
     }
     rows.extend(found_rows(kagan, cx));
-    group("indexes", "Indexes", rows)
+    row_group("indexes", "Indexes", rows)
 }
 
 /// The last search's plugins, each with Install, and a line for each index it could not read.

@@ -7,11 +7,13 @@ use kg_core::Updater;
 use kg_domain::{Op, PreferenceOp, UpdateState};
 use serde_json::json;
 
-use super::row::{Group, group, row, save, switch};
+use super::Kagan;
+use super::row::{Group, group as row_group, row, save, switch};
 use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
 
-pub(super) fn group_for(automatic: bool, cx: &App) -> Group {
+pub(super) fn group(kagan: &Kagan, cx: &App) -> Group {
+    let automatic = kagan.prefs.read(cx).update_check;
     let updater = Updater::global(cx).read(cx);
     let status = match updater.state() {
         UpdateState::Unchecked => "Not checked yet.".to_owned(),
@@ -50,7 +52,7 @@ pub(super) fn group_for(automatic: bool, cx: &App) -> Group {
         &status,
         h_flex().child(check).into_any_element(),
     );
-    group(
+    row_group(
         "updates",
         "Updates",
         vec![

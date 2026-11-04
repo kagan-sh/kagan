@@ -343,13 +343,31 @@ mod review_wrap_tests {
     #[test]
     fn guide_names_every_preference() {
         let guide = include_str!("guide-map.md");
+        let behaviour = include_str!("../../../docs/behaviour.md");
+        let help = include_str!("../../domain/src/op.rs")
+            .lines()
+            .find(|line| line.contains("Read or save a preference:"))
+            .expect("the preference help in op.rs");
         for key in PREFERENCES.iter().copied().chain(["review-viewed"]) {
-            assert!(guide.contains(&format!("`{key}`")), "missing {key}");
+            assert!(guide.contains(&format!("`{key}`")), "guide missing {key}");
+            assert!(
+                behaviour.contains(&format!("`{key}`")),
+                "behaviour missing {key}"
+            );
+            assert!(help.contains(key), "help missing {key}");
         }
         for key in LAYOUT {
             assert!(
                 guide.contains(&format!("`<window>.{key}`")),
-                "missing {key}"
+                "guide missing {key}"
+            );
+            assert!(
+                behaviour.contains(&format!("`<window>.{key}`")),
+                "behaviour missing {key}"
+            );
+            assert!(
+                help.contains(&format!("<window>.{key}")),
+                "help missing {key}"
             );
         }
     }

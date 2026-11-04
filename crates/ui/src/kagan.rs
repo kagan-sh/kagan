@@ -433,7 +433,7 @@ impl Kagan {
         let epoch = self.terminal_font_epoch;
         let read = layout::read::<u8>("terminal-font-size", cx);
         cx.spawn(async move |this, cx| {
-            let size = read.await.unwrap_or(12).clamp(9, 24);
+            let size = read.await.ok().flatten().unwrap_or(12).clamp(9, 24);
             _ = this.update(cx, |this, cx| {
                 if this.terminal_font_epoch == epoch {
                     this.apply_terminal_size(size, cx);

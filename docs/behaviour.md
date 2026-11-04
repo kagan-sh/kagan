@@ -34,10 +34,10 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 ### `Stop`
 
-- **Allowed when**: the thread exists and is not archived [book:cli].
+- **Allowed when**: the thread exists, including one that is archived [book:cli]. On an archived thread it ends the run now instead of waiting for the archive grace [decision 138].
 - **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A program whose title never shows a spinner has no turn to end. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
 - **Shows**: the thread leaves the running status [book:window].
-- **Refused when**: a missing thread — `not-found` [op.rs]. An archived thread — `failed` [op.rs].
+- **Refused when**: a missing thread — `not-found` [op.rs].
 
 ### `StartAgain`
 
@@ -80,10 +80,10 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 ### `Unarchive`
 
-- **Allowed when**: the thread is archived [book:cli] [CONTEXT].
-- **Changes**: brings it back [book:threads]. Inside the 10 second grace, the stop does not happen [book:threads]. Reuse of its environment clears retirement [docs:architecture]. It does not ask [decision 12].
+- **Allowed when**: the thread exists [decision 138]. A live thread is already unarchived; the call returns done and writes no event.
+- **Changes**: brings an archived thread back [book:threads]. Inside the 10 second grace, the stop does not happen [book:threads]. Reuse of its environment clears retirement [docs:architecture]. It does not ask [decision 12].
 - **Shows**: the thread can return to the sidebar [decision 41].
-- **Refused when**: a missing thread — `not-found` [op.rs]. A thread that is not archived — `failed` [op.rs].
+- **Refused when**: a missing thread — `not-found` [op.rs]. The lifecycle owner is still archived — `invalid`, message `unarchive the lifecycle owner first`.
 
 ### `Delete`
 
@@ -468,7 +468,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ## Preference
 
-Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [settings.rs], `update-check` [decision 113], and the sidebar layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar` and `<window>.right-width`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
+Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [settings.rs], `update-check` [decision 113], `terminal-font-size`, `review-viewed`, `slot.threads` and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
 
 ### `Get`
 
@@ -477,7 +477,7 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ### `Set`
 
-- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `notify` [settings.rs]. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48].
+- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `notify` [settings.rs]. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
 - **Refused when**: any other key — `invalid`, message `unknown preference <key>` [person 2026-10-08] [op.rs]. A wrong shape — `invalid` [person 2026-10-08] [op.rs].
 
 ## Config

@@ -28,9 +28,9 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> Vec<Group> {
-    let (agent, notify, update_check) = {
+    let (agent, notify) = {
         let prefs = kagan.prefs.read(cx);
-        (prefs.agent_integration, prefs.notify, prefs.update_check)
+        (prefs.agent_integration, prefs.notify)
     };
     let mut appearance = theme_group(window, cx);
     appearance.key = "appearance".into();
@@ -47,14 +47,14 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     let mut installed = installed::group(kagan, window, cx);
     installed.title = "Plugins".into();
     installed.headed = true;
-    let mut updates = super::updates::group_for(update_check, cx);
+    let mut updates = super::updates::group(kagan, cx);
     updates.headed = true;
     let mut out = vec![appearance, agents, updates];
     out.extend(shortcuts);
     out.push(installed);
-    out.push(indexes::indexes_group(kagan, cx));
+    out.push(indexes::group(kagan, cx));
     for (id, _) in plugin_entries(cx) {
-        let mut groups = plugins::plugin_groups(kagan, &id, cx);
+        let mut groups = plugins::groups(kagan, &id, cx);
         for group in &mut groups {
             group.headed = true;
         }

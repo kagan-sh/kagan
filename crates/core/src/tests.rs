@@ -701,16 +701,18 @@ async fn personal_is_last_in_both_sidebars(cx: &mut TestAppContext) {
     let OpResult::Sidebar(from_op) = op(Op::Sidebar, cx).await.unwrap() else {
         panic!("sidebar")
     };
+    let OpResult::Projects(from_list) = op(Op::Project(ProjectOp::List), cx).await.unwrap() else {
+        panic!("projects")
+    };
     let from_workspace = cx.read(|cx| fixture.workspace.read(cx).sidebar(cx));
-    for sidebar in [&from_op, &from_workspace] {
-        let names: Vec<_> = sidebar
-            .projects
+    for projects in [from_op.projects, from_list, from_workspace.projects] {
+        let names: Vec<_> = projects
             .iter()
             .map(|project| project.name.as_str())
             .collect();
         assert_eq!(names, ["Project", "Zebra", "Personal"]);
         assert_eq!(
-            sidebar.projects.last().map(|project| project.kind),
+            projects.last().map(|project| project.kind),
             Some(ProjectKind::Personal)
         );
     }

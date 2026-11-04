@@ -3,7 +3,7 @@
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
     EnvironmentOp, KeymapOp, Op, OpError, OpResult, PreferenceOp, ProgramOp, ProjectOp, SettingsOp,
-    Sidebar, TerminalOp, ThemeOp, ThreadOp,
+    Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
 };
 
 use crate::database::{Database, Result};
@@ -112,7 +112,11 @@ async fn project_op(
     match op {
         ProjectOp::List => {
             database
-                .call(|store| Ok(OpResult::Projects(store.projects()?)))
+                .call(|store| {
+                    let mut projects = store.projects()?;
+                    order_sidebar_projects(&mut projects);
+                    Ok(OpResult::Projects(projects))
+                })
                 .await
         }
         ProjectOp::Get { id } => {
