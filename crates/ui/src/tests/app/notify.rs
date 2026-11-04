@@ -5,7 +5,7 @@ use gpui_kit::{AppContext as _, SystemNotification, SystemNotificationResponse, 
 use kg_core::Workspace;
 use kg_domain::{EnvironmentSpec, Op, OpResult, ProjectId, Run, ThreadId, ThreadOp};
 
-use super::kagan::{host, open_with_plugins, set_preference, shown, thread_record};
+use crate::tests::kagan::{host, open_with_plugins, set_preference, shown, thread_record};
 
 const SPINNER: &str = "printf '\\033]2;\\342\\227\\220 work\\007'";
 const PLAIN: &str = "printf '\\033]2;\\342\\234\\263 work\\007'";

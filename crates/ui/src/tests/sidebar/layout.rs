@@ -6,12 +6,12 @@ use kg_core::Workspace;
 use kg_domain::{DropSide, InteractionOption, Op, OpError, OpResult, PreferenceOp, ThreadOp, UiOp};
 use serde_json::{Value, json};
 
-use super::kagan::{
+use crate::kagan::changes::POLL;
+use crate::tests::kagan::{
     add_project, chord, click, drag_to, focused_of, hover_to, label, open, present, press,
     press_key, release, repo_thread, run_child, run_shell, selected_of, set_preference, shown,
     shows, value_of, wait_until,
 };
-use crate::kagan::changes::POLL;
 
 fn saved(cx: &mut TestAppContext, key: &str) -> Value {
     let get = cx.update(|cx| {
@@ -35,7 +35,7 @@ fn empty_panels_do_not_open_from_the_button_or_shortcut(cx: &mut TestAppContext)
         cx.run_until_parked();
         let center = span(cx, window, "center").expect("center");
         assert_eq!(
-            super::panels::disabled_of(cx, window, "right-sidebar-toggle"),
+            crate::tests::plugin::panels::disabled_of(cx, window, "right-sidebar-toggle"),
             Some(true)
         );
         click(cx, window, "right-sidebar-toggle");
@@ -215,7 +215,7 @@ fn a_saved_left_width_is_shown_after_settings(cx: &mut TestAppContext) {
 }
 
 /// The x, width and right edge of an element in the window, in points.
-pub(super) fn span(
+pub(crate) fn span(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
     id: &str,
@@ -1110,7 +1110,7 @@ fn the_archive_icon_archives_its_thread(cx: &mut TestAppContext) {
     assert!(!shows(cx, window, &format!("thread-{}", id.0)));
 }
 
-pub(super) fn focus_row(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) {
+pub(crate) fn focus_row(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) {
     cx.simulate_keystrokes(window, &chord("FocusSidebar"));
     cx.run_until_parked();
     for _ in 0..40 {
@@ -1179,7 +1179,7 @@ fn a_hidden_zero_width_disclose_is_not_clicked(cx: &mut TestAppContext) {
     );
 }
 
-pub(super) fn hover_row(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) {
+pub(crate) fn hover_row(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) {
     let bounds = cx
         .update_window(window, |_, window, _| {
             crate::ui_registry::find(window, &ElementId::Name(name.to_owned().into()))

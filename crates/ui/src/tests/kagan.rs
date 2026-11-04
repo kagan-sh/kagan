@@ -383,7 +383,7 @@ fn the_sidebar_selects_a_project_and_opens_a_thread_from_the_keyboard(cx: &mut T
     });
     assert_eq!(selected_of(cx, window, "project-prj_kagan"), Some(false));
 
-    super::sidebars::focus_row(cx, window, &format!("thread-{}", id.0));
+    crate::tests::sidebar::layout::focus_row(cx, window, &format!("thread-{}", id.0));
     press_key(cx, window, "enter");
     cx.run_until_parked();
     assert_eq!(cx.update(|cx| kagan.read(cx).shown_thread(cx)), Some(id));
@@ -1796,11 +1796,11 @@ fn the_title_bar_names_the_thread_and_the_terminal_starts_below_it(cx: &mut Test
     let native = gpui_kit::VisualTestContext::from_window(window, cx).window_title();
     assert_eq!(native, Some(format!("{title} — Kagan project")));
     let (heading_x, heading_w) =
-        super::sidebars::span(cx, window, "thread-heading").expect("heading");
-    let (left_x, left_w) =
-        super::sidebars::span(cx, window, "left-sidebar-toggle").expect("left toggle");
-    let (right_x, _) =
-        super::sidebars::span(cx, window, "right-sidebar-toggle").expect("right toggle");
+        crate::tests::sidebar::layout::span(cx, window, "thread-heading").expect("heading");
+    let (left_x, left_w) = crate::tests::sidebar::layout::span(cx, window, "left-sidebar-toggle")
+        .expect("left toggle");
+    let (right_x, _) = crate::tests::sidebar::layout::span(cx, window, "right-sidebar-toggle")
+        .expect("right toggle");
     assert!(
         heading_x + 0.5 >= left_x + left_w && heading_x + heading_w <= right_x + 0.5,
         "heading {heading_x}+{heading_w} between left {} and right {right_x}",
@@ -5330,21 +5330,24 @@ fn comments_on_long_lines_stay_in_the_review(cx: &mut TestAppContext) {
     click(cx, window, "change-notes.txt");
     wait_until(cx, |cx| shows(cx, window, "comment-New-2"));
     assert_eq!(
-        super::panels::disabled_of(cx, window, "review-discard"),
+        crate::tests::plugin::panels::disabled_of(cx, window, "review-discard"),
         Some(true)
     );
     click(cx, window, "comment-New-2");
-    let (left, _) = super::sidebars::span(cx, window, "review").unwrap();
-    let (right, _) = super::sidebars::span(cx, window, "review-file-notes.txt").unwrap();
+    let (left, _) = crate::tests::sidebar::layout::span(cx, window, "review").unwrap();
+    let (right, _) =
+        crate::tests::sidebar::layout::span(cx, window, "review-file-notes.txt").unwrap();
     let width = right - left;
-    let (x, input_width) = super::sidebars::span(cx, window, "review-comment-input").unwrap();
+    let (x, input_width) =
+        crate::tests::sidebar::layout::span(cx, window, "review-comment-input").unwrap();
     assert!(
         x >= left && x + input_width <= left + width,
         "input {x}+{input_width}, review {left}+{width}"
     );
     cx.simulate_input(window, "A comment");
     click(cx, window, "review-add-comment");
-    let (x, button_width) = super::sidebars::span(cx, window, "review-remove-0").unwrap();
+    let (x, button_width) =
+        crate::tests::sidebar::layout::span(cx, window, "review-remove-0").unwrap();
     assert!(
         x >= left && x + button_width <= left + width,
         "remove {x}+{button_width}, review {left}+{width}"
@@ -5366,13 +5369,14 @@ fn comments_on_long_lines_stay_in_the_review(cx: &mut TestAppContext) {
         cx.update(|cx| review_read::review_horizontal_offset(kagan.read(cx)))
             .is_some_and(|offset| offset < 0.)
     );
-    let (x, button_width) = super::sidebars::span(cx, window, "review-remove-0").unwrap();
+    let (x, button_width) =
+        crate::tests::sidebar::layout::span(cx, window, "review-remove-0").unwrap();
     assert!(
         x >= left && x + button_width <= left + width,
         "scrolled remove {x}+{button_width}, review {left}+{width}"
     );
     assert_eq!(
-        super::panels::disabled_of(cx, window, "review-discard"),
+        crate::tests::plugin::panels::disabled_of(cx, window, "review-discard"),
         Some(false)
     );
 }
@@ -5518,7 +5522,7 @@ fn a_saved_diagnostics_notice_keeps_dismiss_on_screen(cx: &mut TestAppContext) {
         })
         .unwrap();
     let (dismiss_x, dismiss_w) =
-        super::sidebars::span(cx, window, "toast-dismiss").expect("dismiss");
+        crate::tests::sidebar::layout::span(cx, window, "toast-dismiss").expect("dismiss");
     assert!(
         dismiss_x >= 0. && dismiss_x + dismiss_w <= width + 0.5,
         "dismiss {dismiss_x}+{dismiss_w} window {width}"
@@ -5534,7 +5538,7 @@ fn a_saved_diagnostics_notice_keeps_dismiss_on_screen(cx: &mut TestAppContext) {
         "{message}"
     );
     let (message_x, message_w) =
-        super::sidebars::span(cx, window, "toast-message").expect("message");
+        crate::tests::sidebar::layout::span(cx, window, "toast-message").expect("message");
     assert!(
         message_x + message_w <= dismiss_x + 0.5,
         "message {message_x}+{message_w} dismiss {dismiss_x}"
@@ -6163,7 +6167,7 @@ fn review_comments_are_pasted_without_submitting(cx: &mut TestAppContext) {
         Some("Please check this")
     );
     assert_eq!(
-        super::panels::disabled_of(cx, window, "review-send"),
+        crate::tests::plugin::panels::disabled_of(cx, window, "review-send"),
         Some(true)
     );
     click(cx, window, "review-add-comment");
@@ -6173,7 +6177,7 @@ fn review_comments_are_pasted_without_submitting(cx: &mut TestAppContext) {
         1
     );
     assert_eq!(
-        super::panels::disabled_of(cx, window, "review-send"),
+        crate::tests::plugin::panels::disabled_of(cx, window, "review-send"),
         Some(false)
     );
     click(cx, window, "comment-New-2");
@@ -6233,7 +6237,7 @@ fn review_discard_clears_saved_comments(cx: &mut TestAppContext) {
         0
     );
     assert_eq!(
-        super::panels::disabled_of(cx, window, "review-send"),
+        crate::tests::plugin::panels::disabled_of(cx, window, "review-send"),
         Some(true)
     );
     click(cx, window, "review-undo-discard");
@@ -6256,7 +6260,8 @@ fn the_comment_box_fits_the_minimum_window(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "comment-New-2"));
     click(cx, window, "comment-New-2");
     wait_until(cx, |cx| shows(cx, window, "review-comment-input"));
-    let (x, width) = super::sidebars::span(cx, window, "review-comment-input").expect("the box");
+    let (x, width) =
+        crate::tests::sidebar::layout::span(cx, window, "review-comment-input").expect("the box");
     assert!(
         x >= 0. && x + width <= 528.5,
         "box {x}+{width} leaves the window"
@@ -6428,15 +6433,16 @@ fn narrow_review_switches_between_file_and_tree(cx: &mut TestAppContext) {
         "review-close",
         "review-find",
     ] {
-        let (x, width) = super::sidebars::span(cx, window, id).expect(id);
+        let (x, width) = crate::tests::sidebar::layout::span(cx, window, id).expect(id);
         assert!(x >= 0. && x + width <= 789.5, "{id}: {x}+{width}");
     }
-    let (_, width) = super::sidebars::span(cx, window, "review-title").expect("title");
+    let (_, width) =
+        crate::tests::sidebar::layout::span(cx, window, "review-title").expect("title");
     assert!(width > 40., "title width {width}");
     cx.simulate_window_resize(window, size(px(560.), px(720.)));
     cx.run_until_parked();
     for id in ["review-close", "review-find", "review-viewed"] {
-        let (x, width) = super::sidebars::span(cx, window, id).expect(id);
+        let (x, width) = crate::tests::sidebar::layout::span(cx, window, id).expect(id);
         assert!(x >= 0. && x + width <= 560.5, "{id} at 560: {x}+{width}");
     }
     cx.simulate_window_resize(window, size(px(789.), px(720.)));
@@ -6475,7 +6481,7 @@ fn review_closes_the_overlay_and_restores_navigation(cx: &mut TestAppContext) {
         "review-send",
         "review-discard",
     ] {
-        let (x, width) = super::sidebars::span(cx, window, id).expect(id);
+        let (x, width) = crate::tests::sidebar::layout::span(cx, window, id).expect(id);
         assert!(x >= 0. && x + width <= 528.5, "{id}: {x}+{width}");
     }
     assert_eq!(label(cx, window, "review-send"), "Send review to terminal");

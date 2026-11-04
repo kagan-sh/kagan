@@ -8,11 +8,11 @@ use kg_domain::{
 };
 use serde_json::json;
 
-use super::kagan::{
+use crate::kagan::{Kagan, replace_read, review_read};
+use crate::tests::kagan::{
     chord, click, label, open_with_plugins_then, pending, plugin_log, repo_thread, run_shell,
     shows, wait_until,
 };
-use crate::kagan::{Kagan, replace_read, review_read};
 
 const SWAP: &str = "dev.test.swap";
 
@@ -498,7 +498,7 @@ fn a_review_plugin_adds_notes_that_only_the_host_sends(cx: &mut TestAppContext) 
     click(cx, window, "review-send");
     wait_until(cx, |cx| !shows(cx, window, "review"));
     wait_until(cx, |cx| {
-        super::kagan::grid_text(cx, &kagan).contains("from the plugin")
+        crate::tests::kagan::grid_text(cx, &kagan).contains("from the plugin")
     });
 }
 
@@ -900,7 +900,7 @@ fn a_comment_must_name_a_changed_file_and_stay_short(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_comment_goes_to_the_front_window_once(cx: &mut TestAppContext) {
     let (_first, first, data) = opened(cx, LIST);
-    let (thread, _repo) = super::kagan::repo_thread(cx, first, data.path());
+    let (thread, _repo) = crate::tests::kagan::repo_thread(cx, first, data.path());
     let second = cx.update(|cx| crate::kagan::open(cx).unwrap());
     cx.run_until_parked();
     let window = cx.update(|cx| cx.windows()[1]);
@@ -932,7 +932,7 @@ fn a_comment_goes_to_the_front_window_once(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_plugin_cannot_read_a_hidden_thread(cx: &mut TestAppContext) {
     let (_kagan, _window, data) = opened(cx, LIST);
-    let hidden = super::kagan::run_hidden_shell(cx);
+    let hidden = crate::tests::kagan::run_hidden_shell(cx);
     let answer = std::rc::Rc::new(std::cell::RefCell::new(None));
     let slot = answer.clone();
     let op = Op::Plugin(PluginOp::Cli {

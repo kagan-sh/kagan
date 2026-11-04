@@ -13,11 +13,11 @@ use kg_domain::{
 };
 use serde_json::json;
 
-use super::kagan::{
+use crate::tests::kagan::{
     chord, click, focused_of, install_overlay, label, open, open_with_plugins_then, plugin_log,
     present, press_key, repo_thread, run_shell, selected_of, shows, thread_record, wait_until,
 };
-use super::sidebars::focus_row;
+use crate::tests::sidebar::layout::focus_row;
 
 const ALPHA: &str = "dev.test.alpha";
 const BETA: &str = "dev.test.beta";
@@ -375,7 +375,7 @@ fn an_overlay_that_throws_draws_nothing_and_the_terminal_still_types(cx: &mut Te
     cx.simulate_input(window, "echo still''here");
     cx.simulate_keystrokes(window, "enter");
     wait_until(cx, |cx| {
-        super::kagan::grid_text(cx, &kagan).contains("stillhere")
+        crate::tests::kagan::grid_text(cx, &kagan).contains("stillhere")
     });
     assert!(!present(cx, window, &overlay));
     wait_until(cx, |cx| {
@@ -517,7 +517,7 @@ fn an_overlay_hides_while_its_thread_asks(cx: &mut TestAppContext) {
 fn image_refused(cx: &mut TestAppContext, plugin: &str, source: &str) {
     let attack = format!(".child(image({source:?}))");
     let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
-        install_overlay(data, plugin, &super::kagan::overlay_source(&attack));
+        install_overlay(data, plugin, &crate::tests::kagan::overlay_source(&attack));
     });
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
@@ -544,7 +544,7 @@ fn an_overlay_that_opens_a_popover_is_refused_and_dialogs_take_clicks(cx: &mut T
     let plugin = "dev.test.popover";
     let attack = ".child(Popover.new(\"menu\").open(true).trigger(div()).content(div().w(600).h(600).child(\"Deny\")))";
     let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
-        install_overlay(data, plugin, &super::kagan::overlay_source(attack));
+        install_overlay(data, plugin, &crate::tests::kagan::overlay_source(attack));
     });
     wide(cx, window);
     let id = run_shell(cx);
@@ -892,9 +892,9 @@ fn add_plugin_starts_a_thread_and_pastes_without_enter(cx: &mut TestAppContext) 
     assert_eq!(label(cx, window, "plugins-add"), "New plugin…");
     click(cx, window, "plugins-add");
     wait_until(cx, |cx| {
-        super::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that")
+        crate::tests::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that")
     });
-    let text = super::kagan::grid_text(cx, &kagan);
+    let text = crate::tests::kagan::grid_text(cx, &kagan);
     assert!(!text.contains("SUBMITTED:"));
     let id = cx.update(|cx| kagan.read(cx).shown_thread(cx)).unwrap();
     let thread = thread_record(cx, &id);
@@ -920,7 +920,7 @@ fn add_plugin_offers_copy_when_output_never_settles(cx: &mut TestAppContext) {
         assert!(Instant::now() < deadline, "no copy notice");
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(!super::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that"));
+    assert!(!crate::tests::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that"));
 }
 
 #[cfg(unix)]
@@ -954,7 +954,7 @@ fn wait_for_plugin(
     kagan: &gpui_kit::Entity<crate::kagan::Kagan>,
 ) -> ThreadId {
     wait_until(cx, |cx| {
-        super::kagan::grid_text(cx, kagan).contains("Ready>")
+        crate::tests::kagan::grid_text(cx, kagan).contains("Ready>")
     });
     cx.update(|cx| kagan.read(cx).shown_thread(cx)).unwrap()
 }
@@ -1006,7 +1006,7 @@ fn new_plugin_ignores_a_second_click_while_starting(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn new_plugin_starts_the_agent_not_the_last_program(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
-    super::kagan::run_program(cx, "/bin/sh");
+    crate::tests::kagan::run_program(cx, "/bin/sh");
     plugin_agent(cx, data.path(), "printf 'Ready> '; read line; sleep 30");
     click(cx, window, "plugins-add");
     let id = wait_for_plugin(cx, &kagan);
@@ -1081,7 +1081,7 @@ fn typing_cancels_the_plugin_prompt(cx: &mut TestAppContext) {
 fn switching_threads_cancels_the_plugin_prompt(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     plugin_agent(cx, data.path(), "printf 'Ready> '; read line; sleep 30");
-    let other = super::kagan::run_program(cx, "/bin/sh");
+    let other = crate::tests::kagan::run_program(cx, "/bin/sh");
     click(cx, window, "plugins-add");
     let id = wait_for_plugin(cx, &kagan);
     click(cx, window, &format!("thread-{}", other.0));
@@ -1114,9 +1114,9 @@ fn a_paused_splash_can_receive_the_plugin_prompt(cx: &mut TestAppContext) {
     );
     click(cx, window, "plugins-add");
     wait_until(cx, |cx| {
-        super::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that")
+        crate::tests::kagan::grid_text(cx, &kagan).contains("Build a kagan plugin that")
     });
-    assert!(!super::kagan::grid_text(cx, &kagan).contains("SECOND"));
+    assert!(!crate::tests::kagan::grid_text(cx, &kagan).contains("SECOND"));
 }
 
 #[gpui_kit::test]
@@ -3164,7 +3164,7 @@ fn the_project_fold_button_ends_before_the_new_thread_button(cx: &mut TestAppCon
 #[gpui_kit::test]
 fn the_project_fold_button_ends_before_the_plus_in_a_narrow_list(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);
-    super::kagan::set_preference(cx, "main.left-width", json!(200.));
+    crate::tests::kagan::set_preference(cx, "main.left-width", json!(200.));
     wide(cx, window);
     cx.run_until_parked();
     assert_chevron_clear(cx, window, "a 200 point list");
@@ -3253,7 +3253,7 @@ fn the_project_menu_opens_under_its_button(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open_with_plugins_then(cx, install_pair);
     let folder = data.path().join("demo");
     std::fs::create_dir_all(&folder).unwrap();
-    let project = super::kagan::add_project(cx, &folder);
+    let project = crate::tests::kagan::add_project(cx, &folder);
     wide(cx, window);
     cx.run_until_parked();
     let button = format!("project-actions-{}", project.id.0);

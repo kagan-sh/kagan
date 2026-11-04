@@ -9,7 +9,7 @@ use kg_domain::{
 use kg_plugins::PluginHost;
 use serde_json::json;
 
-use super::kagan::{
+use crate::tests::kagan::{
     PAGE, PAGE_FRAME, click, focused_of, install_page, open, open_with_plugins_then, present,
     press_key, shows, value_of, wait_until,
 };
@@ -216,7 +216,7 @@ fn bounds_of(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) -> Op
 }
 
 /// Whether `kg ui` reports an element as disabled.
-pub(super) fn disabled_of(
+pub(crate) fn disabled_of(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
     name: &str,
@@ -501,7 +501,7 @@ fn a_panel_saved_as_collapsed_by_an_older_kagan_still_shows_its_body(cx: &mut Te
 const NAVIGATOR_PANEL: &str = "panel-dev.kagan.navigator-notes";
 #[gpui_kit::test]
 fn a_panel_a_plugin_opens_stays_open_when_a_preference_changes(cx: &mut TestAppContext) {
-    use super::kagan::{install_navigator, run_navigator};
+    use crate::tests::kagan::{install_navigator, run_navigator};
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_navigator);
     cx.run_until_parked();
     run_navigator(cx, "panel");
@@ -563,7 +563,7 @@ fn space_on_the_card_is_the_row_key_that_disables_the_plugin(cx: &mut TestAppCon
 #[gpui_kit::test]
 fn enter_and_space_on_a_tab_select_it(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
-    let id = super::kagan::run_shell(cx);
+    let id = crate::tests::kagan::run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
     let _asked =
         cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));

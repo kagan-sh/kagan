@@ -3,11 +3,11 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, InputEvent as _, TestAp
 
 use crate::kagan::{ArchiveThread, FocusSidebar, Kagan, TogglePinned};
 
-use super::kagan::{
+use crate::tests::kagan::{
     click, focused_of, grid_text, label, open, present, press_key, run_shell, selected_of, shows,
     thread_record, value_of, wait_until,
 };
-use super::sidebars::focus_row;
+use crate::tests::sidebar::layout::focus_row;
 
 fn terminal_focused(
     cx: &mut TestAppContext,

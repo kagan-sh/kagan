@@ -4,7 +4,7 @@ use gpui_kit::{AnyWindowHandle, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{DropSide, Op, OpError, OpResult, Plugin, PluginId, SurfaceOp, UiOp};
 
-use super::kagan::{label, open_with_plugins_then, shows, wait_until};
+use crate::tests::kagan::{label, open_with_plugins_then, shows, wait_until};
 
 const BOARD: &str = "dev.test.board";
 

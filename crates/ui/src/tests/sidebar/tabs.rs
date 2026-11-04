@@ -2,13 +2,13 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{Op, TerminalOp, ThreadId, ThreadOp};
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-use super::kagan::label;
-use super::kagan::{
-    click, focused_of, open, present, run_shell, selected_of, shows, wait_for_shell, wait_until,
-};
 use crate::kagan::screen_read::{shown_tab, tab_focused, tab_grid, tab_numbers};
 use crate::kagan::{CloseTerminal, Kagan, NewTerminal, NextTerminal, PreviousTerminal};
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+use crate::tests::kagan::label;
+use crate::tests::kagan::{
+    click, focused_of, open, present, run_shell, selected_of, shows, wait_for_shell, wait_until,
+};
 
 fn with_sh(cx: &mut TestAppContext) {
     let path = std::env::var_os("PATH").unwrap_or_default();

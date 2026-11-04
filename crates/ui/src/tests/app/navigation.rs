@@ -3,12 +3,12 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
 use kg_core::Workspace;
 use kg_domain::{InteractionOption, Op, ThreadOp, WindowOp};
 
-use super::kagan::{
+use crate::kagan::Kagan;
+use crate::tests::kagan::{
     chord, click, open, present, press_key, run_child, run_shell, shown, shows, thread_record,
     wait_until,
 };
-use super::sidebars::{focus_row, hover_row};
-use crate::kagan::Kagan;
+use crate::tests::sidebar::layout::{focus_row, hover_row};
 
 fn focused(cx: &mut TestAppContext, window: AnyWindowHandle, kagan: &Entity<Kagan>) -> bool {
     cx.update_window(window, |_, window, cx| {

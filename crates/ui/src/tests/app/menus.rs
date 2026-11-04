@@ -13,7 +13,9 @@ use kg_domain::{Op, SelectMode, ThreadOp, WindowOp};
 
 use crate::kagan::menus::{About, Close, Hide, HideOthers, Minimize, Quit, ShowAll, Zoom};
 
-use super::kagan::{chord, click, focused_of, grid_text, open, run_shell, shows, wait_until};
+use crate::tests::kagan::{
+    chord, click, focused_of, grid_text, open, run_shell, shows, wait_until,
+};
 
 #[gpui_kit::test]
 fn the_menu_bar_lists_the_standard_commands(cx: &mut TestAppContext) {

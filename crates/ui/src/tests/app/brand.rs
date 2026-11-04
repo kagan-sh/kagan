@@ -1,10 +1,10 @@
 use gpui_kit::{Role, TestAppContext, px, size};
 use serde_json::json;
 
-use super::kagan::{
+use crate::tests::kagan::{
     click, focused_of, label, open, present, role_of, set_preference, shows, wait_until,
 };
-use super::sidebars::focus_row;
+use crate::tests::sidebar::layout::focus_row;
 
 const ITEMS: [&str; 2] = ["kagan-about", "kagan-settings"];
 

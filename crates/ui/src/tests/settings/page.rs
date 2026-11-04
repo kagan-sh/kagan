@@ -14,12 +14,12 @@ use kg_domain::{
 };
 use serde_json::{Value, json};
 
-use super::kagan::{
+use crate::tests::kagan::{
     NAVIGATOR, add_project, chord, click, drag_to, focused_of, install_navigator, label, open,
     open_with_plugins_then, plugin_log, present, press as press_at, press_key, release, run_shell,
     selected_of, set_preference, shows, value_of, wait_until,
 };
-use super::sidebars::span;
+use crate::tests::sidebar::layout::span;
 use crate::theme::follow_system;
 
 const PREFS: &str = "dev.test.prefs";
@@ -1135,7 +1135,7 @@ fn plugin_config_of(cx: &mut TestAppContext, plugin: &str, key: &str) -> Value {
 
 /// Opens the workspace without a window, so a preference can be set first.
 fn setup_only(cx: &mut TestAppContext) -> tempfile::TempDir {
-    super::kagan::setup(cx)
+    crate::tests::kagan::setup(cx)
 }
 
 fn pane_width(cx: &mut TestAppContext, window: AnyWindowHandle) -> f32 {
@@ -1301,7 +1301,7 @@ fn install_plugins(data: &Path) {
     );
 }
 
-pub(super) fn write_plugin(data: &Path, folder: &str, manifest: &Value, entry: &str) {
+pub(crate) fn write_plugin(data: &Path, folder: &str, manifest: &Value, entry: &str) {
     // A folder setting is a power the person approves at install: the grant names it.
     let folders: Value = manifest["settings"]
         .as_object()

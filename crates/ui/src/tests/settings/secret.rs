@@ -5,8 +5,8 @@ use kg_core::Workspace;
 use kg_domain::{ConfigOp, Op, OpResult, PluginId, PluginOp, UiOp};
 use serde_json::{Value, json};
 
-use super::kagan::{click, open_with_plugins_then, present, value_of, wait_until};
-use super::settings::write_plugin;
+use crate::tests::kagan::{click, open_with_plugins_then, present, value_of, wait_until};
+use crate::tests::settings::page::write_plugin;
 
 const PLUGIN: &str = "dev.test.secret";
 const SECRET: &str = "lin_api_ui_5e2b";

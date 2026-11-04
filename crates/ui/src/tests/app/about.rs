@@ -5,7 +5,7 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, Role, TestAppContext};
 use crate::about::{BOOK, LICENSE, NOTICES_ONLINE, REPO, notices, version};
 use crate::kagan::menus::About;
 
-use super::kagan::{click, label, open, press_key, role_of, value_of};
+use crate::tests::kagan::{click, label, open, press_key, role_of, value_of};
 
 fn open_about(cx: &mut TestAppContext, main: AnyWindowHandle) -> AnyWindowHandle {
     cx.dispatch_action(main, About);

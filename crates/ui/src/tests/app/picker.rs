@@ -4,11 +4,13 @@ use std::path::Path;
 use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext, px, size};
 use kg_domain::ProjectId;
 
-use super::kagan::{add_project, click, label, open, shows, wait_until};
-#[cfg(unix)]
-use super::kagan::{focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of};
 #[cfg(unix)]
 use crate::kagan::Kagan;
+use crate::tests::kagan::{add_project, click, label, open, shows, wait_until};
+#[cfg(unix)]
+use crate::tests::kagan::{
+    focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of,
+};
 #[cfg(unix)]
 use gpui_kit::Entity;
 #[cfg(unix)]
@@ -43,7 +45,7 @@ fn fixture_programs(cx: &mut TestAppContext, data: &Path, names: &[&str]) -> Pat
 }
 
 /// Opens the start screen of a plain folder project, once the picker has its programs.
-pub(super) fn start_in_plain_folder(
+pub(crate) fn start_in_plain_folder(
     cx: &mut TestAppContext,
     window: AnyWindowHandle,
     data: &Path,
@@ -401,10 +403,10 @@ fn the_custom_command_key_opens_and_closes_the_fields(cx: &mut TestAppContext) {
     let (_kagan, window, data) = open(cx);
     start_in_plain_folder(cx, window, data.path());
     assert!(!shows(cx, window, "custom-program"));
-    cx.simulate_keystrokes(window, &super::kagan::chord("ToggleCustomCommand"));
+    cx.simulate_keystrokes(window, &crate::tests::kagan::chord("ToggleCustomCommand"));
     cx.run_until_parked();
     assert!(shows(cx, window, "custom-program"));
-    cx.simulate_keystrokes(window, &super::kagan::chord("ToggleCustomCommand"));
+    cx.simulate_keystrokes(window, &crate::tests::kagan::chord("ToggleCustomCommand"));
     cx.run_until_parked();
     assert!(!shows(cx, window, "custom-program"));
 }

@@ -1,7 +1,9 @@
 use gpui_kit::TestAppContext;
 
-use super::kagan::{click, open, present, repo_thread, run_shell, shows, value_of, wait_until};
 use crate::kagan::changes::POLL;
+use crate::tests::kagan::{
+    click, open, present, repo_thread, run_shell, shows, value_of, wait_until,
+};
 
 fn head(repo: &std::path::Path) -> String {
     let out = std::process::Command::new("git")

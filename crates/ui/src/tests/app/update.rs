@@ -6,7 +6,7 @@ use kg_core::{Target, Updater, Workspace};
 use kg_domain::{Op, OpError, OpResult, UI_PERSON_ONLY, UiOp, UpdateState};
 use serde_json::json;
 
-use super::kagan::{click, open, present, press, release, shows, value_of, wait_until};
+use crate::tests::kagan::{click, open, present, press, release, shows, value_of, wait_until};
 
 fn bundle(dir: &Path) -> PathBuf {
     let exe = dir.join("Applications/kagan.app/Contents/MacOS/kg");

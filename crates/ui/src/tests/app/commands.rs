@@ -8,11 +8,11 @@ use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, Entity, TestAppConte
 use kg_core::Workspace;
 use kg_domain::{KeymapOp, Op, OpResult, Plugin, PluginId, ThreadId, ThreadOp, UiOp, WindowOp};
 
-use super::kagan::{
+use crate::tests::kagan::{
     chord, click, grid_text, install_navigator, label, open, open_with_plugins_then, plugin_log,
     press, press_key, release, run_shell, shown, shows, thread_record, value_of, wait_until,
 };
-use super::panels::disabled_of;
+use crate::tests::plugin::panels::disabled_of;
 
 fn install_header(data: &std::path::Path) {
     install_header_plugin(
@@ -681,10 +681,11 @@ fn the_panels_toggle_stays_on_the_right_without_a_thread_title(cx: &mut TestAppC
     let (_kagan, window, _data) = open(cx);
     cx.simulate_window_resize(window, size(px(1100.), px(720.)));
     cx.run_until_parked();
-    let (left_x, left_w) =
-        super::sidebars::span(cx, window, "left-sidebar-toggle").expect("left toggle");
+    let (left_x, left_w) = crate::tests::sidebar::layout::span(cx, window, "left-sidebar-toggle")
+        .expect("left toggle");
     let (right_x, right_w) =
-        super::sidebars::span(cx, window, "right-sidebar-toggle").expect("right toggle");
+        crate::tests::sidebar::layout::span(cx, window, "right-sidebar-toggle")
+            .expect("right toggle");
     // Windows keeps caption buttons in the title bar, so the toggle sits left of 1000
     // in an 1100-wide window; the spacer still has to push it well past the left toggle.
     assert!(

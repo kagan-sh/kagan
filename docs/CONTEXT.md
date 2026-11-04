@@ -193,7 +193,7 @@ Backend	Provider
 # term	path_contains	line_contains	reason
 Badge	plugin-api.md	Badge	gpui-kit component name
 Sandbox	picker.rs	sandbox	Provider permission sandbox wording
-Sandbox	tests/commands.rs	sandbox	Provider permission test copy
+Sandbox	tests/app/commands.rs	sandbox	Provider permission test copy
 Sandbox	plugins/src/files.rs	sandbox	tempdir variable in path tests
 Sandbox	thread/agent.rs	--sandbox	Cursor Agent's own flag name
 Session	thread/conversation.rs	"--	Claude Code's own flag names

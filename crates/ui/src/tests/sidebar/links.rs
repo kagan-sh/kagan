@@ -1,11 +1,11 @@
 use gpui_kit::{Modifiers, TestAppContext};
 
-use super::kagan::{
+use crate::kagan::changes::POLL;
+use crate::kagan::{NewTerminal, OpenLocalLink};
+use crate::tests::kagan::{
     cell_point, click, grid_text, label, open, present, press, release, run_shell, shown_row,
     wait_for_shell, wait_until,
 };
-use crate::kagan::changes::POLL;
-use crate::kagan::{NewTerminal, OpenLocalLink};
 
 #[gpui_kit::test]
 fn a_secondary_click_on_a_printed_link_opens_it(cx: &mut TestAppContext) {

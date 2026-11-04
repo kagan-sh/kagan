@@ -2,10 +2,10 @@ use gpui_kit::{AppContext as _, Task, TestAppContext, px, size};
 use kg_core::Workspace;
 use kg_domain::{InteractionOption, Op, OpError, ThreadOp};
 
-use super::kagan::{
+use crate::tests::app::picker::start_in_plain_folder;
+use crate::tests::kagan::{
     chord, click, focused_of, open, repo_thread, run_shell, set_preference, shows, wait_until,
 };
-use super::picker::start_in_plain_folder;
 
 fn install_options() -> Vec<InteractionOption> {
     vec![
