@@ -1042,7 +1042,7 @@ impl Workspace {
         self.losses.get(id).copied().map(crate::end::Loss::note)
     }
 
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn set_snapshot_bound(&mut self, id: &ThreadId, bound: usize) -> bool {
         let Some(crate::thread::Shown::Running(terminal)) = self.terminals.get(id) else {
             return false;

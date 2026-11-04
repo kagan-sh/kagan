@@ -143,24 +143,47 @@ impl PluginHost {
         let (host, plugin, command) = (host.clone(), plugin.clone(), command.to_owned());
         cx.spawn(async move |cx| {
             host.update(cx, |host, _| {
-                let active = host.active.get(&plugin).ok_or_else(|| kg_domain::OpError::NotFound(format!("plugin {plugin} is not enabled")))?;
-                let command = active.manifest.commands.iter().find(|item| item.id == command)
-                    .ok_or_else(|| kg_domain::OpError::NotFound(format!("plugin {plugin} has no command {command}")))?;
+                let active = host.active.get(&plugin).ok_or_else(|| {
+                    kg_domain::OpError::NotFound(format!("plugin {plugin} is not enabled"))
+                })?;
+                let command = active
+                    .manifest
+                    .commands
+                    .iter()
+                    .find(|item| item.id == command)
+                    .ok_or_else(|| {
+                        kg_domain::OpError::NotFound(format!(
+                            "plugin {plugin} has no command {command}"
+                        ))
+                    })?;
                 let allowed = match command.when {
                     CommandWhen::Always => true,
                     CommandWhen::Thread => thread_id.is_some(),
                     CommandWhen::Project => project_id.is_some(),
                 };
-                if allowed { Ok(()) } else { Err(kg_domain::OpError::Invalid(format!("command {} needs a {:?} on screen", command.id, command.when))) }
+                if allowed {
+                    Ok(())
+                } else {
+                    Err(kg_domain::OpError::Invalid(format!(
+                        "command {} needs a {:?} on screen",
+                        command.id, command.when
+                    )))
+                }
             })?;
-            let fields = json!({ "kind": "command", "id": command, "threadId": thread_id, "projectId": project_id });
-            let mut job = fields.as_object().cloned().unwrap_or_default();
-            // Jobs own their request id; the command id has its own field.
-            let command_value = job.remove("id").unwrap_or(Value::Null);
-            job.insert("command".into(), command_value);
+            let job = json!({
+                "kind": "command",
+                "command": command,
+                "threadId": thread_id,
+                "projectId": project_id,
+            })
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
             let reply =
                 crate::host::call(&host, &plugin, &command, job, COMMAND_TIMEOUT, cx).await?;
-            reply.map_err(kg_domain::OpError::Failed).map(|_| OpResult::Done)
+            reply
+                .map_err(kg_domain::OpError::Failed)
+                .map(|_| OpResult::Done)
         })
     }
 }

@@ -312,7 +312,7 @@ pub(crate) async fn retry_orphan_stores(
 
 #[cfg(target_os = "macos")]
 #[must_use]
-pub(crate) fn macos_major() -> u32 {
+pub fn macos_major() -> u32 {
     use objc2_foundation::NSProcessInfo;
     let version = NSProcessInfo::processInfo().operatingSystemVersion();
     u32::try_from(version.majorVersion).unwrap_or(0)

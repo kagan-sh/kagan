@@ -1661,7 +1661,9 @@ fn kg_theme_new_copies_a_named_theme_and_keeps_existing_files(cx: &mut TestAppCo
         })
     };
     let made = try_op(cx, new("warm", Some("ember")));
-    let path = data.path().join("themes/warm.json");
+    let path = std::fs::canonicalize(data.path())
+        .unwrap()
+        .join("themes/warm.json");
     assert_eq!(made.unwrap(), OpResult::Files(vec![path.clone()]));
     let file = ThemeFile::parse(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(file.name, "Ember copy");

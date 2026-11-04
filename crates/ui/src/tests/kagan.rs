@@ -3763,7 +3763,6 @@ fn host_then(cx: &mut TestAppContext, install: impl FnOnce(&Path)) -> tempfile::
         gpui_kit::init(cx);
         gpui_shell::init(cx);
         crate::init(cx);
-        crate::theme::init_in(data.path().join("themes"), cx);
         let mut catalog = gpui_shell::components::registry().unwrap();
         crate::register_components(&mut catalog).unwrap();
         kg_plugins::init(cx, catalog.freeze().unwrap())
@@ -3822,7 +3821,6 @@ pub(super) fn setup(cx: &mut TestAppContext) -> tempfile::TempDir {
     cx.update(|cx| {
         gpui_kit::init(cx);
         crate::init(cx);
-        crate::theme::init_in(data.path().join("themes"), cx);
     });
     data
 }

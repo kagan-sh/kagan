@@ -4301,7 +4301,7 @@ async fn a_cursor_query_is_answered_with_no_window_open(cx: &mut TestAppContext)
 
 #[cfg(unix)]
 #[gpui_kit::test]
-async fn a_program_that_cannot_start_fails_the_thread(cx: &mut TestAppContext) {
+async fn a_program_that_vanishes_before_start_refuses_the_thread(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     empty_repo(fixture.dir.path());
     let program = script(fixture.dir.path(), "vanishing", "sleep 30");
@@ -4332,7 +4332,7 @@ async fn a_program_that_cannot_start_fails_the_thread(cx: &mut TestAppContext) {
         metadata: None,
     }));
     let error = op(run, cx).await.unwrap_err();
-    assert!(matches!(error, OpError::Failed(_)), "{error}");
+    assert!(matches!(error, OpError::Invalid(_)), "{error}");
     let OpResult::Threads(threads) = op(
         Op::Thread(ThreadOp::List {
             project_id: None,

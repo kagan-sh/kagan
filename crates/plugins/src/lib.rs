@@ -17,7 +17,6 @@ mod manifest;
 mod ops;
 mod page;
 mod process;
-mod program;
 mod secret;
 mod share;
 mod source;
@@ -46,6 +45,8 @@ pub use manifest::{AgentChoice, Setting};
 pub use page::{MESSAGE_CAP, PageFileError, SCHEME, parse_message, read_plugin_file};
 pub use ui_host::{HostContext, HostUi, HostUiEvent, ReviewComment, ToastAction};
 pub use watchdog::PluginStatus;
+#[cfg(target_os = "macos")]
+pub use web_store::macos_major;
 pub use web_store::{
     StoreRemoval, clear_removed_stores, clear_stores, keep_store, read_store_ids, store_dir,
 };

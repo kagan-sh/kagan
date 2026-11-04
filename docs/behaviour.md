@@ -120,7 +120,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `WaitEvent`
 
 - **Allowed when**: the thread exists [book:cli].
-- **Shows**: the next event of that kind after `after_seq`, or no event when `timeout_ms` passes [docs:plugin-api] [op.rs]. The kind is one of the event types listed under `Events` [event.rs].
+- **Shows**: the next event of that kind after `after_seq`, or no event when `timeout_ms` passes [docs:plugin-api] [op.rs]. The kind is one of the live event types listed under `Events` [event.rs].
 - **Refused when**: an unknown kind — `invalid` [op.rs]. A missing thread — `not-found` [op.rs]. A timeout is not a refusal [op.rs].
 
 ### `Wait`

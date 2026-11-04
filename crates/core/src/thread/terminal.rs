@@ -52,7 +52,7 @@ pub(crate) async fn start(
     let at = crate::workspace::time(this, cx)?;
     let spawned = match folder {
         Some(folder) => spawn(this, &record, folder, size, start, cx).await,
-        None => Err("the thread has no folder".to_owned()),
+        None => Err(OpError::Invalid("the thread has no folder".into())),
     };
     match spawned {
         Ok(terminal) => {
@@ -68,11 +68,11 @@ pub(crate) async fn start(
         }
         Err(error) => {
             let failed = vec![EventKind::Failed {
-                error: Some(error.clone()),
+                error: Some(error.to_string()),
             }];
             Workspace::events(this, record.id, failed, cx).await?;
             status(this, thread, ThreadStatus::Error, cx).await?;
-            Err(OpError::Failed(error))
+            Err(error)
         }
     }
 }
@@ -84,12 +84,11 @@ async fn spawn(
     (cols, rows): (u16, u16),
     start: Start,
     cx: &mut AsyncApp,
-) -> std::result::Result<Terminal, String> {
+) -> Result<Terminal> {
     let environment = crate::program::program_environment_of(this, cx);
-    let program = resolve_program(&record.provider, environment.as_ref())?;
-    let integration = agent::integrate(this, record, &program, &folder, start, cx)
-        .await
-        .map_err(|error| error.to_string())?;
+    let program =
+        resolve_program(&record.provider, environment.as_ref()).map_err(OpError::Invalid)?;
+    let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;
     let args = integration.args.into_iter().chain(program.args).collect();
     let mut env = integration.env;
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
@@ -102,7 +101,7 @@ async fn spawn(
         env,
     };
     Terminal::spawn(launch, cols, rows)
-        .map_err(|error| start_failure(&program.path, &folder, &error))
+        .map_err(|error| OpError::Failed(start_failure(&program.path, &folder, &error)))
 }
 
 fn start_failure(program: &Path, folder: &Path, error: &std::io::Error) -> String {

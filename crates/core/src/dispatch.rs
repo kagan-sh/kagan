@@ -174,8 +174,8 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Theme(ThemeOp::Set { .. })
         | Op::Keymap(KeymapOp::Set { .. } | KeymapOp::Remove { .. })
         | Op::Preference(PreferenceOp::Set { .. })
-        | Op::Section(_) => true,
-        Op::Ui(op) => !matches!(op, kg_domain::UiOp::Snapshot { .. }),
+        | Op::Section(_)
+        | Op::Ui(_) => true,
         Op::Surface(op) => !matches!(op, kg_domain::SurfaceOp::List),
         Op::Thread(op) => match op {
             ThreadOp::Stop { .. }

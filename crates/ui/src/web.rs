@@ -1,5 +1,6 @@
 //! Web panel files, navigation rules and theme, kept apart so tests run without a native page.
-//! The page setup itself is in `page.rs`, shared with the Browser and a plugin `WebView`.
+//! The page setup itself is in `web_page.rs`, the opener shared with the Browser and a plugin
+//! `WebView`. This module compiles only on macOS; `web_page.rs` also covers Windows.
 
 use std::path::{Component, Path};
 

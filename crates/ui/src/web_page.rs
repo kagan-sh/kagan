@@ -1,4 +1,4 @@
-//! One opener for the Browser and for a plugin page.
+//! One opener for the Browser and for a plugin page, on macOS and Windows.
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_kit::{App, AppContext as _, Context, Entity, IntoElement, Render, Window};
@@ -158,12 +158,7 @@ fn build_view(
 pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
 
 #[cfg(target_os = "macos")]
-#[must_use]
-pub(crate) fn macos_major() -> u32 {
-    use objc2_foundation::NSProcessInfo;
-    let version = NSProcessInfo::processInfo().operatingSystemVersion();
-    u32::try_from(version.majorVersion).unwrap_or(0)
-}
+pub(crate) use kg_plugins::macos_major;
 
 // Keeps the store id only on macOS 14 or later. Older systems get None, so the page stays private.
 #[cfg(target_os = "macos")]

@@ -100,12 +100,7 @@ pub(crate) async fn ask(
     }
     let open = this
         .update(cx, |workspace, _| {
-            workspace.asks.get(&id).and_then(|open| {
-                workspace
-                    .for_a_person
-                    .contains(&open.0)
-                    .then(|| open.0.clone())
-            })
+            workspace.asks.get(&id).map(|open| open.0.clone())
         })
         .map_err(closed)?;
     if let Some(open) = open {

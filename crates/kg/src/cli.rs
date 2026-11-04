@@ -304,9 +304,9 @@ fn read_paste_file(path: &str) -> Result<Vec<u8>, OpError> {
         .map_err(|error| OpError::Invalid(format!("could not read {path}: {error}")))?;
     match read_capped(file) {
         Ok(bytes) => Ok(bytes),
-        Err(OpError::Failed(message)) => Err(OpError::Invalid(format!(
-            "could not read {path}: {message}"
-        ))),
+        Err(OpError::Failed(message)) => {
+            Err(OpError::Failed(format!("could not read {path}: {message}")))
+        }
         Err(error) => Err(error),
     }
 }

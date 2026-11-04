@@ -542,6 +542,14 @@ fn event_type_names_match_the_wire_tag() {
 }
 
 #[test]
+fn live_event_types_are_all_known_types() {
+    for live in EventKind::LIVE_TYPES {
+        assert!(EventKind::TYPES.contains(&live), "{live}");
+    }
+    assert!(EventKind::LIVE_TYPES.len() < EventKind::TYPES.len());
+}
+
+#[test]
 fn reset_drops_the_saved_shortcut_and_ignores_old_platform_maps() {
     use crate::Keymap;
     let mut keymap = Keymap::from_setting(Some(json!({

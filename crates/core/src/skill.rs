@@ -80,32 +80,24 @@ pub(crate) async fn catalog(
     cx: &mut AsyncApp,
 ) -> Result<Catalog> {
     let (data_dir, project, database) = this
-        .update(cx, |workspace, cx| {
-            let project = project_id.as_ref().map(|id| {
-                workspace
-                    .projects
-                    .get(id)
-                    .map(|entity| entity.read(cx).record.path.clone())
-            });
-            (
+        .update(cx, |workspace, cx| -> Result<_> {
+            let project = project_id
+                .as_ref()
+                .map(|id| {
+                    workspace
+                        .projects
+                        .get(id)
+                        .map(|entity| entity.read(cx).record.path.clone())
+                        .ok_or_else(|| missing("project", id))
+                })
+                .transpose()?;
+            Ok((
                 workspace.data_dir.clone(),
                 project,
                 workspace.database.clone(),
-            )
+            ))
         })
-        .map_err(closed)?;
-    let project = match project {
-        Some(Some(path)) => Some(path),
-        Some(None) => {
-            return Err(missing(
-                "project",
-                project_id
-                    .as_ref()
-                    .ok_or_else(|| OpError::Invalid("project is missing".into()))?,
-            ));
-        }
-        None => None,
-    };
+        .map_err(closed)??;
     let plugins = database.call(|store| store.plugins()).await?;
     cx.background_spawn(async move {
         let mut catalog = shared(plugins)?;

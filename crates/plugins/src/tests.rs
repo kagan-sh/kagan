@@ -3621,7 +3621,7 @@ fn bounded_programs_capture_output_and_stop_on_timeout() {
     let mut command = Command::new("git");
     command.arg("--version");
     let (_keep, never) = async_channel::bounded::<()>(1);
-    let output = crate::program::run(command, Duration::from_secs(5), &never).unwrap();
+    let output = crate::source::run(command, Duration::from_secs(5), &never).unwrap();
     assert!(output.status.success());
     assert!(
         String::from_utf8(output.stdout)
@@ -3629,10 +3629,9 @@ fn bounded_programs_capture_output_and_stop_on_timeout() {
             .starts_with("git version")
     );
     let started = std::time::Instant::now();
-    let error =
-        crate::program::run(sleep_command(), Duration::from_millis(30), &never).unwrap_err();
+    let error = crate::source::run(sleep_command(), Duration::from_millis(30), &never).unwrap_err();
     assert!(
-        matches!(error, crate::program::RunError::Timeout),
+        matches!(error, crate::source::RunError::Timeout),
         "{error:?}"
     );
     assert!(started.elapsed() < Duration::from_secs(5));

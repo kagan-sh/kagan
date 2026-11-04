@@ -148,10 +148,20 @@ pub(crate) async fn prepare(
             Err(error)
         }
         Err(ProvisionMiss::Discard(error)) => {
-            let id = environment.id.clone();
-            database
-                .call(move |store| store.delete_environment(&id))
-                .await?;
+            if environment.path.exists() {
+                // The folder could not be removed, so keep the row for the next sweep.
+                let mut leftover = environment;
+                leftover.status = EnvironmentStatus::Destroyed;
+                leftover.error = Some(error.to_string());
+                database
+                    .call(move |store| store.put_environment(&leftover))
+                    .await?;
+            } else {
+                let id = environment.id.clone();
+                database
+                    .call(move |store| store.delete_environment(&id))
+                    .await?;
+            }
             Workspace::refresh(this, cx).await?;
             Err(error)
         }
@@ -260,6 +270,7 @@ async fn retry_setup(
     let branch = existing.branch.clone().unwrap_or_default();
     let id = existing.id.clone();
     let project_id = existing.project_id.clone();
+    let leftover = existing.clone();
     match cx
         .background_executor()
         .spawn(async move { script::become_ready(existing) })
@@ -279,13 +290,25 @@ async fn retry_setup(
             let lookup = project_id.clone();
             if let Some(project) = database.call(move |store| store.project(&lookup)).await? {
                 abandon_worktree(&project.path, &path, &branch);
-            } else if path.exists() {
-                let _ = std::fs::remove_dir_all(&path);
+            } else if path.exists()
+                && let Err(error) = std::fs::remove_dir_all(&path)
+            {
+                eprintln!("kg: could not remove {}: {error}", path.display());
             }
-            let deleting = id.clone();
-            database
-                .call(move |store| store.delete_environment(&deleting))
-                .await?;
+            if path.exists() {
+                // The folder could not be removed, so keep the row for the next sweep.
+                let mut leftover = leftover;
+                leftover.status = EnvironmentStatus::Destroyed;
+                leftover.error = Some(error.to_string());
+                database
+                    .call(move |store| store.put_environment(&leftover))
+                    .await?;
+            } else {
+                let deleting = id.clone();
+                database
+                    .call(move |store| store.delete_environment(&deleting))
+                    .await?;
+            }
             Workspace::refresh(this, cx).await?;
             Err(error)
         }
@@ -478,16 +501,22 @@ fn unique_branch(project: &Path, name: &str) -> Result<String> {
 }
 
 fn abandon_worktree(project: &Path, path: &Path, branch: &str) {
-    let _ = git(
+    if let Err(error) = git(
         project,
         &["worktree", "remove", "--force"],
         Some(path),
         None,
-    );
-    if path.exists() {
-        let _ = std::fs::remove_dir_all(path);
+    ) {
+        eprintln!("kg: could not remove worktree {}: {error}", path.display());
     }
-    let _ = git(project, &["branch", "-D"], None, Some(branch));
+    if path.exists()
+        && let Err(error) = std::fs::remove_dir_all(path)
+    {
+        eprintln!("kg: could not remove {}: {error}", path.display());
+    }
+    if let Err(error) = git(project, &["branch", "-D"], None, Some(branch)) {
+        eprintln!("kg: could not delete branch {branch}: {error}");
+    }
 }
 
 pub(crate) async fn restore(
