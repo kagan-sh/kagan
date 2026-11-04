@@ -270,7 +270,10 @@ mod tests;
 //
 // That callback is not a GPUI context, so the text cannot live in an entity.
 mod theme_cell {
-    #![allow(clippy::disallowed_types)]
+    #![expect(
+        clippy::disallowed_types,
+        reason = "the WebKit callback needs a std Arc<Mutex> because it has no GPUI context"
+    )]
 
     use std::sync::{Arc, Mutex};
 

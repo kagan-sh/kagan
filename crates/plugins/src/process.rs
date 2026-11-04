@@ -285,7 +285,6 @@ pub(crate) fn module(owner: &Entity<Processes>, grant: &Grant, root: &Path) -> H
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

@@ -1,4 +1,8 @@
-use super::*;
+use gpui_kit::{App, Entity, Window};
+use kg_domain::ProjectId;
+
+use super::{Kagan, Shown, right, tabs};
+use crate::terminal::TerminalView;
 
 pub(crate) fn start_project(kagan: &Kagan) -> Option<ProjectId> {
     match kagan.screen.shown() {

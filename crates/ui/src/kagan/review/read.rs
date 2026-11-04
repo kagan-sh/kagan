@@ -1,4 +1,6 @@
-use super::*;
+use kg_domain::ReviewRow;
+
+use super::Kagan;
 
 pub(crate) fn review_note_count(kagan: &Kagan) -> usize {
     kagan

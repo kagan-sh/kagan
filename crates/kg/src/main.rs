@@ -1,4 +1,7 @@
-#![allow(clippy::print_stdout)]
+#![expect(
+    clippy::print_stdout,
+    reason = "the CLI writes command output and results to stdout"
+)]
 
 mod app;
 mod cli;
