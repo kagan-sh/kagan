@@ -139,7 +139,8 @@ fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
+#[cfg(target_os = "macos")]
 #[path = "web_panel_test.rs"]
 mod web_panel_test;
 
