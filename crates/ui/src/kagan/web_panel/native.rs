@@ -1,4 +1,7 @@
-use gpui_kit::{AnyElement, App, AppContext as _, Entity, IntoElement as _, Window, div};
+use gpui_kit::{
+    AnyElement, App, AppContext as _, Entity, IntoElement as _, ParentElement as _, Styled as _,
+    Window, div,
+};
 use kg_domain::PluginId;
 use kg_plugins::{PluginHost, SCHEME};
 
@@ -40,16 +43,39 @@ struct Built {
     drain: gpui_kit::Task<()>,
     ipc: async_channel::Sender<String>,
     life: std::sync::Arc<()>,
+    note: Option<String>,
 }
 
 pub(super) fn body(slot: &Slot, file: &str, window: &mut Window, cx: &mut App) -> AnyElement {
     let shown = place(slot, file, window, cx);
-    match shown.note {
-        Some(note) => sentence(&slot.id, &note, cx),
-        None => shown.page.map_or_else(
-            || div().into_any_element(),
-            gpui_kit::IntoElement::into_any_element,
-        ),
+    panel_body(
+        &slot.id,
+        shown.note.as_deref(),
+        shown.page.map(gpui_kit::IntoElement::into_any_element),
+        cx,
+    )
+}
+
+// A warning alone fills the panel. Over a page it takes its own height; the page gets the rest.
+pub(super) fn panel_body(
+    id: &str,
+    note: Option<&str>,
+    page: Option<AnyElement>,
+    cx: &App,
+) -> AnyElement {
+    let fill = page.is_none();
+    let note = note.map(|note| sentence(id, note, fill, cx));
+    match (note, page) {
+        (Some(note), None) => note,
+        (Some(note), Some(page)) => div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(note)
+            .child(div().min_h_0().flex_1().child(page))
+            .into_any_element(),
+        (None, Some(page)) => page,
+        (None, None) => div().into_any_element(),
     }
 }
 
@@ -93,6 +119,24 @@ pub(super) fn deliver(
 pub(super) fn clear(cx: &mut App) {
     if cx.has_global::<Pages>() {
         cx.default_global::<Pages>().pages.clear();
+    }
+}
+
+pub(super) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
+    if !cx.has_global::<Pages>() {
+        return;
+    }
+    let indexes: Vec<usize> = cx
+        .default_global::<Pages>()
+        .pages
+        .iter()
+        .enumerate()
+        .filter_map(|(index, page)| (page.plugin == *plugin).then_some(index))
+        .collect();
+    for index in indexes.into_iter().rev() {
+        let page = cx.default_global::<Pages>().pages.remove(index);
+        page.ipc.close();
+        drop(page.life);
     }
 }
 
@@ -248,6 +292,7 @@ fn open_page(
     match build(slot, file, root, hosts, generation, window, cx) {
         Ok(built) => {
             let view = built.view.clone();
+            let note = built.note.clone();
             save(
                 cx,
                 Held {
@@ -256,7 +301,7 @@ fn open_page(
                     panel: slot.contribution.clone(),
                     file: file.to_owned(),
                     generation,
-                    note: None,
+                    note: note.clone(),
                     view: Some(built.view),
                     theme: built.theme,
                     _drain: built.drain,
@@ -266,7 +311,7 @@ fn open_page(
                 },
             );
             Shown {
-                note: None,
+                note,
                 page: Some(view),
             }
         }
@@ -318,7 +363,21 @@ fn build(
     let panel = slot.contribution.clone();
     let navigation = plugin_id.clone();
     let protocol_plugin = plugin_id.clone();
-    let builder = crate::page::private(wry::WebViewBuilder::new())
+    let wants_store = PluginHost::global(cx)
+        .read(cx)
+        .web_store(&slot.plugin, &slot.contribution);
+    let (store, store_note) = if !wants_store {
+        (None, None)
+    } else if crate::page::macos_major() < 14 {
+        (None, Some(crate::page::STORE_NEEDS_MACOS.to_owned()))
+    } else {
+        let data = PluginHost::global(cx).read(cx).plugin_data(&slot.plugin);
+        (
+            Some(kg_plugins::keep_store(&data, &slot.contribution)?),
+            None,
+        )
+    };
+    let builder = crate::page::with_store(crate::page::private(wry::WebViewBuilder::new()), store)
         .with_url(&url)
         .with_navigation_handler(move |target| web::allows_navigation(&navigation, &target))
         .with_file_dialog(false)
@@ -351,6 +410,7 @@ fn build(
         drain,
         ipc,
         life,
+        note: store_note,
     })
 }
 

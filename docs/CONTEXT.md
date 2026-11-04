@@ -159,11 +159,11 @@ The multi-line text field a plugin script builds. Same contract as `KgInput`, on
 _Avoid_: Textarea (when `kg ui` must see the field)
 
 **WebView**:
-The page a plugin panel shows. It loads one http or https URL on `127.0.0.1`, `localhost`, or a host the plugin may fetch, and it fills the panel. The Browser tab is separate.
+The page a plugin panel shows. It loads one http or https URL on `127.0.0.1`, `localhost`, or a host the plugin may fetch, and it fills the panel. `store(true)` keeps cookies and storage under the plugin data folder. The Browser tab is separate.
 _Avoid_: address bar, embedded browser
 
 **Web panel**:
-A plugin panel whose body is an HTML file in the plugin folder. The page loads only that folder, talks to its plugin script, and uses the Workbench theme. `kg ui` can see the panel and cannot drive the page.
+A plugin panel whose body is an HTML file in the plugin folder. The page loads only that folder, talks to its plugin script, and uses the Workbench theme. `"store": true` keeps cookies and storage under the plugin data folder. `kg ui` can see the panel and cannot drive the page.
 _Avoid_: iframe, embedded browser, address bar
 
 **Agent tool**:

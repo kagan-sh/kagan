@@ -813,11 +813,13 @@ pub(crate) struct Grant {
     #[serde(default)]
     pub(crate) paths: BTreeMap<String, PathBuf>,
     #[serde(default)]
+    pub(crate) page_store: bool,
+    #[serde(default)]
     pub(crate) instruct: bool,
 }
 
 impl Grant {
-    pub(crate) fn of(manifest: &Manifest) -> Self {
+    pub(crate) fn of(manifest: &Manifest, root: &Path) -> Self {
         Self {
             powers: manifest.powers.clone(),
             folders: manifest
@@ -835,6 +837,12 @@ impl Grant {
                 })
                 .collect(),
             paths: BTreeMap::new(),
+            page_store: manifest
+                .ui
+                .panels()
+                .iter()
+                .any(crate::contributions::PanelContribution::store)
+                || crate::development::calls_webview_store(root),
             instruct: manifest.instruct,
         }
     }
@@ -900,6 +908,7 @@ impl Grant {
                 .map(|(key, path)| (key.clone(), path.clone()))
                 .collect(),
             folders,
+            page_store: self.page_store && other.page_store,
             instruct: self.instruct && other.instruct,
         }
     }
@@ -926,6 +935,7 @@ impl Grant {
                 .folders
                 .keys()
                 .all(|key| approved.folders.contains_key(key))
+            && (!self.page_store || approved.page_store)
             && (!self.instruct || approved.instruct)
     }
 
@@ -982,6 +992,9 @@ impl Grant {
         }
         for title in self.folders.values() {
             lines.push(format!("reads a folder you choose ({title})"));
+        }
+        if self.page_store {
+            lines.push("keeps page data on macOS 14 or later".into());
         }
         if self.instruct {
             lines.push("adds instructions to a thread's program".into());

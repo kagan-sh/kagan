@@ -412,8 +412,13 @@ async fn remove(
         host.update(cx, |host, _| host.resume_activation(&id));
         return Err(error);
     }
+    let data = host.read_with(cx, |host, _| host.plugin_data(&id));
+    let store_ids = crate::page::read_store_ids(&data);
     host.update(cx, |host, cx| {
         host.unload(&id, cx);
+        // Drop native pages first. They stay in a UI global until the next frame, and until then
+        // `WebKit` refuses `remove_data_store` with `DataStoreInUse`.
+        host.drop_pages(&id, &store_ids, cx);
         host.active.remove(&id);
         host.records.remove(&id);
         host.warnings.remove(&id);
@@ -421,20 +426,33 @@ async fn remove(
         host.identities.remove(&id);
         cx.notify();
     });
+    // The native view and its frame mouse listener hold the store until the next draw. Refresh
+    // so they let go. A store that is still held keeps its `store.id` file.
+    cx.update(gpui_kit::App::refresh_windows);
+    let cleared = cx
+        .spawn(async move |cx| crate::page::remove_web_stores_after_release(store_ids, cx).await)
+        .await;
+    crate::page::clear_removed_stores(&data, &cleared.removed);
+    let mut warnings = cleared.warnings;
     let store = host.read_with(cx, |host, _| host.secrets.clone());
     let forgotten = cx
         .background_spawn(async move { store.forget(&id, &declared) })
         .await;
-    Ok(match forgotten {
-        Ok(kept) if kept.is_empty() => OpResult::Done,
-        Ok(kept) => OpResult::Warnings(vec![format!(
+    match forgotten {
+        Ok(kept) if !kept.is_empty() => warnings.push(format!(
             "the plugin is removed, but the system keychain kept its secrets {}; \
              delete them in the keychain, service kagan",
             kept.join(", ")
-        )]),
-        Err(error) => OpResult::Warnings(vec![format!(
+        )),
+        Err(error) => warnings.push(format!(
             "the plugin is removed, but its secrets were not forgotten: {error}"
-        )]),
+        )),
+        Ok(_) => {}
+    }
+    Ok(if warnings.is_empty() {
+        OpResult::Done
+    } else {
+        OpResult::Warnings(warnings)
     })
 }
 
@@ -499,7 +517,7 @@ async fn reload(
             "reload cannot change the plugin id".into(),
         ));
     }
-    let grant = Grant::of(&fetched.discovered.manifest);
+    let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
     let approved: Grant = serde_json::from_value(record.approved.clone())?;
     if !grant.within(&approved) {
         let thread_id = thread_id.ok_or_else(|| OpError::Invalid(NO_THREAD.into()))?;
@@ -628,7 +646,7 @@ async fn install(
             "plugin {id} is already installed; use kg plugin update {id}"
         )));
     }
-    let grant = Grant::of(manifest);
+    let grant = Grant::of(manifest, &fetched.root);
     approve(
         thread_id.as_ref(),
         requester,
@@ -696,7 +714,7 @@ async fn update(
             record.source, manifest.id
         )));
     }
-    let grant = Grant::of(manifest);
+    let grant = Grant::of(manifest, &fetched.root);
     let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
     let within = grant.within(&approved);
     if within && fetched.commit.is_some() && fetched.commit == record.commit {

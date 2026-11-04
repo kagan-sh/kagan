@@ -41,6 +41,12 @@ pub(crate) fn init(cx: &mut App) {
     let Some(host) = PluginHost::try_global(cx) else {
         return;
     };
+    host.update(cx, |host, _| {
+        host.set_drop_pages(std::rc::Rc::new(|plugin, stores, cx| {
+            crate::components::drop_stores(stores, cx);
+            crate::kagan::drop_web_panel(plugin, cx);
+        }));
+    });
     let bindings = cx.new(|cx| {
         let subscription = cx.observe(&host, |this: &mut Bindings, host, cx| {
             this.refresh(&host, cx);

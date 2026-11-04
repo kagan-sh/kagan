@@ -55,11 +55,15 @@ use crate::manifest::{Fetch, Grant, Manifest, Scope, Tool};
 pub use catalog::{Example, capabilities, examples, kinds_in, matched};
 pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
 pub use manifest::{AgentChoice, Setting};
-pub use page::{MESSAGE_CAP, PageFileError, SCHEME, parse_message, read_plugin_file};
+pub use page::{
+    MESSAGE_CAP, PageFileError, SCHEME, StoreRemoval, clear_removed_stores, clear_stores,
+    keep_store, parse_message, read_plugin_file, read_store_ids, store_dir,
+};
 pub use ui_host::{HostContext, HostUi, HostUiEvent, ReviewComment, ToastAction};
 pub use watchdog::PluginStatus;
 
 type Result<T> = std::result::Result<T, OpError>;
+type DropPages = Rc<dyn Fn(&PluginId, &[[u8; 16]], &mut App)>;
 
 fn event_data(kind: &kg_domain::EventKind) -> Value {
     serde_json::to_value(kind)
@@ -106,6 +110,7 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
         next_activation: 0,
         permits: BTreeMap::new(),
         components,
+        drop_pages: None,
         _events: cx.subscribe(&workspace, |_, _, event, cx| {
             PluginHost::deliver_workspace_event(event, cx);
         }),
@@ -146,38 +151,51 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
         workspace.set_plugin_host(Rc::new(dispatch));
     });
     let plugins = workspace.read(cx).data_dir().join("plugins");
-    cx.spawn(async move |cx| {
-        cx.background_spawn(async move { source::clear_staging(&plugins) })
-            .await;
-        for record in records.await? {
-            let root = record.root.clone();
-            let data = identity_dir.clone();
-            if let Ok(manifest) = cx
-                .background_spawn(async move { manifest::read(&root, &data) })
-                .await
-            {
-                host.update(cx, |host, _| {
-                    host.identities
-                        .insert(manifest.id.clone(), (manifest.name, manifest.version));
-                });
-            }
+    let data_dir = workspace.read(cx).data_dir().to_owned();
+    cx.spawn(async move |cx| boot(host, records, identity_dir, data_dir, plugins, cx).await)
+}
+
+async fn boot(
+    host: Entity<PluginHost>,
+    records: impl std::future::Future<Output = Result<Vec<kg_domain::Plugin>>>,
+    identity_dir: PathBuf,
+    data_dir: PathBuf,
+    plugins: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<()> {
+    cx.background_spawn(async move { source::clear_staging(&plugins) })
+        .await;
+    let records = records.await?;
+    let known: BTreeSet<_> = records.iter().map(|record| record.id.clone()).collect();
+    page::retry_orphan_stores(&data_dir, &known, cx).await;
+    for record in records {
+        let root = record.root.clone();
+        let data = identity_dir.clone();
+        if let Ok(manifest) = cx
+            .background_spawn(async move { manifest::read(&root, &data) })
+            .await
+        {
             host.update(cx, |host, _| {
-                host.records.insert(record.id.clone(), record.clone());
+                host.identities
+                    .insert(manifest.id.clone(), (manifest.name, manifest.version));
             });
-            if record.enabled
-                && let Err(error) = activate(&host, &record, None, cx).await
-            {
-                host.update(cx, |host, _| {
-                    host.warnings.insert(record.id.clone(), error.to_string());
-                });
-            }
         }
-        host.update(cx, |host, cx| {
-            host.started = true;
-            cx.notify();
+        host.update(cx, |host, _| {
+            host.records.insert(record.id.clone(), record.clone());
         });
-        Ok(())
-    })
+        if record.enabled
+            && let Err(error) = activate(&host, &record, None, cx).await
+        {
+            host.update(cx, |host, _| {
+                host.warnings.insert(record.id.clone(), error.to_string());
+            });
+        }
+    }
+    host.update(cx, |host, cx| {
+        host.started = true;
+        cx.notify();
+    });
+    Ok(())
 }
 
 /// Enabled contributions, discovered without executing plugin code.
@@ -247,6 +265,7 @@ pub struct PluginHost {
     next_activation: u64,
     permits: BTreeMap<PluginId, Arc<Mutex<Option<u64>>>>,
     components: gpui_shell::FrozenComponentRegistry,
+    drop_pages: Option<DropPages>,
     _events: Subscription,
     _watchdog: Task<()>,
     _quit: Subscription,
@@ -393,7 +412,7 @@ async fn activate(
         )));
     }
     let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
-    let asked = Grant::of(&discovered.manifest);
+    let asked = Grant::of(&discovered.manifest, &record.root);
     if !asked.within(&approved) {
         host.update(cx, |host, cx| {
             host.end_activation(&record.id);
@@ -1005,6 +1024,17 @@ impl PluginHost {
         self.components.clone()
     }
 
+    /// Registers a UI hook that drops native pages for a plugin before `WebKit` store removal.
+    pub fn set_drop_pages(&mut self, drop_pages: DropPages) {
+        self.drop_pages = Some(drop_pages);
+    }
+
+    pub(crate) fn drop_pages(&self, id: &PluginId, stores: &[[u8; 16]], cx: &mut App) {
+        if let Some(drop_pages) = &self.drop_pages {
+            drop_pages(id, stores, cx);
+        }
+    }
+
     #[must_use]
     pub fn global(cx: &App) -> Entity<Self> {
         cx.global::<PluginHostGlobal>().0.clone()
@@ -1144,8 +1174,8 @@ impl PluginHost {
     pub fn view_fetch(
         &self,
         id: gpui_kit::EntityId,
-    ) -> Option<(WeakEntity<ScriptView>, Vec<String>)> {
-        for active in self.active.values() {
+    ) -> Option<(WeakEntity<ScriptView>, PluginId, Vec<String>)> {
+        for (plugin, active) in &self.active {
             let Some(loaded) = &active.loaded else {
                 continue;
             };
@@ -1166,7 +1196,7 @@ impl PluginHost {
                     .iter()
                     .filter_map(|fetch| fetch.view_host().ok())
                     .collect();
-                return Some((view, hosts));
+                return Some((view, plugin.clone(), hosts));
             }
         }
         None
@@ -1438,6 +1468,37 @@ impl PluginHost {
                 .find(|item| item.id() == panel)
                 .and_then(|item| item.web().map(str::to_owned))
         })
+    }
+
+    /// Whether the panel keeps cookies and storage. Needs its `store` flag and an approved grant.
+    #[must_use]
+    pub fn web_store(&self, id: &PluginId, panel: &str) -> bool {
+        self.active
+            .get(id)
+            .filter(|active| active.grant.page_store)
+            .and_then(|active| {
+                active
+                    .manifest
+                    .ui
+                    .panels()
+                    .iter()
+                    .find(|item| item.id() == panel)
+                    .map(PanelContribution::store)
+            })
+            .unwrap_or(false)
+    }
+
+    /// Whether the approved grant lets this plugin keep page data.
+    #[must_use]
+    pub fn allows_page_store(&self, id: &PluginId) -> bool {
+        self.active
+            .get(id)
+            .is_some_and(|active| active.grant.page_store)
+    }
+
+    #[must_use]
+    pub fn plugin_data(&self, id: &PluginId) -> PathBuf {
+        self.data_dir.join("plugins").join(&id.0).join("data")
     }
 
     /// The plugin folder, for serving that plugin's own page.

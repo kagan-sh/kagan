@@ -5401,6 +5401,8 @@ dependencies = [
  "kg-domain",
  "kg-process",
  "kg-store",
+ "lb-wry",
+ "objc2-foundation 0.3.2",
  "rusqlite",
  "semver",
  "serde",
@@ -5410,6 +5412,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-javascript",
  "url",
+ "uuid",
  "windows-sys 0.61.2",
 ]
 

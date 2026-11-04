@@ -211,7 +211,7 @@ fn installed(root: &Path) -> Plugin {
     Plugin {
         id: PluginId(ID.into()),
         source: root.display().to_string(),
-        approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap())).unwrap(),
+        approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap(), &root)).unwrap(),
         root,
         commit: None,
         enabled: true,
@@ -635,13 +635,102 @@ fn unique(label: &str) -> String {
 }
 
 #[test]
+fn page_store_is_an_install_line_and_needs_approval_again() {
+    let plugin = plugin_dir();
+    let html = plugin.path().join("ui");
+    std::fs::create_dir_all(&html).unwrap();
+    std::fs::write(html.join("index.html"), "<p>hi</p>").unwrap();
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        !base
+            .lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later")
+    );
+    let mut value = manifest();
+    value["ui"]["panels"] = json!([{
+        "id": "board",
+        "title": "Board",
+        "web": "ui/index.html",
+        "placement": "right",
+        "store": true
+    }]);
+    write_plugin(plugin.path(), &value);
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        with.lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later"),
+        "{:?}",
+        with.lines()
+    );
+    assert!(base.within(&with));
+    assert!(!with.within(&base));
+}
+
+#[test]
+fn webview_store_true_in_the_script_asks_for_page_data() {
+    let plugin = plugin_dir();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        r#"
+import { View } from "gpui-kit";
+import { WebView } from "gpui-component";
+export default class Plugin extends View {
+  render() {
+    return new WebView("board").url("http://127.0.0.1/").store(true);
+  }
+}
+"#,
+    )
+    .unwrap();
+    let grant = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        grant
+            .lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later"),
+        "{:?}",
+        grant.lines()
+    );
+}
+
+#[test]
+fn store_true_on_something_other_than_a_webview_asks_for_nothing() {
+    let plugin = plugin_dir();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        r#"
+import { View } from "gpui-kit";
+export default class Plugin extends View {
+  render() {
+    const cache = new Map();
+    cache.store(true);
+    return null;
+  }
+}
+"#,
+    )
+    .unwrap();
+    let grant = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        !grant
+            .lines()
+            .iter()
+            .any(|line| line == "keeps page data on macOS 14 or later"),
+        "{:?}",
+        grant.lines()
+    );
+}
+
+#[test]
 fn a_grant_grows_only_when_it_asks_for_more() {
     let dir = plugin_dir();
     let grant = |edit: &dyn Fn(&mut Value)| {
         let mut value = manifest();
         edit(&mut value);
         std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
-        Grant::of(&read_manifest(dir.path()).unwrap())
+        Grant::of(&read_manifest(dir.path()).unwrap(), dir.path())
     };
     let base = grant(&|value| {
         value["powers"]["fetch"] =
@@ -683,7 +772,7 @@ fn local_fetch_grants_http_on_that_port_and_install_line() {
         { "host": "api.github.com", "methods": ["GET"] }
     ]);
     std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
-    let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+    let grant = Grant::of(&read_manifest(dir.path()).unwrap(), dir.path());
     assert_eq!(
         grant.lines(),
         vec![
@@ -751,7 +840,7 @@ fn local_fetch_hosts_are_checked() {
         let mut value = manifest();
         value["powers"]["fetch"] = json!([{ "host": host, "methods": ["GET"] }]);
         std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
-        let grant = Grant::of(&read_manifest(dir.path()).unwrap());
+        let grant = Grant::of(&read_manifest(dir.path()).unwrap(), dir.path());
         assert!(
             grant.lines().iter().any(|line| line.contains("port 80")),
             "{host}: {:?}",
@@ -2408,6 +2497,86 @@ fn removing_a_plugin_waits_for_a_person(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut TestAppContext) {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let dropped = Rc::new(Cell::new(false));
+    let mark_drop = dropped.clone();
+    cx.update(|cx| {
+        let host = crate::PluginHost::global(cx);
+        host.update(cx, |host, _| {
+            host.set_drop_pages(Rc::new(move |_, _, _| {
+                mark_drop.set(true);
+            }));
+        });
+    });
+    let attempts = Rc::new(Cell::new(0));
+    let count = attempts.clone();
+    let _hook = crate::page::set_remove_hook(move |_| {
+        let n = count.get() + 1;
+        count.set(n);
+        if n < 3 {
+            crate::page::StoreAttempt::InUse
+        } else {
+            crate::page::StoreAttempt::Removed
+        }
+    });
+    let data = cx.update(|cx| {
+        crate::PluginHost::global(cx)
+            .read(cx)
+            .plugin_data(&PluginId(ID.into()))
+    });
+    crate::keep_store(&data, "board").expect("store");
+    let removing = plugin_op(
+        cx,
+        PluginOp::Remove {
+            id: PluginId(ID.into()),
+            thread_id: None,
+        },
+    );
+    answer_standalone(cx, "approve");
+    cx.run_until_parked();
+    assert!(dropped.get(), "pages drop in the remove turn");
+    assert_eq!(
+        attempts.get(),
+        0,
+        "remove_data_store waits for the native release after drop"
+    );
+    assert!(
+        crate::store_dir(&data, "board").join("store.id").is_file(),
+        "store.id stays until WebKit accepts the delete"
+    );
+    cx.executor().advance_clock(
+        crate::page::RELEASE_WAIT
+            .checked_sub(Duration::from_millis(1))
+            .expect("release wait"),
+    );
+    cx.run_until_parked();
+    assert_eq!(attempts.get(), 0, "still inside the release wait");
+    cx.executor().advance_clock(Duration::from_millis(1));
+    cx.run_until_parked();
+    assert_eq!(attempts.get(), 1, "first attempt after the release wait");
+    assert!(
+        crate::store_dir(&data, "board").join("store.id").is_file(),
+        "InUse keeps store.id for a retry"
+    );
+    cx.executor().advance_clock(Duration::from_secs(3));
+    cx.run_until_parked();
+    assert_eq!(
+        cx.foreground_executor().block_test(removing).unwrap(),
+        OpResult::Done
+    );
+    assert_eq!(attempts.get(), 3, "retries InUse until Removed");
+    assert!(
+        !crate::store_dir(&data, "board").join("store.id").is_file(),
+        "store.id clears only after WebKit accepts the delete"
+    );
+}
+
+#[gpui_kit::test]
 fn reload_stops_when_the_plugin_was_removed(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
@@ -3861,6 +4030,15 @@ fn a_manifest_for_a_spot_kagan_does_not_draw_is_refused() {
     declared["ui"]["panels"] =
         json!([{ "id": "notes", "title": "Notes", "view": "Notes", "placement": "bottom" }]);
     refused(declared, "bottom panels are not in this version");
+    let mut declared = manifest();
+    declared["ui"]["panels"] = json!([{
+        "id": "notes",
+        "title": "Notes",
+        "view": "Notes",
+        "placement": "right",
+        "store": true
+    }]);
+    refused(declared, "store belongs on WebView.store(true)");
 }
 
 #[test]
@@ -4340,7 +4518,8 @@ fn a_cli_command_two_plugins_declare_is_refused(cx: &mut TestAppContext) {
         Plugin {
             id: PluginId("dev.test.other".into()),
             source: root.display().to_string(),
-            approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap())).unwrap(),
+            approved: serde_json::to_value(Grant::of(&read_manifest(&root).unwrap(), &root))
+                .unwrap(),
             root,
             commit: None,
             enabled: true,
@@ -4437,7 +4616,7 @@ fn forwarding(cx: &mut TestAppContext, powers: Value) -> (TempDir, Grant) {
     write_plugin(plugin.path(), &value);
     std::fs::write(plugin.path().join("main.js"), FORWARD).unwrap();
     open(cx, &[installed(plugin.path())]);
-    let grant = Grant::of(&read_manifest(plugin.path()).unwrap());
+    let grant = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     (plugin, grant)
 }
 
@@ -4706,7 +4885,7 @@ fn installed_example(root: &Path) -> Plugin {
     Plugin {
         id: manifest.id.clone(),
         source: root.display().to_string(),
-        approved: serde_json::to_value(Grant::of(&manifest)).unwrap(),
+        approved: serde_json::to_value(Grant::of(&manifest, &root)).unwrap(),
         root,
         commit: None,
         enabled: true,
@@ -4785,7 +4964,7 @@ fn installed_at(root: &Path) -> Plugin {
     Plugin {
         id: manifest.id.clone(),
         source: root.display().to_string(),
-        approved: serde_json::to_value(Grant::of(&manifest)).unwrap(),
+        approved: serde_json::to_value(Grant::of(&manifest, &root)).unwrap(),
         root,
         commit: None,
         enabled: true,
@@ -6009,7 +6188,7 @@ fn a_project_setting_takes_a_live_project_id(cx: &mut TestAppContext) {
 #[test]
 fn instruct_is_an_install_line_and_needs_approval_again() {
     let plugin = plugin_dir();
-    let base = Grant::of(&read_manifest(plugin.path()).unwrap());
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     assert!(
         !base
             .lines()
@@ -6019,7 +6198,7 @@ fn instruct_is_an_install_line_and_needs_approval_again() {
     let mut value = manifest();
     value["instruct"] = json!(true);
     write_plugin(plugin.path(), &value);
-    let with = Grant::of(&read_manifest(plugin.path()).unwrap());
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
     assert!(
         with.lines()
             .iter()
@@ -6226,4 +6405,17 @@ export default class Plugin extends View {{
     assert!(text.contains("Plugin dev.test.instruct.c:\n"));
     assert!(!text.contains("Plugin dev.test.instruct.d:\n"), "{text}");
     assert!(text.len() <= 16 * 1024, "{}", text.len());
+}
+
+#[gpui_kit::test]
+fn a_failed_store_delete_keeps_its_id_and_says_why(cx: &mut TestAppContext) {
+    let _hook = crate::page::set_remove_hook(|_| {
+        crate::page::StoreAttempt::Failed("the store is locked".into())
+    });
+    let mut async_cx = cx.to_async();
+    let removal = cx
+        .foreground_executor()
+        .block_test(crate::page::remove_web_stores(vec![[7; 16]], &mut async_cx));
+    assert!(removal.removed.is_empty(), "a failed delete keeps store.id");
+    assert_eq!(removal.warnings, vec!["the store is locked".to_owned()]);
 }

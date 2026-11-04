@@ -153,6 +153,47 @@ fn build_view(
     gpui_webview::WebView::build(builder, window, cx).map_err(|error| failure(&error.to_string()))
 }
 
+// A per-plugin `WKWebsiteDataStore` needs macOS 14 or later. Older versions keep the page private.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
+
+#[cfg(target_os = "macos")]
+#[must_use]
+pub(crate) fn macos_major() -> u32 {
+    use objc2_foundation::NSProcessInfo;
+    let version = NSProcessInfo::processInfo().operatingSystemVersion();
+    u32::try_from(version.majorVersion).unwrap_or(0)
+}
+
+// Keeps the store id only on macOS 14 or later. Older systems get None, so the page stays private.
+#[cfg(target_os = "macos")]
+#[must_use]
+pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 16]> {
+    store.filter(|_| major >= 14)
+}
+
+// Gives a page its own durable store. Run it after `page::private`: a durable store needs
+// incognito off, and the last call wins.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn with_store(
+    builder: wry::WebViewBuilder<'_>,
+    store: Option<[u8; 16]>,
+) -> wry::WebViewBuilder<'_> {
+    #[cfg(target_os = "macos")]
+    {
+        use wry::WebViewBuilderExtDarwin as _;
+        match durable_store(store, macos_major()) {
+            Some(id) => builder.with_incognito(false).with_data_store_identifier(id),
+            None => builder,
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = store;
+        builder
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

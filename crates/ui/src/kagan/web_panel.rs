@@ -4,6 +4,7 @@
 //! The native view runs on macOS only. Other systems show a one-line notice.
 
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _,
     Role, SharedString, Styled as _, Window, div,
@@ -33,7 +34,7 @@ pub(super) fn body(slot: &Slot, window: &mut Window, cx: &mut App) -> AnyElement
     #[cfg(not(target_os = "macos"))]
     let content = {
         let _ = (file, window);
-        sentence(&slot.id, ONLY_MACOS, cx)
+        sentence(&slot.id, ONLY_MACOS, true, cx)
     };
     frame(&slot.id, &slot.title, content)
 }
@@ -61,6 +62,14 @@ pub(super) fn clear(cx: &mut App) {
     native::clear(cx);
     #[cfg(not(target_os = "macos"))]
     let _ = cx;
+}
+
+// Drops every open page for a plugin so `WebKit` releases their stores before removal.
+pub(crate) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    native::drop_plugin(plugin, cx);
+    #[cfg(not(target_os = "macos"))]
+    let _ = (plugin, cx);
 }
 
 pub(crate) fn forget(slot: &str, cx: &mut App) {
@@ -104,9 +113,10 @@ fn frame(id: &str, title: &str, content: AnyElement) -> AnyElement {
         .into_any_element()
 }
 
-fn sentence(id: &str, note: &str, cx: &App) -> AnyElement {
+fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
     div()
-        .size_full()
+        .w_full()
+        .when(fill, gpui_kit::Styled::h_full)
         .flex()
         .items_center()
         .justify_center()
@@ -129,7 +139,8 @@ fn sentence(id: &str, note: &str, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
+#[cfg(target_os = "macos")]
 #[path = "web_panel_test.rs"]
 mod web_panel_test;
 

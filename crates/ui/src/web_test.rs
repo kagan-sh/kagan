@@ -1,6 +1,8 @@
 use std::path::Path;
 
 use super::{allows_navigation, csp, mime, page_event, page_url, serve};
+#[cfg(target_os = "macos")]
+use crate::page::durable_store;
 
 const PLUGIN: &str = "dev.kagan.page";
 
@@ -216,4 +218,13 @@ fn page_paths_round_trip_through_the_url() {
         .status,
         403
     );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_store_id_is_only_durable_on_macos_14() {
+    let id = [1u8; 16];
+    assert_eq!(durable_store(Some(id), 13), None);
+    assert_eq!(durable_store(Some(id), 14), Some(id));
+    assert_eq!(durable_store(None, 14), None);
 }
