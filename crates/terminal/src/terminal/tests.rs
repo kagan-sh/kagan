@@ -829,7 +829,7 @@ fn pty_pair() -> (std::fs::File, std::fs::File) {
     }
 }
 
-// Reports each WouldBlock, so a test can wait for the real blocked state instead of sleeping.
+// Sends on each WouldBlock, so a test can wait until the write really blocks.
 #[cfg(unix)]
 struct Signalled<T> {
     inner: T,
