@@ -1,5 +1,5 @@
 use std::ffi::{OsStr, OsString};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, mpsc};
@@ -829,31 +829,64 @@ fn pty_pair() -> (std::fs::File, std::fs::File) {
     }
 }
 
+// Sends on each WouldBlock, so a test can wait until the write really blocks.
+#[cfg(unix)]
+struct Signalled<T> {
+    inner: T,
+    would_block: mpsc::Sender<()>,
+}
+
+#[cfg(unix)]
+impl<T> Signalled<T> {
+    fn note<R>(&self, result: io::Result<R>) -> io::Result<R> {
+        if matches!(&result, Err(error) if error.kind() == io::ErrorKind::WouldBlock) {
+            let _ = self.would_block.send(());
+        }
+        result
+    }
+}
+
+#[cfg(unix)]
+impl Write for Signalled<std::fs::File> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let result = self.inner.write(buf);
+        self.note(result)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn a_full_pty_write_is_cancelled_by_stop() {
-    use std::io::Read;
     use std::os::fd::AsRawFd;
     let (master, mut slave) = pty_pair();
     set_nonblocking(master.as_raw_fd()).unwrap();
     set_nonblocking(slave.as_raw_fd()).unwrap();
-    let mut writer = master.try_clone().unwrap();
-    let fd = writer.as_raw_fd();
-    // Nobody reads the slave, so once the pty is full the next write must wait.
-    while matches!(writer.write(&[0_u8; 8192]), Ok(n) if n > 0) {}
+    let (would_block, is_blocked) = mpsc::channel();
+    let mut writer = Signalled {
+        inner: master.try_clone().unwrap(),
+        would_block,
+    };
+    let fd = writer.inner.as_raw_fd();
+    // Nobody reads the slave, so 1 MiB can never fit: this write ends only by stop or by error.
+    let payload = vec![0_u8; 1 << 20];
     let stop = Arc::new(AtomicBool::new(false));
     let flag = Arc::clone(&stop);
     let (done, result) = mpsc::channel();
     let worker = thread::spawn(move || {
-        let _ = done.send(write_bytes(&mut writer, b"abc", &flag, Some(fd)));
+        let _ = done.send(write_bytes(&mut writer, &payload, &flag, Some(fd)));
     });
-    thread::sleep(Duration::from_millis(100));
+    let blocked = is_blocked.recv_timeout(Duration::from_secs(5)).is_ok();
     stop.store(true, Ordering::Release);
     let observed = result.recv_timeout(Duration::from_secs(3));
     // Drain only after the verdict, so a failing run still lets the worker finish.
     let mut sink = [0_u8; 8192];
     while matches!(slave.read(&mut sink), Ok(n) if n > 0) {}
     worker.join().unwrap();
+    assert!(blocked, "the write never reached a full pty");
     assert!(
         matches!(observed, Ok(Err(_))),
         "stop did not cancel the full write: {observed:?}"
@@ -865,56 +898,41 @@ fn a_full_pty_write_is_cancelled_by_stop() {
 fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
     use std::os::fd::AsRawFd;
     use std::os::unix::net::UnixStream;
-    let (reader, mut output) = pty_pair();
-    set_nonblocking(reader.as_raw_fd()).unwrap();
-    // Stands in for the master that teardown drops before it joins the reader.
-    let owner = reader.try_clone().unwrap();
-    let owner_fd = owner.as_raw_fd();
-    let wait = dup_fd(owner_fd).unwrap();
-    let shared = Shared::settled(Screen::new(80, 24));
-    let (replies, _received) = mpsc::channel();
-    let handle = thread_read(
-        Box::new(reader),
-        shared.clone(),
-        replies,
-        Arc::new(AtomicBool::new(false)),
-        Some(wait),
-    );
-    thread::sleep(Duration::from_millis(100));
-    // Made before the close, so its number cannot be owner_fd.
-    let (unrelated, mut peer) = UnixStream::pair().unwrap();
-    drop(owner);
-    // Reuse the number the closed master had. A reader still polling it now waits on this socket.
-    // SAFETY: owner_fd is a number this test just freed; dup2 makes it a copy of the socket.
+    let mut terminal = Terminal::spawn(
+        sh("stty -echo; read first; printf 'ready\\n'; read line; printf 'got:%s\\n' \"$line\"; sleep 30"),
+        80,
+        24,
+    )
+    .unwrap();
+    let reap = Reap(terminal.process_id());
+    // The child prints nothing until it gets input, so the reader's next WouldBlock comes after this arms the gate.
+    let (reached, at_poll) = mpsc::channel();
+    let (resume, held) = mpsc::channel();
+    *lock(&terminal.shared.poll_gate) = Some((reached, held));
+    terminal.write(b"go\n".to_vec()).unwrap();
+    at_poll
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the reader never reached its poll");
+    // Made before the master closes, so the socket cannot take the master's number.
+    let (unrelated, _peer) = UnixStream::pair().unwrap();
+    let master = terminal.master.take().unwrap();
+    let master_fd = MasterPty::as_raw_fd(master.as_ref()).unwrap();
+    drop(master);
+    // SAFETY: drop(master) freed master_fd, so dup2 gives it a copy of the socket. The test closes it below.
     assert_eq!(
-        unsafe { libc::dup2(unrelated.as_raw_fd(), owner_fd) },
-        owner_fd
+        unsafe { libc::dup2(unrelated.as_raw_fd(), master_fd) },
+        master_fd
     );
-    output.write_all(b"FIRST").unwrap();
-    let end = Instant::now() + Duration::from_secs(1);
-    while !lock(&shared.screen).transcript().contains("FIRST") && Instant::now() < end {
-        thread::sleep(Duration::from_millis(5));
-    }
-    thread::sleep(Duration::from_millis(100));
-    output.write_all(b"SECOND").unwrap();
-    thread::sleep(Duration::from_millis(200));
-    let got = lock(&shared.screen).transcript();
-    // Wake a reader that waits on the socket, then close the slave so every reader ends.
-    peer.write_all(b"wake").unwrap();
-    drop(output);
-    let (joined, done) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = handle.join();
-        let _ = joined.send(());
-    });
-    let joined_in_time = done.recv_timeout(Duration::from_secs(3)).is_ok();
-    // SAFETY: this closes the copy that dup2 made; unrelated still owns its own number.
-    unsafe { libc::close(owner_fd) };
+    terminal.write(b"hello\n".to_vec()).unwrap();
+    resume.send(()).unwrap();
+    let frame = wait_for(&terminal, "got:hello");
+    // SAFETY: master_fd is the copy dup2 made, and only this test owns it.
+    unsafe { libc::close(master_fd) };
+    drop(reap);
     assert!(
-        got.contains("SECOND"),
-        "reader stopped seeing output after its fd number was reused: {got:?}"
+        frame.contains("got:hello"),
+        "reader stopped seeing output after its fd number was reused: {frame}"
     );
-    assert!(joined_in_time, "reader did not join");
 }
 
 #[cfg(unix)]

@@ -135,6 +135,8 @@ impl Terminal {
             eof_gate: Arc::default(),
             #[cfg(test)]
             publish_gate: Arc::default(),
+            #[cfg(test)]
+            poll_gate: Arc::default(),
         };
         let ended = Arc::new(AtomicBool::new(false));
         let write_stop = Arc::new(AtomicBool::new(false));
@@ -515,6 +517,11 @@ fn thread_read(
                 }
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    #[cfg(test)]
+                    if let Some((reached, resume)) = lock(&shared.poll_gate).take() {
+                        let _ = reached.send(());
+                        let _ = resume.recv();
+                    }
                     // O_NONBLOCK is shared across the master's dups; sleep would spin an idle pty.
                     #[cfg(unix)]
                     if let Some(fd) = &wait_fd {
@@ -731,6 +738,9 @@ fn is_unsafe_control(c: char) -> bool {
     matches!(c, '\0'..='\u{8}' | '\u{b}'..='\u{c}' | '\u{e}'..='\u{1f}' | '\u{7f}'..='\u{9f}')
 }
 
+#[cfg(test)]
+type PollGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>);
+
 // What the reader thread and the terminal share. Versions move and grids are built only with the
 // screen locked, so a grid's version is the screen's version when it was built.
 #[derive(Clone)]
@@ -753,6 +763,9 @@ struct Shared {
     /// Test only: the teardown waits on this before it publishes the final screen.
     #[cfg(test)]
     publish_gate: Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
+    // Test only: the reader sends on the first channel when it reaches its poll, then waits on the second.
+    #[cfg(test)]
+    poll_gate: Arc<Mutex<Option<PollGate>>>,
 }
 
 impl Shared {
@@ -779,6 +792,8 @@ impl Shared {
             eof_gate: Arc::default(),
             #[cfg(test)]
             publish_gate: Arc::default(),
+            #[cfg(test)]
+            poll_gate: Arc::default(),
         }
     }
 
