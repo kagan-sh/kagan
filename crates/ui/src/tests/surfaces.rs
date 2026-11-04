@@ -1572,17 +1572,20 @@ fn install_webview(data: &Path) {
 }
 
 fn placed(native: Option<bool>, note: &str) -> bool {
-    native == Some(true) || note.contains("could not open") || platform_note(note)
+    native == Some(true)
+        || note.contains("could not open")
+        || note.contains("WebView2 Runtime")
+        || platform_note(note)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 const fn platform_note(_note: &str) -> bool {
     false
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn platform_note(note: &str) -> bool {
-    note == crate::components::ONLY_MACOS
+    note == crate::components::UNAVAILABLE
 }
 
 fn page_place(
@@ -1891,8 +1894,6 @@ fn a_closed_window_gets_no_page_job(cx: &mut TestAppContext) {
 fn a_page_job_queued_before_close_does_not_reach_the_reopened_panel(cx: &mut TestAppContext) {
     let (_kagan, _window, _data, seen) = open_life(cx);
     let plugin = PluginId(LIFE.into());
-    // Queue under the old page token and drop that token before the script can
-    // observe the job, then reopen and queue under a new token.
     cx.update(|cx| {
         crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
         assert!(crate::kagan::queue_page(

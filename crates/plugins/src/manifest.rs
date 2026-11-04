@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
+use gpui_shell::HttpRequestGrant;
 use indexmap::IndexMap;
 use kg_domain::{OpError, PluginId, ThemeFile};
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,7 @@ const KEYS: &[&str] = &[
     "entry",
     "icon",
     "instructions",
+    "instruct",
     "powers",
     "settings",
     "commands",
@@ -41,6 +43,8 @@ pub(crate) struct Manifest {
     pub(crate) icon: Option<PathBuf>,
     #[serde(default)]
     pub(crate) instructions: Option<String>,
+    #[serde(default)]
+    pub(crate) instruct: bool,
     #[serde(default)]
     pub(crate) powers: Powers,
     #[serde(default)]
@@ -104,12 +108,138 @@ pub(crate) struct Fetch {
     pub(crate) methods: BTreeSet<Method>,
 }
 
+pub(crate) const LOCAL_FETCH_CAP: usize = 8;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum FetchKind {
+    Remote,
+    Loopback { host: String, port: u16 },
+}
+
+impl Fetch {
+    pub(crate) fn kind(&self) -> Result<FetchKind, String> {
+        parse_fetch_host(&self.host)
+    }
+
+    pub(crate) fn view_host(&self) -> Result<String, String> {
+        match self.kind()? {
+            FetchKind::Remote => Ok(self.host.clone()),
+            FetchKind::Loopback { host, .. } => Ok(host),
+        }
+    }
+
+    pub(crate) fn http_grant(&self) -> Result<HttpRequestGrant, String> {
+        let methods = self.methods.iter().map(|method| method.name());
+        Ok(match self.kind()? {
+            FetchKind::Remote => {
+                HttpRequestGrant::new(self.host.clone(), methods, Vec::<String>::new(), ["/"])
+            }
+            FetchKind::Loopback { host, port } => {
+                HttpRequestGrant::new(host, methods, Vec::<String>::new(), ["/"])
+                    .scheme("http")
+                    .port(port)
+            }
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) enum Method {
     #[serde(rename = "GET")]
     Get,
     #[serde(rename = "POST")]
     Post,
+}
+
+impl Method {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+        }
+    }
+}
+
+fn parse_fetch_host(raw: &str) -> Result<FetchKind, String> {
+    if raw.eq_ignore_ascii_case("127.0.0.1") || raw.eq_ignore_ascii_case("localhost") {
+        return Err(format!(
+            "fetch host {raw:?} must be http://127.0.0.1:<port> or http://localhost:<port>"
+        ));
+    }
+    if reaches_this_computer(raw) {
+        return Err(
+            "loopback fetch needs an approved explicit HTTP port (IPv6 is unsupported)".into(),
+        );
+    }
+    match url::Url::parse(raw) {
+        Ok(url) => {
+            if url.scheme() != "http" {
+                return Err(format!(
+                    "fetch host {raw:?} must be a hostname, or http://127.0.0.1:<port>"
+                ));
+            }
+            let Some(host) = url.host_str() else {
+                return Err(format!("fetch host {raw:?} needs a host"));
+            };
+            if !host.eq_ignore_ascii_case("127.0.0.1") && !host.eq_ignore_ascii_case("localhost") {
+                return Err(format!(
+                    "http fetch is only for 127.0.0.1 or localhost, not {host:?}"
+                ));
+            }
+            let port = explicit_loopback_port(raw)?;
+            if url.path() != "/" && !url.path().is_empty()
+                || url.query().is_some()
+                || url.fragment().is_some()
+                || !url.username().is_empty()
+                || url.password().is_some()
+            {
+                return Err(format!("local fetch {raw:?} must be only http://host:port"));
+            }
+            Ok(FetchKind::Loopback {
+                host: host.to_ascii_lowercase(),
+                port,
+            })
+        }
+        Err(_)
+            if raw.contains("://") || raw.is_empty() || raw.contains('/') || raw.contains(' ') =>
+        {
+            Err(format!(
+                "fetch host {raw:?} must be a hostname, or http://127.0.0.1:<port>"
+            ))
+        }
+        Err(_) => Ok(FetchKind::Remote),
+    }
+}
+
+// Names that dial this computer must not become a remote HTTPS grant.
+// Every IPv6 literal counts as this computer, not only IPv6 loopback.
+fn reaches_this_computer(raw: &str) -> bool {
+    let name = raw.trim_start_matches('[').trim_end_matches(']');
+    let bare = name.trim_end_matches('.');
+    let dns = bare.to_ascii_lowercase();
+    if dns == "localhost" || dns.ends_with(".localhost") {
+        return true;
+    }
+    match bare.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_unspecified(),
+        Ok(std::net::IpAddr::V6(_)) => true,
+        Err(_) => false,
+    }
+}
+
+// `Url::port` drops a scheme's default, so `http://127.0.0.1:80` looks unported.
+fn explicit_loopback_port(raw: &str) -> Result<u16, String> {
+    let Some((_, authority)) = raw.split_once("://") else {
+        return Err(format!("local fetch {raw:?} needs an explicit port"));
+    };
+    let authority = authority
+        .split_once(['/', '?', '#'])
+        .map_or(authority, |(head, _)| head);
+    let Some((_, port)) = authority.rsplit_once(':') else {
+        return Err(format!("local fetch {raw:?} needs an explicit port"));
+    };
+    port.parse::<u16>()
+        .map_err(|_| format!("local fetch {raw:?} needs a valid explicit port"))
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,7 +277,7 @@ impl Area {
             Self::Threads => (
                 "threads",
                 "Threads",
-                "reads, starts and changes your threads, and reads their changed files",
+                "reads, starts and changes your threads, reads their screen text, and reads their changed files",
             ),
             Self::Database => ("database", "Database", "keeps its own database"),
             Self::Process => (
@@ -188,7 +318,7 @@ impl Settings {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Setting {
     String {
@@ -201,6 +331,11 @@ pub enum Setting {
         #[serde(default)]
         default: Option<bool>,
     },
+    Number {
+        title: String,
+        #[serde(default)]
+        default: Option<serde_json::Number>,
+    },
     Select {
         title: String,
         options: Vec<String>,
@@ -208,6 +343,9 @@ pub enum Setting {
         default: Option<String>,
     },
     Folder {
+        title: String,
+    },
+    Project {
         title: String,
     },
     Provider {
@@ -238,8 +376,10 @@ impl Setting {
         match self {
             Self::String { title, .. }
             | Self::Boolean { title, .. }
+            | Self::Number { title, .. }
             | Self::Select { title, .. }
             | Self::Folder { title }
+            | Self::Project { title }
             | Self::Provider { title }
             | Self::Secret { title } => title,
         }
@@ -249,7 +389,11 @@ impl Setting {
         match self {
             Self::String { default, .. } | Self::Select { default, .. } => default.clone().into(),
             Self::Boolean { default, .. } => (*default).into(),
-            Self::Folder { .. } | Self::Provider { .. } | Self::Secret { .. } => Value::Null,
+            Self::Number { default, .. } => default.clone().map_or(Value::Null, Value::Number),
+            Self::Folder { .. }
+            | Self::Project { .. }
+            | Self::Provider { .. }
+            | Self::Secret { .. } => Value::Null,
         }
     }
 }
@@ -329,6 +473,7 @@ impl Manifest {
         self.check_tools(root)?;
         self.check_options()?;
         self.check_native()?;
+        self.check_fetch()?;
         self.check_read(data_dir)?;
         self.themes(root)?;
         self.shown().try_for_each(plain_line)
@@ -373,6 +518,9 @@ impl Manifest {
                 || !command_ids.insert(&command.id)
             {
                 return Err("commands need unique nonempty ids and titles".into());
+            }
+            if command.header && command.when != crate::commands::CommandWhen::Thread {
+                return Err("a header command needs when thread".into());
             }
             if let Some(key) = &command.key {
                 crate::commands::checked_key(key).map_err(|error| error.to_string())?;
@@ -451,6 +599,19 @@ impl Manifest {
         for program in &self.powers.run {
             if program.program.is_empty() || Path::new(&program.program).components().count() != 1 {
                 return Err("run program must be a name on PATH".into());
+            }
+        }
+        Ok(())
+    }
+
+    fn check_fetch(&self) -> Result<(), String> {
+        let mut local = 0;
+        for fetch in &self.powers.fetch {
+            if matches!(fetch.kind()?, FetchKind::Loopback { .. }) {
+                local += 1;
+                if local > LOCAL_FETCH_CAP {
+                    return Err(format!("at most {LOCAL_FETCH_CAP} local fetch entries"));
+                }
             }
         }
         Ok(())
@@ -654,6 +815,8 @@ pub(crate) struct Grant {
     /// A web panel or `WebView.store(true)` keeps page cookies and storage.
     #[serde(default)]
     pub(crate) page_store: bool,
+    #[serde(default)]
+    pub(crate) instruct: bool,
 }
 
 impl Grant {
@@ -667,7 +830,9 @@ impl Grant {
                     Setting::Folder { title } => Some((key.clone(), title.clone())),
                     Setting::String { .. }
                     | Setting::Boolean { .. }
+                    | Setting::Number { .. }
                     | Setting::Select { .. }
+                    | Setting::Project { .. }
                     | Setting::Provider { .. }
                     | Setting::Secret { .. } => None,
                 })
@@ -679,6 +844,7 @@ impl Grant {
                 .iter()
                 .any(crate::contributions::PanelContribution::store)
                 || crate::development::calls_webview_store(root),
+            instruct: manifest.instruct,
         }
     }
 
@@ -744,6 +910,7 @@ impl Grant {
                 .collect(),
             folders,
             page_store: self.page_store && other.page_store,
+            instruct: self.instruct && other.instruct,
         }
     }
 
@@ -770,6 +937,7 @@ impl Grant {
                 .keys()
                 .all(|key| approved.folders.contains_key(key))
             && (!self.page_store || approved.page_store)
+            && (!self.instruct || approved.instruct)
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -794,16 +962,22 @@ impl Grant {
                 None => format!("runs {}", program.program),
             });
         }
+        let mut local_ports = BTreeSet::new();
         for fetch in &powers.fetch {
-            let methods: Vec<&str> = fetch
+            let methods = fetch
                 .methods
                 .iter()
-                .map(|method| match method {
-                    Method::Get => "GET",
-                    Method::Post => "POST",
-                })
-                .collect();
-            lines.push(format!("talks to {} ({})", fetch.host, methods.join(", ")));
+                .map(|method| method.name())
+                .collect::<Vec<_>>()
+                .join(", ");
+            match fetch.kind() {
+                Ok(FetchKind::Loopback { port, .. }) => {
+                    if local_ports.insert(port) {
+                        lines.push(format!("talks to programs on this computer (port {port})"));
+                    }
+                }
+                _ => lines.push(format!("talks to {} ({methods})", fetch.host)),
+            }
         }
         if powers.clipboard.read {
             lines.push("reads your clipboard".into());
@@ -822,6 +996,9 @@ impl Grant {
         }
         if self.page_store {
             lines.push("keeps page data".into());
+        }
+        if self.instruct {
+            lines.push("adds instructions to a thread's program".into());
         }
         lines
     }

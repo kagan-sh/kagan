@@ -167,6 +167,7 @@ fn main() -> ExitCode {
     }
     let reply = match cli.command.unwrap_or(Command::Op(Box::new(Op::Open))) {
         Command::Mcp { thread } => socket::location()
+            .and_then(|location| socket::before_connect(&location).map(|()| location))
             .and_then(|location| socket::name(&location))
             .and_then(Client::connect)
             .and_then(|mut client| {

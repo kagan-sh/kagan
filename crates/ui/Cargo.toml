@@ -23,20 +23,22 @@ image = { version = "=0.25.10", default-features = false, features = ["png"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 raw-window-handle.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
-# GPUI Fast draws GPUI menus over the Browser's native page. Other systems have no page.
+# GPUI Fast draws menus over the native page.
 gpui-kit = { workspace = true, features = ["gpui-fast"] }
 gpui-shell = { workspace = true, features = ["gpui-fast"] }
 gpui-webview.workspace = true
 wry = { version = "=0.53.3", package = "lb-wry" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
 objc2-foundation = { version = "=0.3.2", default-features = false, features = ["NSString", "NSProcessInfo"] }
 objc2 = "=0.6.4"
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSApplication", "NSDockTile", "NSImage", "NSBitmapImageRep", "NSImageRep", "std"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+tempfile = "=3.27.0"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
 windows = { version = "=0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_Xps", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_WindowsAndMessaging"] }
+gpui-webview = { workspace = true, features = ["windows-composition"] }
 
 [dev-dependencies]
 dunce = "=1.0.5"

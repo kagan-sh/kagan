@@ -1,7 +1,7 @@
 //! A plugin panel whose body is an HTML file in the plugin folder.
 //!
 //! The page is shown only while that panel is on screen, and dropped when the panel closes.
-//! The native view is macOS for now. Other systems show one sentence.
+//! The native view runs on macOS only. Other systems show a one-line notice.
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -32,7 +32,7 @@ pub(super) fn body(slot: &Slot, window: &mut Window, cx: &mut App) -> AnyElement
     frame(&slot.id, &slot.title, &shown, cx)
 }
 
-/// Delivers JSON from the plugin script to the open page.
+// Errors say why the page could not take the message, such as when it is off screen.
 pub(crate) fn post(
     plugin: &PluginId,
     panel: &str,
@@ -95,7 +95,7 @@ pub(crate) fn forget(slot: &str, cx: &mut App) {
     if let Some(index) = find(cx, slot) {
         let page = cx.default_global::<Pages>().pages.remove(index);
         page.ipc.close();
-        // Dropping the strong token expires any page job still waiting on next().
+        // Dropping the life token expires any page job still waiting in `next()`.
         drop(page.life);
     }
     #[cfg(not(target_os = "macos"))]
@@ -132,7 +132,7 @@ pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
     }
 }
 
-/// Pushes the live Workbench theme into every open page, even when the window is not drawing.
+// Pushes the live Workbench theme to every open page, even when the window is not drawing.
 pub(super) fn repaint(cx: &mut App) {
     #[cfg(target_os = "macos")]
     if cx.has_global::<Pages>() {
@@ -374,34 +374,32 @@ fn build(
             None,
         )
     };
-    let builder = web::builder(
-        &url,
-        move |target| web::allows_navigation(&navigation, &target),
-        store,
-    )
-    .with_file_dialog(false)
-    .with_drag_drop_handler(|_| true)
-    .with_initialization_script(BRIDGE)
-    .with_ipc_handler(move |request: wry::http::Request<String>| {
-        let body = request.into_body();
-        if body.len() <= kg_plugins::MESSAGE_CAP {
-            let _ = sender.try_send(body);
-        }
-    })
-    .with_custom_protocol(SCHEME.to_owned(), move |_id, request| {
-        let css = served_theme.get();
-        let served = web::serve(
-            &root,
-            &protocol_plugin,
-            request.method().as_str(),
-            &request.uri().to_string(),
-            &hosts,
-            &css,
-        );
-        http_response(served)
-    });
+    let builder = web::with_store(crate::page::private(wry::WebViewBuilder::new()), store)
+        .with_url(&url)
+        .with_navigation_handler(move |target| web::allows_navigation(&navigation, &target))
+        .with_file_dialog(false)
+        .with_drag_drop_handler(|_| true)
+        .with_initialization_script(BRIDGE)
+        .with_ipc_handler(move |request: wry::http::Request<String>| {
+            let body = request.into_body();
+            if body.len() <= kg_plugins::MESSAGE_CAP {
+                let _ = sender.try_send(body);
+            }
+        })
+        .with_custom_protocol(SCHEME.to_owned(), move |_id, request| {
+            let css = served_theme.get();
+            let served = web::serve(
+                &root,
+                &protocol_plugin,
+                request.method().as_str(),
+                &request.uri().to_string(),
+                &hosts,
+                &css,
+            );
+            http_response(served)
+        });
     let view = gpui_webview::WebView::build(builder, window, cx)
-        .map_err(|error| format!("The page could not open: {error}"))?;
+        .map_err(|error| crate::page::failure(&error.to_string()))?;
     let drain = page_watch::watch(receiver, plugin, panel, generation, alive, cx);
     Ok(Built {
         view: cx.new(|_| view),

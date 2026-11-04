@@ -6,7 +6,7 @@ use kg_plugins::PluginHost;
 #[cfg(target_os = "macos")]
 use super::{Held, Pages, find, page_watch, save};
 
-/// Puts a raw IPC body on the page channel (generation is checked by the drain).
+// Puts a raw IPC body on the page channel. The drain, not this helper, checks the generation.
 #[cfg(target_os = "macos")]
 pub(crate) fn inject(plugin: &PluginId, panel: &str, raw: &str, cx: &App) -> bool {
     let Some(page) = cx.try_global::<Pages>().and_then(|pages| {
@@ -26,7 +26,7 @@ pub(crate) fn inject(plugin: &PluginId, panel: &str, raw: &str, cx: &App) -> boo
     false
 }
 
-/// Queues a page job with the open page's lifetime token, as the IPC drain does after checks.
+// Queues a page job with the open page's lifetime token, as the IPC drain does after its checks.
 #[cfg(target_os = "macos")]
 pub(crate) fn queue_page(plugin: &PluginId, panel: &str, raw: &str, cx: &mut App) -> bool {
     let Some((alive, plugin, panel)) = cx.try_global::<Pages>().and_then(|pages| {

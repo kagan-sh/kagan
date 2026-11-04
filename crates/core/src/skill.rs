@@ -451,7 +451,11 @@ pub(crate) async fn tools(
         (thread.record.id.clone(), thread.record.project_id.clone())
     });
     let catalog = catalog(this, Some(project_id), cx).await?;
-    let note = crate::thread::note(&id.0);
+    let instruct = thread.read_with(cx, |thread, _| thread.instruct.clone());
+    let note = match instruct.as_deref() {
+        Some(extra) if !extra.is_empty() => crate::thread::note_with(&id.0, extra),
+        _ => crate::thread::note(&id.0),
+    };
     let result =
         crate::thread::forward(this, crate::PluginRequest::Tools { thread_id: id }, cx).await?;
     let OpResult::Tools {

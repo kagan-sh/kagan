@@ -199,9 +199,6 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
     claude_config(&fixture, cx);
     codex_home(&fixture, cx);
     cursor_config(&fixture, cx);
-    let plugin = dunce::canonicalize(fixture.dir.path())
-        .unwrap()
-        .join("agent");
     let lines = [
         ("claude", "--resume=abc"),
         ("claude", "-c"),
@@ -234,8 +231,10 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
                 if rest == "login" {
                     assert_eq!(args, &person(rest), "{rest}: {args:?}");
                 } else {
-                    let mut expected =
-                        vec!["--plugin-dir".to_owned(), plugin.display().to_string()];
+                    let mut expected = vec![
+                        "--plugin-dir".to_owned(),
+                        cursor_plugin(&fixture, &id).display().to_string(),
+                    ];
                     expected.extend(person(rest));
                     assert_eq!(args, &expected, "{rest}: {args:?}");
                 }
@@ -243,6 +242,15 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
         }
         assert!(notices(&id, cx).await.is_empty(), "{rest}");
     }
+}
+
+fn cursor_plugin(fixture: &Fixture, id: &ThreadId) -> PathBuf {
+    dunce::canonicalize(fixture.dir.path())
+        .unwrap()
+        .join("agent")
+        .join("threads")
+        .join(&id.0)
+        .join("cursor")
 }
 
 fn leaves_out(args: &[String], ids: &[&str]) {
@@ -373,12 +381,12 @@ async fn start_again_resumes_the_cursor_conversation_the_first_start_named(
     let fixture = Fixture::new(cx).await;
     let config = cursor_config(&fixture, cx);
     let folder = dunce::canonicalize(fixture.dir.path()).unwrap();
-    let plugin = folder.join("agent");
     let elsewhere = folder.join("elsewhere");
     std::fs::create_dir_all(&elsewhere).unwrap();
     let run = fixture.dir.path().join("cursor-run");
     let program = fake_agent(&run, "cursor-agent");
     let (id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
+    let plugin = cursor_plugin(&fixture, &id);
     let (first, _) = ran(&run);
     let conversation = after(&first, "--new-session-id").expect("a conversation id");
     assert_eq!(
@@ -450,7 +458,7 @@ async fn start_again_resumes_the_cursor_conversation_the_first_start_named(
         start_again(&id, &run, cx).await,
         [
             "--plugin-dir".to_owned(),
-            plugin.display().to_string(),
+            cursor_plugin(&fixture, &id).display().to_string(),
             "--resume".to_owned(),
             conversation,
         ]
@@ -461,14 +469,11 @@ async fn start_again_resumes_the_cursor_conversation_the_first_start_named(
 async fn a_worktree_name_is_not_a_cursor_subcommand(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     cursor_config(&fixture, cx);
-    let plugin = dunce::canonicalize(fixture.dir.path())
-        .unwrap()
-        .join("agent");
     let lines = [("-w", "agent"), ("--worktree", "login")];
     for (number, (flag, name)) in lines.into_iter().enumerate() {
         let run = fixture.dir.path().join(format!("worktree-{number}"));
         let program = fake_agent(&run, "cursor-agent");
-        let (_id, _reap) = started(
+        let (id, _reap) = started(
             &fixture,
             &format!("{} {flag} {name}", program.display()),
             cx,
@@ -480,7 +485,7 @@ async fn a_worktree_name_is_not_a_cursor_subcommand(cx: &mut TestAppContext) {
             named,
             [
                 "--plugin-dir".to_owned(),
-                plugin.display().to_string(),
+                cursor_plugin(&fixture, &id).display().to_string(),
                 "--new-session-id".to_owned(),
                 stored,
                 flag.to_owned(),

@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::{App, AppContext, AsyncApp, Context, Entity, WeakEntity};
 use kg_domain::{
     EnvironmentStatus, EventKind, OpError, OpResult, SelectMode, ThreadId, ThreadOp, ThreadStatus,
+    TurnOutcome,
 };
 use kg_terminal::{Exit, Finished, Launch, Terminal};
 
@@ -437,9 +438,10 @@ fn watch(cx: &mut Context<Workspace>) {
     cx.spawn(async move |this, cx| {
         loop {
             cx.background_executor().timer(TICK).await;
-            let Ok((ended, waited, keep, idle)) = this.update(cx, |workspace, cx| {
+            let Ok((ended, waited, started, keep, idle)) = this.update(cx, |workspace, cx| {
                 let mut ended = Vec::new();
                 let mut waited = Vec::new();
+                let mut started = Vec::new();
                 let mut keep = Vec::new();
                 // Whether anything still needs following: a running program, or a screen still settling.
                 let mut following = false;
@@ -470,8 +472,12 @@ fn watch(cx: &mut Context<Workspace>) {
                     }
                     if let Some(thread) = workspace.threads.get(id) {
                         match follow(thread, terminal.title().as_deref(), now, cx) {
-                            Some(true) => cx.emit(WorkspaceEvent::Changed),
-                            Some(false) => waited.push(id.clone()),
+                            Some(Spin::Opened) => {
+                                cx.emit(WorkspaceEvent::Changed);
+                                started.push(id.clone());
+                            }
+                            Some(Spin::Resumed) => cx.emit(WorkspaceEvent::Changed),
+                            Some(Spin::Closed) => waited.push(id.clone()),
                             None => {}
                         }
                     }
@@ -486,10 +492,17 @@ fn watch(cx: &mut Context<Workspace>) {
                 }
                 following |= super::extra::poll(workspace, cx);
                 workspace.watching = following;
-                (ended, waited, keep, !workspace.watching)
+                (ended, waited, started, keep, !workspace.watching)
             }) else {
                 break;
             };
+            for id in started {
+                if let Err(error) =
+                    Workspace::events(&this, id, vec![EventKind::TurnStarted], cx).await
+                {
+                    eprintln!("kg: could not record that a turn started: {error}");
+                }
+            }
             for id in waited {
                 if let Err(error) = waiting(&this, id, cx).await {
                     eprintln!("kg: could not record that a thread is waiting: {error}");
@@ -514,6 +527,13 @@ fn watch(cx: &mut Context<Workspace>) {
     .detach();
 }
 
+/// Why a program was asked to stop. Quit still records `stopped` and `idle`, and skips `turn.ended`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StopReason {
+    Stop,
+    Quit,
+}
+
 /// Asks a running program to end and marks the thread stopping. Its exit records the stop and keeps
 /// the screen. Returns whether there was a program to end.
 pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
@@ -521,7 +541,10 @@ pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
         return false;
     };
     terminal.stop();
-    workspace.stopping.insert(id.clone());
+    workspace
+        .stopping
+        .entry(id.clone())
+        .or_insert(StopReason::Stop);
     true
 }
 
@@ -597,7 +620,7 @@ pub(crate) async fn exited(
     exit: Exit,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let stopped = this
+    let reason = this
         .update(cx, |workspace, _| {
             workspace.exiting.remove(&id);
             workspace.stopping.remove(&id)
@@ -606,53 +629,85 @@ pub(crate) async fn exited(
     let Ok(thread) = super::thread(this, &id, cx) else {
         return Ok(OpResult::Done);
     };
-    let current = thread.read_with(cx, |thread, _| thread.record.status);
+    let (current, turn_open) =
+        thread.read_with(cx, |thread, _| (thread.record.status, thread.turn_open));
     if !matches!(current, ThreadStatus::Active | ThreadStatus::Stopping) {
         return Ok(OpResult::Done);
+    }
+    if turn_open {
+        thread.update(cx, |thread, _| thread.turn_open = false);
     }
     super::halt::settle(this, &thread, cx).await?;
     this.update(cx, |workspace, cx| keep_screen(workspace, &id, cx))
         .map_err(closed)?;
-    if stopped {
-        Workspace::events(this, id, vec![EventKind::Stopped, EventKind::Idle], cx).await?;
+    if let Some(reason) = reason {
+        Workspace::events(
+            this,
+            id,
+            close_turn(
+                turn_open && reason != StopReason::Quit,
+                TurnOutcome::Interrupted,
+                None,
+                vec![EventKind::Stopped, EventKind::Idle],
+            ),
+            cx,
+        )
+        .await?;
         status_idle(this, &thread, cx).await?;
         return Ok(OpResult::Done);
     }
     let (events, next) = match exit {
         Exit::Code(0) => (
-            vec![
-                EventKind::Exited {
-                    code: Some(0),
-                    signal: None,
-                },
-                EventKind::Idle,
-            ],
+            close_turn(
+                turn_open,
+                TurnOutcome::Completed,
+                None,
+                vec![
+                    EventKind::Exited {
+                        code: Some(0),
+                        signal: None,
+                    },
+                    EventKind::Idle,
+                ],
+            ),
             ThreadStatus::Idle,
         ),
-        Exit::Code(code) => (
-            vec![
-                EventKind::Exited {
-                    code: Some(code),
-                    signal: None,
-                },
-                EventKind::Failed {
-                    error: Some(format!("the program exited with code {code}")),
-                },
-            ],
-            ThreadStatus::Error,
-        ),
-        Exit::Signal(signal) => (
-            vec![
-                EventKind::Exited {
-                    code: None,
-                    signal: Some(signal),
-                },
-                EventKind::Failed {
-                    error: Some(format!("the program was ended by signal {signal}")),
-                },
-            ],
-            ThreadStatus::Error,
-        ),
+        Exit::Code(code) => {
+            let error = format!("the program exited with code {code}");
+            (
+                close_turn(
+                    turn_open,
+                    TurnOutcome::Failed,
+                    Some(error.clone()),
+                    vec![
+                        EventKind::Exited {
+                            code: Some(code),
+                            signal: None,
+                        },
+                        EventKind::Failed { error: Some(error) },
+                    ],
+                ),
+                ThreadStatus::Error,
+            )
+        }
+        Exit::Signal(signal) => {
+            let error = format!("the program was ended by signal {signal}");
+            (
+                close_turn(
+                    turn_open,
+                    TurnOutcome::Failed,
+                    Some(error.clone()),
+                    vec![
+                        EventKind::Exited {
+                            code: None,
+                            signal: Some(signal),
+                        },
+                        EventKind::Failed { error: Some(error) },
+                    ],
+                ),
+                ThreadStatus::Error,
+            )
+        }
     };
     Workspace::events(this, id, events, cx).await?;
     status(this, &thread, next, cx).await?;
@@ -662,12 +717,20 @@ pub(crate) async fn exited(
     Ok(OpResult::Done)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Spin {
+    Opened,
+    /// Stop cleared `busy` while the title was still a spinner.
+    Resumed,
+    Closed,
+}
+
 fn follow(
     thread: &Entity<Thread>,
     title: Option<&str>,
     now: Instant,
     cx: &mut App,
-) -> Option<bool> {
+) -> Option<Spin> {
     let busy_title = title.is_some_and(busy);
     thread.update(cx, |thread, cx| {
         let next = if busy_title {
@@ -682,16 +745,41 @@ fn follow(
         if next == thread.busy {
             return None;
         }
+        let opened = next && !thread.turn_open;
         thread.busy = next;
+        thread.turn_open = next;
         cx.notify();
-        Some(next)
+        Some(if !next {
+            Spin::Closed
+        } else if opened {
+            Spin::Opened
+        } else {
+            Spin::Resumed
+        })
     })
 }
 
 async fn waiting(this: &WeakEntity<Workspace>, id: ThreadId, cx: &mut AsyncApp) -> Result<()> {
+    let reason = this
+        .update(cx, |workspace, _| workspace.stopping.get(&id).copied())
+        .map_err(closed)?;
     let thread = super::thread(this, &id, cx)?;
     done(this, &thread, cx).await?;
-    Workspace::events(this, id.clone(), vec![EventKind::Waiting], cx).await?;
+    let mut kinds = vec![EventKind::Waiting];
+    if reason != Some(StopReason::Quit) {
+        kinds.insert(
+            0,
+            EventKind::TurnEnded {
+                outcome: if reason.is_some() {
+                    TurnOutcome::Interrupted
+                } else {
+                    TurnOutcome::Completed
+                },
+                error: None,
+            },
+        );
+    }
+    Workspace::events(this, id.clone(), kinds, cx).await?;
     this.update(cx, |_, cx| cx.emit(WorkspaceEvent::Waiting(id)))
         .map_err(closed)
 }
@@ -716,6 +804,18 @@ async fn done(
         cx.emit(WorkspaceEvent::Changed);
     })
     .map_err(closed)
+}
+
+fn close_turn(
+    open: bool,
+    outcome: TurnOutcome,
+    error: Option<String>,
+    mut kinds: Vec<EventKind>,
+) -> Vec<EventKind> {
+    if open {
+        kinds.insert(0, EventKind::TurnEnded { outcome, error });
+    }
+    kinds
 }
 
 fn busy(title: &str) -> bool {

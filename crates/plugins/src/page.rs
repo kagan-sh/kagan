@@ -16,7 +16,7 @@ use crate::ui_host::{self, HostUiEvent};
 
 /// The largest JSON text `kagan.post` or `post` accepts, in bytes.
 pub const MESSAGE_CAP: usize = 1024 * 1024;
-/// The largest file the page may read from the plugin folder.
+// The largest file the page may read from the plugin folder.
 pub(crate) const FILE_CAP: u64 = 8 * 1024 * 1024;
 
 /// The custom-scheme name. The page origin is `kagan-plugin://<plugin-id>`.
@@ -59,7 +59,7 @@ pub fn read_plugin_file(root: &Path, relative: &str) -> Result<Vec<u8>, PageFile
     read_in(&dir, &relative)
 }
 
-/// The declared `web` file, checked when the manifest is read.
+// Checks the declared `web` file when the manifest is read.
 pub(crate) fn require_html(root: &Path, relative: &str) -> Result<(), String> {
     shape(relative)?;
     read_plugin_file(root, relative)

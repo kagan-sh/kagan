@@ -16,9 +16,9 @@ use crate::page::MESSAGE_CAP;
 type Job = Map<String, Value>;
 type Reply = Result<Value, String>;
 
-/// How many page jobs may wait for `next()` at once.
+// A page job is refused once this many are waiting for `next()`.
 pub(crate) const PAGE_PENDING_CAP: usize = 32;
-/// Total JSON bytes of those waiting page jobs.
+// A page job is refused if it would take waiting bytes past this.
 pub(crate) const PAGE_PENDING_BYTES: usize = MESSAGE_CAP;
 
 pub(crate) enum Ended {
@@ -56,7 +56,7 @@ impl PageBounds {
 struct PageTicket {
     job: Job,
     alive: Weak<()>,
-    /// True while this ticket still counts against the pending page cap.
+    // True until the ticket gives its page cap and bytes back.
     pending: Arc<AtomicBool>,
     bytes: usize,
     bounds: Arc<PageBounds>,
@@ -72,7 +72,7 @@ impl PageTicket {
 
 enum Queued {
     Job(Job),
-    /// Page bodies live in [`Jobs::page_waiting`]; the channel carries only the id.
+    // The body waits in [`Jobs::page_waiting`]; the channel carries only the id.
     Page(String),
 }
 
@@ -81,8 +81,8 @@ enum Queued {
 pub(crate) struct Jobs {
     queue: (Sender<Queued>, Receiver<Queued>),
     open: RefCell<BTreeMap<String, Sender<Reply>>>,
-    /// Page jobs still waiting for `next()`, so a timeout can drop their bodies.
-    /// `Arc`/`Mutex` so the `Send` `next()` future can take a ticket without the `Rc`.
+    // Page jobs waiting for `next()`. A timeout drops their bodies from here.
+    // Arc and Mutex, not Rc: the `Send` `next()` future takes a ticket from it.
     page_waiting: Arc<Mutex<BTreeMap<String, PageTicket>>>,
     bounds: Arc<PageBounds>,
     next: Cell<u64>,
@@ -102,7 +102,7 @@ impl Jobs {
         })
     }
 
-    /// Bytes of page payloads still held for `next()` (not yet timed out or taken).
+    // Bytes held for `next()`: not yet timed out or taken.
     pub(crate) fn pending_page_bytes(&self) -> usize {
         self.bounds.bytes()
     }
@@ -121,7 +121,7 @@ impl Jobs {
         Some((id, replied))
     }
 
-    /// Queues a page job that dies with `alive`. Refuses when the pending page cap is full.
+    // Queues a page job, dropped once `alive` is gone. None when the page cap is full.
     pub(crate) fn send_page(
         &self,
         mut job: Job,
