@@ -56,7 +56,7 @@ pub(super) fn body(slot: &Slot, file: &str, window: &mut Window, cx: &mut App) -
     )
 }
 
-/// A warning alone fills the panel. Over a page it takes its own height; the page keeps the rest.
+// A warning alone fills the panel. Over a page it takes its own height; the page keeps the rest.
 pub(super) fn panel_body(
     id: &str,
     note: Option<&str>,

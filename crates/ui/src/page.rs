@@ -153,7 +153,7 @@ fn build_view(
     gpui_webview::WebView::build(builder, window, cx).map_err(|error| failure(&error.to_string()))
 }
 
-/// macOS 14+ is required for a per-plugin `WKWebsiteDataStore`; older versions keep the page private.
+// A per-plugin `WKWebsiteDataStore` needs macOS 14+. Older versions keep the page private.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
 
@@ -165,15 +165,15 @@ pub(crate) fn macos_major() -> u32 {
     u32::try_from(version.majorVersion).unwrap_or(0)
 }
 
-/// The store id on macOS 14 or later. Otherwise None, and the page stays private.
+// The store id on macOS 14 or later. Otherwise None, and the page stays private.
 #[cfg(target_os = "macos")]
 #[must_use]
 pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 16]> {
     store.filter(|_| major >= 14)
 }
 
-/// Gives a page its own durable store. Must run after `page::private`: a durable store needs
-/// incognito off, and the last call wins.
+// Gives a page its own durable store. Must run after `page::private`: a durable store needs
+// incognito off, and the last call wins.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn with_store(
     builder: wry::WebViewBuilder<'_>,

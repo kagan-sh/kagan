@@ -272,7 +272,6 @@ pub struct PluginHost {
     next_activation: u64,
     permits: BTreeMap<PluginId, Arc<Mutex<Option<u64>>>>,
     components: gpui_shell::FrozenComponentRegistry,
-    // The UI drops a plugin's native pages, so `WebKit` releases their stores before removal.
     drop_pages: Option<DropPages>,
     _events: Subscription,
     _watchdog: Task<()>,
@@ -1477,7 +1476,7 @@ impl PluginHost {
         })
     }
 
-    /// Whether the panel keeps cookies and storage. False unless the approved grant allows page data.
+    /// Whether the panel keeps cookies and storage. Needs its `store` flag and an approved grant.
     #[must_use]
     pub fn web_store(&self, id: &PluginId, panel: &str) -> bool {
         self.active
@@ -1503,7 +1502,6 @@ impl PluginHost {
             .is_some_and(|active| active.grant.page_store)
     }
 
-    /// This plugin's read-write data folder.
     #[must_use]
     pub fn plugin_data(&self, id: &PluginId) -> PathBuf {
         self.data_dir.join("plugins").join(&id.0).join("data")

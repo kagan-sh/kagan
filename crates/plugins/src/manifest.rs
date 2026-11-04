@@ -812,7 +812,6 @@ pub(crate) struct Grant {
     /// The folder a person approved for each folder setting, canonical.
     #[serde(default)]
     pub(crate) paths: BTreeMap<String, PathBuf>,
-    /// A web panel or `WebView.store(true)` keeps page cookies and storage.
     #[serde(default)]
     pub(crate) page_store: bool,
     #[serde(default)]
