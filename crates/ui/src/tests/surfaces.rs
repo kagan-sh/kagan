@@ -1894,8 +1894,6 @@ fn a_closed_window_gets_no_page_job(cx: &mut TestAppContext) {
 fn a_page_job_queued_before_close_does_not_reach_the_reopened_panel(cx: &mut TestAppContext) {
     let (_kagan, _window, _data, seen) = open_life(cx);
     let plugin = PluginId(LIFE.into());
-    // Queue under the old page token, then drop that token before the script sees the job.
-    // Reopen the panel and queue under a new token.
     cx.update(|cx| {
         crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
         assert!(crate::kagan::queue_page(
