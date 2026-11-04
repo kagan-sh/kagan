@@ -117,7 +117,7 @@ pub(crate) async fn remove(
         count => format!("Remove “{}” and its {count} threads", project.name),
     };
     let question = format!("{subject} from kagan? The folder stays on disk.");
-    super::archive::approve(None, requester, question, "Remove", cx).await?;
+    crate::thread::archive::approve(None, requester, question, "Remove", cx).await?;
     let threads = threads.into_iter().map(|thread| thread.id).collect();
     let submitted = this
         .update(cx, |workspace, _| {
@@ -197,11 +197,11 @@ pub(crate) async fn remove_project(
         .call(move |store| store.remove_project(&lookup, at))
         .await?;
     this.update(cx, |workspace, cx| {
-        super::archive::forget_deleted(workspace, events, cx);
+        crate::thread::archive::forget_deleted(workspace, events, cx);
     })
     .map_err(closed)?;
     crate::Workspace::refresh(this, cx).await?;
-    super::agent::forget(this, found, cx).await;
+    crate::thread::agent::forget(this, found, cx).await;
     if failures.is_empty() {
         Ok(kg_domain::OpResult::Done)
     } else {

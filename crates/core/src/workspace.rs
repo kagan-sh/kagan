@@ -335,7 +335,7 @@ impl Workspace {
                     Ok(())
                 })
                 .map_err(closed)??;
-                let result = crate::thread::remove_project(this, id.clone(), threads, cx).await;
+                let result = crate::project::remove_project(this, id.clone(), threads, cx).await;
                 this.update(cx, |workspace, _| {
                     workspace.removing_projects.remove(&id);
                 })
@@ -374,7 +374,7 @@ impl Workspace {
     /// Picks up what the previous process left: interrupted removals.
     async fn resume(this: &WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
         Self::refresh(this, cx).await?;
-        crate::thread::remember_keymap(this, cx).await?;
+        crate::settings::remember_keymap(this, cx).await?;
         let submitted = this
             .update(cx, |workspace, _| workspace.submit(Request::Leftovers))
             .map_err(closed)?;

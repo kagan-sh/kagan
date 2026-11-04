@@ -157,7 +157,7 @@ pub(super) async fn delete(
     Ok(OpResult::Done)
 }
 
-pub(super) fn forget_deleted(
+pub(crate) fn forget_deleted(
     workspace: &mut Workspace,
     deleted: Vec<(kg_domain::Event, kg_domain::ProjectId)>,
     cx: &mut gpui_kit::Context<Workspace>,
@@ -172,7 +172,7 @@ pub(super) fn forget_deleted(
     cx.notify();
 }
 
-pub(super) async fn approve(
+pub(crate) async fn approve(
     thread_id: Option<ThreadId>,
     requester: Option<Requester>,
     question: String,

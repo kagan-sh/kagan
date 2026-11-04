@@ -10,6 +10,9 @@ mod git;
 mod guide;
 mod keys;
 mod program;
+mod project;
+mod section;
+mod settings;
 mod skill;
 #[cfg(test)]
 mod tests;

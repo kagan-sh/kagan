@@ -183,7 +183,7 @@ pub(crate) async fn keymap(
         KeymapOp::Get => {
             let mut value = serde_json::to_value(load_keymap(&database).await?)?;
             let OpResult::Setting(plugins) =
-                super::forward(this, PluginRequest::Keymap(KeymapOp::Get), cx).await?
+                crate::dispatch::forward(this, PluginRequest::Keymap(KeymapOp::Get), cx).await?
             else {
                 return Err(OpError::Failed("plugin shortcuts could not be read".into()));
             };
@@ -194,7 +194,7 @@ pub(crate) async fn keymap(
             KeymapAction::Plugin { .. } => {
                 let key = if reset { key } else { sequence(&key)? };
                 let op = KeymapOp::Set { action, key, reset };
-                super::forward(this, PluginRequest::Keymap(op), cx).await
+                crate::dispatch::forward(this, PluginRequest::Keymap(op), cx).await
             }
             KeymapAction::BuiltIn(shortcut) => {
                 set_built_in(this, &database, shortcut.name, &key, reset, cx).await
@@ -202,7 +202,12 @@ pub(crate) async fn keymap(
         },
         KeymapOp::Remove { action } => match KeymapAction::parse(&action)? {
             KeymapAction::Plugin { .. } => {
-                super::forward(this, PluginRequest::Keymap(KeymapOp::Remove { action }), cx).await
+                crate::dispatch::forward(
+                    this,
+                    PluginRequest::Keymap(KeymapOp::Remove { action }),
+                    cx,
+                )
+                .await
             }
             KeymapAction::BuiltIn(_) => Err(OpError::Invalid(format!(
                 "{action} is built in and keeps a key: set another one, or reset it"
@@ -337,7 +342,7 @@ mod review_wrap_tests {
 
     #[test]
     fn guide_names_every_preference() {
-        let guide = include_str!("../guide-map.md");
+        let guide = include_str!("guide-map.md");
         for key in PREFERENCES.iter().copied().chain(["review-viewed"]) {
             assert!(guide.contains(&format!("`{key}`")), "missing {key}");
         }

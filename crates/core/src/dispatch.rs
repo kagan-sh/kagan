@@ -7,10 +7,10 @@ use kg_domain::{
 };
 
 use crate::database::{Database, Result};
-use crate::thread::project::{add_project, remove as remove_project};
-use crate::thread::section::section;
-use crate::thread::settings::{keymap, preference, theme};
-use crate::thread::{dispatch_thread, project};
+use crate::project::{add_project, remove as remove_project};
+use crate::section::section;
+use crate::settings::{keymap, preference, theme};
+use crate::thread::dispatch_thread;
 use crate::workspace::{closed, missing};
 use crate::{PluginRequest, Requester, Workspace};
 
@@ -141,7 +141,7 @@ async fn project_op(
         ProjectOp::Remove { id } => remove_project(this, id, requester, cx).await,
         ProjectOp::Reorder { id, before } => {
             let result = database
-                .call(move |store| project::reorder(store, &id, before.as_ref()))
+                .call(move |store| crate::project::reorder(store, &id, before.as_ref()))
                 .await?;
             Workspace::refresh(this, cx).await?;
             Ok(result)

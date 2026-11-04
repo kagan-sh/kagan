@@ -1,16 +1,13 @@
-mod agent;
-mod archive;
+pub(crate) mod agent;
+pub(crate) mod archive;
 mod conversation;
 mod details;
 mod extra;
 mod halt;
 mod interaction;
-pub(crate) mod project;
 mod read;
 mod run;
 mod search;
-pub(crate) mod section;
-pub(crate) mod settings;
 mod terminal;
 
 pub(crate) use crate::dispatch::{execute, forward, serialized};
@@ -18,12 +15,10 @@ pub(crate) use agent::{note, note_with};
 pub(crate) use extra::{Extras, end as end_extras};
 pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
-pub(crate) use project::remove_project;
 pub(crate) use read::{wait, wait_event};
 pub(crate) use run::resolve_program;
 pub(crate) use run::{PreparedRun, commit as commit_run, prepare as prepare_run};
 pub(crate) use search::search;
-pub(crate) use settings::remember_keymap;
 pub(crate) use terminal::StopReason;
 pub(crate) use terminal::exited;
 #[cfg(test)]

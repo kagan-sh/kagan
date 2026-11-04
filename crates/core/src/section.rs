@@ -5,7 +5,7 @@ use crate::Workspace;
 use crate::database::{Database, Result};
 use crate::workspace::id;
 
-use super::thread;
+use crate::thread::thread;
 
 fn named(name: &str) -> Result<String> {
     let name = name.trim();
