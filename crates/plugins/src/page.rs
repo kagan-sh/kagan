@@ -234,7 +234,7 @@ pub fn store_dir(data: &Path, page: &str) -> PathBuf {
 ///
 /// # Errors
 ///
-/// The folder cannot be created or the id file cannot be read or written.
+/// The folder cannot be created, or the id file cannot be written.
 pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], String> {
     let dir = store_dir(data, page);
     std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
@@ -362,7 +362,7 @@ impl Drop for RemoveHookGuard {
 }
 
 /// Waits for the native view to release, then deletes each store. Retries `DataStoreInUse`
-/// with growing waits for up to 3 seconds. Ids still held stay out of `removed`, so their
+/// with growing waits for about 3 seconds. Ids still held stay out of `removed`, so their
 /// `store.id` files stay for a later start.
 pub(crate) async fn remove_web_stores_after_release(
     ids: Vec<[u8; 16]>,
