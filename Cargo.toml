@@ -59,7 +59,7 @@ cargo-nextest = { version = "=0.9.148", locked = true }
 
 # The Browser's web view. Camera and microphone are refused, and Windows hosts the page in a composition visual (decision 131).
 [patch.crates-io]
-lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "11b65fc1b90a59a02b12f4b57e64bf1546f181c3" }
+lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "43d44d3f286a8ffd8eaf587517ed677fe6e2376f" }
 
 # Line tables keep panic locations. Full debug info dominates link time and the target directory.
 # unpacked skips dsymutil on macOS. Cargo ignores this value on MSVC, which only supports packed.

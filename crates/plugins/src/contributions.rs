@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::{Component, Path};
 
 use kg_domain::Slot;
 use serde::Deserialize;
@@ -54,7 +55,10 @@ impl Contributions {
 pub struct PanelContribution {
     pub(crate) id: String,
     pub(crate) title: String,
-    pub(crate) view: String,
+    #[serde(default)]
+    pub(crate) view: Option<String>,
+    #[serde(default)]
+    pub(crate) web: Option<String>,
     pub(crate) placement: Placement,
     pub(crate) follows: Option<Follows>,
     pub(crate) replaces: Option<Slot>,
@@ -92,7 +96,7 @@ impl Contributions {
                     panel.id
                 ));
             }
-            check_view(&panel.view)?;
+            check_body(panel)?;
             if panel.title.trim().is_empty() || panel.title.chars().any(char::is_control) {
                 return Err(format!("panel {} needs a plain title", panel.id));
             }
@@ -175,6 +179,49 @@ fn check_id<'a>(id: &'a str, ids: &mut BTreeSet<&'a str>) -> Result<(), String> 
     Ok(())
 }
 
+fn check_body(panel: &PanelContribution) -> Result<(), String> {
+    match (panel.view.as_deref(), panel.web.as_deref()) {
+        (Some(view), None) => check_view(view),
+        (None, Some(web)) => {
+            if panel.replaces.is_some() {
+                return Err(format!(
+                    "panel {} is a web panel, so it cannot replace a host slot",
+                    panel.id
+                ));
+            }
+            check_web(web)
+        }
+        _ => Err(format!(
+            "panel {} needs a view or a web page, and not both",
+            panel.id
+        )),
+    }
+}
+
+fn check_web(web: &str) -> Result<(), String> {
+    let path = Path::new(web);
+    if path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("html"))
+        && !web.starts_with('/')
+        && !web.contains('\\')
+        && !web.contains('\0')
+        && !path.is_absolute()
+        && path
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)))
+        && !web
+            .split('/')
+            .any(|part| part.is_empty() || part.eq_ignore_ascii_case("__kagan"))
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "web {web:?} must be an .html file inside the plugin"
+        ))
+    }
+}
+
 fn check_view(view: &str) -> Result<(), String> {
     if view.is_empty()
         || !view.bytes().enumerate().all(|(ix, byte)| {
@@ -213,8 +260,13 @@ impl PanelContribution {
         &self.title
     }
     #[must_use]
-    pub fn view(&self) -> &str {
-        &self.view
+    pub fn view(&self) -> Option<&str> {
+        self.view.as_deref()
+    }
+    /// The HTML file this panel shows, when its body is a web page.
+    #[must_use]
+    pub fn web(&self) -> Option<&str> {
+        self.web.as_deref()
     }
     #[must_use]
     pub fn placement(&self) -> Placement {

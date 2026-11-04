@@ -91,8 +91,16 @@ pub(crate) fn open(
     }
     #[cfg(target_os = "macos")]
     {
-        build(configure(wry::WebViewBuilder::new()), window, cx)
+        build(configure(private(wry::WebViewBuilder::new())), window, cx)
     }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn private(builder: wry::WebViewBuilder<'_>) -> wry::WebViewBuilder<'_> {
+    builder
+        .with_incognito(true)
+        .with_new_window_req_handler(|_url, _features| wry::NewWindowResponse::Deny)
+        .with_download_started_handler(|_url, _path| false)
 }
 
 #[cfg(target_os = "windows")]
@@ -108,7 +116,9 @@ fn open_windows(
     let storage = page_dir(&data).map_err(|error| failure(&error.to_string()))?;
     let mut context = wry::WebContext::new(Some(storage.clone()));
     let mut view = match build_view(
-        configure(wry::WebViewBuilder::new_with_web_context(&mut context)),
+        configure(private(wry::WebViewBuilder::new_with_web_context(
+            &mut context,
+        ))),
         window,
         cx,
     ) {

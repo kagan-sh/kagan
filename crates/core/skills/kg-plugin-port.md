@@ -125,6 +125,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 | copy as image | `host.writeClipboardPng(base64)` | direct when `powers.clipboard.write` is granted. Standard base64 PNG, at most 8 MiB. Linux returns an error: png clipboard is not available on this platform. |
 | an HTML text field a test types into | `KgInput` or `KgTextarea` with `aria_label` | direct. `kg ui click` uses that name and `kg ui type` writes the value. The shell's `Input` and `Textarea` are not seen. |
 | an iframe or embedded page | `WebView` | close. `new WebView(id).url(url)`, http or https on `127.0.0.1`, `localhost`, or a `powers.fetch` host. macOS draws the page; other systems show one sentence. A general remote page cannot move. |
+| the plugin's own HTML app | web panel | close. `"web": "ui/index.html"` instead of `"view"`. The page loads only its folder on `kagan-plugin://`. `kagan.post(message)` becomes a `page` job; `post` from `kagan/panel` returns JSON as a `kagan` event. Paint with the theme variables on `/__kagan/theme.css`. `kg ui` sees the panel and cannot drive the page. macOS draws it. |
 | open a URL | `openUrl` from `kagan/host` | direct. The system browser. |
 | toast | `toast(message, action?)` | close. `action` is `{ label, command }` and runs one of this plugin's commands. |
 | HTML drag and drop (`draggable`, `onDragStart`, `onDragOver`, `onDrop`, `onDragEnd`) | `on_drag(payload, handler)`, `on_drag_move`, `on_drop` on a `div`, `h_flex` or `v_flex` | close. The payload is text, not a `DataTransfer`. `on_drag` hears `phase` `started`, then `ended` or `cancelled` (the `onDragEnd`). A target hears `side`: `top`, `middle` or `bottom` (quarter, half, quarter), or `null` when the pointer leaves. Only the innermost target hears it, so a card that refuses a payload does the column's move in its own `on_drop`. Nothing follows the pointer: paint the dragged and active looks. Files dragged in from outside cannot move. |
@@ -134,7 +135,7 @@ A tool or CLI job has 120 seconds. A command or event has 10. The script shares 
 
 A panel may set `"follows": "thread"`. Read `context()` in `init` and loop on `onContextChanged()`. `openPanel` and `kg surface open` / `close` / `list` are the same path.
 
-Copy from `examples/plugins`: `panel`, `cli`, `sidebar`, `review`, `overlay`, `header`, `theme`.
+Copy from `examples/plugins`: `panel`, `web-panel`, `cli`, `sidebar`, `review`, `overlay`, `header`, `theme`.
 
 ## Themes
 

@@ -383,7 +383,6 @@ fn build(
     crate::page::open(window, cx, move |builder| {
         builder
             .with_url(&url)
-            .with_incognito(true)
             .with_navigation_handler(move |target| allowed(&target, &hosts).is_ok())
     })
 }

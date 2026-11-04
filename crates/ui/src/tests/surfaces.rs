@@ -1668,6 +1668,288 @@ fn a_plugin_right_panel_mounts_a_web_view(cx: &mut TestAppContext) {
     }
 }
 
+const WEB_PANEL: &str = "dev.test.web-panel";
+
+const WEB_PANEL_SOURCE: &str = r#"import { View } from "gpui-kit";
+export default class Plugin extends View {
+  render() { return ""; }
+}
+"#;
+
+fn install_web_panel(data: &Path) {
+    write_plugin(
+        data,
+        "web-panel",
+        WEB_PANEL,
+        &manifest(
+            WEB_PANEL,
+            "Web panel",
+            json!([
+                {"id": "board", "title": "Board", "web": "ui/index.html", "placement": "right"},
+                {"id": "stage", "title": "Stage", "web": "ui/index.html", "placement": "center"}
+            ]),
+            false,
+        ),
+        WEB_PANEL_SOURCE,
+    );
+    let ui = data.join("web-panel").join("ui");
+    std::fs::create_dir(&ui).unwrap();
+    std::fs::write(ui.join("index.html"), "<p>page</p>").unwrap();
+}
+
+fn web_panel_id(plugin: &str, id: &str) -> String {
+    format!("web-panel-panel-{plugin}-{id}")
+}
+
+#[gpui_kit::test]
+fn a_web_panel_is_labeled_for_kg_ui(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_web_panel);
+    wide(cx, window);
+    open_surface(cx, WEB_PANEL, "board").unwrap();
+    let right = web_panel_id(WEB_PANEL, "board");
+    wait_until(cx, |cx| shows(cx, window, &right));
+    assert_eq!(label(cx, window, &right), "Web panel");
+
+    open_surface(cx, WEB_PANEL, "stage").unwrap();
+    let center = web_panel_id(WEB_PANEL, "stage");
+    wait_until(cx, |cx| shows(cx, window, &center));
+    assert_eq!(label(cx, window, &center), "Web panel");
+}
+
+#[cfg(target_os = "macos")]
+const LIFE: &str = "dev.test.web-life";
+#[cfg(target_os = "macos")]
+const HIDE: &str = "dev.test.web-hide";
+
+#[cfg(target_os = "macos")]
+fn life_script(ready: &Path, seen: &Path) -> String {
+    let ready = serde_json::to_string(&ready.display().to_string()).unwrap();
+    let seen = serde_json::to_string(&seen.display().to_string()).unwrap();
+    format!(
+        r#"import {{ View }} from "gpui-kit";
+import {{ next, reply, fail }} from "kagan/jobs";
+import {{ writeFile }} from "fs/promises";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      await writeFile({ready}, "ready");
+      for (;;) {{
+        const job = await next();
+        try {{
+          if (job.kind === "page") await writeFile({seen}, JSON.stringify(job.message));
+          reply(job.id, null);
+        }} catch (error) {{
+          fail(job.id, String(error));
+        }}
+      }}
+    }});
+  }}
+  render() {{ return ""; }}
+}}
+"#
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn life_seen(data: &Path) -> std::path::PathBuf {
+    data.join("plugins")
+        .join(LIFE)
+        .join("data")
+        .join("seen.json")
+}
+
+#[cfg(target_os = "macos")]
+fn install_life(data: &Path) {
+    let dir = data.join("plugins").join(LIFE).join("data");
+    std::fs::create_dir_all(&dir).unwrap();
+    write_plugin(
+        data,
+        "web-life",
+        LIFE,
+        &manifest(
+            LIFE,
+            "Web life",
+            json!([
+                {"id": "board", "title": "Board", "web": "ui/index.html", "placement": "right"}
+            ]),
+            false,
+        ),
+        &life_script(&dir.join("ready"), &dir.join("seen.json")),
+    );
+    let ui = data.join("web-life").join("ui");
+    std::fs::create_dir(&ui).unwrap();
+    std::fs::write(ui.join("index.html"), "<p>page</p>").unwrap();
+}
+
+#[cfg(target_os = "macos")]
+fn open_life(
+    cx: &mut TestAppContext,
+) -> (
+    gpui_kit::Entity<crate::kagan::Kagan>,
+    AnyWindowHandle,
+    tempfile::TempDir,
+    std::path::PathBuf,
+) {
+    let (kagan, window, data) = open_with_plugins_then(cx, install_life);
+    wide(cx, window);
+    cx.update(|cx| {
+        kg_plugins::PluginHost::global(cx)
+            .update(cx, |host, cx| host.load_plugin(&PluginId(LIFE.into()), cx))
+            .unwrap();
+    });
+    let seen = life_seen(data.path());
+    let ready = seen.parent().unwrap().join("ready");
+    wait_until(cx, |_| ready.is_file());
+    let _ = std::fs::remove_file(&seen);
+    (kagan, window, data, seen)
+}
+
+#[cfg(target_os = "macos")]
+fn missed(seen: &Path, mark: &str) {
+    let text = std::fs::read_to_string(seen).unwrap_or_default();
+    assert!(!text.contains(mark), "{text}");
+}
+
+#[cfg(target_os = "macos")]
+fn life_slot() -> String {
+    format!("panel-{LIFE}-board")
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn a_closed_web_panel_gets_no_page_job(cx: &mut TestAppContext) {
+    let (_kagan, _window, _data, seen) = open_life(cx);
+    let plugin = PluginId(LIFE.into());
+    cx.update(|cx| {
+        crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
+        assert!(crate::kagan::inject(
+            &plugin,
+            "board",
+            r#"{"at":"close"}"#,
+            cx
+        ));
+        crate::kagan::forget(&life_slot(), cx);
+    });
+    open_surface(cx, LIFE, "board").unwrap();
+    close_surface(cx, LIFE, "board").unwrap();
+    missed(&seen, "close");
+    let again = cx.update(|cx| crate::kagan::inject(&plugin, "board", r#"{"at":"after"}"#, cx));
+    assert!(!again);
+    cx.run_until_parked();
+    missed(&seen, "after");
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn a_reloaded_web_panel_gets_no_queued_page_job(cx: &mut TestAppContext) {
+    let (_kagan, _window, _data, seen) = open_life(cx);
+    cx.update(|cx| {
+        let plugin = PluginId(LIFE.into());
+        crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
+        assert!(crate::kagan::inject(
+            &plugin,
+            "board",
+            r#"{"at":"reload"}"#,
+            cx
+        ));
+        assert!(crate::kagan::mark_stale(&life_slot(), cx));
+    });
+    cx.run_until_parked();
+    missed(&seen, "reload");
+    run(
+        cx,
+        Op::Plugin(PluginOp::Reload {
+            id: PluginId(LIFE.into()),
+            thread_id: None,
+        }),
+    )
+    .unwrap();
+    cx.run_until_parked();
+    missed(&seen, "reload");
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn a_closed_window_gets_no_page_job(cx: &mut TestAppContext) {
+    let (kagan, window, _data, seen) = open_life(cx);
+    cx.update(|cx| {
+        let plugin = PluginId(LIFE.into());
+        crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
+        assert!(crate::kagan::inject(
+            &plugin,
+            "board",
+            r#"{"at":"window"}"#,
+            cx
+        ));
+    });
+    drop(kagan);
+    cx.update_window(window, |_, window, _| window.remove_window())
+        .unwrap();
+    cx.run_until_parked();
+    missed(&seen, "window");
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn a_page_job_queued_before_close_does_not_reach_the_reopened_panel(cx: &mut TestAppContext) {
+    let (_kagan, _window, _data, seen) = open_life(cx);
+    let plugin = PluginId(LIFE.into());
+    cx.update(|cx| {
+        crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
+        assert!(crate::kagan::queue_page(
+            &plugin,
+            "board",
+            r#"{"at":"stale"}"#,
+            cx
+        ));
+        crate::kagan::forget(&life_slot(), cx);
+    });
+    cx.update(|cx| {
+        crate::kagan::testing_page(&plugin, "board", &life_slot(), true, cx);
+        assert!(crate::kagan::queue_page(
+            &plugin,
+            "board",
+            r#"{"at":"fresh"}"#,
+            cx
+        ));
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
+    loop {
+        cx.run_until_parked();
+        if std::fs::read_to_string(&seen)
+            .unwrap_or_default()
+            .contains("fresh")
+        {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for the page job"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let text = std::fs::read_to_string(&seen).unwrap();
+    assert!(!text.contains("stale"), "{text}");
+    assert!(text.contains("fresh"), "{text}");
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn a_hidden_web_panel_refuses_post(cx: &mut TestAppContext) {
+    let (_kagan, _window, _data) = open_with_plugins_then(cx, |_| {});
+    let plugin = PluginId(HIDE.into());
+    cx.update(|cx| {
+        crate::kagan::testing_page(&plugin, "board", "board", false, cx);
+        crate::kagan::testing_page(&plugin, "notes", "notes", true, cx);
+    });
+    let hidden = cx.update(|cx| crate::kagan::post(&plugin, "board", r#"{"hi":1}"#, cx));
+    let error = hidden.unwrap_err();
+    assert!(error.contains("not on screen"), "{error}");
+    let shown = cx.update(|cx| crate::kagan::post(&plugin, "notes", r#"{"hi":1}"#, cx));
+    let error = shown.unwrap_err();
+    assert!(!error.contains("not on screen"), "{error}");
+}
+
 #[gpui_kit::test]
 fn full_screen_gives_the_right_sidebar_the_window_and_gives_it_back(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_pair);

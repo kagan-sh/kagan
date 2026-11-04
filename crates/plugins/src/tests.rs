@@ -5572,6 +5572,342 @@ fn share_keeps_the_ssh_user_and_drops_a_token(cx: &mut TestAppContext) {
     assert_eq!(install, format!("kg plugin install {source}"));
 }
 
+const PAGE_PLUGIN: &str = "dev.test.page";
+
+struct PageRun {
+    _plugin: tempfile::TempDir,
+    seen: std::path::PathBuf,
+    posted: async_channel::Receiver<String>,
+    life: std::sync::Arc<()>,
+}
+
+fn page_script(seen: &std::path::Path) -> String {
+    let path = serde_json::to_string(&seen.display().to_string()).unwrap();
+    format!(
+        r#"
+import {{ View }} from "gpui-kit";
+import {{ next, reply, fail }} from "kagan/jobs";
+import {{ post }} from "kagan/panel";
+import {{ writeFile }} from "fs/promises";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      for (;;) {{
+        const job = await next();
+        try {{
+          if (job.kind === "page") {{
+            if (job.message && job.message.big) {{
+              await post(job.panelId, "x".repeat(2 * 1024 * 1024));
+            }} else {{
+              await writeFile({path}, JSON.stringify(job.message));
+              await post(job.panelId, {{ echo: job.message }});
+            }}
+          }}
+          reply(job.id, null);
+        }} catch (error) {{
+          await writeFile({path}, "error:" + String(error));
+          fail(job.id, String(error));
+        }}
+      }}
+    }});
+  }}
+  render() {{ return ""; }}
+}}
+"#
+    )
+}
+
+fn open_page(cx: &mut TestAppContext) -> PageRun {
+    let plugin = tempfile::tempdir().unwrap();
+    let ui = plugin.path().join("ui");
+    std::fs::create_dir(&ui).unwrap();
+    std::fs::write(ui.join("index.html"), "<p>page</p>").unwrap();
+    let manifest = json!({
+        "id": PAGE_PLUGIN,
+        "name": "Page",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "ui": { "panels": [{ "id": "board", "title": "Board", "web": "ui/index.html", "placement": "right" }] }
+    });
+    std::fs::write(plugin.path().join(manifest::FILE), manifest.to_string()).unwrap();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        "import { View } from \"gpui-kit\";\nexport default class Plugin extends View { render() { return \"\"; } }\n",
+    )
+    .unwrap();
+    open(cx, &[installed_at(plugin.path())]);
+    let data = cx.read(|cx| Workspace::global(cx).read(cx).data_dir().to_owned());
+    let seen = data
+        .join("plugins")
+        .join(PAGE_PLUGIN)
+        .join("data")
+        .join("seen.json");
+    std::fs::write(plugin.path().join("main.js"), page_script(&seen)).unwrap();
+    let (sender, posted) = async_channel::bounded(4);
+    cx.update(|cx| {
+        let ui = crate::HostUi::global(cx).unwrap();
+        cx.subscribe(&ui, move |_, event, _| {
+            if let crate::HostUiEvent::PostPage { message, reply, .. } = event {
+                let _ = sender.try_send(message.clone());
+                let _ = reply.try_send(Ok(()));
+            }
+        })
+        .detach();
+    });
+    let handle = cx.add_window(|_, _| gpui_kit::EmptyView);
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, _window, cx| {
+                crate::PluginHost::global(cx)
+                    .update(cx, |host, cx| {
+                        host.load_plugin(&PluginId(PAGE_PLUGIN.into()), cx)
+                    })
+                    .unwrap();
+            })
+            .unwrap();
+    });
+    PageRun {
+        _plugin: plugin,
+        seen,
+        posted,
+        life: std::sync::Arc::new(()),
+    }
+}
+
+fn deliver_page(cx: &mut TestAppContext, run: &PageRun, raw: &str) -> Result<(), String> {
+    let alive = std::sync::Arc::downgrade(&run.life);
+    cx.update(|cx| {
+        crate::PluginHost::global(cx).update(cx, |host, cx| {
+            host.deliver_page(&PluginId(PAGE_PLUGIN.into()), "board", raw, alive, cx)
+        })
+    })
+}
+
+#[gpui_kit::test]
+fn a_page_message_round_trips_through_the_plugin(cx: &mut TestAppContext) {
+    let run = open_page(cx);
+    deliver_page(cx, &run, r#"{"from":"page"}"#).unwrap();
+    let mut echoed = String::new();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if echoed.is_empty()
+            && let Ok(message) = run.posted.try_recv()
+        {
+            echoed = message;
+        }
+        if run.seen.is_file() && !echoed.is_empty() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        std::fs::read_to_string(&run.seen).unwrap(),
+        r#"{"from":"page"}"#
+    );
+    assert!(
+        echoed.contains("\"echo\"") && echoed.contains("\"from\":\"page\""),
+        "{echoed}"
+    );
+}
+
+#[gpui_kit::test]
+fn a_page_message_over_the_cap_is_refused(cx: &mut TestAppContext) {
+    let run = open_page(cx);
+    let over = deliver_page(cx, &run, &format!("\"{}\"", "y".repeat(crate::MESSAGE_CAP)));
+    assert!(over.unwrap_err().contains("over the"));
+    deliver_page(cx, &run, r#"{"big":true}"#).unwrap();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if run.seen.is_file() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let error = std::fs::read_to_string(&run.seen).unwrap();
+    assert!(error.starts_with("error:"), "{error}");
+    assert!(error.contains("over the"), "{error}");
+}
+
+fn open_page_holding_next(cx: &mut TestAppContext) -> tempfile::TempDir {
+    let plugin = tempfile::tempdir().unwrap();
+    let ui = plugin.path().join("ui");
+    std::fs::create_dir(&ui).unwrap();
+    std::fs::write(ui.join("index.html"), "<p>page</p>").unwrap();
+    let manifest = json!({
+        "id": PAGE_PLUGIN,
+        "name": "Page",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "ui": { "panels": [{ "id": "board", "title": "Board", "web": "ui/index.html", "placement": "right" }] }
+    });
+    std::fs::write(plugin.path().join(manifest::FILE), manifest.to_string()).unwrap();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        "import { View } from \"gpui-kit\";\nexport default class Plugin extends View { render() { return \"\"; } }\n",
+    )
+    .unwrap();
+    open(cx, &[installed_at(plugin.path())]);
+    let ready = cx.read(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .data_dir()
+            .join("plugins")
+            .join(PAGE_PLUGIN)
+            .join("data")
+            .join("ready")
+    });
+    let ready_lit = serde_json::to_string(&ready.display().to_string()).unwrap();
+    std::fs::write(
+        plugin.path().join("main.js"),
+        format!(
+            r#"
+import {{ View }} from "gpui-kit";
+import {{ writeFile }} from "fs/promises";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      await writeFile({ready_lit}, "ready");
+      await new Promise(() => {{}});
+    }});
+  }}
+  render() {{ return ""; }}
+}}
+"#
+        ),
+    )
+    .unwrap();
+    let handle = cx.add_window(|_, _| gpui_kit::EmptyView);
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, _window, cx| {
+                crate::PluginHost::global(cx)
+                    .update(cx, |host, cx| {
+                        host.load_plugin(&PluginId(PAGE_PLUGIN.into()), cx)
+                    })
+                    .unwrap();
+            })
+            .unwrap();
+    });
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if ready.is_file() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(ready.is_file(), "plugin never started");
+    plugin
+}
+
+fn flood_page(cx: &mut TestAppContext, life: &std::sync::Arc<()>, raw: &str) -> Result<(), String> {
+    let alive = std::sync::Arc::downgrade(life);
+    cx.update(|cx| {
+        crate::PluginHost::global(cx).update(cx, |host, cx| {
+            host.deliver_page(&PluginId(PAGE_PLUGIN.into()), "board", raw, alive, cx)
+        })
+    })
+}
+
+fn pending_page_bytes(cx: &mut TestAppContext) -> usize {
+    cx.update(|cx| {
+        crate::PluginHost::global(cx)
+            .read(cx)
+            .pending_page_bytes(&PluginId(PAGE_PLUGIN.into()))
+    })
+}
+
+#[gpui_kit::test]
+fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
+    let _plugin = open_page_holding_next(cx);
+    let life = std::sync::Arc::new(());
+    let mut accepted = 0;
+    for i in 0..crate::jobs::PAGE_PENDING_CAP + 8 {
+        let raw = format!(r#"{{"n":{i}}}"#);
+        match flood_page(cx, &life, &raw) {
+            Ok(()) => accepted += 1,
+            Err(error) => {
+                assert!(
+                    error.contains("cannot take another page message"),
+                    "{error}"
+                );
+                break;
+            }
+        }
+    }
+    assert_eq!(accepted, crate::jobs::PAGE_PENDING_CAP);
+    assert!(
+        pending_page_bytes(cx) <= crate::jobs::PAGE_PENDING_BYTES,
+        "{}",
+        pending_page_bytes(cx)
+    );
+    assert!(
+        flood_page(cx, &life, r#"{"n":"over"}"#)
+            .unwrap_err()
+            .contains("cannot take another page message")
+    );
+
+    cx.executor().advance_clock(Duration::from_secs(10));
+    cx.run_until_parked();
+    assert_eq!(pending_page_bytes(cx), 0);
+    let mut after = 0;
+    for i in 0..crate::jobs::PAGE_PENDING_CAP + 8 {
+        let raw = format!(r#"{{"again":{i}}}"#);
+        match flood_page(cx, &life, &raw) {
+            Ok(()) => after += 1,
+            Err(error) => {
+                assert!(
+                    error.contains("cannot take another page message"),
+                    "{error}"
+                );
+                break;
+            }
+        }
+    }
+    assert_eq!(after, crate::jobs::PAGE_PENDING_CAP);
+    assert!(
+        pending_page_bytes(cx) <= crate::jobs::PAGE_PENDING_BYTES,
+        "{}",
+        pending_page_bytes(cx)
+    );
+}
+
+#[gpui_kit::test]
+fn a_page_job_expires_when_its_page_token_dies(cx: &mut TestAppContext) {
+    let run = open_page(cx);
+    cx.update(|cx| {
+        let stale_life = std::sync::Arc::new(());
+        let alive = std::sync::Arc::downgrade(&stale_life);
+        crate::PluginHost::global(cx)
+            .update(cx, |host, cx| {
+                host.deliver_page(
+                    &PluginId(PAGE_PLUGIN.into()),
+                    "board",
+                    r#"{"at":"stale"}"#,
+                    alive,
+                    cx,
+                )
+            })
+            .unwrap();
+        drop(stale_life);
+    });
+    deliver_page(cx, &run, r#"{"at":"fresh"}"#).unwrap();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if std::fs::read_to_string(&run.seen)
+            .unwrap_or_default()
+            .contains("fresh")
+        {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let text = std::fs::read_to_string(&run.seen).unwrap();
+    assert!(!text.contains("stale"), "{text}");
+    assert!(text.contains("fresh"), "{text}");
+}
+
 #[gpui_kit::test]
 fn a_project_setting_takes_a_live_project_id(cx: &mut TestAppContext) {
     let plugin = plugin_dir();

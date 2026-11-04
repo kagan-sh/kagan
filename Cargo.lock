@@ -5464,6 +5464,7 @@ dependencies = [
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
+ "percent-encoding",
  "raw-window-handle",
  "serde",
  "serde_json",
@@ -5554,7 +5555,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 [[package]]
 name = "lb-wry"
 version = "0.53.3"
-source = "git+https://github.com/kagan-sh/wry?rev=11b65fc1b90a59a02b12f4b57e64bf1546f181c3#11b65fc1b90a59a02b12f4b57e64bf1546f181c3"
+source = "git+https://github.com/kagan-sh/wry?rev=43d44d3f286a8ffd8eaf587517ed677fe6e2376f#43d44d3f286a8ffd8eaf587517ed677fe6e2376f"
 dependencies = [
  "base64 0.22.1",
  "block2 0.6.2",

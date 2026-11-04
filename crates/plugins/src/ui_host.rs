@@ -71,6 +71,13 @@ pub enum HostUiEvent {
         comment: ReviewComment,
         reply: Sender<Result<(), String>>,
     },
+    /// The plugin script asked to deliver JSON to its web panel's page.
+    PostPage {
+        plugin: PluginId,
+        panel: String,
+        message: String,
+        reply: Sender<Result<(), String>>,
+    },
 }
 
 /// A note a review plugin adds to the review on screen. The host keeps it with its own notes.
@@ -270,7 +277,7 @@ impl HostUi {
     }
 }
 
-fn app<R>(
+pub(crate) fn app<R>(
     run: impl FnOnce(Entity<HostUi>, &mut App) -> Result<R, HostError>,
 ) -> Result<R, HostError> {
     with_current_app(|cx| {
@@ -543,7 +550,7 @@ fn context_functions(module: HostModule, plugin: &PluginId) -> HostModule {
         })
 }
 
-async fn accepted(
+pub(crate) async fn accepted(
     receiver: async_channel::Receiver<Result<(), String>>,
 ) -> Result<HostValue, HostError> {
     receiver

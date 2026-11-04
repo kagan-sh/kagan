@@ -39,6 +39,9 @@ mod start;
 mod surface;
 mod tabs;
 mod update;
+mod web_panel;
+#[cfg(all(test, target_os = "macos"))]
+pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
 
 use changes::Changes;
 use kg_domain::ProjectOp;
@@ -333,6 +336,7 @@ pub(crate) fn start_plugin(cx: &mut App) -> gpui_kit::Result<()> {
 }
 
 fn release_window(this: &mut Kagan, cx: &mut App) {
+    web_panel::clear(cx);
     let id = this.window.window_id();
     this.cancel_plugin_start();
     this.surface_check = None;
@@ -376,6 +380,7 @@ impl Kagan {
 
     fn theme_paint(cx: &mut Context<Self>) -> Subscription {
         cx.observe(&crate::theme::ThemeState::global(cx), |_, _, cx| {
+            web_panel::repaint(cx);
             cx.notify();
         })
     }
@@ -763,6 +768,14 @@ impl Kagan {
                 if let Some(saved) = self.plugin_comment(plugin, comment, window, cx) {
                     let _ = reply.try_send(saved);
                 }
+            }
+            HostUiEvent::PostPage {
+                plugin,
+                panel,
+                message,
+                reply,
+            } => {
+                let _ = reply.try_send(web_panel::post(plugin, panel, message, cx));
             }
         }
     }
@@ -1457,6 +1470,7 @@ impl Render for Kagan {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         self.sync_browser(cx);
         crate::components::sync_pages(&self.shown_plugin_views(cx), cx);
+        web_panel::sync(self, cx);
         let columns = if self.right_fill == right::Fill::Window && self.panes.right {
             div()
                 .id("right-full-column")

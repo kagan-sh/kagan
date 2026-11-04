@@ -52,7 +52,6 @@ impl Browser {
         match crate::page::open(window, cx, move |builder| {
             builder
                 .with_url(&url)
-                .with_incognito(true)
                 .with_navigation_handler(|target| is_web(&target))
         }) {
             Ok(view) => self.page = Some(view),

@@ -160,7 +160,7 @@ fn tab_body(
         return Some(div().size_full().child(view).into_any_element());
     }
     let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
-    let page = slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
+    let page = slot.web.is_some() || slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
     crate::components::note_inset(!page);
     Some(
         div()
@@ -490,7 +490,7 @@ pub(super) fn plugin_body(
         (Some(error), _) => failed_plugin(slot, &error, window, cx),
         (None, Some(view)) if fill => div().size_full().child(view.clone()).into_any_element(),
         (None, Some(view)) => div().child(view.clone()).into_any_element(),
-        (None, None) => div().into_any_element(),
+        (None, None) => super::web_panel::body(slot, window, cx),
     }
 }
 

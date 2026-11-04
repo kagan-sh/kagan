@@ -114,6 +114,7 @@ A job is plain data with a `kind`:
 | `cli` | `{ command, argv, cwd, threadId?, projectId? }` | `{ exitCode, stdout, stderr }` |
 | `command` | `{ command, threadId?, projectId? }` | none |
 | `event` | `{ type, threadId, projectId, data }` | none |
+| `page` | `{ panelId, message }` | none |
 | `instruct` | `{ threadId, projectId }` | string or `{ text }`, or nothing |
 
 Timeouts: tool and CLI 120 s, instruct 2 s (empty on timeout), others 10 s; the caller gets a plain error naming the plugin, except instruct, which skips a late or failed reply. A `cli` job's `projectId` is the thread's project, else the project whose folder contains `cwd`.
@@ -136,6 +137,10 @@ Every function is async unless marked sync. Arguments and results are plain data
 ### `kagan/jobs` (always granted)
 
 `next()`, `reply(id, value)` sync, `fail(id, message)` sync.
+
+### `kagan/panel` (always granted)
+
+`post(panelId, message)` sends one JSON value to that panel's page. The page hears a `kagan` event whose `detail` is the value. At most 1 MiB of JSON. A panel that is not on screen, or that is not a web panel, rejects the call.
 
 ### `kagan/host` (always granted)
 
@@ -174,7 +179,7 @@ Granted when `powers.read` is not empty. Reads stay inside the plugin's read roo
 
 Plugins get what gpui-kit offers, in the Workbench look ([look.md](look.md)), plus a few things only kagan knows.
 
-Plugins contribute **panels** (a View class the entry exports) placed `left`, `center`, or `right` (decision 59). A panel placed `bottom` is refused. A `left` panel is one icon in the rail, and its body sits below the threads in the list while it is open. A second click on that icon closes it. A `center` panel is a page: one icon in the rail below the tool icons, and the open page fills the center under a host title and Close. Opening that same page again keeps the view. Enter and Space on Close return to the terminal; those keys inside the plugin's own input or button do not. Escape returns unless the focused plugin control handles it first. The thread's terminal stays mounted. A `right` panel is a closable tab in the right sidebar (decision 48). It is not a left-rail icon. Open it with a command, `openPanel` / `kg surface open`, or the right tab bar `+`. A file review and the page do not show together: opening the page closes the review, and opening a review leaves the page. Opening Settings closes the review. Docking and zoom are not in the window. A panel with `"follows": "thread"` tracks the thread on screen through `host.onContextChanged()`.
+Plugins contribute **panels** placed `left`, `center`, or `right` (decision 59). A panel names one body: a View class the entry exports (`"view"`), or an HTML file in the plugin folder (`"web"`). Exactly one of those. A web panel cannot set `replaces`. A panel placed `bottom` is refused. A `left` panel is one icon in the rail, and its body sits below the threads in the list while it is open. A second click on that icon closes it. A `center` panel is a page: one icon in the rail below the tool icons, and the open page fills the center under a host title and Close. Opening that same page again keeps the view. Enter and Space on Close return to the terminal; those keys inside the plugin's own input or button do not. Escape returns unless the focused plugin control handles it first. The thread's terminal stays mounted. A `right` panel is a closable tab in the right sidebar (decision 48). It is not a left-rail icon. Open it with a command, `openPanel` / `kg surface open`, or the right tab bar `+`. A file review and the page do not show together: opening the page closes the review, and opening a review leaves the page. Opening Settings closes the review. Docking and zoom are not in the window. A panel with `"follows": "thread"` tracks the thread on screen through `host.onContextChanged()`.
 
 **Not in this version.** kagan refuses a manifest that declares these, at install and at check: `ui.toolbar`, `ui.status-bar`, `ui.sidebar-footer`, `ui.thread-list`, `ui.file-opener`, and a panel placed `bottom`. `ui.settings` is kagan's settings page for the plugin, below its declared settings.
 
@@ -188,7 +193,19 @@ Plugins contribute **panels** (a View class the entry exports) placed `left`, `c
 - `Markdown`: rendered message text.
 - `KgButton`: a command button with the calls of `Button`: `label`, `tooltip`, `loading`, `size`, `primary`, `secondary`, `danger`, `success`, `warning`, `outline`, `ghost`, `link`, `compact`, `disabled`, `selected`, `on_click`, and children, which sit inside the button. `kg ui` finds, clicks and reads it by its id, with its role, name, state and focus. Two panels that use the same id are refused by `kg ui click` unless `--within` names one. `kg plugin check` warns on a plain `Button` in any plugin script. `kg plugin new` writes a starter panel that uses `KgButton`.
 - `KgInput` and `KgTextarea`: a text field. `new KgInput(state)` takes an `InputState`; `new KgTextarea(state)` takes a `TextareaState`. `aria_label(name)` is the accessible name, and `disabled(flag)` stops edits. With a name, `kg ui` finds the field, `kg ui click <name>` focuses it, and `kg ui type` writes into it. The snapshot states the name, the value, and focus. A masked value is eight dots. Without `aria_label`, the field is not a control. The shell's `Input` and `Textarea` stay as the shell draws them: kagan cannot wrap them (decision 55), so `kg ui` does not see them.
-- `WebView`: one page, placed as a panel's body. `new WebView(id)` takes one string id. `url(url)` loads that http or https address. The host must be `127.0.0.1` or `localhost`, or a host in this plugin's `powers.fetch`. Any other address is refused, and so is a navigation that leaves those hosts, with a sentence that says why. The element fills its parent. A right panel whose body is a `WebView` shows the page edge to edge, and only while that panel is on screen. On macOS and Windows the page is the same `gpui-webview` view as the Browser tab. Linux shows one sentence. It is not the Browser tab and has no address bar.
+- `WebView`: one page, placed as a panel's body. `new WebView(id)` takes one string id. `url(url)` loads that http or https address. The host must be `127.0.0.1` or `localhost`, or a host in this plugin's `powers.fetch`. Any other address is refused, and so is a navigation that leaves those hosts, with a sentence that says why. The element fills its parent. A right panel whose body is a `WebView` shows the page edge to edge, and only while that panel is on screen. On macOS and Windows the page is the same `gpui-webview` view as the Browser tab. Linux shows one sentence. It is not the Browser tab and has no address bar. A page that lives in the plugin folder uses a web panel instead.
+
+**Web panel** (decision 133). `"web"` is a relative path to one `.html` file inside the plugin, such as `"ui/index.html"`. No absolute path, no `..`, no `\`, and no `__kagan` segment. `kg plugin check` reads that file. Left, center, and right all place it. A right or center web panel fills its frame edge to edge. The plugin's entry still loads, so its job loop can answer the page. There is no server.
+
+The page is served from the plugin folder on `kagan-plugin://<plugin-id>/`. That origin is private to the plugin. Reads stay inside the folder: `..` is refused, every symlink is refused, and a file over 8 MiB is refused. The page may load only its own files. Known types are html, css, js, mjs, json, svg, png, jpg, gif, webp, ico, woff, woff2, txt, and wasm. Anything else is `application/octet-stream`.
+
+The page gets no kagan powers. It talks only to its plugin. `kagan.post(message)` sends one JSON value, at most 1 MiB, and the plugin's loop receives a `page` job `{ panelId, message }`. Reply `null`. `import { post } from "kagan/panel"` then `post(panelId, message)` delivers that JSON to the page as a `kagan` event (`event.detail`). A value that is not JSON, or that is over the cap, is refused.
+
+Top-level navigation stays on the plugin's own origin. A host in `powers.fetch` is not a navigation target. The page's content security policy is `default-src 'none'`, scripts and styles from `'self'`, images from `'self'` and `data:`, fonts from `'self'`, and `connect-src` of `'self'` plus `https://` and `http://` for each fetch host that is a plain hostname. Frames, objects, `<base>`, and forms are none. Fetch to a granted host is the page's own fetch, and the other host still applies its own cross-origin rules. On Windows the web view reports this scheme as `http://kagan-plugin.<plugin-id>/`; navigation allows that form only there.
+
+`/__kagan/theme.css` is not a file. kagan serves it from memory and the page links it (the bridge adds the link when the page has none). It sets `--bg`, `--surface`, `--raised`, `--hover`, `--ink`, `--muted`, `--line`, `--accent`, `--needs`, `--failed`, `--added`, `--working`, and `color-scheme`. Those follow the Workbench theme and update when the theme changes.
+
+The page is private. Camera and microphone stay off. New windows and downloads do nothing. The page is shown only while its panel is on screen, and dropped when the panel closes. macOS draws it. Other systems show one sentence. `kg ui` sees the panel: role document, name "Web panel", value the panel title, hint that `kg ui` cannot drive the page. Driving inside the page is out of scope. `examples/plugins/web-panel` posts a message both ways and paints with the theme variables.
 
 **Drag and drop** (decision 122). A `div`, `h_flex` or `v_flex` in a plugin view takes gpui-kit's drag calls. The payload is text, such as a ticket id or a thread id.
 
@@ -256,7 +273,7 @@ A `secret` setting (decision 104):
 ## Not in this API
 
 - HTTP routes, background cron, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it.
-- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one local page with `WebView` (121), not a general browser.
+- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131), and plugins cannot use it. `openUrl` still opens the system browser. A plugin shows one page with `WebView` (121), from localhost or a `powers.fetch` host, or its own HTML as a web panel (133). Neither is a general browser.
 
 ## Measured by the spike
 
