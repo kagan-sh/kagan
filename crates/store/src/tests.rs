@@ -6,7 +6,7 @@ use kg_domain::{
 };
 use serde_json::json;
 
-use crate::{Changes, Error, PluginDb, ScreenRow, Statement, Store};
+use crate::{Error, ScreenRow, Store};
 
 fn store() -> Store {
     let store = Store::open(":memory:").unwrap();
@@ -741,79 +741,6 @@ fn reopening_a_file_keeps_data() {
         "Kept"
     );
     std::fs::remove_dir_all(dir).unwrap();
-}
-
-#[test]
-fn plugin_db_migrates_once_and_round_trips_values() {
-    let mut db = PluginDb::open(":memory:").unwrap();
-    let mut migrations = vec![
-        "CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, points REAL, data TEXT)".to_owned(),
-    ];
-    db.migrate(&migrations).unwrap();
-    migrations.push("ALTER TABLE docs ADD COLUMN flag INTEGER".into());
-    db.migrate(&migrations).unwrap();
-    db.migrate(&migrations).unwrap();
-
-    let changes = db
-        .run(
-            "INSERT INTO docs (name, points, data, flag) VALUES (?, ?, ?, ?)",
-            &[json!("a"), json!(1.5), json!({ "x": 1 }), json!(true)],
-        )
-        .unwrap();
-    assert_eq!(
-        changes,
-        Changes {
-            changes: 1,
-            last_id: 1
-        }
-    );
-    assert_eq!(
-        db.query("SELECT * FROM docs WHERE name = ?", &[json!("a")])
-            .unwrap(),
-        [
-            json!({ "id": 1, "name": "a", "points": 1.5, "data": "{\"x\":1}", "flag": 1 })
-                .as_object()
-                .unwrap()
-                .clone()
-        ]
-    );
-}
-
-#[test]
-fn plugin_db_transaction_is_all_or_nothing_with_foreign_keys() {
-    let mut db = PluginDb::open(":memory:").unwrap();
-    db.migrate(&[
-        "CREATE TABLE tickets (id INTEGER PRIMARY KEY);
-         CREATE TABLE comments (ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE);"
-            .to_owned(),
-    ])
-    .unwrap();
-    let statement = |sql: &str, params: Vec<serde_json::Value>| Statement {
-        sql: sql.into(),
-        params,
-    };
-    assert!(
-        db.transaction(&[
-            statement("INSERT INTO tickets (id) VALUES (?)", vec![json!(1)]),
-            statement(
-                "INSERT INTO comments (ticket_id) VALUES (?)",
-                vec![json!(2)]
-            ),
-        ])
-        .is_err()
-    );
-    assert!(db.query("SELECT * FROM tickets", &[]).unwrap().is_empty());
-
-    db.transaction(&[
-        statement("INSERT INTO tickets (id) VALUES (?)", vec![json!(1)]),
-        statement(
-            "INSERT INTO comments (ticket_id) VALUES (?)",
-            vec![json!(1)],
-        ),
-    ])
-    .unwrap();
-    db.run("DELETE FROM tickets", &[]).unwrap();
-    assert!(db.query("SELECT * FROM comments", &[]).unwrap().is_empty());
 }
 
 #[test]

@@ -4,12 +4,10 @@
 use std::path::PathBuf;
 
 mod column;
-mod plugin_db;
 mod store;
 #[cfg(test)]
 mod tests;
 
-pub use plugin_db::{Changes, PluginDb, Statement};
 pub use store::{ScreenRow, Store};
 
 #[derive(Debug, thiserror::Error)]
