@@ -64,7 +64,7 @@ fn cli_thread_terminal_parses_its_verbs() {
         Op::Thread(ThreadOp::Terminal(TerminalOp::New { id: id.clone() }))
     );
     assert_eq!(
-        parse(&["thread", "terminal", "close", "--id", "thr_1", "2"]),
+        parse(&["thread", "terminal", "close", "thr_1", "2"]),
         Op::Thread(ThreadOp::Terminal(TerminalOp::Close {
             id: id.clone(),
             number: 2
@@ -859,6 +859,9 @@ fn self_extension_commands_derive_from_ops() {
             after: None
         })
     );
+    let wire =
+        serde_json::to_value(parse(&["plugin", "logs", "dev.test.plugin", "--follow"])).unwrap();
+    assert!(wire["plugin"]["logs"].get("follow").is_none());
 }
 
 #[test]
@@ -969,9 +972,9 @@ fn a_missing_id_names_the_variable_that_would_fill_it() {
 }
 
 #[test]
-fn thread_tool_defaults_leave_the_tool_name_positional() {
+fn thread_tool_takes_its_id_and_name_positionally() {
     if std::env::var_os("KG_TEST_DEFAULTS").is_some() {
-        let cli = Cli::try_parse_from(["kg", "thread", "call-tool", "echo"]).unwrap();
+        let cli = Cli::try_parse_from(["kg", "thread", "call-tool", "thr_1", "echo"]).unwrap();
         let Some(Command::Op(op)) = cli.command else {
             panic!("call-tool is not an op");
         };
@@ -984,10 +987,9 @@ fn thread_tool_defaults_leave_the_tool_name_positional() {
     }
     let output = std::process::Command::new(std::env::current_exe().unwrap())
         .env("KG_TEST_DEFAULTS", "1")
-        .env("KG_THREAD_ID", "thr_1")
         .args([
             "--exact",
-            "tests::thread_tool_defaults_leave_the_tool_name_positional",
+            "tests::thread_tool_takes_its_id_and_name_positionally",
         ])
         .output()
         .unwrap();
@@ -1123,7 +1125,7 @@ fn cli_talks_to_a_threads_terminal() {
         })
     );
     assert_eq!(
-        parse(&["thread", "rename", "--id", "thr_1", "New title"]),
+        parse(&["thread", "rename", "thr_1", "New title"]),
         Op::Thread(ThreadOp::Rename {
             id: id.clone(),
             title: "New title".into()

@@ -4,7 +4,7 @@ What kagan should do, one rule per line, for a model suite that reads this file 
 
 Sources, in order: [CONTEXT], [decision N], [book:page], [docs:file], [op.rs], [event.rs], [record.rs]. Help text is the CLI contract in [book:cli].
 
-A missing id is `not-found`. A bad argument is `invalid`. Every other refusal is `failed` [op.rs].
+A missing id is `not-found`. A bad argument is `invalid`. Every other refusal is `failed` [op.rs]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
 
 ## Questions for the person
 
@@ -238,7 +238,7 @@ A plugin is a package installed from git that adds UI, commands, tools, or skill
 
 ### `List`, `Logs`, `Types`
 
-- **Shows**: `List` the installed plugins [book:plugins]. `Logs` its log, crashes, and slow marks; `--follow` keeps printing [book:plugins] [docs:self-extend]. The log keeps the current file and one previous file, each at most 10 MiB; a cursor past the end returns `reset` and starts at 0; a record larger than 10 MiB is rejected [docs:self-extend]. `Types` rewrites the declaration files for this version [docs:self-extend].
+- **Shows**: `List` the installed plugins [book:plugins]. `Logs` its log, crashes, and slow marks; `kg` implements `--follow` by repeating the read, so the op itself never follows [book:plugins] [docs:self-extend]. The log keeps the current file and one previous file, each at most 10 MiB; a cursor past the end returns `reset` and starts at 0; a record larger than 10 MiB is rejected [docs:self-extend]. `Types` rewrites the declaration files for this version [docs:self-extend].
 - **Refused when**: a missing plugin id — `not-found` [op.rs]. A log record larger than 10 MiB — `invalid` [docs:self-extend] [op.rs]. Any other log or types failure — `failed` [op.rs].
 
 ### `Cli`

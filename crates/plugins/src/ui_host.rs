@@ -279,8 +279,9 @@ pub(crate) fn app<R>(
 
 pub(crate) fn extend(module: HostModule, plugin: &PluginId) -> HostModule {
     let declarations = format!(
-        "{}\n/** `overlay` is the size in pixels of the front window's center, which a `ui.overlay` view covers. That view may only paint: boxes, text, images, svgs and paths with styles and motion; a handler, hover style, cursor, scroll area, other component or window call fails it. */\nexport function context(): {{ threadId?: string; projectId?: string; focused: boolean; theme: 'light' | 'dark'; props?: unknown; overlay?: {{ width: number; height: number }} }};\nexport function onContextChanged(): Promise<ReturnType<typeof context>>;\nexport function threadOnScreen(threadId: string): boolean;\nexport function openThread(threadId: string): Promise<void>;\n/** Shows a panel this plugin declares, placed left, center or right. Resolves when it is on screen. */\nexport function openPanel(panelId: string, props?: unknown): Promise<void>;\n/** Opens a URL in the system browser. Needs `powers.openUrl`. */\nexport function openUrl(url: string): Promise<void>;\nexport function toast(message: string, action?: {{ label: string; command: string }}): Promise<void>;\n/** Adds a note to the review on screen, when this plugin draws it. kagan's footer sends or discards it. */\nexport function addComment(comment: {{ path: string; side?: 'old' | 'new'; start: number; end: number; text: string }}): Promise<void>;\n/** Pastes text into a thread's program terminal, without pressing Enter. At most 1 MiB. */\nexport function pasteIntoThread(threadId: string, text: string): Promise<void>;\n/** Writes a PNG to the clipboard. `pngBase64` is standard base64, at most 8 MiB decoded. Needs `powers.clipboard.write`. On Linux it fails: png clipboard is not available on this platform. */\nexport function writeClipboardPng(pngBase64: string): void;",
-        module.declared().unwrap_or("")
+        "{}\n{}",
+        module.declared().unwrap_or(""),
+        include_str!("../assets/host.d.ts")
     );
     let module = context_functions(module.declarations(declarations), plugin);
     let panels = plugin.clone();

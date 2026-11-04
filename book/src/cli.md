@@ -700,16 +700,16 @@ Options:
 ```text
 Close an extra terminal and end its shell
 
-Usage: kg thread terminal close --id <ID> <NUMBER>
+Usage: kg thread terminal close <ID> <NUMBER>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <NUMBER>
           
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
   -h, --help
           Print help
 ```
@@ -790,7 +790,7 @@ Arguments:
           [env: KG_THREAD_ID=]
 
 Options:
-      --thread-id <THREAD_ID>
+      --approval-thread-id <APPROVAL_THREAD_ID>
           The thread where a person approves this delete
           
           [env: KG_THREAD_ID=]
@@ -804,16 +804,16 @@ Options:
 ```text
 Pin or unpin a thread
 
-Usage: kg thread set-pinned --id <ID> <PINNED>
+Usage: kg thread set-pinned <ID> <PINNED>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <PINNED>
           [possible values: true, false]
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
   -h, --help
           Print help
 ```
@@ -823,16 +823,16 @@ Options:
 ```text
 Rename a thread
 
-Usage: kg thread rename --id <ID> <TITLE>
+Usage: kg thread rename <ID> <TITLE>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <TITLE>
           
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
   -h, --help
           Print help
 ```
@@ -1024,16 +1024,16 @@ Options:
 ```text
 Call an agent tool as the thread
 
-Usage: kg thread call-tool [OPTIONS] --id <ID> <NAME>
+Usage: kg thread call-tool [OPTIONS] <ID> <NAME>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <NAME>
           
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
       --input <INPUT>
           [default: {}]
 
@@ -1272,10 +1272,10 @@ Options:
 ```text
 Local branches of a project
 
-Usage: kg environment branches <ID>
+Usage: kg environment branches <PROJECT_ID>
 
 Arguments:
-  <ID>
+  <PROJECT_ID>
           [env: KG_PROJECT_ID=]
 
 Options:

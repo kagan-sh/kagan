@@ -72,8 +72,8 @@ pub(crate) async fn execute(
             Workspace::refresh(this, cx).await?;
             Ok(OpResult::Environment(result))
         }
-        Op::Environment(EnvironmentOp::Branches { id }) => {
-            crate::git::branches(&database, id, cx).await
+        Op::Environment(EnvironmentOp::Branches { project_id }) => {
+            crate::git::branches(&database, project_id, cx).await
         }
         Op::Program(ProgramOp::List) => crate::program::list(this, &database, true, cx).await,
         Op::Program(ProgramOp::Discover) => crate::program::list(this, &database, false, cx).await,

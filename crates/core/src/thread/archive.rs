@@ -86,7 +86,7 @@ pub(super) async fn delete(
     this: &WeakEntity<Workspace>,
     database: Database,
     id: ThreadId,
-    thread_id: Option<ThreadId>,
+    approval_thread_id: Option<ThreadId>,
     requester: Option<Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
@@ -125,7 +125,7 @@ pub(super) async fn delete(
             "Delete “{title}” and permanently delete {described}? Its files cannot be recovered."
         )
     };
-    approve(thread_id, requester, question, "Delete", cx).await?;
+    approve(approval_thread_id, requester, question, "Delete", cx).await?;
     #[cfg(test)]
     {
         let hold = this

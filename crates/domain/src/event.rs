@@ -13,7 +13,12 @@ pub struct Event {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data", rename_all = "camelCase")]
+#[serde(
+    tag = "type",
+    content = "data",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum EventKind {
     Created,
     Started,
@@ -40,11 +45,11 @@ pub enum EventKind {
         outcome: TurnOutcome,
         error: Option<String>,
     },
-    /// An agent message arrives in chunks that share its `message_id`, when the agent names one.
+    /// An agent message arrives in chunks that share its `messageId`, when the agent names one.
     Message {
         role: Role,
         text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none", alias = "message_id")]
         message_id: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
@@ -101,7 +106,6 @@ pub enum EventKind {
     /// The person switched to this thread.
     Opened,
     Rewound {
-        #[serde(rename = "beforeSeq")]
         before_seq: u64,
     },
 }
@@ -217,10 +221,15 @@ pub enum Role {
 
 /// A file or image sent with a user message.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum Attachment {
     Image {
         name: String,
+        #[serde(alias = "mime_type")]
         mime_type: String,
         /// Base64, without a `data:` prefix.
         data: String,
@@ -228,7 +237,7 @@ pub enum Attachment {
     File {
         name: String,
         uri: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default, skip_serializing_if = "Option::is_none", alias = "mime_type")]
         mime_type: Option<String>,
     },
 }

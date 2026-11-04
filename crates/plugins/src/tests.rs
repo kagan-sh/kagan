@@ -3465,7 +3465,7 @@ fn a_plugin_answers_a_question_and_leaves_person_approvals(cx: &mut TestAppConte
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread(),
-                thread_id: Some(thread()),
+                approval_thread_id: Some(thread()),
             }),
             cx,
         )
@@ -5381,7 +5381,7 @@ fn created_and_deleted_events_carry_the_project(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: forked.id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )

@@ -1905,7 +1905,7 @@ fn a_narrow_delete_focuses_cancel(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: id.clone(),
-                thread_id: Some(id.clone()),
+                approval_thread_id: Some(id.clone()),
             }),
             cx,
         )

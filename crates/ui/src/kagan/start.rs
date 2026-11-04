@@ -107,7 +107,7 @@ impl Kagan {
         let path = project_path(&project, cx);
         let task = Workspace::dispatch(
             Op::Environment(EnvironmentOp::Branches {
-                id: project.clone(),
+                project_id: project.clone(),
             }),
             cx,
         );

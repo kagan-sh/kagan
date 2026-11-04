@@ -1,10 +1,10 @@
 mod review;
 
 use crate::{
-    AgentTool, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event, EventKind,
-    InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId, PluginId,
-    PluginOp, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, TurnOutcome, Visibility,
-    WaitOutcome, branch_slug, format_notes, invalid_json, parse_notes,
+    AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
+    EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,
+    PluginId, PluginOp, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, TurnOutcome,
+    UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json, parse_notes,
 };
 use serde_json::{Value, json};
 
@@ -727,6 +727,111 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         metadata: None,
     }));
     assert_eq!(crate::check(&run), Ok(()));
+}
+
+#[test]
+fn surface_ids_and_window_indexes_match_the_documented_checks() {
+    use crate::{SurfaceOp, WindowOp};
+    let open = |id: &str| {
+        crate::check(&Op::Surface(SurfaceOp::Open {
+            plugin: PluginId("dev.example".into()),
+            id: id.into(),
+        }))
+    };
+    assert_eq!(open(""), Err("surface id must be a plain name"));
+    assert_eq!(open("a\nb"), Err("surface id must be a plain name"));
+    assert_eq!(open("notes"), Ok(()));
+    assert_eq!(
+        crate::check(&Op::Window(WindowOp::Thread { index: 0 })),
+        Err("thread index must be between 1 and 9")
+    );
+    assert_eq!(
+        crate::check(&Op::Window(WindowOp::Thread { index: 10 })),
+        Err("thread index must be between 1 and 9")
+    );
+    assert_eq!(
+        crate::check(&Op::Window(WindowOp::Thread { index: 9 })),
+        Ok(())
+    );
+}
+
+#[test]
+fn op_fields_are_camel_case_on_the_wire() {
+    let op = Op::Status {
+        thread_id: Some(ThreadId("thr_1".into())),
+        project_id: None,
+        environment_id: None,
+    };
+    let wire = serde_json::to_value(&op).unwrap();
+    assert_eq!(wire["status"]["threadId"], "thr_1");
+    assert!(wire["status"].get("thread_id").is_none());
+    assert_eq!(serde_json::from_value::<Op>(wire).unwrap(), op);
+    let delete = Op::Thread(ThreadOp::Delete {
+        id: ThreadId("thr_1".into()),
+        approval_thread_id: Some(ThreadId("thr_2".into())),
+    });
+    let wire = serde_json::to_value(&delete).unwrap();
+    assert_eq!(wire["thread"]["delete"]["approvalThreadId"], "thr_2");
+    let branches = Op::Environment(crate::EnvironmentOp::Branches {
+        project_id: crate::ProjectId("prj_1".into()),
+    });
+    let wire = serde_json::to_value(&branches).unwrap();
+    assert_eq!(wire["environment"]["branches"]["projectId"], "prj_1");
+}
+
+#[test]
+fn event_kind_fields_are_camel_case_on_the_wire() {
+    let kind = EventKind::Message {
+        role: crate::Role::Agent,
+        text: "hi".into(),
+        message_id: Some("turn-1".into()),
+        attachments: Vec::new(),
+    };
+    let wire = serde_json::to_value(&kind).unwrap();
+    assert_eq!(wire["data"]["messageId"], "turn-1");
+    assert!(wire["data"].get("message_id").is_none());
+    assert_eq!(serde_json::from_value::<EventKind>(wire).unwrap(), kind);
+    let rewound = serde_json::to_value(EventKind::Rewound { before_seq: 7 }).unwrap();
+    assert_eq!(rewound["data"]["beforeSeq"], 7);
+}
+
+#[test]
+fn attachment_fields_are_camel_case_on_the_wire() {
+    let image = Attachment::Image {
+        name: "a.png".into(),
+        mime_type: "image/png".into(),
+        data: "AA==".into(),
+    };
+    let wire = serde_json::to_value(&image).unwrap();
+    assert_eq!(wire["kind"], "image");
+    assert_eq!(wire["mimeType"], "image/png");
+    assert_eq!(serde_json::from_value::<Attachment>(wire).unwrap(), image);
+    let stored = json!({
+        "kind": "file",
+        "name": "a",
+        "uri": "file:///a",
+        "mime_type": "text/plain"
+    });
+    assert_eq!(
+        serde_json::from_value::<Attachment>(stored).unwrap(),
+        Attachment::File {
+            name: "a".into(),
+            uri: "file:///a".into(),
+            mime_type: Some("text/plain".into()),
+        }
+    );
+}
+
+#[test]
+fn update_state_fields_are_camel_case_on_the_wire() {
+    let ready = UpdateState::Ready {
+        version: "2".into(),
+        notes: "notes".into(),
+        at_quit: true,
+    };
+    let wire = serde_json::to_value(&ready).unwrap();
+    assert_eq!(wire["ready"]["atQuit"], true);
+    assert_eq!(serde_json::from_value::<UpdateState>(wire).unwrap(), ready);
 }
 
 #[test]

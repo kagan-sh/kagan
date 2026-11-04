@@ -78,9 +78,10 @@ pub(crate) async fn dispatch_thread(
         ThreadOp::Links { id } => extra::links(this, id, cx).await,
         ThreadOp::Archive { id } => archive(this, database, id, cx).await,
         ThreadOp::Unarchive { id } => unarchive(this, database, id, cx).await,
-        ThreadOp::Delete { id, thread_id } => {
-            delete(this, database, id, thread_id, requester, cx).await
-        }
+        ThreadOp::Delete {
+            id,
+            approval_thread_id,
+        } => delete(this, database, id, approval_thread_id, requester, cx).await,
         ThreadOp::SetPinned { id, pinned } => {
             database
                 .call(move |store| store.set_pinned(&id, pinned))

@@ -838,7 +838,7 @@ async fn deleting_a_thread_waits_for_a_person(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: victim.id.clone(),
-                thread_id: Some(caller.id.clone()),
+                approval_thread_id: Some(caller.id.clone()),
             }),
             cx,
         )
@@ -878,7 +878,7 @@ async fn deleting_a_thread_waits_for_a_person(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: victim.id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -930,7 +930,7 @@ async fn a_stopped_command_takes_its_delete_question_off_the_thread(cx: &mut Tes
         Workspace::dispatch_for(
             Op::Thread(ThreadOp::Delete {
                 id: victim.id.clone(),
-                thread_id: Some(caller.id.clone()),
+                approval_thread_id: Some(caller.id.clone()),
             }),
             Some(crate::Requester::new(gone)),
             cx,
@@ -1630,7 +1630,7 @@ async fn deleting_a_personal_thread_names_its_folder_and_removes_it_on_approval(
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -1665,7 +1665,7 @@ async fn declining_a_personal_delete_keeps_the_folder(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -1708,7 +1708,7 @@ async fn deleting_a_thread_keeps_a_personal_folder_another_thread_uses(cx: &mut 
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread,
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -1728,7 +1728,7 @@ fn dispatch_delete(id: &ThreadId, cx: &mut TestAppContext) -> gpui_kit::Task<Res
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -4409,7 +4409,7 @@ async fn deleting_a_thread_ends_its_program(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -5052,7 +5052,7 @@ async fn archive_and_delete_remove_the_thread_agent_files(cx: &mut TestAppContex
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: deleted.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -6540,7 +6540,7 @@ async fn deleting_the_thread_is_refused_until_the_worktree_is_removed(cx: &mut T
     let error = op(
         Op::Thread(ThreadOp::Delete {
             id: started.id.clone(),
-            thread_id: None,
+            approval_thread_id: None,
         }),
         cx,
     )
@@ -6680,7 +6680,7 @@ async fn a_personal_folder_does_not_run_teardown(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )

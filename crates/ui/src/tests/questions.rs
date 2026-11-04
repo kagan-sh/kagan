@@ -87,7 +87,7 @@ fn a_stopped_command_takes_its_thread_question_and_the_overlay_away(cx: &mut Tes
         Workspace::dispatch_for(
             Op::Thread(ThreadOp::Delete {
                 id: id.clone(),
-                thread_id: Some(id.clone()),
+                approval_thread_id: Some(id.clone()),
             }),
             Some(kg_core::Requester::new(gone)),
             cx,

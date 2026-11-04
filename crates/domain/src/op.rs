@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum Op {
     /// Current thread context and plugin warnings
     Status {
@@ -1026,7 +1026,7 @@ pub enum TerminalOp {
     },
     /// Close an extra terminal and end its shell
     Close {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         number: u32,
     },
@@ -1209,18 +1209,18 @@ pub enum ThreadOp {
         /// The thread where a person approves this delete
         #[arg(long, env = "KG_THREAD_ID")]
         #[serde(default)]
-        thread_id: Option<ThreadId>,
+        approval_thread_id: Option<ThreadId>,
     },
     /// Pin or unpin a thread
     SetPinned {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         #[arg(action = clap::ArgAction::Set)]
         pinned: bool,
     },
     /// Rename a thread
     Rename {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         title: String,
     },
@@ -1297,7 +1297,7 @@ pub enum ThreadOp {
     },
     /// Call an agent tool as the thread
     CallTool {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         name: String,
         #[arg(long, value_parser = StringValueParser::new().map(json), default_value = "{}")]
@@ -1395,7 +1395,7 @@ pub enum EnvironmentOp {
     /// Local branches of a project
     Branches {
         #[arg(env = "KG_PROJECT_ID")]
-        id: ProjectId,
+        project_id: ProjectId,
     },
     /// Which branch change counts compare against
     SetBase {
@@ -1470,6 +1470,7 @@ pub enum PluginOp {
     Logs {
         id: PluginId,
         #[arg(long)]
+        #[serde(skip)]
         follow: bool,
         #[arg(long, hide = true)]
         after: Option<u64>,
@@ -2075,10 +2076,11 @@ pub const TERMINAL_ROWS: std::ops::RangeInclusive<u16> = 1..=500;
 ///
 /// # Errors
 ///
-/// Returns an error when a thread, plugin, section, environment, or surface id is not a plain
-/// identifier (at most 128 ASCII letters, digits, `_`, or `-`), when a search is empty, longer
-/// than [`SEARCH_TEXT_MAX`], or names a limit outside [`SEARCH_LIMIT`], when a resize is outside
-/// [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], or when a window index is outside 1 to 9.
+/// Returns an error when a thread id is not a plain identifier (at most 128 ASCII letters,
+/// digits, `_`, or `-`), when a surface id is empty or holds a control character, when a search
+/// is empty, longer than [`SEARCH_TEXT_MAX`], or names a limit outside [`SEARCH_LIMIT`], when a
+/// resize is outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], or when a window index is outside
+/// 1 to 9.
 pub fn check(op: &Op) -> Result<(), &'static str> {
     match op {
         Op::Window(WindowOp::Thread { index }) if !(1..=9).contains(index) => {
@@ -2184,7 +2186,13 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
             .into_iter()
             .chain(run.lifecycle_owner_thread_id.as_ref())
             .collect(),
-        ThreadOp::Delete { id, thread_id } => thread_id.iter().chain(std::iter::once(id)).collect(),
+        ThreadOp::Delete {
+            id,
+            approval_thread_id,
+        } => approval_thread_id
+            .iter()
+            .chain(std::iter::once(id))
+            .collect(),
         ThreadOp::Get { id, .. }
         | ThreadOp::Stop { id, .. }
         | ThreadOp::Input { id, .. }

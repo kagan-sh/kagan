@@ -36,7 +36,7 @@ impl InstallKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum UpdateState {
     Unchecked,
     Checking,
