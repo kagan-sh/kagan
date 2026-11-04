@@ -109,16 +109,34 @@ fn command(
     cwd: &Path,
     inherit: bool,
 ) -> Result<Command, HostError> {
-    let env = environment(inherit);
-    let path = env
-        .iter()
-        .find(|(key, _)| env_key(key) == "PATH")
-        .map(|(_, value)| value.as_os_str());
-    let program = find_program(program, path, pathext().as_deref())
+    let path = kg_process::user_path().and_then(|path| absolute_only(&path));
+    let env = with_path(environment(inherit), path.as_deref());
+    let program = find_program(program, path.as_deref(), pathext().as_deref())
         .ok_or_else(|| HostError::new(format!("program {} not found", program.display())))?;
     let mut command = Command::new(program);
     command.args(args).env_clear().envs(env).current_dir(cwd);
     Ok(command)
+}
+
+/// Keeps only the absolute folders of `path`. A relative one would search inside the run's folder, which may be a cloned repo.
+fn absolute_only(path: &OsStr) -> Option<OsString> {
+    let dirs: Vec<PathBuf> = std::env::split_paths(path)
+        .filter(|dir| dir.is_absolute())
+        .collect();
+    std::env::join_paths(dirs).ok()
+}
+
+/// Sets `PATH` to the login shell's, so the program and the helpers it starts are found as they are in a terminal.
+fn with_path(
+    mut env: Vec<(OsString, OsString)>,
+    path: Option<&OsStr>,
+) -> Vec<(OsString, OsString)> {
+    let Some(path) = path else {
+        return env;
+    };
+    env.retain(|(key, _)| env_key(key) != "PATH");
+    env.push((OsString::from("PATH"), path.to_owned()));
+    env
 }
 
 async fn pipes(
@@ -270,6 +288,44 @@ pub(crate) fn module(owner: &Entity<Processes>, grant: &Grant, root: &Path) -> H
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_absolute_folders_go_on_the_path() {
+        let absolute = std::env::temp_dir();
+        let tools = absolute.join("tools");
+        let input = std::env::join_paths([
+            absolute.as_path(),
+            Path::new(""),
+            Path::new("node_modules/.bin"),
+            Path::new("bin"),
+            tools.as_path(),
+        ])
+        .unwrap();
+        let kept = absolute_only(&input).unwrap();
+        let dirs: Vec<PathBuf> = std::env::split_paths(&kept).collect();
+        assert_eq!(dirs, [absolute, tools]);
+    }
+
+    #[test]
+    fn the_login_path_replaces_the_app_path_and_keeps_the_rest() {
+        let env = vec![
+            (OsString::from("HOME"), OsString::from("home")),
+            (OsString::from("PATH"), OsString::from("/usr/bin:/bin")),
+        ];
+        let replaced = with_path(env.clone(), Some(OsStr::new("/opt/homebrew/bin:/usr/bin")));
+        let paths: Vec<_> = replaced
+            .iter()
+            .filter(|(key, _)| env_key(key) == "PATH")
+            .map(|(_, value)| value.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(paths, ["/opt/homebrew/bin:/usr/bin"]);
+        assert!(
+            replaced
+                .iter()
+                .any(|(key, value)| key == "HOME" && value == "home")
+        );
+        assert_eq!(with_path(env.clone(), None), env);
+    }
 
     #[test]
     fn allowlist_keeps_env_key_case_exact_except_on_windows() {
