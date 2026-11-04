@@ -84,10 +84,11 @@ pub(crate) fn run() -> Result<()> {
             if let Err(error) = plugins.await {
                 eprintln!("kg: plugins: {error}");
             }
+            cx.update(kg_ui::plugins_ready);
             while let Ok((op, requester, reply)) = incoming.recv().await {
                 let task = cx.update(|cx| match op {
                     Op::Thread(kg_domain::ThreadOp::Rename { id, title }) => {
-                        kg_core::Workspace::rename_from_socket(id, title, cx)
+                        kg_core::Workspace::rename_once(id, title, cx)
                     }
                     op => kg_core::Workspace::dispatch_for(op, Some(requester), cx),
                 });

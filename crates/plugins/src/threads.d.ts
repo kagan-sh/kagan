@@ -6,8 +6,8 @@ export interface Thread {
   sectionId: string | null; pinned: boolean; lastReadAt: number | null;
   latestAttentionAt: number; archivedAt: number | null; createdAt: number; updatedAt: number;
 }
-export interface Project { id: string; kind: "standard" | "personal"; name: string; path: string; gitRemoteUrl: string | null }
-export interface Environment { id: string; projectId: string; path: string; status: "creating" | "provisioning" | "ready" | "error" | "destroyed"; provider: "project" | "worktree" | "personal"; branch: string | null; baseBranch: string | null; retireAt: number | null }
+export interface Project { id: string; kind: "standard" | "personal"; name: string; path: string; gitRemoteUrl: string | null; sort: number }
+export interface Environment { id: string; projectId: string; path: string; status: "creating" | "provisioning" | "ready" | "error" | "destroyed"; provider: "project" | "worktree" | "personal"; branch: string | null; baseBranch: string | null; retireAt: number | null; error?: string }
 export interface Sidebar { projects: Project[]; sections: { id: string; name: string }[]; threads: Thread[] }
 export type EnvironmentSpec = { kind: "project-default" } | { kind: "reuse"; environmentId: string } | { kind: "worktree"; baseBranch?: string; branch?: string } | { kind: "personal" };
 export interface Spawn { projectId: string; program: string; title?: string; environment: EnvironmentSpec; visibility?: "visible" | "hidden"; parentThreadId?: string; lifecycleOwnerThreadId?: string; metadata?: unknown }
@@ -26,10 +26,10 @@ export function send(id: string, text: string): Promise<void>;
 /** The program's kept scrollback as plain text, at most 256 KiB. */
 export function output(id: string): Promise<{ output: string }>;
 export function archive(id: string): Promise<void>;
-export function answer(id: string, interactionId: string, optionId: string): Promise<void>;
 export function unarchive(id: string): Promise<void>;
 export function remove(id: string): Promise<void>;
 export function setPinned(id: string, pinned: boolean): Promise<void>;
+/** Stores the trimmed title once and returns the thread. A thread spawned with a title, or renamed already, keeps it and the call fails. */
 export function rename(id: string, title: string): Promise<Thread>;
 export function markRead(id: string): Promise<void>;
 export function metadata(id: string): Promise<unknown>;

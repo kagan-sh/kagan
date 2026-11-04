@@ -22,10 +22,10 @@ fn a_plugin_field_is_clicked_and_typed_through_the_driver(cx: &mut TestAppContex
         window.draw(cx).clear(cx);
         let id = ElementId::Name("Title".into());
         let found = crate::ui_registry::find(window, &id).expect("the field is observed");
-        assert_eq!(found.role(), Some(Role::TextInput));
-        assert_eq!(found.label(), Some("Title"));
-        assert_eq!(found.value(), Some(""));
-        assert_eq!(found.focused(), Some(false));
+        assert_eq!(found.role, Some(Role::TextInput));
+        assert_eq!(found.label.as_deref(), Some("Title"));
+        assert_eq!(found.value.as_deref(), Some(""));
+        assert_eq!(found.focused, Some(false));
 
         crate::ui_dispatch::click(window, &id, cx).expect("the field is clicked");
         crate::ui_dispatch::input(window, "Hi", cx).expect("the field takes text");

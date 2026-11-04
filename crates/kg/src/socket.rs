@@ -299,7 +299,7 @@ fn reclaim_stale(path: &std::path::Path) -> io::Result<()> {
 
 #[cfg(unix)]
 fn effective_uid() -> u32 {
-    // `geteuid` only reads this process's credential.
+    // SAFETY: `geteuid` only reads this process's credential and cannot fail.
     unsafe { libc::geteuid() }
 }
 
@@ -309,7 +309,7 @@ struct Umask(libc::mode_t);
 #[cfg(unix)]
 impl Umask {
     fn owner_only() -> Self {
-        // `umask` is process-wide. Drop puts the previous mask back before anything else is created.
+        // SAFETY: `umask` is process-wide. This sets and returns the previous mask, and Drop restores it before anything else is created.
         Self(unsafe { libc::umask(0o077) })
     }
 }
@@ -317,6 +317,7 @@ impl Umask {
 #[cfg(unix)]
 impl Drop for Umask {
     fn drop(&mut self) {
+        // SAFETY: restores the mask that the matching constructor replaced.
         unsafe { libc::umask(self.0) };
     }
 }

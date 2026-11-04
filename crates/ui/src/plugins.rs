@@ -85,16 +85,16 @@ impl Bindings {
     fn refresh(&mut self, host: &Entity<PluginHost>, cx: &mut Context<Self>) {
         let mut commands = host.read(cx).commands();
         // A key the person saved wins over any manifest's, whatever the plugin order.
-        commands.sort_by_key(kg_plugins::CommandContribution::source);
+        commands.sort_by_key(|command| command.source);
         let keys = commands
             .into_iter()
             .filter_map(|command| {
-                command.key().map(|key| {
+                command.key.as_deref().map(|key| {
                     (
-                        command.plugin().clone(),
-                        command.id().to_owned(),
+                        command.plugin.clone(),
+                        command.id.clone(),
                         key.to_owned(),
-                        command.when(),
+                        command.when,
                     )
                 })
             })

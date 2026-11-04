@@ -7,11 +7,11 @@ publish.workspace = true
 
 [dependencies]
 clap.workspace = true
-serde_yaml = "=0.9.34"
+serde_yaml_ng = "=0.10.0"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-uuid = { version = "=1.26.1", features = ["serde", "v4"] }
+uuid = { workspace = true, features = ["serde"] }
 
 [lints]
 workspace = true

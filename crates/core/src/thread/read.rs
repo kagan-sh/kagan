@@ -2,13 +2,16 @@ use std::future::Future;
 use std::time::Duration;
 
 use gpui_kit::{App, AsyncApp, Entity, Task, WeakEntity};
-use kg_domain::{EventKind, OpError, OpResult, Order, ThreadId, ThreadOp, ThreadStatus};
+use kg_domain::{
+    EventKind, OpError, OpResult, Order, ThreadId, ThreadOp, ThreadStatus, WaitOutcome,
+};
 
 use crate::database::{Database, Result};
 use crate::workspace::{closed, missing};
 use crate::{PluginRequest, Workspace};
 
-use super::forward;
+use crate::dispatch::forward;
+
 use super::thread;
 
 pub(crate) fn wait_event(
@@ -20,10 +23,10 @@ pub(crate) fn wait_event(
     cx: &mut App,
 ) -> Task<Result<OpResult>> {
     let kind = kind.strip_prefix("thread.").unwrap_or(kind);
-    let Some(kind) = EventKind::TYPES.into_iter().find(|name| *name == kind) else {
+    let Some(kind) = EventKind::LIVE_TYPES.into_iter().find(|name| *name == kind) else {
         return Task::ready(Err(OpError::Invalid(format!(
             "unknown event type {kind}; expected one of {}",
-            EventKind::TYPES.join(", ")
+            EventKind::LIVE_TYPES.join(", ")
         ))));
     };
     let database = workspace.read(cx).database.clone();
@@ -124,7 +127,7 @@ pub(crate) fn wait(
             .read_with(cx, |thread, _| (thread.record.status, thread.busy))
             .map_err(closed)?;
         if let Some(reason) = ended(status) {
-            return Ok(OpResult::Text(reason.to_owned()));
+            return Ok(OpResult::Wait(reason));
         }
         let mut arming = !busy;
         let deadline = cx
@@ -143,27 +146,27 @@ pub(crate) fn wait(
                     let status = thread
                         .read_with(cx, |thread, _| thread.record.status)
                         .map_err(closed)?;
-                    let reason = ended(status).unwrap_or("timeout");
-                    return Ok(OpResult::Text(reason.to_owned()));
+                    let reason = ended(status).unwrap_or(WaitOutcome::Timeout);
+                    return Ok(OpResult::Wait(reason));
                 }
                 Hit::Armed => {
                     let (status, still) = thread
                         .read_with(cx, |thread, _| (thread.record.status, thread.busy))
                         .map_err(closed)?;
                     if let Some(reason) = ended(status) {
-                        return Ok(OpResult::Text(reason.to_owned()));
+                        return Ok(OpResult::Wait(reason));
                     }
                     if still {
                         arming = false;
                         continue;
                     }
-                    return Ok(OpResult::Text("not-busy".to_owned()));
+                    return Ok(OpResult::Wait(WaitOutcome::NotBusy));
                 }
-                Hit::Ended(reason) => return Ok(OpResult::Text(reason.to_owned())),
+                Hit::Ended(reason) => return Ok(OpResult::Wait(reason)),
                 Hit::Busy => arming = false,
                 Hit::Event(kind) => {
                     if let Some(reason) = settle(&kind) {
-                        return Ok(OpResult::Text(reason.to_owned()));
+                        return Ok(OpResult::Wait(reason));
                     }
                     if kind == EventKind::Deleted {
                         return Err(missing("thread", &id));
@@ -177,13 +180,13 @@ pub(crate) fn wait(
 
 enum Wake {
     Busy,
-    Ended(&'static str),
+    Ended(WaitOutcome),
 }
 
 enum Hit {
     Event(EventKind),
     Busy,
-    Ended(&'static str),
+    Ended(WaitOutcome),
     Timeout,
     Armed,
     Closed,
@@ -240,15 +243,15 @@ fn from_event(result: std::result::Result<EventKind, async_channel::RecvError>) 
 fn from_wake(result: &std::result::Result<Wake, async_channel::RecvError>) -> Hit {
     match result {
         Ok(Wake::Busy) => Hit::Busy,
-        Ok(Wake::Ended(reason)) => Hit::Ended(reason),
+        Ok(Wake::Ended(reason)) => Hit::Ended(*reason),
         Err(_) => Hit::Closed,
     }
 }
 
-fn ended(status: ThreadStatus) -> Option<&'static str> {
+fn ended(status: ThreadStatus) -> Option<WaitOutcome> {
     match status {
-        ThreadStatus::Idle => Some("exited"),
-        ThreadStatus::Error => Some("failed"),
+        ThreadStatus::Idle => Some(WaitOutcome::Exited),
+        ThreadStatus::Error => Some(WaitOutcome::Failed),
         ThreadStatus::Pending
         | ThreadStatus::Starting
         | ThreadStatus::Active
@@ -256,14 +259,14 @@ fn ended(status: ThreadStatus) -> Option<&'static str> {
     }
 }
 
-fn settle(kind: &EventKind) -> Option<&'static str> {
+fn settle(kind: &EventKind) -> Option<WaitOutcome> {
     match kind {
-        EventKind::Waiting => Some("waiting"),
-        EventKind::Stopped | EventKind::Idle => Some("exited"),
+        EventKind::Waiting => Some(WaitOutcome::Waiting),
+        EventKind::Stopped | EventKind::Idle => Some(WaitOutcome::Exited),
         EventKind::Exited { code, signal } if signal.is_none() && code.unwrap_or(0) == 0 => {
-            Some("exited")
+            Some(WaitOutcome::Exited)
         }
-        EventKind::Failed { .. } | EventKind::Exited { .. } => Some("failed"),
+        EventKind::Failed { .. } | EventKind::Exited { .. } => Some(WaitOutcome::Failed),
         _ => None,
     }
 }

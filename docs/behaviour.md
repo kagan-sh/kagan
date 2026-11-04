@@ -4,7 +4,7 @@ What kagan should do, one rule per line, for a model suite that reads this file 
 
 Sources, in order: [CONTEXT], [decision N], [book:page], [docs:file], [op.rs], [event.rs], [record.rs]. Help text is the CLI contract in [book:cli].
 
-A missing id is `not-found`. A bad argument is `invalid`. Every other refusal is `failed` [op.rs].
+A missing id is `not-found`. A bad argument is `invalid`. Every other refusal is `failed` [op.rs]. An `Op` request uses the kebab-case name and camelCase fields, like the `OpResult` reply.
 
 ## Questions for the person
 
@@ -34,10 +34,10 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 ### `Stop`
 
-- **Allowed when**: the thread exists and is not archived [book:cli].
+- **Allowed when**: the thread exists, including one that is archived [book:cli]. On an archived thread it ends the run now instead of waiting for the archive grace [decision 138].
 - **Changes**: a thread that is still starting becomes idle. A running thread is marked `stopping`; once its program has ended, it records `stopped` and `idle` and becomes idle, with no attention. A program whose title never shows a spinner has no turn to end. Stopping during an open turn records `turn.ended` with `interrupted` beside `stopped` and `idle` [decision 123]. The program and what it started end at once, except a process that calls `setsid` itself; on Windows the program's Job Object ends what it started, except a process started before the program joined the job [decision 46] [decision 110]. It does not ask [decision 12].
 - **Shows**: the thread leaves the running status [book:window].
-- **Refused when**: a missing thread — `not-found` [op.rs]. An archived thread — `failed` [op.rs].
+- **Refused when**: a missing thread — `not-found` [op.rs].
 
 ### `StartAgain`
 
@@ -80,10 +80,10 @@ A thread is one program running in one environment, with a status (`pending`, `i
 
 ### `Unarchive`
 
-- **Allowed when**: the thread is archived [book:cli] [CONTEXT].
-- **Changes**: brings it back [book:threads]. Inside the 10 second grace, the stop does not happen [book:threads]. Reuse of its environment clears retirement [docs:architecture]. It does not ask [decision 12].
+- **Allowed when**: the thread exists [decision 138]. A live thread is already unarchived; the call returns done and writes no event.
+- **Changes**: brings an archived thread back [book:threads]. Inside the 10 second grace, the stop does not happen [book:threads]. Reuse of its environment clears retirement [docs:architecture]. It does not ask [decision 12].
 - **Shows**: the thread can return to the sidebar [decision 41].
-- **Refused when**: a missing thread — `not-found` [op.rs]. A thread that is not archived — `failed` [op.rs].
+- **Refused when**: a missing thread — `not-found` [op.rs]. The lifecycle owner is still archived — `invalid`, message `unarchive the lifecycle owner first`.
 
 ### `Delete`
 
@@ -120,7 +120,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `WaitEvent`
 
 - **Allowed when**: the thread exists [book:cli].
-- **Shows**: the next event of that kind after `after_seq`, or no event when `timeout_ms` passes [docs:plugin-api] [op.rs]. The kind is one of the event types listed under `Events` [event.rs].
+- **Shows**: the next event of that kind after `after_seq`, or no event when `timeout_ms` passes [docs:plugin-api] [op.rs]. The kind is one of the live event types listed under `Events` [event.rs].
 - **Refused when**: an unknown kind — `invalid` [op.rs]. A missing thread — `not-found` [op.rs]. A timeout is not a refusal [op.rs].
 
 ### `Wait`
@@ -134,7 +134,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Allowed when**: the thread exists and is not archived [op.rs].
 - **Changes**: stores a question with that title and those options, for the person to answer. A second ask while that question is open does not add another [op.rs].
 - **Shows**: the interaction id at once. The person's choice is an `answered` event (`title` and the option id) [event.rs]. Questions draws that title and those options from the pending row.
-- **Refused when**: an empty title, or fewer than two options — `invalid` [op.rs]. Nothing is stored. A missing thread — `not-found` [op.rs]. An archived thread — `invalid` [op.rs]. `threads.answer` on this question fails with "a person answers this", and the card stays [docs:plugin-api].
+- **Refused when**: an empty title, or fewer than two options — `invalid` [op.rs]. Nothing is stored. A missing thread — `not-found` [op.rs]. An archived thread — `invalid` [op.rs]. A plugin cannot answer it, and the card stays for the person [docs:plugin-api].
 
 ### `Tools`
 
@@ -238,7 +238,7 @@ A plugin is a package installed from git that adds UI, commands, tools, or skill
 
 ### `List`, `Logs`, `Types`
 
-- **Shows**: `List` the installed plugins [book:plugins]. `Logs` its log, crashes, and slow marks; `--follow` keeps printing [book:plugins] [docs:self-extend]. The log keeps the current file and one previous file, each at most 10 MiB; a cursor past the end returns `reset` and starts at 0; a record larger than 10 MiB is rejected [docs:self-extend]. `Types` rewrites the declaration files for this version [docs:self-extend].
+- **Shows**: `List` the installed plugins [book:plugins]. `Logs` its log, crashes, and slow marks; `kg` implements `--follow` by repeating the read, so the op itself never follows [book:plugins] [docs:self-extend]. The log keeps the current file and one previous file, each at most 10 MiB; a cursor past the end returns `reset` and starts at 0; a record larger than 10 MiB is rejected [docs:self-extend]. `Types` rewrites the declaration files for this version [docs:self-extend].
 - **Refused when**: a missing plugin id — `not-found` [op.rs]. A log record larger than 10 MiB — `invalid` [docs:self-extend] [op.rs]. Any other log or types failure — `failed` [op.rs].
 
 ### `Cli`
@@ -468,7 +468,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ## Preference
 
-Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [settings.rs], `update-check` [decision 113], and the sidebar layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar` and `<window>.right-width`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
+Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integration`, `notify` [settings.rs], `update-check` [decision 113], `terminal-font-size`, `review-viewed`, `slot.threads` and `slot.review` (a plugin id, or `kagan` for the built-in; set from the window or with `kg plugin use`) [docs:plugin-api], and the layout of each window, `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a lowercase id such as `main` [decision 48]. `row-actions` and `footer` were removed as unused: the window never read them. The bare `right-sidebar` name was removed as unused (decision 48). The dock layout is not a preference and not an `Op`; it is `{dataDir}/layout.json` [decision 15]. `predict` still loads and no longer hides hunks; it is not one of these keys [decision 43].
 
 ### `Get`
 
@@ -477,7 +477,7 @@ Exactly these keys exist: `confirm-archive` [person 2026-10-08], `agent-integrat
 
 ### `Set`
 
-- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `notify` [settings.rs]. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48].
+- **Changes**: stores the value when the shape matches [person 2026-10-08]. `confirm-archive` is a boolean [person 2026-10-08], and so are `agent-integration` and `notify` [settings.rs]. `notify` set to `false` stops the system notification for a thread that needs you while that thread is not on screen. An unset `notify` counts as on [notify.rs]. `update-check` is a boolean; an unset one counts as off, and on runs the automatic update check at launch and then daily [decision 113]. `terminal-font-size` is an integer from 9 to 24. `<window>.right-sidebar` is a boolean that says whether the right sidebar is open; an open window reads it when it opens, so a change applies the next time the window opens [decision 48]. `<window>.review-wrap` is a boolean that wraps long lines in the review. `<window>.left-width` and `<window>.right-width` are numbers of pixels. `review-viewed` is a map from a reviewed file's path to the revision marked as viewed.
 - **Refused when**: any other key — `invalid`, message `unknown preference <key>` [person 2026-10-08] [op.rs]. A wrong shape — `invalid` [person 2026-10-08] [op.rs].
 
 ## Config
@@ -572,7 +572,7 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 ## Cross-Op rules
 
 - `KG_SOCKET` names the socket. When it is unset and `KG_DATA_DIR` is set, that folder is made absolute and the socket follows it: `<data>/kg.sock` on macOS and Linux, or `/tmp/kagan-<sha256>/kg.sock` when that path does not fit a local socket. The `/tmp` folder must be mode `0700`, owned by this user, and not a symlink, or the connection is refused. On Windows the pipe name is derived from the absolute folder. A file that is not a socket is not removed. It is not the default socket of the app that uses `~/.kagan` [decision 124] [book:data]. `KG_SOCKET` still overrides. With both unset, the socket stays the platform default.
-- Only a person answers an install, a thread delete, or a standalone approval. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin may answer another pending question on a thread through `Workspace::answer`. That removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title and the chosen option. That is the trace of an approval on the thread [docs:architecture] [event.rs].
+- Only a person answers a pending question. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin cannot answer either. An answer removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title and the chosen option. That is the trace of an approval on the thread [docs:architecture] [event.rs].
 - Archive, unarchive, and stop never ask [decision 12] [docs:architecture] [docs:plugin-api].
 - The database is the truth for thread rows and the event log [decision 5] [docs:architecture].
 - Opening the app does not resume a program. A thread left active is marked failed with "kagan quit while the program was running". A thread left starting is marked failed with "kagan stopped while the thread was starting". A thread left stopping is marked failed. Archive and environment-removal deadlines resume [docs:architecture].

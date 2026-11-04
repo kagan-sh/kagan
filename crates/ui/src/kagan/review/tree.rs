@@ -14,6 +14,7 @@ use gpui_kit::{
 use kg_domain::{DiffFile, DiffStatus};
 
 use super::Kagan;
+use crate::kagan::controls::Selected;
 use crate::theme;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -82,15 +83,6 @@ fn folder_tree<'a>(files: &[&'a DiffFile]) -> Folder<'a> {
         folder.files.push(file);
     }
     root
-}
-
-fn status_label(status: DiffStatus) -> &'static str {
-    match status {
-        DiffStatus::Added => "A",
-        DiffStatus::Modified => "M",
-        DiffStatus::Deleted => "D",
-        DiffStatus::Renamed => "R",
-    }
 }
 
 fn compact_folder<'a>(
@@ -331,7 +323,7 @@ impl Kagan {
                     )
                     .child(
                         div().flex_none().child(
-                            super::super::shown::segments(cx)
+                            super::super::controls::segments(cx)
                                 .child(Self::review_tree_toggle(review.tree, true, cx))
                                 .child(Self::review_tree_toggle(review.tree, false, cx)),
                         ),
@@ -399,15 +391,16 @@ impl Kagan {
     fn review_tree_toggle(tree: bool, target: bool, cx: &mut Context<Self>) -> AnyElement {
         let label = if target { "Tree" } else { "Path" };
         let id = if target { "review-tree" } else { "review-path" };
-        super::super::shown::control(
+        let chosen = tree == target;
+        super::super::controls::control(
             id,
             Facts {
-                selected: Some(tree == target),
+                selected: Some(chosen),
                 ..Facts::button(label)
             },
-            super::super::shown::segment(
+            super::super::controls::segment(
                 ElementId::Name(format!("button-{id}").into()),
-                tree == target,
+                if chosen { Selected::Yes } else { Selected::No },
                 cx,
             )
             .icon(if target {
@@ -531,7 +524,7 @@ impl Kagan {
         let focused = focus.is_focused(window);
         let click_focus = focus.clone();
         let selected = self.screen.review().map(|review| &review.path) == Some(&path);
-        let kind = status_label(file.status);
+        let kind = crate::kagan::changes::kind(file.status);
         let viewed = self.is_viewed(&file.path, cx);
         let (base, folder) = name
             .rsplit_once('/')

@@ -116,16 +116,21 @@ fn read_opened(
     let mut file = opened
         .dir
         .open(&opened.relative)
-        .map_err(|error| error.to_string())?;
-    let size = file.metadata().map_err(|error| error.to_string())?.len();
+        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
+    let size = file
+        .metadata()
+        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?
+        .len();
     if offset >= size || max_bytes == 0 {
         return Ok(json!({ "text": "", "next": offset.min(size), "size": size }));
     }
     file.seek(std::io::SeekFrom::Start(offset))
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
     let len = usize::try_from(max_bytes).map_err(|_| "maxBytes does not fit".to_owned())?;
     let mut bytes = vec![0; len];
-    let read = file.read(&mut bytes).map_err(|error| error.to_string())?;
+    let read = file
+        .read(&mut bytes)
+        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
     bytes.truncate(read);
     let end = match std::str::from_utf8(&bytes) {
         Ok(text) => text.len(),
@@ -150,9 +155,9 @@ fn list_dir(roots: &[Root], path: &Path) -> Result<serde_json::Value, String> {
     for entry in opened
         .dir
         .read_dir(&opened.relative)
-        .map_err(|error| error.to_string())?
+        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?
     {
-        let entry = entry.map_err(|error| error.to_string())?;
+        let entry = entry.map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
         let name = entry.file_name();
         name_bytes += name.len();
         if rows.len() == MAX_LIST_ENTRIES || name_bytes > MAX_LIST_NAME_BYTES {

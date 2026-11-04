@@ -31,7 +31,7 @@ impl Kagan {
         let declared: Vec<PluginId> = kg_plugins::contributions(cx)
             .map(|list| {
                 list.into_iter()
-                    .filter(|(_, ui)| ui.overlay().is_some())
+                    .filter(|(_, ui)| ui.overlay.as_deref().is_some())
                     .map(|(plugin, _)| plugin)
                     .collect()
             })

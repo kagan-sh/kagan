@@ -2,8 +2,8 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gpui_kit::{AsyncApp, WeakEntity};
-use kg_domain::{DiagnosticsOp, OpResult, ThreadId, ThreadStatus};
+use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
+use kg_domain::{DiagnosticsOp, OpError, OpResult, ThreadId, ThreadStatus};
 use kg_store::{ScreenRow, Store};
 use kg_terminal::SNAPSHOT_MAX;
 
@@ -22,31 +22,27 @@ pub(crate) async fn export(
             (workspace.database.clone(), workspace.data_dir.clone())
         })
         .map_err(closed)?;
-    let path = database
-        .call(move |store| write_export(store, &data_dir, path))
+    let report_dir = data_dir.clone();
+    let text = database
+        .call(move |store| report(store, &report_dir))
+        .await?;
+    let path = cx
+        .background_spawn(async move {
+            let path = match path {
+                Some(path) => path,
+                None => default_path(&data_dir)
+                    .map_err(|error| OpError::Failed(format!("{}: {error}", data_dir.display())))?,
+            };
+            write_new(&path, &text)?;
+            Ok::<std::path::PathBuf, OpError>(path)
+        })
         .await?;
     Ok(OpResult::Diagnostics { path })
 }
 
-fn write_export(
-    store: &Store,
-    data_dir: &Path,
-    path: Option<PathBuf>,
-) -> kg_store::Result<PathBuf> {
-    let text = report(store, data_dir)?;
-    let path = match path {
-        Some(path) => path,
-        None => {
-            default_path(data_dir).map_err(|error| kg_store::Error::Conflict(error.to_string()))?
-        }
-    };
-    write_new(&path, &text).map_err(kg_store::Error::Conflict)?;
-    Ok(path)
-}
-
 fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
     let schema = store.schema_version()?;
-    let threads = store.threads(None, None, None, None)?;
+    let threads = store.all_threads()?;
     let endings = store.endings()?;
     let screens = store.screens()?;
     let plugins = store.plugins()?;
@@ -238,15 +234,15 @@ fn default_path(data_dir: &Path) -> std::io::Result<PathBuf> {
     ))
 }
 
-fn write_new(path: &Path, text: &str) -> std::result::Result<(), String> {
+fn write_new(path: &Path, text: &str) -> std::result::Result<(), OpError> {
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
         && !parent.exists()
     {
-        return Err(format!(
+        return Err(OpError::Invalid(format!(
             "the folder does not exist: {}. Create it, or omit --path to write under the data directory",
             parent.display()
-        ));
+        )));
     }
     let mut file = match std::fs::OpenOptions::new()
         .write(true)
@@ -255,14 +251,16 @@ fn write_new(path: &Path, text: &str) -> std::result::Result<(), String> {
     {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            return Err("that file already exists".into());
+            return Err(OpError::Invalid("that file already exists".into()));
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => {
+            return Err(OpError::Failed(format!("{}: {error}", path.display())));
+        }
     };
     if let Err(error) = file.write_all(text.as_bytes()) {
         drop(file);
         let _ = std::fs::remove_file(path);
-        return Err(error.to_string());
+        return Err(OpError::Failed(format!("{}: {error}", path.display())));
     }
     Ok(())
 }

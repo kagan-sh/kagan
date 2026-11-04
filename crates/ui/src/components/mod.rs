@@ -1,5 +1,5 @@
 mod button;
-mod fail;
+mod component_error;
 mod field;
 #[cfg(test)]
 mod tests;
@@ -20,7 +20,7 @@ use gpui_shell::{
 pub(crate) use webview::UNAVAILABLE;
 #[cfg(test)]
 pub(crate) use webview::{REFUSED_HOST, native_shown};
-pub(crate) use webview::{drop_stores, fills_panel, note_inset, sync_pages};
+pub(crate) use webview::{drop_stores, fills_panel, nudge_once, sync_pages};
 
 pub(crate) fn register(registry: &mut ComponentRegistry) -> Result<(), RegistryError> {
     button::register(registry)?;
@@ -68,7 +68,9 @@ impl ComponentMaterializer for Markdown {
         let (id, text) = request
             .payload()
             .downcast_ref::<(String, String)>()
-            .ok_or_else(|| fail::ComponentError::new("Markdown received incompatible text data"))?;
+            .ok_or_else(|| {
+                component_error::ComponentError::new("Markdown received incompatible text data")
+            })?;
         let element = div().child(TextView::markdown(id.clone(), text.clone()));
         request.finish(element)
     }

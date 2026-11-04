@@ -16,7 +16,7 @@ use kg_core::Workspace;
 use kg_domain::{DiffFile, DiffOp, DiffQuery, DiffScope, DiffStatus, Op, OpResult, ThreadId};
 
 use super::Kagan;
-use super::shown::control;
+use super::controls::{Selected, control};
 use crate::theme;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -96,7 +96,7 @@ pub(super) fn line(
         .child(text.into())
 }
 
-fn kind(status: DiffStatus) -> &'static str {
+pub(super) fn kind(status: DiffStatus) -> &'static str {
     match status {
         DiffStatus::Added => "A",
         DiffStatus::Modified => "M",
@@ -303,7 +303,7 @@ impl Kagan {
     }
 
     fn scope_row(&self, cx: &mut Context<Self>) -> AnyElement {
-        super::shown::segments(cx)
+        super::controls::segments(cx)
             .child(self.scope_button(
                 DiffScope::Uncommitted,
                 "Uncommitted",
@@ -322,15 +322,20 @@ impl Kagan {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let active = self.changes.scope == scope;
+        let selected = if active { Selected::Yes } else { Selected::No };
         control(
             name,
             Facts {
                 selected: Some(active),
                 ..Facts::button(label)
             },
-            super::shown::segment(ElementId::Name(format!("button-{name}").into()), active, cx)
-                .label(label)
-                .on_click(cx.listener(move |this, _, _, cx| this.set_scope(scope, cx))),
+            super::controls::segment(
+                ElementId::Name(format!("button-{name}").into()),
+                selected,
+                cx,
+            )
+            .label(label)
+            .on_click(cx.listener(move |this, _, _, cx| this.set_scope(scope, cx))),
         )
         .into_any_element()
     }

@@ -44,7 +44,7 @@ impl Kagan {
         let mut cards: Vec<AnyElement> = Vec::new();
         let mut held = 0;
         for approval in &approvals {
-            if self.holds(approval.id()) {
+            if self.holds(&approval.id) {
                 held += 1;
             } else {
                 cards.push(
@@ -158,7 +158,7 @@ impl Kagan {
         Workspace::global(cx)
             .read(cx)
             .approvals()
-            .map(|approval| (approval.id(), approval.options()))
+            .map(|approval| (&approval.id, approval.options.as_slice()))
             .chain(
                 self.questions
                     .read(cx)

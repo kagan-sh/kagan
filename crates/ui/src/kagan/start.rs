@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use super::shown::{control, dispatch, note};
+use super::controls::{Selected, control, dispatch, note};
 use super::{
     Kagan, RetryBranches, RetryPrograms, Shown, ToggleCustomCommand, UseProjectFolder,
     UseWorktreeFolder,
@@ -91,7 +91,7 @@ pub(super) struct StartState {
 
 impl StartState {
     /// Forgets the last project's pick. A start still preparing is kept, so a second one waits.
-    pub(super) fn show(&mut self) {
+    pub(super) fn reset(&mut self) {
         self.folder = None;
         self.branches = Branches::Loading;
         self.setup = None;
@@ -107,7 +107,7 @@ impl Kagan {
         let path = project_path(&project, cx);
         let task = Workspace::dispatch(
             Op::Environment(EnvironmentOp::Branches {
-                id: project.clone(),
+                project_id: project.clone(),
             }),
             cx,
         );
@@ -556,7 +556,8 @@ impl Kagan {
                       folder: StartFolder,
                       action: Box<dyn Action>| {
             let on = chosen == Some(folder);
-            super::shown::segment(button, on, cx)
+            let selected = if on { Selected::Yes } else { Selected::No };
+            super::controls::segment(button, selected, cx)
                 .disabled(starting)
                 .tooltip(name.clone())
                 .child(control(
@@ -571,7 +572,7 @@ impl Kagan {
                 ))
                 .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
         };
-        super::shown::segments(cx)
+        super::controls::segments(cx)
             .child(toggle(
                 "folder-project",
                 "folder-project-button",

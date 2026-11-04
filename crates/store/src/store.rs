@@ -49,8 +49,8 @@ CREATE TABLE threads (
     environment_id TEXT REFERENCES environments(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     provider TEXT NOT NULL,
-    model TEXT NOT NULL,
-    reasoning_level TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    reasoning_level TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     visibility TEXT NOT NULL,
     parent_thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,
@@ -131,6 +131,7 @@ CREATE TABLE plugin_values (
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
 ",
     "ALTER TABLE threads ADD COLUMN conversation TEXT;",
+    "ALTER TABLE threads DROP COLUMN model; ALTER TABLE threads DROP COLUMN reasoning_level;",
     r"
 ALTER TABLE projects ADD COLUMN sort INTEGER NOT NULL DEFAULT 0;
 UPDATE projects SET sort = (
@@ -161,10 +162,9 @@ pub struct ScreenRow {
     pub screen_kept: bool,
 }
 
-const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, model, \
-    reasoning_level, status, visibility, parent_thread_id, lifecycle_owner_thread_id, \
-    section_id, pinned, last_read_at, latest_attention_at, archived_at, created_at, \
-    updated_at, title_locked, done";
+const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, status, \
+    visibility, parent_thread_id, lifecycle_owner_thread_id, section_id, pinned, last_read_at, \
+    latest_attention_at, archived_at, created_at, updated_at, title_locked, done";
 
 const OWNED_THREADS: &str = "WITH RECURSIVE owned(id) AS ( \
     SELECT id FROM threads WHERE id = ?1 \
@@ -267,12 +267,8 @@ impl Store {
             .optional()?)
     }
 
-    pub fn remove_project(
-        &mut self,
-        id: &ProjectId,
-        at: Timestamp,
-    ) -> Result<Vec<(Event, ProjectId)>> {
-        let tx = self.conn.transaction()?;
+    pub fn delete_project(&self, id: &ProjectId, at: Timestamp) -> Result<Vec<(Event, ProjectId)>> {
+        let tx = self.conn.unchecked_transaction()?;
         let ids: Vec<ThreadId> = {
             let mut statement = tx.prepare("SELECT id FROM threads WHERE project_id = ?1")?;
             statement
@@ -439,6 +435,11 @@ impl Store {
     }
 
     /// Newest first by `created_at`; `archived` and `before` filter only when given.
+    /// Every thread, visible or hidden, archived or live.
+    pub fn all_threads(&self) -> Result<Vec<Thread>> {
+        self.threads(None, None, None, None)
+    }
+
     pub fn threads(
         &self,
         project_id: Option<&ProjectId>,
@@ -578,7 +579,6 @@ impl Store {
         found(changed, "thread", id)
     }
 
-    /// Archives the thread and its lifecycle dependents; returns those that were not archived yet.
     /// Archives the thread and its lifecycle dependents; returns an `Archived` event per thread it archived.
     pub fn archive_thread(&mut self, id: &ThreadId, at: Timestamp) -> Result<Vec<Event>> {
         let tx = self.conn.transaction()?;
@@ -649,12 +649,12 @@ impl Store {
     /// Deletes the thread, its lifecycle dependents and all their history, and marks `folders` destroyed in the same
     /// commit. `folders` must be what `personal_folders` returned; if it changed, nothing is deleted. Returns a `Deleted` event per thread and that thread's project, read before the row goes.
     pub fn delete_thread(
-        &mut self,
+        &self,
         id: &ThreadId,
         at: Timestamp,
         folders: &[EnvironmentId],
     ) -> Result<Vec<(Event, ProjectId)>> {
-        let tx = self.conn.transaction()?;
+        let tx = self.conn.unchecked_transaction()?;
         let owned = owned_threads(&tx, id)?;
         if owned.is_empty() {
             return Err(not_found("thread", id));
@@ -822,7 +822,7 @@ impl Store {
         Ok(interactions)
     }
 
-    pub fn remove_pending_interaction(&self, id: &PendingInteractionId) -> Result<()> {
+    pub fn delete_pending_interaction(&self, id: &PendingInteractionId) -> Result<()> {
         let changed = self
             .conn
             .execute("DELETE FROM pending_interactions WHERE id = ?1", [Text(id)])?;
@@ -919,7 +919,7 @@ impl Store {
         found(changed, "plugin", id)
     }
 
-    pub fn remove_plugin(&self, id: &PluginId) -> Result<()> {
+    pub fn delete_plugin(&self, id: &PluginId) -> Result<()> {
         let transaction = self.conn.unchecked_transaction()?;
         transaction.execute(
             "DELETE FROM plugin_values WHERE plugin_id = ?1",
@@ -961,14 +961,12 @@ impl Store {
             ));
         }
         let transaction = self.conn.unchecked_transaction()?;
-        let latest: Option<u64> = transaction
-            .query_row(
-                "SELECT MAX(seq) FROM events \
-                 WHERE thread_id = ?1 AND json_extract(kind, '$.type') = 'started'",
-                [Text(&row.thread_id)],
-                |row| row.get(0),
-            )
-            .optional()?;
+        let latest: Option<u64> = transaction.query_row(
+            "SELECT MAX(seq) FROM events \
+             WHERE thread_id = ?1 AND json_extract(kind, '$.type') = 'started'",
+            [Text(&row.thread_id)],
+            |row| row.get(0),
+        )?;
         if latest != Some(row.started_seq) {
             transaction.commit()?;
             return Ok(false);
@@ -1232,25 +1230,23 @@ fn thread(row: &Row) -> rusqlite::Result<Thread> {
         environment_id: row.get::<_, Text<_>>(2)?.0,
         title: row.get(3)?,
         provider: row.get(4)?,
-        model: row.get(5)?,
-        reasoning_level: row.get(6)?,
-        status: row.get::<_, Text<_>>(7)?.0,
-        visibility: row.get::<_, Text<_>>(8)?.0,
-        parent_thread_id: row.get::<_, Text<_>>(9)?.0,
-        lifecycle_owner_thread_id: row.get::<_, Text<_>>(10)?.0,
-        section_id: row.get::<_, Text<_>>(11)?.0,
-        pinned: row.get(12)?,
-        last_read_at: row.get::<_, Option<i64>>(13)?.map(Timestamp),
-        latest_attention_at: Timestamp(row.get(14)?),
-        mark: if row.get(19)? {
+        status: row.get::<_, Text<_>>(5)?.0,
+        visibility: row.get::<_, Text<_>>(6)?.0,
+        parent_thread_id: row.get::<_, Text<_>>(7)?.0,
+        lifecycle_owner_thread_id: row.get::<_, Text<_>>(8)?.0,
+        section_id: row.get::<_, Text<_>>(9)?.0,
+        pinned: row.get(10)?,
+        last_read_at: row.get::<_, Option<i64>>(11)?.map(Timestamp),
+        latest_attention_at: Timestamp(row.get(12)?),
+        mark: if row.get(17)? {
             ThreadMark::Done
         } else {
             ThreadMark::None
         },
-        archived_at: row.get::<_, Option<i64>>(15)?.map(Timestamp),
-        created_at: Timestamp(row.get(16)?),
-        updated_at: Timestamp(row.get(17)?),
-        title_locked: row.get(18)?,
+        archived_at: row.get::<_, Option<i64>>(13)?.map(Timestamp),
+        created_at: Timestamp(row.get(14)?),
+        updated_at: Timestamp(row.get(15)?),
+        title_locked: row.get(16)?,
     })
 }
 
@@ -1258,12 +1254,11 @@ fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
     conn.execute(
         &format!(
             "INSERT INTO threads ({THREAD_COLUMNS})
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
              ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id,
                 environment_id = excluded.environment_id, title = excluded.title,
                 title_locked = excluded.title_locked,
-                provider = excluded.provider, model = excluded.model,
-                reasoning_level = excluded.reasoning_level, status = excluded.status,
+                provider = excluded.provider, status = excluded.status,
                 visibility = excluded.visibility, parent_thread_id = excluded.parent_thread_id,
                 lifecycle_owner_thread_id = excluded.lifecycle_owner_thread_id,
                 section_id = excluded.section_id, pinned = excluded.pinned,
@@ -1278,8 +1273,6 @@ fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
             Text(&thread.environment_id),
             thread.title,
             thread.provider,
-            thread.model,
-            thread.reasoning_level,
             Text(thread.status),
             Text(thread.visibility),
             Text(&thread.parent_thread_id),

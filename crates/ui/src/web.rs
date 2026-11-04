@@ -1,5 +1,6 @@
 //! Web panel files, navigation rules and theme, kept apart so tests run without a native page.
-//! The page setup itself is in `page.rs`, shared with the Browser and a plugin `WebView`.
+//! The page setup itself is in `web_page.rs`, the opener shared with the Browser and a plugin
+//! `WebView`. This module compiles only on macOS; `web_page.rs` also covers Windows.
 
 use std::path::{Component, Path};
 
@@ -72,27 +73,41 @@ pub(crate) fn mime(path: &str) -> &'static str {
 pub(crate) fn theme_css(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
-    let palette = &state.palette;
-    let scheme = match state.mode {
+    stylesheet(&tokens(&state.palette), scheme(state.mode))
+}
+
+fn stylesheet(tokens: &[(&'static str, kg_domain::Color)], scheme: &str) -> String {
+    let declarations = tokens
+        .iter()
+        .map(|(name, color)| format!("{name}:{}", color.hex()))
+        .collect::<Vec<_>>()
+        .join(";");
+    format!(":root{{{declarations};color-scheme:{scheme}}}\n")
+}
+
+fn scheme(mode: gpui_kit::component::ThemeMode) -> &'static str {
+    match mode {
         gpui_kit::component::ThemeMode::Light => "light",
         gpui_kit::component::ThemeMode::Dark => "dark",
-    };
+    }
+}
+
+fn tokens(palette: &kg_domain::Palette) -> [(&'static str, kg_domain::Color); 12] {
     let hover = palette.hover.unwrap_or(palette.raised);
-    format!(
-        ":root{{--bg:{bg};--surface:{surface};--raised:{raised};--hover:{hover};--ink:{ink};--muted:{muted};--line:{line};--accent:{accent};--needs:{needs};--failed:{failed};--added:{added};--working:{working};color-scheme:{scheme}}}\n",
-        bg = palette.bg.hex(),
-        surface = palette.surface.hex(),
-        raised = palette.raised.hex(),
-        hover = hover.hex(),
-        ink = palette.ink.hex(),
-        muted = palette.muted.hex(),
-        line = palette.line.hex(),
-        accent = palette.accent.hex(),
-        needs = palette.needs.hex(),
-        failed = palette.failed.hex(),
-        added = palette.added().hex(),
-        working = palette.working.hex(),
-    )
+    [
+        ("--bg", palette.bg),
+        ("--surface", palette.surface),
+        ("--raised", palette.raised),
+        ("--hover", hover),
+        ("--ink", palette.ink),
+        ("--muted", palette.muted),
+        ("--line", palette.line),
+        ("--accent", palette.accent),
+        ("--needs", palette.needs),
+        ("--failed", palette.failed),
+        ("--added", palette.added()),
+        ("--working", palette.working),
+    ]
 }
 
 pub(crate) fn serve(
@@ -213,37 +228,26 @@ pub(crate) const BRIDGE: &str = r#"(function(){function post(message){var text;t
 pub(crate) fn theme_refresh(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
-    let palette = &state.palette;
-    let scheme = match state.mode {
-        gpui_kit::component::ThemeMode::Light => "light",
-        gpui_kit::component::ThemeMode::Dark => "dark",
-    };
-    let hover = palette.hover.unwrap_or(palette.raised);
+    refresh(&tokens(&state.palette), scheme(state.mode))
+}
+
+fn refresh(tokens: &[(&'static str, kg_domain::Color)], scheme: &str) -> String {
+    let vars = tokens
+        .iter()
+        .map(|(name, color)| format!("'{name}':'{}'", color.hex()))
+        .collect::<Vec<_>>()
+        .join(",");
     format!(
         concat!(
             "(function(){{var r=document.documentElement;",
-            "var v={{'--bg':'{bg}','--surface':'{surface}','--raised':'{raised}',",
-            "'--hover':'{hover}','--ink':'{ink}','--muted':'{muted}','--line':'{line}',",
-            "'--accent':'{accent}','--needs':'{needs}','--failed':'{failed}',",
-            "'--added':'{added}','--working':'{working}'}};",
+            "var v={{{vars}}};",
             "for(var k in v)r.style.setProperty(k,v[k]);",
             "r.style.colorScheme='{scheme}';",
             "var link=document.getElementById('kagan-theme');",
             "if(link){{link.href=link.href.split('?')[0]+'?v='+Date.now();",
             "link.dispatchEvent(new Event('load'));}}}})();"
         ),
-        bg = palette.bg.hex(),
-        surface = palette.surface.hex(),
-        raised = palette.raised.hex(),
-        hover = hover.hex(),
-        ink = palette.ink.hex(),
-        muted = palette.muted.hex(),
-        line = palette.line.hex(),
-        accent = palette.accent.hex(),
-        needs = palette.needs.hex(),
-        failed = palette.failed.hex(),
-        added = palette.added().hex(),
-        working = palette.working.hex(),
+        vars = vars,
         scheme = scheme,
     )
 }
@@ -260,14 +264,16 @@ fn host_token(host: &str) -> bool {
 }
 
 #[cfg(test)]
-#[path = "web_test.rs"]
-mod web_test;
+mod tests;
 
 // The stylesheet text the web view's protocol callback reads.
 //
 // That callback is not a GPUI context, so the text cannot live in an entity.
 mod theme_cell {
-    #![allow(clippy::disallowed_types)]
+    #![expect(
+        clippy::disallowed_types,
+        reason = "the WebKit callback needs a std Arc<Mutex> because it has no GPUI context"
+    )]
 
     use std::sync::{Arc, Mutex};
 

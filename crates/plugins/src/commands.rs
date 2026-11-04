@@ -7,7 +7,6 @@ use kg_domain::{KeymapAction, KeymapOp, OpResult, PluginId, ProjectId, ThreadId}
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::jobs::Ended;
 use crate::{PluginHost, Result};
 
 #[derive(Clone, PartialEq, gpui_kit::Action)]
@@ -34,6 +33,9 @@ impl RunCommand {
 }
 
 pub(crate) const BINDINGS: &str = "$hotkeys";
+
+/// docs/plugin-api.md gives a command 10 s; tools and CLI calls get `TOOL_TIMEOUT`.
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -66,45 +68,20 @@ pub enum KeySource {
 
 #[derive(Clone, Debug)]
 pub struct CommandContribution {
-    plugin: PluginId,
-    command: Command,
-    key: Option<String>,
-    source: KeySource,
+    pub plugin: PluginId,
+    pub id: String,
+    pub title: String,
+    pub key: Option<String>,
+    pub when: CommandWhen,
+    pub header: bool,
+    pub source: KeySource,
 }
 
 impl CommandContribution {
-    #[must_use]
-    pub fn plugin(&self) -> &PluginId {
-        &self.plugin
-    }
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.command.id
-    }
-    #[must_use]
-    pub fn title(&self) -> &str {
-        &self.command.title
-    }
-    #[must_use]
-    pub fn key(&self) -> Option<&str> {
-        self.key.as_deref()
-    }
-    #[must_use]
-    pub fn when(&self) -> CommandWhen {
-        self.command.when
-    }
-    #[must_use]
-    pub fn header(&self) -> bool {
-        self.command.header
-    }
-    #[must_use]
-    pub fn source(&self) -> KeySource {
-        self.source
-    }
     /// The name `kg keymap` gives this command.
     #[must_use]
     pub fn action(&self) -> String {
-        format!("{}:{}", self.plugin, self.command.id)
+        format!("{}:{}", self.plugin, self.id)
     }
 }
 
@@ -121,9 +98,12 @@ impl PluginHost {
                     };
                     CommandContribution {
                         plugin: plugin.clone(),
+                        id: command.id.clone(),
+                        title: command.title.clone(),
                         key,
+                        when: command.when,
+                        header: command.header,
                         source,
-                        command: command.clone(),
                     }
                 })
             })
@@ -141,29 +121,47 @@ impl PluginHost {
         let (host, plugin, command) = (host.clone(), plugin.clone(), command.to_owned());
         cx.spawn(async move |cx| {
             host.update(cx, |host, _| {
-                let active = host.active.get(&plugin).ok_or_else(|| kg_domain::OpError::NotFound(format!("plugin {plugin} is not enabled")))?;
-                let command = active.manifest.commands.iter().find(|item| item.id == command)
-                    .ok_or_else(|| kg_domain::OpError::NotFound(format!("plugin {plugin} has no command {command}")))?;
+                let active = host.active.get(&plugin).ok_or_else(|| {
+                    kg_domain::OpError::NotFound(format!("plugin {plugin} is not enabled"))
+                })?;
+                let command = active
+                    .manifest
+                    .commands
+                    .iter()
+                    .find(|item| item.id == command)
+                    .ok_or_else(|| {
+                        kg_domain::OpError::NotFound(format!(
+                            "plugin {plugin} has no command {command}"
+                        ))
+                    })?;
                 let allowed = match command.when {
                     CommandWhen::Always => true,
                     CommandWhen::Thread => thread_id.is_some(),
                     CommandWhen::Project => project_id.is_some(),
                 };
-                if allowed { Ok(()) } else { Err(kg_domain::OpError::Invalid(format!("command {} needs a {:?} on screen", command.id, command.when))) }
+                if allowed {
+                    Ok(())
+                } else {
+                    Err(kg_domain::OpError::Invalid(format!(
+                        "command {} needs a {:?} on screen",
+                        command.id, command.when
+                    )))
+                }
             })?;
-            let jobs = host.update(cx, |host, cx| host.load(&plugin, cx))?;
-            let fields = json!({ "kind": "command", "id": command, "threadId": thread_id, "projectId": project_id });
-            let mut job = fields.as_object().cloned().unwrap_or_default();
-            // Jobs own their request id; the command id has its own field.
-            let command = job.remove("id").unwrap_or(Value::Null);
-        job.insert("command".into(), command);
-            let (id, receive) = jobs.send(job).ok_or_else(|| kg_domain::OpError::Failed(format!("plugin {plugin} unloaded")))?;
-            let timer = cx.background_executor().timer(Duration::from_secs(10));
-            match jobs.settled(&id, &receive, timer).await {
-                Ok(reply) => reply.map_err(kg_domain::OpError::Failed).map(|_| OpResult::Done),
-                Err(Ended::Unloaded) => Err(kg_domain::OpError::Failed(format!("plugin {plugin} unloaded"))),
-                Err(Ended::TimedOut) => Err(kg_domain::OpError::Failed(format!("plugin {plugin} did not answer command within 10 s"))),
-            }
+            let job = json!({
+                "kind": "command",
+                "command": command,
+                "threadId": thread_id,
+                "projectId": project_id,
+            })
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+            let reply =
+                crate::host::call(&host, &plugin, &command, job, COMMAND_TIMEOUT, cx).await?;
+            reply
+                .map_err(kg_domain::OpError::Failed)
+                .map(|_| OpResult::Done)
         })
     }
 }
@@ -245,7 +243,7 @@ pub(crate) async fn keymap(
                     crate::keys::conflict(&crate::keys::window_keys(cx), &entered).or_else(|| {
                         commands
                             .iter()
-                            .filter(|item| item.plugin != plugin || item.command.id != command)
+                            .filter(|item| item.plugin != plugin || item.id != command)
                             .find(|item| {
                                 item.key.as_deref().is_some_and(|other| {
                                     crate::keys::overlaps(
@@ -288,33 +286,23 @@ async fn store_bindings(
     bindings: &BTreeMap<String, Option<String>>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let stamped = host.read_with(cx, |host, _| {
-        Some((host.activation(&plugin)?, host.permit(&plugin)?))
+    let permit = host.read_with(cx, |host, _| {
+        Some(kg_core::Permit::new(
+            host.activation(&plugin)?,
+            host.permit(&plugin)?,
+        ))
     });
-    let Some((activation, permit)) = stamped else {
+    let Some(permit) = permit else {
         return Err(kg_domain::OpError::Invalid(format!(
             "plugin {plugin} changed while this was saving"
         )));
     };
     let value = serde_json::to_value(bindings)?;
     let workspace = cx.update(|cx| Workspace::global(cx));
-    let wrote = workspace
+    workspace
         .read_with(cx, |workspace, _| {
-            workspace.commit_plugin_config(
-                plugin.clone(),
-                BINDINGS.into(),
-                value,
-                None,
-                permit,
-                activation,
-            )
+            workspace.commit_plugin_config(plugin.clone(), BINDINGS.into(), value, None, permit)
         })
         .await?;
-    if wrote {
-        Ok(())
-    } else {
-        Err(kg_domain::OpError::Invalid(format!(
-            "plugin {plugin} changed while this was saving"
-        )))
-    }
+    Ok(())
 }

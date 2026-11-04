@@ -8,26 +8,9 @@ use crate::{Workspace, WorkspaceEvent};
 
 #[derive(Clone, Debug)]
 pub struct Approval {
-    id: PendingInteractionId,
-    title: String,
-    options: Vec<InteractionOption>,
-}
-
-impl Approval {
-    #[must_use]
-    pub fn id(&self) -> &PendingInteractionId {
-        &self.id
-    }
-
-    #[must_use]
-    pub fn title(&self) -> &str {
-        &self.title
-    }
-
-    #[must_use]
-    pub fn options(&self) -> &[InteractionOption] {
-        &self.options
-    }
+    pub id: PendingInteractionId,
+    pub title: String,
+    pub options: Vec<InteractionOption>,
 }
 
 /// The socket connection an op came from. `gone` closes when the connection does.

@@ -10,12 +10,18 @@ use kg_domain::{
 };
 use serde_json::{Map, Value};
 
-use crate::jobs::Ended;
 use crate::manifest::{AgentChoice, Grant, Setting};
+
+pub(crate) fn approved(record: &Plugin) -> Result<Grant> {
+    serde_json::from_value(record.approved.clone()).map_err(|error| {
+        OpError::Invalid(format!(
+            "plugin {}: the stored approval cannot be read; approve it again ({error})",
+            record.id
+        ))
+    })
+}
 use crate::source::{Fetched, Source, checkout, fetch};
 use crate::{Discovered, PluginHost, Result, activate};
-
-const NO_THREAD: &str = "reload from a thread";
 
 pub(crate) async fn run(
     host: &Entity<PluginHost>,
@@ -124,7 +130,7 @@ async fn use_slot(
     let set = cx.update(|cx| {
         Workspace::dispatch(
             Op::Preference(PreferenceOp::Set {
-                key: slot.preference(),
+                key: slot.preference().to_owned(),
                 value: Value::String(choice.to_string()),
             }),
             cx,
@@ -196,7 +202,6 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
                 .map(|project| project.id)
         }
     };
-    let jobs = host.update(cx, |host, cx| host.load(&plugin, cx))?;
     let job = Map::from_iter([
         ("kind".to_owned(), "cli".into()),
         ("command".to_owned(), command.clone().into()),
@@ -205,23 +210,7 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
         ("threadId".to_owned(), thread_id.map(|id| id.0).into()),
         ("projectId".to_owned(), project_id.map(|id| id.0).into()),
     ]);
-    let unloaded = || {
-        OpError::Failed(format!(
-            "plugin {plugin} was unloaded before it answered {command}"
-        ))
-    };
-    let (id, replied) = jobs.send(job).ok_or_else(unloaded)?;
-    let timer = cx.background_executor().timer(crate::TOOL_TIMEOUT);
-    let reply = match jobs.settled(&id, &replied, timer).await {
-        Ok(reply) => reply,
-        Err(Ended::Unloaded) => return Err(unloaded()),
-        Err(Ended::TimedOut) => {
-            return Err(OpError::Failed(format!(
-                "plugin {plugin} did not answer {command} within {} s",
-                crate::TOOL_TIMEOUT.as_secs()
-            )));
-        }
-    };
+    let reply = crate::host::call(host, &plugin, &command, job, crate::TOOL_TIMEOUT, cx).await?;
     let secrets = host.read_with(cx, |host, _| host.secrets.clone());
     let value = reply.map_err(|error| OpError::Failed(secrets.redact(&plugin, &error)))?;
     let exit_code = value["exitCode"]
@@ -281,6 +270,7 @@ async fn develop(
                 .values()
                 .map(|record| Plugin {
                     error: host.failure(&record.id),
+                    source: crate::index::shown(&record.source),
                     ..record.clone()
                 })
                 .collect()
@@ -413,7 +403,7 @@ async fn remove(
         return Err(error);
     }
     let data = host.read_with(cx, |host, _| host.plugin_data(&id));
-    let store_ids = crate::page::read_store_ids(&data);
+    let store_ids = crate::web_store::read_store_ids(&data);
     host.update(cx, |host, cx| {
         host.unload(&id, cx);
         // Drop native pages first. They stay in a UI global until the next frame, and until then
@@ -430,9 +420,11 @@ async fn remove(
     // so they let go. A store that is still held keeps its `store.id` file.
     cx.update(gpui_kit::App::refresh_windows);
     let cleared = cx
-        .spawn(async move |cx| crate::page::remove_web_stores_after_release(store_ids, cx).await)
+        .spawn(async move |cx| {
+            crate::web_store::remove_web_stores_after_release(store_ids, cx).await
+        })
         .await;
-    crate::page::clear_removed_stores(&data, &cleared.removed);
+    crate::web_store::clear_removed_stores(&data, &cleared.removed);
     let mut warnings = cleared.warnings;
     let store = host.read_with(cx, |host, _| host.secrets.clone());
     let forgotten = cx
@@ -466,7 +458,7 @@ async fn dev(
     let root = cx
         .background_spawn(async move { dunce::canonicalize(path) })
         .await?;
-    let record = host
+    let mut record = host
         .read_with(cx, |host, _| {
             host.records
                 .values()
@@ -486,6 +478,7 @@ async fn dev(
         )));
     }
     reload(host, record.clone(), thread_id, requester, cx).await?;
+    record.source = crate::index::shown(&record.source);
     Ok(OpResult::Plugins(vec![record]))
 }
 
@@ -518,11 +511,10 @@ async fn reload(
         ));
     }
     let grant = Grant::of(&fetched.discovered.manifest, &fetched.root);
-    let approved: Grant = serde_json::from_value(record.approved.clone())?;
+    let approved = approved(&record)?;
     if !grant.within(&approved) {
-        let thread_id = thread_id.ok_or_else(|| OpError::Invalid(NO_THREAD.into()))?;
         approve(
-            Some(&thread_id),
+            thread_id.as_ref(),
             requester,
             format!(
                 "Reload {} ({})?",
@@ -549,7 +541,6 @@ async fn reload(
     Ok(result)
 }
 
-/// Frees the plugin host's install slot when the install ends, even when it is cancelled.
 /// Holds the install slot. Dropping it frees the slot, even when the install is cancelled, and
 /// tells the windows, which read the slot from the host.
 struct Claim {
@@ -584,7 +575,7 @@ async fn install(
             "{running} is already installing; answer it in Questions first"
         )));
     }
-    *slot.borrow_mut() = Some(source.clone());
+    *slot.borrow_mut() = Some(crate::index::shown(&source));
     host.update(cx, |_, cx| cx.notify());
     let stops = host.read_with(cx, |host, _| host.install_stop.clone());
     let _claim = Claim {
@@ -608,8 +599,8 @@ async fn install(
         host.read_with(cx, |host, _| (host.data_dir.clone(), host.indexes.clone()));
     let plugins = data_dir.join("plugins");
     let (stop, stopped) = async_channel::bounded::<()>(1);
-    let named = crate::index::named(&source);
-    if named || source.starts_with("git:") {
+    let by_name = crate::index::names_an_index(&source);
+    if by_name || source.starts_with("git:") {
         *stops.borrow_mut() = Some(stop);
         host.update(cx, |_, cx| cx.notify());
     }
@@ -715,7 +706,7 @@ async fn update(
         )));
     }
     let grant = Grant::of(manifest, &fetched.root);
-    let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
+    let approved = approved(&record)?;
     let within = grant.within(&approved);
     if within && fetched.commit.is_some() && fetched.commit == record.commit {
         return Ok(OpResult::Done);
@@ -829,8 +820,7 @@ async fn approve(
     };
     let mut options = permission_options();
     if install {
-        options[0].label = "Install".into();
-        options[1].label = "Cancel".into();
+        options[1].label = "Install".into();
     }
     choose(thread_id, requester, title, &question, options, cx).await
 }
@@ -838,12 +828,12 @@ async fn approve(
 fn permission_options() -> Vec<InteractionOption> {
     vec![
         InteractionOption {
-            id: "approve".into(),
-            label: "Approve".into(),
+            id: InteractionOption::DECLINE.into(),
+            label: "Cancel".into(),
         },
         InteractionOption {
-            id: "decline".into(),
-            label: "Decline".into(),
+            id: InteractionOption::APPROVE.into(),
+            label: "Approve".into(),
         },
     ]
 }
@@ -851,11 +841,11 @@ fn permission_options() -> Vec<InteractionOption> {
 fn removal_options() -> Vec<InteractionOption> {
     vec![
         InteractionOption {
-            id: "decline".into(),
+            id: InteractionOption::DECLINE.into(),
             label: "Cancel".into(),
         },
         InteractionOption {
-            id: "approve".into(),
+            id: InteractionOption::APPROVE.into(),
             label: "Remove".into(),
         },
     ]
@@ -872,7 +862,7 @@ async fn choose(
     let answer = cx
         .update(|cx| Workspace::ask_for_person(thread_id, requester, title, options, cx))
         .await?;
-    if answer == "approve" {
+    if answer == InteractionOption::APPROVE {
         Ok(())
     } else {
         Err(OpError::Invalid(format!("declined: {question}")))
@@ -1016,23 +1006,17 @@ async fn write_setting(
     if let Some(hold) = host.update(cx, |host, _| host.write_hold.take()) {
         let _ = hold.recv().await;
     }
-    let wrote = workspace
+    workspace
         .read_with(cx, |workspace, _| {
             workspace.commit_plugin_config(
                 id.clone(),
                 key.to_owned(),
                 value.clone(),
                 folder.map(|path| path.display().to_string()),
-                permit,
-                activation,
+                kg_core::Permit::new(activation, permit),
             )
         })
         .await?;
-    if !wrote {
-        return Err(OpError::Invalid(format!(
-            "plugin {id} changed while this was saving"
-        )));
-    }
     host.update(cx, |host, cx| {
         remember_setting(host, id, key, &value, folder, activation, cx)
     })?;
@@ -1079,8 +1063,7 @@ fn remember_setting(
             active.grant.paths.insert(key.to_owned(), path.clone());
         }
         if let Some(record) = host.records.get_mut(id) {
-            let mut approved: Grant =
-                serde_json::from_value(record.approved.clone()).unwrap_or_default();
+            let mut approved = approved(record)?;
             approved.paths.insert(key.to_owned(), path.clone());
             record.approved = serde_json::to_value(&approved)?;
         }
@@ -1111,7 +1094,7 @@ fn stage(host: &PluginHost, id: &PluginId, key: &str, folder: Option<&PathBuf>) 
         .records
         .get(id)
         .ok_or_else(|| OpError::Invalid(format!("plugin {id} was removed while this waited")))?;
-    let approved: Grant = serde_json::from_value(record.approved.clone()).unwrap_or_default();
+    let approved = approved(record)?;
     let still_folder = approved.folders.contains_key(key)
         && host.active.get(id).is_some_and(|active| {
             matches!(

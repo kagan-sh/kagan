@@ -918,8 +918,8 @@ fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
     let master = terminal.master.take().unwrap();
     let master_fd = MasterPty::as_raw_fd(master.as_ref()).unwrap();
     drop(master);
-    // SAFETY: drop(master) freed master_fd, so dup2 gives it a copy of the socket. The test closes it below.
     assert_eq!(
+        // SAFETY: drop(master) freed master_fd, so dup2 gives it a copy of the socket. The test closes it below.
         unsafe { libc::dup2(unrelated.as_raw_fd(), master_fd) },
         master_fd
     );

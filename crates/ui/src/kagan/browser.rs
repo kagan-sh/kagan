@@ -12,12 +12,12 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use crate::page::Page;
+use crate::web_page::WebPage;
 
 pub(super) struct Browser {
     address: Entity<InputState>,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    page: Option<Entity<Page>>,
+    page: Option<Entity<WebPage>>,
     note: Option<String>,
     _enter: Subscription,
 }
@@ -49,7 +49,7 @@ impl Browser {
         // Links and redirects inside the page are held to the same rule as the address field.
         // Private: cookies and logins end with the page, and nothing lands outside kagan's data.
         let url = url.as_str().to_owned();
-        match crate::page::open(window, cx, move |builder| {
+        match crate::web_page::open(window, cx, move |builder| {
             builder
                 .with_url(&url)
                 .with_navigation_handler(|target| is_web(&target))

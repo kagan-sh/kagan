@@ -205,11 +205,9 @@ jobs:
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
       - name: Tests
-        # a_saved_shortcut_is_kept_and_announced has failed on macOS only; it does not block a merge.
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
           --partition slice:${{ matrix.shard }}/2
-          -E 'not test(a_saved_shortcut_is_kept_and_announced)'
 
   windows-tests:
     needs: scope

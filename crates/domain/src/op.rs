@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum Op {
     /// Current thread context and plugin warnings
     Status {
@@ -68,7 +68,7 @@ pub enum Op {
     /// Keyboard shortcuts: built-in ones and plugin commands
     #[command(subcommand)]
     Keymap(KeymapOp),
-    /// Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
+    /// Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
     #[command(subcommand)]
     Preference(PreferenceOp),
     /// Native window for QA and agents
@@ -110,36 +110,55 @@ pub enum GuideChapter {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum SkillOp {
+    /// List skills
     List {
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Show one skill
     Show {
+        /// Skill name
         name: String,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// List a skill's files
     Files {
+        /// Skill name
         name: String,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Create a skill
     New {
+        /// Skill name, lowercase and hyphenated
         name: String,
+        /// Create it in the project folder instead of the user folder
         #[arg(long)]
         project: bool,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Add a skill from a folder
     Add {
+        /// Folder to read the skill from
         path: PathBuf,
+        /// Add it to the project folder instead of the user folder
         #[arg(long)]
         project: bool,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
+    /// Remove a skill
     Remove {
+        /// Skill name
         name: String,
+        /// Project whose skills to include
         #[arg(long, env = "KG_PROJECT_ID")]
         project_id: Option<ProjectId>,
     },
@@ -504,17 +523,14 @@ impl std::fmt::Display for KeymapAction {
     }
 }
 
-/// The chord an action answers to. A saved override wins. Off macOS, `secondary` is Ctrl+Shift,
-/// because a bare Ctrl chord belongs to the program.
+/// The chord an action answers to when the person has not saved one. Off macOS, `secondary` is
+/// Ctrl+Shift, because a bare Ctrl chord belongs to the program.
 #[must_use]
-pub fn effective_chord(name: &str, keymap: &Keymap, platform: KeyPlatform) -> String {
-    if let Some(saved) = keymap.shared.get(name) {
-        return saved.clone();
-    }
-    let Some(shortcut) = SHORTCUTS.iter().find(|shortcut| shortcut.name == name) else {
-        return String::new();
-    };
-    expand_secondary(shortcut.chord, platform)
+pub fn default_chord(name: &str, platform: KeyPlatform) -> Option<String> {
+    SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.name == name)
+        .map(|shortcut| expand_secondary(shortcut.chord, platform))
 }
 
 /// `secondary` is the platform key on macOS and Ctrl+Shift elsewhere. A following `shift-` is already in Ctrl+Shift.
@@ -711,8 +727,11 @@ impl Slot {
 
     /// The preference that holds the plugin id filling this slot, or `kagan`.
     #[must_use]
-    pub fn preference(self) -> String {
-        format!("slot.{}", self.id())
+    pub const fn preference(self) -> &'static str {
+        match self {
+            Self::Threads => "slot.threads",
+            Self::Review => "slot.review",
+        }
     }
 
     /// What a person reads: "replaceable sidebar" or "replaceable review".
@@ -821,7 +840,7 @@ pub enum ThemeOp {
         #[arg(value_enum)]
         mode: Appearance,
     },
-    /// Copy a theme to <dataDir>/themes/<id>.json and print its path
+    /// Copy a theme to `<dataDir>/themes/<id>.json` and print its path
     New {
         /// The new file's id: lowercase letters, digits and dashes
         #[arg(value_parser = theme_id)]
@@ -1007,7 +1026,7 @@ pub enum TerminalOp {
     },
     /// Close an extra terminal and end its shell
     Close {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         number: u32,
     },
@@ -1190,18 +1209,18 @@ pub enum ThreadOp {
         /// The thread where a person approves this delete
         #[arg(long, env = "KG_THREAD_ID")]
         #[serde(default)]
-        thread_id: Option<ThreadId>,
+        approval_thread_id: Option<ThreadId>,
     },
     /// Pin or unpin a thread
     SetPinned {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         #[arg(action = clap::ArgAction::Set)]
         pinned: bool,
     },
     /// Rename a thread
     Rename {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         title: String,
     },
@@ -1221,8 +1240,12 @@ pub enum ThreadOp {
     SetMetadata {
         #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
-        #[command(flatten)]
-        metadata: Metadata,
+        /// The plugin whose metadata this is
+        #[arg(long, value_name = "PLUGIN_ID")]
+        plugin_id: PluginId,
+        /// The metadata as JSON
+        #[arg(long, value_name = "JSON", value_parser = StringValueParser::new().map(json))]
+        value: Value,
     },
     /// A thread's events
     Events {
@@ -1278,7 +1301,7 @@ pub enum ThreadOp {
     },
     /// Call an agent tool as the thread
     CallTool {
-        #[arg(long, env = "KG_THREAD_ID")]
+        #[arg(env = "KG_THREAD_ID")]
         id: ThreadId,
         name: String,
         #[arg(long, value_parser = StringValueParser::new().map(json), default_value = "{}")]
@@ -1376,7 +1399,7 @@ pub enum EnvironmentOp {
     /// Local branches of a project
     Branches {
         #[arg(env = "KG_PROJECT_ID")]
-        id: ProjectId,
+        project_id: ProjectId,
     },
     /// Which branch change counts compare against
     SetBase {
@@ -1451,6 +1474,7 @@ pub enum PluginOp {
     Logs {
         id: PluginId,
         #[arg(long)]
+        #[serde(skip)]
         follow: bool,
         #[arg(long, hide = true)]
         after: Option<u64>,
@@ -1575,7 +1599,7 @@ pub struct Run {
     pub program: String,
     #[arg(long)]
     pub title: Option<String>,
-    /// project-default, personal, worktree[:<base>[:<branch>]] or reuse:<environment-id>
+    /// project-default, personal, `worktree[:<base>[:<branch>]]` or `reuse:<environment-id>`
     #[arg(long, value_parser = environment_spec, default_value = "worktree")]
     pub environment: EnvironmentSpec,
     #[arg(long, value_enum)]
@@ -1595,16 +1619,20 @@ pub struct Run {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Args)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
+    /// The plugin whose metadata this is
     #[arg(
-        long = "metadata-plugin",
+        long = "plugin-id",
         id = "metadata_plugin",
+        value_name = "PLUGIN_ID",
         required = false,
         requires = "metadata_value"
     )]
     pub plugin_id: PluginId,
+    /// The metadata as JSON
     #[arg(
         long = "metadata",
         id = "metadata_value",
+        value_name = "JSON",
         required = false,
         requires = "metadata_plugin",
         value_parser = StringValueParser::new().map(json)
@@ -1672,10 +1700,36 @@ pub struct BranchList {
     pub names: Vec<String>,
 }
 
+/// Why a wait returned. `kg thread wait` prints these words, and so does the plugin API.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WaitOutcome {
+    Waiting,
+    Exited,
+    Failed,
+    NotBusy,
+    Timeout,
+}
+
+impl std::fmt::Display for WaitOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Waiting => "waiting",
+            Self::Exited => "exited",
+            Self::Failed => "failed",
+            Self::NotBusy => "not-busy",
+            Self::Timeout => "timeout",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum OpResult {
     Text(String),
+    /// Serialized as `text` so `kg thread wait --json` keeps the key it printed before.
+    #[serde(rename(serialize = "text", deserialize = "wait"))]
+    Wait(WaitOutcome),
     Diagnostics {
         path: PathBuf,
     },
@@ -1797,7 +1851,7 @@ impl Skill {
             .and_then(|text| text.split_once("\n---\n"))
             .ok_or_else(|| OpError::Invalid("SKILL.md needs YAML frontmatter".into()))?;
         let header: Header =
-            serde_yaml::from_str(yaml).map_err(|error| OpError::Invalid(error.to_string()))?;
+            serde_yaml_ng::from_str(yaml).map_err(|error| OpError::Invalid(error.to_string()))?;
         let valid = !name.is_empty()
             && name.split('-').all(|part| {
                 !part.is_empty()
@@ -2026,12 +2080,15 @@ pub const SEARCH_TEXT_MAX: usize = 256;
 /// The rows a terminal may have.
 pub const TERMINAL_ROWS: std::ops::RangeInclusive<u16> = 1..=500;
 
-/// Rejects an op a client must not send: a thread id that is not a plain identifier, or a
-/// terminal size outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`].
+/// Rejects an op a client must not send.
 ///
 /// # Errors
 ///
-/// Returns an error when any thread id on `op` is empty or contains a character other than an ASCII letter, digit, `_`, or `-`, or when a resize is outside those ranges.
+/// Returns an error when a thread id is not a plain identifier (at most 128 ASCII letters,
+/// digits, `_`, or `-`), when a surface id is empty or holds a control character, when a search
+/// is empty, longer than [`SEARCH_TEXT_MAX`], or names a limit outside [`SEARCH_LIMIT`], when a
+/// resize is outside [`TERMINAL_COLS`] and [`TERMINAL_ROWS`], or when a window index is outside
+/// 1 to 9.
 pub fn check(op: &Op) -> Result<(), &'static str> {
     match op {
         Op::Window(WindowOp::Thread { index }) if !(1..=9).contains(index) => {
@@ -2137,7 +2194,13 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
             .into_iter()
             .chain(run.lifecycle_owner_thread_id.as_ref())
             .collect(),
-        ThreadOp::Delete { id, thread_id } => thread_id.iter().chain(std::iter::once(id)).collect(),
+        ThreadOp::Delete {
+            id,
+            approval_thread_id,
+        } => approval_thread_id
+            .iter()
+            .chain(std::iter::once(id))
+            .collect(),
         ThreadOp::Get { id, .. }
         | ThreadOp::Stop { id, .. }
         | ThreadOp::Input { id, .. }

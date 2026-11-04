@@ -62,19 +62,13 @@ pub struct Updater {
 impl Updater {
     pub(crate) fn install(database: Database, cx: &mut App) {
         let updater = cx.new(|cx: &mut Context<Self>| {
-            let detect = cx.background_spawn(async {
-                let target = Target::detect();
-                target.clean();
-                target
-            });
-            cx.spawn(async move |this, cx| {
-                let target = detect.await;
-                this.update(cx, |this, _| this.target = target).ok();
-            })
-            .detach();
+            let target = Target::detect();
+            let cleaning = target.clone();
+            cx.background_spawn(async move { cleaning.clean() })
+                .detach();
             Self {
                 version: current(),
-                target: Target::default(),
+                target,
                 endpoint: std::env::var("KG_UPDATE_URL").unwrap_or_else(|_| MANIFEST.into()),
                 key: KEY.into(),
                 state: UpdateState::Unchecked,

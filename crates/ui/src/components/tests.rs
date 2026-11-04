@@ -198,13 +198,13 @@ export default class Swap extends View {
     visual.update(|window, cx| {
         window.draw(cx).clear(cx);
         assert_eq!(view.read(cx).build_error(), None);
-        assert!(observed(window, "thread-title").is_some_and(|element| element.visible()));
+        assert!(observed(window, "thread-title").is_some_and(|element| element.visible));
         assert!(observed(window, "thread-status").is_none());
         click_at(window, cx);
         window.draw(cx).clear(cx);
         assert_eq!(view.read(cx).build_error(), None);
         assert!(observed(window, "thread-title").is_none());
-        assert!(observed(window, "thread-status").is_some_and(|element| element.visible()));
+        assert!(observed(window, "thread-status").is_some_and(|element| element.visible));
     });
 }
 
@@ -261,8 +261,6 @@ fn seed_thread(dir: &std::path::Path) {
             title: "Swap thread".into(),
             title_locked: false,
             provider: "demo".into(),
-            model: String::new(),
-            reasoning_level: String::new(),
             status: ThreadStatus::Idle,
             visibility: Visibility::Visible,
             parent_thread_id: None,

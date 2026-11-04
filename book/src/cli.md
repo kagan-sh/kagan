@@ -29,7 +29,7 @@ Commands:
   window       The application menu and the window
   surface      Plugin surfaces in the window
   keymap       Keyboard shortcuts: built-in ones and plugin commands
-  preference   Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
+  preference   Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   ui           Native window for QA and agents
   diff         A thread environment's diff. Reads git and never writes the worktree
   diagnostics  Write a local diagnostics file
@@ -128,12 +128,12 @@ Find, read and create skills
 Usage: kg skill [OPTIONS] <COMMAND>
 
 Commands:
-  list    
-  show    
-  files   
-  new     
-  add     
-  remove  
+  list    List skills
+  show    Show one skill
+  files   List a skill's files
+  new     Create a skill
+  add     Add a skill from a folder
+  remove  Remove a skill
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -147,10 +147,14 @@ Options:
 ## `kg skill list`
 
 ```text
+List skills
+
 Usage: kg skill list [OPTIONS]
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -160,14 +164,18 @@ Options:
 ## `kg skill show`
 
 ```text
+Show one skill
+
 Usage: kg skill show [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -177,14 +185,18 @@ Options:
 ## `kg skill files`
 
 ```text
+List a skill's files
+
 Usage: kg skill files [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -194,17 +206,21 @@ Options:
 ## `kg skill new`
 
 ```text
+Create a skill
+
 Usage: kg skill new [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name, lowercase and hyphenated
 
 Options:
       --project
-          
+          Create it in the project folder instead of the user folder
 
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -214,17 +230,21 @@ Options:
 ## `kg skill add`
 
 ```text
+Add a skill from a folder
+
 Usage: kg skill add [OPTIONS] <PATH>
 
 Arguments:
   <PATH>
-          
+          Folder to read the skill from
 
 Options:
       --project
-          
+          Add it to the project folder instead of the user folder
 
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -234,14 +254,18 @@ Options:
 ## `kg skill remove`
 
 ```text
+Remove a skill
+
 Usage: kg skill remove [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
-          
+          Skill name
 
 Options:
       --project-id <PROJECT_ID>
+          Project whose skills to include
+          
           [env: KG_PROJECT_ID=]
 
   -h, --help
@@ -372,7 +396,7 @@ Options:
           
 
       --environment <ENVIRONMENT>
-          project-default, personal, worktree[:<base>[:<branch>]] or reuse:<environment-id>
+          project-default, personal, `worktree[:<base>[:<branch>]]` or `reuse:<environment-id>`
           
           [default: worktree]
 
@@ -385,11 +409,11 @@ Options:
       --lifecycle-owner-thread-id <LIFECYCLE_OWNER_THREAD_ID>
           
 
-      --metadata-plugin <metadata_plugin>
-          
+      --plugin-id <PLUGIN_ID>
+          The plugin whose metadata this is
 
-      --metadata <metadata_value>
-          
+      --metadata <JSON>
+          The metadata as JSON
 
   -h, --help
           Print help
@@ -676,16 +700,16 @@ Options:
 ```text
 Close an extra terminal and end its shell
 
-Usage: kg thread terminal close --id <ID> <NUMBER>
+Usage: kg thread terminal close <ID> <NUMBER>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <NUMBER>
           
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
   -h, --help
           Print help
 ```
@@ -766,7 +790,7 @@ Arguments:
           [env: KG_THREAD_ID=]
 
 Options:
-      --thread-id <THREAD_ID>
+      --approval-thread-id <APPROVAL_THREAD_ID>
           The thread where a person approves this delete
           
           [env: KG_THREAD_ID=]
@@ -780,16 +804,16 @@ Options:
 ```text
 Pin or unpin a thread
 
-Usage: kg thread set-pinned --id <ID> <PINNED>
+Usage: kg thread set-pinned <ID> <PINNED>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <PINNED>
           [possible values: true, false]
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
   -h, --help
           Print help
 ```
@@ -799,16 +823,16 @@ Options:
 ```text
 Rename a thread
 
-Usage: kg thread rename --id <ID> <TITLE>
+Usage: kg thread rename <ID> <TITLE>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <TITLE>
           
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
   -h, --help
           Print help
 ```
@@ -853,18 +877,18 @@ Options:
 ```text
 Set a plugin's metadata on a thread
 
-Usage: kg thread set-metadata [OPTIONS] <ID>
+Usage: kg thread set-metadata --plugin-id <PLUGIN_ID> --value <JSON> <ID>
 
 Arguments:
   <ID>
           [env: KG_THREAD_ID=]
 
 Options:
-      --metadata-plugin <metadata_plugin>
-          
+      --plugin-id <PLUGIN_ID>
+          The plugin whose metadata this is
 
-      --metadata <metadata_value>
-          
+      --value <JSON>
+          The metadata as JSON
 
   -h, --help
           Print help
@@ -1000,16 +1024,16 @@ Options:
 ```text
 Call an agent tool as the thread
 
-Usage: kg thread call-tool [OPTIONS] --id <ID> <NAME>
+Usage: kg thread call-tool [OPTIONS] <ID> <NAME>
 
 Arguments:
+  <ID>
+          [env: KG_THREAD_ID=]
+
   <NAME>
           
 
 Options:
-      --id <ID>
-          [env: KG_THREAD_ID=]
-
       --input <INPUT>
           [default: {}]
 
@@ -1248,10 +1272,10 @@ Options:
 ```text
 Local branches of a project
 
-Usage: kg environment branches <ID>
+Usage: kg environment branches <PROJECT_ID>
 
 Arguments:
-  <ID>
+  <PROJECT_ID>
           [env: KG_PROJECT_ID=]
 
 Options:
@@ -1914,7 +1938,7 @@ Usage: kg theme [OPTIONS] <COMMAND>
 Commands:
   get     Selected theme and mode
   set     Select a theme and mode
-  new     Copy a theme to <dataDir>/themes/<id>.json and print its path
+  new     Copy a theme to `<dataDir>/themes/<id>.json` and print its path
   folder  Print the folder of your own theme files, making it when missing
   help    Print this message or the help of the given subcommand(s)
 
@@ -1963,7 +1987,7 @@ Options:
 ## `kg theme new`
 
 ```text
-Copy a theme to <dataDir>/themes/<id>.json and print its path
+Copy a theme to `<dataDir>/themes/<id>.json` and print its path
 
 Usage: kg theme new [OPTIONS] <ID>
 
@@ -2449,7 +2473,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, main.left-sidebar, main.right-sidebar, main.left-width, main.right-width, or main.review-wrap
+Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 

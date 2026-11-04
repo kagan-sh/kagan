@@ -227,6 +227,8 @@ impl SshRewrite {
         .unwrap();
         let previous_global = std::env::var_os("GIT_CONFIG_GLOBAL");
         let previous_nosystem = std::env::var_os("GIT_CONFIG_NOSYSTEM");
+        // SAFETY: nextest runs each test in its own process, so this test owns these
+        // process-global variables while the guard is alive and restores them on drop.
         unsafe {
             std::env::set_var("GIT_CONFIG_GLOBAL", &path);
             std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
@@ -240,6 +242,8 @@ impl SshRewrite {
 
 impl Drop for SshRewrite {
     fn drop(&mut self) {
+        // SAFETY: nextest runs each test in its own process, so nothing else reads these
+        // variables while the guard restores them.
         unsafe {
             match self.previous_global.take() {
                 Some(value) => std::env::set_var("GIT_CONFIG_GLOBAL", value),
@@ -564,8 +568,7 @@ async fn a_title_set_at_run_rejects_a_socket_rename(cx: &mut TestAppContext) {
 async fn socket_rename(id: &ThreadId, title: &str, cx: &mut TestAppContext) -> Result<OpResult> {
     let id = id.clone();
     let title = title.to_owned();
-    cx.update(|cx| Workspace::rename_from_socket(id, title, cx))
-        .await
+    cx.update(|cx| Workspace::rename_once(id, title, cx)).await
 }
 
 async fn environment_branch(id: &EnvironmentId, cx: &mut TestAppContext) -> Option<String> {
@@ -702,16 +705,18 @@ async fn personal_is_last_in_both_sidebars(cx: &mut TestAppContext) {
     let OpResult::Sidebar(from_op) = op(Op::Sidebar, cx).await.unwrap() else {
         panic!("sidebar")
     };
+    let OpResult::Projects(from_list) = op(Op::Project(ProjectOp::List), cx).await.unwrap() else {
+        panic!("projects")
+    };
     let from_workspace = cx.read(|cx| fixture.workspace.read(cx).sidebar(cx));
-    for sidebar in [&from_op, &from_workspace] {
-        let names: Vec<_> = sidebar
-            .projects
+    for projects in [from_op.projects, from_list, from_workspace.projects] {
+        let names: Vec<_> = projects
             .iter()
             .map(|project| project.name.as_str())
             .collect();
         assert_eq!(names, ["Project", "Zebra", "Personal"]);
         assert_eq!(
-            sidebar.projects.last().map(|project| project.kind),
+            projects.last().map(|project| project.kind),
             Some(ProjectKind::Personal)
         );
     }
@@ -839,7 +844,7 @@ async fn deleting_a_thread_waits_for_a_person(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: victim.id.clone(),
-                thread_id: Some(caller.id.clone()),
+                approval_thread_id: Some(caller.id.clone()),
             }),
             cx,
         )
@@ -879,7 +884,7 @@ async fn deleting_a_thread_waits_for_a_person(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: victim.id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -891,7 +896,7 @@ async fn deleting_a_thread_waits_for_a_person(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
@@ -931,7 +936,7 @@ async fn a_stopped_command_takes_its_delete_question_off_the_thread(cx: &mut Tes
         Workspace::dispatch_for(
             Op::Thread(ThreadOp::Delete {
                 id: victim.id.clone(),
-                thread_id: Some(caller.id.clone()),
+                approval_thread_id: Some(caller.id.clone()),
             }),
             Some(crate::Requester::new(gone)),
             cx,
@@ -1280,10 +1285,10 @@ async fn a_theme_set_after_the_migration_stays(cx: &mut TestAppContext) {
 
 #[test]
 fn a_stop_waits_in_the_queue_and_a_run_does_not() {
-    assert!(crate::thread::serialized(&Op::Thread(ThreadOp::Stop {
+    assert!(crate::dispatch::serialized(&Op::Thread(ThreadOp::Stop {
         id: ThreadId("thr_a".into()),
     })));
-    assert!(!crate::thread::serialized(&Op::Thread(ThreadOp::Run(
+    assert!(!crate::dispatch::serialized(&Op::Thread(ThreadOp::Run(
         Run {
             project_id: ProjectId("project".into()),
             program: "sh".into(),
@@ -1555,7 +1560,7 @@ fn pending_delete(cx: &mut TestAppContext) -> (PendingInteractionId, String) {
     cx.read(|cx| {
         let workspace = Workspace::global(cx);
         let approval = workspace.read(cx).approvals().next().unwrap();
-        (approval.id().clone(), approval.title().to_string())
+        (approval.id.clone(), approval.title.clone())
     })
 }
 
@@ -1631,7 +1636,7 @@ async fn deleting_a_personal_thread_names_its_folder_and_removes_it_on_approval(
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -1666,7 +1671,7 @@ async fn declining_a_personal_delete_keeps_the_folder(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -1709,7 +1714,7 @@ async fn deleting_a_thread_keeps_a_personal_folder_another_thread_uses(cx: &mut 
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread,
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -1729,7 +1734,7 @@ fn dispatch_delete(id: &ThreadId, cx: &mut TestAppContext) -> gpui_kit::Task<Res
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -2740,13 +2745,13 @@ async fn wait_on_an_ended_program_returns_at_once(cx: &mut TestAppContext) {
         panic!("thread")
     };
     wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
-    assert_eq!(settle(&started.id, 5_000, cx).await, "exited");
+    assert_eq!(settle(&started.id, 5_000, cx).await, WaitOutcome::Exited);
     let failed = op(fixture.run("/bin/sh -c \"exit 7\""), cx).await.unwrap();
     let OpResult::Thread(failed) = failed else {
         panic!("thread")
     };
     wait_for_status(&failed.id, ThreadStatus::Error, cx).await;
-    assert_eq!(settle(&failed.id, 5_000, cx).await, "failed");
+    assert_eq!(settle(&failed.id, 5_000, cx).await, WaitOutcome::Failed);
 }
 
 #[cfg(unix)]
@@ -2764,7 +2769,7 @@ async fn a_quiet_program_is_not_busy_only_after_the_arm(cx: &mut TestAppContext)
     cx.executor()
         .advance_clock(std::time::Duration::from_secs(1));
     cx.run_until_parked();
-    assert_eq!(text(task.await.unwrap()), "not-busy");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::NotBusy);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
 }
 
@@ -2779,7 +2784,7 @@ async fn a_timeout_leaves_the_thread_alone(cx: &mut TestAppContext) {
     cx.executor()
         .advance_clock(std::time::Duration::from_millis(200));
     cx.run_until_parked();
-    assert_eq!(text(task.await.unwrap()), "timeout");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Timeout);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
     assert_eq!(kinds_of(&id, cx).await, before);
 }
@@ -2791,13 +2796,13 @@ async fn an_exit_during_the_wait_names_exited_or_failed(cx: &mut TestAppContext)
     let (id, _reap) = started(&fixture, "/bin/sh -c \"sleep 0.2; exit 0\"", cx).await;
     let task = begin_wait(&id, 10_000, cx);
     finish_wait(&task, cx);
-    assert_eq!(text(task.await.unwrap()), "exited");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Exited);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
 
     let (id, _reap) = started(&fixture, "/bin/sh -c \"sleep 0.2; exit 7\"", cx).await;
     let task = begin_wait(&id, 10_000, cx);
     finish_wait(&task, cx);
-    assert_eq!(text(task.await.unwrap()), "failed");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Failed);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
 }
 
@@ -2812,7 +2817,7 @@ async fn stop_during_the_wait_returns_exited(cx: &mut TestAppContext) {
         .await
         .unwrap();
     finish_wait(&task, cx);
-    assert_eq!(text(task.await.unwrap()), "exited");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Exited);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
 }
 
@@ -2831,7 +2836,7 @@ async fn stop_while_starting_returns_exited(cx: &mut TestAppContext) {
         .unwrap();
     cx.run_until_parked();
     assert!(task.is_ready());
-    assert_eq!(text(task.await.unwrap()), "exited");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Exited);
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
     assert_eq!(kinds_of(&id, cx).await, before);
 }
@@ -2840,12 +2845,19 @@ async fn stop_while_starting_returns_exited(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 async fn an_end_logged_before_the_wait_returns_when_the_row_changes(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    row_end_after_its_event(&fixture, EventKind::Idle, ThreadStatus::Idle, "exited", cx).await;
+    row_end_after_its_event(
+        &fixture,
+        EventKind::Idle,
+        ThreadStatus::Idle,
+        WaitOutcome::Exited,
+        cx,
+    )
+    .await;
     row_end_after_its_event(
         &fixture,
         EventKind::Failed { error: None },
         ThreadStatus::Error,
-        "failed",
+        WaitOutcome::Failed,
         cx,
     )
     .await;
@@ -2911,7 +2923,7 @@ async fn a_spinner_returns_waiting_only_after_the_quiet(cx: &mut TestAppContext)
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
     assert!(task.is_ready());
-    assert_eq!(text(task.await.unwrap()), "waiting");
+    assert_eq!(outcome(&task.await.unwrap()), WaitOutcome::Waiting);
     assert_eq!(waiting_count(&id, cx).await, 1);
 }
 
@@ -2932,7 +2944,7 @@ async fn row_end_after_its_event(
     fixture: &Fixture,
     kind: EventKind,
     status: ThreadStatus,
-    reason: &str,
+    reason: WaitOutcome,
     cx: &mut TestAppContext,
 ) {
     let (id, _reap) = started(fixture, "/bin/sh -c \"sleep 30\"", cx).await;
@@ -2949,7 +2961,7 @@ async fn row_end_after_its_event(
     set_row_status(fixture, &id, status, cx);
     cx.run_until_parked();
     assert!(task.is_ready(), "{reason} waited out the end of the row");
-    assert_eq!(text(task.await.unwrap()), reason);
+    assert_eq!(outcome(&task.await.unwrap()), reason);
 }
 
 #[cfg(unix)]
@@ -2977,9 +2989,9 @@ fn finish_wait(task: &gpui_kit::Task<Result<OpResult>>, cx: &mut TestAppContext)
 }
 
 #[cfg(unix)]
-async fn settle(id: &ThreadId, timeout_ms: u64, cx: &mut TestAppContext) -> String {
-    text(
-        op(
+async fn settle(id: &ThreadId, timeout_ms: u64, cx: &mut TestAppContext) -> WaitOutcome {
+    outcome(
+        &op(
             Op::Thread(ThreadOp::Wait {
                 id: id.clone(),
                 timeout_ms,
@@ -2991,11 +3003,11 @@ async fn settle(id: &ThreadId, timeout_ms: u64, cx: &mut TestAppContext) -> Stri
     )
 }
 
-fn text(result: OpResult) -> String {
-    let OpResult::Text(reason) = result else {
+fn outcome(result: &OpResult) -> WaitOutcome {
+    let OpResult::Wait(outcome) = result else {
         panic!("wait returned {result:?}");
     };
-    reason
+    *outcome
 }
 
 fn ask_options() -> Vec<InteractionOption> {
@@ -4293,7 +4305,7 @@ async fn a_cursor_query_is_answered_with_no_window_open(cx: &mut TestAppContext)
 
 #[cfg(unix)]
 #[gpui_kit::test]
-async fn a_program_that_cannot_start_fails_the_thread(cx: &mut TestAppContext) {
+async fn a_program_that_vanishes_before_start_refuses_the_thread(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     empty_repo(fixture.dir.path());
     let program = script(fixture.dir.path(), "vanishing", "sleep 30");
@@ -4324,7 +4336,7 @@ async fn a_program_that_cannot_start_fails_the_thread(cx: &mut TestAppContext) {
         metadata: None,
     }));
     let error = op(run, cx).await.unwrap_err();
-    assert!(matches!(error, OpError::Failed(_)), "{error}");
+    assert!(matches!(error, OpError::Invalid(_)), "{error}");
     let OpResult::Threads(threads) = op(
         Op::Thread(ThreadOp::List {
             project_id: None,
@@ -4350,6 +4362,22 @@ async fn a_program_that_cannot_start_fails_the_thread(cx: &mut TestAppContext) {
         "{failed:?}"
     );
     assert!(pid_of(&threads[0].id, cx).is_none());
+}
+
+#[test]
+fn a_data_dir_that_cannot_be_made_is_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("not-a-folder");
+    std::fs::write(&file, "x").unwrap();
+    let data_dir = file.join("kagan");
+    let Err(error) = crate::workspace::open_data(&data_dir) else {
+        panic!("opened");
+    };
+    let message = error.to_string();
+    assert!(
+        message.contains(&data_dir.display().to_string()),
+        "{message}"
+    );
 }
 
 #[gpui_kit::test]
@@ -4387,7 +4415,7 @@ async fn deleting_a_thread_ends_its_program(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -4399,7 +4427,7 @@ async fn deleting_a_thread_ends_its_program(cx: &mut TestAppContext) {
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
@@ -5030,7 +5058,7 @@ async fn archive_and_delete_remove_the_thread_agent_files(cx: &mut TestAppContex
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: deleted.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -5042,7 +5070,7 @@ async fn archive_and_delete_remove_the_thread_agent_files(cx: &mut TestAppContex
             .approvals()
             .next()
             .unwrap()
-            .id()
+            .id
             .clone()
     });
     cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
@@ -5216,8 +5244,6 @@ fn idle_thread(id: &str, project: ProjectId) -> Thread {
         title: id.into(),
         title_locked: false,
         provider: "sh".into(),
-        model: String::new(),
-        reasoning_level: String::new(),
         status: ThreadStatus::Idle,
         visibility: Visibility::Visible,
         parent_thread_id: None,
@@ -6092,7 +6118,7 @@ impl GitTrack {
             permissions.set_mode(0o755);
             std::fs::set_permissions(&program, permissions).unwrap();
         }
-        crate::changes::set_program(cwd, "git", Some(program));
+        crate::git::set_program(cwd, "git", Some(program));
         (
             log,
             Self {
@@ -6113,7 +6139,7 @@ fn which_git() -> std::path::PathBuf {
 
 impl Drop for GitTrack {
     fn drop(&mut self) {
-        crate::changes::set_program(&self.cwd, "git", None);
+        crate::git::set_program(&self.cwd, "git", None);
     }
 }
 
@@ -6520,7 +6546,7 @@ async fn deleting_the_thread_is_refused_until_the_worktree_is_removed(cx: &mut T
     let error = op(
         Op::Thread(ThreadOp::Delete {
             id: started.id.clone(),
-            thread_id: None,
+            approval_thread_id: None,
         }),
         cx,
     )
@@ -6560,7 +6586,7 @@ async fn a_removal_refusal_is_not_reused_for_the_next_worktree(cx: &mut TestAppC
     let environment_id = started.environment_id.clone().unwrap();
     let folder = stop_archive_and_settle(&started.id, &environment_id, cx).await;
     assert!(folder.path.exists(), "{folder:?}");
-    let mut store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
     store.delete_thread(&started.id, Timestamp(1), &[]).unwrap();
     drop(store);
     let OpResult::Thread(fresh) = op(worktree_run(&fixture, Some("again"), None), cx)
@@ -6660,7 +6686,7 @@ async fn a_personal_folder_does_not_run_teardown(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: thread.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -6956,15 +6982,14 @@ fn queue_folder_write(
     cx: &mut TestAppContext,
     fixture: &Fixture,
     permit: std::sync::Arc<std::sync::Mutex<Option<u64>>>,
-) -> impl std::future::Future<Output = Result<bool>> + use<> {
+) -> impl std::future::Future<Output = crate::database::Result<()>> + use<> {
     fixture.workspace.read_with(cx, |workspace, _| {
         workspace.commit_plugin_config(
             PluginId("demo-plugin".into()),
             "notes".into(),
             json!("/notes"),
             Some("/notes".into()),
-            permit,
-            1,
+            crate::Permit::new(1, permit),
         )
     })
 }
@@ -6997,7 +7022,7 @@ async fn a_queued_plugin_write_is_refused_once_its_permit_is_cleared(cx: &mut Te
     let mut context = std::task::Context::from_waker(&waker);
     assert!(write.as_mut().poll(&mut context).is_pending());
     *permit.lock().unwrap() = None;
-    assert!(!cx.foreground_executor().block_test(write).unwrap());
+    assert!(cx.foreground_executor().block_test(write).is_err());
     assert_folder_write_absent(&fixture);
 }
 
@@ -7009,7 +7034,7 @@ async fn a_queued_plugin_write_lands_while_its_permit_holds(cx: &mut TestAppCont
     let waker = futures::task::noop_waker();
     let mut context = std::task::Context::from_waker(&waker);
     assert!(write.as_mut().poll(&mut context).is_pending());
-    assert!(cx.foreground_executor().block_test(write).unwrap());
+    cx.foreground_executor().block_test(write).unwrap();
     assert_folder_write_landed(&fixture);
 }
 
@@ -7071,6 +7096,33 @@ async fn remove_project_asks_and_keeps_the_folder(cx: &mut TestAppContext) {
             .project(&fixture.project)
             .is_none()
     }));
+}
+
+#[gpui_kit::test]
+async fn a_serialized_request_runs_while_a_removal_waits_for_a_person(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let remove = Op::Project(ProjectOp::Remove {
+        id: fixture.project.clone(),
+    });
+    assert!(!crate::dispatch::serialized(&remove));
+    let snapshot = Op::Ui(UiOp::Snapshot { window: 0 });
+    assert!(crate::dispatch::serialized(&snapshot));
+    let removing = cx.update(|cx| Workspace::dispatch(remove, cx));
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+
+    // The queue is one request wide: a handler that awaited this answer would hold every
+    // `kg` command until the person answered.
+    assert!(op(Op::Sidebar, cx).await.is_ok());
+    assert!(matches!(
+        op(snapshot, cx).await,
+        Err(OpError::Failed(message)) if message == UI_UNAVAILABLE
+    ));
+
+    cx.update(|cx| Workspace::answer_standalone(approval, "decline".into(), cx))
+        .await
+        .unwrap();
+    assert!(removing.await.is_err());
 }
 
 #[gpui_kit::test]

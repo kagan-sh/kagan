@@ -7,25 +7,23 @@ use kg_core::Updater;
 use kg_domain::{Op, PreferenceOp, UpdateState};
 use serde_json::json;
 
-use super::pages::{Group, group, row, save, switch};
-use crate::kagan::shown::control;
+use super::Kagan;
+use super::row::{Group, group as row_group, row, save, switch};
+use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
 
-pub(super) fn group_for(automatic: bool, cx: &App) -> Group {
+pub(super) fn group(kagan: &Kagan, cx: &App) -> Group {
+    let automatic = kagan.prefs.read(cx).update_check;
     let updater = Updater::global(cx).read(cx);
     let status = match updater.state() {
         UpdateState::Unchecked => "Not checked yet.".to_owned(),
         UpdateState::Checking => "Checking…".to_owned(),
         UpdateState::Current => "This is the newest version.".to_owned(),
         UpdateState::Available { version, .. } => format!("kagan {version} is available."),
-        UpdateState::Downloading { version } => format!("Downloading kagan {version}…"),
-        UpdateState::Ready {
-            version,
-            at_quit: true,
-            ..
-        } => format!("kagan {version} installs when kagan quits."),
-        UpdateState::Ready { version, .. } => format!("kagan {version} is ready to install."),
         UpdateState::Failed { reason } => format!("Could not check: {reason}"),
+        UpdateState::Downloading { .. } | UpdateState::Ready { .. } => {
+            super::super::update::progress_sentence(updater.state()).unwrap_or_default()
+        }
     };
     let busy = matches!(
         updater.state(),
@@ -50,7 +48,7 @@ pub(super) fn group_for(automatic: bool, cx: &App) -> Group {
         &status,
         h_flex().child(check).into_any_element(),
     );
-    group(
+    row_group(
         "updates",
         "Updates",
         vec![

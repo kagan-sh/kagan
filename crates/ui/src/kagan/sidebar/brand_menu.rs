@@ -12,7 +12,7 @@ use kg_core::Workspace;
 use kg_domain::{Op, SettingsOp, WindowOp};
 
 use super::{ActivateRow, EnterRow, Sidebar};
-use crate::kagan::shown::{control, menu_item};
+use crate::kagan::controls::{control, menu_item};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 

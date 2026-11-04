@@ -72,23 +72,23 @@ const DECLARED: [Capability; 7] = [
 
 /// Capabilities present on a `kagan.json` value.
 #[must_use]
-pub fn matched(value: &Value) -> Vec<Capability> {
+pub fn capabilities_in(value: &Value) -> Vec<Capability> {
     capabilities()
         .into_iter()
-        .filter(|kind| present(value, kind.id))
+        .filter(|kind| is_present(value, kind.id))
         .collect()
 }
 
 /// Kind names present on a `kagan.json` value.
 #[must_use]
 pub fn kinds_in(value: &Value) -> Vec<String> {
-    matched(value)
+    capabilities_in(value)
         .into_iter()
         .map(|kind| kind.name.to_owned())
         .collect()
 }
 
-fn present(value: &Value, id: &str) -> bool {
+fn is_present(value: &Value, id: &str) -> bool {
     let filled = |value: &Value| match value {
         Value::Array(items) => !items.is_empty(),
         Value::Object(map) => !map.is_empty(),
@@ -145,13 +145,13 @@ fn read_example(root: &Path) -> Option<Example> {
         .map(|icon| root.join(icon))
         .and_then(|path| std::fs::read(path).ok())
         .unwrap_or_default();
-    let matched = matched(&value);
+    let found = capabilities_in(&value);
     Some(Example {
         id,
         name,
         description,
-        kinds: matched.iter().map(|kind| kind.name.to_owned()).collect(),
-        kind_ids: matched.iter().map(|kind| kind.id.to_owned()).collect(),
+        kinds: found.iter().map(|kind| kind.name.to_owned()).collect(),
+        kind_ids: found.iter().map(|kind| kind.id.to_owned()).collect(),
         icon,
         root: root.to_path_buf(),
     })

@@ -28,9 +28,7 @@ pub(crate) async fn status(
         cx.notify();
         thread.record.clone()
     });
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     database
         .call(move |store| store.set_thread_status(&record.id, record.status, record.updated_at))
         .await?;

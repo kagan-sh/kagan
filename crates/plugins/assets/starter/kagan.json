@@ -1,0 +1,17 @@
+{
+  "id": "dev.kagan.__NAME__",
+  "name": "__NAME__",
+  "version": "0.1.0",
+  "kagan": ">=__VERSION__",
+  "entry": "main.js",
+  "instructions": "A starter plugin: a hello tool under the threads. A panel may also be a center page or a right tab. Bottom is refused. A hello command writes to its log; a person binds its key in Settings, Keyboard.",
+  "powers": {},
+  "commands": [{ "id": "hello", "title": "Say hello" }],
+  "ui": {
+    "panels": [
+      { "id": "hello", "title": "Hello", "view": "HelloPanel", "placement": "left" }
+    ]
+  },
+  "tools": [],
+  "skills": []
+}

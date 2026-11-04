@@ -91,8 +91,8 @@ pub(super) fn search_threads(_: &SearchThreads, _: &mut Window, cx: &mut App) {
 }
 
 pub(super) fn rail_button(cx: &App) -> impl IntoElement {
-    let tip = super::shown::tip("Command list", &OpenCommandList, cx);
-    super::shown::control(
+    let tip = super::controls::tip("Command list", &OpenCommandList, cx);
+    super::controls::control(
         "command-list-open",
         Facts::button("Command list"),
         Button::new("command-list-open-button")
@@ -364,17 +364,14 @@ fn entries(kagan: &Kagan, cx: &mut Context<Kagan>) -> Vec<(String, Vec<Entry>)> 
         let entries = commands
             .into_iter()
             .map(|command| Entry {
-                id: format!("{}-{}", plugin.0, command.id()),
-                label: command.title().to_owned(),
-                off: match command.when() {
+                id: format!("{}-{}", plugin.0, command.id),
+                label: command.title.clone(),
+                off: match command.when {
                     CommandWhen::Thread if !thread => Some("Open a thread first."),
                     CommandWhen::Project if !project => Some("Choose a project first."),
                     _ => None,
                 },
-                run: Run::Action(Rc::new(RunCommand::new(
-                    plugin.clone(),
-                    command.id().to_owned(),
-                ))),
+                run: Run::Action(Rc::new(RunCommand::new(plugin.clone(), command.id.clone()))),
                 plugin: Some(name.clone()),
             })
             .collect();

@@ -523,19 +523,6 @@ pub(crate) fn copy_id(cx: &App) -> String {
         .unwrap_or(first)
 }
 
-pub(crate) fn init(cx: &mut App) {
-    let root = std::env::var_os("KG_DATA_DIR").map_or_else(
-        || {
-            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-                .map(PathBuf::from)
-                .unwrap_or_default()
-                .join(".kagan")
-        },
-        PathBuf::from,
-    );
-    init_in(root.join("themes"), cx);
-}
-
 pub(crate) fn init_in(dir: PathBuf, cx: &mut App) {
     let state = cx.new(|cx| ThemeState::new(dir, cx));
     cx.set_global(ThemeOwner(state));

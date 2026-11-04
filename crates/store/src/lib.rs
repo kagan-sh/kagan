@@ -1,15 +1,18 @@
+//! SQLite: migrations, typed reads and writes, and the append-only event log.
+
 // Every fallible call returns `Error`: a SQLite failure, or `NotFound` from a write that names a missing row.
-#![allow(clippy::missing_errors_doc)]
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "the store documents its error contract at the module level"
+)]
 
 use std::path::PathBuf;
 
 mod column;
-mod plugin_db;
 mod store;
 #[cfg(test)]
 mod tests;
 
-pub use plugin_db::{Changes, PluginDb, Statement};
 pub use store::{ScreenRow, Store};
 
 #[derive(Debug, thiserror::Error)]

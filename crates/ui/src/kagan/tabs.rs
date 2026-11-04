@@ -11,8 +11,8 @@ use gpui_kit::{
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, TerminalOp, ThreadId, ThreadOp, WindowOp};
 
+use super::controls::{control, dispatch, tip};
 use super::right::ActivatePanelHeader;
-use super::shown::{control, dispatch, tip};
 use super::{Kagan, Shown};
 use crate::terminal::{TerminalView, Typed};
 use crate::ui_observe::UiObserveExt as _;

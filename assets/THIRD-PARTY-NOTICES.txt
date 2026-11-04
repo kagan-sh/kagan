@@ -1,7 +1,7 @@
 Third-party notices for the kg binary.
-cargo-lock 015670772c36049dab668145e40215b5d210dc48159d235a2d0c25e13f0a7a8b
+cargo-lock 35084b6dda41c4296a0fea99e0d374d6c4509512d7650e254fd66f731f1ab993
 
-kagan itself is MIT. See LICENSE.
+kagan itself is Apache-2.0. See LICENSE.
 
 The window, the terminal, and the wordmark use these fonts. Each is under the SIL Open Font License 1.1.
 
@@ -14304,6 +14304,14 @@ gpui-kit 0.8.1
 gpui-fps 0.8.1
 gpui-kit-assets 0.8.1
 gpui-webview 0.8.1
+kg-core 0.1.0
+kg-domain 0.1.0
+kg 0.1.0
+kg-plugins 0.1.0
+kg-process 0.1.0
+kg-store 0.1.0
+kg-terminal 0.1.0
+kg-ui 0.1.0
 accesskit 0.24.1
 accesskit_atspi_common 0.19.1
 accesskit_consumer 0.38.0
@@ -16446,6 +16454,34 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 The files under third-party/chromium are licensed as described in
 third-party/chromium/LICENSE.
+
+
+================================================================================
+MIT
+serde_yaml_ng 0.10.0
+
+                                  MIT License
+
+Copyright 2024 Antoine Catton
+Copyright 2016-2024 David Tolnay
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the “Software”), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 
 ================================================================================
@@ -18832,14 +18868,6 @@ SOFTWARE.
 
 ================================================================================
 MIT
-kg-core 0.1.0
-kg-domain 0.1.0
-kg 0.1.0
-kg-plugins 0.1.0
-kg-process 0.1.0
-kg-store 0.1.0
-kg-terminal 0.1.0
-kg-ui 0.1.0
 base64-simd 0.8.0
 block2 0.6.2
 block 0.1.6

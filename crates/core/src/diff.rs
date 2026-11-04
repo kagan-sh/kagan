@@ -130,7 +130,7 @@ fn cached<T>(
 }
 
 fn files(cache: &Cache, root: &Path, hint: Option<&str>, query: &DiffQuery) -> Result<DiffList> {
-    if !crate::changes::repository(root) {
+    if !crate::git::is_repository(root) {
         return Ok(DiffList {
             files: Vec::new(),
             added: 0,
@@ -238,32 +238,17 @@ fn file(
             "the diff path must be inside the repository".into(),
         ));
     }
-    if !crate::changes::repository(root) {
-        return Ok(DiffFileView {
-            path: path.to_owned(),
-            revision: String::new(),
-            binary: false,
-            truncated: false,
-            too_large: false,
-            hunks: Vec::new(),
-            file: None,
-            added: 0,
-            removed: 0,
-        });
+    if !crate::git::is_repository(root) {
+        return Ok(DiffFileView::empty(path));
     }
     let (left, right, base) = trees(root, hint, query)?;
     if let Some(skipped) = right.skipped.get(path).or_else(|| left.skipped.get(path)) {
         let revision = file_revision(root, &left, &right, path, path)?;
         return Ok(DiffFileView {
-            path: path.to_owned(),
             revision,
             binary: skipped.binary,
-            truncated: false,
             too_large: skipped.too_large,
-            hunks: Vec::new(),
-            file: None,
-            added: 0,
-            removed: 0,
+            ..DiffFileView::empty(path)
         });
     }
     let key = cache_key(root, query);
@@ -314,7 +299,7 @@ fn file_revision(
 }
 
 fn commits(root: &Path) -> Result<Vec<DiffCommit>> {
-    if !crate::changes::repository(root) {
+    if !crate::git::is_repository(root) {
         return Ok(Vec::new());
     }
     let stdout = git_ok(root, &["log", "--format=%H%x09%s", "-n", "50"], None)?;
@@ -450,15 +435,10 @@ fn diff_file(
     let binary = stat.as_ref().is_some_and(|stat| stat.binary);
     if binary {
         return Ok(DiffFileView {
-            path: path.to_owned(),
-            revision: String::new(),
             binary: true,
-            truncated: false,
-            too_large: false,
-            hunks: Vec::new(),
-            file: None,
             added,
             removed,
+            ..DiffFileView::empty(path)
         });
     }
     let unified = diff(
@@ -473,8 +453,6 @@ fn diff_file(
     };
     let (file, too_large, binary) = read_side(root, right, path)?;
     Ok(DiffFileView {
-        path: path.to_owned(),
-        revision: String::new(),
         binary,
         truncated,
         too_large,
@@ -482,6 +460,7 @@ fn diff_file(
         file: if binary { None } else { file },
         added,
         removed,
+        ..DiffFileView::empty(path)
     })
 }
 
@@ -883,7 +862,7 @@ fn diff(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
 fn git(root: &Path, args: &[&str], index: Option<&Path>) -> Result<Captured> {
     let program = kg_process::find_program(
         Path::new("git"),
-        std::env::var_os("PATH").as_deref(),
+        kg_process::user_path().as_deref(),
         kg_process::pathext().as_deref(),
     )
     .ok_or_else(|| OpError::Failed("git is not installed".into()))?;
@@ -893,7 +872,7 @@ fn git(root: &Path, args: &[&str], index: Option<&Path>) -> Result<Captured> {
     if let Some(index) = index {
         command.env("GIT_INDEX_FILE", index);
     }
-    kg_process::capture(&mut command).map_err(OpError::from)
+    kg_process::capture_with_limit(&mut command, crate::git::GIT_LIMIT).map_err(OpError::from)
 }
 
 fn git_ok(root: &Path, args: &[&str], index: Option<&Path>) -> Result<Vec<u8>> {

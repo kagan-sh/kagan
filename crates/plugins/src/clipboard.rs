@@ -24,8 +24,8 @@ fn write_png(_plugin: &PluginId, _bytes: Vec<u8>) -> Result<HostValue, HostError
 fn write_png(plugin: &PluginId, bytes: Vec<u8>) -> Result<HostValue, HostError> {
     let plugin = plugin.clone();
     with_current_app(|cx| {
-        let allowed =
-            PluginHost::try_global(cx).is_some_and(|host| host.read(cx).clipboard_write(&plugin));
+        let allowed = PluginHost::try_global(cx)
+            .is_some_and(|host| host.read(cx).allows_clipboard_write(&plugin));
         if !allowed {
             return Err(HostError::new("clipboard write is not granted"));
         }
@@ -104,6 +104,16 @@ fn decode(text: &str) -> Result<Vec<u8>, HostError> {
         }
     }
     Ok(out)
+}
+
+#[cfg(not(target_os = "linux"))]
+impl PluginHost {
+    #[must_use]
+    pub(crate) fn allows_clipboard_write(&self, id: &PluginId) -> bool {
+        self.active
+            .get(id)
+            .is_some_and(|active| active.grant.powers.clipboard.write)
+    }
 }
 
 #[cfg(test)]
