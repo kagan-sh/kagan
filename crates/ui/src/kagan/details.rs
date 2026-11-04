@@ -10,8 +10,8 @@ use kg_domain::{EnvironmentProvider, GitDetails, Op, OpResult, ThreadDetails, Th
 
 use super::Kagan;
 use super::changes::line;
+use super::controls::control;
 use super::right::Body;
-use super::shown::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 

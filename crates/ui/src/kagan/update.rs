@@ -148,7 +148,7 @@ fn button(
     label: &'static str,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    super::shown::control(
+    super::controls::control(
         id,
         Facts::button(label),
         Button::new(SharedString::from(format!("{id}-button")))

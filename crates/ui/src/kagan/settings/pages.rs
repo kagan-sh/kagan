@@ -22,7 +22,7 @@ use super::installed;
 use super::plugins;
 use super::row::{Group, Row, group, row, save, switch};
 use super::{ActivateItem, ITEM, Kagan};
-use crate::kagan::shown::control;
+use crate::kagan::controls::control;
 use crate::theme::{CatalogEntry, Source, ThemeState, swatches};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -149,7 +149,7 @@ fn terminal_size(kagan: &Kagan) -> Row {
                 .label("−")
                 .accessibility_label("Smaller terminal text")
                 .disabled(size <= 9)
-                .on_click(super::super::shown::dispatch(super::super::Smaller)),
+                .on_click(super::super::controls::dispatch(super::super::Smaller)),
         ))
         .child(div().child(format!("{size} pt")))
         .child(control(
@@ -164,7 +164,7 @@ fn terminal_size(kagan: &Kagan) -> Row {
                 .label("+")
                 .accessibility_label("Bigger terminal text")
                 .disabled(size >= 24)
-                .on_click(super::super::shown::dispatch(super::super::Bigger)),
+                .on_click(super::super::controls::dispatch(super::super::Bigger)),
         ));
     row(
         "terminal-font-size",
@@ -256,7 +256,7 @@ fn theme_actions() -> impl IntoElement {
                 .small()
                 .outline()
                 .label("New theme…")
-                .on_click(super::super::shown::dispatch(super::super::NewTheme)),
+                .on_click(super::super::controls::dispatch(super::super::NewTheme)),
         ))
         .child(control(
             "theme-folder",
@@ -265,7 +265,7 @@ fn theme_actions() -> impl IntoElement {
                 .small()
                 .outline()
                 .label("Open themes folder")
-                .on_click(super::super::shown::dispatch(super::super::OpenThemes)),
+                .on_click(super::super::controls::dispatch(super::super::OpenThemes)),
         ))
 }
 

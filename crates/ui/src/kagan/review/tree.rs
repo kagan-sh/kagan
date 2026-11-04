@@ -14,6 +14,7 @@ use gpui_kit::{
 use kg_domain::{DiffFile, DiffStatus};
 
 use super::Kagan;
+use crate::kagan::controls::Selected;
 use crate::theme;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -322,7 +323,7 @@ impl Kagan {
                     )
                     .child(
                         div().flex_none().child(
-                            super::super::shown::segments(cx)
+                            super::super::controls::segments(cx)
                                 .child(Self::review_tree_toggle(review.tree, true, cx))
                                 .child(Self::review_tree_toggle(review.tree, false, cx)),
                         ),
@@ -390,15 +391,16 @@ impl Kagan {
     fn review_tree_toggle(tree: bool, target: bool, cx: &mut Context<Self>) -> AnyElement {
         let label = if target { "Tree" } else { "Path" };
         let id = if target { "review-tree" } else { "review-path" };
-        super::super::shown::control(
+        let chosen = tree == target;
+        super::super::controls::control(
             id,
             Facts {
-                selected: Some(tree == target),
+                selected: Some(chosen),
                 ..Facts::button(label)
             },
-            super::super::shown::segment(
+            super::super::controls::segment(
                 ElementId::Name(format!("button-{id}").into()),
-                tree == target,
+                if chosen { Selected::Yes } else { Selected::No },
                 cx,
             )
             .icon(if target {

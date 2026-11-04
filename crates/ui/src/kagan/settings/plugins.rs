@@ -22,7 +22,7 @@ use serde_json::{Value, json};
 
 use super::Kagan;
 use super::row::{Group, Row, group, row, switch};
-use crate::kagan::shown::control;
+use crate::kagan::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 use gpui_kit::Role;

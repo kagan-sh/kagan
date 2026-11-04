@@ -15,7 +15,7 @@ use gpui_kit::{
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, Program, ProgramList, ProgramOp, ProgramSource, split_program};
 
-use super::shown::{container, control, dispatch, note};
+use super::controls::{container, control, dispatch, note};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;

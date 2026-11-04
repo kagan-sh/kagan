@@ -8,7 +8,7 @@ use kg_domain::{Op, PreferenceOp, UpdateState};
 use serde_json::json;
 
 use super::row::{Group, group, row, save, switch};
-use crate::kagan::shown::control;
+use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
 
 pub(super) fn group_for(automatic: bool, cx: &App) -> Group {

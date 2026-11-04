@@ -16,7 +16,7 @@ use kg_domain::{
 };
 
 use super::Kagan;
-use super::shown::control;
+use super::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 

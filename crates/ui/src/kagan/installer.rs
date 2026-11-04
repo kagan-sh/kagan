@@ -11,7 +11,7 @@ use kg_domain::{Listing, Op, OpError, OpResult, PluginId, PluginOp};
 use kg_plugins::PluginHost;
 
 use super::Kagan;
-use super::shown::control;
+use super::controls::control;
 use crate::ui_registry::Facts;
 
 const LOG_LINES: usize = 8;

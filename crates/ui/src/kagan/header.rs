@@ -5,7 +5,7 @@ use gpui_kit::{AnyElement, App, ElementId, IntoElement, SharedString, Styled as 
 use kg_domain::PluginId;
 use kg_plugins::{CommandWhen, PluginHost, RunCommand};
 
-use super::shown::{control, dispatch};
+use super::controls::{control, dispatch};
 use crate::ui_registry::Facts;
 
 pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {

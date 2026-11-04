@@ -4,6 +4,7 @@ pub(crate) mod attention;
 mod browser;
 pub(crate) mod changes;
 pub(crate) mod commands;
+mod controls;
 mod details;
 #[cfg(target_os = "macos")]
 mod dock;
@@ -1704,7 +1705,7 @@ fn toast_button(
     label: SharedString,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    shown::control(
+    controls::control(
         id,
         Facts::button(label.clone()),
         Button::new(SharedString::from(format!("{id}-control")))

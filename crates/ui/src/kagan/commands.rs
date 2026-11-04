@@ -91,8 +91,8 @@ pub(super) fn search_threads(_: &SearchThreads, _: &mut Window, cx: &mut App) {
 }
 
 pub(super) fn rail_button(cx: &App) -> impl IntoElement {
-    let tip = super::shown::tip("Command list", &OpenCommandList, cx);
-    super::shown::control(
+    let tip = super::controls::tip("Command list", &OpenCommandList, cx);
+    super::controls::control(
         "command-list-open",
         Facts::button("Command list"),
         Button::new("command-list-open-button")

@@ -6,7 +6,7 @@ use kg_plugins::PluginHost;
 
 use super::Kagan;
 use super::row::{Row, save};
-use crate::kagan::shown::control;
+use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
 
 /// Built-in, or each enabled plugin that offers to fill `slot`. Only this choice fills it.

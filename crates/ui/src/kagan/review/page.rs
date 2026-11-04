@@ -1,5 +1,6 @@
 use super::{Kagan, renamed_from};
 use crate::kagan::changes::{counts, files_label};
+use crate::kagan::controls::Selected;
 use crate::theme;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
@@ -42,21 +43,26 @@ impl Kagan {
             .iter()
             .filter(|file| self.is_viewed(&file.path, cx))
             .count();
-        let mut scopes = super::super::shown::segments(cx);
+        let mut scopes = super::super::controls::segments(cx);
         for (scope, label) in [
             (DiffScope::Uncommitted, "Uncommitted"),
             (DiffScope::Branch, "Branch"),
             (DiffScope::Commit, "Last commit"),
         ] {
-            scopes = scopes.child(super::super::shown::control(
+            let selected = review.scope == scope;
+            scopes = scopes.child(super::super::controls::control(
                 ElementId::Name(format!("review-scope-{label}").into()),
                 Facts {
-                    selected: Some(review.scope == scope),
+                    selected: Some(selected),
                     ..Facts::button(label)
                 },
-                super::super::shown::segment(
+                super::super::controls::segment(
                     ElementId::Name(format!("button-review-scope-{label}").into()),
-                    review.scope == scope,
+                    if selected {
+                        Selected::Yes
+                    } else {
+                        Selected::No
+                    },
                     cx,
                 )
                 .label(label)

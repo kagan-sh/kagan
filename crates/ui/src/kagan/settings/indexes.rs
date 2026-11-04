@@ -14,8 +14,8 @@ use kg_plugins::PluginHost;
 
 use super::Kagan;
 use super::row::{Group, Row, group, row};
+use crate::kagan::controls::control;
 use crate::kagan::installer::{AddIndex, SearchIndexes};
-use crate::kagan::shown::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 

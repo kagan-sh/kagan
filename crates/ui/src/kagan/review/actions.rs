@@ -1,4 +1,4 @@
-use super::super::shown::{bound_keys, control};
+use super::super::controls::{bound_keys, control};
 use super::{FindInDiff, Kagan, NextChange, NextFile, PrevChange, PrevFile, Review, ToggleWrap};
 use crate::ui_registry::Facts;
 use gpui_kit::assets::IconName;

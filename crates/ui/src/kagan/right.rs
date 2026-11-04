@@ -15,8 +15,8 @@ use kg_core::Workspace;
 use kg_domain::{Op, PluginId, PluginOp, SurfaceOp};
 
 use super::Kagan;
+use super::controls::{control, menu_popup};
 use super::installer::{ReloadPlugin, ShowPluginLogs, TogglePluginEnabled, answer, send};
-use super::shown::{control, menu_popup};
 use super::surface::Slot;
 use super::tabs::{self, CloseTab, NewTerminal};
 use crate::components::fills_panel;

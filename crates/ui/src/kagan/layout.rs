@@ -811,7 +811,7 @@ fn bar_button(
     action: impl Action + Clone,
     cx: &App,
 ) -> Button {
-    let tip = super::shown::tip(&name, &action, cx);
+    let tip = super::controls::tip(&name, &action, cx);
     Button::new(ElementId::Name(SharedString::from(format!("{id}-button"))))
         .small()
         .ghost()

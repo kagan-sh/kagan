@@ -558,7 +558,7 @@ impl Kagan {
         } else {
             "Files"
         };
-        super::shown::control(
+        super::controls::control(
             "review-toggle-files",
             Facts::button(label),
             gpui_kit::component::button::Button::new("button-review-toggle-files")

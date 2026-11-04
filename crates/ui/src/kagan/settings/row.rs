@@ -5,7 +5,7 @@ use gpui_kit::{AnyElement, App, ElementId, IntoElement, Role, SharedString, Wind
 use kg_core::Workspace;
 use kg_domain::Op;
 
-use crate::kagan::shown::control;
+use crate::kagan::controls::control;
 use crate::ui_registry::Facts;
 
 /// One row: a title, a muted line, and its control on the right.
