@@ -135,6 +135,8 @@ impl Terminal {
             eof_gate: Arc::default(),
             #[cfg(test)]
             publish_gate: Arc::default(),
+            #[cfg(test)]
+            poll_gate: Arc::default(),
         };
         let ended = Arc::new(AtomicBool::new(false));
         let write_stop = Arc::new(AtomicBool::new(false));
@@ -515,6 +517,11 @@ fn thread_read(
                 }
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    #[cfg(test)]
+                    if let Some((reached, resume)) = lock(&shared.poll_gate).take() {
+                        let _ = reached.send(());
+                        let _ = resume.recv();
+                    }
                     // O_NONBLOCK is shared across the master's dups; sleep would spin an idle pty.
                     #[cfg(unix)]
                     if let Some(fd) = &wait_fd {
@@ -733,6 +740,9 @@ fn is_unsafe_control(c: char) -> bool {
 
 // What the reader thread and the terminal share. Versions move and grids are built only with the
 // screen locked, so a grid's version is the screen's version when it was built.
+#[cfg(test)]
+type PollGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>);
+
 #[derive(Clone)]
 struct Shared {
     screen: Arc<Mutex<Screen>>,
@@ -753,6 +763,9 @@ struct Shared {
     /// Test only: the teardown waits on this before it publishes the final screen.
     #[cfg(test)]
     publish_gate: Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
+    /// Test only: the reader reports it has reached its poll, then waits for the resume.
+    #[cfg(test)]
+    poll_gate: Arc<Mutex<Option<PollGate>>>,
 }
 
 impl Shared {
@@ -779,6 +792,8 @@ impl Shared {
             eof_gate: Arc::default(),
             #[cfg(test)]
             publish_gate: Arc::default(),
+            #[cfg(test)]
+            poll_gate: Arc::default(),
         }
     }
 

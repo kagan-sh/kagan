@@ -899,14 +899,20 @@ fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
     use std::os::fd::AsRawFd;
     use std::os::unix::net::UnixStream;
     let mut terminal = Terminal::spawn(
-        sh("stty -echo; printf 'ready\\n'; read line; printf 'got:%s\\n' \"$line\"; sleep 30"),
+        sh("stty -echo; read first; printf 'ready\\n'; read line; printf 'got:%s\\n' \"$line\"; sleep 30"),
         80,
         24,
     )
     .unwrap();
     let reap = Reap(terminal.process_id());
-    wait_for(&terminal, "ready");
-    // Teardown closes the master while the reader still runs. A socket then takes the same number.
+    // The child prints nothing until it gets input, so the reader's next WouldBlock comes after this arms the gate.
+    let (reached, at_poll) = mpsc::channel();
+    let (resume, held) = mpsc::channel();
+    *lock(&terminal.shared.poll_gate) = Some((reached, held));
+    terminal.write(b"go\n".to_vec()).unwrap();
+    at_poll
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the reader never reached its poll");
     // Made before the master closes, so the socket cannot take the master's number.
     let (unrelated, _peer) = UnixStream::pair().unwrap();
     let master = terminal.master.take().unwrap();
@@ -918,6 +924,7 @@ fn the_reader_keeps_polling_its_own_fd_after_the_master_closes() {
         master_fd
     );
     terminal.write(b"hello\n".to_vec()).unwrap();
+    resume.send(()).unwrap();
     let frame = wait_for(&terminal, "got:hello");
     // SAFETY: master_fd is the copy dup2 made, and only this test owns it.
     unsafe { libc::close(master_fd) };
