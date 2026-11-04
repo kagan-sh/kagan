@@ -936,6 +936,7 @@ impl Grant {
             })
             && (!new.clipboard.read || old.clipboard.read)
             && (!new.clipboard.write || old.clipboard.write)
+            && (!new.open_url || old.open_url)
             && new.areas.is_subset(&old.areas)
             && new
                 .read

@@ -668,6 +668,31 @@ fn page_store_is_an_install_line_and_needs_approval_again() {
 }
 
 #[test]
+fn open_url_is_an_install_line_and_needs_approval_again() {
+    let plugin = plugin_dir();
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        !base
+            .lines()
+            .iter()
+            .any(|line| line == "opens links in your browser")
+    );
+    let mut value = manifest();
+    value["powers"]["openUrl"] = json!(true);
+    write_plugin(plugin.path(), &value);
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        with.lines()
+            .iter()
+            .any(|line| line == "opens links in your browser"),
+        "{:?}",
+        with.lines()
+    );
+    assert!(base.within(&with));
+    assert!(!with.within(&base));
+}
+
+#[test]
 fn webview_store_true_in_the_script_asks_for_page_data() {
     let plugin = plugin_dir();
     std::fs::write(
