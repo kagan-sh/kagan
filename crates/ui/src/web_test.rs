@@ -1,8 +1,8 @@
 use std::path::Path;
 
-#[cfg(target_os = "macos")]
-use super::durable_store;
 use super::{allows_navigation, csp, mime, page_event, page_url, serve};
+#[cfg(target_os = "macos")]
+use crate::page::durable_store;
 
 const PLUGIN: &str = "dev.kagan.page";
 

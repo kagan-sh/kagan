@@ -153,45 +153,6 @@ fn build_view(
     gpui_webview::WebView::build(builder, window, cx).map_err(|error| failure(&error.to_string()))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_missing_runtime_names_the_download() {
-        let message = failure(&format!(
-            "creating the environment failed: {}",
-            hresult("80070002")
-        ));
-        assert!(message.contains("WebView2 Runtime"));
-        assert!(message.contains("https://developer.microsoft.com/microsoft-edge/webview2/"));
-        let other = failure("the window is gone");
-        assert!(other.contains("could not open"));
-        assert!(!other.contains("WebView2 Runtime"));
-    }
-
-    #[test]
-    fn webview_files_stay_inside_kagan_data() {
-        let data = tempfile::tempdir().expect("temp data");
-        let stale = data.path().join("page-stale");
-        std::fs::create_dir_all(&stale).expect("stale page dir");
-        std::fs::write(stale.join("lock"), b"x").expect("stale file");
-        SWEPT.store(false, std::sync::atomic::Ordering::SeqCst);
-        let path = page_dir(data.path()).expect("page dir");
-        assert!(path.starts_with(data.path()));
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
-        assert!(name.starts_with("page-"));
-        assert!(
-            !stale.exists(),
-            "abandoned page dirs are removed on restart"
-        );
-        let _ = std::fs::remove_dir_all(path);
-    }
-}
-
 /// macOS 14+ is required for a per-plugin `WKWebsiteDataStore`; older versions share the default.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
@@ -230,5 +191,44 @@ pub(crate) fn with_store(
     {
         let _ = store;
         builder
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_runtime_names_the_download() {
+        let message = failure(&format!(
+            "creating the environment failed: {}",
+            hresult("80070002")
+        ));
+        assert!(message.contains("WebView2 Runtime"));
+        assert!(message.contains("https://developer.microsoft.com/microsoft-edge/webview2/"));
+        let other = failure("the window is gone");
+        assert!(other.contains("could not open"));
+        assert!(!other.contains("WebView2 Runtime"));
+    }
+
+    #[test]
+    fn webview_files_stay_inside_kagan_data() {
+        let data = tempfile::tempdir().expect("temp data");
+        let stale = data.path().join("page-stale");
+        std::fs::create_dir_all(&stale).expect("stale page dir");
+        std::fs::write(stale.join("lock"), b"x").expect("stale file");
+        SWEPT.store(false, std::sync::atomic::Ordering::SeqCst);
+        let path = page_dir(data.path()).expect("page dir");
+        assert!(path.starts_with(data.path()));
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        assert!(name.starts_with("page-"));
+        assert!(
+            !stale.exists(),
+            "abandoned page dirs are removed on restart"
+        );
+        let _ = std::fs::remove_dir_all(path);
     }
 }
