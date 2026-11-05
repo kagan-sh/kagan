@@ -51,7 +51,7 @@ async fn run(
     cx: &mut AsyncApp,
 ) -> Result<Value, String> {
     if serde_json::to_vec(&input).map_or(true, |bytes| bytes.len() > CALL_CAP) {
-        return Err(format!("the input to {name} is larger than 64 KiB"));
+        return Err(format!("the input to {target} is larger than 64 KiB"));
     }
     host.read_with(cx, |host, _| host.check_call(caller, target, name))?;
     let jobs = host
