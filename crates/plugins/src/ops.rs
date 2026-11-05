@@ -10,7 +10,7 @@ use kg_domain::{
 };
 use serde_json::{Map, Value};
 
-use crate::manifest::{AgentChoice, Grant, Setting};
+use crate::manifest::{self, AgentChoice, Grant, Setting};
 
 pub(crate) fn approved(record: &Plugin) -> Result<Grant> {
     serde_json::from_value(record.approved.clone()).map_err(|error| {
@@ -1119,6 +1119,14 @@ async fn set_enabled(id: &PluginId, enabled: bool, cx: &mut AsyncApp) -> Result<
 }
 
 fn checked(key: &str, setting: &Setting, value: Value) -> Result<Value> {
+    let value = typed(key, setting, value)?;
+    if let Some(failure) = manifest::schema_failure(key, setting, &value) {
+        return Err(OpError::Invalid(failure));
+    }
+    Ok(value)
+}
+
+fn typed(key: &str, setting: &Setting, value: Value) -> Result<Value> {
     let takes =
         |what: &str| OpError::Invalid(format!("setting {key} ({}) takes {what}", setting.title()));
     match setting {

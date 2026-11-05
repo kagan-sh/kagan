@@ -6,13 +6,13 @@ use crate::theme::TypeScale as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Sizable as _, h_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _,
-    IntoElement, ParentElement as _, PathPromptOptions, SharedString,
+    AnyElement, App, AppContext as _, Context, ElementId, Entity, Focusable as _,
+    InteractiveElement as _, IntoElement, ParentElement as _, PathPromptOptions, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, WeakEntity, Window, div, rems,
 };
 use kg_core::Workspace;
@@ -117,10 +117,14 @@ fn text_rows(host: &PluginHost) -> Vec<(PluginId, String, FieldKind, String)> {
             host.settings(&id)
                 .into_iter()
                 .filter_map(|(key, setting, value)| match setting {
-                    Setting::String { .. } => Some((
+                    Setting::String { multiline, .. } => Some((
                         id.clone(),
                         key,
-                        FieldKind::Text,
+                        if multiline {
+                            FieldKind::Multiline
+                        } else {
+                            FieldKind::Text
+                        },
                         value.as_str().unwrap_or_default().to_owned(),
                     )),
                     Setting::Number { .. } => Some((
@@ -284,7 +288,15 @@ fn plugin_row(
         }
         Setting::Provider { .. } => return None,
     };
-    Some(row(&scope, title, &note, control))
+    let mut entry = row(&scope, title, &note, control);
+    entry.wide = matches!(
+        setting,
+        Setting::String {
+            multiline: true,
+            ..
+        }
+    );
+    Some(entry)
 }
 
 fn string_control(
@@ -293,16 +305,9 @@ fn string_control(
     field: &Entity<TextField>,
     cx: &mut Context<Kagan>,
 ) -> (String, AnyElement) {
-    let input = field.read(cx).input.clone();
-    #[cfg(test)]
-    TEXT_INPUTS.with(|inputs| {
-        inputs
-            .borrow_mut()
-            .insert(scope.to_owned(), input.downgrade());
-    });
-    let (draft, committed, pending, error, kind) = {
+    let (draft, committed, pending, error, kind, input) = {
         let field = field.read(cx);
-        let draft = field.input.read(cx).value().to_string();
+        let draft = field.input.value(cx);
         let pending = field.sent.as_ref().is_some_and(|sent| sent == &draft);
         (
             draft,
@@ -310,17 +315,23 @@ fn string_control(
             pending,
             field.error.clone(),
             field.kind,
+            field.input.clone(),
         )
     };
+    #[cfg(test)]
+    input.record_for_test(scope, cx);
     let note = if let Some(error) = error.as_ref() {
         match kind {
-            FieldKind::Number => error.clone(),
             FieldKind::Text => format!("{error} Enter saves."),
+            FieldKind::Multiline | FieldKind::Number => error.clone(),
         }
     } else if pending {
         "Saving…".to_owned()
     } else if draft != committed {
-        "Enter saves.".to_owned()
+        match kind {
+            FieldKind::Multiline => "Unsaved changes.".to_owned(),
+            FieldKind::Text | FieldKind::Number => "Enter saves.".to_owned(),
+        }
     } else {
         String::new()
     };
@@ -339,23 +350,58 @@ fn string_control(
             .on_click(move |_, window, cx| revert(&field, window, cx)),
         )
     });
-    let control = h_flex()
-        .gap_2()
-        .items_center()
-        .children(revert)
-        .child(
-            div()
-                .id(ElementId::Name(format!("plugin-text-{scope}").into()))
-                .ui_observe_as(Facts::input(title, &input, cx))
-                .w(rems(13.75))
-                .h(rems(1.75))
-                .child(
-                    Input::new(&input)
-                        .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
-                        .small(),
-                ),
-        )
-        .into_any_element();
+    let element = div()
+        .id(ElementId::Name(format!("plugin-text-{scope}").into()))
+        .ui_observe_as(input.facts(title, cx));
+    let element = match &input {
+        FieldInput::Line(state) => element
+            .w(rems(13.75))
+            .h(rems(1.75))
+            .child(
+                Input::new(state)
+                    .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                    .small(),
+            )
+            .into_any_element(),
+        FieldInput::Area(state) => element
+            .w_full()
+            .child(
+                Textarea::new(state)
+                    .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                    .small(),
+            )
+            .into_any_element(),
+    };
+    let control = if kind == FieldKind::Multiline {
+        let save = {
+            let field = field.clone();
+            control(
+                format!("setting-save-{scope}"),
+                Facts::button("Save"),
+                Button::new(ElementId::Name(
+                    format!("button-setting-save-{scope}").into(),
+                ))
+                .small()
+                .outline()
+                .label("Save")
+                .on_click(move |_, window, cx| {
+                    field.update(cx, |field, cx| field.submit(window, cx));
+                }),
+            )
+        };
+        v_flex()
+            .gap_2()
+            .child(element)
+            .child(h_flex().gap_2().children(revert).child(save))
+            .into_any_element()
+    } else {
+        h_flex()
+            .gap_2()
+            .items_center()
+            .children(revert)
+            .child(element)
+            .into_any_element()
+    };
     (note, control)
 }
 
@@ -692,11 +738,66 @@ fn select_control(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FieldKind {
     Text,
+    Multiline,
     Number,
 }
 
+#[derive(Clone)]
+enum FieldInput {
+    Line(Entity<InputState>),
+    Area(Entity<TextareaState>),
+}
+
+impl FieldInput {
+    fn value(&self, cx: &App) -> String {
+        match self {
+            Self::Line(state) => state.read(cx).value().to_string(),
+            Self::Area(state) => state.read(cx).value().to_string(),
+        }
+    }
+
+    fn set_value(&self, text: String, window: &mut Window, cx: &mut App) {
+        match self {
+            Self::Line(state) => state.update(cx, |state, cx| state.set_value(text, window, cx)),
+            Self::Area(state) => state.update(cx, |state, cx| state.set_value(text, window, cx)),
+        }
+    }
+
+    fn facts(&self, title: &str, cx: &App) -> Facts {
+        match self {
+            Self::Line(state) => Facts::input(title, state, cx),
+            Self::Area(state) => Facts {
+                role: Role::TextInput,
+                value: Some(state.read(cx).value().to_string().into()),
+                focus: Some(state.focus_handle(cx)),
+                ..Facts::button(title)
+            },
+        }
+    }
+
+    #[cfg(test)]
+    fn record_for_test(&self, scope: &str, _cx: &App) {
+        match self {
+            Self::Line(state) => {
+                TEXT_INPUTS.with(|inputs| {
+                    inputs
+                        .borrow_mut()
+                        .insert(scope.to_owned(), state.downgrade());
+                });
+            }
+            Self::Area(state) => {
+                TEXTAREAS.with(|areas| {
+                    areas
+                        .borrow_mut()
+                        .insert(scope.to_owned(), state.downgrade());
+                });
+            }
+        }
+    }
+}
+
 struct TextField {
-    input: Entity<InputState>,
+    input: FieldInput,
     kind: FieldKind,
     committed: String,
     sent: Option<String>,
@@ -710,7 +811,7 @@ struct TextField {
 
 impl TextField {
     fn dirty(&self, cx: &App) -> bool {
-        let draft = self.input.read(cx).value().to_string();
+        let draft = self.input.value(cx);
         draft != self.committed || self.sent.is_some() || self.error.is_some()
     }
 
@@ -722,19 +823,17 @@ impl TextField {
     }
 
     fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let value = self.input.read(cx).value().to_string();
+        let value = self.input.value(cx);
         if value == self.committed && self.error.is_none() && self.sent.is_none() {
             return;
         }
         let (change, sent) = match self.kind {
-            FieldKind::Text => (Change::Set(json!(value.clone())), value),
+            FieldKind::Text | FieldKind::Multiline => (Change::Set(json!(value.clone())), value),
             FieldKind::Number => match parse_number(&value) {
                 Ok(number) => {
                     let sent = number.to_string();
                     if sent != value {
-                        self.input.update(cx, |state, cx| {
-                            state.set_value(sent.clone(), window, cx);
-                        });
+                        self.input.set_value(sent.clone(), window, cx);
                     }
                     (Change::Set(Value::Number(number)), sent)
                 }
@@ -776,7 +875,7 @@ impl TextField {
         let Some(sent) = shown_value(written) else {
             return;
         };
-        let draft = self.input.read(cx).value().to_string();
+        let draft = self.input.value(cx);
         self.sent = None;
         let baseline = baseline.unwrap_or("");
         if draft != sent {
@@ -826,16 +925,32 @@ fn text_field(
 ) -> Entity<TextField> {
     let (plugin, setting, owner) = (id.clone(), key.to_owned(), kagan.clone());
     cx.new(move |cx| {
-        let input = cx.new(|cx| InputState::new(window, cx).default_value(text.clone()));
-        let save = cx.subscribe_in(
-            &input,
-            window,
-            move |field: &mut TextField, _, event, window, cx| match event {
-                InputEvent::Change => cx.notify(),
-                InputEvent::PressEnter { .. } => field.submit(window, cx),
-                InputEvent::Focus | InputEvent::Blur => {}
-            },
-        );
+        let (input, save) = if kind == FieldKind::Multiline {
+            let state = cx.new(|cx| {
+                TextareaState::new(window, cx)
+                    .auto_grow(2, 6)
+                    .default_value(text.clone())
+            });
+            let save =
+                cx.subscribe_in(&state, window, move |_: &mut TextField, _, event, _, cx| {
+                    if matches!(event, InputEvent::Change) {
+                        cx.notify();
+                    }
+                });
+            (FieldInput::Area(state), save)
+        } else {
+            let state = cx.new(|cx| InputState::new(window, cx).default_value(text.clone()));
+            let save = cx.subscribe_in(
+                &state,
+                window,
+                move |field: &mut TextField, _, event, window, cx| match event {
+                    InputEvent::Change => cx.notify(),
+                    InputEvent::PressEnter { .. } => field.submit(window, cx),
+                    InputEvent::Focus | InputEvent::Blur => {}
+                },
+            );
+            (FieldInput::Line(state), save)
+        };
         TextField {
             input,
             kind,
@@ -856,7 +971,7 @@ fn sync_one(field: &Entity<TextField>, text: &str, window: &mut Window, cx: &mut
         if field.committed == text && field.sent.is_none() {
             return;
         }
-        let draft = field.input.read(cx).value().to_string();
+        let draft = field.input.value(cx);
         if field.sent.as_deref() == Some(text) {
             text.clone_into(&mut field.committed);
             return;
@@ -873,9 +988,7 @@ fn sync_one(field: &Entity<TextField>, text: &str, window: &mut Window, cx: &mut
         text.clone_into(&mut field.committed);
         field.error = None;
         if draft != text {
-            field.input.update(cx, |state, cx| {
-                state.set_value(text.to_owned(), window, cx);
-            });
+            field.input.set_value(text.to_owned(), window, cx);
         }
     });
 }
@@ -891,9 +1004,7 @@ fn revert(field: &Entity<TextField>, window: &mut Window, cx: &mut App) {
             forget_queued(&mut kagan.settings_drafts, &scope);
         });
         let committed = field.committed.clone();
-        field.input.update(cx, |state, cx| {
-            state.set_value(committed, window, cx);
-        });
+        field.input.set_value(committed, window, cx);
         cx.notify();
     });
 }
@@ -1198,14 +1309,24 @@ thread_local! {
     /// test does not keep the input alive.
     static TEXT_INPUTS: std::cell::RefCell<BTreeMap<String, gpui_kit::WeakEntity<InputState>>> =
         const { std::cell::RefCell::new(BTreeMap::new()) };
+    /// The editor of each multiline setting, kept apart because it is another state type.
+    static TEXTAREAS: std::cell::RefCell<BTreeMap<String, gpui_kit::WeakEntity<TextareaState>>> =
+        const { std::cell::RefCell::new(BTreeMap::new()) };
 }
 
 /// The text a plugin's text setting shows, as the last render drew it. Used by the tests.
 #[cfg(test)]
 pub(super) fn text_for_test(plugin: &PluginId, key: &str, cx: &App) -> String {
-    let input =
-        TEXT_INPUTS.with(|inputs| inputs.borrow().get(&format!("{}/{key}", plugin.0)).cloned());
-    input
+    let scope = format!("{}/{key}", plugin.0);
+    let input = TEXT_INPUTS.with(|inputs| inputs.borrow().get(&scope).cloned());
+    if let Some(text) = input
         .and_then(|input| input.upgrade())
-        .map_or_else(String::new, |input| input.read(cx).value().to_string())
+        .map(|input| input.read(cx).value().to_string())
+    {
+        return text;
+    }
+    TEXTAREAS
+        .with(|areas| areas.borrow().get(&scope).cloned())
+        .and_then(|area| area.upgrade())
+        .map_or_else(String::new, |area| area.read(cx).value().to_string())
 }

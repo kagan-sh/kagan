@@ -507,6 +507,27 @@ fn a_plugin_setting_saves_from_its_page(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_multiline_setting_saves_its_lines_from_the_editor(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    let field = format!("plugin-text-{PREFS}/log");
+    assert!(present(cx, window, &field));
+
+    click(cx, window, &field);
+    cx.simulate_input(window, "first");
+    cx.simulate_keystrokes(window, "enter");
+    cx.simulate_input(window, "second");
+    cx.run_until_parked();
+    assert_eq!(settings_text(cx, "log"), "first\nsecond");
+    assert_eq!(plugin_config(cx, "log"), Value::Null, "not saved yet");
+
+    click(cx, window, &format!("setting-save-{PREFS}/log"));
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "log"), json!("first\nsecond"));
+}
+
+#[gpui_kit::test]
 fn a_project_setting_picks_from_a_dropdown(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_plugins);
     cx.run_until_parked();
@@ -1258,6 +1279,7 @@ fn install_plugins(data: &Path) {
                     "default": "comfortable"
                 },
                 "label": {"type": "string", "title": "Label", "default": "hi"},
+                "log": {"type": "string", "title": "Log", "multiline": true},
                 "board": {"type": "project", "title": "Board"},
                 "retries": {"type": "number", "title": "Retries", "default": 3},
                 "folder": {"type": "folder", "title": "Folder"}
@@ -2086,7 +2108,7 @@ fn an_enabled_plugin_says_what_it_added_without_a_side(cx: &mut TestAppContext) 
     cx.run_until_parked();
     click(cx, window, "settings-gear");
     let note = aria_label(cx, window, &format!("setting-row-{PREFS}-note")).unwrap_or_default();
-    assert_eq!(note, "Adds 6 settings.");
+    assert_eq!(note, "Adds 7 settings.");
     assert!(!note.starts_with("On"), "{note}");
     assert!(!note.contains("right") && !note.contains("left"), "{note}");
 }

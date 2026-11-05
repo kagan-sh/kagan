@@ -311,6 +311,10 @@ pub enum Setting {
         title: String,
         #[serde(default)]
         default: Option<String>,
+        #[serde(default)]
+        multiline: bool,
+        #[serde(default)]
+        schema: Option<Value>,
     },
     Boolean {
         title: String,
@@ -321,6 +325,8 @@ pub enum Setting {
         title: String,
         #[serde(default)]
         default: Option<serde_json::Number>,
+        #[serde(default)]
+        schema: Option<Value>,
     },
     Select {
         title: String,
@@ -382,6 +388,25 @@ impl Setting {
             | Self::Secret { .. } => Value::Null,
         }
     }
+
+    pub(crate) fn schema(&self) -> Option<&Value> {
+        match self {
+            Self::String { schema, .. } | Self::Number { schema, .. } => schema.as_ref(),
+            _ => None,
+        }
+    }
+}
+
+/// The first way `value` fails `setting`'s schema, in plain words. `None` when it passes or the
+/// setting declares no schema.
+pub(crate) fn schema_failure(key: &str, setting: &Setting, value: &Value) -> Option<String> {
+    let schema = setting.schema()?;
+    let validator = jsonschema::validator_for(schema).ok()?;
+    let failure = validator.iter_errors(value).next()?;
+    Some(format!(
+        "setting {key} ({}) does not match its schema: {failure}",
+        setting.title()
+    ))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -415,6 +440,30 @@ pub(crate) enum Scope {
     Tagged,
 }
 
+/// Refuses `multiline` and `schema` on a setting type that does not take them, naming the key.
+/// Serde would refuse them as unknown fields, without the key, so this runs on the raw JSON.
+fn check_setting_fields(value: &Value) -> Result<(), String> {
+    let Some(settings) = value.get("settings").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (key, setting) in settings {
+        let kind = setting.get("type").and_then(Value::as_str);
+        if setting.get("multiline").is_some() && kind != Some("string") {
+            return Err(if kind == Some("secret") {
+                format!("setting {key} cannot be multiline; a secret is one line of text")
+            } else {
+                format!("setting {key}: multiline works on a string setting only")
+            });
+        }
+        if setting.get("schema").is_some() && !matches!(kind, Some("string" | "number")) {
+            return Err(format!(
+                "setting {key}: schema works on a string or number setting only"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Reads and checks `kagan.json` in `root` without running plugin code.
 pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
     let invalid =
@@ -425,6 +474,7 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
     let Value::Object(_) = &value else {
         return Err(invalid("must be a JSON object".into()));
     };
+    check_setting_fields(&value).map_err(invalid)?;
     let mut manifest: Manifest =
         serde_json::from_str(&text).map_err(|error| invalid(error.to_string()))?;
     manifest.check(root, data_dir).map_err(invalid)?;
@@ -561,6 +611,19 @@ impl Manifest {
                     "secret setting {key} needs a key of at most {} bytes",
                     crate::secret::MAX_KEY
                 ));
+            }
+            if let Some(schema) = setting.schema() {
+                if !schema.is_object() {
+                    return Err(format!("setting {key} schema must be a JSON object"));
+                }
+                jsonschema::validator_for(schema)
+                    .map_err(|error| format!("setting {key} schema does not compile: {error}"))?;
+                let default = setting.default_value();
+                if !default.is_null()
+                    && let Some(failure) = schema_failure(key, setting, &default)
+                {
+                    return Err(failure);
+                }
             }
         }
         Ok(())
