@@ -366,7 +366,6 @@ fn read_manifest(root: &Path) -> Result<crate::manifest::Manifest, OpError> {
 }
 
 /// The catalog the plugin crate's own tests declare against: the gpui-kit components.
-
 fn catalog() -> gpui_shell::FrozenComponentRegistry {
     gpui_shell::components::components().unwrap()
 }
@@ -642,7 +641,6 @@ fn dispatched(
 }
 
 /// Waits for an answer, moving the test clock by `tick` each round so timers can fire.
-
 fn settled(
     cx: &mut TestAppContext,
     receive: &async_channel::Receiver<Result<OpResult, OpError>>,
@@ -980,7 +978,6 @@ export default class Plugin extends View {
 "#;
 
 /// A plugin that forwards one host call, so the call runs inside a real script scope.
-
 fn forwarding(cx: &mut TestAppContext, powers: Value) -> (TempDir, Grant) {
     let plugin = probe_plugin(&["process"], FORWARD);
     let mut value = sample_manifest();
