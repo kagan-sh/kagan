@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use kg_domain::{ProjectId, ProjectKind};
 
-use super::{Kind, Row, row_tip};
+use super::marks::row_tip;
+use super::{Kind, Row};
 
 fn project(kind: ProjectKind) -> Row {
     Row {

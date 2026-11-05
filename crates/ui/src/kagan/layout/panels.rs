@@ -1,0 +1,89 @@
+use gpui_kit::{Context, Window};
+
+use crate::kagan::Kagan;
+use crate::kagan::screen::Side;
+
+use super::{Panes, key, right_index, save};
+
+impl Kagan {
+    pub(in crate::kagan) fn sync_panels(&mut self, cx: &mut Context<Self>) {
+        let want = self.desired_panes(cx);
+        self.sync_to(want, cx);
+    }
+
+    pub(in crate::kagan) fn sync_to(&mut self, want: Panes, cx: &mut Context<Self>) {
+        if (want.right && self.screen.promote(Side::Right))
+            || (want.left && self.screen.promote(Side::Left))
+        {
+            cx.notify();
+        }
+        let held = self.panes;
+        if held == want {
+            return;
+        }
+        self.panes = want;
+        let layout = self.layout;
+        self.columns.update(cx, |state, cx| {
+            if held.right && !want.right && state.sizes().len() > right_index(held.left) {
+                state.remove_panel(right_index(held.left), cx);
+            }
+            if held.left && !want.left && !state.sizes().is_empty() {
+                state.remove_panel(0, cx);
+            }
+            if want.left && !held.left {
+                state.insert_panel(Some(layout.left_width), Some(0), cx);
+            }
+            if want.right && !held.right {
+                state.insert_panel(Some(layout.right_width), None, cx);
+            }
+        });
+        cx.notify();
+    }
+
+    pub(in crate::kagan) fn restore_widths(
+        &mut self,
+        kept: Panes,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Restoring makes resize events that are not the person's choice, so they are ignored.
+        self.hold_resizes(cx);
+        let (index, layout) = (right_index(self.panes.left), self.layout);
+        self.columns.update(cx, |state, cx| {
+            if kept.left {
+                state.resize_panel(0, layout.left_width, window, cx);
+            }
+            if kept.right {
+                state.resize_panel(index, layout.right_width, window, cx);
+            }
+        });
+    }
+
+    /// A drag ended: keep the widths the sidebars have now. Resizes in Settings are not kept.
+    pub(in crate::kagan) fn resized(&mut self, cx: &mut Context<Self>) {
+        if self.in_settings() || self.settling || self.hidden_by_width() {
+            return;
+        }
+        let sizes = self.columns.read(cx).sizes().clone();
+        let mut next = self.layout;
+        if self.panes.left
+            && let Some(width) = sizes.first().copied()
+            && self.chosen_width(width)
+        {
+            next.left_width = width;
+        }
+        if self.panes.right
+            && let Some(width) = sizes.last()
+        {
+            next.right_width = *width;
+        }
+        if next.left_width != self.layout.left_width {
+            save(&key("left-width"), next.left_width, cx);
+        }
+        if next.right_width != self.layout.right_width {
+            save(&key("right-width"), next.right_width, cx);
+        }
+        self.layout = next;
+        cx.notify();
+    }
+}

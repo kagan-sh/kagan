@@ -1,5 +1,7 @@
+use gpui_kit::component::highlighter::HighlightTheme;
 use kg_core::Ansi;
 
+use super::colors::highlight;
 use super::*;
 
 const NAMES: [Ansi; 16] = [
