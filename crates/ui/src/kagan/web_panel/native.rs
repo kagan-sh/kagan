@@ -1,6 +1,5 @@
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Entity, IntoElement as _, ParentElement as _, Styled as _,
-    Window, div,
+    AnyElement, App, Entity, IntoElement as _, ParentElement as _, Styled as _, Window, div,
 };
 use kg_domain::PluginId;
 use kg_plugins::{PluginHost, SCHEME};
@@ -363,25 +362,9 @@ fn build(
     let panel = slot.contribution.clone();
     let navigation = plugin_id.clone();
     let protocol_plugin = plugin_id.clone();
-    let wants_store = PluginHost::global(cx)
-        .read(cx)
-        .web_store(&slot.plugin, &slot.contribution);
-    let (store, store_note) = if !wants_store {
-        (None, None)
-    } else if crate::web_page::macos_major() < 14 {
-        (None, Some(crate::web_page::STORE_NEEDS_MACOS.to_owned()))
-    } else {
-        let data = PluginHost::global(cx).read(cx).plugin_data(&slot.plugin);
-        (
-            Some(
-                kg_plugins::keep_store(&data, &slot.contribution)
-                    .map_err(|error| error.to_string())?,
-            ),
-            None,
-        )
-    };
-    let builder =
-        crate::web_page::with_store(crate::web_page::private(wry::WebViewBuilder::new()), store)
+    let (store, store_note) = store_for(slot, cx)?;
+    let view = crate::web_page::open_view(window, cx, move |builder| {
+        crate::web_page::with_store(builder, store)
             .with_url(&url)
             .with_navigation_handler(move |target| web::allows_navigation(&navigation, &target))
             .with_file_dialog(false)
@@ -412,18 +395,40 @@ fn build(
                     &css,
                 );
                 http_response(served)
-            });
-    let view = gpui_webview::WebView::build(builder, window, cx)
-        .map_err(|error| crate::web_page::failure(&error.to_string()))?;
+            })
+    })?;
     let drain = page_watch::watch(receiver, plugin, panel, generation, alive, cx);
     Ok(Built {
-        view: cx.new(|_| view),
+        view,
         theme,
         drain,
         ipc,
         life,
         note: store_note,
     })
+}
+
+// A durable store is a `WKWebsiteDataStore`. WebView2 has none, so the page stays private there.
+#[cfg(target_os = "macos")]
+fn store_for(slot: &Slot, cx: &App) -> Result<(Option<[u8; 16]>, Option<String>), String> {
+    let wants_store = PluginHost::global(cx)
+        .read(cx)
+        .web_store(&slot.plugin, &slot.contribution);
+    if !wants_store {
+        return Ok((None, None));
+    }
+    if crate::web_page::macos_major() < 14 {
+        return Ok((None, Some(crate::web_page::STORE_NEEDS_MACOS.to_owned())));
+    }
+    let data = PluginHost::global(cx).read(cx).plugin_data(&slot.plugin);
+    let store =
+        kg_plugins::keep_store(&data, &slot.contribution).map_err(|error| error.to_string())?;
+    Ok((Some(store), None))
+}
+
+#[cfg(target_os = "windows")]
+fn store_for(_slot: &Slot, _cx: &App) -> Result<(Option<[u8; 16]>, Option<String>), String> {
+    Ok((None, None))
 }
 
 fn http_response(

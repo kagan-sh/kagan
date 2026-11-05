@@ -1,15 +1,21 @@
 use crate::ui_observe::UiObserveExt as _;
+#[cfg(target_os = "macos")]
 use gpui_kit::App;
 use gpui_kit::{
     AppContext as _, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _,
 };
+#[cfg(target_os = "macos")]
 use kg_domain::PluginId;
+#[cfg(target_os = "macos")]
 use kg_plugins::PluginHost;
 
+#[cfg(target_os = "macos")]
 use super::native::{Held, Pages, find, save};
+#[cfg(target_os = "macos")]
 use super::page_watch;
 
 // Puts a raw IPC body on the page channel. The drain, not this helper, checks the generation.
+#[cfg(target_os = "macos")]
 pub(crate) fn inject(plugin: &PluginId, panel: &str, raw: &str, cx: &App) -> bool {
     let Some(page) = cx.try_global::<Pages>().and_then(|pages| {
         pages
@@ -23,6 +29,7 @@ pub(crate) fn inject(plugin: &PluginId, panel: &str, raw: &str, cx: &App) -> boo
 }
 
 // Queues a page job with the open page's lifetime token, as the IPC drain does after its checks.
+#[cfg(target_os = "macos")]
 pub(crate) fn queue_page(plugin: &PluginId, panel: &str, raw: &str, cx: &mut App) -> bool {
     let Some((alive, plugin, panel)) = cx.try_global::<Pages>().and_then(|pages| {
         pages
@@ -46,6 +53,7 @@ pub(crate) fn queue_page(plugin: &PluginId, panel: &str, raw: &str, cx: &mut App
         .is_ok()
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn mark_stale(slot: &str, cx: &mut App) -> bool {
     let Some(index) = find(cx, slot) else {
         return false;
@@ -54,6 +62,7 @@ pub(crate) fn mark_stale(slot: &str, cx: &mut App) -> bool {
     true
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn testing_page(plugin: &PluginId, panel: &str, slot: &str, shown: bool, cx: &mut App) {
     super::forget(slot, cx);
     let generation = PluginHost::try_global(cx)

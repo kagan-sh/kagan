@@ -1,6 +1,7 @@
 //! Web panel files, navigation rules and theme, kept apart so tests run without a native page.
 //! The page setup itself is in `web_page.rs`, the opener shared with the Browser and a plugin
-//! `WebView`. This module compiles only on macOS; `web_page.rs` also covers Windows.
+//! `WebView`. This module compiles wherever a page is drawn, and in tests, so the rules run on
+//! every system CI covers.
 
 use std::path::{Component, Path};
 
@@ -19,13 +20,35 @@ pub(crate) struct Served {
 
 // Only the plugin's own origin passes.
 pub(crate) fn allows_navigation(plugin: &str, target: &str) -> bool {
-    let Ok(url) = url::Url::parse(target) else {
+    let target = unwork(target);
+    let Ok(url) = url::Url::parse(&target) else {
         return false;
     };
     if !url.username().is_empty() || url.password().is_some() || url.port().is_some() {
         return false;
     }
     url.scheme() == SCHEME && url.host_str() == Some(plugin)
+}
+
+// WebView2 serves `kagan-plugin://<id>/` as `http://kagan-plugin.<id>/`, and navigation reports
+// that form (decision 142). The protocol handler gets the original back.
+#[cfg(any(test, target_os = "windows"))]
+fn unwork(target: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    let Some(rest) = target
+        .strip_prefix("http://")
+        .and_then(|rest| rest.strip_prefix(SCHEME))
+        .and_then(|rest| rest.strip_prefix('.'))
+    else {
+        return Cow::Borrowed(target);
+    };
+    let (host, tail) = rest.split_at(rest.find(['/', '?', '#']).unwrap_or(rest.len()));
+    Cow::Owned(format!("{SCHEME}://{host}{tail}"))
+}
+
+#[cfg(not(any(test, target_os = "windows")))]
+fn unwork(target: &str) -> std::borrow::Cow<'_, str> {
+    std::borrow::Cow::Borrowed(target)
 }
 
 // Only the page's own files load, plus fetch to the `powers.fetch` hosts.

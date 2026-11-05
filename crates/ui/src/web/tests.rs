@@ -39,6 +39,28 @@ fn navigation_stays_on_the_plugin_origin() {
 }
 
 #[test]
+fn a_windows_page_keeps_the_plugin_origin_through_webview2() {
+    // WebView2 rewrites the page's own origin, and navigation reports the rewritten form.
+    let page = "http://kagan-plugin.dev.kagan.page/ui/index.html";
+    assert!(allows_navigation(PLUGIN, page));
+    assert!(allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.kagan.page/a?b#c"
+    ));
+    assert!(!allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.other.page/ui/index.html"
+    ));
+    assert!(!allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.kagan.page:8080/x"
+    ));
+    assert!(!allows_navigation(PLUGIN, "http://example.com/"));
+    let own = page_url(PLUGIN, "ui/index.html").unwrap();
+    assert!(allows_navigation(PLUGIN, &own));
+}
+
+#[test]
 fn fetch_hosts_are_only_a_connect_source() {
     let policy = csp(&["files.example".into(), "not a host".into()]);
     assert!(policy.contains("connect-src 'self' https://files.example http://files.example"));
