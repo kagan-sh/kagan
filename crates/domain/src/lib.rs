@@ -16,7 +16,9 @@ pub use diff::{
     BaseBranch, DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList,
     DiffNote, DiffSide, DiffStatus, GitDetails, ThreadDetails, format_notes, parse_notes,
 };
-pub use event::{Attachment, Event, EventKind, NoticeSeverity, Role, ToolStatus, TurnOutcome};
+pub use event::{
+    Attachment, Event, EventKind, NoticeSeverity, Role, ToolOutcome, ToolStatus, TurnOutcome,
+};
 pub use id::{
     Conversation, EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId,
     Timestamp, plain_identifier,

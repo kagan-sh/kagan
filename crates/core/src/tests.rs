@@ -2280,3 +2280,229 @@ fn wait_until_gone(path: &Path, cx: &mut TestAppContext) {
     }
     panic!("{} was never removed", path.display());
 }
+const TOOL_THREAD: &str = "thr_tool";
+
+async fn tool_thread(cx: &mut TestAppContext) -> (Fixture, ThreadId) {
+    let fixture = Fixture::new(cx).await;
+    let project = fixture.project.clone();
+    let fixture = fixture
+        .restart(cx, move |store| {
+            store
+                .put_thread(&idle_thread(TOOL_THREAD, project))
+                .unwrap();
+        })
+        .await;
+    (fixture, ThreadId(TOOL_THREAD.into()))
+}
+
+fn set_tool_host(
+    fixture: &Fixture,
+    cx: &mut TestAppContext,
+    reply: impl Fn(&str) -> Result<OpResult> + 'static,
+) {
+    let reply = std::rc::Rc::new(reply);
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.set_plugin_host(std::rc::Rc::new(move |request, _| {
+            let result = match request {
+                crate::PluginRequest::CallTool { name, .. } => reply(&name),
+                _ => Err(OpError::Failed("unexpected plugin request".into())),
+            };
+            gpui_kit::Task::ready(result)
+        }));
+    });
+}
+
+async fn call_tool(
+    id: &ThreadId,
+    name: &str,
+    input: serde_json::Value,
+    cx: &mut TestAppContext,
+) -> Result<OpResult> {
+    op(
+        Op::Thread(ThreadOp::CallTool {
+            id: id.clone(),
+            name: name.into(),
+            input,
+        }),
+        cx,
+    )
+    .await
+}
+
+async fn tool_pair(id: &ThreadId, cx: &mut TestAppContext) -> (String, String, ToolOutcome) {
+    let kinds: Vec<EventKind> = events(id, cx)
+        .await
+        .into_iter()
+        .map(|event| event.kind)
+        .collect();
+    let [
+        EventKind::ToolStarted { id: started, name },
+        EventKind::ToolEnded { id: ended, status },
+    ] = kinds.as_slice()
+    else {
+        panic!("tool events: {kinds:?}");
+    };
+    assert_eq!(started, ended);
+    (name.clone(), started.clone(), *status)
+}
+
+#[gpui_kit::test]
+async fn a_plugin_tool_call_writes_started_then_ended_ok(cx: &mut TestAppContext) {
+    let (fixture, id) = tool_thread(cx).await;
+    set_tool_host(&fixture, cx, |name| {
+        assert_eq!(name, "editor_open");
+        Ok(OpResult::ToolReply {
+            text: "opened".into(),
+            is_error: false,
+        })
+    });
+    let reply = call_tool(&id, "editor_open", json!({}), cx).await.unwrap();
+    assert_eq!(
+        reply,
+        OpResult::ToolReply {
+            text: "opened".into(),
+            is_error: false,
+        }
+    );
+    let (name, started, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "editor_open");
+    assert_eq!(status, ToolOutcome::Ok);
+    assert!(started.starts_with("tool_"), "{started}");
+}
+
+#[gpui_kit::test]
+async fn a_failing_tool_call_writes_ended_error(cx: &mut TestAppContext) {
+    let (fixture, id) = tool_thread(cx).await;
+    set_tool_host(&fixture, cx, |_| {
+        Err(OpError::Invalid("the plugin refused".into()))
+    });
+    let error = call_tool(&id, "editor_open", json!({}), cx)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("refused"), "{error}");
+    let (name, _, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "editor_open");
+    assert_eq!(status, ToolOutcome::Error);
+}
+
+#[gpui_kit::test]
+async fn a_plugin_error_reply_writes_ended_error(cx: &mut TestAppContext) {
+    let (fixture, id) = tool_thread(cx).await;
+    set_tool_host(&fixture, cx, |_| {
+        Ok(OpResult::ToolReply {
+            text: "no luck".into(),
+            is_error: true,
+        })
+    });
+    let reply = call_tool(&id, "editor_open", json!({}), cx).await.unwrap();
+    assert_eq!(
+        reply,
+        OpResult::ToolReply {
+            text: "no luck".into(),
+            is_error: true,
+        }
+    );
+    let (name, _, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "editor_open");
+    assert_eq!(status, ToolOutcome::Error);
+}
+
+#[gpui_kit::test]
+async fn two_tool_calls_get_distinct_paired_ids(cx: &mut TestAppContext) {
+    let (fixture, id) = tool_thread(cx).await;
+    set_tool_host(&fixture, cx, |_| {
+        Ok(OpResult::ToolReply {
+            text: "done".into(),
+            is_error: false,
+        })
+    });
+    call_tool(&id, "editor_open", json!({}), cx).await.unwrap();
+    call_tool(&id, "editor_open", json!({}), cx).await.unwrap();
+    let kinds: Vec<EventKind> = events(&id, cx)
+        .await
+        .into_iter()
+        .map(|event| event.kind)
+        .collect();
+    let [
+        EventKind::ToolStarted {
+            id: first_start, ..
+        },
+        EventKind::ToolEnded { id: first_end, .. },
+        EventKind::ToolStarted {
+            id: second_start, ..
+        },
+        EventKind::ToolEnded { id: second_end, .. },
+    ] = kinds.as_slice()
+    else {
+        panic!("tool events: {kinds:?}");
+    };
+    assert_eq!(first_start, first_end);
+    assert_eq!(second_start, second_end);
+    assert_ne!(first_start, second_start);
+}
+
+#[gpui_kit::test]
+async fn a_tool_with_no_host_writes_both_rows_with_error(cx: &mut TestAppContext) {
+    let (_fixture, id) = tool_thread(cx).await;
+    let error = call_tool(&id, "editor_open", json!({}), cx)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, OpError::NotFound(_)), "{error}");
+    let (name, _, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "editor_open");
+    assert_eq!(status, ToolOutcome::Error);
+}
+
+#[gpui_kit::test]
+async fn a_missing_thread_writes_no_tool_events(cx: &mut TestAppContext) {
+    let (fixture, _) = tool_thread(cx).await;
+    let missing = ThreadId("thr_missing".into());
+    let error = call_tool(&missing, "editor_open", json!({}), cx)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, OpError::NotFound(_)), "{error}");
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert!(
+        store
+            .events_after(&missing, None, None, Order::Asc)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[gpui_kit::test]
+async fn skill_load_writes_tool_events(cx: &mut TestAppContext) {
+    let (fixture, id) = tool_thread(cx).await;
+    let folder = fixture.dir.path().join("skills").join("probe");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(
+        folder.join("SKILL.md"),
+        "---\nname: probe\ndescription: A probe.\n---\n\nBody.\n",
+    )
+    .unwrap();
+    let reply = call_tool(&id, "skill_load", json!({ "name": "probe" }), cx)
+        .await
+        .unwrap();
+    assert!(matches!(
+        reply,
+        OpResult::ToolReply {
+            is_error: false,
+            ..
+        }
+    ));
+    let (name, _, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "skill_load");
+    assert_eq!(status, ToolOutcome::Ok);
+}
+
+#[gpui_kit::test]
+async fn a_failing_skill_load_writes_ended_error(cx: &mut TestAppContext) {
+    let (_fixture, id) = tool_thread(cx).await;
+    let error = call_tool(&id, "skill_load", json!({ "name": "missing" }), cx)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, OpError::NotFound(_)), "{error}");
+    let (name, _, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "skill_load");
+    assert_eq!(status, ToolOutcome::Error);
+}

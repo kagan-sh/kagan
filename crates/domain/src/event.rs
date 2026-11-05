@@ -62,6 +62,19 @@ pub enum EventKind {
         name: Option<String>,
         status: ToolStatus,
     },
+    /// kagan handed this tool call to a plugin, or served `skill_load` itself.
+    #[serde(rename = "tool.started")]
+    ToolStarted {
+        id: String,
+        name: String,
+    },
+    /// The tool call ended, whether or not a reply came back. `status` is `error` for a
+    /// refusal, a schema miss, a plugin error, or a timeout.
+    #[serde(rename = "tool.ended")]
+    ToolEnded {
+        id: String,
+        status: ToolOutcome,
+    },
     /// Restoring the thread failed. The error stays on the event so an old log still opens.
     #[serde(rename = "restore.failed")]
     RestoreFailed {
@@ -124,7 +137,7 @@ pub enum NoticeSeverity {
 impl EventKind {
     /// Every `type` tag an event can carry, including kinds kagan no longer writes. An old log
     /// may hold any of them.
-    pub const TYPES: [&'static str; 24] = [
+    pub const TYPES: [&'static str; 26] = [
         "created",
         "started",
         "exited",
@@ -139,6 +152,8 @@ impl EventKind {
         "turn.ended",
         "message",
         "tool",
+        "tool.started",
+        "tool.ended",
         "restore.failed",
         "snapshot.failed",
         "notice",
@@ -153,7 +168,7 @@ impl EventKind {
 
     /// The kinds kagan writes now, and the only names a wait or a subscription accepts. A kind
     /// that is in [`Self::TYPES`] but not here still loads from an old log.
-    pub const LIVE_TYPES: [&'static str; 15] = [
+    pub const LIVE_TYPES: [&'static str; 17] = [
         "created",
         "started",
         "exited",
@@ -169,6 +184,8 @@ impl EventKind {
         "message",
         "notice",
         "answered",
+        "tool.started",
+        "tool.ended",
     ];
 
     #[must_use]
@@ -188,6 +205,8 @@ impl EventKind {
             Self::TurnEnded { .. } => "turn.ended",
             Self::Message { .. } => "message",
             Self::Tool { .. } => "tool",
+            Self::ToolStarted { .. } => "tool.started",
+            Self::ToolEnded { .. } => "tool.ended",
             Self::RestoreFailed { .. } => "restore.failed",
             Self::SnapshotFailed { .. } => "snapshot.failed",
             Self::Notice { .. } => "notice",
@@ -247,4 +266,12 @@ pub enum ToolStatus {
     InProgress,
     Completed,
     Failed,
+}
+
+/// How a tool call kagan served ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolOutcome {
+    Ok,
+    Error,
 }
