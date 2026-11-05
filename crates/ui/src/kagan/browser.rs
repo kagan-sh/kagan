@@ -289,7 +289,6 @@ impl Kagan {
             .into_any_element()
     }
 
-    /// The driven row, then the page edge to edge below it.
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn render_driven(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(agent) = &self.browser.agent else {

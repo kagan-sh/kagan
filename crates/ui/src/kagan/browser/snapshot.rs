@@ -77,8 +77,8 @@ pub(super) fn parse_snapshot(raw: &str) -> Result<BrowserSnapshot, OpError> {
         .controls
         .into_iter()
         .map(|control| {
-            // The script marks a password input by its type, never by its role. This is the
-            // second guard on the way to a person.
+            // A page sets its own role, so the script marks a password input by its type;
+            // the host drops the value when the type or the role says password.
             let password = control.secret || control.role == "password";
             BrowserControl {
                 ref_id: control.ref_id,

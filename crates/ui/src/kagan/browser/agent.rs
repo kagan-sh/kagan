@@ -370,7 +370,6 @@ impl Kagan {
         })
     }
 
-    /// Records that the page answered, and where it is now.
     fn touch(&mut self, page: &Entity<WebPage>, cx: &App) -> Result<(), OpError> {
         let Some(agent) = &mut self.browser.agent else {
             return Err(OpError::NotFound(ENDED.into()));
