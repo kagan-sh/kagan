@@ -1,0 +1,396 @@
+use kg_domain::{
+    Conversation, EnvironmentId, EnvironmentStatus, Event, EventKind, PluginId, ProjectId, Thread,
+    ThreadId, ThreadMark, ThreadStatus, Timestamp,
+};
+use rusqlite::{Connection, OptionalExtension as _, Row, params};
+use serde_json::Value;
+
+use super::environment::personal_folders;
+use super::event::append_events;
+use super::{found, not_found};
+use crate::column::{Json, Text};
+use crate::{Error, Result};
+
+const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, status, \
+    visibility, parent_thread_id, lifecycle_owner_thread_id, section_id, pinned, last_read_at, \
+    latest_attention_at, archived_at, created_at, updated_at, title_locked, done";
+
+const OWNED_THREADS: &str = "WITH RECURSIVE owned(id) AS ( \
+    SELECT id FROM threads WHERE id = ?1 \
+    UNION SELECT threads.id FROM threads JOIN owned ON threads.lifecycle_owner_thread_id = owned.id)";
+
+impl super::Store {
+    pub fn put_thread(&self, thread: &Thread) -> Result<()> {
+        put_thread(&self.conn, thread)
+    }
+
+    /// Recovers one thread in one commit: its record, its own events, the questions it held, and each
+    /// parent notice. If any write fails, none is kept, so the next start retries the whole thread.
+    pub fn recover_thread(
+        &mut self,
+        thread: &Thread,
+        at: Timestamp,
+        own: impl IntoIterator<Item = EventKind>,
+        notices: impl IntoIterator<Item = (ThreadId, EventKind)>,
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        put_thread(&tx, thread)?;
+        tx.execute(
+            "DELETE FROM pending_interactions WHERE thread_id = ?1",
+            [Text(&thread.id)],
+        )?;
+        append_events(&tx, &thread.id, at, own)?;
+        for (parent, kind) in notices {
+            append_events(&tx, &parent, at, [kind])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Inserts a new thread together with its first events.
+    pub fn create_thread(
+        &mut self,
+        thread: &Thread,
+        kinds: impl IntoIterator<Item = EventKind>,
+    ) -> Result<Vec<Event>> {
+        let tx = self.conn.transaction()?;
+        put_thread(&tx, thread)?;
+        let events = append_events(&tx, &thread.id, thread.created_at, kinds)?;
+        tx.commit()?;
+        Ok(events)
+    }
+
+    pub fn thread(&self, id: &ThreadId) -> Result<Option<Thread>> {
+        Ok(self
+            .conn
+            .query_row(
+                &format!("SELECT {THREAD_COLUMNS} FROM threads WHERE id = ?1"),
+                [Text(id)],
+                thread_row,
+            )
+            .optional()?)
+    }
+
+    /// Newest first by `created_at`; `archived` and `before` filter only when given.
+    /// Every thread, visible or hidden, archived or live.
+    pub fn all_threads(&self) -> Result<Vec<Thread>> {
+        self.threads(None, None, None, None)
+    }
+
+    pub fn threads(
+        &self,
+        project_id: Option<&kg_domain::ProjectId>,
+        archived: Option<bool>,
+        limit: Option<u32>,
+        before: Option<Timestamp>,
+    ) -> Result<Vec<Thread>> {
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT {THREAD_COLUMNS} FROM threads
+             WHERE (?1 IS NULL OR project_id = ?1)
+               AND (?2 IS NULL OR (archived_at IS NOT NULL) = ?2)
+               AND (?3 IS NULL OR created_at < ?3)
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?4"
+        ))?;
+        let threads = statement
+            .query_map(
+                params![
+                    Text(project_id),
+                    archived,
+                    before.map(|at| at.0),
+                    limit.map_or(-1, i64::from),
+                ],
+                thread_row,
+            )?
+            .collect::<Result<_, _>>()?;
+        Ok(threads)
+    }
+
+    pub fn set_thread_status(
+        &self,
+        id: &ThreadId,
+        status: ThreadStatus,
+        at: Timestamp,
+    ) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET status = ?2, updated_at = ?3,
+                latest_attention_at = CASE
+                    WHEN ?2 = 'error' AND status IN ('active', 'starting') THEN ?3
+                    ELSE latest_attention_at END
+             WHERE id = ?1",
+            params![Text(id), Text(status), at.0],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    pub fn conversation(&self, id: &ThreadId) -> Result<Option<Conversation>> {
+        let conversation: Option<Text<Option<Conversation>>> = self
+            .conn
+            .query_row(
+                "SELECT conversation FROM threads WHERE id = ?1",
+                [Text(id)],
+                |row| row.get(0),
+            )
+            .optional()?;
+        conversation
+            .map(|Text(conversation)| conversation)
+            .ok_or_else(|| not_found("thread", id))
+    }
+
+    pub fn set_conversation(&self, id: &ThreadId, conversation: Conversation) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET conversation = ?2 WHERE id = ?1",
+            params![Text(id), Text(conversation)],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    pub fn set_pinned(&self, id: &ThreadId, pinned: bool) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET pinned = ?2 WHERE id = ?1",
+            params![Text(id), pinned],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    pub fn set_title(&self, id: &ThreadId, title: &str) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET title = ?2, title_locked = 1 WHERE id = ?1",
+            params![Text(id), title],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    pub fn set_title_once(&self, id: &ThreadId, title: &str) -> Result<bool> {
+        let locked = self
+            .conn
+            .query_row(
+                "SELECT title_locked FROM threads WHERE id = ?1",
+                [Text(id)],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(locked) = locked else {
+            return Err(not_found("thread", id));
+        };
+        if locked {
+            return Ok(false);
+        }
+        self.set_title(id, title)?;
+        Ok(true)
+    }
+
+    pub fn mark_read(&self, id: &ThreadId, at: Timestamp) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET last_read_at = ?2, done = 0 WHERE id = ?1",
+            params![Text(id), at.0],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    pub fn set_attention(&self, id: &ThreadId, at: Timestamp) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET latest_attention_at = ?2 WHERE id = ?1",
+            params![Text(id), at.0],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    pub fn mark_done(&self, id: &ThreadId) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET done = 1 WHERE id = ?1",
+            params![Text(id)],
+        )?;
+        found(changed, "thread", id)
+    }
+
+    /// Archives the thread and its lifecycle dependents; returns an `Archived` event per thread it archived.
+    pub fn archive_thread(&mut self, id: &ThreadId, at: Timestamp) -> Result<Vec<Event>> {
+        let tx = self.conn.transaction()?;
+        if owned_threads(&tx, id)?.is_empty() {
+            return Err(not_found("thread", id));
+        }
+        let mut statement = tx.prepare(&format!(
+            "{OWNED_THREADS} UPDATE threads SET archived_at = ?2
+             WHERE id IN owned AND archived_at IS NULL RETURNING id"
+        ))?;
+        let archived: Vec<ThreadId> = statement
+            .query_map(params![Text(id), at.0], |row| {
+                Ok(row.get::<_, Text<_>>(0)?.0)
+            })?
+            .collect::<Result<_, _>>()?;
+        drop(statement);
+        let mut events = Vec::new();
+        for id in &archived {
+            events.extend(append_events(&tx, id, at, [EventKind::Archived])?);
+        }
+        tx.commit()?;
+        Ok(events)
+    }
+
+    pub fn unarchive_thread(&mut self, id: &ThreadId, at: Timestamp) -> Result<Vec<Event>> {
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE threads SET archived_at = NULL WHERE id = ?1 AND archived_at IS NOT NULL",
+            [Text(id)],
+        )?;
+        if changed == 0 {
+            found(
+                tx.query_row(
+                    "SELECT COUNT(*) FROM threads WHERE id = ?1",
+                    [Text(id)],
+                    |row| row.get(0),
+                )?,
+                "thread",
+                id,
+            )?;
+            return Ok(Vec::new());
+        }
+        tx.execute("UPDATE environments SET retire_at = NULL WHERE id = (SELECT environment_id FROM threads WHERE id = ?1)", [Text(id)])?;
+        let events = append_events(&tx, id, at, [EventKind::Unarchived])?;
+        tx.commit()?;
+        Ok(events)
+    }
+
+    pub fn owned_threads(&self, id: &ThreadId) -> Result<Vec<ThreadId>> {
+        owned_threads(&self.conn, id)
+    }
+
+    /// Deletes the thread, its lifecycle dependents and all their history, and marks `folders` destroyed in the same
+    /// commit. `folders` must be what `personal_folders` returned; if it changed, nothing is deleted. Returns a `Deleted` event per thread and that thread's project, read before the row goes.
+    pub fn delete_thread(
+        &self,
+        id: &ThreadId,
+        at: Timestamp,
+        folders: &[EnvironmentId],
+    ) -> Result<Vec<(Event, ProjectId)>> {
+        let tx = self.conn.unchecked_transaction()?;
+        let owned = owned_threads(&tx, id)?;
+        if owned.is_empty() {
+            return Err(not_found("thread", id));
+        }
+        let mut found: Vec<EnvironmentId> = personal_folders(&tx, id)?
+            .into_iter()
+            .map(|folder| folder.id)
+            .collect();
+        let mut expected = folders.to_vec();
+        found.sort();
+        expected.sort();
+        if found != expected {
+            return Err(Error::Conflict(
+                "a folder changed while you decided; delete again".into(),
+            ));
+        }
+        let events = super::event::append_deleted(&tx, &owned, at)?;
+        tx.execute("DELETE FROM threads WHERE id = ?1", [Text(id)])?;
+        for folder in &found {
+            tx.execute(
+                "UPDATE environments SET status = ?2 WHERE id = ?1",
+                params![Text(folder), Text(EnvironmentStatus::Destroyed)],
+            )?;
+        }
+        tx.commit()?;
+        Ok(events)
+    }
+
+    pub fn thread_metadata(&self, id: &ThreadId, plugin_id: &PluginId) -> Result<Option<Value>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT value FROM thread_metadata WHERE thread_id = ?1 AND plugin_id = ?2",
+                params![Text(id), Text(plugin_id)],
+                |row| Ok(row.get::<_, Json<_>>(0)?.0),
+            )
+            .optional()?)
+    }
+
+    pub fn set_thread_metadata(
+        &self,
+        id: &ThreadId,
+        plugin_id: &PluginId,
+        value: &Value,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO thread_metadata (thread_id, plugin_id, value) VALUES (?1, ?2, ?3)
+             ON CONFLICT(thread_id, plugin_id) DO UPDATE SET value = excluded.value",
+            params![Text(id), Text(plugin_id), Json(value)],
+        )?;
+        Ok(())
+    }
+}
+
+pub(super) fn owned_threads(conn: &Connection, id: &ThreadId) -> Result<Vec<ThreadId>> {
+    let mut statement = conn.prepare(&format!("{OWNED_THREADS} SELECT id FROM owned"))?;
+    let owned = statement
+        .query_map([Text(id)], |row| Ok(row.get::<_, Text<_>>(0)?.0))?
+        .collect::<Result<_, _>>()?;
+    Ok(owned)
+}
+
+fn thread_row(row: &Row) -> rusqlite::Result<Thread> {
+    Ok(Thread {
+        id: row.get::<_, Text<_>>(0)?.0,
+        project_id: row.get::<_, Text<_>>(1)?.0,
+        environment_id: row.get::<_, Text<_>>(2)?.0,
+        title: row.get(3)?,
+        provider: row.get(4)?,
+        status: row.get::<_, Text<_>>(5)?.0,
+        visibility: row.get::<_, Text<_>>(6)?.0,
+        parent_thread_id: row.get::<_, Text<_>>(7)?.0,
+        lifecycle_owner_thread_id: row.get::<_, Text<_>>(8)?.0,
+        section_id: row.get::<_, Text<_>>(9)?.0,
+        pinned: row.get(10)?,
+        last_read_at: row.get::<_, Option<i64>>(11)?.map(Timestamp),
+        latest_attention_at: Timestamp(row.get(12)?),
+        mark: if row.get(17)? {
+            ThreadMark::Done
+        } else {
+            ThreadMark::None
+        },
+        archived_at: row.get::<_, Option<i64>>(13)?.map(Timestamp),
+        created_at: Timestamp(row.get(14)?),
+        updated_at: Timestamp(row.get(15)?),
+        title_locked: row.get(16)?,
+    })
+}
+
+fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
+    conn.execute(
+        &format!(
+            "INSERT INTO threads ({THREAD_COLUMNS})
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+             ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id,
+                environment_id = excluded.environment_id, title = excluded.title,
+                title_locked = excluded.title_locked,
+                provider = excluded.provider, status = excluded.status,
+                visibility = excluded.visibility, parent_thread_id = excluded.parent_thread_id,
+                lifecycle_owner_thread_id = excluded.lifecycle_owner_thread_id,
+                section_id = excluded.section_id, pinned = excluded.pinned,
+                last_read_at = excluded.last_read_at,
+                latest_attention_at = excluded.latest_attention_at,
+                archived_at = excluded.archived_at, created_at = excluded.created_at,
+                updated_at = excluded.updated_at, done = excluded.done"
+        ),
+        params![
+            Text(&thread.id),
+            Text(&thread.project_id),
+            Text(&thread.environment_id),
+            thread.title,
+            thread.provider,
+            Text(thread.status),
+            Text(thread.visibility),
+            Text(&thread.parent_thread_id),
+            Text(&thread.lifecycle_owner_thread_id),
+            Text(&thread.section_id),
+            thread.pinned,
+            thread.last_read_at.map(|at| at.0),
+            thread.latest_attention_at.0,
+            thread.archived_at.map(|at| at.0),
+            thread.created_at.0,
+            thread.updated_at.0,
+            thread.title_locked,
+            thread.mark == ThreadMark::Done,
+        ],
+    )?;
+    Ok(())
+}
