@@ -68,8 +68,8 @@ pub enum EventKind {
         id: String,
         name: String,
     },
-    /// The tool call's reply landed. `status` is `error` for a refusal, a schema miss, a
-    /// plugin error, or a timeout.
+    /// The tool call ended, whether or not a reply came back. `status` is `error` for a
+    /// refusal, a schema miss, a plugin error, or a timeout.
     #[serde(rename = "tool.ended")]
     ToolEnded {
         id: String,
