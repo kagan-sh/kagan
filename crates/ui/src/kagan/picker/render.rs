@@ -90,7 +90,7 @@ impl RenderOnce for ProgramRow {
                                             .id(format!("program-name-{}", self.program.command))
                                             .ui_container()
                                             .min_w_0()
-                                            .type_body()
+                                            .type_body(cx)
                                             .whitespace_nowrap()
                                             .text_ellipsis()
                                             .aria_label(name)
@@ -100,7 +100,7 @@ impl RenderOnce for ProgramRow {
                                         div()
                                             .flex_1()
                                             .min_w_0()
-                                            .type_small()
+                                            .type_small(cx)
                                             .text_color(muted)
                                             .text_ellipsis()
                                             .child(self.program.command),
@@ -108,7 +108,7 @@ impl RenderOnce for ProgramRow {
                                     .child(
                                         div()
                                             .max_w(gpui_kit::px(100.))
-                                            .type_caption()
+                                            .type_caption(cx)
                                             .font_family(cx.theme().mono_font_family.clone())
                                             .text_color(muted)
                                             .whitespace_nowrap()
@@ -122,7 +122,7 @@ impl RenderOnce for ProgramRow {
 }
 
 /// The programs could not be listed: why, and a Retry.
-fn programs_failed(message: &str, muted: Hsla) -> AnyElement {
+fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
     // The message sits above the button: a long path in it must not push the Retry out of view.
     v_flex()
         .gap_2()
@@ -130,7 +130,7 @@ fn programs_failed(message: &str, muted: Hsla) -> AnyElement {
         .child(
             div()
                 .w_full()
-                .type_body()
+                .type_body(cx)
                 .text_color(muted)
                 .child(format!("Couldn’t look for programs: {message}")),
         )
@@ -150,7 +150,7 @@ impl Render for Picker {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let body: AnyElement = if let Programs::Failed(message) = &self.state {
-            programs_failed(message, muted)
+            programs_failed(message, muted, cx)
         } else {
             // Capped at LIST_ROWS rows once the first row is measured. Until then, all rows show.
             let cap = self
@@ -190,12 +190,12 @@ impl Render for Picker {
                 "program-search",
                 Facts::input("Search programs", &self.search, cx),
                 Input::new(&self.search)
-                    .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                    .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                     .small(),
             ))
             .child(container("program-list", body))
             .when_some(reason, |this, reason| {
-                this.child(note("program-reason", reason, muted))
+                this.child(note("program-reason", reason, muted, cx))
             })
             .child(control(
                 "custom-command-toggle",

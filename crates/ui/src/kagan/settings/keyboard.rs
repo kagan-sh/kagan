@@ -232,9 +232,9 @@ fn controls(
     let muted = cx.theme().muted_foreground;
     let line = h_flex().gap_1().items_center();
     let line = if recording {
-        line.child(status(id, "Press a key", "Press a key…", muted))
+        line.child(status(id, "Press a key", "Press a key…", muted, cx))
     } else if shortcut.keys.is_empty() {
-        line.child(status(id, "Not set", "Not set", muted))
+        line.child(status(id, "Not set", "Not set", muted, cx))
     } else {
         line.child(keycaps(id, &shortcut.keys))
     };
@@ -280,12 +280,18 @@ fn controls(
     line.into_any_element()
 }
 
-fn status(id: &str, label: &'static str, text: &'static str, muted: Hsla) -> impl IntoElement {
+fn status(
+    id: &str,
+    label: &'static str,
+    text: &'static str,
+    muted: Hsla,
+    cx: &App,
+) -> impl IntoElement {
     div()
         .id(ElementId::Name(format!("shortcut-{id}").into()))
         .ui_container()
         .aria_label(label)
-        .type_small()
+        .type_small(cx)
         .text_color(muted)
         .child(text)
 }

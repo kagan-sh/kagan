@@ -256,7 +256,7 @@ impl Kagan {
                     role: Role::Label,
                     ..Facts::button(note.clone())
                 })
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().danger)
                 .child(note)
         });
@@ -287,7 +287,7 @@ impl Kagan {
                         role: Role::Label,
                         ..Facts::button(hint)
                     })
-                    .type_small()
+                    .type_small(cx)
                     .child(hint)
                     .into_any_element(),
             })
@@ -314,7 +314,7 @@ impl Kagan {
             .child(
                 div()
                     .flex_none()
-                    .type_small()
+                    .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Driven by {thread}")),
             )
@@ -324,7 +324,7 @@ impl Kagan {
                     .flex_1()
                     .min_w_0()
                     .truncate()
-                    .type_small()
+                    .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(agent.url.clone()),
             )

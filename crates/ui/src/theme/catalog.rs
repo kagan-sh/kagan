@@ -5,7 +5,9 @@ use gpui_kit::component::ThemeMode;
 use gpui_kit::{
     App, AppContext as _, Context, Entity, EventEmitter, Global, Hsla, Subscription, Task, Window,
 };
-use kg_domain::{Appearance, Op, OpError, OpResult, Palette, ThemeFile, ThemeOp, ThemeSettings};
+use kg_domain::{
+    Appearance, Look, Op, OpError, OpResult, Palette, ThemeFile, ThemeOp, ThemeSettings,
+};
 use kg_plugins::PluginHost;
 
 use kg_core::{Workspace, WorkspaceEvent};
@@ -55,6 +57,20 @@ impl EventEmitter<Notice> for ThemeState {}
 
 struct ThemeOwner(Entity<ThemeState>);
 impl Global for ThemeOwner {}
+
+/// The density and type sizes in force. A window without a theme state keeps the defaults.
+pub(crate) fn look(cx: &App) -> Look {
+    cx.try_global::<ThemeOwner>()
+        .map_or_else(Look::default, |owner| owner.0.read(cx).look())
+}
+
+#[cfg(test)]
+pub(crate) fn set_look_for_test(look: Look, cx: &mut App) {
+    ThemeState::global(cx).update(cx, |state, cx| {
+        state.applied.look = look;
+        state.paint(cx);
+    });
+}
 
 impl ThemeState {
     pub(crate) fn global(cx: &App) -> Entity<Self> {
@@ -223,6 +239,10 @@ impl ThemeState {
         self.palette = palette(&self.applied, self.mode).clone();
         apply(&self.applied, self.mode, cx);
         cx.notify();
+    }
+
+    pub(crate) fn look(&self) -> Look {
+        self.applied.look
     }
 
     fn copy(&self, id: &str, from: Option<&str>) -> Result<ThemeFile, OpError> {

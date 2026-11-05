@@ -8,29 +8,89 @@ pub(crate) const MARK_FAILED: f32 = 8.;
 pub(crate) const MARK_ENDED: f32 = 8.;
 pub(crate) const MARK_IDLE: f32 = 4.;
 const REM_BASE: f32 = 16.;
-pub(crate) const TYPE_TITLE: f32 = 15.;
-pub(crate) const TYPE_BODY: f32 = 13.;
-pub(crate) const TYPE_SMALL: f32 = 12.;
-pub(crate) const TYPE_CAPTION: f32 = 11.;
-pub(crate) const TYPE_MONO: f32 = 12.;
-const RADIUS: usize = 8;
-const RADIUS_LG: usize = 12;
+
+/// A spacing step, named as the theme file names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SpaceStep {
+    Xs,
+    Sm,
+    Md,
+    Lg,
+    Xl,
+}
+
+pub(crate) use catalog::look;
+
+pub(crate) fn space(step: SpaceStep, cx: &App) -> f32 {
+    let space = look(cx).space;
+    f32::from(match step {
+        SpaceStep::Xs => space.xs,
+        SpaceStep::Sm => space.sm,
+        SpaceStep::Md => space.md,
+        SpaceStep::Lg => space.lg,
+        SpaceStep::Xl => space.xl,
+    })
+}
+
+pub(crate) fn radius_xs(cx: &App) -> f32 {
+    f32::from(look(cx).radius.xs)
+}
+
+pub(crate) fn radius_sm(cx: &App) -> f32 {
+    f32::from(look(cx).radius.sm)
+}
+
+pub(crate) fn radius_md(cx: &App) -> f32 {
+    f32::from(look(cx).radius.md)
+}
+
+pub(crate) fn radius_lg(cx: &App) -> f32 {
+    f32::from(look(cx).radius.lg)
+}
+
+pub(crate) fn type_title(cx: &App) -> f32 {
+    f32::from(look(cx).type_sizes.title)
+}
+
+pub(crate) fn type_body(cx: &App) -> f32 {
+    f32::from(look(cx).type_sizes.body)
+}
+
+pub(crate) fn type_small(cx: &App) -> f32 {
+    f32::from(look(cx).type_sizes.small)
+}
+
+pub(crate) fn type_caption(cx: &App) -> f32 {
+    f32::from(look(cx).type_sizes.caption)
+}
+
+pub(crate) fn type_mono(cx: &App) -> f32 {
+    f32::from(look(cx).type_sizes.mono)
+}
+
+pub(crate) fn row_height(cx: &App) -> f32 {
+    f32::from(look(cx).row)
+}
+
+pub(crate) fn control_height(cx: &App) -> f32 {
+    f32::from(look(cx).control)
+}
 
 pub(crate) trait TypeScale: Styled {
-    fn type_title(self) -> Self {
-        self.text_size(px(TYPE_TITLE))
+    fn type_title(self, cx: &App) -> Self {
+        self.text_size(px(type_title(cx)))
     }
 
-    fn type_small(self) -> Self {
-        self.text_size(px(TYPE_SMALL))
+    fn type_small(self, cx: &App) -> Self {
+        self.text_size(px(type_small(cx)))
     }
 
-    fn type_caption(self) -> Self {
-        self.text_size(px(TYPE_CAPTION))
+    fn type_caption(self, cx: &App) -> Self {
+        self.text_size(px(type_caption(cx)))
     }
 
-    fn type_body(self) -> Self {
-        self.text_size(px(TYPE_BODY))
+    fn type_body(self, cx: &App) -> Self {
+        self.text_size(px(type_body(cx)))
     }
 }
 
@@ -67,10 +127,14 @@ mod palette;
 pub(crate) use catalog::follow_system;
 #[cfg(test)]
 use catalog::read_user;
+#[cfg(test)]
+pub(crate) use catalog::set_look_for_test;
 pub(crate) use catalog::{
     CatalogEntry, Notice, Source, ThemeState, copy_id, follow_plugins, init_in, new_theme,
     swatches, watch_system,
 };
+#[cfg(test)]
+use colors::config;
 pub(crate) use colors::{Tone, added, brand_color, cursor_color, terminal_color};
 #[cfg(test)]
 use gpui_kit::component::ThemeMode;

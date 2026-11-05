@@ -82,7 +82,7 @@ impl Kagan {
                     .gap_1()
                     .child(
                         div()
-                            .type_small()
+                            .type_small(cx)
                             .text_color(cx.theme().muted_foreground)
                             .child(thread),
                     )
@@ -103,7 +103,7 @@ impl Kagan {
             } else {
                 format!("{held} questions wait until you stop typing.")
             };
-            line("needs-held", text, cx.theme().muted_foreground)
+            line("needs-held", text, cx.theme().muted_foreground, cx)
         });
         v_flex()
             .gap_2()

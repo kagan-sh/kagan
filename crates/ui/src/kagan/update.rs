@@ -91,7 +91,7 @@ pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
             .py_2()
             .border_b_1()
             .border_color(cx.theme().border)
-            .type_body()
+            .type_body(cx)
             .child(text)
             .child(actions(cx))
             .when(

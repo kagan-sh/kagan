@@ -27,5 +27,30 @@
     "needs": "#e8cf80",
     "failed": "#ffa1ad",
     "idle": "#a4b2d6"
+  },
+  "look": {
+    "space": {
+      "xs": 4,
+      "sm": 8,
+      "md": 12,
+      "lg": 16,
+      "xl": 24,
+      "xxl": 32
+    },
+    "radius": {
+      "xs": 2,
+      "sm": 2,
+      "md": 2,
+      "lg": 4
+    },
+    "type": {
+      "caption": 11,
+      "small": 12,
+      "body": 13,
+      "title": 15,
+      "mono": 12
+    },
+    "row": 26,
+    "control": 22
   }
 }

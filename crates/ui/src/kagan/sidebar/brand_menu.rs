@@ -76,7 +76,7 @@ pub(super) fn button(sidebar: &Sidebar, cx: &mut Context<Sidebar>) -> impl IntoE
         .child(
             Button::new("kagan-menu-button")
                 .small()
-                .rounded(px(6.))
+                .rounded(px(crate::theme::radius_xs(cx)))
                 .ghost()
                 .selected(menu.is_some())
                 .icon(crate::brand::mark_icon())

@@ -9,10 +9,7 @@ use kg_domain::{Color, ThemeFile, Thread, ThreadStatus};
 use super::ThemeState;
 use super::palette::palette;
 use super::terminal;
-use crate::theme::{
-    MARK_ENDED, MARK_FAILED, MARK_IDLE, MARK_RING, RADIUS, RADIUS_LG, REM_BASE, TYPE_MONO,
-    token_color,
-};
+use crate::theme::{MARK_ENDED, MARK_FAILED, MARK_IDLE, MARK_RING, REM_BASE, token_color};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Tone {
     Busy,
@@ -155,6 +152,11 @@ pub(super) fn highlight(file: &ThemeFile, mode: ThemeMode) -> Arc<HighlightTheme
 }
 
 pub(super) fn apply(file: &ThemeFile, mode: ThemeMode, cx: &mut App) {
+    let config = Rc::new(config(file, mode));
+    Theme::update(cx, |theme| theme.apply_config(&config));
+}
+
+pub(super) fn config(file: &ThemeFile, mode: ThemeMode) -> ThemeConfig {
     let p = palette(file, mode);
     let hex = |c: Color| Some(SharedString::from(c.hex()));
     let mut colors = ThemeConfigColors::default();
@@ -167,15 +169,17 @@ pub(super) fn apply(file: &ThemeFile, mode: ThemeMode, cx: &mut App) {
         table_foot, scrollbar, tab_bar_segmented);
     project!(p.raised => secondary, secondary_hover, accent, list_active, list_active_border,
         list_even, sidebar_accent, button, button_hover, table_active,
-        table_active_border, table_even, table_hover, selection, skeleton);
+        table_active_border, table_even, table_hover, skeleton);
+    project!(p.selection() => selection);
     project!(p.ink => foreground, secondary_foreground, accent_foreground, sidebar_foreground,
         sidebar_accent_foreground, popover_foreground, tab_active_foreground,
         group_box_foreground, group_box_title_foreground, description_list_label_foreground,
         button_foreground, table_head_foreground, table_foot_foreground);
     project!(p.muted => muted_foreground, tab_foreground, scrollbar_thumb);
-    project!(p.line => border, input, secondary_active, sidebar_border, title_bar_border,
+    project!(p.line => border, secondary_active, sidebar_border, title_bar_border,
         status_bar_border, window_border, button_active, table_row_border, chart_grid,
         scrollbar_thumb_hover);
+    project!(p.input() => input);
     project!(p.hover.unwrap_or(p.raised) => list_hover);
     project!(p.muted => switch);
     project!(p.bg => switch_thumb);
@@ -197,14 +201,13 @@ pub(super) fn apply(file: &ThemeFile, mode: ThemeMode, cx: &mut App) {
     config.name = file.name.clone().into();
     config.mode = mode;
     config.font_size = Some(REM_BASE);
-    config.mono_font_size = Some(TYPE_MONO);
+    config.mono_font_size = Some(f32::from(file.look.type_sizes.mono));
     config.font_family = Some(SharedString::from("Inter"));
     config.mono_font_family = Some(SharedString::from("JetBrains Mono"));
-    config.radius = Some(RADIUS);
-    config.radius_lg = Some(RADIUS_LG);
+    config.radius = Some(usize::from(file.look.radius.md));
+    config.radius_lg = Some(usize::from(file.look.radius.lg));
     config.shadow = Some(false);
     config.highlight = Some(highlight);
     config.colors = colors;
-    let config = Rc::new(config);
-    Theme::update(cx, |theme| theme.apply_config(&config));
+    config
 }

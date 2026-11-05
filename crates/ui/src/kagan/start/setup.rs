@@ -50,7 +50,7 @@ impl Kagan {
                         .child(v_flex().gap_0().children(text.lines().map(|line| {
                             let shown = if line.is_empty() { " " } else { line };
                             div()
-                                .type_small()
+                                .type_small(cx)
                                 .font(gpui_kit::font(cx.theme().mono_font_family.clone()))
                                 .text_color(ink)
                                 .child(shown.to_owned())
@@ -62,7 +62,7 @@ impl Kagan {
                             .id("setup-truncated")
                             .ui_container()
                             .aria_label("The rest of the script is not shown.")
-                            .type_small()
+                            .type_small(cx)
                             .text_color(cx.theme().muted_foreground)
                             .child("The rest of the script is not shown."),
                     )
@@ -97,13 +97,13 @@ impl Kagan {
         let failed = cx.theme().danger;
         let mut rows = Vec::new();
         if let Some(message) = self.start.setup.as_ref().and_then(SetupSeen::announcement) {
-            rows.push(note("setup-script", message, muted));
+            rows.push(note("setup-script", message, muted, cx));
         }
         if let Some(seen) = self.start.setup.as_ref().and_then(SetupSeen::script) {
             rows.push(self.setup_disclosure(seen, cx));
         }
         if let Some(failure) = &self.start.setup_failure {
-            rows.push(note("setup-failure", failure.clone(), failed));
+            rows.push(note("setup-failure", failure.clone(), failed, cx));
             if !script_changed(failure) {
                 rows.push(self.setup_retry(cx));
             }

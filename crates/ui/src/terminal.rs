@@ -405,7 +405,7 @@ impl Render for TerminalView {
                     .px_4()
                     .py_2()
                     .bg(cx.theme().muted)
-                    .type_small()
+                    .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(format!("Not sent: {notice}."))
             }))

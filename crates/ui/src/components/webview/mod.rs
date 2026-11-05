@@ -207,7 +207,7 @@ fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
                     role: Role::Label,
                     ..Facts::button(note.to_owned())
                 })
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().danger)
                 .child(SharedString::from(note.to_owned())),
         )

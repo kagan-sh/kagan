@@ -16,6 +16,7 @@ use kg_domain::{ProjectId, ProjectKind};
 use super::order::{DragProject, Place};
 
 use crate::kagan::controls::{control, tip};
+use crate::theme::{SpaceStep, control_height, radius_sm, row_height, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -68,7 +69,7 @@ pub(super) fn project_line(
     .child(div().min_w_0().flex_1().child(face))
     .child(
         h_flex()
-            .ml_2()
+            .ml(px(space(SpaceStep::Sm, cx)))
             .flex_shrink_0()
             .items_center()
             .when(!focused, gpui_kit::Styled::invisible)
@@ -138,8 +139,8 @@ pub(super) fn project_shell(
         .id(ElementId::Name(format!("project-drag-{id}").into()))
         .group("project-row")
         .w_full()
-        .h_6()
-        .px_2()
+        .h(px(control_height(cx)))
+        .px(px(space(SpaceStep::Sm, cx)))
         .items_center()
         .rounded(cx.theme().radius)
         .hover(|line| line.bg(cx.theme().list_hover))
@@ -313,6 +314,11 @@ pub(super) fn row_face(
     let tip = row_tip(row);
     let (state, mark, pin) = row_marks(&kind, cx);
     let (name_id, suffix_id) = project_text_ids(&kind, detail.is_some());
+    let height = if project {
+        control_height(cx)
+    } else {
+        row_height(cx)
+    };
     let face = div()
         .id(ElementId::Name(id.into()))
         .group("thread-row")
@@ -320,24 +326,24 @@ pub(super) fn row_face(
         .role(Role::TreeItem)
         .aria_label(row.label.clone())
         .aria_selected(row.selected)
-        .h_7()
+        .h(px(height))
         .w_full()
-        .min_h(if project { px(24.) } else { px(28.) })
-        .max_h(if project { px(24.) } else { px(28.) })
+        .min_h(px(height))
+        .max_h(px(height))
         .flex_shrink_0()
-        .when(inset, gpui_kit::Styled::px_2)
+        .when(inset, |line| line.px(px(space(SpaceStep::Sm, cx))))
         .when_some(thread_indent(&kind), |line, depth| {
             line.ml(px(depth))
                 .border_l_1()
                 .border_color(cx.theme().border)
         })
-        .gap_2()
+        .gap(px(space(SpaceStep::Sm, cx)))
         .flex()
         .items_center()
-        .rounded(cx.theme().radius)
-        .type_body()
+        .rounded(px(radius_sm(cx)))
+        .type_body(cx)
         .when(project, |line| {
-            line.type_small().text_color(cx.theme().muted_foreground)
+            line.type_small(cx).text_color(cx.theme().muted_foreground)
         })
         .when(row.selected, |line| {
             line.bg(cx.theme().sidebar_accent)

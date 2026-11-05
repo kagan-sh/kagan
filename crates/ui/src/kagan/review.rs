@@ -124,7 +124,7 @@ fn review_title(review: &Review, cx: &mut Context<Kagan>) -> AnyElement {
         .ui_observe_as(Facts::button(review.path.clone()))
         .min_w_0()
         .whitespace_nowrap()
-        .type_body()
+        .type_body(cx)
         .when_some(
             review
                 .renamed_from

@@ -99,7 +99,7 @@ fn form_row(kagan: &Kagan, cx: &mut Context<Kagan>) -> Row {
         .min_w_0()
         .child(
             Input::new(&kagan.plugins.source)
-                .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                 .small(),
         );
     let install = control(
@@ -213,7 +213,7 @@ fn plugin_rows(
         .focus(|row| row.border_1().border_color(cx.theme().ring))
         .rounded(cx.theme().radius)
         .px_1()
-        .type_small()
+        .type_small(cx)
         .text_color(cx.theme().muted_foreground)
         .child("•");
     let anchor = row_keys(anchor, &id, is_git_source(&status.source), cx);
@@ -387,7 +387,7 @@ fn details_row(status: &PluginStatus, focus: &gpui_kit::FocusHandle) -> Row {
 fn log_row(id: &PluginId, text: &str, cx: &mut Context<Kagan>) -> Row {
     let body = if text.is_empty() {
         div()
-            .type_small()
+            .type_small(cx)
             .text_color(cx.theme().muted_foreground)
             .child("No log lines yet.")
             .into_any_element()
@@ -396,7 +396,7 @@ fn log_row(id: &PluginId, text: &str, cx: &mut Context<Kagan>) -> Row {
             .gap_0p5()
             .children(
                 text.lines()
-                    .map(|line| div().type_small().child(line.to_owned())),
+                    .map(|line| div().type_small(cx).child(line.to_owned())),
             )
             .into_any_element()
     };

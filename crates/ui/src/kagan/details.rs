@@ -81,9 +81,9 @@ impl Kagan {
     pub(super) fn render_details(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         match &self.details.read {
-            None => line("details-loading", "Reading…", muted).into_any_element(),
+            None => line("details-loading", "Reading…", muted, cx).into_any_element(),
             Some(Err(error)) => {
-                line("details-error", error.clone(), cx.theme().danger).into_any_element()
+                line("details-error", error.clone(), cx.theme().danger, cx).into_any_element()
             }
             Some(Ok(details)) => {
                 let folder = details.folder.display().to_string();
@@ -115,9 +115,8 @@ impl Kagan {
                     ))
                     .child(match &details.git {
                         Some(git) => git_facts(git, cx),
-                        None => {
-                            line("details-not-git", "Not a git folder.", muted).into_any_element()
-                        }
+                        None => line("details-not-git", "Not a git folder.", muted, cx)
+                            .into_any_element(),
                     })
                     .into_any_element()
             }
@@ -137,11 +136,11 @@ fn fact(id: &'static str, label: &'static str, value: String, cx: &App) -> AnyEl
         .min_w_0()
         .child(
             div()
-                .type_caption()
+                .type_caption(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(label),
         )
-        .child(div().type_body().min_w_0().text_ellipsis().child(value))
+        .child(div().type_body(cx).min_w_0().text_ellipsis().child(value))
         .into_any_element()
 }
 
@@ -187,7 +186,7 @@ fn git_facts(git: &GitDetails, cx: &App) -> AnyElement {
             })
             .gap_2()
             .min_w_0()
-            .type_small()
+            .type_small(cx)
             .child(
                 div()
                     .flex_none()
@@ -213,7 +212,7 @@ fn git_facts(git: &GitDetails, cx: &App) -> AnyElement {
                 .gap_1()
                 .child(
                     div()
-                        .type_caption()
+                        .type_caption(cx)
                         .text_color(cx.theme().muted_foreground)
                         .child("Last commits"),
                 )

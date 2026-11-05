@@ -1,4 +1,4 @@
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 use std::rc::Rc;
 
 use gpui_kit::component::ActiveTheme as _;
@@ -7,7 +7,7 @@ use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled as _, WeakEntity, Window, div,
+    SharedString, Styled as _, WeakEntity, Window, div, px,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::{InteractionOption, PendingInteraction, PendingInteractionId, ThreadId};
@@ -155,15 +155,15 @@ fn body(
             format!("question-{}", question.id.0).into(),
         ))
         .ui_container()
-        .p_3()
-        .gap_2()
-        .rounded(cx.theme().radius_lg)
+        .p(px(space(SpaceStep::Md, cx)))
+        .gap(px(space(SpaceStep::Sm, cx)))
+        .rounded(px(crate::theme::radius_lg(cx)))
         .border_1()
         .border_color(cx.theme().warning)
         .bg(cx.theme().muted)
-        .child(div().type_body().child(question.title))
+        .child(div().type_body(cx).child(question.title))
         .children(form)
-        .child(h_flex().gap_2().children(buttons))
+        .child(h_flex().gap(px(space(SpaceStep::Sm, cx))).children(buttons))
 }
 
 fn answer(

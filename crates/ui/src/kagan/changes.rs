@@ -87,11 +87,12 @@ pub(super) fn line(
     id: &'static str,
     text: impl Into<SharedString>,
     color: Hsla,
+    cx: &App,
 ) -> impl IntoElement {
     div()
         .id(id)
         .ui_container()
-        .type_body()
+        .type_body(cx)
         .text_color(color)
         .child(text.into())
 }
@@ -126,7 +127,7 @@ pub(super) fn files_label(count: usize) -> String {
 pub(super) fn counts(added: u32, removed: u32, cx: &App) -> impl IntoElement {
     h_flex()
         .gap_1()
-        .type_caption()
+        .type_caption(cx)
         .font_family(cx.theme().mono_font_family.clone())
         .when(added > 0, |line| {
             line.child(
@@ -290,6 +291,7 @@ impl Kagan {
                 "changes-none",
                 "Open a thread to see its changes.",
                 cx.theme().muted_foreground,
+                cx,
             )
             .into_any_element();
         }
@@ -342,19 +344,25 @@ impl Kagan {
 
     fn changes_body(&self, cx: &mut Context<Self>) -> AnyElement {
         if let Some(error) = &self.changes.error {
-            return line("changes-error", error.clone(), cx.theme().danger).into_any_element();
+            return line("changes-error", error.clone(), cx.theme().danger, cx).into_any_element();
         }
         if !self.changes.repository {
             return line(
                 "changes-not-git",
                 "Not a git folder.",
                 cx.theme().muted_foreground,
+                cx,
             )
             .into_any_element();
         }
         if self.changes.files.is_empty() {
-            return line("changes-empty", "No changes.", cx.theme().muted_foreground)
-                .into_any_element();
+            return line(
+                "changes-empty",
+                "No changes.",
+                cx.theme().muted_foreground,
+                cx,
+            )
+            .into_any_element();
         }
         let added: u32 = self.changes.files.iter().map(|file| file.added).sum();
         let removed: u32 = self.changes.files.iter().map(|file| file.removed).sum();
@@ -366,7 +374,7 @@ impl Kagan {
                     .gap_2()
                     .child(
                         div()
-                            .type_small()
+                            .type_small(cx)
                             .text_color(cx.theme().muted_foreground)
                             .child(files_label(self.changes.files.len())),
                     )
@@ -432,7 +440,7 @@ impl Kagan {
             .flex()
             .items_center()
             .rounded(cx.theme().radius)
-            .type_body()
+            .type_body(cx)
             .when(selected, |row| row.bg(cx.theme().list_active))
             .hover(|row| row.bg(cx.theme().list_hover))
             .focus(|row| row.border_1().border_color(cx.theme().ring))
@@ -443,7 +451,7 @@ impl Kagan {
             .child(
                 div()
                     .w_3()
-                    .type_caption()
+                    .type_caption(cx)
                     .font_family(cx.theme().mono_font_family.clone())
                     .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(cx.theme().muted_foreground)

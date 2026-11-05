@@ -282,7 +282,11 @@ fn plugin_row(
         ),
         Setting::Folder { title } => {
             let shown = value.as_str().unwrap_or("Not chosen").to_owned();
-            (title, fault, folder_control(weak, &scope, id, key, shown))
+            (
+                title,
+                fault,
+                folder_control(weak, &scope, id, key, shown, cx),
+            )
         }
         Setting::Project { title } => {
             let (hint, control) = project_control(weak, id, key, &scope, value, cx);

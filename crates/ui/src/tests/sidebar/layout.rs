@@ -1272,3 +1272,42 @@ fn the_personal_header_says_what_it_holds_on_hover(cx: &mut TestAppContext) {
         Some("Threads that are not in a project. Each one gets its own folder.")
     );
 }
+
+#[gpui_kit::test]
+fn a_theme_row_height_and_body_size_reach_the_sidebar(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let thread = run_shell(cx);
+    let row = format!("thread-{}", thread.0);
+    wait_until(cx, |cx| present(cx, window, &row));
+    let height = |cx: &mut TestAppContext| {
+        cx.update_window(window, |_, window, _| {
+            f32::from(
+                crate::ui_registry::find(window, &ElementId::Name(row.clone().into()))
+                    .expect("thread row")
+                    .bounds
+                    .size
+                    .height,
+            )
+        })
+        .unwrap()
+    };
+    assert!((height(cx) - 28.).abs() < 0.5, "default row {}", height(cx));
+
+    cx.update(|cx| {
+        crate::theme::set_look_for_test(
+            kg_domain::Look {
+                row: 22,
+                type_sizes: kg_domain::TypeSizes {
+                    body: 12,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            cx,
+        );
+    });
+    cx.run_until_parked();
+    assert!((height(cx) - 22.).abs() < 0.5, "themed row {}", height(cx));
+    let body = cx.update(|cx| crate::theme::type_body(cx));
+    assert!((body - 12.).abs() < 0.5);
+}

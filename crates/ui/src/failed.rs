@@ -53,7 +53,7 @@ impl Render for StartFailed {
             .child(
                 div()
                     .id("start-failed-message")
-                    .type_small()
+                    .type_small(cx)
                     .child(self.message.clone())
                     .ui_observe_as(Facts {
                         role: Role::Label,

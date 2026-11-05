@@ -8,10 +8,11 @@ use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use kg_domain::{ProjectId, Thread, ThreadId};
 
+use crate::theme::{SpaceStep, row_height, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -59,15 +60,15 @@ pub(in crate::kagan) fn list(
                         .flex_1()
                         .min_h_0()
                         .overflow_hidden()
-                        .pt_3()
-                        .px_3()
+                        .pt(px(space(SpaceStep::Md, cx)))
+                        .px(px(space(SpaceStep::Md, cx)))
                         .child(
                             div()
                                 .id("sidebar-new-thread")
                                 .ui_observe_as(Facts::button("New thread"))
-                                .h_7()
-                                .px_2()
-                                .gap_2()
+                                .h(px(row_height(cx)))
+                                .px(px(space(SpaceStep::Sm, cx)))
+                                .gap(px(space(SpaceStep::Sm, cx)))
                                 .flex()
                                 .items_center()
                                 .rounded(cx.theme().radius)
@@ -99,7 +100,7 @@ pub(in crate::kagan) fn list(
                             .ui_container()
                             .flex_1()
                             .min_h_0()
-                            .p_3()
+                            .p(px(space(SpaceStep::Md, cx)))
                             .child(tool),
                     )
                 })

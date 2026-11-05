@@ -103,6 +103,45 @@ fn a_written_theme_reads_back_the_same() {
 }
 
 #[test]
+fn a_default_look_projects_the_numbers_the_window_had_before() {
+    let config = config(&fjord(), ThemeMode::Light);
+    assert_eq!(config.font_size, Some(16.));
+    assert_eq!(config.mono_font_size, Some(12.));
+    assert_eq!(config.radius, Some(8));
+    assert_eq!(config.radius_lg, Some(12));
+    assert_eq!(config.colors.selection.as_deref(), Some("#d8dee7"));
+    assert_eq!(config.colors.input.as_deref(), Some("#d3d9e2"));
+}
+
+#[test]
+fn a_custom_look_projects_its_numbers() {
+    let mut file = fjord();
+    file.look = kg_domain::Look {
+        radius: kg_domain::Radius {
+            xs: 0,
+            sm: 0,
+            md: 2,
+            lg: 4,
+        },
+        type_sizes: kg_domain::TypeSizes {
+            caption: 10,
+            small: 11,
+            body: 12,
+            title: 14,
+            mono: 11,
+        },
+        row: 24,
+        control: 20,
+        ..kg_domain::Look::default()
+    };
+    let config = config(&file, ThemeMode::Dark);
+    assert_eq!(config.mono_font_size, Some(11.));
+    assert_eq!(file.look.radius.xs, 0);
+    assert_eq!(config.radius, Some(2));
+    assert_eq!(config.radius_lg, Some(4));
+}
+
+#[test]
 fn a_theme_without_highlight_keeps_the_gpui_default_syntax() {
     let file = fjord();
     assert_eq!(

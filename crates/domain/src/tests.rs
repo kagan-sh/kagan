@@ -448,6 +448,185 @@ fn theme_cli_parses_modes_and_rejects_paths() {
 }
 
 #[test]
+fn a_theme_without_a_look_keeps_the_default_density_and_type() {
+    let file = crate::ThemeFile::parse(theme_file("").as_bytes()).unwrap();
+    let look = file.look;
+    assert_eq!(look, crate::Look::default());
+    assert_eq!(
+        [
+            look.type_sizes.caption,
+            look.type_sizes.small,
+            look.type_sizes.body,
+            look.type_sizes.title,
+            look.type_sizes.mono,
+        ],
+        [11, 12, 13, 15, 12]
+    );
+    assert_eq!(
+        [
+            look.radius.xs,
+            look.radius.sm,
+            look.radius.md,
+            look.radius.lg
+        ],
+        [6, 8, 8, 12]
+    );
+    assert_eq!(
+        [
+            look.space.xs,
+            look.space.sm,
+            look.space.md,
+            look.space.lg,
+            look.space.xl,
+            look.space.xxl,
+        ],
+        [4, 8, 12, 16, 24, 32]
+    );
+    assert_eq!((look.row, look.control), (28, 24));
+}
+
+#[test]
+fn a_theme_can_set_its_own_density_and_type() {
+    let look = r#","look":{
+        "space":{"xs":2,"sm":6,"md":10,"lg":14,"xl":20,"xxl":28},
+        "radius":{"sm":0,"md":2,"lg":4},
+        "type":{"caption":10,"small":11,"body":12,"title":14,"mono":11},
+        "row":24,"control":20
+    }"#;
+    let file = crate::ThemeFile::parse(theme_file(look).as_bytes()).unwrap();
+    assert_eq!(
+        [
+            file.look.type_sizes.caption,
+            file.look.type_sizes.small,
+            file.look.type_sizes.body,
+            file.look.type_sizes.title,
+            file.look.type_sizes.mono,
+        ],
+        [10, 11, 12, 14, 11]
+    );
+    assert_eq!(
+        [
+            file.look.radius.xs,
+            file.look.radius.sm,
+            file.look.radius.md,
+            file.look.radius.lg,
+        ],
+        [6, 0, 2, 4]
+    );
+    assert_eq!(file.look.space.sm, 6);
+    assert_eq!((file.look.row, file.look.control), (24, 20));
+    assert_eq!(
+        serde_json::to_value(&file).unwrap()["look"]["type"]["body"],
+        12
+    );
+}
+
+#[test]
+fn a_partial_look_keeps_every_other_default() {
+    let file = crate::ThemeFile::parse(theme_file(r#","look":{"row":24}"#).as_bytes()).unwrap();
+    let look = file.look;
+    assert_eq!(look.row, 24);
+    assert_eq!(look.control, crate::Look::default().control);
+    assert_eq!(look.space, crate::Space::default());
+    assert_eq!(look.radius, crate::Radius::default());
+    assert_eq!(look.type_sizes, crate::TypeSizes::default());
+    assert_eq!(serde_json::to_value(&file).unwrap()["look"]["row"], 24);
+}
+
+#[test]
+fn an_unknown_field_inside_a_look_group_is_refused() {
+    for field in [
+        r#""space":{"tiny":2}"#,
+        r#""radius":{"xl":8}"#,
+        r#""type":{"link":12}"#,
+    ] {
+        let error =
+            crate::ThemeFile::parse(theme_file(&format!(r#","look":{{{field}}}"#)).as_bytes())
+                .unwrap_err()
+                .to_string();
+        assert!(error.contains("unknown field"), "{field}: {error}");
+    }
+}
+
+#[test]
+fn a_look_value_that_is_not_a_whole_number_is_refused() {
+    for (group, value) in [("row", "24.5"), ("row", "-1"), ("type", r#"{"body":null}"#)] {
+        let look = format!(r#","look":{{"{group}":{value}}}"#);
+        let error = crate::ThemeFile::parse(theme_file(&look).as_bytes())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("invalid type") || error.contains("invalid value"),
+            "{value}: {error}"
+        );
+    }
+}
+
+#[test]
+fn a_look_value_outside_its_range_is_refused_with_its_field() {
+    for (look, field, min, max) in [
+        (r#","look":{"row":0}"#, "look.row", 16, 64),
+        (r#","look":{"control":65535}"#, "look.control", 16, 64),
+        (r#","look":{"type":{"body":7}}"#, "look.type.body", 8, 48),
+        (r#","look":{"type":{"title":49}}"#, "look.type.title", 8, 48),
+        (r#","look":{"space":{"xs":65}}"#, "look.space.xs", 0, 64),
+        (r#","look":{"radius":{"lg":33}}"#, "look.radius.lg", 0, 32),
+    ] {
+        let error = crate::ThemeFile::parse(theme_file(look).as_bytes())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(field)
+                && error.contains(&min.to_string())
+                && error.contains(&max.to_string()),
+            "{look}: {error}"
+        );
+    }
+    for look in [
+        r#","look":{"row":16}"#,
+        r#","look":{"control":64}"#,
+        r#","look":{"space":{"xs":0}}"#,
+        r#","look":{"radius":{"lg":32}}"#,
+        r#","look":{"type":{"body":8}}"#,
+        r#","look":{"type":{"title":48}}"#,
+    ] {
+        assert!(
+            crate::ThemeFile::parse(theme_file(look).as_bytes()).is_ok(),
+            "{look} is on the edge of its range"
+        );
+    }
+}
+
+#[test]
+fn a_look_field_this_version_does_not_know_is_refused() {
+    let error = crate::ThemeFile::parse(theme_file(r#","look":{"shadow":4}"#).as_bytes())
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("unknown field"), "{error}");
+}
+
+#[test]
+fn selection_and_input_default_to_the_raised_and_line_colors() {
+    let file = crate::ThemeFile::parse(theme_file("").as_bytes()).unwrap();
+    assert_eq!(file.light.selection(), file.light.raised);
+    assert_eq!(file.light.input(), file.light.line);
+    assert_eq!(file.light.selection, None);
+    assert_eq!(file.light.input, None);
+
+    let palette = r##"{
+        "bg": "#ffffff", "surface": "#eeeeee", "raised": "#dddddd",
+        "ink": "#111111", "muted": "#555555", "line": "#cccccc",
+        "accent": "#aa0000", "primaryForeground": "#ffffff",
+        "working": "#0000aa", "needs": "#aa8800", "failed": "#aa0000",
+        "idle": "#777777", "selection": "#112233", "input": "#445566"
+    }"##;
+    let text = format!(r#"{{"name":"Test","light":{palette},"dark":{palette}}}"#);
+    let file = crate::ThemeFile::parse(text.as_bytes()).unwrap();
+    assert_eq!(file.light.selection(), crate::Color::new(0x11_2233));
+    assert_eq!(file.light.input(), crate::Color::new(0x44_5566));
+}
+
+#[test]
 fn a_theme_color_holds_only_rgb() {
     let color = crate::Color::new(0x1ff_ffff);
     assert_eq!(color.rgb(), 0xff_ffff);

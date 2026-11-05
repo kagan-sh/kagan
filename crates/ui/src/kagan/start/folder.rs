@@ -16,10 +16,10 @@ impl Kagan {
     pub(super) fn render_folder(&self, kind: ProjectKind, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         if kind == ProjectKind::Personal {
-            return note("folder", "Runs in your Personal folder.", muted);
+            return note("folder", "Runs in your Personal folder.", muted, cx);
         }
         let branches = match &self.start.branches {
-            Branches::Loading => return note("folder", "Checking the folder…", muted),
+            Branches::Loading => return note("folder", "Checking the folder…", muted, cx),
             Branches::Failed(message) => {
                 return v_flex()
                     .gap_2()
@@ -28,6 +28,7 @@ impl Kagan {
                         "folder",
                         format!("Couldn’t read the git branches: {message}"),
                         muted,
+                        cx,
                     ))
                     .child(control(
                         "folder-retry",
@@ -51,18 +52,20 @@ impl Kagan {
                 "folder",
                 "No git commit to start a worktree from, so the thread runs in the folder itself.",
                 muted,
+                cx,
             );
         }
         let chosen = self.chosen_folder();
         v_flex()
             .gap_1()
             .items_start()
-            .child(div().type_small().text_color(muted).child("Runs in"))
+            .child(div().type_small(cx).text_color(muted).child("Runs in"))
             .child(self.folder_toggles(branches, chosen, cx))
             .child(note(
                 "worktree-hint",
                 "A worktree is a separate folder for this thread’s changes.",
                 muted,
+                cx,
             ))
             .into_any_element()
     }

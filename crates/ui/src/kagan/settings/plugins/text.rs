@@ -83,7 +83,7 @@ pub(super) fn string_control(
             .h(rems(1.75))
             .child(
                 Input::new(state)
-                    .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                    .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                     .small(),
             )
             .into_any_element(),
@@ -91,7 +91,7 @@ pub(super) fn string_control(
             .w_full()
             .child(
                 Textarea::new(state)
-                    .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                    .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                     .small(),
             )
             .into_any_element(),

@@ -47,7 +47,7 @@ impl Render for ThreadComponent {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .type_body()
+                    .type_body(cx)
                     .child(tone.mark(cx))
                     .child(tone.word())
             }

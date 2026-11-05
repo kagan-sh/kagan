@@ -1,4 +1,4 @@
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, radius_md, space};
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{IconName, Selectable as _, Sizable as _, h_flex};
@@ -6,7 +6,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable as _,
     InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString, Styled as _,
-    Subscription, Task, Window, actions, div,
+    Subscription, Task, Window, actions, div, px,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, TerminalOp, ThreadId, ThreadOp, WindowOp};
@@ -367,7 +367,7 @@ impl Kagan {
                 .w_full()
                 .min_w_0()
                 .h_9()
-                .px_2()
+                .px(px(space(SpaceStep::Sm, cx)))
                 .border_b_1()
                 .border_color(cx.theme().border)
                 .child(div().flex_1())
@@ -474,8 +474,8 @@ pub(super) fn tab(
     let tab = h_flex()
         .flex_none()
         .items_center()
-        .rounded(cx.theme().radius)
-        .type_small()
+        .rounded(px(radius_md(cx)))
+        .type_small(cx)
         .child(control(
             id,
             Facts {

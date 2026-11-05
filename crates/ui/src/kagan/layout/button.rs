@@ -1,9 +1,10 @@
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::{IconName, h_flex};
 use gpui_kit::{
     App, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString, Styled, div,
+    px,
 };
 
 use crate::kagan::{Kagan, ToggleRightSidebar};
@@ -69,7 +70,7 @@ impl Kagan {
         };
         let row = h_flex()
             .id("right-sidebar-toggle")
-            .gap_1()
+            .gap(px(space(SpaceStep::Xs, cx)))
             .items_center()
             .ui_observe_as(facts);
         let row = if drawn || waiting == 0 {
@@ -79,7 +80,7 @@ impl Kagan {
                 div()
                     .id("right-sidebar-waiting")
                     .ui_container()
-                    .type_small()
+                    .type_small(cx)
                     .text_color(crate::theme::Tone::Needs.color(cx))
                     .child(waiting.to_string()),
             )
@@ -91,7 +92,7 @@ impl Kagan {
                 div()
                     .id("right-sidebar-changes")
                     .ui_container()
-                    .type_small()
+                    .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(changed.to_string()),
             )

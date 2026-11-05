@@ -173,14 +173,14 @@ fn found_item(found: Found) -> CommandItem {
                         .child(div().text_ellipsis().child(found.title.clone()))
                         .child(
                             div()
-                                .type_small()
+                                .type_small(cx)
                                 .text_color(muted)
                                 .child(found.project.clone()),
                         ),
                 )
                 .children(found.snippet.as_ref().map(|snippet| {
                     div()
-                        .type_small()
+                        .type_small(cx)
                         .text_color(muted)
                         .text_ellipsis()
                         .child(snippet.text.clone())

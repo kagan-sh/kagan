@@ -1,9 +1,9 @@
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use kg_domain::{PluginId, SurfacePlacement};
 use kg_plugins::{MountError, PluginHost};
@@ -151,7 +151,7 @@ pub(super) fn center_body(slot: &Slot, window: &mut Window, cx: &mut Context<Kag
     if slot.web.is_none() {
         div()
             .size_full()
-            .p_4()
+            .p(px(space(SpaceStep::Lg, cx)))
             .ui_container()
             .overflow_y_scrollbar()
             .id(id)
@@ -185,9 +185,9 @@ pub(in crate::kagan) fn page(
         .key_context("Page")
         .child(
             h_flex()
-                .px_4()
-                .py_2()
-                .gap_2()
+                .px(px(space(SpaceStep::Lg, cx)))
+                .py(px(space(SpaceStep::Sm, cx)))
+                .gap(px(space(SpaceStep::Sm, cx)))
                 .justify_between()
                 .items_center()
                 .border_b_1()
@@ -198,7 +198,7 @@ pub(in crate::kagan) fn page(
                         .ui_container()
                         .flex_1()
                         .min_w_0()
-                        .type_title()
+                        .type_title(cx)
                         .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                         .text_ellipsis()
                         .child(title.clone()),
@@ -208,10 +208,10 @@ pub(in crate::kagan) fn page(
                         .id("surface-close")
                         .key_context("SurfaceClose")
                         .tab_stop(true)
-                        .px_2()
-                        .py_1()
+                        .px(px(space(SpaceStep::Sm, cx)))
+                        .py(px(space(SpaceStep::Xs, cx)))
                         .rounded(cx.theme().radius)
-                        .type_body()
+                        .type_body(cx)
                         .focus(|close| close.border_1().border_color(cx.theme().ring))
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.close_page(&ClosePage, window, cx);

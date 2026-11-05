@@ -246,7 +246,9 @@ pub(super) fn fields(
                 AskField::String { id, label, .. } | AskField::Number { id, label, .. } => {
                     text_field(asked, draft, id, label, cx)
                 }
-                AskField::Boolean { id, label, .. } => flag_field(asked, draft, kagan, id, label),
+                AskField::Boolean { id, label, .. } => {
+                    flag_field(asked, draft, kagan, id, label, cx)
+                }
                 AskField::Select { .. } => select_field(asked, draft, kagan, field, cx),
             };
             v_flex()
@@ -258,7 +260,7 @@ pub(super) fn fields(
                             format!("ask-field-error-{}-{}", asked.id.0, field.id()).into(),
                         ))
                         .ui_container()
-                        .type_small()
+                        .type_small(cx)
                         .text_color(cx.theme().danger)
                         .child(message.clone())
                 }))
@@ -268,7 +270,7 @@ pub(super) fn fields(
             div()
                 .id(ElementId::Name(format!("ask-error-{}", asked.id.0).into()))
                 .ui_container()
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().danger)
                 .child(message)
         }))
@@ -287,7 +289,7 @@ fn text_field(
         .gap_1()
         .child(
             div()
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(label.to_owned()),
         )
@@ -297,7 +299,7 @@ fn text_field(
                 .ui_observe_as(Facts::input(label.to_owned(), &input, cx))
                 .child(
                     Input::new(&input)
-                        .text_size(px(crate::theme::TYPE_BODY))
+                        .text_size(px(crate::theme::type_body(cx)))
                         .into_any_element(),
                 )
                 .into_any_element()
@@ -311,6 +313,7 @@ fn flag_field(
     kagan: &Entity<Kagan>,
     id: &str,
     label: &str,
+    cx: &App,
 ) -> AnyElement {
     let on = draft.flags.get(id).copied().unwrap_or(false);
     let field_id = id.to_owned();
@@ -344,7 +347,7 @@ fn flag_field(
                     }),
                 ),
         )
-        .child(div().type_body().child(label.to_owned()))
+        .child(div().type_body(cx).child(label.to_owned()))
         .into_any_element()
 }
 
@@ -433,7 +436,7 @@ fn select_field(
         .gap_1()
         .child(
             div()
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(label.to_owned()),
         )

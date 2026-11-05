@@ -131,7 +131,7 @@ fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
                     focus: None,
                     hint: None,
                 })
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().danger)
                 .child(SharedString::from(note.to_owned())),
         )

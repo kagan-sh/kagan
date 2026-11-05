@@ -188,7 +188,7 @@ impl Kagan {
                             })
                             .child(
                                 Input::new(&review.filter)
-                                    .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                                    .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                                     .small(),
                             ),
                     )
@@ -237,7 +237,7 @@ impl Kagan {
                         list.child(
                             div()
                                 .p_2()
-                                .type_body()
+                                .type_body(cx)
                                 .text_color(cx.theme().muted_foreground)
                                 .child(format!("No files match “{query}”.")),
                         )
@@ -329,7 +329,7 @@ impl Kagan {
                     .h_7()
                     .gap_1()
                     .rounded(cx.theme().radius)
-                    .type_body()
+                    .type_body(cx)
                     .hover(|row| row.bg(cx.theme().list_hover))
                     .child(
                         Icon::new(if collapsed {
@@ -415,7 +415,7 @@ impl Kagan {
             .h_7()
             .gap_1()
             .rounded(cx.theme().radius)
-            .type_body()
+            .type_body(cx)
             .when(selected, |row| row.bg(cx.theme().secondary))
             .hover(|row| row.bg(cx.theme().list_hover))
             .child(
@@ -449,7 +449,7 @@ impl Kagan {
             .when(file.added > 0, |row| {
                 row.child(
                     div()
-                        .type_caption()
+                        .type_caption(cx)
                         .font_family(cx.theme().mono_font_family.clone())
                         .text_color(theme::added(cx))
                         .child(format!("+{}", file.added)),
@@ -458,7 +458,7 @@ impl Kagan {
             .when(file.removed > 0, |row| {
                 row.child(
                     div()
-                        .type_caption()
+                        .type_caption(cx)
                         .font_family(cx.theme().mono_font_family.clone())
                         .text_color(cx.theme().danger)
                         .child(format!("−{}", file.removed)),
@@ -467,7 +467,7 @@ impl Kagan {
             .child(
                 div()
                     .w_3()
-                    .type_caption()
+                    .type_caption(cx)
                     .font_family(cx.theme().mono_font_family.clone())
                     .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(cx.theme().muted_foreground)
