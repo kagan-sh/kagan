@@ -296,7 +296,6 @@ impl Kagan {
             if !owns(&owner, thread_id) {
                 return Err(OpError::Invalid(self.owner_refusal(&owner, cx)));
             }
-            // The first command after 30 idle minutes ends the drive and says so.
             if self
                 .browser
                 .agent
