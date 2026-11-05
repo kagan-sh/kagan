@@ -424,7 +424,7 @@ fn yes_no() -> Vec<InteractionOption> {
     ]
 }
 
-/// Asks with fields written as JSON, so these tests state the wire shape from decision 133.
+/// Asks with fields written as JSON, so these tests state the wire shape from decision 144.
 fn ask_fields(
     cx: &mut TestAppContext,
     thread: &kg_domain::ThreadId,
@@ -455,7 +455,7 @@ fn bounds(cx: &mut TestAppContext, window: gpui_kit::AnyWindowHandle, name: &str
         let element =
             crate::ui_registry::find(window, &gpui_kit::ElementId::Name(name.to_owned().into()))
                 .unwrap_or_else(|| panic!("{name} is not drawn"));
-        let bounds = element.bounds();
+        let bounds = element.bounds;
         [
             f32::from(bounds.origin.x),
             f32::from(bounds.origin.y),

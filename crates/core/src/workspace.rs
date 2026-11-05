@@ -827,7 +827,7 @@ impl Workspace {
         )
     }
 
-    /// Answers a pending question, including values for an ask form (decision 133).
+    /// Answers a pending question, including values for an ask form (decision 144).
     pub fn answer_fields(
         thread_id: &ThreadId,
         interaction_id: PendingInteractionId,

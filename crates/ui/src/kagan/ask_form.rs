@@ -16,9 +16,9 @@ use gpui_kit::{
 use kg_domain::{ASK_TEXT_MAX_CHARS, AskField, PendingInteraction, PendingInteractionId, ThreadId};
 use serde_json::{Value, json};
 
+use super::controls::control;
 use super::screen::Center;
 use super::{Kagan, Shown};
-use crate::kagan::shown::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 

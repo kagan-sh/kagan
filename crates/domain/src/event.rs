@@ -83,7 +83,7 @@ pub enum EventKind {
         text: String,
     },
     /// The person answered a pending interaction. `option` is the choice; `title` is the request.
-    /// `fields` holds values from an ask form when the question declared them (decision 133).
+    /// `fields` holds values from an ask form when the question declared them (decision 144).
     Answered {
         title: String,
         option: String,
