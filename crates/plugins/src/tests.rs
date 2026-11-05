@@ -1,6 +1,7 @@
 mod index;
 mod page;
 mod secret;
+mod settings;
 
 use std::path::Path;
 use std::process::Command;
