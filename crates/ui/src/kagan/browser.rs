@@ -1,16 +1,19 @@
 use crate::theme::TypeScale as _;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use gpui_kit::FocusHandle;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable as _,
-    InteractiveElement as _, IntoElement, ParentElement as _, Role, Styled as _, Subscription,
-    Window, div,
+    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
+    IntoElement, ParentElement as _, Role, Styled as _, Subscription, Window, div,
 };
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use kg_domain::ThreadId;
 
 use super::Kagan;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use super::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -50,6 +53,7 @@ pub(super) struct Browser {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) agent: Option<Agent>,
     /// Where the keys go while a thread drives the page, since the address field is hidden.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     driven_focus: FocusHandle,
     note: Option<String>,
     _enter: Subscription,
@@ -70,6 +74,7 @@ impl Browser {
             page: None,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             agent: None,
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             driven_focus: cx.focus_handle().tab_stop(true),
             note: None,
             _enter: enter,
@@ -111,27 +116,15 @@ impl Browser {
         self.note = Some(UNSUPPORTED.into());
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) fn driven(&self) -> bool {
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
-        {
-            self.agent.is_some()
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        {
-            false
-        }
+        self.agent.is_some()
     }
 
     /// The thread that drives the page, while one does.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) fn owner(&self) -> Option<&ThreadId> {
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
-        {
-            self.agent.as_ref().map(|agent| &agent.thread)
-        }
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        {
-            None
-        }
+        self.agent.as_ref().map(|agent| &agent.thread)
     }
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -182,16 +175,26 @@ impl Browser {
     }
 
     pub(super) fn holds_focus(&self, window: &Window, cx: &App) -> bool {
-        self.address.focus_handle(cx).contains_focused(window, cx)
-            || (self.driven() && self.driven_focus.contains_focused(window, cx))
+        if self.address.focus_handle(cx).contains_focused(window, cx) {
+            return true;
+        }
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            self.driven() && self.driven_focus.contains_focused(window, cx)
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            false
+        }
     }
 
     pub(super) fn focus(&self, window: &mut Window, cx: &mut App) {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         if self.driven() {
             window.focus(&self.driven_focus, cx);
-        } else {
-            window.focus(&self.address.focus_handle(cx), cx);
+            return;
         }
+        window.focus(&self.address.focus_handle(cx), cx);
     }
 }
 
