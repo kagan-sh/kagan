@@ -85,13 +85,25 @@ pub(crate) fn open(
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
 ) -> Result<Entity<WebPage>, String> {
+    let view = open_view(window, cx, configure)?;
+    Ok(cx.new(|_| WebPage { view }))
+}
+
+// The native view alone, for a caller that drives the page itself, such as a plugin web panel.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+pub(crate) fn open_view(
+    window: &mut Window,
+    cx: &mut App,
+    configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
+) -> Result<Entity<gpui_webview::WebView>, String> {
     #[cfg(target_os = "windows")]
     {
         open_windows(window, cx, configure)
     }
     #[cfg(target_os = "macos")]
     {
-        build(configure(private(wry::WebViewBuilder::new())), window, cx)
+        let view = build_view(configure(private(wry::WebViewBuilder::new())), window, cx)?;
+        Ok(cx.new(|_| view))
     }
 }
 
@@ -108,7 +120,7 @@ fn open_windows(
     window: &mut Window,
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
-) -> Result<Entity<WebPage>, String> {
+) -> Result<Entity<gpui_webview::WebView>, String> {
     let data = kg_core::Workspace::global(cx)
         .read(cx)
         .data_dir()
@@ -129,19 +141,7 @@ fn open_windows(
         }
     };
     view.remove_user_data_when_closed(storage);
-    let view = cx.new(|_| view);
-    Ok(cx.new(|_| WebPage { view }))
-}
-
-#[cfg(target_os = "macos")]
-fn build(
-    builder: wry::WebViewBuilder<'_>,
-    window: &mut Window,
-    cx: &mut App,
-) -> Result<Entity<WebPage>, String> {
-    let view = build_view(builder, window, cx)?;
-    let view = cx.new(|_| view);
-    Ok(cx.new(|_| WebPage { view }))
+    Ok(cx.new(|_| view))
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]

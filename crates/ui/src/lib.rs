@@ -15,7 +15,7 @@ mod ui_dispatch;
 mod ui_driver;
 mod ui_observe;
 mod ui_registry;
-#[cfg(target_os = "macos")]
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
 mod web;
 mod web_page;
 

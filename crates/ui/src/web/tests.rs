@@ -39,6 +39,32 @@ fn navigation_stays_on_the_plugin_origin() {
 }
 
 #[test]
+fn a_windows_page_keeps_the_plugin_origin_through_webview2() {
+    // WebView2 rewrites the page's own origin, and navigation reports the rewritten form.
+    let page = "http://kagan-plugin.dev.kagan.page/ui/index.html";
+    assert!(allows_navigation(PLUGIN, page));
+    assert!(allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.kagan.page/a?b#c"
+    ));
+    assert!(!allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.other.page/ui/index.html"
+    ));
+    assert!(!allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.kagan.page:8080/x"
+    ));
+    assert!(!allows_navigation(PLUGIN, "http://example.com/"));
+    assert!(!allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.kagan.page@evil.com/"
+    ));
+    let own = page_url(PLUGIN, "ui/index.html").unwrap();
+    assert!(allows_navigation(PLUGIN, &own));
+}
+
+#[test]
 fn fetch_hosts_are_only_a_connect_source() {
     let policy = csp(&["files.example".into(), "not a host".into()]);
     assert!(policy.contains("connect-src 'self' https://files.example http://files.example"));
@@ -190,14 +216,13 @@ fn page_paths_round_trip_through_the_url() {
     std::fs::write(ui.join("my page.html"), b"<p>space</p>").unwrap();
     std::fs::write(ui.join("café.html"), b"<p>unicode</p>").unwrap();
     std::fs::write(ui.join("100%.html"), b"<p>percent</p>").unwrap();
-    std::fs::write(ui.join("a?b.html"), b"<p>query</p>").unwrap();
+    // Windows cannot create `?` in a name; `a_query_and_a_hash_stay_in_the_page_path` covers it.
     std::fs::write(ui.join("a#b.html"), b"<p>hash</p>").unwrap();
 
     for (file, body) in [
         ("ui/my page.html", b"<p>space</p>".as_slice()),
         ("ui/café.html", b"<p>unicode</p>"),
         ("ui/100%.html", b"<p>percent</p>"),
-        ("ui/a?b.html", b"<p>query</p>"),
         ("ui/a#b.html", b"<p>hash</p>"),
     ] {
         let url = page_url(PLUGIN, file).unwrap();
@@ -233,6 +258,17 @@ fn page_paths_round_trip_through_the_url() {
         .status,
         403
     );
+}
+
+#[test]
+fn a_query_and_a_hash_stay_in_the_page_path() {
+    for (file, encoded) in [
+        ("ui/a?b.html", "ui/a%3Fb.html"),
+        ("ui/a#b.html", "ui/a%23b.html"),
+    ] {
+        let url = page_url(PLUGIN, file).unwrap();
+        assert!(url.ends_with(encoded), "{url}");
+    }
 }
 
 #[cfg(target_os = "macos")]

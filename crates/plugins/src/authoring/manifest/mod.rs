@@ -47,6 +47,8 @@ pub(crate) enum Error {
     Commands,
     #[error("a header command needs when thread")]
     HeaderCommand,
+    #[error("a menu command needs when thread")]
+    MenuCommand,
     #[error("$hotkeys is reserved for keyboard shortcuts")]
     ReservedHotkeys,
     #[error("tool name {0:?} must be 1 to 64 letters, digits, _ or -")]
@@ -281,6 +283,9 @@ impl Manifest {
             }
             if command.header && command.when != crate::commands::CommandWhen::Thread {
                 return Err(Error::HeaderCommand);
+            }
+            if command.menu && command.when != crate::commands::CommandWhen::Thread {
+                return Err(Error::MenuCommand);
             }
             if let Some(key) = &command.key {
                 crate::commands::checked_key(key)
