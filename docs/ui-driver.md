@@ -31,6 +31,6 @@ Only input that reaches an answer button is refused. An unrelated click or key s
 
 ## Requirements
 
-The `kg` app must be running with a window open. If the UI driver is not installed yet, open a window once (`kg open`). Drive the instance `kg status --json` confirmed. Leave `KG_DATA_DIR` and `KG_SOCKET` unset. A command that starts a second headless app is the wrong window.
+The `kg` app must be running with a window open. If the UI driver is not installed yet, open a window once (`kg open`). Drive the instance `kg status --json` confirmed. Leave `KG_DATA_DIR` and `KG_SOCKET` unset. A command that starts a second headless app is the wrong window. `KG_NO_START=1` makes a client fail with `no kagan app is listening on <socket>; start it first` instead of starting one. The live smoke gate (`scripts/smoke.sh`) is the exception: it sets every variable to a temporary folder, so it drives its own window and never yours.
 
 `kg plugin install` waits until a person approves powers in the app. This driver cannot answer that. The Op returns `person-only approvals cannot be answered with kg ui`.

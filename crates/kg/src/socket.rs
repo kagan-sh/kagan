@@ -409,6 +409,15 @@ impl Client {
         if let Ok(client) = Self::connect(name(&location)?) {
             return Ok(client);
         }
+        if non_empty("KG_NO_START").is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "no kagan app is listening on {}; start it first",
+                    location.to_string_lossy()
+                ),
+            ));
+        }
         start_headless(&location)?;
         wait_for_socket(&location, START_TIMEOUT)
     }
