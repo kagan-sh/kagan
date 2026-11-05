@@ -394,6 +394,7 @@ mod tests {
                 blob: "two".into()
             }
         ));
+        #[cfg(unix)]
         assert!(!same(
             &file,
             &Object {
