@@ -33,7 +33,7 @@ impl Drop for Claim {
     }
 }
 
-pub(in crate::ops) async fn install(
+pub(in crate::runtime::ops) async fn install(
     host: &Entity<PluginHost>,
     source: String,
     plugin: Option<String>,
@@ -138,7 +138,7 @@ pub(in crate::ops) async fn install(
     keep(host, fetched, source, grant, &plugins, true, cx).await
 }
 
-pub(in crate::ops) async fn update(
+pub(in crate::runtime::ops) async fn update(
     host: &Entity<PluginHost>,
     id: &PluginId,
     thread_id: Option<ThreadId>,
@@ -206,7 +206,7 @@ pub(in crate::ops) async fn update(
 }
 
 /// Records approved code with its grant and makes it active.
-pub(in crate::ops) async fn keep(
+pub(in crate::runtime::ops) async fn keep(
     host: &Entity<PluginHost>,
     fetched: Fetched,
     source: String,

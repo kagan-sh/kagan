@@ -1,33 +1,21 @@
 //! The plugin host: discovery, activation, contributions, and the panels and pages plugins add.
 
-mod area;
-mod catalog;
-mod clipboard;
-mod commands;
-mod contributions;
-mod database;
-mod development;
-mod files;
-mod host;
-mod index;
-mod jobs;
-pub mod keys;
-mod log;
+mod authoring;
+mod install;
+mod runtime;
 
-pub(crate) use log::{Level, log};
-mod manifest;
-mod ops;
-mod page;
-mod process;
-mod secret;
-mod share;
-mod source;
+pub(crate) use authoring::{catalog, contributions, development, manifest, share};
+pub(crate) use install::{index, source};
+pub use runtime::keys;
+pub(crate) use runtime::log;
+pub(crate) use runtime::log::{Level, log};
+pub(crate) use runtime::{
+    area, clipboard, commands, database, files, host, jobs, ops, page, process, secret, threads,
+    ui_host, watchdog, web_store,
+};
+
 #[cfg(test)]
 mod tests;
-mod threads;
-mod ui_host;
-mod watchdog;
-mod web_store;
 
 use std::rc::Rc;
 use std::time::Duration;

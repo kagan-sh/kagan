@@ -39,17 +39,17 @@ pub(crate) fn new(
         std::fs::create_dir_all(parent).map_err(name_too_long)?;
     }
     std::fs::create_dir(&root).map_err(name_too_long)?;
-    let manifest = include_str!("../assets/starter/kagan.json")
+    let manifest = include_str!("../../assets/starter/kagan.json")
         .replace("__NAME__", name)
         .replace("__VERSION__", env!("CARGO_PKG_VERSION"));
     std::fs::write(root.join("kagan.json"), manifest)?;
     std::fs::write(
         root.join("main.js"),
-        include_str!("../assets/starter/main.js"),
+        include_str!("../../assets/starter/main.js"),
     )?;
     std::fs::write(
         root.join("jsconfig.json"),
-        include_str!("../assets/starter/jsconfig.json"),
+        include_str!("../../assets/starter/jsconfig.json"),
     )?;
     let mut files = types(&root, components)?;
     files.extend([

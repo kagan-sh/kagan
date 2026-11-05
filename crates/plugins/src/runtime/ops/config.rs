@@ -11,7 +11,7 @@ use crate::{PluginHost, Result};
 use super::approve::approve_folder;
 use super::{approved, record};
 
-pub(in crate::ops) async fn config(
+pub(in crate::runtime::ops) async fn config(
     host: &Entity<PluginHost>,
     id: &PluginId,
     op: ConfigOp,
@@ -99,7 +99,7 @@ pub(in crate::ops) async fn config(
     }
 }
 
-pub(in crate::ops) async fn write_setting(
+pub(in crate::runtime::ops) async fn write_setting(
     host: &Entity<PluginHost>,
     id: &PluginId,
     key: &str,
@@ -141,7 +141,7 @@ pub(in crate::ops) async fn write_setting(
 
 /// Writes or clears a secret in the store, never in the database, and returns the store's
 /// warning when it fell back to a file.
-pub(in crate::ops) async fn keep_secret(
+pub(in crate::runtime::ops) async fn keep_secret(
     host: &Entity<PluginHost>,
     id: &PluginId,
     key: &str,
@@ -162,7 +162,7 @@ pub(in crate::ops) async fn keep_secret(
     Ok(warning.map_or(OpResult::Done, |warning| OpResult::Warnings(vec![warning])))
 }
 
-pub(in crate::ops) fn remember_setting(
+pub(in crate::runtime::ops) fn remember_setting(
     host: &mut PluginHost,
     id: &PluginId,
     key: &str,
@@ -197,7 +197,7 @@ pub(in crate::ops) fn remember_setting(
     Ok(())
 }
 
-pub(in crate::ops) fn stage(
+pub(in crate::runtime::ops) fn stage(
     host: &PluginHost,
     id: &PluginId,
     key: &str,
@@ -231,7 +231,11 @@ pub(in crate::ops) fn stage(
     Ok(())
 }
 
-pub(in crate::ops) fn checked(key: &str, setting: &Setting, value: Value) -> Result<Value> {
+pub(in crate::runtime::ops) fn checked(
+    key: &str,
+    setting: &Setting,
+    value: Value,
+) -> Result<Value> {
     let takes =
         |what: &str| OpError::Invalid(format!("setting {key} ({}) takes {what}", setting.title()));
     match setting {

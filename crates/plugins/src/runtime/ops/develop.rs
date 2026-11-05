@@ -12,7 +12,7 @@ use super::approve::{approve, choose, removal_options};
 use super::install::keep;
 use super::{approved, record, start};
 
-pub(in crate::ops) async fn develop(
+pub(in crate::runtime::ops) async fn develop(
     host: &Entity<PluginHost>,
     op: PluginOp,
     requester: Option<Requester>,
@@ -96,7 +96,7 @@ pub(in crate::ops) async fn develop(
     }
 }
 
-pub(in crate::ops) async fn enable(
+pub(in crate::runtime::ops) async fn enable(
     host: &Entity<PluginHost>,
     id: PluginId,
     cx: &mut AsyncApp,
@@ -116,7 +116,7 @@ pub(in crate::ops) async fn enable(
     Ok(OpResult::Done)
 }
 
-pub(in crate::ops) async fn disable(
+pub(in crate::runtime::ops) async fn disable(
     host: &Entity<PluginHost>,
     id: PluginId,
     cx: &mut AsyncApp,
@@ -142,7 +142,7 @@ pub(in crate::ops) async fn disable(
     Ok(OpResult::Done)
 }
 
-pub(in crate::ops) async fn remove(
+pub(in crate::runtime::ops) async fn remove(
     host: &Entity<PluginHost>,
     id: PluginId,
     thread_id: Option<ThreadId>,
@@ -222,7 +222,7 @@ pub(in crate::ops) async fn remove(
     })
 }
 
-pub(in crate::ops) async fn dev(
+pub(in crate::runtime::ops) async fn dev(
     host: &Entity<PluginHost>,
     path: PathBuf,
     thread_id: Option<ThreadId>,
@@ -256,7 +256,7 @@ pub(in crate::ops) async fn dev(
     Ok(OpResult::Plugins(vec![record]))
 }
 
-pub(in crate::ops) async fn reload(
+pub(in crate::runtime::ops) async fn reload(
     host: &Entity<PluginHost>,
     record: Plugin,
     thread_id: Option<ThreadId>,
@@ -315,7 +315,7 @@ pub(in crate::ops) async fn reload(
     Ok(result)
 }
 
-pub(in crate::ops) async fn set_enabled(
+pub(in crate::runtime::ops) async fn set_enabled(
     id: &PluginId,
     enabled: bool,
     cx: &mut AsyncApp,

@@ -9,7 +9,7 @@ use crate::Result;
 use crate::manifest::Setting;
 
 /// `about` says where the code comes from, between the question and the powers.
-pub(in crate::ops) async fn approve(
+pub(in crate::runtime::ops) async fn approve(
     thread_id: Option<&ThreadId>,
     requester: Option<Requester>,
     question: String,
@@ -37,7 +37,7 @@ pub(in crate::ops) async fn approve(
     choose(thread_id, requester, title, &question, options, cx).await
 }
 
-pub(in crate::ops) fn permission_options() -> Vec<InteractionOption> {
+pub(in crate::runtime::ops) fn permission_options() -> Vec<InteractionOption> {
     vec![
         InteractionOption {
             id: InteractionOption::DECLINE.into(),
@@ -50,7 +50,7 @@ pub(in crate::ops) fn permission_options() -> Vec<InteractionOption> {
     ]
 }
 
-pub(in crate::ops) fn removal_options() -> Vec<InteractionOption> {
+pub(in crate::runtime::ops) fn removal_options() -> Vec<InteractionOption> {
     vec![
         InteractionOption {
             id: InteractionOption::DECLINE.into(),
@@ -63,7 +63,7 @@ pub(in crate::ops) fn removal_options() -> Vec<InteractionOption> {
     ]
 }
 
-pub(in crate::ops) async fn choose(
+pub(in crate::runtime::ops) async fn choose(
     thread_id: Option<&ThreadId>,
     requester: Option<Requester>,
     title: String,
@@ -82,7 +82,7 @@ pub(in crate::ops) async fn choose(
 }
 
 /// Asks a person before a folder setting names a folder; returns that folder.
-pub(in crate::ops) async fn approve_folder(
+pub(in crate::runtime::ops) async fn approve_folder(
     setting: &Setting,
     value: &Value,
     question: String,
