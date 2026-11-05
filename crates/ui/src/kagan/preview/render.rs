@@ -10,10 +10,11 @@ use gpui_kit::{
     ObjectFit, ParentElement as _, Role, SharedString, StatefulInteractiveElement as _,
     Styled as _, StyledImage as _, div, img, px,
 };
-use kg_domain::{PreviewCut, PreviewImageFormat, PreviewKind};
+use kg_domain::{PreviewImageFormat, PreviewKind};
 
 use super::super::Kagan;
 use super::Preview;
+use crate::kagan::browser::is_web;
 use crate::kagan::controls::control;
 use crate::theme::{TypeScale as _, type_mono};
 use crate::ui_observe::UiObserveExt as _;
@@ -30,13 +31,14 @@ impl Preview {
         let size = self
             .file
             .as_ref()
-            .map_or_else(String::new, |file| kg_core::human_size(file.bytes));
+            .map_or_else(|| "—".to_owned(), |file| kg_core::human_size(file.bytes));
         let path = self.path.clone();
         v_flex()
             .id("preview")
             .ui_container()
             .size_full()
             .min_h_0()
+            .tab_stop(true)
             .track_focus(&self.focus)
             .child(
                 h_flex()
@@ -116,29 +118,35 @@ impl Preview {
             };
             return sentence("preview-loading", text.into(), cx);
         };
-        match &file.kind {
+        let note = kg_core::preview_note(&file.kind);
+        let content = match &file.kind {
             PreviewKind::Unavailable { reason } => {
                 sentence("preview-notice", reason.clone().into(), cx)
             }
-            PreviewKind::Text { text, cut } => plain_text(text, cut.as_ref(), self, cx),
-            PreviewKind::Markdown { text, cut } => markdown(text, cut.as_ref(), cx),
-            PreviewKind::Csv {
-                rows,
-                rows_total,
-                columns_total,
-                truncated,
-            } => csv(rows, *rows_total, *columns_total, *truncated, cx),
+            PreviewKind::Text { text, .. } => plain_text(text, self, cx),
+            PreviewKind::Markdown { text, .. } => markdown(text),
+            PreviewKind::Csv { rows, .. } => csv(rows),
             PreviewKind::Image {
                 format,
                 width,
                 height,
             } => image_body(self.image.clone(), *format, *width, *height, file.bytes, cx),
-        }
+        };
+        with_note(content, note, cx)
     }
 }
 
-fn cut_line(cut: &PreviewCut) -> String {
-    format!("Showing the first {} of {} lines.", cut.shown, cut.total)
+fn with_note(content: AnyElement, note: Option<String>, cx: &mut Context<Kagan>) -> AnyElement {
+    match note {
+        Some(note) => v_flex()
+            .id("preview-body")
+            .flex_1()
+            .min_h_0()
+            .child(content)
+            .child(sentence("preview-cut", note.into(), cx))
+            .into_any_element(),
+        None => content,
+    }
 }
 
 fn sentence(id: &'static str, text: SharedString, cx: &mut Context<Kagan>) -> AnyElement {
@@ -156,12 +164,7 @@ fn sentence(id: &'static str, text: SharedString, cx: &mut Context<Kagan>) -> An
         .into_any_element()
 }
 
-fn plain_text(
-    text: &str,
-    cut: Option<&PreviewCut>,
-    preview: &Preview,
-    cx: &mut Context<Kagan>,
-) -> AnyElement {
+fn plain_text(text: &str, preview: &Preview, cx: &mut Context<Kagan>) -> AnyElement {
     v_flex()
         .id("preview-text")
         .flex_1()
@@ -186,11 +189,10 @@ fn plain_text(
                         ),
                 ),
         )
-        .children(cut.map(|cut| sentence("preview-cut", cut_line(cut).into(), cx)))
         .into_any_element()
 }
 
-fn markdown(text: &str, cut: Option<&PreviewCut>, cx: &mut Context<Kagan>) -> AnyElement {
+fn markdown(text: &str) -> AnyElement {
     v_flex()
         .id("preview-markdown")
         .flex_1()
@@ -206,29 +208,26 @@ fn markdown(text: &str, cut: Option<&PreviewCut>, cx: &mut Context<Kagan>) -> An
                     TextView::markdown("preview-markdown-text", text.to_owned())
                         .selectable(true)
                         .scrollable(false)
-                        .image_source(|_| ImageSource::Image(Arc::new(Image::empty())))
+                        .image_source(document_image)
                         .on_link_click(|url, _, _, cx| {
-                            if is_web(url) {
+                            if let Some(url) = web_link(url) {
                                 cx.open_url(url);
                             }
                         }),
                 ),
         )
-        .children(cut.map(|cut| sentence("preview-cut", cut_line(cut).into(), cx)))
         .into_any_element()
 }
 
-fn is_web(url: &str) -> bool {
-    url::Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
+fn document_image(_: &gpui_kit::SharedUri) -> ImageSource {
+    ImageSource::Image(Arc::new(Image::empty()))
 }
 
-fn csv(
-    rows: &[Vec<String>],
-    rows_total: usize,
-    columns_total: usize,
-    truncated: bool,
-    cx: &mut Context<Kagan>,
-) -> AnyElement {
+fn web_link(url: &str) -> Option<&str> {
+    is_web(url).then_some(url)
+}
+
+fn csv(rows: &[Vec<String>]) -> AnyElement {
     let mut table = Table::new().small().accessibility_label("CSV preview");
     if let Some(header) = rows.first() {
         table = table.child(
@@ -250,15 +249,6 @@ fn csv(
             ),
         )
     });
-    let note = truncated.then(|| {
-        format!(
-            "Showing the first {} of {} rows, and the first {} of {} columns.",
-            rows.len(),
-            rows_total,
-            rows.first().map_or(0, Vec::len),
-            columns_total
-        )
-    });
     v_flex()
         .id("preview-csv")
         .flex_1()
@@ -274,7 +264,6 @@ fn csv(
                 .overflow_x_scroll()
                 .child(table.child(body)),
         )
-        .children(note.map(|note| sentence("preview-cut", note.into(), cx)))
         .into_any_element()
 }
 
@@ -334,19 +323,26 @@ mod tests {
 
     #[test]
     fn a_markdown_image_resolves_to_nothing() {
-        let resolve = |_: &gpui_kit::SharedUri| ImageSource::Image(Arc::new(Image::empty()));
         let uri = gpui_kit::SharedUri::from("https://example.com/pixel.png");
-        let ImageSource::Image(image) = resolve(&uri) else {
+        let ImageSource::Image(image) = document_image(&uri) else {
             panic!("a document image must not become a resource")
         };
         assert!(image.bytes.is_empty());
     }
 
     #[test]
-    fn link_schemes_are_limited_to_the_web() {
-        assert!(is_web("https://example.com"));
-        assert!(is_web("http://localhost:3000"));
-        assert!(!is_web("file:///etc/passwd"));
-        assert!(!is_web("javascript:alert(1)"));
+    fn a_link_opens_only_on_the_web() {
+        assert_eq!(web_link("https://example.com"), Some("https://example.com"));
+        assert_eq!(
+            web_link("http://localhost:3000"),
+            Some("http://localhost:3000")
+        );
+        for denied in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "data:text/html,x",
+        ] {
+            assert_eq!(web_link(denied), None, "{denied} must not open");
+        }
     }
 }

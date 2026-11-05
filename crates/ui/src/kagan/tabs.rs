@@ -113,11 +113,9 @@ impl Kagan {
                 ..Tabs::default()
             };
             self.browser.leave_thread(window, cx);
-            if self
-                .right_tab
-                .as_deref()
-                .is_some_and(|tab| tab == BROWSER || terminal_number(tab).is_some())
-            {
+            if self.right_tab.as_deref().is_some_and(|tab| {
+                tab == BROWSER || tab == super::preview::TAB || terminal_number(tab).is_some()
+            }) {
                 self.right_tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.

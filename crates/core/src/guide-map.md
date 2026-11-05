@@ -42,7 +42,7 @@ browser: `kg browser open`, `kg browser status`, `kg browser snapshot`, `kg brow
 
 diff: `kg diff list`, `kg diff show`, `kg diff commits`.
 
-preview: `kg preview show` reads one file into the right sidebar's Preview tab.
+preview: `kg preview show` prints one file with the same rules as the Preview tab.
 
 diagnostics: `kg diagnostics export`.
 

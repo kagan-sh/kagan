@@ -48,6 +48,34 @@ fn copy_path_puts_the_previewed_path_on_the_clipboard(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn an_image_preview_shows_its_size_and_caption(cx: &mut TestAppContext) {
+    const PIXEL: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+        0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8,
+        0xcf, 0xc0, 0xf0, 0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00,
+        0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+    let (kagan, window, data) = open(cx);
+    let (thread, repo) = repo_thread(cx, window, data.path());
+    std::fs::write(repo.join("pixel.png"), PIXEL).unwrap();
+    cx.update_window(window, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| {
+            kagan.show_preview(Some(thread.clone()), "pixel.png".into(), window, cx);
+        });
+    })
+    .unwrap();
+    wait_until(cx, |cx| {
+        value_of(cx, window, "preview-image-caption").is_some()
+    });
+    assert_eq!(
+        value_of(cx, window, "preview-image-caption").as_deref(),
+        Some("1×1 · PNG 70 B")
+    );
+    assert_eq!(value_of(cx, window, "preview-size"), Some("70 B".into()));
+}
+
+#[gpui_kit::test]
 fn a_path_outside_the_thread_keeps_the_tab_and_says_why(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     let (thread, _repo) = repo_thread(cx, window, data.path());

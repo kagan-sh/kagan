@@ -220,6 +220,9 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                     PreviewKind::Unavailable { reason } => reason.clone(),
                 };
                 println!("{text}");
+                if let Some(note) = kg_core::preview_note(&file.kind) {
+                    eprintln!("{note}");
+                }
                 return Ok(());
             }
             _ => {}

@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::io::Read as _;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use gpui_kit::{
@@ -188,7 +189,10 @@ impl Kagan {
                 preview.file = Some(file);
                 self.load_image(expect.generation, window, cx);
             }
-            Ok(_) => preview.notice = Some("Could not read this file.".into()),
+            Ok(_) => {
+                // Dispatch answers this Op with Preview, so any other result is a bug.
+                preview.notice = Some("Could not read this file.".into());
+            }
             Err(error) => {
                 preview.notice = Some(format!("Could not read this file: {error}").into());
             }
@@ -197,7 +201,7 @@ impl Kagan {
     }
 
     /// Reads the bytes of the image the Op named, after checking the path again.
-    fn load_image(&mut self, generation: u64, _window: &mut Window, cx: &mut Context<Self>) {
+    fn load_image(&mut self, generation: u64, window: &mut Window, cx: &mut Context<Self>) {
         let Some(preview) = self.tabs.preview.as_ref() else {
             return;
         };
@@ -207,30 +211,17 @@ impl Kagan {
         let PreviewKind::Image { format, .. } = &file.kind else {
             return;
         };
-        let (format, absolute, thread, handle) = (
-            *format,
-            file.absolute.clone(),
-            preview.thread.clone(),
-            preview.window,
-        );
-        let root = thread.and_then(|thread| environment_root(&thread, cx));
+        let (format, absolute, handle) = (*format, file.absolute.clone(), preview.window);
+        let root = match &preview.thread {
+            Some(thread) => match environment_path(thread, cx) {
+                Some(root) => Some(root),
+                None => return self.apply_image(generation, None, window, cx),
+            },
+            None => None,
+        };
         let read = cx.background_spawn(async move {
-            let absolute = std::fs::canonicalize(&absolute).ok()?;
-            if let Some(root) = root
-                && !absolute.starts_with(&root)
-            {
-                return None;
-            }
-            let metadata = std::fs::metadata(&absolute).ok()?;
-            if !metadata.is_file() || metadata.len() > IMAGE_LIMIT {
-                return None;
-            }
-            let bytes = std::fs::read(&absolute).ok()?;
-            let (width, height) = kg_core::image_size(&bytes)?;
-            if u64::from(width) * u64::from(height) > PIXEL_LIMIT {
-                return None;
-            }
-            Some(Arc::new(Image::from_bytes(image_format(format), bytes)))
+            read_image(root.as_deref(), &absolute)
+                .map(|bytes| Arc::new(Image::from_bytes(image_format(format), bytes)))
         });
         let load = cx.spawn(async move |this, cx| {
             let image = read.await;
@@ -266,7 +257,31 @@ impl Kagan {
     }
 }
 
-fn environment_root(thread: &ThreadId, cx: &App) -> Option<PathBuf> {
+fn read_image(root: Option<&Path>, absolute: &Path) -> Option<Vec<u8>> {
+    let absolute = std::fs::canonicalize(absolute).ok()?;
+    if let Some(root) = root {
+        let root = std::fs::canonicalize(root).ok()?;
+        if !absolute.starts_with(root) {
+            return None;
+        }
+    }
+    let file = std::fs::File::open(&absolute).ok()?;
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    file.take(IMAGE_LIMIT + 1).read_to_end(&mut bytes).ok()?;
+    if bytes.len() as u64 > IMAGE_LIMIT {
+        return None;
+    }
+    let (width, height) = kg_core::image_size(&bytes)?;
+    if u64::from(width) * u64::from(height) > PIXEL_LIMIT {
+        return None;
+    }
+    Some(bytes)
+}
+
+fn environment_path(thread: &ThreadId, cx: &App) -> Option<PathBuf> {
     let workspace = Workspace::global(cx).read(cx);
     let id = workspace
         .thread(thread)?
@@ -274,8 +289,7 @@ fn environment_root(thread: &ThreadId, cx: &App) -> Option<PathBuf> {
         .record()
         .environment_id
         .clone()?;
-    let path = workspace.environment(&id)?.read(cx).record().path.clone();
-    std::fs::canonicalize(path).ok()
+    Some(workspace.environment(&id)?.read(cx).record().path.clone())
 }
 
 fn image_format(format: PreviewImageFormat) -> ImageFormat {
@@ -294,3 +308,6 @@ impl Preview {
         self.focus.clone()
     }
 }
+
+#[cfg(test)]
+mod tests;

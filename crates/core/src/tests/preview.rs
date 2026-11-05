@@ -56,10 +56,11 @@ async fn a_path_outside_the_thread_folder_is_refused(cx: &mut TestAppContext) {
         .await
         .unwrap_err();
     assert!(error.to_string().contains("outside this thread's folder"));
-    let error = preview(Some(&thread), "../secret.txt", cx)
+    let sibling = outside.path().file_name().unwrap().to_string_lossy();
+    let error = preview(Some(&thread), &format!("../{sibling}/secret.txt"), cx)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("no file"));
+    assert!(error.to_string().contains("outside this thread's folder"));
 }
 
 #[cfg(unix)]
@@ -105,7 +106,7 @@ async fn a_folder_a_missing_file_and_an_empty_file_say_why(cx: &mut TestAppConte
             .await
             .unwrap_err()
             .to_string()
-            .contains("folder")
+            .contains("is a folder")
     );
     assert!(
         preview(Some(&thread), "missing.txt", cx)
@@ -271,6 +272,86 @@ async fn csv_stops_at_one_hundred_rows_and_twenty_columns(cx: &mut TestAppContex
     assert!(truncated);
 }
 
+#[gpui_kit::test]
+async fn a_file_exactly_at_each_cap_is_accepted(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(
+        fixture.dir.path().join("exact.txt"),
+        vec![b'a'; 1024 * 1024],
+    )
+    .unwrap();
+    let lines: String = (0..2_000)
+        .map(|n| format!("line {n}\n"))
+        .collect::<Vec<_>>()
+        .concat();
+    std::fs::write(fixture.dir.path().join("lines.txt"), lines).unwrap();
+    std::fs::write(fixture.dir.path().join("line.txt"), "x".repeat(4_000)).unwrap();
+    let mut csv = String::new();
+    for row in 0..100 {
+        let cells: Vec<String> = (0..20)
+            .map(|column| {
+                if row == 0 && column == 0 {
+                    "c".repeat(120)
+                } else {
+                    format!("{row}-{column}")
+                }
+            })
+            .collect();
+        csv.push_str(&cells.join(","));
+        csv.push('\n');
+    }
+    std::fs::write(fixture.dir.path().join("exact.csv"), csv).unwrap();
+    let mut heavy = png(2, 2);
+    heavy.resize(8 * 1024 * 1024, 0);
+    std::fs::write(fixture.dir.path().join("exact.png"), heavy).unwrap();
+    std::fs::write(fixture.dir.path().join("many.png"), png(8_000, 5_000)).unwrap();
+    let thread = started(&fixture, cx).await;
+
+    let PreviewKind::Text { text, cut } =
+        preview(Some(&thread), "exact.txt", cx).await.unwrap().kind
+    else {
+        panic!("text at the cap")
+    };
+    assert_eq!(text.len(), 4_000);
+    assert!(cut.is_none());
+
+    let PreviewKind::Text { text, cut } =
+        preview(Some(&thread), "lines.txt", cx).await.unwrap().kind
+    else {
+        panic!("2,000 lines at the cap")
+    };
+    assert_eq!(text.lines().count(), 2_000);
+    assert!(cut.is_none());
+
+    let PreviewKind::Text { text, cut } =
+        preview(Some(&thread), "line.txt", cx).await.unwrap().kind
+    else {
+        panic!("4,000 bytes at the cap")
+    };
+    assert_eq!(text.len(), 4_000);
+    assert!(cut.is_none());
+
+    let PreviewKind::Csv {
+        rows,
+        rows_total,
+        columns_total,
+        truncated,
+    } = preview(Some(&thread), "exact.csv", cx).await.unwrap().kind
+    else {
+        panic!("csv at the caps")
+    };
+    assert_eq!(rows.len(), 100);
+    assert_eq!(rows[0].len(), 20);
+    assert_eq!(rows[0][0].chars().count(), 120);
+    assert_eq!((rows_total, columns_total), (100, 20));
+    assert!(!truncated);
+
+    let file = preview(Some(&thread), "exact.png", cx).await.unwrap();
+    assert!(matches!(file.kind, PreviewKind::Image { .. }));
+    let file = preview(Some(&thread), "many.png", cx).await.unwrap();
+    assert!(matches!(file.kind, PreviewKind::Image { .. }));
+}
+
 fn png(width: u32, height: u32) -> Vec<u8> {
     let mut ihdr = Vec::new();
     ihdr.extend_from_slice(&width.to_be_bytes());
@@ -400,4 +481,40 @@ fn check_refuses_an_empty_and_a_control_character_path() {
         path: "notes.txt".into(),
     });
     assert!(kg_domain::check(&op).is_ok());
+}
+
+#[test]
+fn the_cut_note_names_only_the_dimension_that_was_cut() {
+    let csv = |rows: Vec<Vec<&str>>, rows_total: usize, columns_total: usize| PreviewKind::Csv {
+        rows: rows
+            .into_iter()
+            .map(|row| row.into_iter().map(str::to_owned).collect())
+            .collect(),
+        rows_total,
+        columns_total,
+        truncated: true,
+    };
+    assert_eq!(
+        crate::preview_note(&csv(vec![vec!["a"]; 100], 151, 1)).as_deref(),
+        Some("Showing the first 100 of 151 rows.")
+    );
+    assert_eq!(
+        crate::preview_note(&csv(vec![vec!["a"; 20]; 100], 100, 30)).as_deref(),
+        Some("Showing the first 20 of 30 columns.")
+    );
+    assert_eq!(
+        crate::preview_note(&csv(vec![vec!["a"], vec!["a", "b", "c"]], 2, 3)),
+        None
+    );
+    let cut = PreviewKind::Text {
+        text: "one".into(),
+        cut: Some(kg_domain::PreviewCut {
+            shown: 2_000,
+            total: 2_001,
+        }),
+    };
+    assert_eq!(
+        crate::preview_note(&cut).as_deref(),
+        Some("Showing the first 2000 of 2001 lines.")
+    );
 }

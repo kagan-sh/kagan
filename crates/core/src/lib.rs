@@ -18,7 +18,7 @@ mod workspace;
 
 pub use dispatch::ui::{UiDispatch, UiJob};
 pub use kg_terminal::{Ansi, Cell, Color, Cursor, Grid, Motion, Mouse, Weight};
-pub use preview::{human_size, image_size};
+pub use preview::{human_size, image_size, preview_note};
 pub use settings::keys::{host_os, parse_key};
 pub use update::{Target, Updater};
 pub use workspace::approval::{Approval, Requester};

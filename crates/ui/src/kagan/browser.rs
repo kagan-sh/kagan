@@ -217,7 +217,7 @@ pub(super) fn page_url(typed: &str) -> Option<url::Url> {
         .filter(|url| is_web(url.as_str()))
 }
 
-fn is_web(url: &str) -> bool {
+pub(super) fn is_web(url: &str) -> bool {
     url::Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
 }
 
