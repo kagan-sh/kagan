@@ -19,16 +19,13 @@ use crate::theme::{Tone, TypeScale as _};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// The strip's height closed. A layout constant, like the rail's 48 points.
 const HEIGHT: f32 = 28.;
-/// The most the log keeps. It lives in memory and is gone when kagan quits.
 const KEEP: usize = 100;
 /// The rows the log shows, newest last.
 const ROWS: u16 = 7;
 const ROW: f32 = 20.;
 const DOT: f32 = 6.;
 
-/// The strip's own state: whether it is open, and the log it keeps.
 pub(super) struct Strip {
     focus: FocusHandle,
     open: bool,
@@ -115,7 +112,6 @@ impl Strip {
         }
     }
 
-    /// The rows the log shows: the last `ROWS`, oldest first.
     fn tail(&self) -> Vec<(u64, SharedString)> {
         self.lines
             .iter()
@@ -150,7 +146,6 @@ pub(super) fn watch(cx: &mut Context<Kagan>) -> Subscription {
 }
 
 impl Kagan {
-    /// A turn started or ended in a thread's log.
     pub(super) fn saw_turn(&mut self, event: &Event, cx: &App) {
         let title = title_of(&event.thread_id, cx);
         self.activity.turn(event, &title);
@@ -302,7 +297,7 @@ impl Kagan {
             .children(install_part)
     }
 
-    /// The strip across the bottom of the window. It takes height only, never the columns' widths.
+    /// Takes height only, never a column's width.
     pub(super) fn activity_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let working = Workspace::global(cx).read(cx).busy_threads(cx);
         let needs = self.needs_you(cx);
