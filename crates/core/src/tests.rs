@@ -7099,6 +7099,19 @@ async fn remove_project_asks_and_keeps_the_folder(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn a_browser_command_needs_a_window(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let status = Op::Browser(kg_domain::BrowserOp::Status {
+        thread_id: ThreadId("thr_browser".into()),
+    });
+    assert!(!crate::dispatch::serialized(&status));
+    assert!(matches!(
+        op(status, cx).await,
+        Err(OpError::Failed(message)) if message == UI_UNAVAILABLE
+    ));
+}
+
+#[gpui_kit::test]
 async fn a_serialized_request_runs_while_a_removal_waits_for_a_person(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let remove = Op::Project(ProjectOp::Remove {

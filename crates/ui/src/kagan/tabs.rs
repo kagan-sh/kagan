@@ -111,13 +111,22 @@ impl Kagan {
                 thread: thread.clone(),
                 ..Tabs::default()
             };
-            self.browser.close(window, cx);
+            self.browser.leave_thread(window, cx);
             if self
                 .right_tab
                 .as_deref()
                 .is_some_and(|tab| tab == BROWSER || terminal_number(tab).is_some())
             {
                 self.right_tab = None;
+            }
+            // A thread's page outlives the switch; the tab comes back with the thread.
+            if self
+                .tabs
+                .thread
+                .as_ref()
+                .is_some_and(|id| self.browser.owner() == Some(id))
+            {
+                self.tabs.browser = true;
             }
             self.load_local_link(cx);
         }

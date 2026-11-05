@@ -123,8 +123,12 @@ What an agent remembers of a thread's program: what was said and done. Kagan giv
 _Avoid_: Session, chat
 
 **Browser**:
-A tab of the right sidebar that shows one web page on macOS and Windows. Plugins cannot use it.
+A tab of the right sidebar that shows one web page on macOS and Windows. A thread's agent can drive it with `kg browser`. Plugins cannot use it.
 _Avoid_: Web view, preview, embedded browser
+
+**Browser session**:
+The page a thread drives through `kg browser`: one per window, owned by one thread, ending on Stop agent, `kg browser close`, its tab, or kagan quitting.
+_Avoid_: Automation, headless browser
 
 **Panel**:
 A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, the Browser, extra terminals, and a + that opens one of them.
@@ -199,5 +203,8 @@ Sandbox	thread/agent.rs	--sandbox	Cursor Agent's own flag name
 Session	thread/conversation.rs	"--	Claude Code's own flag names
 Session	*	--session-id	Claude Code's own flag name
 Session	*	--new-session-id	Cursor Agent's own flag name
+Session	docs/behaviour.md	browser session	browser session is the CONTEXT term for the page a thread drives
+Session	book/src/window.md	browser session	browser session is the CONTEXT term for the page a thread drives
+Session	crates/ui/src/kagan/browser/agent.rs	browser session	browser session is the CONTEXT term for the page a thread drives
 Chat	thread/agent.rs	create-chat	Cursor Agent's own subcommand
 ```

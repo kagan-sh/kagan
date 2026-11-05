@@ -74,6 +74,9 @@ pub enum Op {
     /// Native window for QA and agents
     #[command(subcommand)]
     Ui(UiOp),
+    /// The Browser tab's page, driven by this thread
+    #[command(subcommand)]
+    Browser(BrowserOp),
     /// A thread environment's diff. Reads git and never writes the worktree.
     #[command(subcommand)]
     Diff(DiffOp),
@@ -966,6 +969,109 @@ pub enum DropSide {
     Bottom,
 }
 
+/// What a thread may do with the Browser tab's one page.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
+#[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
+pub enum BrowserOp {
+    /// Give this thread the Browser tab's page and load a URL
+    Open {
+        url: String,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// The page this thread drives: thread, url, title, and whether the tab is drawn
+    Status {
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Controls and text on the page, each control with a ref for the next command
+    Snapshot {
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Load another URL in the page
+    Goto {
+        url: String,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Go back in the page's history
+    Back {
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Go forward in the page's history
+    Forward {
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Load the page again
+    Reload {
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Stop driving; the page stays as the person's
+    Close {
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+}
+
+impl BrowserOp {
+    /// The thread that must own the page this verb reaches.
+    #[must_use]
+    pub fn thread(&self) -> &ThreadId {
+        match self {
+            Self::Open { thread_id, .. }
+            | Self::Status { thread_id }
+            | Self::Snapshot { thread_id }
+            | Self::Goto { thread_id, .. }
+            | Self::Back { thread_id }
+            | Self::Forward { thread_id }
+            | Self::Reload { thread_id }
+            | Self::Close { thread_id } => thread_id,
+        }
+    }
+}
+
+/// The page a thread drives, as `open` and `status` report it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserView {
+    pub thread_id: ThreadId,
+    pub thread: String,
+    pub url: String,
+    pub title: String,
+    /// Whether the driven page is the tab on screen.
+    pub shown: bool,
+}
+
+/// Controls and text read from the page. Text is what a person can read on it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserSnapshot {
+    pub url: String,
+    pub title: String,
+    pub controls: Vec<BrowserControl>,
+    pub text: String,
+    pub truncated: bool,
+}
+
+/// One control the snapshot found, with the ref the next command names it by.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserControl {
+    #[serde(rename = "ref")]
+    pub ref_id: u32,
+    pub role: String,
+    pub name: String,
+    /// Never a password's value.
+    pub value: Option<String>,
+    pub focused: bool,
+    pub disabled: bool,
+    pub checked: Option<bool>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 #[value(rename_all = "kebab-case")]
@@ -1807,6 +1913,8 @@ pub enum OpResult {
     Interactions(Vec<PendingInteraction>),
     Theme(ThemeSettings),
     Ui(UiSnapshot),
+    Browser(BrowserView),
+    BrowserSnapshot(BrowserSnapshot),
     Diff(crate::DiffList),
     DiffFile(crate::DiffFileView),
     Commits(Vec<crate::DiffCommit>),
@@ -2102,6 +2210,7 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
             .and_then(|()| search(op)),
         Op::Environment(op) => environment_thread(op),
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
+        Op::Browser(op) => plain(op.thread()).and_then(|()| browser_url(op)),
         Op::Guide { .. }
         | Op::Skill(_)
         | Op::Open
@@ -2232,6 +2341,15 @@ fn thread_ids(op: &ThreadOp) -> Vec<&ThreadId> {
         | ThreadOp::Tools { id, .. }
         | ThreadOp::CallTool { id, .. }
         | ThreadOp::Interactions { id, .. } => vec![id],
+    }
+}
+
+fn browser_url(op: &BrowserOp) -> Result<(), &'static str> {
+    match op {
+        BrowserOp::Open { url, .. } | BrowserOp::Goto { url, .. } if url.trim().is_empty() => {
+            Err("type a web address, such as example.com")
+        }
+        _ => Ok(()),
     }
 }
 

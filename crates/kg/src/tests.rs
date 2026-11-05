@@ -44,6 +44,90 @@ fn guide_names_every_command() {
 }
 
 #[test]
+fn cli_browser_verbs_parse_and_take_the_thread_from_the_environment() {
+    let thread = std::ffi::OsStr::new("thr_browser");
+    let _env = set_env("KG_THREAD_ID", thread);
+    let id = ThreadId("thr_browser".into());
+    assert_eq!(
+        parse(&["browser", "open", "example.com"]),
+        Op::Browser(kg_domain::BrowserOp::Open {
+            url: "example.com".into(),
+            thread_id: id.clone(),
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "status"]),
+        Op::Browser(kg_domain::BrowserOp::Status {
+            thread_id: id.clone()
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "snapshot"]),
+        Op::Browser(kg_domain::BrowserOp::Snapshot {
+            thread_id: id.clone()
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "goto", "https://example.org"]),
+        Op::Browser(kg_domain::BrowserOp::Goto {
+            url: "https://example.org".into(),
+            thread_id: id.clone(),
+        })
+    );
+    for (verb, want) in [
+        (
+            "back",
+            kg_domain::BrowserOp::Back {
+                thread_id: id.clone(),
+            },
+        ),
+        (
+            "forward",
+            kg_domain::BrowserOp::Forward {
+                thread_id: id.clone(),
+            },
+        ),
+        (
+            "reload",
+            kg_domain::BrowserOp::Reload {
+                thread_id: id.clone(),
+            },
+        ),
+        (
+            "close",
+            kg_domain::BrowserOp::Close {
+                thread_id: id.clone(),
+            },
+        ),
+    ] {
+        assert_eq!(parse(&["browser", verb]), Op::Browser(want), "{verb}");
+    }
+}
+
+#[test]
+fn cli_browser_text_omits_an_empty_title_and_text() {
+    let snapshot = kg_domain::BrowserSnapshot {
+        url: "https://example.com/login".into(),
+        title: String::new(),
+        controls: vec![kg_domain::BrowserControl {
+            ref_id: 2,
+            role: "textbox".into(),
+            name: "Email".into(),
+            value: Some("ada@example.com".into()),
+            focused: false,
+            disabled: false,
+            checked: None,
+        }],
+        text: String::new(),
+        truncated: false,
+    };
+    assert_eq!(
+        crate::cli::format_browser_snapshot(&snapshot),
+        "https://example.com/login\n[2] textbox \"Email\" value=\"ada@example.com\"\n"
+    );
+}
+
+#[test]
 fn kg_update_checks_and_reads_status_but_cannot_install() {
     assert_eq!(
         parse(&["update", "check"]),
