@@ -1,12 +1,17 @@
 //! The Browser tab's page, driven by a thread.
 
+use std::path::PathBuf;
+
 use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
 use super::ThreadId;
 
+/// The largest text a browser verb carries.
+const BROWSER_TEXT_MAX: usize = 1024 * 1024;
+
 /// What a thread may do with the Browser tab's one page.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Subcommand)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum BrowserOp {
     /// Give this thread the Browser tab's page and load a URL
@@ -46,6 +51,58 @@ pub enum BrowserOp {
         #[arg(env = "KG_THREAD_ID")]
         thread_id: ThreadId,
     },
+    /// Click the control with this ref
+    Click {
+        #[arg(value_name = "ref")]
+        #[serde(rename = "ref")]
+        ref_id: u32,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Set a control's text, or read it from --file
+    Fill {
+        #[arg(value_name = "ref")]
+        #[serde(rename = "ref")]
+        ref_id: u32,
+        /// The text. Omit it when `--file` is set
+        #[arg(required_unless_present = "file", conflicts_with = "file")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        /// Read the text from this path, or `-` for stdin
+        #[arg(long, value_name = "PATH")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        file: Option<PathBuf>,
+        #[arg(long, env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Insert text into the focused control
+    Type {
+        text: String,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Press enter, escape, tab, a letter, or an arrow
+    Press {
+        key: String,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Choose a <select> option by value or label
+    Select {
+        #[arg(value_name = "ref")]
+        #[serde(rename = "ref")]
+        ref_id: u32,
+        option: String,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
+    /// Scroll the page by dy pixels
+    Scroll {
+        #[arg(allow_hyphen_values = true)]
+        dy: f32,
+        #[arg(env = "KG_THREAD_ID")]
+        thread_id: ThreadId,
+    },
     /// Stop driving; the page stays as the person's
     Close {
         #[arg(env = "KG_THREAD_ID")]
@@ -65,6 +122,12 @@ impl BrowserOp {
             | Self::Back { thread_id }
             | Self::Forward { thread_id }
             | Self::Reload { thread_id }
+            | Self::Click { thread_id, .. }
+            | Self::Fill { thread_id, .. }
+            | Self::Type { thread_id, .. }
+            | Self::Press { thread_id, .. }
+            | Self::Select { thread_id, .. }
+            | Self::Scroll { thread_id, .. }
             | Self::Close { thread_id } => thread_id,
         }
     }
@@ -108,11 +171,32 @@ pub struct BrowserControl {
     pub checked: Option<bool>,
 }
 
-pub(super) fn browser_url(op: &BrowserOp) -> Result<(), &'static str> {
+pub(super) fn browser_check(op: &BrowserOp) -> Result<(), &'static str> {
     match op {
         BrowserOp::Open { url, .. } | BrowserOp::Goto { url, .. } if url.trim().is_empty() => {
             Err("type a web address, such as example.com")
         }
+        BrowserOp::Fill {
+            text: Some(_),
+            file: Some(_),
+            ..
+        } => Err("pass the text or --file, not both"),
+        BrowserOp::Fill {
+            text: None,
+            file: None,
+            ..
+        } => Err("pass the text or --file"),
+        BrowserOp::Fill {
+            text: Some(text), ..
+        }
+        | BrowserOp::Type { text, .. }
+            if text.len() > BROWSER_TEXT_MAX =>
+        {
+            Err("text is over 1 MiB")
+        }
+        BrowserOp::Type { text, .. } if text.is_empty() => Err("text must not be empty"),
+        BrowserOp::Press { key, .. } if key.trim().is_empty() => Err("key must not be empty"),
+        BrowserOp::Scroll { dy, .. } if !dy.is_finite() => Err("scroll must be a number"),
         _ => Ok(()),
     }
 }

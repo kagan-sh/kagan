@@ -930,6 +930,69 @@ fn a_browser_op_needs_a_plain_thread_and_a_web_address() {
         })),
         Ok(())
     );
+    let thread_id = || ThreadId("thr_1".into());
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Type {
+            text: String::new(),
+            thread_id: thread_id(),
+        })),
+        Err("text must not be empty")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Type {
+            text: "x".repeat(1024 * 1024 + 1),
+            thread_id: thread_id(),
+        })),
+        Err("text is over 1 MiB")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Fill {
+            ref_id: 1,
+            text: Some("x".into()),
+            file: Some("a".into()),
+            thread_id: thread_id(),
+        })),
+        Err("pass the text or --file, not both")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Fill {
+            ref_id: 1,
+            text: None,
+            file: None,
+            thread_id: thread_id(),
+        })),
+        Err("pass the text or --file")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Press {
+            key: " ".into(),
+            thread_id: thread_id(),
+        })),
+        Err("key must not be empty")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Scroll {
+            dy: f32::NAN,
+            thread_id: thread_id(),
+        })),
+        Err("scroll must be a number")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Click {
+            ref_id: 2,
+            thread_id: thread_id(),
+        })),
+        Ok(())
+    );
+    let fill = serde_json::to_value(Op::Browser(BrowserOp::Fill {
+        ref_id: 2,
+        text: Some("ada".into()),
+        file: None,
+        thread_id: thread_id(),
+    }))
+    .unwrap();
+    assert_eq!(fill["browser"]["fill"]["ref"], 2);
+    assert!(fill["browser"]["fill"].get("refId").is_none());
 }
 
 #[test]

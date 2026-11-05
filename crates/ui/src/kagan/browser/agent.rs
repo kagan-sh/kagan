@@ -38,6 +38,12 @@ pub(crate) async fn run(op: BrowserOp, cx: &mut AsyncApp) -> Result<OpResult, Op
         BrowserOp::Back { thread_id } => history(&kagan, handle, &thread_id, true, cx),
         BrowserOp::Forward { thread_id } => history(&kagan, handle, &thread_id, false, cx),
         BrowserOp::Reload { thread_id } => reload(&kagan, handle, &thread_id, cx).await,
+        op @ (BrowserOp::Click { .. }
+        | BrowserOp::Fill { .. }
+        | BrowserOp::Type { .. }
+        | BrowserOp::Press { .. }
+        | BrowserOp::Select { .. }
+        | BrowserOp::Scroll { .. }) => act(&kagan, handle, op, cx).await,
         BrowserOp::Close { thread_id } => close(&kagan, handle, &thread_id, cx),
     }
 }
@@ -178,6 +184,22 @@ fn close(
     Ok(OpResult::Done)
 }
 
+async fn act(
+    kagan: &Entity<Kagan>,
+    handle: AnyWindowHandle,
+    op: BrowserOp,
+    cx: &mut AsyncApp,
+) -> Result<OpResult, OpError> {
+    let page = on_window(kagan, handle, cx, |kagan, window, cx| {
+        kagan.require(op.thread(), Instant::now(), window, cx)
+    })??;
+    let script = super::act::script(&op).map_err(OpError::Invalid)?;
+    let text = evaluate(&page, &script, handle, WAIT, cx).await?;
+    let _ = parse_info(&text)?;
+    touch(kagan, handle, &page, cx)?;
+    Ok(OpResult::Done)
+}
+
 fn on_window<R>(
     kagan: &Entity<Kagan>,
     handle: AnyWindowHandle,
@@ -193,7 +215,7 @@ fn on_window<R>(
 /// Runs one host script in the page and waits for its JSON reply.
 async fn evaluate(
     page: &Entity<WebPage>,
-    script: &'static str,
+    script: &str,
     handle: AnyWindowHandle,
     wait: Duration,
     cx: &mut AsyncApp,

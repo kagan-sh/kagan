@@ -31,6 +31,8 @@ use gpui_kit::component::h_flex;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::web_page::WebPage;
 
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+pub(super) mod act;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) mod agent;
 #[cfg(any(test, target_os = "macos", target_os = "windows"))]
