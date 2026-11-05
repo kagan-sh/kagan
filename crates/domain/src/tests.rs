@@ -483,6 +483,20 @@ fn a_theme_can_carry_syntax_colors_per_mode() {
 }
 
 #[test]
+fn a_zed_theme_with_null_fields_parses() {
+    let light = r##"{"name":"Zed one light","appearance":"light","style":{
+        "syntax":{"attribute":{"color":"#74ade8","font_style":null,"font_weight":null},
+                  "keyword":{"color":null}},
+        "panel.focused_border":null,"editor.background":"#ffffff"}}"##;
+    let text = theme_file(&format!(r#","highlight":{{"light":{light}}}"#));
+    let file = crate::ThemeFile::parse(text.as_bytes()).unwrap();
+    assert_eq!(
+        file.highlight.as_ref().unwrap().light.as_ref().unwrap()["name"],
+        "Zed one light"
+    );
+}
+
+#[test]
 fn a_bad_highlight_is_refused_with_its_field() {
     for (highlight, want) in [
         (

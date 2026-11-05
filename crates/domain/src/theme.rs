@@ -256,11 +256,13 @@ fn check_highlight(field: &str, value: &serde_json::Value) -> Result<(), ThemeFi
             return Err(bad(format!("{field} must be an object")));
         };
         if let Some(color) = token.get("color")
+            && !color.is_null()
             && !is_hex(color)
         {
             return Err(bad(format!("{field}.color must be a {COLOR} color")));
         }
         if let Some(font) = token.get("font_style")
+            && !font.is_null()
             && !matches!(font.as_str(), Some("normal" | "italic" | "underline"))
         {
             return Err(bad(format!(
@@ -268,6 +270,7 @@ fn check_highlight(field: &str, value: &serde_json::Value) -> Result<(), ThemeFi
             )));
         }
         if let Some(weight) = token.get("font_weight")
+            && !weight.is_null()
             && !matches!(
                 weight.as_u64(),
                 Some(100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900)
@@ -279,7 +282,7 @@ fn check_highlight(field: &str, value: &serde_json::Value) -> Result<(), ThemeFi
         }
     }
     for (name, color) in style {
-        if name != "syntax" && !is_hex(color) {
+        if name != "syntax" && !color.is_null() && !is_hex(color) {
             return Err(bad(format!("{field}.style.{name} must be a {COLOR} color")));
         }
     }
