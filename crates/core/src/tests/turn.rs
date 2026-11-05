@@ -667,6 +667,7 @@ async fn a_program_that_sets_no_spinner_title_is_never_busy(cx: &mut TestAppCont
     assert_eq!(busy_and_unread(&id, cx), (false, false));
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn an_unknown_answer_option_leaves_the_question_open(cx: &mut TestAppContext) {
     let (fixture, id) = sleeping(cx).await;
@@ -692,6 +693,7 @@ async fn an_unknown_answer_option_leaves_the_question_open(cx: &mut TestAppConte
     }));
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn answering_the_same_question_twice_is_not_found(cx: &mut TestAppContext) {
     let (_fixture, id) = sleeping(cx).await;

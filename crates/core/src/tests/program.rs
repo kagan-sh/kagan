@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use super::fake_program;
 
 #[test]
