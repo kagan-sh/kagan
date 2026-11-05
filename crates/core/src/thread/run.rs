@@ -41,7 +41,7 @@ pub(crate) fn resolve_program(
         crate::host::program::search_path(environment).as_deref(),
         pathext().as_deref(),
     )
-    .ok_or_else(|| ResolveError::NotFound(name))?;
+    .ok_or(ResolveError::NotFound(name))?;
     Ok(ResolvedProgram {
         path: found,
         args: args.into_iter().map(OsString::from).collect(),
