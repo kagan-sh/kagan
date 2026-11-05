@@ -281,7 +281,7 @@ pub(crate) fn extend(module: HostModule, plugin: &PluginId) -> HostModule {
     let declarations = format!(
         "{}\n{}",
         module.declared().unwrap_or(""),
-        include_str!("../assets/host.d.ts")
+        include_str!("../../assets/host.d.ts")
     );
     let module = context_functions(module.declarations(declarations), plugin);
     let panels = plugin.clone();

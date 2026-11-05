@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::io::Read as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use gpui_kit::{AppContext as _, AsyncApp, Entity};
 use kg_domain::{IndexEntry, IndexOp, Listing, OpError, OpResult};
@@ -122,20 +122,33 @@ pub(crate) fn names_an_index(source: &str) -> bool {
     !source.starts_with("git:") && Path::new(source).is_relative()
 }
 
+/// Why the saved index list cannot be read.
+#[derive(Clone, Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("{path}: {message}", path = .path.display())]
+    Read { path: PathBuf, message: String },
+    #[error("{path}: {message}", path = .path.display())]
+    Parse { path: PathBuf, message: String },
+}
+
 /// The saved index locations. A missing file is no indexes; a file that cannot be read is an
 /// error, so nothing saves over it.
-pub(crate) fn load(data_dir: &Path) -> std::result::Result<Vec<String>, String> {
+pub(crate) fn load(data_dir: &Path) -> std::result::Result<Vec<String>, Error> {
     let path = data_dir.join(SAVED);
     match std::fs::read_to_string(&path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
-        Err(error) => Err(format!("{}: {error}", path.display())),
-        Ok(text) => {
-            serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))
-        }
+        Err(source) => Err(Error::Read {
+            path,
+            message: source.to_string(),
+        }),
+        Ok(text) => serde_json::from_str(&text).map_err(|source| Error::Parse {
+            path,
+            message: source.to_string(),
+        }),
     }
 }
 
-pub(crate) fn locations(saved: &std::result::Result<Vec<String>, String>) -> Result<Vec<String>> {
+pub(crate) fn locations(saved: &std::result::Result<Vec<String>, Error>) -> Result<Vec<String>> {
     saved.clone().map_err(|error| {
         OpError::Failed(format!(
             "the list of indexes cannot be read; fix or delete it: {error}"
@@ -269,7 +282,7 @@ pub(crate) fn parse(text: &str, folder: Option<&Path>) -> Result<(String, Vec<In
 
 /// A name the indexes list becomes that listing's source and `--plugin`; another source stays.
 pub(crate) fn resolve(
-    indexes: &std::result::Result<Vec<String>, String>,
+    indexes: &std::result::Result<Vec<String>, Error>,
     source: String,
     plugin: Option<String>,
     stop: &async_channel::Receiver<()>,
@@ -372,7 +385,7 @@ pub(crate) async fn run(
                 saved.remove(at);
             }
         }
-        if host.indexes.as_ref() != Ok(&saved) {
+        if host.indexes.as_ref().ok().map(Vec::as_slice) != Some(saved.as_slice()) {
             save(&host.data_dir, &saved)?;
             host.indexes = Ok(saved.clone());
             cx.notify();
@@ -417,4 +430,18 @@ pub(crate) async fn search(
         })
         .await;
     Ok(OpResult::Listings { listings, warnings })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Error, SAVED, load};
+
+    #[test]
+    fn an_unreadable_saved_list_is_a_typed_error_naming_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(SAVED), "{").unwrap();
+        let error = load(dir.path()).unwrap_err();
+        assert!(matches!(&error, Error::Parse { .. }), "{error}");
+        assert!(error.to_string().contains("indexes.json"), "{error}");
+    }
 }

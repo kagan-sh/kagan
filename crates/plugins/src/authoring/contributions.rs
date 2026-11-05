@@ -22,6 +22,41 @@ pub struct Contributions {
     pub(crate) file_opener: Option<IgnoredAny>,
 }
 
+/// Why a manifest's UI contributions cannot be used.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error(
+        "panel {0} must be placed left, right or center: bottom panels are not in this version of kagan"
+    )]
+    BottomPanel(String),
+    #[error("panel {0} needs a plain title")]
+    PlainTitle(String),
+    #[error("panel {0} replaces threads, so it must be placed left")]
+    ReplacesThreads(String),
+    #[error("panel {0} replaces review, so it must be placed center")]
+    ReplacesReview(String),
+    #[error("only one panel may replace {0}")]
+    OneReplacement(&'static str),
+    #[error(
+        "ui.thread-list is not in this version of kagan; declare a left panel with \"replaces\": \"threads\""
+    )]
+    ThreadList,
+    #[error("ui.{0} is not in this version of kagan; remove it")]
+    Spot(&'static str),
+    #[error("UI contribution id {0:?} is blank, repeated or contains control characters")]
+    BlankId(String),
+    #[error("panel {0} uses a view, so store belongs on WebView.store(true)")]
+    StoreOnView(String),
+    #[error("panel {0} is a web panel, so it cannot replace a host slot")]
+    WebReplaces(String),
+    #[error("panel {0} needs a view or a web page, and not both")]
+    Body(String),
+    #[error("web {0:?} must be an .html file inside the plugin")]
+    WebShape(String),
+    #[error("UI view {0:?} must name an exported class")]
+    ViewShape(String),
+}
+
 /// One thing a plugin can add. The ids are the `ui` keys on [`Contributions`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Capability {
@@ -93,41 +128,32 @@ pub enum Follows {
 }
 
 impl Contributions {
-    pub(crate) fn check(&self) -> Result<(), String> {
+    pub(crate) fn check(&self) -> Result<(), Error> {
         self.check_spots()?;
         self.check_panels()?;
         self.check_views()
     }
 
-    fn check_panels(&self) -> Result<(), String> {
+    fn check_panels(&self) -> Result<(), Error> {
         let mut ids = BTreeSet::new();
         for panel in &self.panels {
             check_id(&panel.id, &mut ids)?;
             if matches!(panel.placement, Placement::Bottom) {
-                return Err(format!(
-                    "panel {} must be placed left, right or center: bottom panels are not in this version of kagan",
-                    panel.id
-                ));
+                return Err(Error::BottomPanel(panel.id.clone()));
             }
             check_body(panel)?;
             if panel.title.trim().is_empty() || panel.title.chars().any(char::is_control) {
-                return Err(format!("panel {} needs a plain title", panel.id));
+                return Err(Error::PlainTitle(panel.id.clone()));
             }
             match (panel.replaces, panel.placement) {
                 (Some(Slot::Threads), Placement::Left)
                 | (Some(Slot::Review), Placement::Center)
                 | (None, _) => {}
                 (Some(Slot::Threads), _) => {
-                    return Err(format!(
-                        "panel {} replaces threads, so it must be placed left",
-                        panel.id
-                    ));
+                    return Err(Error::ReplacesThreads(panel.id.clone()));
                 }
                 (Some(Slot::Review), _) => {
-                    return Err(format!(
-                        "panel {} replaces review, so it must be placed center",
-                        panel.id
-                    ));
+                    return Err(Error::ReplacesReview(panel.id.clone()));
                 }
             }
         }
@@ -139,7 +165,7 @@ impl Contributions {
                 .count()
                 > 1
             {
-                return Err(format!("only one panel may replace {}", slot.id()));
+                return Err(Error::OneReplacement(slot.id()));
             }
         }
         Ok(())
@@ -155,7 +181,7 @@ impl Contributions {
 
     /// The spots kagan does not draw yet. A manifest that declares one is refused, so a plugin never
     /// loads as if its spot worked.
-    fn check_spots(&self) -> Result<(), String> {
+    fn check_spots(&self) -> Result<(), Error> {
         let spots = [
             ("toolbar", !self.toolbar.is_empty()),
             ("status-bar", !self.status_bar.is_empty()),
@@ -164,18 +190,13 @@ impl Contributions {
             ("file-opener", self.file_opener.is_some()),
         ];
         match spots.iter().find(|(_, declared)| *declared) {
-            Some(("thread-list", _)) => Err(
-                "ui.thread-list is not in this version of kagan; declare a left panel with \"replaces\": \"threads\""
-                    .into(),
-            ),
-            Some((spot, _)) => Err(format!(
-                "ui.{spot} is not in this version of kagan; remove it"
-            )),
+            Some(("thread-list", _)) => Err(Error::ThreadList),
+            Some((spot, _)) => Err(Error::Spot(spot)),
             None => Ok(()),
         }
     }
 
-    fn check_views(&self) -> Result<(), String> {
+    fn check_views(&self) -> Result<(), Error> {
         for view in [&self.settings, &self.overlay].into_iter().flatten() {
             check_view(view)?;
         }
@@ -183,43 +204,32 @@ impl Contributions {
     }
 }
 
-fn check_id<'a>(id: &'a str, ids: &mut BTreeSet<&'a str>) -> Result<(), String> {
+fn check_id<'a>(id: &'a str, ids: &mut BTreeSet<&'a str>) -> Result<(), Error> {
     if id.trim().is_empty() || id.chars().any(char::is_control) || !ids.insert(id) {
-        return Err(format!(
-            "UI contribution id {id:?} is blank, repeated or contains control characters"
-        ));
+        return Err(Error::BlankId(id.to_owned()));
     }
     Ok(())
 }
 
-fn check_body(panel: &PanelContribution) -> Result<(), String> {
+fn check_body(panel: &PanelContribution) -> Result<(), Error> {
     match (panel.view.as_deref(), panel.web.as_deref()) {
         (Some(view), None) => {
             if panel.store {
-                return Err(format!(
-                    "panel {} uses a view, so store belongs on WebView.store(true)",
-                    panel.id
-                ));
+                return Err(Error::StoreOnView(panel.id.clone()));
             }
             check_view(view)
         }
         (None, Some(web)) => {
             if panel.replaces.is_some() {
-                return Err(format!(
-                    "panel {} is a web panel, so it cannot replace a host slot",
-                    panel.id
-                ));
+                return Err(Error::WebReplaces(panel.id.clone()));
             }
             check_web(web)
         }
-        _ => Err(format!(
-            "panel {} needs a view or a web page, and not both",
-            panel.id
-        )),
+        _ => Err(Error::Body(panel.id.clone())),
     }
 }
 
-fn check_web(web: &str) -> Result<(), String> {
+fn check_web(web: &str) -> Result<(), Error> {
     let path = Path::new(web);
     if path
         .extension()
@@ -237,13 +247,11 @@ fn check_web(web: &str) -> Result<(), String> {
     {
         Ok(())
     } else {
-        Err(format!(
-            "web {web:?} must be an .html file inside the plugin"
-        ))
+        Err(Error::WebShape(web.to_owned()))
     }
 }
 
-fn check_view(view: &str) -> Result<(), String> {
+fn check_view(view: &str) -> Result<(), Error> {
     if view.is_empty()
         || !view.bytes().enumerate().all(|(ix, byte)| {
             byte.is_ascii_alphabetic()
@@ -252,7 +260,23 @@ fn check_view(view: &str) -> Result<(), String> {
                 || (ix > 0 && byte.is_ascii_digit())
         })
     {
-        return Err(format!("UI view {view:?} must name an exported class"));
+        return Err(Error::ViewShape(view.to_owned()));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Contributions, Error};
+
+    #[test]
+    fn a_refused_spot_is_a_typed_error() {
+        let contributions: Contributions = serde_json::from_str(r#"{"toolbar": [{}]}"#).unwrap();
+        let error = contributions.check().unwrap_err();
+        assert!(matches!(&error, Error::Spot("toolbar")), "{error}");
+        assert_eq!(
+            error.to_string(),
+            "ui.toolbar is not in this version of kagan; remove it"
+        );
+    }
 }
