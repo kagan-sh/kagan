@@ -12,9 +12,11 @@ use kg_domain::{
 
 use crate::kagan::changes::POLL;
 
+#[cfg(unix)]
+use super::notice_of;
 use super::{
-    add_project, approvals_waiting, click, focused_of, grid_text, hover_to, label, line, notice_of,
-    open, present, repo_thread, run_program, run_shell, selected_of, set_preference, shell, shows,
+    add_project, approvals_waiting, click, focused_of, grid_text, hover_to, label, line, open,
+    present, repo_thread, run_program, run_shell, selected_of, set_preference, shell, shows,
     thread_status, two_changes, value_of, wait_until,
 };
 

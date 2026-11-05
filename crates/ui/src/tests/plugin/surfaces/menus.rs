@@ -2,10 +2,9 @@ use std::path::Path;
 
 use gpui_kit::{AnyWindowHandle, TestAppContext};
 
-use super::{
-    height_of, install_pair, origin_x, origin_y, plugin_agent, use_environment, wait_for_plugin,
-    wide, width_of,
-};
+use super::{height_of, install_pair, origin_x, origin_y, use_environment, wide, width_of};
+#[cfg(unix)]
+use super::{plugin_agent, wait_for_plugin};
 use crate::tests::kagan::{
     click, label, open, open_with_plugins_then, run_shell, shows, thread_record, wait_until,
 };

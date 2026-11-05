@@ -23,5 +23,7 @@ pub(in crate::tests) use narrow::narrow;
 pub(in crate::tests) use open_close::{assert_replaced, emit_open, screen, set_mode};
 pub(in crate::tests) use pages::{origin_x, origin_y};
 pub(in crate::tests) use panels::set_plugin;
-pub(in crate::tests) use prompt::{plugin_agent, use_environment, wait_for_plugin};
+pub(in crate::tests) use prompt::use_environment;
+#[cfg(unix)]
+pub(in crate::tests) use prompt::{plugin_agent, wait_for_plugin};
 pub(in crate::tests) use rail::{THROWING_OVERLAY, TINT, TINT_OVERLAY};

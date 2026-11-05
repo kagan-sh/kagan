@@ -30,6 +30,7 @@ mod worktree;
 
 pub(in crate::tests) use approvals::approvals_waiting;
 pub(in crate::tests) use commands::{NAVIGATOR, run_navigator};
+#[cfg(unix)]
 pub(in crate::tests) use keys::notice_of;
 pub(in crate::tests) use marks::{install_navigator, plugin_log, wait_for_mark};
 pub(in crate::tests) use paint::{

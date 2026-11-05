@@ -11,11 +11,13 @@ use serde_json::{Value, json};
 use crate::PluginHostGlobal;
 
 use super::{
-    AREAS_PROBE, COMMAND_PROBE, ID, MAIN, RENAME_PROBE, THREAD, THREAD_OPS, THREADS_FORWARD, alive,
+    AREAS_PROBE, COMMAND_PROBE, ID, MAIN, RENAME_PROBE, THREAD, THREAD_OPS, THREADS_FORWARD,
     answered, call, call_and_approve, dispatched, forward, forwarded, forwarded_reply, forwarding,
     hides_agent, installed, installed_example, loaded, open, pick_worker, plugin_dir, probe_plugin,
-    real_call, run, sample_manifest, settled, shell, sleeping, start_tree, thread, write_plugin,
+    real_call, run, sample_manifest, settled, shell, sleeping, thread, write_plugin,
 };
+#[cfg(unix)]
+use super::{alive, start_tree};
 
 #[gpui_kit::test]
 fn settings_are_typed_by_the_manifest(cx: &mut TestAppContext) {
