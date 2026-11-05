@@ -153,7 +153,6 @@ pub struct ThemeFile {
     pub name: String,
     pub light: Palette,
     pub dark: Palette,
-    /// Zed-format syntax colors: GPUI Kit reads them, kagan keeps them opaque.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlight: Option<Highlight>,
 }

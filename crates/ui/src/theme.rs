@@ -82,7 +82,6 @@ fn palette(file: &ThemeFile, mode: ThemeMode) -> &Palette {
     }
 }
 
-/// The theme's own syntax colors in `mode`, else the GPUI default for that mode.
 fn highlight(file: &ThemeFile, mode: ThemeMode) -> Arc<HighlightTheme> {
     let chosen = file.highlight.as_ref().and_then(|highlight| match mode {
         ThemeMode::Light => highlight.light.as_ref(),
