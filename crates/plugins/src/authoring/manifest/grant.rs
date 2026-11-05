@@ -105,6 +105,7 @@ impl Grant {
                     write: mine.clipboard.write && theirs.clipboard.write,
                 },
                 areas: mine.areas.intersection(&theirs.areas).copied().collect(),
+                calls: mine.calls.intersection(&theirs.calls).cloned().collect(),
                 read: theirs
                     .read
                     .iter()
@@ -147,6 +148,7 @@ impl Grant {
             && (!new.clipboard.write || old.clipboard.write)
             && (!new.open_url || old.open_url)
             && new.areas.is_subset(&old.areas)
+            && new.calls.is_subset(&old.calls)
             && new
                 .read
                 .iter()
@@ -214,6 +216,9 @@ impl Grant {
         }
         for area in &powers.areas {
             lines.push(area.phrase().into());
+        }
+        for plugin in &powers.calls {
+            lines.push(format!("asks the {} plugin to do work for it", plugin.0));
         }
         for title in self.folders.values() {
             lines.push(format!("reads a folder you choose ({title})"));

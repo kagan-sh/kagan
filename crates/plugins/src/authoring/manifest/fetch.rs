@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use gpui_shell::HttpRequestGrant;
+use kg_domain::PluginId;
 use serde::{Deserialize, Serialize};
 
 /// The most loopback fetch entries a manifest may declare.
@@ -16,6 +17,7 @@ pub(crate) struct Powers {
     pub(crate) read: Vec<String>,
     #[serde(default, rename = "openUrl")]
     pub(crate) open_url: bool,
+    pub(crate) calls: BTreeSet<PluginId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

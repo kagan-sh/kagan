@@ -67,7 +67,7 @@ pub(crate) fn modules(
 /// `kagan/host`, always granted.
 pub(crate) fn host(id: &PluginId, values: Values) -> HostModule {
     let named = id.0.clone();
-    let (logged, read) = (id.clone(), id.clone());
+    let (logged, read, caller) = (id.clone(), id.clone(), id.clone());
     let Values { settings, secrets } = values;
     let hidden = secrets.clone();
     HostModule::new("kagan/host")
@@ -75,8 +75,13 @@ pub(crate) fn host(id: &PluginId, values: Values) -> HostModule {
             "export function pluginId(): string;\n\
              export function log(level: \"debug\" | \"info\" | \"warn\" | \"error\", message: string): void;\n\
              /** Each declared setting by key. A `secret` setting is its text, or null until a person sets it. */\n\
-             export function settings(): Record<string, unknown>;",
+             export function settings(): Record<string, unknown>;\n\
+             /** Runs `name`, which another plugin lists in its `exports`, and resolves to its reply. */\n\
+             export function call(plugin: string, name: string, input?: unknown): Promise<unknown>;",
         )
+        .async_function("call", move |arguments| {
+            crate::call::call(arguments, &caller)
+        })
         .function("pluginId", move |_| Ok(named.as_str().into()))
         .function("log", move |arguments| {
             write_log(&hidden, &logged, arguments)

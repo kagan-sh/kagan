@@ -174,6 +174,12 @@ _Avoid_: address bar, embedded browser
 A plugin panel whose body is an HTML file in the plugin folder. The page loads only that folder, talks to its plugin script, and uses the Workbench theme. `"store": true` keeps cookies and storage under the plugin data folder. `kg ui` can see the panel and cannot drive the page.
 _Avoid_: iframe, embedded browser, address bar
 
+**Export**:
+A function name a plugin lists in its `exports`, so another plugin may `call` it. Only listed names are reachable.
+
+**Call**:
+One plugin running another plugin's export through `call` in `kagan/host`. The caller lists the target in `powers.calls`, and the callee lists the name in `exports`.
+
 **Agent tool**:
 A function a plugin or kagan offers to agents in threads.
 _Avoid_: MCP tool (the transport, not the concept)

@@ -236,7 +236,7 @@ The provider on a thread is the program line that thread runs, such as `claude` 
 
 ## Plugin
 
-A plugin is a package installed from git that adds UI, commands, tools, or skills [CONTEXT]. A plugin's thread record omits the program line [docs:plugin-api]. There is no trust shortcut for a plugin an agent built [docs:self-extend]. This contract has no catalog and no marketplace command; install is a git link or a local folder [docs:self-extend] [book:plugins]. Decision 3 describes a later index and is not an Op here [decision 3]. A manifest with `"areas": ["audio"]` is refused as an unknown area [decision 42]. When loaded, its script reads its data folder as `process.dataDir` [decision 127].
+A plugin is a package installed from git that adds UI, commands, tools, or skills [CONTEXT]. A plugin's thread record omits the program line [docs:plugin-api]. There is no trust shortcut for a plugin an agent built [docs:self-extend]. This contract has no catalog and no marketplace command; install is a git link or a local folder [docs:self-extend] [book:plugins]. Decision 3 describes a later index and is not an Op here [decision 3]. A manifest with `"areas": ["audio"]` is refused as an unknown area [decision 42]. When loaded, its script reads its data folder as `process.dataDir` [decision 127]. A plugin calls another's `exports` only when the caller lists that plugin in `powers.calls` and the callee lists the name; the call waits at most 30 s [decision 155] [docs:plugin-api].
 
 ### `List`, `Logs`, `Types`
 

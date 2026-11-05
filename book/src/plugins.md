@@ -79,6 +79,10 @@ kg plugin use threads kagan
 
 [Keyboard shortcuts](keys.md#change-a-key) explains plugin keys. [Troubleshooting](troubleshooting.md#a-plugin-fails) covers logs and recovery.
 
+## Call another plugin
+
+A plugin can run a function another plugin offers. The caller lists the other plugin in `powers.calls`, and the install screen says it asks that plugin to do work. The other plugin lists the function name in `exports`. The caller then uses `call(plugin, name, input)` from `kagan/host`, and gets the reply as JSON. A call that is not approved, names a disabled plugin, or names a function that is not exported is refused. A call times out after 30 seconds. See decision 155.
+
 ## Thread events
 
 A plugin lists the events it wants in `kagan.json`. `thread.turn.started` fires when a program's title shows a spinner as its first character. `thread.turn.ended` fires when that spinner ends, or the program stops or exits during it. The end says `completed`, `interrupted`, or `failed`. Quitting does not write `thread.turn.ended`. A working mark later in the title, such as an hourglass after a plain prefix, does not start a turn. `thread.tool.started` fires when kagan hands an agent tool call to a plugin, and carries the tool's name and kagan's own id; `thread.tool.ended` fires when that call's reply lands, with the same id and `ok` or `error`. Neither event holds the input, the reply, an error text, or a plugin id.
