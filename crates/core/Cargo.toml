@@ -36,6 +36,7 @@ test = []
 workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 minisign = "=0.10.0"
 gpui-kit = { workspace = true, features = ["test-support"] }
 rusqlite.workspace = true

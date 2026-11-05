@@ -353,3 +353,25 @@ fn plugin_thread_metadata_is_separate_and_deleted_with_its_thread() {
     store.delete_thread(&thread.id, Timestamp(1), &[]).unwrap();
     assert_eq!(store.thread_metadata(&thread.id, &one).unwrap(), None);
 }
+
+#[test]
+fn owned_threads_reaches_every_lifecycle_descendant() {
+    let store = store();
+    store.put_thread(&thread("thr_parent", 1)).unwrap();
+    store
+        .put_thread(&owned("thr_child", "thr_parent", 2))
+        .unwrap();
+    store
+        .put_thread(&owned("thr_grandchild", "thr_child", 3))
+        .unwrap();
+    store.put_thread(&thread("thr_other", 4)).unwrap();
+
+    assert_eq!(
+        sorted(store.owned_threads(&id("thr_parent")).unwrap()),
+        sorted(vec![
+            id("thr_parent"),
+            id("thr_child"),
+            id("thr_grandchild"),
+        ])
+    );
+}

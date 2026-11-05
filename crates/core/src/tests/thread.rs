@@ -1197,3 +1197,24 @@ async fn a_stop_after_the_program_ended_records_nothing(cx: &mut TestAppContext)
     assert_eq!(kinds_of(&started.id, cx).await, before);
     assert_eq!(thread(&started.id, cx).await.status, ThreadStatus::Idle);
 }
+
+#[gpui_kit::test]
+async fn a_new_run_forgets_the_saved_screen_of_the_last_one(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.saved.insert((id.clone(), 1));
+    });
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
+        .await
+        .unwrap();
+
+    let saved = fixture
+        .workspace
+        .read_with(cx, |workspace, _| workspace.saved.clone());
+    assert!(!saved.iter().any(|(thread, _)| thread == &id));
+}

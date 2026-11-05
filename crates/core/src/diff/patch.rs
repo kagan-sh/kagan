@@ -301,3 +301,139 @@ fn hunk_starts(header: &str) -> (u32, u32) {
     }
     (old, new)
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::parse_numstat;
+
+    #[derive(Clone, Debug)]
+    enum Record {
+        Text {
+            added: u16,
+            removed: u16,
+            path: String,
+        },
+        Binary {
+            path: String,
+        },
+        Rename {
+            added: u16,
+            removed: u16,
+            old: String,
+            new: String,
+        },
+    }
+
+    fn path() -> impl Strategy<Value = String> {
+        "[A-Za-z0-9._/-]{1,20}"
+    }
+
+    fn record() -> impl Strategy<Value = Record> {
+        prop_oneof![
+            (0u16..1_000, 0u16..1_000, path()).prop_map(|(added, removed, path)| Record::Text {
+                added,
+                removed,
+                path,
+            }),
+            path().prop_map(|path| Record::Binary { path }),
+            (0u16..1_000, 0u16..1_000, path(), path()).prop_map(|(added, removed, old, new)| {
+                Record::Rename {
+                    added,
+                    removed,
+                    old,
+                    new,
+                }
+            }),
+        ]
+    }
+
+    fn render(record: &Record) -> (Vec<u8>, (String, u32, u32, bool)) {
+        match record {
+            Record::Text {
+                added,
+                removed,
+                path,
+            } => (
+                format!("{added}\t{removed}\t{path}\0").into_bytes(),
+                (path.clone(), u32::from(*added), u32::from(*removed), false),
+            ),
+            Record::Binary { path } => (
+                format!("-\t-\t{path}\0").into_bytes(),
+                (path.clone(), 0, 0, true),
+            ),
+            Record::Rename {
+                added,
+                removed,
+                old,
+                new,
+            } => (
+                format!("{added}\t{removed}\t\0{old}\0{new}\0").into_bytes(),
+                (new.clone(), u32::from(*added), u32::from(*removed), false),
+            ),
+        }
+    }
+
+    #[test]
+    fn read_side_keeps_a_file_at_the_limit_and_refuses_one_over() {
+        let limit = usize::try_from(super::FILE_LIMIT).expect("file limit fits in usize");
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path();
+        let git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .current_dir(root)
+                .args(args)
+                .status()
+                .expect("git");
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&["init", "-q"]);
+        std::fs::write(root.join("at.txt"), vec![b'a'; limit]).expect("write at");
+        std::fs::write(root.join("over.txt"), vec![b'a'; limit + 1]).expect("write over");
+        git(&["add", "."]);
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "files",
+        ]);
+
+        let (body, too_big, binary) = super::read_side(root, "HEAD", "at.txt").expect("at");
+        assert_eq!(body.map(|body| body.len()), Some(limit));
+        assert!(!too_big);
+        assert!(!binary);
+
+        let (body, too_big, binary) = super::read_side(root, "HEAD", "over.txt").expect("over");
+        assert_eq!(body, None);
+        assert!(too_big);
+        assert!(!binary);
+    }
+
+    proptest! {
+        #[test]
+        fn numstat_round_trips(records in prop::collection::vec(record(), 0..8)) {
+            let mut bytes = Vec::new();
+            let mut expected = Vec::new();
+            for record in &records {
+                let (rendered, stat) = render(record);
+                bytes.extend(rendered);
+                expected.push(stat);
+            }
+
+            let actual = parse_numstat(&bytes)
+                .into_iter()
+                .map(|stat| (stat.path, stat.added, stat.removed, stat.binary))
+                .collect::<Vec<_>>();
+            prop_assert_eq!(actual, expected);
+        }
+
+        #[test]
+        fn arbitrary_bytes_do_not_panic(bytes in prop::collection::vec(any::<u8>(), 0..256)) {
+            let _ = parse_numstat(&bytes);
+        }
+    }
+}

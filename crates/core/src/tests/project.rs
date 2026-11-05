@@ -668,3 +668,46 @@ async fn a_run_after_the_removal_began_is_refused(cx: &mut TestAppContext) {
     removing.await.unwrap();
     assert!(!folder.exists());
 }
+
+#[gpui_kit::test]
+async fn a_refresh_keeps_the_project_and_environment_entities(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (thread_id, _reap) = started(&fixture, program(), cx).await;
+    let environment_id = thread(&thread_id, cx)
+        .await
+        .environment_id
+        .expect("thread environment");
+    let before = fixture.workspace.read_with(cx, |workspace, _| {
+        (
+            workspace
+                .project(&fixture.project)
+                .map(gpui_kit::Entity::entity_id),
+            workspace
+                .environment(&environment_id)
+                .map(gpui_kit::Entity::entity_id),
+        )
+    });
+    assert!(before.0.is_some() && before.1.is_some());
+
+    op(
+        Op::Project(ProjectOp::Reorder {
+            id: fixture.project.clone(),
+            before: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+
+    let after = fixture.workspace.read_with(cx, |workspace, _| {
+        (
+            workspace
+                .project(&fixture.project)
+                .map(gpui_kit::Entity::entity_id),
+            workspace
+                .environment(&environment_id)
+                .map(gpui_kit::Entity::entity_id),
+        )
+    });
+    assert_eq!(before, after);
+}

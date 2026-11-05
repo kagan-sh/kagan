@@ -263,3 +263,100 @@ pub(super) fn is_unsafe_control(c: char) -> bool {
 pub(super) fn io_error(err: impl std::fmt::Display) -> io::Error {
     io::Error::other(err.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::{self, Write};
+    use std::sync::atomic::AtomicBool;
+
+    use proptest::prelude::*;
+
+    use super::write_bytes;
+
+    struct Chunks {
+        data: Vec<u8>,
+        chunk: usize,
+        first: Option<io::ErrorKind>,
+        flushed: bool,
+    }
+
+    impl Write for Chunks {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if let Some(kind) = self.first.take() {
+                return Err(io::Error::from(kind));
+            }
+            let n = buf.len().min(self.chunk);
+            self.data.extend_from_slice(&buf[..n]);
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushed = true;
+            Ok(())
+        }
+    }
+
+    fn write(writer: &mut Chunks, bytes: &[u8], stop: &AtomicBool) -> io::Result<()> {
+        #[cfg(unix)]
+        return write_bytes(writer, bytes, stop, None);
+        #[cfg(not(unix))]
+        write_bytes(writer, bytes, stop)
+    }
+
+    proptest! {
+        #[test]
+        fn every_byte_reaches_the_writer_in_any_chunk(
+            bytes in prop::collection::vec(any::<u8>(), 0..256),
+            chunk in 1usize..32,
+        ) {
+            let mut writer = Chunks {
+                data: Vec::new(),
+                chunk,
+                first: Some(io::ErrorKind::Interrupted),
+                flushed: false,
+            };
+            let stop = AtomicBool::new(false);
+            write(&mut writer, &bytes, &stop).expect("write");
+            prop_assert_eq!(writer.data, bytes);
+            prop_assert!(writer.flushed);
+        }
+    }
+
+    #[test]
+    fn a_writer_that_accepts_nothing_is_a_write_zero() {
+        let mut writer = Chunks {
+            data: Vec::new(),
+            chunk: 0,
+            first: None,
+            flushed: false,
+        };
+        let error = write(&mut writer, b"x", &AtomicBool::new(false)).expect_err("zero write");
+        assert_eq!(error.kind(), io::ErrorKind::WriteZero);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_closed_terminal_refuses_the_write() {
+        let mut writer = Chunks {
+            data: Vec::new(),
+            chunk: 4,
+            first: None,
+            flushed: false,
+        };
+        let error = write(&mut writer, b"x", &AtomicBool::new(true)).expect_err("closed");
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_blocked_write_is_retried() {
+        let mut writer = Chunks {
+            data: Vec::new(),
+            chunk: 4,
+            first: Some(io::ErrorKind::WouldBlock),
+            flushed: false,
+        };
+        write(&mut writer, b"hello", &AtomicBool::new(false)).expect("retry");
+        assert_eq!(writer.data, b"hello");
+    }
+}

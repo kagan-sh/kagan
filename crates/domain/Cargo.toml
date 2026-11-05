@@ -13,5 +13,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

@@ -1,4 +1,7 @@
+use gpui_kit::TestAppContext;
 use kg_domain::*;
+
+use super::{Fixture, program, started};
 
 #[test]
 fn a_data_dir_that_cannot_be_made_is_named() {
@@ -36,4 +39,14 @@ fn a_stop_waits_in_the_queue_and_a_run_does_not() {
             metadata: None,
         },
     ))));
+}
+
+#[gpui_kit::test]
+async fn the_workspace_lists_the_thread_records_it_loaded(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, program(), cx).await;
+    let records = fixture
+        .workspace
+        .read_with(cx, crate::Workspace::thread_records);
+    assert!(records.iter().any(|record| record.id == id));
 }

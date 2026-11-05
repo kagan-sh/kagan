@@ -212,3 +212,27 @@ impl Drop for Reap {
         }
     }
 }
+
+#[test]
+fn dropping_the_process_kills_a_background_grandchild() -> std::io::Result<()> {
+    let path = TempPath::new("drop-grandchild");
+    let process = Process::spawn(
+        tree_command(&path.0),
+        Stdio::null(),
+        Stdio::null(),
+        Stdio::null(),
+    )?;
+    let pid = read_pid(&path.0)?;
+    let _reap = Reap(pid);
+    drop(process);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while alive(pid) {
+        if Instant::now() >= deadline {
+            return Err(std::io::Error::other(format!(
+                "grandchild {pid} survived drop"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    Ok(())
+}

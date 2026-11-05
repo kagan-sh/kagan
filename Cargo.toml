@@ -19,6 +19,7 @@ kg-terminal = { path = "crates/terminal" }
 kg-ui = { path = "crates/ui" }
 
 anyhow = "=1.0.104"
+proptest = "=1.12.0"
 async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
 dunce = "=1.0.5"

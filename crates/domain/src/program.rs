@@ -121,6 +121,8 @@ pub fn split_program(line: &str) -> Result<(String, Vec<String>), SplitProgramEr
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::{SplitProgramError, split_program};
 
     #[test]
@@ -142,6 +144,28 @@ mod tests {
         );
         assert_eq!(split_program("  "), Err(SplitProgramError::Empty));
         assert_eq!(split_program("\"\""), Err(SplitProgramError::Empty));
+    }
+
+    proptest! {
+        #[test]
+        fn quoted_words_round_trip(words in prop::collection::vec("[^\"\\\\]{1,24}", 1..6)) {
+            let line = words
+                .iter()
+                .map(|word| format!("\"{word}\""))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let (name, args) = split_program(&line).expect("quoted words");
+            prop_assert_eq!(name, words[0].clone());
+            prop_assert_eq!(args, words[1..].to_vec());
+        }
+
+        #[test]
+        fn plain_words_round_trip(words in prop::collection::vec("[A-Za-z0-9._/:-]{1,24}", 1..6)) {
+            let line = words.join(" ");
+            let (name, args) = split_program(&line).expect("plain words");
+            prop_assert_eq!(name, words[0].clone());
+            prop_assert_eq!(args, words[1..].to_vec());
+        }
     }
 
     #[test]
