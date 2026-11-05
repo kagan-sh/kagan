@@ -1,6 +1,6 @@
 use gpui_kit::{App, Task};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use kg_domain::{InteractionOption, OpError, OpResult, PendingInteractionId, ThreadId};
 
 use crate::Requester;

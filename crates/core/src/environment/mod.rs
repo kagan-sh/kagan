@@ -7,7 +7,7 @@ use kg_domain::{
 };
 
 use crate::Workspace;
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::workspace::{closed, id, missing};
 
 mod maintenance;
@@ -391,7 +391,7 @@ fn provision(
         Provider::Project => {}
         Provider::Personal => std::fs::create_dir_all(&environment.path)?,
         Provider::Worktree => {
-            if !crate::git::is_repository(project) {
+            if !crate::host::git::is_repository(project) {
                 return Err(OpError::Invalid(format!(
                     "{} is not a git repository, so it has no worktree; run in the project folder instead (--environment project-default)",
                     project.display()
@@ -402,16 +402,16 @@ fn provision(
                 .branch
                 .clone()
                 .ok_or_else(|| OpError::Invalid("worktree has no branch".into()))?;
-            if !crate::git::valid_branch(&requested) {
+            if !crate::host::git::valid_branch(&requested) {
                 return Err(
                     OpError::Invalid(format!("branch name {requested} is not allowed")).into(),
                 );
             }
-            let branches = crate::git::branch_list(project)?;
+            let branches = crate::host::git::branch_list(project)?;
             if let Some(base) = environment.base_branch.as_deref() {
                 // A branch, or a commit when HEAD is detached.
                 let known = branches.names.iter().any(|name| name == base)
-                    || crate::git::git(
+                    || crate::host::git::git(
                         project,
                         &[
                             "rev-parse",
@@ -421,7 +421,7 @@ fn provision(
                         ],
                     )
                     .is_ok();
-                if !crate::git::valid_branch(base) || !known {
+                if !crate::host::git::valid_branch(base) || !known {
                     return Err(OpError::Invalid(format!(
                         "base {base} is not a branch or commit in this repository"
                     ))
@@ -488,17 +488,17 @@ fn git(project: &Path, args: &[&str], path: Option<&Path>, trailing: Option<&str
         owned.push(trailing.to_owned());
     }
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    crate::git::git(project, &refs).map(|_| ())
+    crate::host::git::git(project, &refs).map(|_| ())
 }
 
 fn unique_branch(project: &Path, name: &str) -> Result<String> {
-    let names = crate::git::branch_list(project)?.names;
+    let names = crate::host::git::branch_list(project)?.names;
     if !names.iter().any(|branch| branch == name) {
         return Ok(name.to_owned());
     }
     for suffix in 2..100 {
         let candidate = format!("{name}-{suffix}");
-        if crate::git::valid_branch(&candidate) && !names.contains(&candidate) {
+        if crate::host::git::valid_branch(&candidate) && !names.contains(&candidate) {
             return Ok(candidate);
         }
     }

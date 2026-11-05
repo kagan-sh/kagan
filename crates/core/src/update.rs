@@ -14,7 +14,7 @@ use minisign_verify::{PublicKey, Signature};
 use semver::Version;
 use serde::Deserialize;
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 pub use install::Target;
 
 pub(crate) const PREFERENCE: &str = "update-check";

@@ -4,7 +4,7 @@ use std::time::Duration;
 use gpui_kit::{App, Task};
 use kg_domain::{Op, OpError};
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 use super::{PluginDispatch, QUIT_DEADLINE, Workspace};
 
@@ -12,7 +12,7 @@ impl Workspace {
     pub fn set_plugin_host(&mut self, dispatch: PluginDispatch) {
         self.plugins = Some(dispatch);
     }
-    pub fn set_ui_driver(&mut self, dispatch: crate::ui::UiDispatch) {
+    pub fn set_ui_driver(&mut self, dispatch: crate::dispatch::ui::UiDispatch) {
         self.ui = Some(dispatch);
     }
     pub fn end_programs(&mut self) {

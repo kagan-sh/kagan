@@ -14,11 +14,13 @@ use kg_domain::{
 };
 use serde_json::Value;
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::{Environment, Project, Requester, Thread};
 
+pub(crate) mod approval;
 mod clock;
 mod data;
+pub(crate) mod entity;
 mod lifecycle;
 mod plugins;
 mod questions;
@@ -95,7 +97,7 @@ pub enum PluginRequest {
 pub type PluginDispatch = Rc<dyn Fn(PluginRequest, &mut App) -> Task<Result<OpResult>>>;
 
 pub struct Workspace {
-    pub(crate) approvals: BTreeMap<PendingInteractionId, crate::approval::Waiting>,
+    pub(crate) approvals: BTreeMap<PendingInteractionId, crate::workspace::approval::Waiting>,
     pub(crate) replies: BTreeMap<PendingInteractionId, Sender<String>>,
     pub(crate) for_a_person: BTreeSet<PendingInteractionId>,
     pub(crate) asks: BTreeMap<ThreadId, (PendingInteractionId, async_channel::Receiver<String>)>,
@@ -133,14 +135,14 @@ pub struct Workspace {
     keymap: kg_domain::Keymap,
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
-    pub(crate) program_environment: Option<crate::program::ProgramEnvironment>,
+    pub(crate) program_environment: Option<crate::host::program::ProgramEnvironment>,
     /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
     pub(crate) claude_config: Option<std::path::PathBuf>,
     /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
     pub(crate) codex_home: Option<std::path::PathBuf>,
     /// Where Cursor keeps its conversations, when a test has set it; None is `CURSOR_CONFIG_DIR`, `$XDG_CONFIG_HOME/cursor`, or `~/.cursor`
     pub(crate) cursor_config: Option<std::path::PathBuf>,
-    pub(crate) ui: Option<crate::ui::UiDispatch>,
+    pub(crate) ui: Option<crate::dispatch::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
     // Wall time at open plus executor time, so grace deadlines follow GPUI's test clock.
@@ -361,7 +363,7 @@ impl Workspace {
     /// PATH and the shell. A test calls this so its program list does not depend on the machine.
     #[cfg(any(test, feature = "test-support"))]
     pub fn use_program_environment(&mut self, path: &std::path::Path, shell: &std::path::Path) {
-        self.program_environment = Some(crate::program::ProgramEnvironment {
+        self.program_environment = Some(crate::host::program::ProgramEnvironment {
             path: path.as_os_str().to_owned(),
             shell: shell.as_os_str().to_owned(),
         });

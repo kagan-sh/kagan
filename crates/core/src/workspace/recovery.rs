@@ -1,7 +1,7 @@
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{OpResult, ThreadId};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::clock::{closed, now};
 use kg_store::Store;
 

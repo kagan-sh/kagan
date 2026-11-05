@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use gpui_kit::{AppContext as _, AsyncApp};
 use serde_json::json;
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 use super::{Known, SKILL_LINK, introduction, note_with, toml};
 

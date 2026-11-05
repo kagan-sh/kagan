@@ -28,7 +28,7 @@ pub(crate) use terminal::{Shown, release_ended};
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{OpError, OpResult, ThreadId, ThreadOp};
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::workspace::{closed, missing, time};
 use crate::{Requester, Thread, Workspace};
 

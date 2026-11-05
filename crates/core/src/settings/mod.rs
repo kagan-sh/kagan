@@ -1,9 +1,11 @@
+pub(crate) mod keys;
+
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
 use kg_domain::{
     KeymapAction, KeymapOp, OpError, OpResult, PreferenceOp, Slot, ThemeOp, ThemeSettings,
 };
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::workspace::closed;
 use crate::{PluginRequest, Workspace};
 
@@ -46,7 +48,7 @@ pub(crate) async fn theme(
             Ok(OpResult::Theme(settings))
         }
         ThemeOp::New { id, from } => {
-            crate::ui::drive(this, crate::UiJob::NewTheme { id, from }, cx).await
+            crate::dispatch::ui::drive(this, crate::UiJob::NewTheme { id, from }, cx).await
         }
         ThemeOp::Folder => {
             let dir = this
@@ -373,9 +375,9 @@ mod review_wrap_tests {
 
     #[test]
     fn guide_names_every_preference() {
-        let guide = include_str!("guide-map.md");
-        let behaviour = include_str!("../../../docs/behaviour.md");
-        let help = include_str!("../../domain/src/op.rs")
+        let guide = include_str!("../dispatch/guide-map.md");
+        let behaviour = include_str!("../../../../docs/behaviour.md");
+        let help = include_str!("../../../domain/src/op.rs")
             .lines()
             .find(|line| line.contains("Read or save a preference:"))
             .expect("the preference help in op.rs");

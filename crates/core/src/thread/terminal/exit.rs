@@ -4,7 +4,7 @@ use kg_domain::{
 };
 use kg_terminal::Exit;
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::closed;
 use crate::{Thread, Workspace};
 

@@ -4,7 +4,7 @@ use gpui_kit::{App, AsyncApp, Task, WeakEntity};
 use kg_domain::{OpError, OpResult, SurfaceOp, UI_UNAVAILABLE, UiOp};
 
 use crate::Workspace;
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::closed;
 
 #[derive(Clone, Debug)]

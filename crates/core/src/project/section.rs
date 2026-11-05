@@ -2,7 +2,7 @@ use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{OpError, OpResult, Section, SectionId, SectionOp};
 
 use crate::Workspace;
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::workspace::id;
 
 use crate::thread::thread;

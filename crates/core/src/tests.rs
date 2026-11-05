@@ -35,7 +35,7 @@ use serde_json::json;
 
 use crate::Workspace;
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 struct Fixture {
     dir: tempfile::TempDir,
@@ -1221,7 +1221,7 @@ impl GitTrack {
             permissions.set_mode(0o755);
             std::fs::set_permissions(&program, permissions).unwrap();
         }
-        crate::git::set_program(cwd, "git", Some(program));
+        crate::host::git::set_program(cwd, "git", Some(program));
         (
             log,
             Self {
@@ -1242,7 +1242,7 @@ fn which_git() -> std::path::PathBuf {
 
 impl Drop for GitTrack {
     fn drop(&mut self) {
-        crate::git::set_program(&self.cwd, "git", None);
+        crate::host::git::set_program(&self.cwd, "git", None);
     }
 }
 
@@ -1316,7 +1316,7 @@ fn queue_folder_write(
     cx: &mut TestAppContext,
     fixture: &Fixture,
     permit: std::sync::Arc<std::sync::Mutex<Option<u64>>>,
-) -> impl std::future::Future<Output = crate::database::Result<()>> + use<> {
+) -> impl std::future::Future<Output = crate::host::database::Result<()>> + use<> {
     fixture.workspace.read_with(cx, |workspace, _| {
         workspace.commit_plugin_config(
             PluginId("demo-plugin".into()),

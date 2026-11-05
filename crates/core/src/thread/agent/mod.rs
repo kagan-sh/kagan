@@ -5,7 +5,7 @@ use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
 use kg_domain::{EventKind, NoticeSeverity, OpResult, ThreadId};
 use serde_json::Value;
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::closed;
 use crate::{PluginRequest, SocketLocation, Workspace, skill};
 

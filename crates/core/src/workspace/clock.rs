@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::OpError;
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 
 use super::Workspace;
 

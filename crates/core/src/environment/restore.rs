@@ -6,7 +6,7 @@ use kg_domain::{
 };
 
 use crate::Workspace;
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{closed, missing};
 
 use super::{git, provision};
@@ -103,7 +103,7 @@ fn check_kept_worktree(
     others: &[Environment],
 ) -> Result<()> {
     let path = dunce::canonicalize(&environment.path)?;
-    let listed = crate::git::git(project, &["worktree", "list", "--porcelain"])?;
+    let listed = crate::host::git::git(project, &["worktree", "list", "--porcelain"])?;
     let is_worktree = listed
         .lines()
         .filter_map(|line| line.strip_prefix("worktree "))
@@ -129,7 +129,7 @@ fn check_kept_worktree(
         .branch
         .as_deref()
         .ok_or_else(|| OpError::Invalid("worktree has no branch".into()))?;
-    let head = crate::git::git(&path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let head = crate::host::git::git(&path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
     if head.trim() != recorded {
         return Err(OpError::Failed(format!(
             "the worktree is on {}, not {recorded}",

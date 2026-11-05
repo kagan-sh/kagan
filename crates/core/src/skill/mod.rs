@@ -6,7 +6,7 @@ use gpui_kit::{AppContext as _, AsyncApp, Entity, WeakEntity};
 use kg_domain::{OpError, OpResult, ProjectId, SkillOp, SkillSource};
 
 use crate::Workspace;
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{closed, missing};
 
 const BUNDLED: &[(&str, &str)] = &[

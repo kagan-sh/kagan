@@ -5,7 +5,7 @@ use gpui_kit::{AppContext, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EventKind, OpError, OpResult, SelectMode, ThreadId, ThreadOp, ThreadStatus};
 use kg_terminal::{Finished, Launch, Terminal};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{closed, missing};
 use crate::{Thread, Workspace, WorkspaceEvent};
 
@@ -95,7 +95,7 @@ async fn spawn(
     start: Start,
     cx: &mut AsyncApp,
 ) -> Result<Terminal> {
-    let environment = crate::program::program_environment_of(this, cx);
+    let environment = crate::host::program::program_environment_of(this, cx);
     let program = resolve_program(&record.provider, environment.as_ref())
         .map_err(|error| OpError::Invalid(error.to_string()))?;
     let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;

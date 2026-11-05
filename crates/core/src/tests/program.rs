@@ -68,7 +68,7 @@ fn a_program_with_a_bad_quote_or_no_name_is_refused() {
 fn the_program_list_finds_known_agents_and_defaults_to_the_first_installed() {
     let dir = tempfile::tempdir().unwrap();
     fake_program(dir.path(), "claude", "echo 'claude 9.9.9 (test)'");
-    let list = crate::program::discover(
+    let list = crate::host::program::discover(
         Some(dir.path().as_os_str()),
         None,
         Some(std::ffi::OsStr::new("/bin/sh")),
@@ -108,7 +108,7 @@ fn the_newest_installed_recent_program_is_the_default() {
     let dir = tempfile::tempdir().unwrap();
     fake_program(dir.path(), "claude", "true");
     fake_program(dir.path(), "tool", "true");
-    let list = crate::program::discover(
+    let list = crate::host::program::discover(
         Some(dir.path().as_os_str()),
         None,
         None,
@@ -124,8 +124,8 @@ fn only_installed_known_agents_get_a_version() {
     fake_program(dir.path(), "claude", "echo 'claude 9.9.9 (test)'");
     fake_program(dir.path(), "tool", "echo 'tool 1.0'");
     let mut list =
-        crate::program::discover(Some(dir.path().as_os_str()), None, None, &["tool".into()]);
-    crate::program::versions(&mut list);
+        crate::host::program::discover(Some(dir.path().as_os_str()), None, None, &["tool".into()]);
+    crate::host::program::versions(&mut list);
     let version = |command: &str| {
         list.programs
             .iter()

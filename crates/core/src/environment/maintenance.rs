@@ -7,7 +7,7 @@ use kg_domain::{
 };
 
 use crate::Workspace;
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{GRACE, closed, missing, time};
 
 use super::{git, personal, script};
@@ -353,7 +353,7 @@ pub(crate) fn removal_refusal(root: &Path, error: &OpError, next: &str) -> Strin
     if !raw.contains("modified or untracked") {
         return raw;
     }
-    let names = crate::git::git(root, &["status", "--porcelain", "-uall"])
+    let names = crate::host::git::git(root, &["status", "--porcelain", "-uall"])
         .ok()
         .map(|text| {
             text.lines()

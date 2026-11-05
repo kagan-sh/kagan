@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use kg_domain::OpError;
 use kg_store::Store;
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::clock::closed;
 
 fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {

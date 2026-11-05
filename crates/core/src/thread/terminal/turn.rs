@@ -3,7 +3,7 @@ use std::time::Instant;
 use gpui_kit::{App, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EventKind, ThreadId, TurnOutcome};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::closed;
 use crate::{Thread, Workspace, WorkspaceEvent};
 

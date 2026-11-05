@@ -5,7 +5,7 @@ pub(crate) fn read(chapter: Option<GuideChapter>) -> OpResult {
         None => {
             return OpResult::Text(format!(
                 "{}\n\nChapters: threads, projects, environments, plugins, skills, ui, json\nRead one with kg guide <chapter>.\n\n{}",
-                include_str!("../../../docs/CONTEXT.md"),
+                include_str!("../../../../docs/CONTEXT.md"),
                 include_str!("guide-map.md")
             ));
         }
@@ -21,15 +21,15 @@ pub(crate) fn read(chapter: Option<GuideChapter>) -> OpResult {
         Some(GuideChapter::Plugins) => {
             return OpResult::Text(format!(
                 "{}\n\n{}",
-                include_str!("../../../docs/plugin-api.md"),
-                include_str!("../../../docs/self-extend.md")
+                include_str!("../../../../docs/plugin-api.md"),
+                include_str!("../../../../docs/self-extend.md")
             ));
         }
         Some(GuideChapter::Skills) => {
             "A skill is a folder with SKILL.md: YAML frontmatter name (lowercase, hyphenated, matching the folder), description, and an optional one-line argument-hint, followed by instructions. Supporting files live beside it. Sources override in order: bundled, enabled plugin manifest skills, <dataDir>/skills, <project>/.kagan/skills. Duplicate names within one source are dropped and reported. Use kg skill list, show <name>, files <name>, new <name> [--project], add <path> [--project], remove <name>. Project context defaults to KG_PROJECT_ID. Only user and project skills can be removed. The tool list names each skill and its description. The agent loads instructions with the skill_load tool. claude and cursor-agent also receive the bundled skills from kagan's agent plugin. codex receives kg-threads from the thread folder."
         }
         Some(GuideChapter::Ui) => {
-            return OpResult::Text(include_str!("../../../docs/ui-driver.md").into());
+            return OpResult::Text(include_str!("../../../../docs/ui-driver.md").into());
         }
         Some(GuideChapter::Json) => {
             "Every command accepts --json. Results are the serialized OpResult for the running version, and every Op request uses kebab-case names and camelCase fields. Failures return {\"error\":{\"kind\":\"not-found|invalid|failed\",\"message\":\"...\"}} and a nonzero exit code. `hint` may be present. `kg thread paste --file` reads the file in the client and sends the text; a payload that still carries a path is invalid. kg status --json returns {\"status\":{\"threadId\",\"projectId\",\"environmentId\",\"cli\",\"dataDir\",\"warnings\"}}. cli is the absolute path of the kg that is serving this command. Leave KG_DATA_DIR unset to reach the open app. A KG_DATA_DIR without KG_SOCKET uses the socket for that folder, not the open app. In a thread KG_SOCKET is the open app's socket already; outside one, leave it unset so you reach the open app. If the socket does not answer, the command starts a second headless app, and you should stop. On macOS the open app's socket is ~/Library/Application Support/kagan/kg.sock when KG_DATA_DIR is unset, and the binary in /Applications is /Applications/kagan.app/Contents/MacOS/kg. That macOS build is unsigned and not notarized unless the Apple signing secrets are set. It does not add itself to PATH. A kg mcp process is not the app. --help is generated from the same typed operations that the app dispatches."
@@ -44,7 +44,7 @@ pub(crate) async fn status(
     project_id: Option<kg_domain::ProjectId>,
     environment_id: Option<kg_domain::EnvironmentId>,
     cx: &mut gpui_kit::AsyncApp,
-) -> crate::database::Result<OpResult> {
+) -> crate::host::database::Result<OpResult> {
     let (cli, data_dir) = this
         .update(cx, |workspace, _| {
             (workspace.cli.clone(), workspace.data_dir.clone())

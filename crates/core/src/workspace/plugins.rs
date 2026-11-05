@@ -5,7 +5,7 @@ use kg_domain::{Plugin, PluginId};
 use kg_store::Store;
 use serde_json::Value;
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 use super::Workspace;
 

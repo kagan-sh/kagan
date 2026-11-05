@@ -1,7 +1,7 @@
 use gpui_kit::{App, AppContext as _, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EnvironmentId, ProjectId, ThreadId};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::clock::{closed, time};
 use crate::workspace::screens::remember;
 use crate::{Environment, Project, Thread};

@@ -2,7 +2,7 @@ use kg_domain::{OpError, Skill, SkillSource};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::closed;
 
 use super::BUNDLED;

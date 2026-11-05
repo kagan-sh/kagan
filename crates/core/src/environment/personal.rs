@@ -4,7 +4,7 @@ use gpui_kit::AsyncApp;
 use kg_domain::ThreadId;
 
 use super::Retirement;
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 
 /// The Personal folders that deleting `id` would remove. Only Delete removes them.
 pub(crate) async fn personal_folders(database: &Database, id: ThreadId) -> Result<Vec<Retirement>> {

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use gpui_kit::{App, AppContext as _, Task};
 use kg_domain::ThreadId;
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::clock::missing;
 
 use super::Workspace;

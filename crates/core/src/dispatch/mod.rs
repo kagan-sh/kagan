@@ -1,14 +1,18 @@
 //! The global `Op` router: one match over every operation, and the queue policy around it.
 
+mod diagnostics;
+mod guide;
+pub(crate) mod ui;
+
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
     EnvironmentOp, KeymapOp, Op, OpError, OpResult, PreferenceOp, ProgramOp, ProjectOp, SettingsOp,
     Sidebar, TerminalOp, ThemeOp, ThreadOp, order_sidebar_projects,
 };
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
+use crate::project::section::section;
 use crate::project::{add_project, remove as remove_project};
-use crate::section::section;
 use crate::settings::{keymap, preference, theme};
 use crate::thread::dispatch_thread;
 use crate::workspace::{closed, missing};
@@ -30,13 +34,13 @@ pub(crate) async fn execute(
 ) -> Result<OpResult> {
     let database = crate::workspace::database(this, cx)?;
     match op {
-        Op::Guide { chapter } => Ok(crate::guide::read(chapter)),
+        Op::Guide { chapter } => Ok(crate::dispatch::guide::read(chapter)),
         Op::Skill(op) => crate::skill::run(this, op, cx).await,
         Op::Status {
             thread_id,
             project_id,
             environment_id,
-        } => crate::guide::status(this, thread_id, project_id, environment_id, cx).await,
+        } => crate::dispatch::guide::status(this, thread_id, project_id, environment_id, cx).await,
         Op::Open => {
             this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::Open))
                 .map_err(closed)?;
@@ -73,12 +77,14 @@ pub(crate) async fn execute(
             Ok(OpResult::Environment(result))
         }
         Op::Environment(EnvironmentOp::Branches { project_id }) => {
-            crate::git::branches(&database, project_id, cx).await
+            crate::host::git::branches(&database, project_id, cx).await
         }
-        Op::Program(ProgramOp::List) => crate::program::list(this, &database, true, cx).await,
-        Op::Program(ProgramOp::Discover) => crate::program::list(this, &database, false, cx).await,
+        Op::Program(ProgramOp::List) => crate::host::program::list(this, &database, true, cx).await,
+        Op::Program(ProgramOp::Discover) => {
+            crate::host::program::list(this, &database, false, cx).await
+        }
         Op::Environment(EnvironmentOp::SetBase { id, base }) => {
-            crate::git::set_base(this, &database, id, base, cx).await
+            crate::host::git::set_base(this, &database, id, base, cx).await
         }
         Op::Environment(EnvironmentOp::Remove { id }) => {
             crate::environment::remove_again(this, id, cx).await
@@ -86,10 +92,10 @@ pub(crate) async fn execute(
         Op::Theme(op) => theme(this, database, op, cx).await,
         Op::Keymap(op) => keymap(this, database, op, cx).await,
         Op::Preference(op) => preference(this, database, op, cx).await,
-        Op::Ui(op) => crate::ui::run(this, op, cx).await,
-        Op::Surface(op) => crate::ui::drive(this, crate::UiJob::Surface(op), cx).await,
+        Op::Ui(op) => crate::dispatch::ui::run(this, op, cx).await,
+        Op::Surface(op) => crate::dispatch::ui::drive(this, crate::UiJob::Surface(op), cx).await,
         Op::Diff(op) => crate::diff::run(database, op, cx).await,
-        Op::Diagnostics(op) => crate::diagnostics::export(this, op, cx).await,
+        Op::Diagnostics(op) => crate::dispatch::diagnostics::export(this, op, cx).await,
         Op::Update(op) => crate::update::run(&database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,

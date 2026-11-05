@@ -7,7 +7,7 @@ use kg_domain::{
     DiffFile, DiffFileView, DiffList, DiffOp, DiffQuery, DiffStatus, OpError, OpResult,
 };
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::workspace::missing;
 
 mod git;
@@ -110,7 +110,7 @@ fn cached<T>(
 }
 
 fn files(cache: &Cache, root: &Path, hint: Option<&str>, query: &DiffQuery) -> Result<DiffList> {
-    if !crate::git::is_repository(root) {
+    if !crate::host::git::is_repository(root) {
         return Ok(DiffList {
             files: Vec::new(),
             added: 0,
@@ -210,7 +210,7 @@ fn file(
             "the diff path must be inside the repository".into(),
         ));
     }
-    if !crate::git::is_repository(root) {
+    if !crate::host::git::is_repository(root) {
         return Ok(DiffFileView::empty(path));
     }
     let (left, right, base) = trees(root, hint, query)?;

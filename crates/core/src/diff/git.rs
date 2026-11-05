@@ -4,7 +4,7 @@ use std::process::Command;
 use kg_domain::OpError;
 use kg_process::Captured;
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 pub(super) fn diff(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
     let mut all = vec![
@@ -31,7 +31,7 @@ pub(super) fn git(root: &Path, args: &[&str], index: Option<&Path>) -> Result<Ca
     if let Some(index) = index {
         command.env("GIT_INDEX_FILE", index);
     }
-    kg_process::capture_with_limit(&mut command, crate::git::GIT_LIMIT).map_err(OpError::from)
+    kg_process::capture_with_limit(&mut command, crate::host::git::GIT_LIMIT).map_err(OpError::from)
 }
 
 pub(super) fn git_ok(root: &Path, args: &[&str], index: Option<&Path>) -> Result<Vec<u8>> {

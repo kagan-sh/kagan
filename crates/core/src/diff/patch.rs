@@ -4,13 +4,13 @@ use kg_domain::{
     DiffCommit, DiffFile, DiffFileView, DiffHunk, DiffLine, DiffLineKind, DiffList, DiffStatus,
 };
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 use super::git::{diff, git, git_ok, text};
 use super::{FILE_LIMIT, PATCH_LIMIT};
 
 pub(super) fn commits(root: &Path) -> Result<Vec<DiffCommit>> {
-    if !crate::git::is_repository(root) {
+    if !crate::host::git::is_repository(root) {
         return Ok(Vec::new());
     }
     let stdout = git_ok(root, &["log", "--format=%H%x09%s", "-n", "50"], None)?;

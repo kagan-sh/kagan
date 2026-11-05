@@ -8,7 +8,7 @@ use kg_domain::{Conversation, Timestamp};
 use serde::Deserialize;
 
 use crate::Workspace;
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::closed;
 
 use super::agent::{Known, Start};
@@ -190,7 +190,7 @@ async fn cursor(
 }
 
 async fn remember(
-    database: &crate::database::Database,
+    database: &crate::host::database::Database,
     thread: &kg_domain::ThreadId,
     last: Last,
     flag: &str,

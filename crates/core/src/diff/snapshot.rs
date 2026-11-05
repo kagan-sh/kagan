@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use kg_domain::{DiffQuery, DiffScope, OpError};
 use serde::{Deserialize, Serialize};
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 use super::FILE_LIMIT;
 use super::git::{diff, git, git_ok, git_text, text};

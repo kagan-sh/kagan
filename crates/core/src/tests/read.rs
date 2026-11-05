@@ -1,7 +1,7 @@
 use gpui_kit::TestAppContext;
 use kg_domain::*;
 
-use crate::database::Result;
+use crate::host::database::Result;
 
 use super::{Fixture, op, program, started};
 
