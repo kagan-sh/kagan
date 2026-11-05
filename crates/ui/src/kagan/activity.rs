@@ -181,7 +181,7 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Escape closes it. Enter and Space are the click GPUI makes from a focused element.
+    /// Enter and Space arrive as the click GPUI makes on a focused element.
     fn strip_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         if event.keystroke.key == "escape" && self.activity.open() {
             self.activity.close();
