@@ -408,8 +408,8 @@ fn build(
     })
 }
 
-// Only macOS has a durable store (a `WKWebsiteDataStore`). Windows keeps the panel page's
-// folder only until the window closes, so "store": true leaves the page private there.
+// Only macOS has a durable store (a `WKWebsiteDataStore`). Windows deletes the WebView2 profile
+// when the page closes, so "store": true leaves the page private there.
 #[cfg(target_os = "macos")]
 fn store_for(slot: &Slot, cx: &App) -> Result<(Option<[u8; 16]>, Option<String>), String> {
     let wants_store = PluginHost::global(cx)
