@@ -5,6 +5,7 @@ use std::time::Duration;
 use super::process::poll_child;
 
 /// Output of a command that ran to completion.
+#[derive(Debug)]
 pub struct Captured {
     pub code: i32,
     pub stdout: Vec<u8>,
@@ -80,4 +81,58 @@ fn join_pipe(handle: Option<std::thread::JoinHandle<Vec<u8>>>) -> Vec<u8> {
     handle
         .and_then(|handle| handle.join().ok())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::process::Command;
+    use std::time::Duration;
+
+    use super::{capture, capture_with_limit};
+
+    #[cfg(unix)]
+    fn shell(script: &str) -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", script]);
+        command
+    }
+
+    #[cfg(windows)]
+    fn shell(script: &str) -> Command {
+        let mut command = Command::new("cmd");
+        command.args(["/C", script]);
+        command
+    }
+
+    #[cfg(unix)]
+    fn slow() -> Command {
+        shell("sleep 10")
+    }
+
+    #[cfg(windows)]
+    fn slow() -> Command {
+        shell("ping -n 10 127.0.0.1 >NUL")
+    }
+
+    #[test]
+    fn capture_keeps_stdout_stderr_and_the_code() {
+        let output = capture(&mut shell("printf out; printf err >&2; exit 3")).unwrap();
+        assert_eq!(output.code, 3);
+        assert_eq!(output.stdout, b"out");
+        assert_eq!(output.stderr, "err");
+    }
+
+    #[test]
+    fn capture_with_limit_returns_a_fast_command() {
+        let output = capture_with_limit(&mut shell("printf fast"), Duration::from_secs(5)).unwrap();
+        assert_eq!(output.code, 0);
+        assert_eq!(output.stdout, b"fast");
+    }
+
+    #[test]
+    fn capture_with_limit_reports_a_timeout_and_kills_the_command() {
+        let error =
+            capture_with_limit(&mut slow(), Duration::from_millis(50)).expect_err("slow command");
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+    }
 }

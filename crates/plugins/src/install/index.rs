@@ -125,10 +125,18 @@ pub(crate) fn names_an_index(source: &str) -> bool {
 /// Why the saved index list cannot be read.
 #[derive(Clone, Debug, thiserror::Error)]
 pub(crate) enum Error {
-    #[error("{path}: {message}", path = .path.display())]
-    Read { path: PathBuf, message: String },
-    #[error("{path}: {message}", path = .path.display())]
-    Parse { path: PathBuf, message: String },
+    #[error("{path}: {source}", path = .path.display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::sync::Arc<std::io::Error>,
+    },
+    #[error("{path}: {source}", path = .path.display())]
+    Parse {
+        path: PathBuf,
+        #[source]
+        source: std::sync::Arc<serde_json::Error>,
+    },
 }
 
 /// The saved index locations. A missing file is no indexes; a file that cannot be read is an
@@ -139,11 +147,11 @@ pub(crate) fn load(data_dir: &Path) -> std::result::Result<Vec<String>, Error> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(source) => Err(Error::Read {
             path,
-            message: source.to_string(),
+            source: std::sync::Arc::new(source),
         }),
         Ok(text) => serde_json::from_str(&text).map_err(|source| Error::Parse {
             path,
-            message: source.to_string(),
+            source: std::sync::Arc::new(source),
         }),
     }
 }
