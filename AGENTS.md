@@ -12,7 +12,7 @@ At every step, make the best decision that will elevate all three: the user expe
 - `cargo run -p kg --release` builds and opens the app only when none is running; otherwise `kg` sends the command to the running app over a socket, so quit it before testing a new UI build. `KG_DATA_DIR=<temp>` gives an isolated headless app for CLI tests.
 - `cargo t` is the alias for the pinned nextest (`cargo bin cargo-nextest run`; install `cargo-run-bin` once). Run `cargo t --workspace --locked`; one crate or test with `cargo t -p kg-core <filter>`.
 - Before a pull request, run: `cargo fmt --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo t --workspace --locked`.
-- For a UI change, run `sh scripts/smoke.sh` on macOS before a pull request, and attach its snapshot and screenshot paths to the report.
+- For a UI change, run `sh scripts/smoke.sh --keep` on macOS before a pull request, and attach its snapshot and screenshot paths to the report.
 - `book/src/cli.md` is generated from clap help. After changing the CLI, run `KG_UPDATE_CLI=1 cargo t -p kg cli_reference_matches_help`; the test `cli_reference_matches_help` fails otherwise.
 
 ## Crates

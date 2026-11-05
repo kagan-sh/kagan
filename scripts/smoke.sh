@@ -1,11 +1,12 @@
 #!/bin/sh
-# Live UI smoke gate: an isolated data dir, a real window, one snapshot, one screenshot, clean quit.
+# Live UI smoke gate on macOS and Linux: an isolated data dir, a real window, one snapshot,
+# one screenshot, a clean quit.
 set -eu
 
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 
 usage() {
-  echo "usage: sh scripts/smoke.sh [--binary <path>] [--keep] [--strict]" >&2
+  echo "usage: sh scripts/smoke.sh [--binary <path>] [--keep] [--strict]"
 }
 
 binary=target/debug/kg
@@ -14,7 +15,7 @@ strict=0
 while [ $# -gt 0 ]; do
   case $1 in
     --binary)
-      [ $# -ge 2 ] || { usage; exit 2; }
+      [ $# -ge 2 ] || { usage >&2; exit 2; }
       binary=$2
       shift 2
       ;;
@@ -32,7 +33,7 @@ while [ $# -gt 0 ]; do
       ;;
     *)
       echo "smoke: unknown argument: $1" >&2
-      usage
+      usage >&2
       exit 2
       ;;
   esac
@@ -51,20 +52,24 @@ if [ ! -x "$binary" ]; then
   [ -x "$binary" ] || { echo "smoke: $binary is missing after the build" >&2; exit 1; }
 fi
 
-# The caller's app is left alone: a data dir brings its own socket (decision 124).
-unset KG_SOCKET
+# The caller's app is left alone: this run gets its own data dir and socket. The socket path
+# must fit sun_path (103 bytes on macOS); a mktemp folder does.
 tmp=$(mktemp -d) || { echo "smoke: cannot make a temp folder" >&2; exit 1; }
 KG_DATA_DIR=$tmp/data
-export KG_DATA_DIR
+KG_SOCKET=$tmp/kg.sock
+export KG_DATA_DIR KG_SOCKET
 log=$tmp/app.log
 snapshot=$tmp/snapshot.json
 shot=$tmp/smoke.png
 app=
 
 cleanup() {
-  if [ -n "$app" ] && kill -0 "$app" 2>/dev/null; then
-    kill "$app" 2>/dev/null || true
-  fi
+  [ -n "$app" ] || return 0
+  kill -0 "$app" 2>/dev/null || return 0
+  for child in $(ps -ax -o pid= -o ppid= | awk -v parent="$app" '$2 == parent { print $1 }'); do
+    kill "$child" 2>/dev/null || true
+  done
+  kill "$app" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -81,32 +86,27 @@ fail() {
 "$binary" --headless >"$log" 2>&1 &
 app=$!
 
-# The app binds its socket before it opens the workspace. A client that arrives first
-# would start a second app, so give the bind a moment.
-sleep 1
-
+# A client call can start its own app, so readiness is the socket file, not `kg status`.
 i=0
-ready=0
-while [ "$i" -lt 30 ]; do
-  if kill -0 "$app" 2>/dev/null && "$binary" status --json >/dev/null 2>&1; then
-    ready=1
-    break
-  fi
-  kill -0 "$app" 2>/dev/null || fail "$binary exited before answering kg status"
+while [ ! -S "$KG_SOCKET" ]; do
+  kill -0 "$app" 2>/dev/null || fail "$binary exited before it made its socket"
+  [ "$i" -lt 30 ] || fail "$binary made no socket within 30s"
   i=$((i + 1))
   sleep 1
 done
-[ "$ready" -eq 1 ] || fail "$binary did not answer kg status within 30s"
+kill -0 "$app" 2>/dev/null || fail "the app exited before answering kg status"
 
+"$binary" status --json >/dev/null || fail "kg status failed"
 "$binary" open >/dev/null || fail "kg open failed"
+kill -0 "$app" 2>/dev/null || fail "the app exited after kg open"
 
 i=0
 while :; do
   if "$binary" ui snapshot --json >"$snapshot" 2>/dev/null &&
-    grep -q '"label":"New thread"' "$snapshot"; then
+    grep -Fq '"id":"Name(\"sidebar-new-thread\")"' "$snapshot"; then
     break
   fi
-  [ "$i" -lt 15 ] || fail "the window never showed a New thread control; see $snapshot"
+  [ "$i" -lt 15 ] || fail "the window never showed the sidebar's New thread control; see $snapshot"
   i=$((i + 1))
   sleep 1
 done
@@ -126,6 +126,8 @@ else
   echo "smoke: warning: ui screenshot failed: $(tr -d '\n' <"$tmp/capture.json")" >&2
 fi
 
+kill -0 "$app" 2>/dev/null || fail "the app exited before the end of the run"
+
 "$binary" window quit >/dev/null || fail "kg window quit failed"
 
 i=0
@@ -140,7 +142,11 @@ app=
 
 echo "smoke: ok"
 echo "smoke: snapshot $snapshot"
-echo "smoke: screenshot $shot"
+if [ -s "$shot" ]; then
+  echo "smoke: screenshot $shot"
+else
+  echo "smoke: screenshot missing (see the warning above)"
+fi
 if [ "$keep" -eq 1 ]; then
   echo "smoke: kept $tmp"
 else
