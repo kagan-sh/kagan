@@ -20,7 +20,7 @@ fn guide_names_every_command() {
     check(
         &Cli::command(),
         "kg",
-        include_str!("../../../core/src/guide-map.md"),
+        include_str!("../../../core/src/dispatch/guide-map.md"),
     );
 }
 

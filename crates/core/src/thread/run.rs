@@ -15,7 +15,7 @@ use crate::workspace::{id, missing, time};
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum ResolveError {
     #[error("{0}")]
-    Line(String),
+    Line(kg_domain::SplitProgramError),
     #[error("program {0} was not found")]
     NotFound(String),
 }
