@@ -185,6 +185,30 @@ fn a_socket_that_appears_is_accepted_and_a_missed_deadline_is_not() {
     drop(ready.join().unwrap());
 }
 
+#[cfg(unix)]
+#[test]
+fn no_start_refuses_to_spawn_an_app() {
+    let dir = test_dir("no-start");
+    let location = socket::location_in(&dir).unwrap();
+    let _socket = socket_var(&location);
+    let _no_start = set_env("KG_NO_START", std::ffi::OsStr::new("1"));
+    let started = std::time::Instant::now();
+    let Err(error) = Client::connect_or_start() else {
+        panic!("a missing app answered");
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    assert!(error.to_string().contains("start it first"), "{error}");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(1),
+        "the client waited for an app to start"
+    );
+    assert!(
+        !std::path::Path::new(&location).exists(),
+        "a socket appeared; an app was started"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 pub(super) struct EnvVar {
     key: &'static str,
     previous: Option<std::ffi::OsString>,

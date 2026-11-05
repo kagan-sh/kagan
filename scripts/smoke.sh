@@ -1,6 +1,6 @@
 #!/bin/sh
-# Live UI smoke gate on macOS and Linux: an isolated data dir, a real window, one snapshot,
-# one screenshot, a clean quit.
+# Live UI smoke gate on macOS: an isolated data dir, a real window, one snapshot, one screenshot,
+# a clean quit. Linux has no `kg ui screenshot`, so `--strict` needs macOS.
 set -eu
 
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
@@ -57,19 +57,31 @@ fi
 tmp=$(mktemp -d) || { echo "smoke: cannot make a temp folder" >&2; exit 1; }
 KG_DATA_DIR=$tmp/data
 KG_SOCKET=$tmp/kg.sock
-export KG_DATA_DIR KG_SOCKET
+KG_NO_START=1
+export KG_DATA_DIR KG_SOCKET KG_NO_START
 log=$tmp/app.log
 snapshot=$tmp/snapshot.json
 shot=$tmp/smoke.png
 app=
 
+# A zombie is not a running app; `kill -0` cannot tell them apart.
+alive() {
+  state=$(ps -p "$app" -o stat= 2>/dev/null | tr -d '[:space:]')
+  [ -n "$state" ] || return 1
+  case $state in
+  Z*) return 1 ;;
+  esac
+  return 0
+}
+
 cleanup() {
   [ -n "$app" ] || return 0
-  kill -0 "$app" 2>/dev/null || return 0
-  for child in $(ps -ax -o pid= -o ppid= | awk -v parent="$app" '$2 == parent { print $1 }'); do
-    kill "$child" 2>/dev/null || true
-  done
-  kill "$app" 2>/dev/null || true
+  if alive; then
+    for child in $(ps -ax -o pid= -o ppid= | awk -v parent="$app" '$2 == parent { print $1 }'); do
+      kill "$child" 2>/dev/null || true
+    done
+    kill "$app" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 
@@ -89,16 +101,16 @@ app=$!
 # A client call can start its own app, so readiness is the socket file, not `kg status`.
 i=0
 while [ ! -S "$KG_SOCKET" ]; do
-  kill -0 "$app" 2>/dev/null || fail "$binary exited before it made its socket"
+  alive || fail "$binary exited before it made its socket"
   [ "$i" -lt 30 ] || fail "$binary made no socket within 30s"
   i=$((i + 1))
   sleep 1
 done
-kill -0 "$app" 2>/dev/null || fail "the app exited before answering kg status"
+alive || fail "the app exited before answering kg status"
 
 "$binary" status --json >/dev/null || fail "kg status failed"
 "$binary" open >/dev/null || fail "kg open failed"
-kill -0 "$app" 2>/dev/null || fail "the app exited after kg open"
+alive || fail "the app exited after kg open"
 
 i=0
 while :; do
@@ -126,12 +138,12 @@ else
   echo "smoke: warning: ui screenshot failed: $(tr -d '\n' <"$tmp/capture.json")" >&2
 fi
 
-kill -0 "$app" 2>/dev/null || fail "the app exited before the end of the run"
+alive || fail "the app exited before the end of the run"
 
 "$binary" window quit >/dev/null || fail "kg window quit failed"
 
 i=0
-while kill -0 "$app" 2>/dev/null; do
+while alive; do
   i=$((i + 1))
   if [ "$i" -ge 15 ]; then
     fail "the app did not quit within 15s"
