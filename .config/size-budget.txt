@@ -1,5 +1,5 @@
 target 35000
-total 58995
+total 59480
 allow_expect 4
 crates/ui/src/components/webview.rs 684
 crates/ui/src/kagan.rs 1901
@@ -8,8 +8,8 @@ crates/ui/src/kagan/picker.rs 777
 crates/ui/src/kagan/review.rs 681
 crates/ui/src/kagan/review/tree.rs 614
 crates/ui/src/kagan/right.rs 602
-crates/ui/src/kagan/settings/plugins.rs 1211
+crates/ui/src/kagan/settings/plugins.rs 1348
 crates/ui/src/kagan/sidebar.rs 1745
 crates/ui/src/kagan/start.rs 871
 crates/ui/src/kagan/surface.rs 1002
-crates/ui/src/theme.rs 740
+crates/ui/src/theme.rs 756

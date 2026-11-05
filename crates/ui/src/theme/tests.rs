@@ -99,3 +99,57 @@ fn a_written_theme_reads_back_the_same() {
     let text = serde_json::to_vec_pretty(&ocean).unwrap();
     assert_eq!(ThemeFile::parse(&text).unwrap(), ocean);
 }
+
+#[test]
+fn a_theme_without_highlight_keeps_the_gpui_default_syntax() {
+    let file = fjord();
+    assert_eq!(
+        *highlight(&file, ThemeMode::Light),
+        *HighlightTheme::default_light()
+    );
+    assert_eq!(
+        *highlight(&file, ThemeMode::Dark),
+        *HighlightTheme::default_dark()
+    );
+}
+
+#[test]
+fn a_theme_picks_its_own_highlight_for_each_mode() {
+    let mut file = fjord();
+    file.highlight = Some(kg_domain::Highlight {
+        light: Some(serde_json::json!({
+            "name": "Light ink",
+            "appearance": "light",
+            "style": {"syntax": {"keyword": {"color": "#112233", "font_weight": 700}}},
+        })),
+        dark: Some(serde_json::json!({
+            "name": "Dark ink",
+            "style": {"syntax": {"keyword": {"color": "#445566"}}},
+        })),
+    });
+    let light = highlight(&file, ThemeMode::Light);
+    assert_eq!(light.name, "Light ink");
+    assert_eq!(
+        light
+            .style
+            .syntax
+            .style("keyword")
+            .and_then(|style| style.color),
+        Some(token_color(Color::new(0x11_2233)))
+    );
+    let dark = highlight(&file, ThemeMode::Dark);
+    assert_eq!(dark.name, "Dark ink");
+    assert_eq!(
+        dark.style
+            .syntax
+            .style("keyword")
+            .and_then(|style| style.color),
+        Some(token_color(Color::new(0x44_5566)))
+    );
+    file.highlight.as_mut().unwrap().light = None;
+    assert_eq!(
+        *highlight(&file, ThemeMode::Light),
+        *HighlightTheme::default_light(),
+        "a mode without its own syntax keeps the default"
+    );
+}

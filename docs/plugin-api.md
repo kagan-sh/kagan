@@ -244,6 +244,15 @@ Decision 105. A panel may offer to fill a slot: `"replaces": "threads"` on a `le
 
 Setting types: `string`, `boolean`, `number` (a finite JSON number; Settings shows a text field), `select`, `folder` (a user-picked folder, granted read-only), `project` (a project id from a dropdown; decision 135), `secret` (a token such as an API key), `provider` (kept so an old manifest parses; `host.settings()` leaves it out). A thread a plugin starts names its program in `spawn`. Plugin settings are `Op`s like every feature: `kg plugin config <id> get|set|clear <key> [<value>]`.
 
+A `string` setting may add `"multiline": true` for an editor that holds newlines; Save saves it, because Enter inserts a line. A `string` or `number` setting may add `"schema"`, one JSON Schema object (decision 140). kagan compiles the schema when it reads the manifest and refuses the manifest, with the setting key, when the schema is not an object or does not compile. It checks a candidate value in `kg plugin config set` and in Settings before saving, and refuses a `default` that fails the schema; the error names the setting and the first failure in plain words. `secret`, `folder`, `project`, `select` and `boolean` refuse `multiline` and `schema`; a secret stays one line of text. The schema is data: kagan compiles it in process, never runs code from it, and does not fetch a `$ref` over the network.
+
+```json
+"settings": {
+  "notes": { "type": "string", "title": "Notes", "multiline": true },
+  "retries": { "type": "number", "title": "Retries", "default": 3, "schema": { "type": "number", "minimum": 1, "maximum": 5 } }
+}
+```
+
 A `project` setting (decision 135):
 
 - Declare `{ "type": "project", "title": "Board project" }`. There is no default: unset is `null`.

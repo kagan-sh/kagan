@@ -9,6 +9,7 @@ mod fetch;
 mod grant;
 mod roots;
 mod settings;
+pub(crate) use settings::schema_failure;
 
 pub(crate) use fetch::{Area, Env, Fetch, FetchError, FetchKind, LOCAL_FETCH_CAP, Powers};
 #[cfg(test)]
@@ -96,6 +97,8 @@ pub(crate) enum Error {
     Contributions(#[from] crate::contributions::Error),
     #[error("{0}")]
     CommandKey(String),
+    #[error("{0}")]
+    SettingField(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,6 +173,29 @@ pub(crate) enum Scope {
     Tagged,
 }
 
+// Serde refuses an unknown field without naming the setting key, so the check runs on the raw JSON.
+fn check_setting_fields(value: &Value) -> Result<(), Error> {
+    let Some(settings) = value.get("settings").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (key, setting) in settings {
+        let kind = setting.get("type").and_then(Value::as_str);
+        if setting.get("multiline").is_some() && kind != Some("string") {
+            return Err(Error::SettingField(if kind == Some("secret") {
+                format!("setting {key} cannot be multiline; a secret is one line of text")
+            } else {
+                format!("setting {key}: multiline works on a string setting only")
+            }));
+        }
+        if setting.get("schema").is_some() && !matches!(kind, Some("string" | "number")) {
+            return Err(Error::SettingField(format!(
+                "setting {key}: schema works on a string or number setting only"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Reads and checks `kagan.json` in `root` without running plugin code.
 pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
     let invalid = |error: Error| OpError::Invalid(format!("{FILE} in {}: {error}", root.display()));
@@ -179,6 +205,7 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
     let Value::Object(_) = &value else {
         return Err(invalid(Error::NotObject));
     };
+    check_setting_fields(&value).map_err(invalid)?;
     let mut manifest: Manifest =
         serde_json::from_str(&text).map_err(|error| invalid(error.into()))?;
     manifest.check(root, data_dir).map_err(invalid)?;
@@ -300,6 +327,22 @@ impl Manifest {
                         .is_some_and(|default| !options.contains(default)))
             {
                 return Err(Error::Options(key.clone()));
+            }
+            if let Some(schema) = setting.schema() {
+                if !schema.is_object() {
+                    return Err(Error::SettingField(format!(
+                        "setting {key} schema must be a JSON object"
+                    )));
+                }
+                jsonschema::validator_for(schema).map_err(|error| {
+                    Error::SettingField(format!("setting {key} schema does not compile: {error}"))
+                })?;
+                let default = setting.default_value();
+                if !default.is_null()
+                    && let Some(failure) = settings::schema_failure(key, setting, &default)
+                {
+                    return Err(Error::SettingField(failure));
+                }
             }
             if matches!(setting, Setting::Secret { .. }) && key.len() > crate::secret::MAX_KEY {
                 return Err(Error::SecretKey {

@@ -8,6 +8,7 @@ mod manifest;
 mod page;
 mod runtime;
 mod secret;
+mod settings;
 
 use std::path::Path;
 use std::process::Command;

@@ -38,6 +38,10 @@ pub enum Setting {
         title: String,
         #[serde(default)]
         default: Option<String>,
+        #[serde(default)]
+        multiline: bool,
+        #[serde(default)]
+        schema: Option<Value>,
     },
     Boolean {
         title: String,
@@ -48,6 +52,8 @@ pub enum Setting {
         title: String,
         #[serde(default)]
         default: Option<serde_json::Number>,
+        #[serde(default)]
+        schema: Option<Value>,
     },
     Select {
         title: String,
@@ -98,6 +104,13 @@ impl Setting {
         }
     }
 
+    pub(crate) fn schema(&self) -> Option<&Value> {
+        match self {
+            Self::String { schema, .. } | Self::Number { schema, .. } => schema.as_ref(),
+            _ => None,
+        }
+    }
+
     pub(crate) fn default_value(&self) -> Value {
         match self {
             Self::String { default, .. } | Self::Select { default, .. } => default.clone().into(),
@@ -109,4 +122,23 @@ impl Setting {
             | Self::Secret { .. } => Value::Null,
         }
     }
+}
+
+/// `Some` for the first failure, or for a schema that does not compile; callers treat any `Some` as invalid.
+pub(crate) fn schema_failure(key: &str, setting: &Setting, value: &Value) -> Option<String> {
+    let schema = setting.schema()?;
+    let validator = match jsonschema::validator_for(schema) {
+        Ok(validator) => validator,
+        Err(error) => {
+            return Some(format!(
+                "setting {key} ({}) schema does not compile: {error}",
+                setting.title()
+            ));
+        }
+    };
+    let failure = validator.iter_errors(value).next()?;
+    Some(format!(
+        "setting {key} ({}) does not match its schema: {failure}",
+        setting.title()
+    ))
 }

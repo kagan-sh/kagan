@@ -5,7 +5,7 @@ use kg_core::{Requester, Workspace};
 use kg_domain::{ConfigOp, OpError, OpResult, PluginId, ProjectId, ThreadId};
 use serde_json::Value;
 
-use crate::manifest::{AgentChoice, Setting};
+use crate::manifest::{self, AgentChoice, Setting};
 use crate::{PluginHost, Result};
 
 use super::approve::approve_folder;
@@ -236,6 +236,14 @@ pub(in crate::runtime::ops) fn checked(
     setting: &Setting,
     value: Value,
 ) -> Result<Value> {
+    let value = typed(key, setting, value)?;
+    if let Some(failure) = manifest::schema_failure(key, setting, &value) {
+        return Err(OpError::Invalid(failure));
+    }
+    Ok(value)
+}
+
+fn typed(key: &str, setting: &Setting, value: Value) -> Result<Value> {
     let takes =
         |what: &str| OpError::Invalid(format!("setting {key} ({}) takes {what}", setting.title()));
     match setting {

@@ -43,5 +43,7 @@ pub use record::{
     order_sidebar_projects, owned_thread_ids,
 };
 pub use review::{ReviewRow, review_rows};
-pub use theme::{Color, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError};
+pub use theme::{
+    Color, Highlight, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError,
+};
 pub use update::{InstallKind, UpdateOp, UpdateState, UpdateStatus};
