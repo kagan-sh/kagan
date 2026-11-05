@@ -108,7 +108,7 @@ while [ ! -S "$KG_SOCKET" ]; do
 done
 alive || fail "the app exited before answering kg status"
 
-"$binary" status --json >/dev/null || fail "kg status failed"
+"$binary" status >/dev/null || fail "kg status failed"
 "$binary" open >/dev/null || fail "kg open failed"
 alive || fail "the app exited after kg open"
 
