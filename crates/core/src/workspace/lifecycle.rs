@@ -93,6 +93,15 @@ impl Workspace {
             .filter(|thread| thread.read(cx).running())
             .count()
     }
+
+    /// Counts threads whose program title says it is busy with a reply.
+    #[must_use]
+    pub fn busy_threads(&self, cx: &App) -> usize {
+        self.threads
+            .values()
+            .filter(|thread| thread.read(cx).busy())
+            .count()
+    }
     #[cfg(any(test, feature = "test"))]
     #[must_use]
     pub fn terminal_process_id(&self, id: &kg_domain::ThreadId) -> Option<u32> {

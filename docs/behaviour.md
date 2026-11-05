@@ -626,6 +626,14 @@ The macOS menu bar. These shortcuts are not keymap overrides. Quit asks when a p
 - **Changes**: opens the window when it is closed, and shows the command list, or the list on thread search. When the list is open, each switches it to its own view [decision 107].
 - **Shows**: every window command and each enabled plugin's commands, grouped, with the key that runs it from where the keyboard was. A command that cannot run there is greyed with its reason. Enter runs it from there; Escape or a click outside closes the list and gives the keyboard back. Thread search shows the same rows as `kg thread search --archived`, under Threads and Archived; Enter opens the thread at the matched line [decision 107].
 
+## Activity strip
+
+The strip is the host's and has no `Op`; the window reads state it already has [decision 148].
+
+- **Shows**: closed, one 28 px line across the bottom of the window. `1 agent working` or `N agents working` for threads whose program is busy, or `Quiet`; `N needs you` for the threads `NextThreadNeedingYou` can reach, which is every thread other than the one on screen that is unread or asking; `Update available` when a check found a newer kagan that Not now has not put off; `Installing <source>` while a plugin install runs [CONTEXT] [decision 148]. It draws only what the workspace, the attention list, the updater and the plugin host already report.
+- **Changes**: a click opens it to the last seven rows of an in-memory log, newest last: a turn started or ended, a thread other than the one on screen that needs the person, an update found, downloading or ready, a plugin install starting, and a plugin command the window ran. A second click, Enter or Space while it has the keyboard, or Escape closes it. The needs-you words run `NextThreadNeedingYou`; the shown thread is not counted in either place, because that action skips it. It keeps 100 rows in memory and saves none. It never takes the keyboard on its own [decision 148].
+- **Refused when**: nothing. No plugin adds to it, and a panel placed `bottom` stays refused [decision 56] [decision 59].
+
 ## Update
 
 Finds a newer kagan on the GitHub releases page (decision 113). Installing is not an `Op`: only the person installs, from the window.

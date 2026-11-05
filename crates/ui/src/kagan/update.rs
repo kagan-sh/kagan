@@ -66,9 +66,13 @@ pub(super) fn progress_sentence(state: &UpdateState) -> Option<String> {
     }
 }
 
+pub(super) fn hidden(cx: &App) -> Option<String> {
+    cx.try_global::<Hidden>().map(|hidden| hidden.0.clone())
+}
+
 /// The quiet line over the center while a newer kagan waits.
 pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
-    let hidden = cx.try_global::<Hidden>().map(|hidden| hidden.0.clone());
+    let hidden = hidden(cx);
     let updater = Updater::global(cx);
     let updater = updater.read(cx);
     let text = match updater.state() {

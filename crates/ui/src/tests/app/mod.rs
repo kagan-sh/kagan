@@ -1,4 +1,5 @@
 mod about;
+mod activity;
 mod brand;
 mod commands;
 mod menus;
