@@ -31,13 +31,9 @@ pub(crate) const UNAVAILABLE: &str = "This page works on macOS and Windows only 
 
 /// The script's root is a `WebView`, so the panel can sit edge to edge.
 pub(crate) fn fills_panel(view: &Entity<ScriptView>, cx: &App) -> bool {
-    view.read(cx).snapshot().is_some_and(|snapshot| {
-        snapshot
-            .debug_tree()
-            .lines()
-            .next()
-            .is_some_and(|line| line.starts_with("WebView"))
-    })
+    view.read(cx)
+        .snapshot()
+        .is_some_and(|snapshot| snapshot.root_component_name() == Some("WebView"))
 }
 
 pub(super) fn allowed(url: &str, hosts: &[String]) -> Result<(), &'static str> {
@@ -514,7 +510,6 @@ fn conceal_at(_cx: &mut App, _index: usize) {}
 #[derive(Default)]
 struct Pages {
     pages: Vec<Held>,
-    nudged: Vec<gpui_kit::EntityId>,
 }
 
 impl gpui_kit::Global for Pages {}
@@ -536,7 +531,7 @@ mod pages;
 
 #[cfg(test)]
 pub(crate) use pages::native_shown;
-pub(crate) use pages::{drop_stores, nudge_once, sync_pages};
+pub(crate) use pages::{drop_stores, sync_pages};
 
 use pages::{find, write};
 #[cfg(any(target_os = "macos", target_os = "windows"))]

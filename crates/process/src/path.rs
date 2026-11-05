@@ -1,9 +1,6 @@
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-#[cfg(unix)]
-use super::process::poll_child;
-
 /// The `PATH` of the user's login shell, which an app started from the desktop does not inherit,
 /// else this process's own. Resolved once; the first call waits for the shell (at most
 /// `LOGIN_SHELL_TIMEOUT`), so call [`warm_user_path`] at startup.
@@ -28,29 +25,12 @@ const LOGIN_SHELL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 
 #[cfg(unix)]
 fn login_path() -> Option<OsString> {
-    use std::io::Read as _;
     use std::os::unix::ffi::OsStringExt as _;
     let shell = std::env::var_os("SHELL")?;
-    let mut child = std::process::Command::new(shell)
-        .args(["-l", "-c", "printf %s \"$PATH\""])
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .ok()?;
-    let status = poll_child(
-        &mut child,
-        std::process::Child::try_wait,
-        |child| {
-            let _ = child.kill();
-            let _ = child.wait();
-        },
-        LOGIN_SHELL_TIMEOUT,
-    )
-    .ok()??;
-    let mut path = Vec::new();
-    child.stdout.take()?.read_to_end(&mut path).ok()?;
-    (status.success() && !path.is_empty()).then(|| OsString::from_vec(path))
+    let mut command = std::process::Command::new(shell);
+    command.args(["-l", "-c", "printf %s \"$PATH\""]);
+    let output = crate::capture_with_limit(command, LOGIN_SHELL_TIMEOUT).ok()?;
+    (output.code == 0 && !output.stdout.is_empty()).then(|| OsString::from_vec(output.stdout))
 }
 
 #[cfg(windows)]

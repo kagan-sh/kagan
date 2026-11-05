@@ -18,7 +18,7 @@ use gpui_kit::{
     WeakEntity, Window, actions, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{Found, Op, PluginOp, SHORTCUTS, SettingsOp, WindowOp};
+use kg_domain::{Found, Op, PluginOp, SHORTCUTS, SettingsOp, ShortcutWhen, WindowOp};
 use kg_plugins::{CommandWhen, RunCommand};
 
 use super::{Kagan, Shown};
@@ -310,22 +310,22 @@ fn entries(kagan: &Kagan, cx: &mut Context<Kagan>) -> Vec<(String, Vec<Entry>)> 
     let project = kagan.shown_project(cx).is_some();
     let review = kagan.screen.review().is_some();
     let start = matches!(kagan.screen.shown(), Shown::Start(_));
-    let off = |group: &str, name: &str| match group {
-        "Review" if !review => Some("Open a review first."),
-        "New thread" if !start => Some("Open New thread first."),
-        _ if !thread && NEEDS_THREAD.contains(&name) => Some("Open a thread first."),
+    let off = |when| match when {
+        ShortcutWhen::Review if !review => Some("Open a review first."),
+        ShortcutWhen::NewThread if !start => Some("Open New thread first."),
+        ShortcutWhen::Thread if !thread => Some("Open a thread first."),
         _ => None,
     };
     let mut groups: Vec<(String, Vec<Entry>)> = GROUPS
         .iter()
         .map(|group| ((*group).to_owned(), Vec::new()))
         .collect();
-    let mut add = |group: &str, id: &str, label: &str, run: Run| {
+    let mut add = |group: &str, id: &str, label: &str, when: ShortcutWhen, run: Run| {
         if let Some((_, entries)) = groups.iter_mut().find(|(title, _)| title == group) {
             entries.push(Entry {
                 id: id.to_owned(),
                 label: label.to_owned(),
-                off: off(group, id),
+                off: off(when),
                 run,
                 plugin: None,
             });
@@ -339,25 +339,28 @@ fn entries(kagan: &Kagan, cx: &mut Context<Kagan>) -> Vec<(String, Vec<Entry>)> 
             continue;
         };
         add(
-            group_of(shortcut.name, shortcut.action),
+            shortcut.command_group.title(),
             shortcut.name,
             shortcut.label,
+            shortcut.when,
             Run::Action(action.into()),
         );
     }
-    for (group, id, label, action) in keyless() {
-        add(group, id, label, Run::Action(action));
+    for (group, id, label, when, action) in keyless() {
+        add(group, id, label, when, Run::Action(action));
     }
     add(
         "Plugins",
         "ManagePlugins",
         "Manage plugins",
+        ShortcutWhen::Always,
         Run::Op(Rc::new(Op::Settings(SettingsOp::Plugins))),
     );
     add(
         "Plugins",
         "NewPlugin",
         "New plugin…",
+        ShortcutWhen::Always,
         Run::Op(Rc::new(Op::Plugin(PluginOp::Start))),
     );
     for (plugin, name, commands) in super::settings::plugin_commands(cx) {
@@ -390,16 +393,13 @@ const GROUPS: [&str; 6] = [
     "Plugins",
 ];
 
-const NEEDS_THREAD: [&str; 8] = [
-    "StopThread",
-    "ArchiveThread",
-    "TogglePinned",
-    "StartAgain",
-    "RestoreThread",
-    "ThreadActions",
-    "RenameThread",
-    "SaveDiagnostics",
-];
+type Keyless = (
+    &'static str,
+    &'static str,
+    &'static str,
+    ShortcutWhen,
+    Rc<dyn Action>,
+);
 
 fn group_of(name: &str, action: &str) -> &'static str {
     if action.starts_with("review::") {
@@ -424,63 +424,91 @@ fn keyless() -> [(&'static str, &'static str, &'static str, Rc<dyn Action>); 13]
             "Threads",
             "RenameThread",
             "Rename thread…",
+            ShortcutWhen::Thread,
             Rc::new(super::RenameThread),
         ),
         (
             "Threads",
             "SaveDiagnostics",
             "Save diagnostics",
+            ShortcutWhen::Thread,
             Rc::new(super::SaveDiagnostics),
         ),
         (
             "Window",
             "About",
             "About kagan",
+            ShortcutWhen::Always,
             Rc::new(super::menus::About),
         ),
         (
             "Window",
             "Minimize",
             "Minimize",
+            ShortcutWhen::Always,
             Rc::new(super::menus::Minimize),
         ),
-        ("Window", "Zoom", "Zoom", Rc::new(super::menus::Zoom)),
-        ("Window", "Hide", "Hide kagan", Rc::new(super::menus::Hide)),
+        (
+            "Window",
+            "Zoom",
+            "Zoom",
+            ShortcutWhen::Always,
+            Rc::new(super::menus::Zoom),
+        ),
+        (
+            "Window",
+            "Hide",
+            "Hide kagan",
+            ShortcutWhen::Always,
+            Rc::new(super::menus::Hide),
+        ),
         (
             "Window",
             "HideOthers",
             "Hide others",
+            ShortcutWhen::Always,
             Rc::new(super::menus::HideOthers),
         ),
         (
             "Window",
             "ShowAll",
             "Show all",
+            ShortcutWhen::Always,
             Rc::new(super::menus::ShowAll),
         ),
         (
             "Window",
             "Close",
             "Close window",
+            ShortcutWhen::Always,
             Rc::new(super::menus::Close),
         ),
-        ("Window", "Quit", "Quit kagan", Rc::new(super::menus::Quit)),
+        (
+            "Window",
+            "Quit",
+            "Quit kagan",
+            ShortcutWhen::Always,
+            Rc::new(super::menus::Quit),
+        ),
         (
             "Settings",
             "CheckForUpdates",
             "Check for updates",
+            ShortcutWhen::Always,
             Rc::new(super::update::CheckForUpdates),
         ),
         (
             "Settings",
             "NewTheme",
             "New theme…",
+            ShortcutWhen::Always,
             Rc::new(super::NewTheme),
         ),
         (
             "Settings",
             "OpenThemes",
             "Open themes folder",
+            ShortcutWhen::Always,
             Rc::new(super::OpenThemes),
         ),
     ]

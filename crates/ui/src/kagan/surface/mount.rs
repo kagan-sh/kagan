@@ -36,6 +36,7 @@ pub(in crate::kagan) fn mount(
             title: declared.title.clone(),
             details,
             view: None,
+            _snapshot_watch: None,
             web,
             error,
             generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),
@@ -49,6 +50,13 @@ pub(in crate::kagan) fn mount(
         Ok(view) => (Some(view), None),
         Err(error) => (None, Some(mount_error(&error))),
     };
+    let snapshot_watch = view.as_ref().map(|view| {
+        std::rc::Rc::new(
+            cx.subscribe(view, |_, _, _: &gpui_shell::SnapshotPublished, cx| {
+                cx.notify();
+            }),
+        )
+    });
     Slot {
         id: declared.surface_id(),
         plugin: declared.plugin.clone(),
@@ -56,6 +64,7 @@ pub(in crate::kagan) fn mount(
         title: declared.title.clone(),
         details,
         view,
+        _snapshot_watch: snapshot_watch,
         web: None,
         error,
         generation: host.read(cx).generation(&declared.plugin).unwrap_or(0),

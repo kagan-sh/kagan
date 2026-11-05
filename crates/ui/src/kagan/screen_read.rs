@@ -1,7 +1,7 @@
 use gpui_kit::{App, Entity, Window};
 use kg_domain::ProjectId;
 
-use super::{Kagan, Shown, right, tabs};
+use super::{Kagan, Shown, right};
 use crate::terminal::TerminalView;
 
 pub(crate) fn start_project(kagan: &Kagan) -> Option<ProjectId> {
@@ -45,7 +45,10 @@ pub(crate) fn tab_numbers(kagan: &Kagan) -> Vec<u32> {
 
 /// The extra terminal the right sidebar shows, if it shows one.
 pub(crate) fn shown_tab(kagan: &Kagan, cx: &App) -> Option<u32> {
-    right::selected_tab(kagan, cx).and_then(|tab| tabs::terminal_number(&tab))
+    match right::selected_tab(kagan, cx) {
+        Some(right::Tab::Terminal(number)) => Some(number),
+        _ => None,
+    }
 }
 
 pub(crate) fn tab_grid(kagan: &Kagan, number: u32, cx: &App) -> Option<kg_core::Grid> {

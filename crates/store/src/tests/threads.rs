@@ -6,24 +6,154 @@ use serde_json::json;
 use super::{id, owned, sorted, store, thread};
 use crate::{Error, Store};
 
+fn ready_environment(store: &Store) -> kg_domain::Environment {
+    let environment = kg_domain::Environment {
+        id: kg_domain::EnvironmentId("env_1".into()),
+        project_id: ProjectId("prj_1".into()),
+        path: "/code/kagan".into(),
+        status: kg_domain::EnvironmentStatus::Ready,
+        provider: kg_domain::EnvironmentProvider::Project,
+        branch: None,
+        base_branch: None,
+        retire_at: Some(Timestamp(99)),
+        error: None,
+    };
+    store.put_environment(&environment).unwrap();
+    environment
+}
+
 #[test]
-fn a_created_thread_arrives_with_its_events() {
+fn a_created_thread_arrives_with_its_metadata_and_events() {
     let mut store = store();
+    let environment = ready_environment(&store);
+    let record = Thread {
+        environment_id: Some(environment.id.clone()),
+        ..thread("thr_1", 7)
+    };
+    let metadata = kg_domain::Metadata {
+        plugin_id: PluginId("dev.test".into()),
+        value: json!({"role": "worker"}),
+    };
     let events = store
         .create_thread(
-            &thread("thr_1", 7),
+            &record,
+            Some(&metadata),
             [EventKind::Created, EventKind::TurnStarted],
         )
         .unwrap();
     assert_eq!(events.len(), 2);
     assert_eq!(events[1].at, Timestamp(7));
-    assert!(store.thread(&id("thr_1")).unwrap().is_some());
+    assert_eq!(store.thread(&record.id).unwrap(), Some(record.clone()));
+    assert_eq!(
+        store
+            .thread_metadata(&record.id, &metadata.plugin_id)
+            .unwrap(),
+        Some(metadata.value)
+    );
+    assert_eq!(
+        store
+            .environment(&environment.id)
+            .unwrap()
+            .unwrap()
+            .retire_at,
+        None
+    );
+}
+
+#[test]
+fn a_failed_creation_rolls_back_the_thread_metadata_events_and_retirement() {
+    let mut store = store();
+    let environment = ready_environment(&store);
+    let record = Thread {
+        environment_id: Some(environment.id.clone()),
+        ..thread("thr_1", 7)
+    };
+    let metadata = kg_domain::Metadata {
+        plugin_id: PluginId("dev.test".into()),
+        value: json!({"role": "worker"}),
+    };
+    store
+        .conn
+        .execute_batch(
+            "CREATE TRIGGER refuse_second_event BEFORE INSERT ON events WHEN NEW.seq = 2
+         BEGIN SELECT RAISE(ABORT, 'event write failed'); END;",
+        )
+        .unwrap();
     assert!(
         store
-            .create_thread(&owned("thr_2", "missing", 8), [EventKind::Created])
+            .create_thread(
+                &record,
+                Some(&metadata),
+                [EventKind::Created, EventKind::TurnStarted]
+            )
             .is_err()
     );
-    assert!(store.thread(&id("thr_2")).unwrap().is_none());
+    assert!(store.thread(&record.id).unwrap().is_none());
+    assert!(
+        store
+            .thread_metadata(&record.id, &metadata.plugin_id)
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        store
+            .events_after(&record.id, None, None, Order::Asc)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        store.environment(&environment.id).unwrap(),
+        Some(environment)
+    );
+    store
+        .conn
+        .execute_batch("DROP TRIGGER refuse_second_event")
+        .unwrap();
+    let events = store
+        .create_thread(&record, Some(&metadata), [EventKind::Created])
+        .unwrap();
+    assert_eq!(events[0].seq, 1);
+}
+
+#[test]
+fn creation_refuses_an_environment_that_is_not_ready_or_in_the_project() {
+    let mut store = store();
+    let mut environment = ready_environment(&store);
+    let record = Thread {
+        environment_id: Some(environment.id.clone()),
+        ..thread("thr_1", 7)
+    };
+    environment.status = kg_domain::EnvironmentStatus::Destroyed;
+    store.put_environment(&environment).unwrap();
+    assert!(
+        store
+            .create_thread(&record, None, [EventKind::Created])
+            .is_err()
+    );
+    environment.status = kg_domain::EnvironmentStatus::Ready;
+    store.put_environment(&environment).unwrap();
+    let other = Thread {
+        project_id: ProjectId("prj_other".into()),
+        ..record.clone()
+    };
+    assert!(
+        store
+            .create_thread(&other, None, [EventKind::Created])
+            .is_err()
+    );
+    let missing_owner = Thread {
+        lifecycle_owner_thread_id: Some(id("missing")),
+        ..record
+    };
+    assert!(
+        store
+            .create_thread(&missing_owner, None, [EventKind::Created])
+            .is_err()
+    );
+    assert_eq!(
+        store.environment(&environment.id).unwrap(),
+        Some(environment)
+    );
 }
 
 #[test]

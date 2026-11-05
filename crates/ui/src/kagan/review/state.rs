@@ -69,7 +69,7 @@ impl Kagan {
         cx.notify();
     }
 
-    pub(in crate::kagan) fn next_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::kagan) fn next_change(&mut self, cx: &mut Context<Self>) {
         let Some(review) = self.screen.review_mut() else {
             return;
         };
@@ -77,10 +77,10 @@ impl Kagan {
             return;
         };
         let at = review.at.map_or(0, |at| (at + 1).min(last));
-        self.go_to_change(at, window, cx);
+        self.go_to_change(at, cx);
     }
 
-    pub(in crate::kagan) fn prev_change(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::kagan) fn prev_change(&mut self, cx: &mut Context<Self>) {
         let Some(review) = self.screen.review_mut() else {
             return;
         };
@@ -88,17 +88,16 @@ impl Kagan {
             return;
         }
         let at = review.at.map_or(0, |at| at.saturating_sub(1));
-        self.go_to_change(at, window, cx);
+        self.go_to_change(at, cx);
     }
 
-    fn go_to_change(&mut self, at: usize, window: &mut Window, cx: &mut Context<Self>) {
+    fn go_to_change(&mut self, at: usize, cx: &mut Context<Self>) {
         let Some(review) = self.screen.review_mut() else {
             return;
         };
         review.at = Some(at);
         let row = review.hunks[at];
         review.scroll.scroll_to_top_of_item(row as usize);
-        let _ = window;
         cx.notify();
     }
 }

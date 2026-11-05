@@ -12,7 +12,7 @@ use kg_core::Workspace;
 use kg_domain::{Op, OpResult, TerminalOp, ThreadId, ThreadOp, WindowOp};
 
 use super::controls::{control, dispatch, tip};
-use super::right::ActivatePanelHeader;
+use super::right::{ActivatePanelHeader, Tab};
 use super::{Kagan, Shown};
 use crate::terminal::{TerminalView, Typed};
 use crate::ui_observe::UiObserveExt as _;
@@ -52,16 +52,6 @@ pub(super) fn perform(op: WindowOp, cx: &mut App) {
             _ => this.step_tab(op == WindowOp::NextTerminal, window, cx),
         });
     });
-}
-
-pub(super) const BROWSER: &str = "browser";
-
-pub(super) fn terminal_tab(number: u32) -> String {
-    format!("terminal-{number}")
-}
-
-pub(super) fn terminal_number(tab: &str) -> Option<u32> {
-    tab.strip_prefix("terminal-")?.parse().ok()
 }
 
 /// The extra terminals of the thread on screen, whether its Browser tab is open, and the newest
@@ -116,6 +106,11 @@ impl Kagan {
             if self.right_tab.as_deref().is_some_and(|tab| {
                 tab == BROWSER || tab == super::preview::TAB || terminal_number(tab).is_some()
             }) {
+            if self
+                .right_tab
+                .as_ref()
+                .is_some_and(|tab| matches!(tab, Tab::Browser | Tab::Terminal(_)))
+            {
                 self.right_tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.
@@ -153,12 +148,9 @@ impl Kagan {
                 self.tabs.views.push((*number, view, typed));
             }
         }
-        if self
-            .right_tab
-            .as_deref()
-            .and_then(terminal_number)
-            .is_some_and(|shown| !numbers.contains(&shown))
-        {
+        if self.right_tab.as_ref().is_some_and(
+            |shown| matches!(shown, Tab::Terminal(number) if !numbers.contains(number)),
+        ) {
             self.right_tab = self.default_right_tab(cx);
         }
         if held {
@@ -168,12 +160,7 @@ impl Kagan {
 
     /// Selects a tab of the right sidebar, opens the sidebar if it is not drawn, and gives the
     /// tab the keyboard.
-    pub(super) fn show_right_tab(
-        &mut self,
-        tab: &str,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn show_right_tab(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
         self.select_right_tab(tab, cx);
         if !self.right_drawn() {
             self.show_right(window, cx);
@@ -198,7 +185,7 @@ impl Kagan {
             (at + order.len() - 1) % order.len()
         };
         match order[next] {
-            Some(number) => self.show_right_tab(&terminal_tab(number), window, cx),
+            Some(number) => self.show_right_tab(Tab::Terminal(number), window, cx),
             None => self.focus_work(window, cx),
         }
     }
@@ -225,7 +212,7 @@ impl Kagan {
                         this.note = None;
                         this.sync_tabs(window, cx);
                         if let Some(extra) = opened.first() {
-                            this.show_right_tab(&terminal_tab(extra.number), window, cx);
+                            this.show_right_tab(Tab::Terminal(extra.number), window, cx);
                         }
                     }
                     Ok(_) => {}
@@ -306,13 +293,13 @@ impl Kagan {
 
     pub(super) fn open_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.browser = true;
-        self.show_right_tab(BROWSER, window, cx);
+        self.show_right_tab(Tab::Browser, window, cx);
     }
 
     fn close_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.browser = false;
         self.browser.close(window, cx);
-        if self.right_tab.as_deref() == Some(BROWSER) {
+        if self.right_tab == Some(Tab::Browser) {
             self.right_tab = self.default_right_tab(cx);
         }
         self.focus_right_tab(window, cx);
@@ -322,19 +309,19 @@ impl Kagan {
     /// The Browser tab and a tab for each extra terminal, for the right sidebar's tab row.
     pub(super) fn right_tabs(
         &self,
-        selected: Option<&str>,
+        selected: Option<&Tab>,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let browser = self.tabs.browser.then(|| {
             let close: CloseTab = (
-                format!("right-tab-close-{BROWSER}").into(),
+                "right-tab-close-browser".into(),
                 Box::new(Kagan::close_browser),
             );
             tab(
-                format!("right-tab-{BROWSER}"),
+                "right-tab-browser",
                 "Browser".into(),
-                selected == Some(BROWSER),
-                |this, window, cx| this.show_right_tab(BROWSER, window, cx),
+                selected == Some(&Tab::Browser),
+                |this, window, cx| this.show_right_tab(Tab::Browser, window, cx),
                 Some(close),
                 None,
                 cx,
@@ -362,6 +349,8 @@ impl Kagan {
             })
             .collect();
         let preview = if self.tabs.preview.is_some() {
+        let terminals = self.tabs.numbers().map(|number| {
+            let id = Tab::Terminal(number).id().into_owned();
             let close: CloseTab = (
                 "right-tab-close-preview".into(),
                 Box::new(Kagan::close_preview),
@@ -371,6 +360,12 @@ impl Kagan {
                 "Preview".into(),
                 selected == Some(crate::kagan::preview::TAB),
                 |this, window, cx| this.show_right_tab(crate::kagan::preview::TAB, window, cx),
+            let selected = selected == Some(&Tab::Terminal(number));
+            tab(
+                format!("right-tab-{id}"),
+                format!("Terminal {number}").into(),
+                selected,
+                move |this, window, cx| this.show_right_tab(Tab::Terminal(number), window, cx),
                 Some(close),
                 None,
                 cx,

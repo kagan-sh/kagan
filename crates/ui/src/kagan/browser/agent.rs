@@ -7,7 +7,7 @@ use kg_domain::{BrowserOp, BrowserView, OpError, OpResult, ThreadId};
 
 use super::Agent;
 use super::snapshot::{INFO, SNAPSHOT, UNREADABLE, parse_info, parse_snapshot};
-use crate::kagan::{Kagan, tabs};
+use crate::kagan::Kagan;
 use crate::web_page::WebPage;
 
 const NEEDS_WINDOW: &str = "browser control needs a kagan window";
@@ -358,7 +358,7 @@ impl Kagan {
         };
         if self.shown_thread(cx).as_ref() == Some(thread_id) {
             self.tabs.browser = true;
-            self.select_right_tab(tabs::BROWSER, cx);
+            self.select_right_tab(crate::kagan::right::Tab::Browser, cx);
             self.show_right_quiet(window, cx);
         }
         self.sync_browser(cx);

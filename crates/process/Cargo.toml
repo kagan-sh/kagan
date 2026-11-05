@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 async-process = "=2.5.0"
+tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

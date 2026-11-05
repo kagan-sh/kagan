@@ -97,7 +97,6 @@ impl Drop for Process {
     }
 }
 
-/// Polls `try_wait` every 20 ms until the child exits or `limit` passes, then calls `kill`.
 pub(super) fn poll_child<T>(
     child: &mut T,
     mut try_wait: impl FnMut(&mut T) -> io::Result<Option<ExitStatus>>,

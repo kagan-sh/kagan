@@ -21,7 +21,6 @@ fn a_plain_button_in_any_plugin_script_is_a_warning_and_a_kg_button_is_not() {
         ["ui/panel.js uses Button, which kg ui cannot find or click; use KgButton"]
     );
 
-    // A comment or a string that names Button constructs nothing.
     std::fs::write(
         dir.path().join("ui/panel.js"),
         "// new Button(\"old\")\nexport const n = \"new Button(x)\";\nexport const k = new KgButton(\"go\");\n",
