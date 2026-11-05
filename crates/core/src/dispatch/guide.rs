@@ -6,7 +6,7 @@ pub(crate) fn read(chapter: Option<GuideChapter>) -> OpResult {
             return OpResult::Text(format!(
                 "{}\n\nChapters: threads, projects, environments, plugins, skills, ui, json\nRead one with kg guide <chapter>.\n\n{}",
                 include_str!("../../../../docs/CONTEXT.md"),
-                include_str!("guide-map.md")
+                include_str!("../guide-map.md")
             ));
         }
         Some(GuideChapter::Threads) => {
