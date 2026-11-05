@@ -6,28 +6,41 @@ use serde_json::json;
 
 use crate::host::database::Result;
 
-use super::{Known, SKILL_LINK, introduction, note_with, toml};
+use super::{Known, introduction, note_with, toml};
+
+pub(super) struct AgentFiles<'a> {
+    pub(super) agent: &'a Path,
+    pub(super) id: &'a str,
+    pub(super) cli: &'a Path,
+    pub(super) socket: Option<&'a OsStr>,
+    pub(super) extra: &'a str,
+    pub(super) skills_root: &'a Path,
+}
 
 pub(super) async fn write_agent_files(
     known: &Known,
-    agent: &Path,
-    id: &str,
-    cli: &Path,
-    socket: Option<&OsStr>,
-    extra: &str,
+    files: AgentFiles<'_>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
+    let AgentFiles {
+        agent,
+        id,
+        cli,
+        socket,
+        extra,
+        skills_root,
+    } = files;
     match known {
         Known::Claude => write_files(claude_files(agent, id, cli, socket, extra), cx).await,
         Known::Cursor => {
             let dir = cursor_dir(agent, id);
             write_files(cursor_files(&dir, extra), cx).await?;
-            let skills = agent.join("skills");
+            let skills = skills_root.to_owned();
             cx.background_spawn(async move { link_cursor_skills(&dir, &skills) })
                 .await?;
             Ok(())
         }
-        Known::Codex => Ok(()),
+        Known::Codex | Known::Kimi | Known::OpenCode | Known::Pi => Ok(()),
     }
 }
 
@@ -41,15 +54,18 @@ pub(super) fn flags(
     cli: &Path,
     socket: Option<&OsStr>,
     agent: &Path,
+    skills_root: &Path,
+    folder: &Path,
 ) -> Vec<OsString> {
     match known {
         Known::Claude => {
             let thread = agent.join("threads").join(id);
+            let plugin = skills_root.parent().unwrap_or(agent);
             vec![
                 OsString::from("--mcp-config"),
                 thread.join("mcp.json").into_os_string(),
                 OsString::from("--plugin-dir"),
-                agent.to_path_buf().into_os_string(),
+                plugin.to_path_buf().into_os_string(),
                 OsString::from("--append-system-prompt-file"),
                 thread.join("note.txt").into_os_string(),
             ]
@@ -59,7 +75,39 @@ pub(super) fn flags(
             cursor_dir(agent, id).into_os_string(),
         ],
         Known::Codex => codex_overrides(id, cli, socket),
+        Known::Kimi => kimi_skills(skills_root, folder),
+        Known::Pi => vec![
+            OsString::from("--skill"),
+            skills_root.to_owned().into_os_string(),
+        ],
+        Known::OpenCode => Vec::new(),
     }
+}
+
+fn kimi_skills(skills_root: &Path, folder: &Path) -> Vec<OsString> {
+    let mut native = Vec::new();
+    if let Some(home) = std::env::var_os("KIMI_CODE_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    {
+        native.push(home.join("skills"));
+    } else if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+    {
+        let home = PathBuf::from(home);
+        native.push(home.join(".kimi-code/skills"));
+        native.push(home.join(".kimi/skills"));
+    }
+    native.push(folder.join(".kimi-code/skills"));
+    native.push(folder.join(".agents/skills"));
+    native.push(folder.join(".claude/skills"));
+    let mut args = Vec::new();
+    for dir in native.into_iter().filter(|dir| dir.is_dir()) {
+        args.push(OsString::from("--skills-dir"));
+        args.push(dir.into_os_string());
+    }
+    args.push(OsString::from("--skills-dir"));
+    args.push(skills_root.to_owned().into_os_string());
+    args
 }
 
 pub(super) fn environment(
@@ -133,39 +181,102 @@ fn link_cursor_skills(dir: &Path, skills: &Path) -> std::io::Result<()> {
     symlink_dir(&skills, &link)
 }
 
-// Codex discovers skills in the working folder and has no per-run skills directory. The link is
-// the skill. A directory the person already put at this path is left alone. Git exclude keeps
-// the link out of the change list.
-pub(super) fn link_skill(folder: &Path, skill: &Path) -> std::io::Result<()> {
-    let skill = dunce::canonicalize(skill)?;
-    let link = folder.join(".agents").join("skills").join("kg-threads");
-    if let Some(parent) = link.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    match std::fs::symlink_metadata(&link) {
-        Ok(_) => match std::fs::read_link(&link) {
-            Ok(current) if current == skill => {}
-            Ok(current) if kagan_skill_link(&current) => std::fs::remove_file(&link)?,
-            Ok(_) | Err(_) => return Ok(()),
-        },
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
-    }
-    if !link.exists() {
-        symlink_dir(&skill, &link)?;
-    }
-    hide_from_git(folder)
+// Codex and OpenCode read skills from the working folder and have no per-run skills
+// directory. Kagan links each composed skill into that folder and leaves any entry the person
+// already put at the same name alone. Git exclude names only the links Kagan owns.
+pub(super) async fn link_skills(
+    folder: &Path,
+    skills_root: &Path,
+    owned_root: &Path,
+    names: &[String],
+    roots: &[&str],
+    cx: &mut AsyncApp,
+) -> std::io::Result<()> {
+    let folder = folder.to_owned();
+    let skills_root = skills_root.to_owned();
+    let owned_root = owned_root.to_owned();
+    let names = names.to_vec();
+    let roots = roots
+        .iter()
+        .map(|root| (*root).to_owned())
+        .collect::<Vec<_>>();
+    cx.background_spawn(async move {
+        let _turn = LINKS
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for root in &roots {
+            let owned = link_root(&folder, &skills_root, &owned_root, &names, root)?;
+            hide_from_git(&folder, root, &owned, &owned_root)?;
+        }
+        Ok(())
+    })
+    .await
 }
 
-fn kagan_skill_link(path: &Path) -> bool {
-    let mut parts = path.components().rev();
-    parts
-        .next()
-        .is_some_and(|part| part.as_os_str() == "kg-threads")
-        && parts
-            .next()
-            .is_some_and(|part| part.as_os_str() == "skills")
-        && parts.next().is_some_and(|part| part.as_os_str() == "agent")
+static LINKS: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+
+fn link_root(
+    folder: &Path,
+    skills_root: &Path,
+    owned_root: &Path,
+    names: &[String],
+    relative: &str,
+) -> std::io::Result<Vec<String>> {
+    let root = folder.join(relative);
+    std::fs::create_dir_all(&root)?;
+    for entry in std::fs::read_dir(&root)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !names.contains(&name) && own_link(&entry.path(), owned_root) {
+            remove_link(&entry.path())?;
+        }
+    }
+    let mut owned = Vec::new();
+    for name in names {
+        let link = root.join(name);
+        let target = skills_root.join(name);
+        match std::fs::symlink_metadata(&link) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                if std::fs::read_link(&link).is_ok_and(|current| current == target) {
+                    owned.push(name.clone());
+                    continue;
+                }
+                if own_link(&link, owned_root) {
+                    remove_link(&link)?;
+                } else {
+                    continue;
+                }
+            }
+            Ok(_) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        if !link.exists() {
+            symlink_dir(&target, &link)?;
+        }
+        if own_link(&link, owned_root) {
+            owned.push(name.clone());
+        }
+    }
+    Ok(owned)
+}
+
+fn own_link(link: &Path, owned_root: &Path) -> bool {
+    std::fs::read_link(link).is_ok_and(|target| {
+        let target = if target.is_absolute() {
+            target
+        } else {
+            link.parent()
+                .map(|parent| parent.join(&target))
+                .unwrap_or(target)
+        };
+        target.starts_with(owned_root)
+    })
+}
+
+fn remove_link(link: &Path) -> std::io::Result<()> {
+    std::fs::remove_file(link)
 }
 
 fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
@@ -179,27 +290,57 @@ fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
     }
 }
 
-fn hide_from_git(folder: &Path) -> std::io::Result<()> {
+fn hide_from_git(
+    folder: &Path,
+    root: &str,
+    owned: &[String],
+    owned_root: &Path,
+) -> std::io::Result<()> {
     let Some(exclude) = git_exclude(folder) else {
         return Ok(());
     };
     if let Some(parent) = exclude.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut text = match std::fs::read_to_string(&exclude) {
+    let text = match std::fs::read_to_string(&exclude) {
         Ok(text) => text,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(error),
     };
-    if text.lines().any(|line| line.trim() == SKILL_LINK) {
-        return Ok(());
+    let prefix = format!("{root}/");
+    let mut lines = Vec::new();
+    let mut changed = false;
+    for line in text.lines() {
+        let keep = match line.trim().strip_prefix(&prefix) {
+            Some(name) if !name.is_empty() && !name.contains('/') => {
+                let link = folder.join(root).join(name);
+                let owned_name = owned.iter().any(|owned| owned == name);
+                owned_name
+                    || (std::fs::symlink_metadata(&link).is_ok() && !own_link(&link, owned_root))
+            }
+            _ => true,
+        };
+        if keep {
+            lines.push(line.to_owned());
+        } else {
+            changed = true;
+        }
     }
-    if !text.is_empty() && !text.ends_with('\n') {
-        text.push('\n');
+    for name in owned {
+        let line = format!("{root}/{name}");
+        if !lines.iter().any(|existing| existing.trim() == line) {
+            lines.push(line);
+            changed = true;
+        }
     }
-    text.push_str(SKILL_LINK);
-    text.push('\n');
-    std::fs::write(exclude, text)
+    if changed {
+        let mut text = lines.join("\n");
+        if !text.is_empty() {
+            text.push('\n');
+        }
+        std::fs::write(exclude, text)?;
+    }
+    Ok(())
 }
 
 fn git_exclude(folder: &Path) -> Option<PathBuf> {
@@ -232,10 +373,6 @@ fn claude_files(
 ) -> Vec<(PathBuf, String)> {
     let thread = agent.join("threads").join(id);
     vec![
-        (
-            agent.join(".claude-plugin").join("plugin.json"),
-            "{\"name\": \"kagan\"}\n".into(),
-        ),
         (thread.join("mcp.json"), mcp_config(id, cli, socket)),
         (thread.join("note.txt"), note_with(id, extra)),
     ]
@@ -289,7 +426,7 @@ fn codex_overrides(id: &str, cli: &Path, socket: Option<&OsStr>) -> Vec<OsString
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::{SKILL_LINK, git_exclude, hide_from_git, link_skill};
+    use super::{git_exclude, hide_from_git, link_root};
 
     fn skill(dir: &Path, name: &str) -> PathBuf {
         let path = dir.join(name);
@@ -303,32 +440,38 @@ mod tests {
         path
     }
 
+    fn names(names: &[&str]) -> Vec<String> {
+        names.iter().map(|name| (*name).to_owned()).collect()
+    }
+
     #[cfg(unix)]
     #[test]
-    fn link_skill_links_the_skill_and_hides_it_from_git_once() {
+    fn link_root_links_the_skill_and_hides_only_that_link_from_git() {
         let dir = tempfile::tempdir().unwrap();
-        let source = skill(dir.path(), "source");
+        let _source = skill(dir.path(), "source");
         let work = folder(dir.path(), "work");
+        let root = ".codex/skills";
 
-        link_skill(&work, &source).unwrap();
+        let owned =
+            link_root(&work, dir.path(), dir.path(), &names(&["kg-threads"]), root).unwrap();
+        hide_from_git(&work, root, &owned, dir.path()).unwrap();
         assert_eq!(
-            std::fs::read_link(work.join(".agents/skills/kg-threads")).unwrap(),
-            source
+            std::fs::read_link(work.join(".codex/skills/kg-threads")).unwrap(),
+            dir.path().join("kg-threads")
         );
         let exclude = work.join(".git/info/exclude");
         assert_eq!(
-            std::fs::read_to_string(&exclude)
-                .unwrap()
-                .matches(SKILL_LINK)
-                .count(),
-            1
+            std::fs::read_to_string(&exclude).unwrap(),
+            ".codex/skills/kg-threads\n"
         );
 
-        link_skill(&work, &source).unwrap();
+        let owned =
+            link_root(&work, dir.path(), dir.path(), &names(&["kg-threads"]), root).unwrap();
+        hide_from_git(&work, root, &owned, dir.path()).unwrap();
         assert_eq!(
             std::fs::read_to_string(&exclude)
                 .unwrap()
-                .matches(SKILL_LINK)
+                .matches(".codex/skills/kg-threads")
                 .count(),
             1
         );
@@ -336,70 +479,85 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn link_skill_leaves_a_person_s_folder_or_unrelated_link_alone() {
+    fn link_root_leaves_a_person_s_folder_or_unrelated_link_alone() {
         let dir = tempfile::tempdir().unwrap();
-        let source = skill(dir.path(), "source");
-        let other = skill(dir.path(), "other");
+        let _source = skill(dir.path(), "source");
+        let root = ".codex/skills";
 
         let folder_path = dir.path().join("folder");
-        std::fs::create_dir_all(folder_path.join(".agents/skills/kg-threads")).unwrap();
-        link_skill(&folder_path, &source).unwrap();
-        assert!(!folder_path.join(".agents/skills/kg-threads").is_symlink());
+        std::fs::create_dir_all(folder_path.join(".codex/skills/kg-threads")).unwrap();
+        let owned = link_root(
+            &folder_path,
+            dir.path(),
+            dir.path(),
+            &names(&["kg-threads"]),
+            root,
+        )
+        .unwrap();
+        assert!(owned.is_empty());
+        assert!(!folder_path.join(".codex/skills/kg-threads").is_symlink());
 
+        let other = skill(dir.path(), "other");
         let linked = dir.path().join("linked");
-        std::fs::create_dir_all(linked.join(".agents/skills")).unwrap();
-        std::os::unix::fs::symlink(&other, linked.join(".agents/skills/kg-threads")).unwrap();
-        link_skill(&linked, &source).unwrap();
+        std::fs::create_dir_all(linked.join(".codex/skills")).unwrap();
+        std::os::unix::fs::symlink(&other, linked.join(".codex/skills/kg-threads")).unwrap();
+        let owned = link_root(
+            &linked,
+            dir.path(),
+            dir.path(),
+            &names(&["kg-threads"]),
+            root,
+        )
+        .unwrap();
+        assert!(owned.is_empty());
         assert_eq!(
-            std::fs::read_link(linked.join(".agents/skills/kg-threads")).unwrap(),
+            std::fs::read_link(linked.join(".codex/skills/kg-threads")).unwrap(),
             other
         );
     }
 
     #[cfg(unix)]
     #[test]
-    fn link_skill_replaces_an_older_kagan_link() {
+    fn link_root_removes_a_kagan_link_the_catalog_dropped() {
         let dir = tempfile::tempdir().unwrap();
-        let source = skill(dir.path(), "source");
+        let _source = skill(dir.path(), "source");
         let work = folder(dir.path(), "work");
-        let old = dir.path().join("agent/skills/kg-threads");
-        std::fs::create_dir_all(&old).unwrap();
-        std::fs::create_dir_all(work.join(".agents/skills")).unwrap();
-        std::os::unix::fs::symlink(&old, work.join(".agents/skills/kg-threads")).unwrap();
+        std::fs::create_dir_all(work.join(".codex/skills")).unwrap();
+        std::os::unix::fs::symlink(dir.path().join("gone"), work.join(".codex/skills/gone"))
+            .unwrap();
 
-        link_skill(&work, &source).unwrap();
-        assert_eq!(
-            std::fs::read_link(work.join(".agents/skills/kg-threads")).unwrap(),
-            source
-        );
+        link_root(
+            &work,
+            dir.path(),
+            dir.path(),
+            &names(&["kept"]),
+            ".codex/skills",
+        )
+        .unwrap();
+        assert!(!work.join(".codex/skills/gone").exists());
+        assert!(work.join(".codex/skills/kept").is_symlink());
     }
 
+    #[cfg(unix)]
     #[test]
-    fn hide_from_git_keeps_existing_text_and_adds_one_line() {
+    fn hide_from_git_removes_a_stale_owned_line_and_keeps_a_person_line() {
         let dir = tempfile::tempdir().unwrap();
         let work = folder(dir.path(), "work");
         let exclude = work.join(".git/info/exclude");
-        std::fs::write(&exclude, "target").unwrap();
+        std::fs::create_dir_all(work.join(".codex/skills/mine")).unwrap();
+        std::fs::write(&exclude, "target\n.codex/skills/gone\n.codex/skills/mine\n").unwrap();
 
-        hide_from_git(&work).unwrap();
+        hide_from_git(&work, ".codex/skills", &names(&["kept"]), dir.path()).unwrap();
         assert_eq!(
             std::fs::read_to_string(&exclude).unwrap(),
-            format!("target\n{SKILL_LINK}\n")
-        );
-        hide_from_git(&work).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(&exclude)
-                .unwrap()
-                .matches(SKILL_LINK)
-                .count(),
-            1
+            "target\n.codex/skills/mine\n.codex/skills/kept\n"
         );
     }
 
     #[test]
     fn hide_from_git_does_nothing_without_a_git_folder() {
         let dir = tempfile::tempdir().unwrap();
-        hide_from_git(dir.path()).unwrap();
+        hide_from_git(dir.path(), ".codex/skills", &names(&["one"]), dir.path()).unwrap();
         assert!(!dir.path().join(".git/info/exclude").exists());
     }
 
@@ -410,7 +568,7 @@ mod tests {
         let exclude = work.join(".git/info/exclude");
         std::fs::remove_file(&exclude).ok();
         std::fs::create_dir(&exclude).unwrap();
-        assert!(hide_from_git(&work).is_err());
+        assert!(hide_from_git(&work, ".codex/skills", &names(&["one"]), dir.path()).is_err());
     }
 
     #[test]

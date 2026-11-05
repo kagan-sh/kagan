@@ -118,8 +118,12 @@ _Avoid_: cron job, cron, background job, service
 **Skill**:
 A packaged set of instructions an agent can load for one kind of task.
 
+**BB skill**:
+A skill in the person's BB data folder (`$BB_DATA_DIR/skills`, or `~/.bb/skills`), or in a thread folder's `.bb/skills`. Kagan leaves it where it is and copies it into a thread's native skill tree; it is not one of kagan's four `kg skill` sources [decision 158].
+_Avoid_: imported skill, external skill
+
 **Agent integration**:
-What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, kagan's skills from `<dataDir>/agent`. For `cursor-agent`, a per-thread plugin dir under `<dataDir>/agent/threads/<id>/cursor` (skills linked from `<dataDir>/agent/skills`, note as a rule there). For `codex`, the skill `kg-threads` linked into the thread folder, where Codex looks. Plugins that declare `instruct` may append text to that note for the current start only. For `claude`, `codex`, `cursor-agent`, and `agent`, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. For `cursor-agent` and `agent`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The link in the thread folder stays. The person can turn the extra arguments off with the `agent-integration` preference.
+What kagan adds to a thread's program so it knows it runs inside kagan: the `KG_*` variables and `kg` on `PATH` for every program. For `claude` and `codex`, the `kg mcp` server and a fixed note in its instructions. For `claude`, the composed skills as a plugin at `<dataDir>/agent/catalogs/<hash>`. For `cursor-agent`, a per-thread plugin dir under `<dataDir>/agent/threads/<id>/cursor` (skills linked from the catalog, note as a rule there). For `codex`, the composed skills linked into the thread folder at `.codex/skills`; for `opencode`, at `.opencode/skills`; for `kimi`, `--skills-dir` for each existing native root and the composed root. For `pi`, `--skill <catalog>/skills`. The composed tree is immutable per content hash and holds kagan's resolved skills (bundled, plugin, user, project), then the person's BB skills from `<BB_DATA_DIR or ~/.bb>/skills` and `<thread folder>/.bb/skills`; a kagan skill wins a name collision with a BB skill. Plugins that declare `instruct` may append text to that note for the current start only. For `claude`, `codex`, `cursor-agent`, and `agent`, what lets Start again resume the thread's conversation. For `claude`, nothing is added to a line that names a subcommand. For `cursor-agent`, `agent`, `kimi`, `opencode`, and `pi`, nothing is added to a line that names a subcommand. Archiving or deleting a thread removes its agent files. The links in the thread folder stay, and each one has its own `.git/info/exclude` line. The person can turn the extra arguments off with the `agent-integration` preference.
 _Avoid_: Injection, agent setup, wrapper
 
 **Conversation**:
@@ -220,5 +224,9 @@ Session	*	--new-session-id	Cursor Agent's own flag name
 Session	docs/behaviour.md	browser session	browser session is the CONTEXT term for the page a thread drives
 Session	book/src/window.md	browser session	browser session is the CONTEXT term for the page a thread drives
 Session	crates/ui/src/kagan/browser/agent.rs	browser session	browser session is the CONTEXT term for the page a thread drives
+Session	thread/agent.rs	--session	another program's own flag name
+Session	thread/agent.rs	"session"	another program's own subcommand name
+Session	book/src/skills.md	session opened	another program's own session
+Session	docs/self-extend.md	session of the same program	another program's own session
 Chat	thread/agent.rs	create-chat	Cursor Agent's own subcommand
 ```

@@ -85,6 +85,7 @@ pub(super) async fn args(
         Known::Codex => codex(this, record, folder, cx).await,
         Known::Cursor if picks_cursor(args) => Ok((Vec::new(), None)),
         Known::Cursor => cursor(this, record, folder, start, cx).await,
+        Known::Kimi | Known::OpenCode | Known::Pi => Ok((Vec::new(), None)),
     }
 }
 

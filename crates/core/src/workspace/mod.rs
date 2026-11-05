@@ -143,6 +143,8 @@ pub struct Workspace {
     pub(crate) codex_home: Option<std::path::PathBuf>,
     /// Where Cursor keeps its conversations, when a test has set it; None is `CURSOR_CONFIG_DIR`, `$XDG_CONFIG_HOME/cursor`, or `~/.cursor`
     pub(crate) cursor_config: Option<std::path::PathBuf>,
+    /// Where BB keeps its skills, when a test has set it; None is `BB_DATA_DIR` or `~/.bb`
+    pub(crate) bb_data_dir: Option<std::path::PathBuf>,
     pub(crate) ui: Option<crate::dispatch::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
@@ -267,6 +269,7 @@ impl Workspace {
                         claude_config: None,
                         codex_home: None,
                         cursor_config: None,
+                        bb_data_dir: None,
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),

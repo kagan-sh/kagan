@@ -1,6 +1,6 @@
 ---
 name: kg-cli
-description: Status, projects, and the binary for the running kagan app.
+description: Find the running kagan app, read status, list projects and programs, and choose the right kg command. Use before acting in a thread, when kg is not found, or when a command needs the project, environment, or data folder.
 ---
 
 Read `kg guide` for the command and preference map, and `kg guide json`. Read `kg status --json` for thread context. Use `kg guide threads`, `kg guide projects`, `kg guide environments` and `kg guide ui` before changing work. Use --json and treat a nonzero exit as a failure.

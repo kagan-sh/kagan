@@ -13,7 +13,6 @@ use super::conversation;
 use super::run::ResolvedProgram;
 
 const PREFERENCE: &str = "agent-integration";
-const SKILL_LINK: &str = ".agents/skills/kg-threads";
 
 // https://code.claude.com/docs/en/cli-reference: the commands in its table, and the aliases plugins and kill.
 const CLAUDE_SUBCOMMANDS: &[&str] = &[
@@ -45,6 +44,118 @@ const CLAUDE_SUBCOMMANDS: &[&str] = &[
 const CLAUDE_PERMISSION_FLAGS: &[&str] = &[
     "--dangerously-skip-permissions",
     "--allow-dangerously-skip-permissions",
+];
+
+// OpenCode 1.4.x, from `opencode --help`.
+const OPENCODE_SUBCOMMANDS: &[&str] = &[
+    "upgrade",
+    "update",
+    "uninstall",
+    "acp",
+    "api",
+    "debug",
+    "auth",
+    "mcp",
+    "plugin",
+    "models",
+    "stats",
+    "mini",
+    "run",
+    "session",
+    "service",
+    "reload",
+    "pair",
+    "serve",
+    "help",
+];
+
+// Pi, from `pi --help`.
+const PI_SUBCOMMANDS: &[&str] = &[
+    "install",
+    "remove",
+    "uninstall",
+    "update",
+    "list",
+    "config",
+    "auth",
+    "mcp",
+    "help",
+];
+
+// Kimi Code 2.4, from `kimi --help`.
+const KIMI_SUBCOMMANDS: &[&str] = &[
+    "export",
+    "fork",
+    "provider",
+    "session",
+    "acp",
+    "web",
+    "server",
+    "rc",
+    "remote",
+    "login",
+    "doctor",
+    "vis",
+    "install-desktop",
+    "app",
+    "migrate",
+    "import-sessions",
+    "upgrade",
+    "update",
+    "help",
+];
+
+// Options that take the next argument, so a value that looks like a subcommand is not one.
+const OPENCODE_VALUE_FLAGS: &[&str] = &[
+    "--server",
+    "--session",
+    "-s",
+    "--prompt",
+    "--log-level",
+    "--completions",
+];
+
+const PI_VALUE_FLAGS: &[&str] = &[
+    "--provider",
+    "--model",
+    "--api-key",
+    "--system-prompt",
+    "--append-system-prompt",
+    "--mode",
+    "--session",
+    "--session-id",
+    "--fork",
+    "--session-dir",
+    "--name",
+    "-n",
+    "--models",
+    "--tools",
+    "-t",
+    "--exclude-tools",
+    "-xt",
+    "--thinking",
+    "--extension",
+    "-e",
+    "--skill",
+    "--prompt-template",
+    "--theme",
+    "--use-theme",
+    "--export",
+    "--tui-mode",
+];
+
+const KIMI_VALUE_FLAGS: &[&str] = &[
+    "-S",
+    "--session",
+    "-m",
+    "--model",
+    "-p",
+    "--prompt",
+    "--output-format",
+    "--skills-dir",
+    "--agent",
+    "--agent-file",
+    "--add-dir",
 ];
 
 // Cursor Agent 2026.10.22-27dcf5f, from `agent --help`. `agent` is that program too.
@@ -108,6 +219,9 @@ pub(super) enum Known {
     Claude,
     Codex,
     Cursor,
+    Kimi,
+    OpenCode,
+    Pi,
 }
 
 /// The `KG_*` variables and the PATH with `kg` on it, which every terminal of the thread gets.
@@ -155,7 +269,6 @@ pub(crate) async fn integrate(
             )
         })
         .map_err(closed)?;
-    let id = record.id.0.as_str();
     let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
     let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
     else {
@@ -169,46 +282,136 @@ pub(crate) async fn integrate(
             args: Vec::new(),
         });
     };
-    let setup = async {
-        let extra = collect_instruct(this, record, cx).await;
-        let agent = data_dir.join("agent");
-        skill::mirror(this, agent.join("skills"), cx).await?;
-        write_agent_files(&known, &agent, id, &cli, socket.as_deref(), &extra, cx).await?;
-        if matches!(known, Known::Codex) {
-            let skill = data_dir.join("agent").join("skills").join("kg-threads");
-            if let Err(error) = link_skill(folder, &skill) {
-                eprintln!(
-                    "kg: could not offer kg-threads in {}: {error}",
-                    folder.display()
-                );
-            }
-        }
-        let mut args = flags(&known, id, &cli, socket.as_deref(), &agent);
-        let (conversation, notice) =
-            conversation::args(this, &known, record, &program.args, folder, start, cx).await?;
-        args.extend(conversation);
-        Result::Ok((args, notice))
-    };
-    let (args, notice) = match setup.await {
-        Ok((args, notice)) => (
+    let setup = configure(
+        Setup {
+            this,
+            record,
+            program,
+            folder,
+            start,
+            data_dir: &data_dir,
+            cli: &cli,
+            socket: socket.as_deref(),
+            known: &known,
+        },
+        cx,
+    );
+    let (args, notice, warning) = match setup.await {
+        Ok((args, notice, warning)) => (
             args,
             notice.map(|text| (NoticeSeverity::Info, text.to_owned())),
+            warning,
         ),
         Err(error) => (
             Vec::new(),
-            Some((
-                NoticeSeverity::Warning,
-                format!(
-                    "kagan could not set up the agent integration, so the program starts without it: {error}"
-                ),
+            None,
+            Some(format!(
+                "kagan could not set up the agent integration, so the program starts without it: {error}"
             )),
         ),
     };
+    let mut notices = Vec::new();
     if let Some((severity, text)) = notice {
-        let notice = EventKind::Notice { severity, text };
-        Workspace::events(this, record.id.clone(), vec![notice], cx).await?;
+        notices.push(EventKind::Notice { severity, text });
+    }
+    if let Some(text) = warning {
+        notices.push(EventKind::Notice {
+            severity: NoticeSeverity::Warning,
+            text,
+        });
+    }
+    if !notices.is_empty() {
+        Workspace::events(this, record.id.clone(), notices, cx).await?;
     }
     Ok(Integration { env, args })
+}
+
+struct Setup<'a> {
+    this: &'a WeakEntity<Workspace>,
+    record: &'a kg_domain::Thread,
+    program: &'a ResolvedProgram,
+    folder: &'a Path,
+    start: Start,
+    data_dir: &'a Path,
+    cli: &'a Path,
+    socket: Option<&'a OsStr>,
+    known: &'a Known,
+}
+
+async fn configure(
+    input: Setup<'_>,
+    cx: &mut AsyncApp,
+) -> Result<(Vec<OsString>, Option<&'static str>, Option<String>)> {
+    let Setup {
+        this,
+        record,
+        program,
+        folder,
+        start,
+        data_dir,
+        cli,
+        socket,
+        known,
+    } = input;
+    let id = record.id.0.as_str();
+    let extra = collect_instruct(this, record, cx).await;
+    let agent = data_dir.join("agent");
+    let (skills_root, skills, skill_errors) = skill::mirror(
+        this,
+        agent.clone(),
+        folder.to_owned(),
+        record.project_id.clone(),
+        cx,
+    )
+    .await?;
+    write_agent_files(
+        known,
+        files::AgentFiles {
+            agent: &agent,
+            id,
+            cli,
+            socket,
+            extra: &extra,
+            skills_root: &skills_root,
+        },
+        cx,
+    )
+    .await?;
+    let roots: &[&str] = match known {
+        Known::Codex => &[".codex/skills"],
+        Known::OpenCode => &[".opencode/skills"],
+        Known::Claude | Known::Cursor | Known::Kimi | Known::Pi => &[],
+    };
+    let mut warning = None;
+    if !skill_errors.is_empty() {
+        warning = Some(format!(
+            "kagan could not use some skills: {}",
+            skill_errors
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
+    if !roots.is_empty()
+        && let Err(error) =
+            files::link_skills(folder, &skills_root, &agent, &skills, roots, cx).await
+    {
+        let text = format!(
+            "kagan could not offer the composed skills in {}: {error}",
+            folder.display()
+        );
+        warning = Some(match warning {
+            Some(previous) => format!("{previous}; {text}"),
+            None => text,
+        });
+    }
+    let mut args = flags(known, id, cli, socket, &agent, &skills_root, folder);
+    let (conversation, notice) =
+        conversation::args(this, known, record, &program.args, folder, start, cx).await?;
+    args.extend(conversation);
+    Ok((args, notice, warning))
 }
 
 fn known(program: &Path) -> Option<Known> {
@@ -216,13 +419,17 @@ fn known(program: &Path) -> Option<Known> {
         "claude" => Some(Known::Claude),
         "codex" => Some(Known::Codex),
         "cursor-agent" | "agent" => Some(Known::Cursor),
+        "kimi" => Some(Known::Kimi),
+        "opencode" => Some(Known::OpenCode),
+        "pi" => Some(Known::Pi),
         _ => None,
     }
 }
 
 // Claude takes no flag before a subcommand, so kagan adds nothing to a line that names one. Codex
 // takes its flags before a subcommand, so its overrides always apply. A Cursor subcommand is not
-// its conversation, so kagan adds nothing to that line either.
+// its conversation, so kagan adds nothing to that line either. The other programs take flags
+// before a subcommand, and a subcommand line is not a conversation.
 fn subcommand(known: &Known, args: &[OsString]) -> bool {
     match known {
         Known::Claude => args
@@ -235,8 +442,36 @@ fn subcommand(known: &Known, args: &[OsString]) -> bool {
             .and_then(|arg| arg.to_str())
             .is_some_and(|arg| CLAUDE_SUBCOMMANDS.contains(&arg)),
         Known::Cursor => cursor_subcommand(args),
+        Known::Kimi => {
+            first_word(args, KIMI_VALUE_FLAGS).is_some_and(|arg| KIMI_SUBCOMMANDS.contains(&arg))
+        }
+        Known::OpenCode => first_word(args, OPENCODE_VALUE_FLAGS)
+            .is_some_and(|arg| OPENCODE_SUBCOMMANDS.contains(&arg)),
+        Known::Pi => {
+            first_word(args, PI_VALUE_FLAGS).is_some_and(|arg| PI_SUBCOMMANDS.contains(&arg))
+        }
         Known::Codex => false,
     }
+}
+
+fn first_word<'a>(args: &'a [OsString], value_flags: &[&str]) -> Option<&'a str> {
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let Some(text) = arg.to_str() else {
+            continue;
+        };
+        if text == "--" {
+            return args.next().and_then(|arg| arg.to_str());
+        }
+        if text.starts_with('-') {
+            if !text.contains('=') && value_flags.contains(&text) {
+                args.next();
+            }
+            continue;
+        }
+        return Some(text);
+    }
+    None
 }
 
 fn cursor_subcommand(args: &[OsString]) -> bool {
@@ -293,7 +528,7 @@ async fn collect_instruct(
 
 mod files;
 
-use files::{environment, flags, link_skill, write_agent_files};
+use files::{environment, flags, write_agent_files};
 
 pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx: &mut AsyncApp) {
     let Ok(data_dir) = this.update(cx, |workspace, _| workspace.data_dir.clone()) else {

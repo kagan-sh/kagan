@@ -143,6 +143,7 @@ pub enum SkillSource {
     Plugin,
     User,
     Project,
+    External,
 }
 
 #[cfg(test)]

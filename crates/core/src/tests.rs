@@ -81,6 +81,11 @@ impl Fixture {
             .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
             .await
             .unwrap();
+        cx.update(|cx| {
+            workspace.update(cx, |workspace, _| {
+                workspace.bb_data_dir = Some(dir.path().join("bb"));
+            });
+        });
         Self {
             dir,
             project,
@@ -109,6 +114,11 @@ impl Fixture {
             .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
             .await
             .unwrap();
+        cx.update(|cx| {
+            workspace.update(cx, |workspace, _| {
+                workspace.bb_data_dir = Some(dir.path().join("bb"));
+            });
+        });
         Self {
             dir,
             project,
@@ -1493,7 +1503,7 @@ fn fake_agent(run: &Path, name: &str) -> std::path::PathBuf {
     std::fs::write(
         &program,
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{out}/args'\nenv > '{out}/env.tmp' && mv '{out}/env.tmp' '{out}/env'\nsleep 30\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{out}/args'\nls -1 .codex/skills > '{out}/codex-skills' 2>/dev/null\nls -1 .opencode/skills > '{out}/opencode-skills' 2>/dev/null\nenv > '{out}/env.tmp' && mv '{out}/env.tmp' '{out}/env'\nsleep 30\n",
             out = out.display()
         ),
     )
@@ -1516,6 +1526,7 @@ fn ran(run: &Path) -> (Vec<String>, std::collections::BTreeMap<String, String>) 
     let args = std::fs::read_to_string(out.join("args"))
         .unwrap()
         .lines()
+        .filter(|line| !line.is_empty())
         .map(str::to_owned)
         .collect();
     let env = std::fs::read_to_string(out.join("env"))

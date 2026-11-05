@@ -171,6 +171,13 @@ impl Catalog {
                 .push(format!("duplicate {source:?} skill {name}; both dropped"));
         }
         for (name, loaded) in tier {
+            if matches!(source, SkillSource::User | SkillSource::Project) && name.starts_with("kg-")
+            {
+                self.errors.push(format!(
+                    "{source:?} skill {name} uses the reserved kg- prefix; dropped"
+                ));
+                continue;
+            }
             if source == SkillSource::Plugin
                 && self
                     .skills
