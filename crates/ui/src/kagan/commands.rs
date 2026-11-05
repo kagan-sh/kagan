@@ -413,7 +413,7 @@ fn group_of(name: &str, action: &str) -> &'static str {
         | "ToggleCustomCommand" => "New thread",
         "OpenSettings" | "UseBuiltInSidebar" | "UseBuiltInReview" => "Settings",
         "Bigger" | "Smaller" | "ActualSize" | "ToggleSidebar" | "ToggleRightSidebar"
-        | "FocusSidebar" | "AddProject" => "Window",
+        | "FocusSidebar" | "AddProject" | "Preview" => "Window",
         _ => "Threads",
     }
 }

@@ -100,6 +100,7 @@ pub(crate) async fn execute(
         Op::Browser(op) => crate::browser::run(this, op, cx).await,
         Op::Surface(op) => crate::dispatch::ui::drive(this, crate::UiJob::Surface(op), cx).await,
         Op::Diff(op) => crate::diff::run(database, op, cx).await,
+        Op::Preview(op) => crate::preview::run(database, op, cx).await,
         Op::Diagnostics(op) => crate::dispatch::diagnostics::export(this, op, cx).await,
         Op::Update(op) => crate::update::run(&database, op, cx).await,
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
@@ -180,6 +181,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Preference(PreferenceOp::Get { .. })
         | Op::Plugin(_)
         | Op::Diff(_)
+        | Op::Preview(_)
         | Op::Diagnostics(_)
         | Op::Browser(_)
         | Op::Update(_) => false,

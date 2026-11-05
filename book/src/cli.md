@@ -33,6 +33,7 @@ Commands:
   ui           Native window for QA and agents
   browser      The Browser tab's page, driven by this thread
   diff         A thread environment's diff. Reads git and never writes the worktree
+  preview      One file in the Preview tab, read-only
   diagnostics  Write a local diagnostics file
   update       Check for a newer kagan
   help         Print this message or the help of the given subcommand(s)
@@ -3093,6 +3094,46 @@ Arguments:
           [env: KG_THREAD_ID=]
 
 Options:
+  -h, --help
+          Print help
+```
+
+## `kg preview`
+
+```text
+One file in the Preview tab, read-only
+
+Usage: kg preview [OPTIONS] <COMMAND>
+
+Commands:
+  show  Show one file in the Preview tab
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg preview show`
+
+```text
+Show one file in the Preview tab
+
+Usage: kg preview show [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          File to show. A relative name joins the thread's folder; without a thread it must be absolute
+
+Options:
+      --thread-id <THREAD_ID>
+          Thread whose folder a relative path joins (defaults to `KG_THREAD_ID`)
+          
+          [env: KG_THREAD_ID=]
+
   -h, --help
           Print help
 ```

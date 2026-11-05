@@ -19,6 +19,11 @@ impl Kagan {
         {
             return self.browser.focus(window, cx);
         }
+        if tab == crate::kagan::preview::TAB
+            && let Some(preview) = self.tabs.preview.as_ref()
+        {
+            return window.focus(&preview.focus_handle(), cx);
+        }
         let terminal =
             crate::kagan::tabs::terminal_number(&tab).and_then(|number| self.tabs.view(number));
         let focus = match terminal {

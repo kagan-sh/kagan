@@ -42,6 +42,8 @@ browser: `kg browser open`, `kg browser status`, `kg browser snapshot`, `kg brow
 
 diff: `kg diff list`, `kg diff show`, `kg diff commits`.
 
+preview: `kg preview show` reads one file into the right sidebar's Preview tab.
+
 diagnostics: `kg diagnostics export`.
 
 update: `kg update check` reads the GitHub release list now; `kg update status` prints the version, the install kind and what the last check found. Only a person installs, from the window.

@@ -5355,6 +5355,7 @@ dependencies = [
  "futures",
  "gpui-kit",
  "gpui-pre-reqwest",
+ "image",
  "kg-domain",
  "kg-process",
  "kg-store",

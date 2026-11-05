@@ -31,7 +31,7 @@ use serde_json::Value;
 
 use crate::{
     AgentTool, Environment, EnvironmentId, Event, IndexEntry, Listing, PendingInteraction, Plugin,
-    ProgramList, Project, ProjectId, Sidebar, Thread, ThreadId,
+    PreviewOp, ProgramList, Project, ProjectId, Sidebar, Thread, ThreadId,
 };
 
 pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
@@ -132,6 +132,9 @@ pub enum Op {
     /// A thread environment's diff. Reads git and never writes the worktree.
     #[command(subcommand)]
     Diff(DiffOp),
+    /// One file in the Preview tab, read-only
+    #[command(subcommand)]
+    Preview(PreviewOp),
     /// Write a local diagnostics file
     #[command(subcommand)]
     Diagnostics(DiagnosticsOp),
@@ -228,6 +231,7 @@ pub enum OpResult {
     BrowserSnapshot(BrowserSnapshot),
     Diff(crate::DiffList),
     DiffFile(crate::DiffFileView),
+    Preview(crate::PreviewFile),
     Commits(Vec<crate::DiffCommit>),
     Surfaces(Vec<SurfaceItem>),
     Terminals(Vec<ExtraTerminal>),

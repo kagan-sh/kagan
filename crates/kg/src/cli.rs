@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use kg_domain::{
-    BrowserOp, BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, ThreadOp, UiSnapshot,
+    BrowserOp, BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, PreviewKind, ThreadOp,
+    UiSnapshot,
 };
 
 use crate::socket::Client;
@@ -195,6 +196,30 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                 std::io::stdout()
                     .lock()
                     .write_all(format_browser_snapshot(snapshot).as_bytes())?;
+                return Ok(());
+            }
+            OpResult::Preview(file) => {
+                let text = match &file.kind {
+                    PreviewKind::Text { text, .. } | PreviewKind::Markdown { text, .. } => {
+                        text.clone()
+                    }
+                    PreviewKind::Csv { rows, .. } => rows
+                        .iter()
+                        .map(|row| row.join("\t"))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    PreviewKind::Image {
+                        format,
+                        width,
+                        height,
+                    } => format!(
+                        "{} ({width}×{height} {})",
+                        file.absolute.display(),
+                        format.name()
+                    ),
+                    PreviewKind::Unavailable { reason } => reason.clone(),
+                };
+                println!("{text}");
                 return Ok(());
             }
             _ => {}

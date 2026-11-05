@@ -128,14 +128,18 @@ _Avoid_: Session, chat
 
 **Browser**:
 A tab of the right sidebar that shows one web page on macOS and Windows. A thread's agent can drive it with `kg browser`. Plugins cannot use it.
-_Avoid_: Web view, preview, embedded browser
+_Avoid_: Web view, embedded browser
 
 **Browser session**:
 The page a thread drives through `kg browser`: one per window, owned by one thread, ending on Stop agent, `kg browser close`, its tab, or kagan quitting.
 _Avoid_: Automation, headless browser
 
+**Preview**:
+A tab of the right sidebar that shows one file read-only: UTF-8 text, Markdown, PNG or JPEG, or CSV/TSV. One file at a time. It reads the shown thread's environment folder, or a path the person picked, and never edits, saves or fetches.
+_Avoid_: Viewer, file opener, page, browser
+
 **Panel**:
-A titled block a plugin declares, or one of Questions, Changes and Details. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, the Browser, extra terminals, and a + that opens one of them.
+A titled block a plugin declares, or one of Questions, Changes, Details and Preview. Questions lists pending questions. A thread mark that says needs you is attention, not that panel. A plugin panel is a left tool, a center page, or a right sidebar tab. A panel placed on the bottom is refused. The right sidebar is a tab bar: built-in panels, closable plugin tabs, the Browser, extra terminals, Preview, and a + that opens one of them.
 _Avoid_: Pane, dock
 
 **Page**:

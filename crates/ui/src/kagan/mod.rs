@@ -24,6 +24,7 @@ mod notify;
 mod overlays;
 pub(crate) mod picker;
 mod plugin_actions;
+mod preview;
 mod question;
 pub(crate) mod quit;
 mod replace;
@@ -137,7 +138,8 @@ actions!(
         Smaller,
         ActualSize,
         NewTheme,
-        OpenThemes
+        OpenThemes,
+        Preview
     ]
 );
 

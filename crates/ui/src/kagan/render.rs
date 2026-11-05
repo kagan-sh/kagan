@@ -96,6 +96,7 @@ impl Render for Kagan {
             .on_action(cx.listener(Self::new_thread))
             .on_action(cx.listener(Self::stop))
             .on_action(cx.listener(Self::new_terminal))
+            .on_action(cx.listener(Self::preview_file))
             .on_action(cx.listener(Self::close_terminal))
             .on_action(cx.listener(Self::start_again))
             .on_action(cx.listener(Self::save_diagnostics))
