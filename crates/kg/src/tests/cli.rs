@@ -661,6 +661,67 @@ fn cli_browser_verbs_parse_and_take_the_thread_from_the_environment() {
 }
 
 #[test]
+fn cli_browser_acting_verbs_parse_and_take_the_thread_from_the_environment() {
+    let thread = std::ffi::OsStr::new("thr_browser");
+    let _env = set_env("KG_THREAD_ID", thread);
+    let id = ThreadId("thr_browser".into());
+    assert_eq!(
+        parse(&["browser", "click", "2"]),
+        Op::Browser(kg_domain::BrowserOp::Click {
+            ref_id: 2,
+            thread_id: id.clone(),
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "fill", "2", "ada@example.com"]),
+        Op::Browser(kg_domain::BrowserOp::Fill {
+            ref_id: 2,
+            text: Some("ada@example.com".into()),
+            file: None,
+            thread_id: id.clone(),
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "fill", "3", "--file", "-"]),
+        Op::Browser(kg_domain::BrowserOp::Fill {
+            ref_id: 3,
+            text: None,
+            file: Some(PathBuf::from("-")),
+            thread_id: id.clone(),
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "type", "hello"]),
+        Op::Browser(kg_domain::BrowserOp::Type {
+            text: "hello".into(),
+            thread_id: id.clone(),
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "press", "enter"]),
+        Op::Browser(kg_domain::BrowserOp::Press {
+            key: "enter".into(),
+            thread_id: id.clone(),
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "select", "4", "Blue"]),
+        Op::Browser(kg_domain::BrowserOp::Select {
+            ref_id: 4,
+            option: "Blue".into(),
+            thread_id: id.clone(),
+        })
+    );
+    assert_eq!(
+        parse(&["browser", "scroll", "-200"]),
+        Op::Browser(kg_domain::BrowserOp::Scroll {
+            dy: -200.0,
+            thread_id: id.clone(),
+        })
+    );
+}
+
+#[test]
 fn cli_browser_text_omits_an_empty_title_and_text() {
     let snapshot = kg_domain::BrowserSnapshot {
         url: "https://example.com/login".into(),

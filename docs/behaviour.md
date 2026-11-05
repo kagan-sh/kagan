@@ -443,7 +443,7 @@ A thread environment's diff reads git and never writes the worktree [book:cli]. 
 
 ## Browser
 
-`kg browser` gives the thread named by `KG_THREAD_ID` the Browser tab's one page [decision 143]. One browser session exists per window, owned by that thread; another thread is refused and the message names the owner. The page is private, as the person's is: only http and https, no camera or microphone, no new windows, no downloads [decision 117]. The first command after 30 idle minutes ends the browser session and fails with `the browser session ended after 30 idle minutes`, and the page stays as the person's. Stop agent, `close`, closing the tab, closing the window, or quitting ends it; the page then belongs to the person again. Showing another thread hides the page but does not end the browser session, and the Browser tab comes back with the thread. Linux refuses every verb with `The browser works on macOS and Windows only for now.` [decision 143].
+`kg browser` gives the thread named by `KG_THREAD_ID` the Browser tab's one page [decision 143]. One browser session exists per window, owned by that thread; another thread is refused and the message names the owner. `click`, `fill`, `type`, `press`, `select` and `scroll` act on that page through fixed host scripts [decision 147]. On Windows the agent page has WebView2's default script dialogs off, so a page's `alert`, `confirm` or `prompt` cannot stall a command; macOS shows no script dialogs. The page is private, as the person's is: only http and https, no camera or microphone, no new windows, no downloads [decision 117]. The first command after 30 idle minutes ends the browser session and fails with `the browser session ended after 30 idle minutes`, and the page stays as the person's. Stop agent, `close`, closing the tab, closing the window, or quitting ends it; the page then belongs to the person again. Showing another thread hides the page but does not end the browser session, and the Browser tab comes back with the thread. Linux refuses every verb with `The browser works on macOS and Windows only for now.` [decision 143].
 
 ### `Open`
 
@@ -470,6 +470,48 @@ A thread environment's diff reads git and never writes the worktree [book:cli]. 
 - **Changes**: loads another URL in the page, under the same address rule as `Open`, and waits for the new document. Old refs are gone.
 - **Shows**: done.
 - **Refused when**: an empty or non-web address — `invalid`. No browser session, another thread's browser session, or no window — as `Open` and `Status`.
+
+### `Click`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: focuses the control with that ref, then dispatches `pointerdown`, `mousedown`, `pointerup`, `mouseup` and `click`, all bubbling, cancelable and composed, so the page's default action runs [decision 147]. A `file` input is refused before any event, because a chooser would open on the person's desktop.
+- **Shows**: done.
+- **Refused when**: a ref that is not on the page — `ref N is not on the page; take a fresh snapshot` — `not-found`. A `file` input — `a page cannot choose a file; the person uploads it` — `invalid`. No browser session, another thread's browser session, or no window — as `Status`.
+
+### `Fill`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: focuses the control with that ref, then writes the text through the prototype's `value` setter and dispatches `input` and `change`; a `contenteditable` uses `insertText` [decision 147]. `--file -` reads the text from stdin, and `--file PATH` reads it from a file of at most 1 MiB; a password never appears in a result, an error or the snapshot. A password field may be filled. A page that throws during the write is reported as `the page refused the text`, without its message. A `file` input is refused before any event.
+- **Shows**: done.
+- **Refused when**: text and `--file` together — `pass the text or --file, not both` — `invalid`. Text over 1 MiB or not UTF-8 — `invalid`. A dead ref — `not-found`. A `file` input — `invalid`. No browser session, another thread's browser session, or no window — as `Status`.
+
+### `Type`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: inserts the text into the focused control the way `Fill` writes one, at the cursor where the engine can, and does nothing when no control has focus [decision 147]. A page that throws during the write is reported as `the page refused the text`, without its message.
+- **Shows**: done.
+- **Refused when**: empty text — `text must not be empty` — `invalid`. Text over 1 MiB — `invalid`. No browser session, another thread's browser session, or no window — as `Status`.
+
+### `Press`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: dispatches `keydown`, `keypress` and `keyup` on the focused control with `key`, `code` and `keyCode` for `enter`, `escape`, `tab`, `space`, `backspace`, `delete`, `up`, `down`, `left`, `right`, `home`, `end`, `pageup`, `pagedown`, or one printable character [decision 147]. `Tab` moves focus. `Enter` presses a submit button when the form has one, else calls `requestSubmit` when the engine has it, else calls `submit`, which skips validation and the submit event; it does both only when neither the keydown nor keypress event was canceled, so a page that submits on Enter without canceling can submit twice. `Enter` on a link does nothing.
+- **Shows**: done.
+- **Refused when**: an empty key — `key must not be empty` — `invalid`. Any other name or more than one character — `invalid`, with the accepted names. No browser session, another thread's browser session, or no window — as `Status`.
+
+### `Select`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: chooses the `<select>` option whose value or label matches, then dispatches `input` and `change` [decision 147].
+- **Shows**: done.
+- **Refused when**: no matching option — `invalid`, listing up to ten labels. A ref that is not a `<select>` — `invalid`. A dead ref — `not-found`. No browser session, another thread's browser session, or no window — as `Status`.
+
+### `Scroll`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: scrolls the page instantly by `dy` pixels, positive for down [decision 147].
+- **Shows**: done.
+- **Refused when**: a value that is not a number — `invalid`. No browser session, another thread's browser session, or no window — as `Status`.
 
 ### `Back`, `Forward`, `Reload`
 

@@ -3,12 +3,14 @@ use std::hash::{Hash as _, Hasher as _};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use kg_domain::{BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, ThreadOp, UiSnapshot};
+use kg_domain::{
+    BrowserOp, BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, ThreadOp, UiSnapshot,
+};
 
 use crate::socket::Client;
 
 pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
-    let op = take_value(take_paste(op)?)?;
+    let op = take_value(take_browser_text(take_paste(op)?)?)?;
     let next = match &op {
         Op::Plugin(PluginOp::New { name, dir }) => {
             Some((true, dir.clone().unwrap_or_else(|| PathBuf::from(name))))
@@ -238,9 +240,9 @@ pub(crate) fn take_paste_from(op: Op, stdin: impl std::io::Read) -> Result<Op, O
         return Err(OpError::Invalid("pass the text or --file, not both".into()));
     }
     let bytes = if path == "-" {
-        read_capped(stdin)?
+        read_capped(stdin, "paste")?
     } else {
-        read_paste_file(&path)?
+        read_file(Path::new(&path), "paste")?
     };
     let text =
         String::from_utf8(bytes).map_err(|_| OpError::Invalid("paste must be UTF-8".into()))?;
@@ -249,6 +251,47 @@ pub(crate) fn take_paste_from(op: Op, stdin: impl std::io::Read) -> Result<Op, O
         text: Some(text),
         file: None,
         terminal,
+    }))
+}
+
+/// Reads a `browser fill --file`, so a password stays out of argv and the process list.
+pub(crate) fn take_browser_text(op: Op) -> Result<Op, OpError> {
+    take_browser_text_from(op, std::io::stdin().lock())
+}
+
+pub(crate) fn take_browser_text_from(op: Op, stdin: impl std::io::Read) -> Result<Op, OpError> {
+    let Op::Browser(BrowserOp::Fill {
+        ref_id,
+        text,
+        file,
+        thread_id,
+    }) = op
+    else {
+        return Ok(op);
+    };
+    let Some(path) = file else {
+        return Ok(Op::Browser(BrowserOp::Fill {
+            ref_id,
+            text,
+            file: None,
+            thread_id,
+        }));
+    };
+    if text.is_some() {
+        return Err(OpError::Invalid("pass the text or --file, not both".into()));
+    }
+    let bytes = if path == Path::new("-") {
+        read_capped(stdin, "text")?
+    } else {
+        read_file(&path, "text")?
+    };
+    let text =
+        String::from_utf8(bytes).map_err(|_| OpError::Invalid("text must be UTF-8".into()))?;
+    Ok(Op::Browser(BrowserOp::Fill {
+        ref_id,
+        text: Some(text),
+        file: None,
+        thread_id,
     }))
 }
 
@@ -263,7 +306,7 @@ fn take_value(op: Op) -> Result<Op, OpError> {
         })
     } else {
         take_value_with(op, |_| {
-            String::from_utf8(read_capped(stdin.lock())?)
+            String::from_utf8(read_capped(stdin.lock(), "value")?)
                 .map_err(|_| OpError::Invalid("the value must be UTF-8".into()))
         })
     }
@@ -299,28 +342,29 @@ pub(crate) fn take_value_with(
     }))
 }
 
-fn read_paste_file(path: &str) -> Result<Vec<u8>, OpError> {
+fn read_file(path: &Path, noun: &str) -> Result<Vec<u8>, OpError> {
     let meta = std::fs::metadata(path)
-        .map_err(|error| OpError::Invalid(format!("could not read {path}: {error}")))?;
+        .map_err(|error| OpError::Invalid(format!("could not read {}: {error}", path.display())))?;
     // A fifo reports length 0, and a file can grow after this check.
     if meta.is_file() && meta.len() > PASTE_CAP {
         return Err(OpError::Invalid(format!(
-            "paste is {} bytes; the cap is 1 MiB",
+            "{noun} is {} bytes; the cap is 1 MiB",
             meta.len()
         )));
     }
     let file = std::fs::File::open(path)
-        .map_err(|error| OpError::Invalid(format!("could not read {path}: {error}")))?;
-    match read_capped(file) {
+        .map_err(|error| OpError::Invalid(format!("could not read {}: {error}", path.display())))?;
+    match read_capped(file, noun) {
         Ok(bytes) => Ok(bytes),
-        Err(OpError::Failed(message)) => {
-            Err(OpError::Failed(format!("could not read {path}: {message}")))
-        }
+        Err(OpError::Failed(message)) => Err(OpError::Failed(format!(
+            "could not read {}: {message}",
+            path.display()
+        ))),
         Err(error) => Err(error),
     }
 }
 
-fn read_capped(mut reader: impl std::io::Read) -> Result<Vec<u8>, OpError> {
+fn read_capped(mut reader: impl std::io::Read, noun: &str) -> Result<Vec<u8>, OpError> {
     let mut bytes = Vec::new();
     let mut chunk = [0_u8; 8192];
     loop {
@@ -333,7 +377,7 @@ fn read_capped(mut reader: impl std::io::Read) -> Result<Vec<u8>, OpError> {
         let next = bytes.len().saturating_add(read);
         if u64::try_from(next).unwrap_or(u64::MAX) > PASTE_CAP {
             return Err(OpError::Invalid(format!(
-                "paste is {next} bytes; the cap is 1 MiB"
+                "{noun} is {next} bytes; the cap is 1 MiB"
             )));
         }
         bytes.extend_from_slice(&chunk[..read]);

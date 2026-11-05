@@ -38,7 +38,7 @@ preference: `kg preference get`, `kg preference set`.
 
 ui: `kg ui snapshot`, `kg ui click`, `kg ui type`, `kg ui key`, `kg ui scroll`, `kg ui drag`, `kg ui drop`, `kg ui screenshot`.
 
-browser: `kg browser open`, `kg browser status`, `kg browser snapshot`, `kg browser goto`, `kg browser back`, `kg browser forward`, `kg browser reload`, `kg browser close`.
+browser: `kg browser open`, `kg browser status`, `kg browser snapshot`, `kg browser goto`, `kg browser back`, `kg browser forward`, `kg browser reload`, `kg browser click`, `kg browser fill`, `kg browser type`, `kg browser press`, `kg browser select`, `kg browser scroll`, `kg browser close`.
 
 diff: `kg diff list`, `kg diff show`, `kg diff commits`.
 

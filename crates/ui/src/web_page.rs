@@ -93,6 +93,18 @@ impl WebPage {
         self.view.read(cx).raw().url().unwrap_or_default()
     }
 
+    /// Stops a page's `alert`, `confirm` and `prompt` from blocking the agent's command.
+    #[cfg(target_os = "windows")]
+    pub(crate) fn quiet_dialogs(&self, cx: &App) -> Result<(), String> {
+        use wry::WebViewExtWindows as _;
+        let webview = self.view.read(cx).raw().webview();
+        // SAFETY: the WebView2 settings are read on the UI thread that owns the page.
+        let settings = unsafe { webview.Settings() }.map_err(|error| error.to_string())?;
+        // SAFETY: the settings object belongs to this page and stays alive for the call.
+        unsafe { settings.SetAreDefaultScriptDialogsEnabled(false) }
+            .map_err(|error| error.to_string())
+    }
+
     pub(crate) fn back(&self, cx: &mut App) -> Result<(), String> {
         self.view
             .update(cx, |view, _| view.back())

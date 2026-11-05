@@ -211,6 +211,59 @@ fn paste_rejects_a_fifo_past_the_cap() {
 }
 
 #[test]
+fn browser_fill_reads_a_file_or_stdin_and_sends_the_text() {
+    use crate::cli::take_browser_text_from;
+    let thread_id = ThreadId("thr_1".into());
+    let fill = |ref_id: u32, text: Option<&str>, file: Option<std::path::PathBuf>| {
+        Op::Browser(kg_domain::BrowserOp::Fill {
+            ref_id,
+            text: text.map(str::to_owned),
+            file,
+            thread_id: thread_id.clone(),
+        })
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("note.txt");
+    let body = "say \"hi\" and `date`";
+    std::fs::write(&path, body).unwrap();
+    let from_file =
+        take_browser_text_from(fill(3, None, Some(path.clone())), std::io::empty()).unwrap();
+    let sent = fill(3, Some(body), None);
+    assert_eq!(from_file, sent);
+    assert_eq!(
+        take_browser_text_from(
+            fill(3, None, Some(std::path::PathBuf::from("-"))),
+            std::io::Cursor::new(body),
+        )
+        .unwrap(),
+        sent
+    );
+    let plain = fill(2, Some("ada@example.com"), None);
+    assert_eq!(
+        take_browser_text_from(plain.clone(), std::io::empty()).unwrap(),
+        plain
+    );
+    assert!(Cli::try_parse_from(["kg", "browser", "fill", "3", "ada", "--file", "a"]).is_err());
+    let big = dir.path().join("big");
+    std::fs::File::create(&big)
+        .unwrap()
+        .set_len(1024 * 1024 + 8)
+        .unwrap();
+    let err = take_browser_text_from(fill(3, None, Some(big)), std::io::empty()).unwrap_err();
+    let message = err.to_string();
+    assert!(matches!(err, OpError::Invalid(_)));
+    assert!(message.contains("text is 1048584 bytes"), "{message}");
+    assert!(message.contains("1 MiB"), "{message}");
+    let bad = dir.path().join("bad");
+    std::fs::write(&bad, [0xff, 0xfe]).unwrap();
+    let err = take_browser_text_from(fill(3, None, Some(bad)), std::io::empty()).unwrap_err();
+    assert!(err.to_string().contains("UTF-8"), "{err}");
+    let missing = dir.path().join("missing");
+    let err = take_browser_text_from(fill(3, None, Some(missing)), std::io::empty()).unwrap_err();
+    assert!(err.to_string().contains("could not read"), "{err}");
+}
+
+#[test]
 fn install_sends_a_bare_name_to_the_indexes_and_a_folder_as_its_path() {
     use crate::cli::paths;
     let source = |args: &[&str]| match paths(parse(args)).unwrap() {

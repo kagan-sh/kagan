@@ -2733,6 +2733,12 @@ Commands:
   back      Go back in the page's history
   forward   Go forward in the page's history
   reload    Load the page again
+  click     Click the control with this ref
+  fill      Set a control's text, or read it from --file
+  type      Insert text into the focused control
+  press     Press enter, escape, tab, a letter, or an arrow
+  select    Choose a <select> option by value or label
+  scroll    Scroll the page by dy pixels
   close     Stop driving; the page stays as the person's
   help      Print this message or the help of the given subcommand(s)
 
@@ -2854,6 +2860,129 @@ Load the page again
 Usage: kg browser reload <THREAD_ID>
 
 Arguments:
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser click`
+
+```text
+Click the control with this ref
+
+Usage: kg browser click <ref> <THREAD_ID>
+
+Arguments:
+  <ref>
+          
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser fill`
+
+```text
+Set a control's text, or read it from --file
+
+Usage: kg browser fill [OPTIONS] --thread-id <THREAD_ID> <ref> [TEXT]
+
+Arguments:
+  <ref>
+          
+
+  [TEXT]
+          The text. Omit it when `--file` is set
+
+Options:
+      --file <PATH>
+          Read the text from this path, or `-` for stdin
+
+      --thread-id <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+  -h, --help
+          Print help
+```
+
+## `kg browser type`
+
+```text
+Insert text into the focused control
+
+Usage: kg browser type <TEXT> <THREAD_ID>
+
+Arguments:
+  <TEXT>
+          
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser press`
+
+```text
+Press enter, escape, tab, a letter, or an arrow
+
+Usage: kg browser press <KEY> <THREAD_ID>
+
+Arguments:
+  <KEY>
+          
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser select`
+
+```text
+Choose a <select> option by value or label
+
+Usage: kg browser select <ref> <OPTION> <THREAD_ID>
+
+Arguments:
+  <ref>
+          
+
+  <OPTION>
+          
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser scroll`
+
+```text
+Scroll the page by dy pixels
+
+Usage: kg browser scroll <DY> <THREAD_ID>
+
+Arguments:
+  <DY>
+          
+
   <THREAD_ID>
           [env: KG_THREAD_ID=]
 
