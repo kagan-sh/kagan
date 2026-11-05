@@ -15,6 +15,8 @@ QA and agents drive the native kagan window without OS mouse or keyboard. Input 
 
 `--window` is a zero-based index into open windows sorted by `WindowId`. Default `0`.
 
+`kg ui` does not drive page content. A Browser page is driven with `kg browser`.
+
 A screenshot's JSON is `{"capture": {"path": ..., "current": true|false}}`. `current` is false when the window did not draw a new frame before the capture (it was hidden, or no frame came within two seconds), so the image may show an earlier state. The plain output prints the path and, when `current` is false, a note on stderr.
 
 ## What `kg ui` can find

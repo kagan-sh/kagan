@@ -1,5 +1,6 @@
 //! The `Op` the CLI and the window share, its result, and its error.
 
+mod browser;
 mod check;
 mod config;
 mod diagnostics;
@@ -33,6 +34,7 @@ use crate::{
     ProgramList, Project, ProjectId, Sidebar, Thread, ThreadId,
 };
 
+pub use browser::{BrowserControl, BrowserOp, BrowserSnapshot, BrowserView};
 pub use check::check;
 pub use config::ConfigOp;
 pub use diagnostics::DiagnosticsOp;
@@ -124,6 +126,9 @@ pub enum Op {
     /// Native window for QA and agents
     #[command(subcommand)]
     Ui(UiOp),
+    /// The Browser tab's page, driven by this thread
+    #[command(subcommand)]
+    Browser(BrowserOp),
     /// A thread environment's diff. Reads git and never writes the worktree.
     #[command(subcommand)]
     Diff(DiffOp),
@@ -219,6 +224,8 @@ pub enum OpResult {
     Interactions(Vec<PendingInteraction>),
     Theme(ThemeSettings),
     Ui(UiSnapshot),
+    Browser(BrowserView),
+    BrowserSnapshot(BrowserSnapshot),
     Diff(crate::DiffList),
     DiffFile(crate::DiffFileView),
     Commits(Vec<crate::DiffCommit>),

@@ -1,5 +1,6 @@
 use crate::ThreadId;
 
+use super::browser::browser_url;
 use super::{
     DiffOp, EnvironmentOp, Op, PluginOp, SEARCH_LIMIT, SEARCH_TEXT_MAX, SectionOp, SurfaceOp,
     TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThreadOp, WindowOp,
@@ -27,6 +28,7 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
             .and_then(|()| search(op)),
         Op::Environment(op) => environment_thread(op),
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
+        Op::Browser(op) => plain(op.thread()).and_then(|()| browser_url(op)),
         Op::Guide { .. }
         | Op::Skill(_)
         | Op::Open

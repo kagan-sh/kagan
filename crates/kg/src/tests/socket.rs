@@ -185,12 +185,12 @@ fn a_socket_that_appears_is_accepted_and_a_missed_deadline_is_not() {
     drop(ready.join().unwrap());
 }
 
-struct EnvVar {
+pub(super) struct EnvVar {
     key: &'static str,
     previous: Option<std::ffi::OsString>,
 }
 
-fn set_env(key: &'static str, value: &std::ffi::OsStr) -> EnvVar {
+pub(super) fn set_env(key: &'static str, value: &std::ffi::OsStr) -> EnvVar {
     let previous = std::env::var_os(key);
     // SAFETY: nextest runs each test in its own process, so this test owns these
     // process-global variables while the guard is alive and restores them on drop.

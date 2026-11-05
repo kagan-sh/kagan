@@ -67,7 +67,7 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - Copy is Cmd+C, or Ctrl+Shift+C off macOS. Paste is Cmd+V, or Ctrl+Shift+V off macOS.
 - A program that asks for mouse reports (DECSET 1000, 1002 or 1003) gets clicks, drags and the wheel. It gets them in the SGR form when it asks for 1006, and in the legacy form otherwise. Shift overrides this: the press selects and the wheel scrolls in the window.
 - Terminal in the right sidebar's + opens an extra terminal as a tab of that sidebar, selects it and gives it the keys. Cmd+T does the same and opens the sidebar when it is hidden. The center shows only the program's terminal. Cmd+Alt+] and Cmd+Alt+[ step the keys through the program's terminal and each extra terminal. × on a tab, or Cmd+Shift+W in an extra terminal, closes it, and the keys go to the selected tab or the +. A terminal opened with `kg` adds a tab and does not change the selected one. Showing another thread shows its terminals [decisions 110 and 118].
-- Browser in the right sidebar's + opens the Browser tab and gives its address field the keys. Only http and https open, from the field and for links inside the page, and a bare name such as `example.com` gets https, or http for a local host such as `localhost:3000`. The page appears on the first address and is hidden whenever its tab is not drawn. Closing the tab or showing another thread drops it and clears the address. Its cookies and logins end when the page closes, and never gets the camera or microphone. On Linux the tab shows "The browser works on macOS and Windows only for now." and no field. Plugins cannot open a page in it [decision 117].
+- Browser in the right sidebar's + opens the Browser tab and gives its address field the keys. Only http and https open, from the field and for links inside the page, and a bare name such as `example.com` gets https, or http for a local host such as `localhost:3000`. The page appears on the first address and is hidden whenever its tab is not drawn. Closing the tab or showing another thread drops it and clears the address. Its cookies and logins end when the page closes, and never gets the camera or microphone. On Linux the tab shows "The browser works on macOS and Windows only for now." and no field. Plugins cannot open a page in it [decision 117]. A thread's agent can drive it with `kg browser`: the tab then shows `Driven by <thread>` and Stop agent instead of the address field, and showing another thread hides the page without ending the browser session. Stop agent, or `kg browser close`, leaves the page as the person's with its address in the field [decision 143].
 - Cmd-click, or Ctrl-click off macOS, on an http or https link opens it in the system browser and does nothing else: no selection and no mouse report. A link the program set with OSC 8 opens its target; other links are read from the text, across wrapped rows [decision 112].
 - When the thread's terminals printed a local link (localhost, 127.0.0.1, 0.0.0.0, [::1] or [::]), the row over the terminal shows Open host:port at its right end for the newest one. The button, Cmd+Alt+O or `kg window open-local-link` opens it [decision 112].
 
@@ -432,6 +432,50 @@ A thread environment's diff reads git and never writes the worktree [book:cli]. 
 
 - **Shows**: a PNG at the given path, without focusing the window [docs:ui-driver] [book:cli]. A covered window captures the last presented buffer [docs:ui-driver].
 - **Refused when**: a platform without capture — `failed` [docs:ui-driver] [op/]. No window — `failed` [docs:ui-driver] [op/].
+
+## Browser
+
+`kg browser` gives the thread named by `KG_THREAD_ID` the Browser tab's one page [decision 143]. One browser session exists per window, owned by that thread; another thread is refused and the message names the owner. The page is private, as the person's is: only http and https, no camera or microphone, no new windows, no downloads [decision 117]. The first command after 30 idle minutes ends the browser session and fails with `the browser session ended after 30 idle minutes`, and the page stays as the person's. Stop agent, `close`, closing the tab, closing the window, or quitting ends it; the page then belongs to the person again. Showing another thread hides the page but does not end the browser session, and the Browser tab comes back with the thread. Linux refuses every verb with `The browser works on macOS and Windows only for now.` [decision 143].
+
+### `Open`
+
+- **Allowed when**: the caller owns the browser session, or no browser session exists [decision 143].
+- **Changes**: takes the Browser's one page, dropping the person's page if one was there, and loads the URL. A bare name gets https, a local host gets http, and anything that is not http or https is refused [decision 117]. It shows the tab, opens the right sidebar, and selects it only when the caller is the thread on screen, and it never takes the keyboard [decision 143]. Another thread's browser session is left alone.
+- **Shows**: the driven page: thread id, thread title, url, title, and whether the tab is drawn.
+- **Refused when**: an empty or non-web address — `type a web address, such as example.com` — `invalid` [op.rs]. Another thread's browser session — `thread <title> is driving the browser; close it with kg browser close` — `invalid`. No window — `browser control needs a kagan window` — `failed`. Linux — `failed` [decision 143].
+
+### `Status`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Shows**: the same fields as `Open`, read from the page.
+- **Refused when**: no browser session — `no browser session; run kg browser open <url> first` — `not-found`. Another thread's browser session — `invalid`, with its title. A page that does not answer within 10 seconds — `failed`.
+
+### `Snapshot`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Shows**: the url, title, each control with a ref and its role, name, value, focused, disabled and checked, then the page text [decision 145]. Refs are numbered from 1 in document order and are valid until the next snapshot or a navigation. Links, buttons, inputs other than hidden ones, selects, textareas, summaries, editable elements, `[tabindex]`, elements with a role, and headings are listed; an iframe is named and not inspected. Hidden elements, `aria-hidden` elements and hidden inputs are left out. A password control never reports a value: it is an `input` whose type is `password`, whatever role it carries, and the host drops a value for it even if the page sends one. At most 300 controls, 120-character names, 200-character values, 8 KiB of text and 24 KiB of JSON; when cut, the snapshot says so and the text ends with `… N more controls not shown`, or `… text cut at the size limit` when the JSON cap shortened the text. Text is what a person can read on the page, so it can contain anything visible [decision 145].
+- **Refused when**: no browser session or another thread's browser session — as `Status`. A page that does not answer within 10 seconds — `the page did not answer within 10 seconds` — `failed`. A reply that is empty or not JSON — `the page could not be read; take the page over or try again` — `failed`.
+
+### `Goto`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: loads another URL in the page, under the same address rule as `Open`, and waits for the new document. Old refs are gone.
+- **Shows**: done.
+- **Refused when**: an empty or non-web address — `invalid`. No browser session, another thread's browser session, or no window — as `Open` and `Status`.
+
+### `Back`, `Forward`, `Reload`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: moves through the page's history, or loads it again. `Reload` waits for the new document.
+- **Shows**: done.
+- **Refused when**: no browser session, another thread's browser session, or no window — as `Status`. The page could not run the history step — `failed`.
+
+### `Close`
+
+- **Allowed when**: this thread owns the browser session [decision 143].
+- **Changes**: ends control and leaves the page as the person's, with its last address in the address field. The browser session is gone at once, so the next command is `not-found` [decision 143].
+- **Shows**: done.
+- **Refused when**: no browser session — `no browser session; run kg browser open <url> first` — `not-found`. Another thread's browser session — `invalid`. Linux — `failed`.
 
 ## Theme
 

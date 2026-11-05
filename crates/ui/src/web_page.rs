@@ -51,12 +51,66 @@ fn sweep_page_dirs(data: &std::path::Path) {
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) struct WebPage {
     view: Entity<gpui_webview::WebView>,
+    /// Fires when the page finishes a load. A command's deadline sends on it too.
+    loads: async_channel::Sender<()>,
+    finished: async_channel::Receiver<()>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 impl WebPage {
     pub(crate) fn load_url(&self, url: &str, cx: &mut App) {
         self.view.update(cx, |view, _| view.load_url(url));
+    }
+
+    /// The next load the page finishes, and the sender a deadline can signal with.
+    pub(crate) fn loading(&self) -> (async_channel::Sender<()>, async_channel::Receiver<()>) {
+        (self.loads.clone(), self.finished.clone())
+    }
+
+    /// Clears earlier load signals, so the next load wait does not return before the new document loads.
+    pub(crate) fn forget_loads(&self) {
+        while self.finished.try_recv().is_ok() {}
+    }
+
+    /// Runs one host script in the page. Its reply arrives later, as JSON text.
+    pub(crate) fn eval(
+        &self,
+        script: &str,
+        reply: async_channel::Sender<Option<String>>,
+        cx: &App,
+    ) -> Result<(), String> {
+        self.view
+            .read(cx)
+            .raw()
+            .evaluate_script_with_callback(script, move |value| {
+                let _ = reply.try_send(Some(value));
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    /// The address the page reports, or an empty string when it has none.
+    pub(crate) fn url(&self, cx: &App) -> String {
+        self.view.read(cx).raw().url().unwrap_or_default()
+    }
+
+    pub(crate) fn back(&self, cx: &mut App) -> Result<(), String> {
+        self.view
+            .update(cx, |view, _| view.back())
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn forward(&self, cx: &mut App) -> Result<(), String> {
+        self.view
+            .update(cx, |view, _| view.forward())
+            .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn reload(&self, cx: &App) -> Result<(), String> {
+        self.view
+            .read(cx)
+            .raw()
+            .reload()
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn show(&self, cx: &mut App) {
@@ -85,8 +139,13 @@ pub(crate) fn open(
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
 ) -> Result<Entity<WebPage>, String> {
-    let view = open_view(window, cx, configure)?;
-    Ok(cx.new(|_| WebPage { view }))
+    let (loads, finished) = async_channel::bounded(1);
+    let view = open_view_with_loads(window, cx, configure, Some(loads.clone()))?;
+    Ok(cx.new(|_| WebPage {
+        view,
+        loads,
+        finished,
+    }))
 }
 
 // The native view alone, for a caller that drives the page itself, such as a plugin web panel.
@@ -96,15 +155,42 @@ pub(crate) fn open_view(
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
 ) -> Result<Entity<gpui_webview::WebView>, String> {
+    open_view_with_loads(window, cx, configure, None)
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn open_view_with_loads(
+    window: &mut Window,
+    cx: &mut App,
+    configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
+    loads: Option<async_channel::Sender<()>>,
+) -> Result<Entity<gpui_webview::WebView>, String> {
     #[cfg(target_os = "windows")]
     {
-        open_windows(window, cx, configure)
+        open_windows(window, cx, configure, loads)
     }
     #[cfg(target_os = "macos")]
     {
-        let view = build_view(configure(private(wry::WebViewBuilder::new())), window, cx)?;
+        let builder = with_loads(configure(private(wry::WebViewBuilder::new())), loads);
+        let view = build_view(builder, window, cx)?;
         Ok(cx.new(|_| view))
     }
+}
+
+/// Tells `loads` when the page finishes loading, once per navigation.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn with_loads(
+    builder: wry::WebViewBuilder<'_>,
+    loads: Option<async_channel::Sender<()>>,
+) -> wry::WebViewBuilder<'_> {
+    let Some(loads) = loads else {
+        return builder;
+    };
+    builder.with_on_page_load_handler(move |event, _| {
+        if matches!(event, wry::PageLoadEvent::Finished) {
+            let _ = loads.try_send(());
+        }
+    })
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -120,6 +206,7 @@ fn open_windows(
     window: &mut Window,
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
+    loads: Option<async_channel::Sender<()>>,
 ) -> Result<Entity<gpui_webview::WebView>, String> {
     let data = kg_core::Workspace::global(cx)
         .read(cx)
@@ -127,13 +214,10 @@ fn open_windows(
         .to_owned();
     let storage = page_dir(&data).map_err(|error| failure(&error.to_string()))?;
     let mut context = wry::WebContext::new(Some(storage.clone()));
-    let mut view = match build_view(
-        configure(private(wry::WebViewBuilder::new_with_web_context(
-            &mut context,
-        ))),
-        window,
-        cx,
-    ) {
+    let builder = configure(private(wry::WebViewBuilder::new_with_web_context(
+        &mut context,
+    )));
+    let mut view = match build_view(with_loads(builder, loads), window, cx) {
         Ok(view) => view,
         Err(error) => {
             let _ = std::fs::remove_dir_all(&storage);

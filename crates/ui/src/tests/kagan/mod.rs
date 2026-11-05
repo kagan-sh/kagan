@@ -45,10 +45,10 @@ pub(in crate::tests) use review::two_changes;
 pub(in crate::tests) use setup::commit_setup;
 pub(in crate::tests) use start::press_key;
 pub(in crate::tests) use support::{
-    click, count_repaints, git, grid_text, host_grid, host_then, input, open, pending, run_child,
-    run_program, run_shell, set_preference, setup, thread_record, thread_status, wait_for_shell,
-    wait_until,
+    click, count_repaints, git, grid_text, host_grid, host_then, input, pending, run_child,
+    run_program, set_preference, setup, thread_record, thread_status, wait_for_shell, wait_until,
 };
+pub(crate) use support::{open, run_shell};
 pub(in crate::tests) use surfaces::{
     click_through_driver, install_overlay, install_twin, observed_label, open_surface,
     overlay_source, run_op,

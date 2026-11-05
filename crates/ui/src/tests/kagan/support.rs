@@ -71,9 +71,7 @@ pub(in crate::tests) fn pending(
     list
 }
 
-pub(in crate::tests) fn open(
-    cx: &mut TestAppContext,
-) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
+pub(crate) fn open(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, tempfile::TempDir) {
     let data = setup(cx);
     let kagan = cx.update(|cx| crate::kagan::open(cx).unwrap());
     cx.run_until_parked();
@@ -108,7 +106,7 @@ pub(in crate::tests) fn seed(dir: &Path) {
         .unwrap();
 }
 
-pub(in crate::tests) fn run_shell(cx: &mut TestAppContext) -> ThreadId {
+pub(crate) fn run_shell(cx: &mut TestAppContext) -> ThreadId {
     run_program(cx, shell())
 }
 

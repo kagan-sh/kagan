@@ -1347,6 +1347,339 @@ fn assert_folder_write_absent(fixture: &Fixture) {
     assert!(row.approved["paths"]["notes"].is_null());
 }
 
+#[gpui_kit::test]
+async fn a_queued_plugin_write_is_refused_once_its_permit_is_cleared(cx: &mut TestAppContext) {
+    let fixture = folder_plugin_fixture(cx).await;
+    let permit = std::sync::Arc::new(std::sync::Mutex::new(Some(1)));
+    let mut write = std::pin::pin!(queue_folder_write(cx, &fixture, permit.clone()));
+    let waker = futures::task::noop_waker();
+    let mut context = std::task::Context::from_waker(&waker);
+    assert!(write.as_mut().poll(&mut context).is_pending());
+    *permit.lock().unwrap() = None;
+    assert!(cx.foreground_executor().block_test(write).is_err());
+    assert_folder_write_absent(&fixture);
+}
+
+#[gpui_kit::test]
+async fn a_queued_plugin_write_lands_while_its_permit_holds(cx: &mut TestAppContext) {
+    let fixture = folder_plugin_fixture(cx).await;
+    let permit = std::sync::Arc::new(std::sync::Mutex::new(Some(1)));
+    let mut write = std::pin::pin!(queue_folder_write(cx, &fixture, permit));
+    let waker = futures::task::noop_waker();
+    let mut context = std::task::Context::from_waker(&waker);
+    assert!(write.as_mut().poll(&mut context).is_pending());
+    cx.foreground_executor().block_test(write).unwrap();
+    assert_folder_write_landed(&fixture);
+}
+
+#[gpui_kit::test]
+async fn remove_project_asks_and_keeps_the_folder(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let folder = fixture.dir.path().join("keep.txt");
+    std::fs::write(&folder, "keep").unwrap();
+    let remove = || {
+        Op::Project(ProjectOp::Remove {
+            id: fixture.project.clone(),
+        })
+    };
+    let cancel = cx.update(|cx| Workspace::dispatch(remove(), cx));
+    cx.run_until_parked();
+    let (approval, question) = pending_delete(cx);
+    assert!(
+        question.contains("Project")
+            && !question.contains("0 threads")
+            && question.contains("The folder stays on disk."),
+        "{question}"
+    );
+    cx.update(|cx| Workspace::answer_standalone(approval, "decline".into(), cx))
+        .await
+        .unwrap();
+    assert!(cancel.await.is_err());
+    assert!(
+        op(
+            Op::Project(ProjectOp::Get {
+                id: fixture.project.clone()
+            }),
+            cx
+        )
+        .await
+        .is_ok()
+    );
+    let confirm = cx.update(|cx| Workspace::dispatch(remove(), cx));
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+    cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    confirm.await.unwrap();
+    assert!(folder.exists());
+    assert!(
+        op(
+            Op::Project(ProjectOp::Get {
+                id: fixture.project.clone()
+            }),
+            cx
+        )
+        .await
+        .is_err()
+    );
+    assert!(cx.read(|cx| {
+        fixture
+            .workspace
+            .read(cx)
+            .project(&fixture.project)
+            .is_none()
+    }));
+}
+
+#[gpui_kit::test]
+async fn a_browser_command_needs_a_window(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let status = Op::Browser(kg_domain::BrowserOp::Status {
+        thread_id: ThreadId("thr_browser".into()),
+    });
+    assert!(!crate::dispatch::serialized(&status));
+    assert!(matches!(
+        op(status, cx).await,
+        Err(OpError::Failed(message)) if message == UI_UNAVAILABLE
+    ));
+}
+
+#[gpui_kit::test]
+async fn a_serialized_request_runs_while_a_removal_waits_for_a_person(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let remove = Op::Project(ProjectOp::Remove {
+        id: fixture.project.clone(),
+    });
+    assert!(!crate::dispatch::serialized(&remove));
+    let snapshot = Op::Ui(UiOp::Snapshot { window: 0 });
+    assert!(crate::dispatch::serialized(&snapshot));
+    let removing = cx.update(|cx| Workspace::dispatch(remove, cx));
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+
+    // The queue is one request wide: a handler that awaited this answer would hold every
+    // `kg` command until the person answered.
+    assert!(op(Op::Sidebar, cx).await.is_ok());
+    assert!(matches!(
+        op(snapshot, cx).await,
+        Err(OpError::Failed(message)) if message == UI_UNAVAILABLE
+    ));
+
+    cx.update(|cx| Workspace::answer_standalone(approval, "decline".into(), cx))
+        .await
+        .unwrap();
+    assert!(removing.await.is_err());
+}
+
+#[gpui_kit::test]
+async fn a_stopped_command_takes_its_project_removal_question_with_it(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let remove = |requester| {
+        let op = Op::Project(ProjectOp::Remove {
+            id: fixture.project.clone(),
+        });
+        move |cx: &mut gpui_kit::App| Workspace::dispatch_for(op, Some(requester), cx)
+    };
+    let project = |cx: &mut TestAppContext| {
+        cx.update(|cx| {
+            Workspace::dispatch(
+                Op::Project(ProjectOp::Get {
+                    id: fixture.project.clone(),
+                }),
+                cx,
+            )
+        })
+    };
+    let approvals =
+        |cx: &TestAppContext| cx.read(|cx| Workspace::global(cx).read(cx).approvals().count());
+
+    let (present, gone) = async_channel::bounded::<()>(1);
+    let removing = cx.update(remove(crate::Requester::new(gone)));
+    cx.run_until_parked();
+    assert_eq!(approvals(cx), 1);
+    drop(present);
+    cx.run_until_parked();
+    assert_eq!(
+        approvals(cx),
+        0,
+        "the card stayed after its command stopped"
+    );
+    assert!(removing.await.is_err());
+    assert!(project(cx).await.is_ok());
+
+    let opened = std::rc::Rc::new(std::cell::Cell::new(0));
+    let _opens = cx.update(|cx| {
+        let opened = opened.clone();
+        cx.subscribe(&fixture.workspace, move |_, event, _| {
+            if matches!(event, crate::WorkspaceEvent::Open) {
+                opened.set(opened.get() + 1);
+            }
+        })
+    });
+    let (present, gone) = async_channel::bounded::<()>(1);
+    let removing = cx.update(remove(crate::Requester::new(gone)));
+    drop(present);
+    cx.run_until_parked();
+    assert_eq!(
+        opened.get(),
+        0,
+        "a card was raised for a command already gone"
+    );
+    assert!(removing.await.is_err());
+    assert!(project(cx).await.is_ok());
+
+    let (_present, gone) = async_channel::bounded::<()>(1);
+    let removing = cx.update(remove(crate::Requester::new(gone)));
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+    cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    removing.await.unwrap();
+    assert!(project(cx).await.is_err());
+}
+
+#[gpui_kit::test]
+async fn remove_project_refuses_personal_and_running_programs(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (thread_id, _reap) = started(&fixture, program(), cx).await;
+    let error = op(
+        Op::Project(ProjectOp::Remove {
+            id: fixture.project.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("Stop the programs in"),
+        "{error}"
+    );
+    let error = op(
+        Op::Project(ProjectOp::Remove {
+            id: ProjectId("personal".into()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(error.to_string().contains("Personal"), "{error}");
+    assert_eq!(thread(&thread_id, cx).await.status, ThreadStatus::Active);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn remove_project_removes_worktrees_and_archived_threads(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    let OpResult::Thread(started) = op(worktree_run(&fixture, Some("notes"), None), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let folder = environment_of(started.environment_id.as_ref().unwrap(), cx)
+        .await
+        .path;
+    op(
+        Op::Thread(ThreadOp::Stop {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    op(
+        Op::Thread(ThreadOp::Archive {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let removing = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Project(ProjectOp::Remove {
+                id: fixture.project.clone(),
+            }),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let (approval, question) = pending_delete(cx);
+    assert!(question.contains("and its thread"), "{question}");
+    cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    removing.await.unwrap();
+    assert!(!folder.exists());
+    assert!(repo.exists());
+    assert!(
+        op(Op::Thread(ThreadOp::Get { id: started.id }), cx)
+            .await
+            .is_err()
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn remove_project_reports_a_worktree_git_keeps(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    empty_repo(&repo);
+    let OpResult::Thread(started) = op(worktree_run(&fixture, Some("dirty"), None), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("thread")
+    };
+    let folder = environment_of(started.environment_id.as_ref().unwrap(), cx)
+        .await
+        .path;
+    std::fs::write(folder.join("valuable.txt"), "keep").unwrap();
+    op(
+        Op::Thread(ThreadOp::Stop {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    let removing = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Project(ProjectOp::Remove {
+                id: fixture.project.clone(),
+            }),
+            cx,
+        )
+    });
+    cx.run_until_parked();
+    let (approval, _) = pending_delete(cx);
+    cx.update(|cx| Workspace::answer_standalone(approval, "approve".into(), cx))
+        .await
+        .unwrap();
+    let OpResult::Warnings(warnings) = removing.await.unwrap() else {
+        panic!("warnings")
+    };
+    let text = warnings.join("; ");
+    assert!(text.contains("valuable.txt"), "{warnings:?}");
+    assert!(
+        text.contains(&format!("git worktree remove {}", folder.display())),
+        "{warnings:?}"
+    );
+    assert!(!text.contains("remove the worktree again"), "{warnings:?}");
+    assert!(folder.join("valuable.txt").exists());
+    assert!(
+        op(Op::Thread(ThreadOp::Get { id: started.id }), cx)
+            .await
+            .is_err()
+    );
+}
+
 #[cfg(unix)]
 async fn stopped_worktree(
     fixture: &Fixture,

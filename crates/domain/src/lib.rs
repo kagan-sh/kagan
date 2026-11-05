@@ -22,15 +22,16 @@ pub use id::{
     Timestamp, plain_identifier,
 };
 pub use op::{
-    Appearance, BranchList, ConfigOp, DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide,
-    EnvironmentOp, EnvironmentSpec, ExtraTerminal, GuideChapter, IndexOp, KeyPlatform, Keymap,
-    KeymapAction, KeymapOp, Metadata, Op, OpError, OpResult, Order, PluginOp, PreferenceOp,
-    ProgramOp, ProjectOp, Run, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp,
-    SelectMode, SettingsOp, Shortcut, Skill, SkillOp, SkillSource, Slot, SlotChoice,
-    SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS,
-    TerminalOp, ThemeOp, ThemeSettings, ThreadOp, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE,
-    UI_UNAVAILABLE, UiBounds, UiElement, UiOp, UiSnapshot, WaitOutcome, WindowOp, branch_slug,
-    check, default_chord, expand_secondary, invalid_json, valid_theme_choice, valid_theme_id,
+    Appearance, BranchList, BrowserControl, BrowserOp, BrowserSnapshot, BrowserView, ConfigOp,
+    DiagnosticsOp, DiffOp, DiffQuery, DiffScope, DropSide, EnvironmentOp, EnvironmentSpec,
+    ExtraTerminal, GuideChapter, IndexOp, KeyPlatform, Keymap, KeymapAction, KeymapOp, Metadata,
+    Op, OpError, OpResult, Order, PluginOp, PreferenceOp, ProgramOp, ProjectOp, Run,
+    SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, SHORTCUTS, SectionOp, SelectMode, SettingsOp,
+    Shortcut, Skill, SkillOp, SkillSource, Slot, SlotChoice, SlotChoiceError, SurfaceItem,
+    SurfaceOp, SurfacePlacement, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThemeOp, ThemeSettings,
+    ThreadOp, UI_PERSON_ONLY, UI_SCREENSHOT_UNAVAILABLE, UI_UNAVAILABLE, UiBounds, UiElement, UiOp,
+    UiSnapshot, WaitOutcome, WindowOp, branch_slug, check, default_chord, expand_secondary,
+    invalid_json, valid_theme_choice, valid_theme_id,
 };
 pub use program::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, Program, ProgramList, ProgramSource, SplitProgramError,

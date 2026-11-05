@@ -3,7 +3,7 @@ use std::hash::{Hash as _, Hasher as _};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use kg_domain::{ConfigOp, Op, OpError, OpResult, PluginOp, ThreadOp, UiSnapshot};
+use kg_domain::{BrowserSnapshot, ConfigOp, Op, OpError, OpResult, PluginOp, ThreadOp, UiSnapshot};
 
 use crate::socket::Client;
 
@@ -188,6 +188,13 @@ fn print(result: &OpResult, json: bool) -> Result<(), OpError> {
                     .write_all(format_ui_snapshot(snapshot).as_bytes())?;
                 return Ok(());
             }
+            OpResult::BrowserSnapshot(snapshot) => {
+                use std::io::Write as _;
+                std::io::stdout()
+                    .lock()
+                    .write_all(format_browser_snapshot(snapshot).as_bytes())?;
+                return Ok(());
+            }
             _ => {}
         }
     }
@@ -332,6 +339,30 @@ fn read_capped(mut reader: impl std::io::Read) -> Result<Vec<u8>, OpError> {
         bytes.extend_from_slice(&chunk[..read]);
     }
     Ok(bytes)
+}
+
+pub(crate) fn format_browser_snapshot(snapshot: &BrowserSnapshot) -> String {
+    let mut out = String::new();
+    let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{}\n", snapshot.url));
+    if !snapshot.title.is_empty() {
+        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{}\n", snapshot.title));
+    }
+    for control in &snapshot.controls {
+        let _ = std::fmt::Write::write_fmt(
+            &mut out,
+            format_args!("[{}] {} {:?}", control.ref_id, control.role, control.name),
+        );
+        if let Some(value) = &control.value {
+            let _ = std::fmt::Write::write_fmt(&mut out, format_args!(" value={value:?}"));
+        }
+        out.push('\n');
+    }
+    if !snapshot.text.is_empty() {
+        out.push_str("text:\n");
+        out.push_str(&snapshot.text);
+        out.push('\n');
+    }
+    out
 }
 
 fn format_ui_snapshot(snapshot: &UiSnapshot) -> String {

@@ -3,7 +3,7 @@ use layout::Layout;
 use plugin_actions::Plugins;
 mod archived;
 pub(crate) mod attention;
-mod browser;
+pub(crate) mod browser;
 pub(crate) mod changes;
 pub(crate) mod commands;
 mod controls;
