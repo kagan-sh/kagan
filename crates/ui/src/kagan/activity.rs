@@ -115,6 +115,17 @@ impl Strip {
         }
     }
 
+    /// The rows the log shows: the last `ROWS`, oldest first.
+    fn tail(&self) -> Vec<(u64, SharedString)> {
+        self.lines
+            .iter()
+            .rev()
+            .take(usize::from(ROWS))
+            .rev()
+            .cloned()
+            .collect()
+    }
+
     #[cfg(test)]
     fn kept(&self) -> usize {
         self.lines.len()
@@ -145,18 +156,26 @@ impl Kagan {
         self.activity.turn(event, &title);
     }
 
-    /// The person is needed: a reply, a question, or a failure.
+    /// The person is needed: a reply, a question, or a failure. The shown thread is left out, as
+    /// the strip's needs count is.
     pub(super) fn saw_needs(&mut self, id: &ThreadId, cx: &App) {
+        if self.shown_thread(cx).as_ref() == Some(id) {
+            return;
+        }
         let title = title_of(id, cx);
         self.activity.needs(&title);
     }
 
-    /// Threads that need the person, as `NextThreadNeedingYou` reads them.
+    /// Threads `NextThreadNeedingYou` can reach: not archived, not the one on screen, unread or
+    /// asking. The Dock badge is wider, because it counts the shown thread too.
     fn needs_you(&self, cx: &App) -> usize {
-        let attention = super::attention::global(cx);
-        let attention = attention.read(cx);
+        let shown = self.shown_thread(cx);
+        let questions = self.questions.read(cx).questions.clone();
         self.listed(cx)
-            .filter(|thread| attention.tone(thread, cx) == Tone::Needs)
+            .filter(|thread| Some(&thread.id) != shown.as_ref())
+            .filter(|thread| {
+                thread.unread() || questions.iter().any(|asked| asked.thread_id == thread.id)
+            })
             .count()
     }
 
@@ -238,11 +257,17 @@ impl Kagan {
                 })
                 .child(format!("{needs} needs you"))
         });
-        let update_part = matches!(
-            Updater::global(cx).read(cx).state(),
-            UpdateState::Available { .. }
-        )
-        .then(|| {
+        let available = {
+            let updater = Updater::global(cx);
+            let updater = updater.read(cx);
+            match updater.state() {
+                UpdateState::Available { version, .. } => {
+                    super::update::hidden(cx).as_deref() != Some(version.as_str())
+                }
+                _ => false,
+            }
+        };
+        let update_part = available.then(|| {
             div()
                 .id("activity-update")
                 .ui_container()
@@ -287,16 +312,7 @@ impl Kagan {
             1 => "1 agent working".into(),
             count => format!("{count} agents working").into(),
         };
-        let rows: Vec<(u64, SharedString)> = self
-            .activity
-            .lines
-            .iter()
-            .rev()
-            .take(usize::from(ROWS))
-            .rev()
-            .cloned()
-            .collect();
-        let log = strip_log(rows, cx);
+        let log = strip_log(self.activity.tail(), cx);
         let summary_row = self.strip_summary(summary, working, needs, open, cx);
         let height = px(if open {
             HEIGHT + f32::from(ROWS) * ROW
@@ -336,6 +352,8 @@ fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use
         vec![
             div()
                 .id("activity-empty")
+                .aria_label("Nothing has happened yet.")
+                .ui_container()
                 .flex_none()
                 .h(px(ROW))
                 .type_small()
@@ -348,6 +366,7 @@ fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use
             .map(|(seq, line)| {
                 h_flex()
                     .id(ElementId::Name(format!("activity-row-{seq}").into()))
+                    .aria_label(line.clone())
                     .ui_container()
                     .flex_none()
                     .h(px(ROW))
@@ -388,6 +407,20 @@ mod tests {
             strip.lines.front().map(|(_, line)| line.as_ref()),
             Some("20")
         );
+    }
+
+    #[gpui_kit::test]
+    fn the_log_shows_the_last_seven_oldest_first(cx: &mut gpui_kit::TestAppContext) {
+        let mut strip = strip(cx);
+        for line in 1..=10 {
+            strip.say(line.to_string());
+        }
+        let lines: Vec<String> = strip
+            .tail()
+            .into_iter()
+            .map(|(_, line)| line.to_string())
+            .collect();
+        assert_eq!(lines, ["4", "5", "6", "7", "8", "9", "10"]);
     }
 
     #[gpui_kit::test]

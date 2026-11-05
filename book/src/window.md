@@ -45,12 +45,12 @@ A plugin icon opens its tool below the threads or its page in the center. Click 
 
 At the bottom of the window, one line says what is happening. It stays below the sidebars and the center, and it is closed by default.
 
-- **Quiet** means no program is busy with a reply. **2 agents working** means two threads are.
-- **2 needs you** means threads want you. Click it, or press Option+Cmd+J, to open the next one.
-- **Update available** means a check found a newer kagan.
-- **Installing kagan-tools** means a plugin install is running.
+- **Quiet** means no program is busy with a reply. **1 agent working** means one thread is; **2 agents working** means two.
+- **2 needs you** means other threads want you. Click it, or press Option+Cmd+J, to open the next one. The thread you are viewing is not counted.
+- **Update available** means a check found a newer kagan. **Not now** on the update notice hides it here too.
+- **Installing /home/me/plugins/kagan-tools** or **Installing git:github.com/acme/tools@main** means a plugin install is running; the words are the source it installs from.
 
-Click the line, or press Enter or Space while it has focus, to see the last seven things that happened: turns started and ended, threads that need you, updates, and plugin installs. A new row is added at the bottom. Click again or press Escape to close it.
+Click the line, or press Enter or Space while it has focus, to see the last seven things that happened: turns started and ended, other threads that need you, updates, and plugin installs. A new row is added at the bottom. Click again or press Escape to close it.
 
 The list is kept in memory and is gone when kagan quits. A question or a finished turn never takes your keyboard. Plugins cannot draw in the strip.
 
