@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use crate::terminal::{TerminalView, Typed};
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::{App, AppContext as _, Context, Focusable as _, PathPromptOptions, Window};
+use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, Window};
 use kg_core::Workspace;
 use kg_domain::{
     Op, OpError, OpResult, PreferenceOp, ProjectId, Thread, ThreadId, ThreadOp, ThreadStatus,
