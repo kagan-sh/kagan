@@ -83,7 +83,6 @@ impl Strip {
         self.say(format!("{plugin}: ran a command"));
     }
 
-    /// Logs each update state once, so a repeat does not fill the log.
     pub(super) fn update_state(&mut self, state: &UpdateState) {
         let line = match state {
             UpdateState::Available { version, .. } => format!("kagan {version} is available"),
