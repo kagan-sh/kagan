@@ -26,3 +26,14 @@ fn image() -> Option<objc2::rc::Retained<NSImage>> {
     let data = unsafe { NSData::dataWithBytes_length(ICON.as_ptr().cast(), ICON.len()) };
     NSImage::initWithData(NSImage::alloc(), &data)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ICON, image};
+
+    #[test]
+    fn the_embedded_png_is_a_dock_icon() {
+        assert!(ICON.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(image().is_some(), "the embedded PNG did not decode");
+    }
+}
