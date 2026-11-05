@@ -232,7 +232,7 @@ impl Kagan {
             div()
                 .id("activity-needs")
                 .flex_none()
-                .type_small()
+                .type_small(cx)
                 .text_color(Tone::Needs.color(cx))
                 .on_click(cx.listener(|_, _, window, cx| {
                     cx.stop_propagation();
@@ -264,7 +264,7 @@ impl Kagan {
                 .id("activity-update")
                 .ui_container()
                 .flex_none()
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child("Update available")
         });
@@ -276,7 +276,7 @@ impl Kagan {
                 .max_w(px(240.))
                 .min_w_0()
                 .text_ellipsis()
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(install)
         });
@@ -286,7 +286,7 @@ impl Kagan {
             .items_center()
             .gap_3()
             .px_3()
-            .type_small()
+            .type_small(cx)
             .text_color(cx.theme().muted_foreground)
             .child(head)
             .children(needs_part)
@@ -348,7 +348,7 @@ fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use
                 .ui_container()
                 .flex_none()
                 .h(px(ROW))
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child("Nothing has happened yet.")
                 .into_any_element(),
@@ -364,7 +364,7 @@ fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use
                     .h(px(ROW))
                     .min_w_0()
                     .items_center()
-                    .type_small()
+                    .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(div().min_w_0().text_ellipsis().child(line))
                     .into_any_element()
