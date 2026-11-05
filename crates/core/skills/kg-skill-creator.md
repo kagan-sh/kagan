@@ -46,4 +46,4 @@ kg skill files <name>
 
 Then ask the agent to load the skill with `skill_load { "name": "<name>" }` and do the task once. `skill_load` is connected to Claude and Codex. For another program, start a thread and check that the composed native folder contains the skill. Fix the description if the agent did not load it for the request, and fix the steps if it loaded it but did the task wrong.
 
-A bundled, plugin, user, or project skill also reaches Claude, Cursor, Codex, Kimi, OpenCode, and Pi as an immutable native skill catalog. A BB skill in `~/.bb/skills` or `.bb/skills` reaches every known program, but it is not a kagan skill source and `kg skill list` does not show it.
+A bundled, plugin, user, or project skill also reaches Claude, Cursor, Codex, Kimi, OpenCode, and Pi natively: Claude and Cursor as a plugin catalog, Codex from `.agents/skills`, OpenCode from `.opencode/skills`, and Kimi and Pi with a skills-dir or skill flag. A BB skill in `~/.bb/skills` or `.bb/skills` reaches every known program, but it is not a kagan skill source and `kg skill list` does not show it.

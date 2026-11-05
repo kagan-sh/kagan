@@ -378,13 +378,19 @@ async fn configure(
     )
     .await?;
     let roots: &[&str] = match known {
-        Known::Codex => &[".codex/skills"],
+        Known::Codex => &[".agents/skills"],
         Known::OpenCode => &[".opencode/skills"],
         Known::Claude | Known::Cursor | Known::Kimi | Known::Pi => &[],
     };
     let mut warning = None;
-    if !skill_errors.is_empty() {
+    if let Err(error) = files::retire_legacy(folder, &agent, cx).await {
         warning = Some(format!(
+            "kagan could not remove its old skill links in {}: {error}",
+            folder.display()
+        ));
+    }
+    if !skill_errors.is_empty() {
+        let text = format!(
             "kagan could not use some skills: {}",
             skill_errors
                 .iter()
@@ -392,7 +398,11 @@ async fn configure(
                 .cloned()
                 .collect::<Vec<_>>()
                 .join("; ")
-        ));
+        );
+        warning = Some(match warning {
+            Some(previous) => format!("{previous}; {text}"),
+            None => text,
+        });
     }
     if !roots.is_empty()
         && let Err(error) =

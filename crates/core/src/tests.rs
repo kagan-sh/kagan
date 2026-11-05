@@ -1503,7 +1503,7 @@ fn fake_agent(run: &Path, name: &str) -> std::path::PathBuf {
     std::fs::write(
         &program,
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{out}/args'\nls -1 .codex/skills > '{out}/codex-skills' 2>/dev/null\nls -1 .opencode/skills > '{out}/opencode-skills' 2>/dev/null\nenv > '{out}/env.tmp' && mv '{out}/env.tmp' '{out}/env'\nsleep 30\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{out}/args'\nls -1 .agents/skills > '{out}/agents-skills' 2>/dev/null\nls -1 .opencode/skills > '{out}/opencode-skills' 2>/dev/null\nenv > '{out}/env.tmp' && mv '{out}/env.tmp' '{out}/env'\nsleep 30\n",
             out = out.display()
         ),
     )

@@ -91,15 +91,15 @@ fn kimi_skills(skills_root: &Path, folder: &Path) -> Vec<OsString> {
         .map(PathBuf::from)
     {
         native.push(home.join("skills"));
-    } else if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-    {
+    }
+    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
         let home = PathBuf::from(home);
         native.push(home.join(".kimi-code/skills"));
         native.push(home.join(".kimi/skills"));
+        native.push(home.join(".agents/skills"));
     }
     native.push(folder.join(".kimi-code/skills"));
     native.push(folder.join(".agents/skills"));
-    native.push(folder.join(".claude/skills"));
     let mut args = Vec::new();
     for dir in native.into_iter().filter(|dir| dir.is_dir()) {
         args.push(OsString::from("--skills-dir"));
@@ -206,8 +206,42 @@ pub(super) async fn link_skills(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         for root in &roots {
-            let owned = link_root(&folder, &skills_root, &owned_root, &names, root)?;
-            hide_from_git(&folder, root, &owned, &owned_root)?;
+            let (owned, removed) = link_root(&folder, &skills_root, &owned_root, &names, root)?;
+            hide_from_git(&folder, root, &owned, &removed)?;
+        }
+        Ok(())
+    })
+    .await
+}
+
+pub(super) async fn retire_legacy(
+    folder: &Path,
+    agent: &Path,
+    cx: &mut AsyncApp,
+) -> std::io::Result<()> {
+    let folder = folder.to_owned();
+    let legacy = agent.join("skills");
+    cx.background_spawn(async move {
+        let _turn = LINKS
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let root = folder.join(".agents").join("skills");
+        let entries = match std::fs::read_dir(&root) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let mut removed = Vec::new();
+        for entry in entries {
+            let entry = entry?;
+            if own_link(&entry.path(), &legacy) {
+                remove_link(&entry.path())?;
+                removed.push(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+        if !removed.is_empty() {
+            hide_from_git(&folder, ".agents/skills", &[], &removed)?;
         }
         Ok(())
     })
@@ -222,14 +256,16 @@ fn link_root(
     owned_root: &Path,
     names: &[String],
     relative: &str,
-) -> std::io::Result<Vec<String>> {
+) -> std::io::Result<(Vec<String>, Vec<String>)> {
     let root = folder.join(relative);
     std::fs::create_dir_all(&root)?;
+    let mut removed = Vec::new();
     for entry in std::fs::read_dir(&root)? {
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if !names.contains(&name) && own_link(&entry.path(), owned_root) {
             remove_link(&entry.path())?;
+            removed.push(name);
         }
     }
     let mut owned = Vec::new();
@@ -259,7 +295,7 @@ fn link_root(
             owned.push(name.clone());
         }
     }
-    Ok(owned)
+    Ok((owned, removed))
 }
 
 fn own_link(link: &Path, owned_root: &Path) -> bool {
@@ -294,7 +330,7 @@ fn hide_from_git(
     folder: &Path,
     root: &str,
     owned: &[String],
-    owned_root: &Path,
+    removed: &[String],
 ) -> std::io::Result<()> {
     let Some(exclude) = git_exclude(folder) else {
         return Ok(());
@@ -313,10 +349,7 @@ fn hide_from_git(
     for line in text.lines() {
         let keep = match line.trim().strip_prefix(&prefix) {
             Some(name) if !name.is_empty() && !name.contains('/') => {
-                let link = folder.join(root).join(name);
-                let owned_name = owned.iter().any(|owned| owned == name);
-                owned_name
-                    || (std::fs::symlink_metadata(&link).is_ok() && !own_link(&link, owned_root))
+                !removed.iter().any(|removed| removed == name)
             }
             _ => true,
         };
@@ -361,7 +394,23 @@ fn git_exclude(folder: &Path) -> Option<PathBuf> {
     } else {
         folder.join(dir)
     };
-    Some(dir.join("info").join("exclude"))
+    let common = std::fs::read_to_string(dir.join("commondir"))
+        .ok()
+        .map(|text| text.trim().to_owned())
+        .filter(|text| !text.is_empty())
+        .map(|text| {
+            let path = Path::new(&text);
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                dir.join(path)
+            }
+        })
+        .map_or_else(
+            || dir.clone(),
+            |path| dunce::canonicalize(&path).unwrap_or(path),
+        );
+    Some(common.join("info").join("exclude"))
 }
 
 fn claude_files(
@@ -450,28 +499,28 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let _source = skill(dir.path(), "source");
         let work = folder(dir.path(), "work");
-        let root = ".codex/skills";
+        let root = ".agents/skills";
 
-        let owned =
+        let (owned, removed) =
             link_root(&work, dir.path(), dir.path(), &names(&["kg-threads"]), root).unwrap();
-        hide_from_git(&work, root, &owned, dir.path()).unwrap();
+        hide_from_git(&work, root, &owned, &removed).unwrap();
         assert_eq!(
-            std::fs::read_link(work.join(".codex/skills/kg-threads")).unwrap(),
+            std::fs::read_link(work.join(".agents/skills/kg-threads")).unwrap(),
             dir.path().join("kg-threads")
         );
         let exclude = work.join(".git/info/exclude");
         assert_eq!(
             std::fs::read_to_string(&exclude).unwrap(),
-            ".codex/skills/kg-threads\n"
+            ".agents/skills/kg-threads\n"
         );
 
-        let owned =
+        let (owned, removed) =
             link_root(&work, dir.path(), dir.path(), &names(&["kg-threads"]), root).unwrap();
-        hide_from_git(&work, root, &owned, dir.path()).unwrap();
+        hide_from_git(&work, root, &owned, &removed).unwrap();
         assert_eq!(
             std::fs::read_to_string(&exclude)
                 .unwrap()
-                .matches(".codex/skills/kg-threads")
+                .matches(".agents/skills/kg-threads")
                 .count(),
             1
         );
@@ -482,11 +531,11 @@ mod tests {
     fn link_root_leaves_a_person_s_folder_or_unrelated_link_alone() {
         let dir = tempfile::tempdir().unwrap();
         let _source = skill(dir.path(), "source");
-        let root = ".codex/skills";
+        let root = ".agents/skills";
 
         let folder_path = dir.path().join("folder");
-        std::fs::create_dir_all(folder_path.join(".codex/skills/kg-threads")).unwrap();
-        let owned = link_root(
+        std::fs::create_dir_all(folder_path.join(".agents/skills/kg-threads")).unwrap();
+        let (owned, _) = link_root(
             &folder_path,
             dir.path(),
             dir.path(),
@@ -495,13 +544,13 @@ mod tests {
         )
         .unwrap();
         assert!(owned.is_empty());
-        assert!(!folder_path.join(".codex/skills/kg-threads").is_symlink());
+        assert!(!folder_path.join(".agents/skills/kg-threads").is_symlink());
 
         let other = skill(dir.path(), "other");
         let linked = dir.path().join("linked");
-        std::fs::create_dir_all(linked.join(".codex/skills")).unwrap();
-        std::os::unix::fs::symlink(&other, linked.join(".codex/skills/kg-threads")).unwrap();
-        let owned = link_root(
+        std::fs::create_dir_all(linked.join(".agents/skills")).unwrap();
+        std::os::unix::fs::symlink(&other, linked.join(".agents/skills/kg-threads")).unwrap();
+        let (owned, _) = link_root(
             &linked,
             dir.path(),
             dir.path(),
@@ -511,7 +560,7 @@ mod tests {
         .unwrap();
         assert!(owned.is_empty());
         assert_eq!(
-            std::fs::read_link(linked.join(".codex/skills/kg-threads")).unwrap(),
+            std::fs::read_link(linked.join(".agents/skills/kg-threads")).unwrap(),
             other
         );
     }
@@ -522,20 +571,22 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let _source = skill(dir.path(), "source");
         let work = folder(dir.path(), "work");
-        std::fs::create_dir_all(work.join(".codex/skills")).unwrap();
-        std::os::unix::fs::symlink(dir.path().join("gone"), work.join(".codex/skills/gone"))
+        std::fs::create_dir_all(work.join(".agents/skills")).unwrap();
+        std::os::unix::fs::symlink(dir.path().join("gone"), work.join(".agents/skills/gone"))
             .unwrap();
 
-        link_root(
+        let (owned, removed) = link_root(
             &work,
             dir.path(),
             dir.path(),
             &names(&["kept"]),
-            ".codex/skills",
+            ".agents/skills",
         )
         .unwrap();
-        assert!(!work.join(".codex/skills/gone").exists());
-        assert!(work.join(".codex/skills/kept").is_symlink());
+        assert!(removed.contains(&"gone".to_owned()));
+        hide_from_git(&work, ".agents/skills", &owned, &removed).unwrap();
+        assert!(!work.join(".agents/skills/gone").exists());
+        assert!(work.join(".agents/skills/kept").is_symlink());
     }
 
     #[cfg(unix)]
@@ -544,20 +595,30 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let work = folder(dir.path(), "work");
         let exclude = work.join(".git/info/exclude");
-        std::fs::create_dir_all(work.join(".codex/skills/mine")).unwrap();
-        std::fs::write(&exclude, "target\n.codex/skills/gone\n.codex/skills/mine\n").unwrap();
+        std::fs::create_dir_all(work.join(".agents/skills/mine")).unwrap();
+        std::fs::write(
+            &exclude,
+            "target\n.agents/skills/gone\n.agents/skills/mine\n.agents/skills/future\n",
+        )
+        .unwrap();
 
-        hide_from_git(&work, ".codex/skills", &names(&["kept"]), dir.path()).unwrap();
+        hide_from_git(
+            &work,
+            ".agents/skills",
+            &names(&["kept"]),
+            &names(&["gone"]),
+        )
+        .unwrap();
         assert_eq!(
             std::fs::read_to_string(&exclude).unwrap(),
-            "target\n.codex/skills/mine\n.codex/skills/kept\n"
+            "target\n.agents/skills/mine\n.agents/skills/future\n.agents/skills/kept\n"
         );
     }
 
     #[test]
     fn hide_from_git_does_nothing_without_a_git_folder() {
         let dir = tempfile::tempdir().unwrap();
-        hide_from_git(dir.path(), ".codex/skills", &names(&["one"]), dir.path()).unwrap();
+        hide_from_git(dir.path(), ".agents/skills", &names(&["one"]), &[]).unwrap();
         assert!(!dir.path().join(".git/info/exclude").exists());
     }
 
@@ -568,7 +629,101 @@ mod tests {
         let exclude = work.join(".git/info/exclude");
         std::fs::remove_file(&exclude).ok();
         std::fs::create_dir(&exclude).unwrap();
-        assert!(hide_from_git(&work, ".codex/skills", &names(&["one"]), dir.path()).is_err());
+        assert!(hide_from_git(&work, ".agents/skills", &names(&["one"]), &[]).is_err());
+    }
+
+    #[test]
+    fn kimi_re_adds_its_user_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".agents/skills/probe")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".kimi-code/skills/probe")).unwrap();
+        let home_var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+        let previous_home = std::env::var_os(home_var);
+        let previous_kimi = std::env::var_os("KIMI_CODE_HOME");
+        // SAFETY: nextest runs each test in its own process, so this test owns these
+        // process-global variables while the guard restores them.
+        unsafe {
+            std::env::set_var(home_var, dir.path());
+            std::env::remove_var("KIMI_CODE_HOME");
+        }
+        let args = super::kimi_skills(&dir.path().join("catalog"), dir.path());
+        // SAFETY: see above.
+        unsafe {
+            match previous_home {
+                Some(value) => std::env::set_var(home_var, value),
+                None => std::env::remove_var(home_var),
+            }
+            match previous_kimi {
+                Some(value) => std::env::set_var("KIMI_CODE_HOME", value),
+                None => std::env::remove_var("KIMI_CODE_HOME"),
+            }
+        }
+        let dirs = args
+            .chunks(2)
+            .map(|pair| pair[1].clone())
+            .collect::<Vec<_>>();
+        assert!(
+            dirs.iter()
+                .any(|arg| arg == &dir.path().join(".agents/skills").into_os_string())
+        );
+        assert!(
+            dirs.iter()
+                .any(|arg| arg == &dir.path().join(".kimi-code/skills").into_os_string())
+        );
+    }
+
+    #[test]
+    fn a_linked_worktree_uses_the_common_exclude() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let git = |cwd: &Path, args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(cwd)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&repo, &["init"]);
+        std::fs::write(repo.join("README.md"), "test\n").unwrap();
+        git(&repo, &["add", "README.md"]);
+        git(
+            &repo,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.test",
+                "commit",
+                "-m",
+                "initial",
+            ],
+        );
+        let worktree = dir.path().join("worktree");
+        git(
+            &repo,
+            &["worktree", "add", worktree.to_str().unwrap(), "-b", "test"],
+        );
+
+        let exclude = dunce::canonicalize(git_exclude(&worktree).unwrap()).unwrap();
+        assert_eq!(
+            exclude,
+            dunce::canonicalize(repo.join(".git/info/exclude")).unwrap()
+        );
+        std::fs::create_dir_all(worktree.join(".agents/skills")).unwrap();
+        std::fs::write(worktree.join(".agents/skills/one"), "one\n").unwrap();
+        std::fs::write(&exclude, ".agents/skills/one\n").unwrap();
+        let status = std::process::Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&worktree)
+            .output()
+            .unwrap();
+        assert!(
+            status.stdout.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&status.stdout)
+        );
     }
 
     #[test]

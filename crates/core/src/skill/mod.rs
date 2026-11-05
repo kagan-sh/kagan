@@ -91,6 +91,9 @@ pub(crate) async fn mirror(
         external.folder(&folder.join(".bb/skills"), SkillSource::External);
         resolved.errors.extend(external.errors);
         for (name, loaded) in external.skills {
+            if name.starts_with("kg-") {
+                continue;
+            }
             resolved.skills.entry(name).or_insert(loaded);
         }
         let names = resolved.skills.keys().cloned().collect();
