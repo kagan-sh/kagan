@@ -452,6 +452,79 @@ fn a_theme_color_holds_only_rgb() {
     assert_eq!(color.hex(), "#ffffff");
 }
 
+fn theme_file(highlight: &str) -> String {
+    let palette = r##"{
+        "bg": "#ffffff", "surface": "#eeeeee", "raised": "#dddddd",
+        "ink": "#111111", "muted": "#555555", "line": "#cccccc",
+        "accent": "#aa0000", "primaryForeground": "#ffffff",
+        "working": "#0000aa", "needs": "#aa8800", "failed": "#aa0000",
+        "idle": "#777777"
+    }"##;
+    format!(r#"{{"name":"Test","light":{palette},"dark":{palette}{highlight}}}"#)
+}
+
+#[test]
+fn a_theme_can_carry_syntax_colors_per_mode() {
+    let light = r##"{"name":"Light ink","appearance":"light","style":{
+        "syntax":{"keyword":{"color":"#112233"},"comment":{"color":"#445566","font_style":"italic","font_weight":700}},
+        "editor.background":"#ffffff","warning":"#aa8800"}}"##;
+    let dark = r##"{"name":"Dark ink","style":{"syntax":{"keyword":{"color":"#aabbcc"}}}}"##;
+    let text = theme_file(&format!(
+        r#","highlight":{{"light":{light},"dark":{dark}}}"#
+    ));
+    let file = crate::ThemeFile::parse(text.as_bytes()).unwrap();
+    let highlight = file.highlight.as_ref().unwrap();
+    assert_eq!(highlight.light.as_ref().unwrap()["name"], "Light ink");
+    assert_eq!(highlight.dark.as_ref().unwrap()["name"], "Dark ink");
+    assert_eq!(
+        serde_json::to_value(&file).unwrap()["highlight"]["dark"]["name"],
+        "Dark ink"
+    );
+}
+
+#[test]
+fn a_bad_highlight_is_refused_with_its_field() {
+    for (highlight, want) in [
+        (
+            r#","highlight":{"dark":7}"#,
+            "highlight.dark must be an object",
+        ),
+        (
+            r#","highlight":{"light":{"style":{"syntax":{}}}}"#,
+            "highlight.light.name must be a string",
+        ),
+        (
+            r#","highlight":{"dark":{"name":"d","appearance":"sepia","style":{"syntax":{}}}}"#,
+            "highlight.dark.appearance",
+        ),
+        (
+            r#","highlight":{"dark":{"name":"d","style":{}}}"#,
+            "highlight.dark.style.syntax must be an object",
+        ),
+        (
+            r#","highlight":{"dark":{"name":"d","style":{"syntax":{"keyword":{"color":"nope"}}}}}"#,
+            "highlight.dark.style.syntax.keyword.color",
+        ),
+        (
+            r#","highlight":{"dark":{"name":"d","style":{"syntax":{"keyword":{"font_weight":750}}}}}"#,
+            "highlight.dark.style.syntax.keyword.font_weight",
+        ),
+        (
+            r#","highlight":{"dark":{"name":"d","style":{"syntax":{},"error":4}}}"#,
+            "highlight.dark.style.error",
+        ),
+        (
+            r#","highlight":{"dark":{"name":"d","style":{"syntax":{}}},"other":1}"#,
+            "unknown field",
+        ),
+    ] {
+        let error = crate::ThemeFile::parse(theme_file(highlight).as_bytes())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(want), "{highlight}: {error}");
+    }
+}
+
 #[test]
 fn a_plugin_theme_is_named_by_its_plugin() {
     for id in ["ocean", "dev.kagan.example/midnight", "a.b/c-2"] {

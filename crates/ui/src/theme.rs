@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::component::highlighter::{HighlightTheme, HighlightThemeStyle};
@@ -79,6 +80,23 @@ fn palette(file: &ThemeFile, mode: ThemeMode) -> &Palette {
         ThemeMode::Light => &file.light,
         ThemeMode::Dark => &file.dark,
     }
+}
+
+/// The theme's own syntax colors in `mode`, else the GPUI default for that mode.
+fn highlight(file: &ThemeFile, mode: ThemeMode) -> Arc<HighlightTheme> {
+    let chosen = file.highlight.as_ref().and_then(|highlight| match mode {
+        ThemeMode::Light => highlight.light.as_ref(),
+        ThemeMode::Dark => highlight.dark.as_ref(),
+    });
+    chosen
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .map_or_else(
+            || match mode {
+                ThemeMode::Light => HighlightTheme::default_light(),
+                ThemeMode::Dark => HighlightTheme::default_dark(),
+            },
+            Arc::new,
+        )
 }
 
 struct Swatch {
@@ -176,6 +194,7 @@ fn fjord() -> ThemeFile {
             terminal: Some(FJORD),
         }
         .palette(),
+        highlight: None,
     }
 }
 
@@ -260,7 +279,7 @@ impl ThemeState {
         let system = ThemeMode::Dark;
         let mode = resolve(settings.mode, system);
         let palette = palette(&file, mode).clone();
-        apply(&palette, &file.name, mode, cx);
+        apply(&file, mode, cx);
         let folder = dir.clone();
         let watch = cx.spawn(async move |this, cx| {
             if this.update(cx, Self::load_settings).is_err() {
@@ -411,7 +430,7 @@ impl ThemeState {
     fn paint(&mut self, cx: &mut Context<Self>) {
         self.mode = resolve(self.settings.mode, self.system);
         self.palette = palette(&self.applied, self.mode).clone();
-        apply(&self.palette, &self.applied.name, self.mode, cx);
+        apply(&self.applied, self.mode, cx);
         cx.notify();
     }
 
@@ -679,7 +698,8 @@ pub(crate) fn cursor_color(cx: &App) -> Hsla {
     token_color(state.read(cx).palette.terminal().cursor)
 }
 
-fn apply(p: &Palette, name: &str, mode: ThemeMode, cx: &mut App) {
+fn apply(file: &ThemeFile, mode: ThemeMode, cx: &mut App) {
+    let p = palette(file, mode);
     let hex = |c: Color| Some(SharedString::from(c.hex()));
     let mut colors = ThemeConfigColors::default();
     macro_rules! project {
@@ -713,15 +733,12 @@ fn apply(p: &Palette, name: &str, mode: ThemeMode, cx: &mut App) {
     project!(p.working => success, success_hover, success_active, chart_bullish);
     project!(p.bg => warning_foreground, danger_foreground, success_foreground);
     colors.overlay = Some(format!("{}cc", p.bg.hex()).into());
-    let syntax = match mode {
-        ThemeMode::Light => HighlightTheme::default_light(),
-        ThemeMode::Dark => HighlightTheme::default_dark(),
-    };
+    let syntax = highlight(file, mode);
     let mut highlight = HighlightThemeStyle::default();
     highlight.status.clone_from(&syntax.style.status);
     highlight.syntax.clone_from(&syntax.style.syntax);
     let mut config = ThemeConfig::default();
-    config.name = name.to_owned().into();
+    config.name = file.name.clone().into();
     config.mode = mode;
     config.font_size = Some(REM_BASE);
     config.mono_font_size = Some(TYPE_MONO);
