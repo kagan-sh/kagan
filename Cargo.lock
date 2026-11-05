@@ -5362,12 +5362,14 @@ dependencies = [
  "libc",
  "minisign",
  "minisign-verify",
+ "proptest",
  "rusqlite",
  "semver",
  "serde",
  "serde_json",
  "tar",
  "tempfile",
+ "thiserror 2.0.21",
  "uuid",
 ]
 
@@ -5376,6 +5378,7 @@ name = "kg-domain"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "proptest",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -5444,6 +5447,7 @@ dependencies = [
  "kg-process",
  "libc",
  "portable-pty",
+ "proptest",
  "rustix",
  "tempfile",
  "windows-sys 0.61.2",

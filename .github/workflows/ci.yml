@@ -278,11 +278,30 @@ jobs:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: for result in $RESULTS; do echo "$result"; [ "$result" = success ] || exit 1; done
 
-  mutants:
+  mutants-base:
     if: github.event_name == 'workflow_dispatch' && inputs.mutants
     runs-on: ubuntu-latest
+    outputs:
+      base: ${{ steps.base.outputs.base }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: base
+        run: echo "base=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+
+  mutants:
+    needs: mutants-base
+    if: github.event_name == 'workflow_dispatch' && inputs.mutants
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     env:
       RUSTFLAGS: -C link-arg=-fuse-ld=lld
+      MUTANTS_SHARD: ${{ matrix.shard }}/16
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -303,4 +322,28 @@ jobs:
         with:
           tool: cargo-nextest@${{ steps.versions.outputs.nextest }},cargo-mutants@${{ steps.versions.outputs.mutants }}
       - name: Mutants on the changed lines
-        run: sh scripts/mutants-diff.sh origin/main
+        run: sh scripts/mutants-diff.sh "${{ needs.mutants-base.outputs.base }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: mutants-${{ matrix.shard }}
+          path: target/mutants/diff
+          if-no-files-found: ignore
+
+  mutants-result:
+    needs: mutants
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.mutants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: mutants-*
+          path: mutants
+      - name: Report the surviving mutants
+        run: |
+          missed=$(find mutants -name missed.txt -size +0c -print -exec cat {} \;)
+          if [ -n "$missed" ]; then
+            echo "$missed"
+            exit 1
+          fi
+          echo "no surviving mutants"

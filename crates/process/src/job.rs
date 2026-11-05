@@ -104,3 +104,55 @@ pub(crate) fn resume(pid: u32) -> io::Result<()> {
     }
     Err(io::Error::other("the suspended child has no thread"))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::os::windows::process::CommandExt as _;
+    use std::process::{Child, Command, ExitStatus, Stdio};
+    use std::time::{Duration, Instant};
+
+    use super::{Job, resume};
+
+    const CREATE_SUSPENDED: u32 = 0x0000_0004;
+    const WAIT_LIMIT: Duration = Duration::from_secs(10);
+
+    fn silent(command: &mut Command) -> &mut Command {
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+    }
+
+    fn wait_until_exit(child: &mut Child) -> ExitStatus {
+        let deadline = Instant::now() + WAIT_LIMIT;
+        loop {
+            if let Some(status) = child.try_wait().expect("try_wait") {
+                return status;
+            }
+            assert!(Instant::now() < deadline, "the child did not exit");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn terminating_the_job_ends_the_process_in_it() {
+        let mut child = silent(Command::new("cmd").args(["/C", "ping -n 60 127.0.0.1 >NUL"]))
+            .spawn()
+            .expect("spawn");
+        let job = Job::assign(child.id()).expect("assign");
+        job.terminate();
+        let _ = wait_until_exit(&mut child);
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn resuming_a_suspended_child_lets_it_finish() {
+        let mut child = silent(Command::new("cmd").args(["/C", "exit 0"]))
+            .creation_flags(CREATE_SUSPENDED)
+            .spawn()
+            .expect("spawn");
+        resume(child.id()).expect("resume");
+        assert!(wait_until_exit(&mut child).success());
+    }
+}

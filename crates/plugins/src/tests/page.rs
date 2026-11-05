@@ -1,4 +1,13 @@
+use std::time::Duration;
+
+use gpui_kit::TestAppContext;
+use kg_domain::PluginId;
+
 use crate::page::{FILE_CAP, MESSAGE_CAP, PageFileError, parse_message, read_plugin_file};
+
+use super::{
+    PAGE_PLUGIN, deliver_page, flood_page, open_page, open_page_holding_next, pending_page_bytes,
+};
 
 #[test]
 fn a_file_inside_the_plugin_is_read() {
@@ -102,4 +111,144 @@ fn the_reserved_folder_is_not_a_plugin_file() {
         read_plugin_file(root.path(), "__KAGAN/theme.css"),
         Err(PageFileError::Refused)
     );
+}
+
+#[gpui_kit::test]
+fn a_page_message_round_trips_through_the_plugin(cx: &mut TestAppContext) {
+    let run = open_page(cx);
+    deliver_page(cx, &run, r#"{"from":"page"}"#).unwrap();
+    let mut echoed = String::new();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if echoed.is_empty()
+            && let Ok(message) = run.posted.try_recv()
+        {
+            echoed = message;
+        }
+        if run.seen.is_file() && !echoed.is_empty() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        std::fs::read_to_string(&run.seen).unwrap(),
+        r#"{"from":"page"}"#
+    );
+    assert!(
+        echoed.contains("\"echo\"") && echoed.contains("\"from\":\"page\""),
+        "{echoed}"
+    );
+}
+
+#[gpui_kit::test]
+fn a_page_message_over_the_cap_is_refused(cx: &mut TestAppContext) {
+    let run = open_page(cx);
+    let over = deliver_page(cx, &run, &format!("\"{}\"", "y".repeat(crate::MESSAGE_CAP)));
+    assert!(over.unwrap_err().to_string().contains("over the"));
+    deliver_page(cx, &run, r#"{"big":true}"#).unwrap();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if run.seen.is_file() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let error = std::fs::read_to_string(&run.seen).unwrap();
+    assert!(error.starts_with("error:"), "{error}");
+    assert!(error.contains("over the"), "{error}");
+}
+
+#[gpui_kit::test]
+fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
+    let _plugin = open_page_holding_next(cx);
+    let life = std::sync::Arc::new(());
+    let mut accepted = 0;
+    for i in 0..crate::jobs::PAGE_PENDING_CAP + 8 {
+        let raw = format!(r#"{{"n":{i}}}"#);
+        match flood_page(cx, &life, &raw) {
+            Ok(()) => accepted += 1,
+            Err(error) => {
+                assert!(
+                    error
+                        .to_string()
+                        .contains("cannot take another page message"),
+                    "{error}"
+                );
+                break;
+            }
+        }
+    }
+    assert_eq!(accepted, crate::jobs::PAGE_PENDING_CAP);
+    assert!(
+        pending_page_bytes(cx) <= crate::jobs::PAGE_PENDING_BYTES,
+        "{}",
+        pending_page_bytes(cx)
+    );
+    assert!(
+        flood_page(cx, &life, r#"{"n":"over"}"#)
+            .unwrap_err()
+            .to_string()
+            .contains("cannot take another page message")
+    );
+
+    cx.executor().advance_clock(Duration::from_secs(10));
+    cx.run_until_parked();
+    assert_eq!(pending_page_bytes(cx), 0);
+    let mut after = 0;
+    for i in 0..crate::jobs::PAGE_PENDING_CAP + 8 {
+        let raw = format!(r#"{{"again":{i}}}"#);
+        match flood_page(cx, &life, &raw) {
+            Ok(()) => after += 1,
+            Err(error) => {
+                assert!(
+                    error
+                        .to_string()
+                        .contains("cannot take another page message"),
+                    "{error}"
+                );
+                break;
+            }
+        }
+    }
+    assert_eq!(after, crate::jobs::PAGE_PENDING_CAP);
+    assert!(
+        pending_page_bytes(cx) <= crate::jobs::PAGE_PENDING_BYTES,
+        "{}",
+        pending_page_bytes(cx)
+    );
+}
+
+#[gpui_kit::test]
+fn a_page_job_expires_when_its_page_token_dies(cx: &mut TestAppContext) {
+    let run = open_page(cx);
+    cx.update(|cx| {
+        let stale_life = std::sync::Arc::new(());
+        let alive = std::sync::Arc::downgrade(&stale_life);
+        crate::PluginHost::global(cx)
+            .update(cx, |host, cx| {
+                host.deliver_page(
+                    &PluginId(PAGE_PLUGIN.into()),
+                    "board",
+                    r#"{"at":"stale"}"#,
+                    alive,
+                    cx,
+                )
+            })
+            .unwrap();
+        drop(stale_life);
+    });
+    deliver_page(cx, &run, r#"{"at":"fresh"}"#).unwrap();
+    for _ in 0..2000 {
+        cx.run_until_parked();
+        if std::fs::read_to_string(&run.seen)
+            .unwrap_or_default()
+            .contains("fresh")
+        {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let text = std::fs::read_to_string(&run.seen).unwrap();
+    assert!(!text.contains("stale"), "{text}");
+    assert!(text.contains("fresh"), "{text}");
 }

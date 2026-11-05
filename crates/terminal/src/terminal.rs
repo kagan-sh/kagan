@@ -1,54 +1,40 @@
 use std::ffi::OsString;
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, BorrowedFd, OwnedFd};
+use portable_pty::{Child, CommandBuilder, MasterPty, native_pty_system};
 
-use crate::screen::{Edit, MIN_COLS, SNAPSHOT_MAX, Screen, SelectMode};
+use crate::screen::{Edit, SNAPSHOT_MAX, Screen, SelectMode};
 
 mod ending;
+mod exit;
 mod finished;
 mod lines;
+mod shared;
+mod stream;
+#[cfg(test)]
+mod tests;
 
 use ending::Ending;
+pub use exit::Exit;
 pub use finished::Finished;
 pub use lines::{Kept, KeptLine, Lines};
+use shared::{Frame, Shared, lock, try_lock};
+use stream::{Outgoing, io_error, is_unsafe_control, paste_text, pty_size};
+#[cfg(unix)]
+use stream::{dup_fd, set_nonblocking};
+use stream::{thread_read, thread_write};
 
 pub struct Launch {
     pub program: OsString,
     pub args: Vec<OsString>,
     pub cwd: Option<PathBuf>,
     pub env: Vec<(OsString, OsString)>,
-}
-
-/// Whether a process has finished, given whether its handle has signalled and the code it reads.
-/// A running Windows process reads `259` (`STILL_ACTIVE`), and a program can exit with that code too,
-/// so a code counts only once the handle has signalled.
-#[cfg(any(windows, test))]
-fn finished_exit(signalled: bool, code: u32) -> Option<Exit> {
-    signalled.then_some(Exit::Code(code))
-}
-
-/// How a program ended: its exit code, or the signal that ended it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Exit {
-    Code(u32),
-    Signal(i32),
-}
-
-enum Outgoing {
-    Bytes(Vec<u8>),
-    Checked {
-        bytes: Vec<u8>,
-        done: Sender<io::Result<()>>,
-    },
 }
 
 pub struct Terminal {
@@ -63,20 +49,16 @@ pub struct Terminal {
     write_stop: Arc<AtomicBool>,
     process_id: u32,
     epoch: Instant,
-    observed: OnceLock<(Exit, Duration)>,
+    observed: OnceLock<(Exit, std::time::Duration)>,
     ended_with: OnceLock<Exit>,
     // Holds the program and what it starts; closing the handle kills them all.
     #[cfg(windows)]
     job: Option<kg_process::Job>,
     #[cfg(test)]
-    clock: Option<Arc<AtomicU64>>,
+    clock: Option<Arc<std::sync::atomic::AtomicU64>>,
     #[cfg(test)]
     fail_write: Arc<AtomicBool>,
 }
-
-/// How long output may keep arriving after the program exits. A background job that keeps the pty
-/// open after its tree is killed cannot hold the exit back past this.
-const DRAIN: Duration = Duration::from_millis(500);
 
 impl Terminal {
     /// # Errors
@@ -353,57 +335,6 @@ impl Terminal {
         }
     }
 
-    /// How the program ended, once it has. `None` while it runs and until the 500 ms drain ends.
-    #[must_use]
-    pub fn exit(&self) -> Option<Exit> {
-        if let Some(exit) = self.ended_with.get() {
-            return Some(*exit);
-        }
-        let (exit, observed) = if let Some(&found) = self.observed.get() {
-            found
-        } else {
-            let exit = self.observe()?;
-            // The leader is gone, so its tree is what still holds the pty open. Kill it now, so
-            // the output can end.
-            #[cfg(unix)]
-            crate::tree::kill_tree(self.process_id);
-            *self.observed.get_or_init(|| (exit, self.now()))
-        };
-        if !self.ended.load(Ordering::Acquire) && self.now().saturating_sub(observed) < DRAIN {
-            return None;
-        }
-        Some(*self.ended_with.get_or_init(|| exit))
-    }
-
-    // The clock the drain cap is read from. A test can drive it.
-    fn now(&self) -> Duration {
-        #[cfg(test)]
-        if let Some(clock) = &self.clock {
-            return Duration::from_millis(clock.load(Ordering::Acquire));
-        }
-        self.epoch.elapsed()
-    }
-
-    /// Asks the program and everything it started to end. Its screen is final once `exit` returns `Some`.
-    pub fn stop(&self) {
-        // Unix does not use `child.kill()`: portable-pty reaps the child after its SIGHUP, and then the
-        // exit could never be read. The leader and its tree are killed by pid, and reaped later.
-        #[cfg(unix)]
-        {
-            crate::tree::kill_leader(self.process_id);
-            crate::tree::kill_tree(self.process_id);
-        }
-        #[cfg(windows)]
-        {
-            if let Some(job) = &self.job {
-                job.terminate();
-            }
-            if let Some(child) = lock(&self.child).as_mut() {
-                let _ = child.kill();
-            }
-        }
-    }
-
     /// Ends the program's IO and keeps its screen. Call once `exit` has returned `Some`.
     #[must_use]
     pub fn finish(mut self) -> Finished {
@@ -422,48 +353,6 @@ impl Terminal {
         Finished { shared }
     }
 
-    #[cfg(unix)]
-    fn observe(&self) -> Option<Exit> {
-        crate::tree::exit(self.process_id)
-    }
-
-    #[cfg(windows)]
-    fn observe(&self) -> Option<Exit> {
-        use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
-        use windows_sys::Win32::Storage::FileSystem::SYNCHRONIZE;
-        use windows_sys::Win32::System::Threading::{
-            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, WaitForSingleObject,
-        };
-        // portable-pty keeps the child's handle open until the terminal ends, so the pid
-        // cannot be reused while this runs.
-        // SAFETY: the handle is opened here and closed on every path below; the out pointer is valid for the call.
-        unsafe {
-            let handle = OpenProcess(
-                SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-                0,
-                self.process_id,
-            );
-            if handle.is_null() {
-                return None;
-            }
-            let signalled = WaitForSingleObject(handle, 0) == WAIT_OBJECT_0;
-            let mut code = 0_u32;
-            let read = signalled && GetExitCodeProcess(handle, &raw mut code) != 0;
-            CloseHandle(handle);
-            finished_exit(read, code)
-        }
-    }
-
-    /// Whether the program has ended. A background job it left can keep the pty open, so the
-    /// output may not be at its end.
-    #[must_use]
-    pub fn exited(&self) -> bool {
-        // ConPTY keeps the output open after the program exits, so ask the process too.
-        self.observe().is_some() || self.ended.load(Ordering::Acquire)
-    }
-}
-
-impl Terminal {
     fn ending(&mut self) -> Option<Ending> {
         Some(Ending {
             child: self
@@ -493,411 +382,3 @@ impl Drop for Terminal {
         let _ = std::thread::Builder::new().spawn(move || ending.finish());
     }
 }
-
-fn thread_read(
-    mut reader: Box<dyn Read + Send>,
-    shared: Shared,
-    replies: Sender<Outgoing>,
-    ended: Arc<AtomicBool>,
-    #[cfg(unix)] wait_fd: Option<OwnedFd>,
-) -> JoinHandle<()> {
-    std::thread::spawn(move || {
-        let mut buf = [0_u8; 8192];
-        // Keep reading until the pty closes: stopping early leaves the host's last frame unread.
-        // The master is non-blocking so a full-buffer write can be cancelled; WouldBlock is not EOF.
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    // The reply is sent after the lock is gone, so a client asking for a frame never waits on the pty.
-                    let reply = shared.feed(&buf[..n]);
-                    if !reply.is_empty() {
-                        let _ = replies.send(Outgoing::Bytes(reply));
-                    }
-                }
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    #[cfg(test)]
-                    if let Some((reached, resume)) = lock(&shared.poll_gate).take() {
-                        let _ = reached.send(());
-                        let _ = resume.recv();
-                    }
-                    // O_NONBLOCK is shared across the master's dups; sleep would spin an idle pty.
-                    #[cfg(unix)]
-                    if let Some(fd) = &wait_fd {
-                        wait_ready(fd.as_raw_fd(), libc::POLLIN, -1);
-                    } else {
-                        std::thread::sleep(Duration::from_micros(100));
-                    }
-                    #[cfg(not(unix))]
-                    std::thread::sleep(Duration::from_micros(100));
-                }
-                Err(_) => break,
-            }
-        }
-        #[cfg(test)]
-        if let Some(gate) = lock(&shared.eof_gate).take() {
-            let _ = gate.recv();
-        }
-        ended.store(true, Ordering::Release);
-    })
-}
-
-#[cfg(unix)]
-fn dup_fd(fd: std::os::fd::RawFd) -> io::Result<OwnedFd> {
-    // SAFETY: the master is open while spawn runs, so fd is valid for this borrow.
-    unsafe { BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()
-}
-
-#[cfg(unix)]
-fn set_nonblocking(fd: std::os::fd::RawFd) -> io::Result<()> {
-    // SAFETY: fcntl only reads and sets flags on fd; a bad fd fails with EBADF.
-    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-    if flags == -1 {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: as above. O_NONBLOCK is per open file description, so every dup of the master sees it.
-    if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } == -1 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
-}
-
-// A full pty never wakes a writer on its own, so writers check write_stop this often.
-#[cfg(unix)]
-const WRITE_WAIT_MS: libc::c_int = 10;
-
-#[cfg(unix)]
-fn wait_ready(fd: std::os::fd::RawFd, events: libc::c_short, timeout_ms: libc::c_int) {
-    loop {
-        let mut pfd = libc::pollfd {
-            fd,
-            events,
-            revents: 0,
-        };
-        // SAFETY: pfd is one valid pollfd; fd is a live pty master.
-        let n = unsafe { libc::poll(&raw mut pfd, 1, timeout_ms) };
-        if n >= 0 {
-            return;
-        }
-        if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-            return;
-        }
-    }
-}
-
-fn thread_write(
-    mut writer: Box<dyn Write + Send>,
-    queued: mpsc::Receiver<Outgoing>,
-    write_stop: Arc<AtomicBool>,
-    #[cfg(unix)] wait_fd: Option<OwnedFd>,
-    #[cfg(test)] fail_write: Arc<AtomicBool>,
-) -> JoinHandle<()> {
-    std::thread::spawn(move || {
-        while let Ok(outgoing) = queued.recv() {
-            let (bytes, done) = match outgoing {
-                Outgoing::Bytes(bytes) => (bytes, None),
-                Outgoing::Checked { bytes, done } => (bytes, Some(done)),
-            };
-            let result = if bytes.is_empty() {
-                Err(io::Error::other("terminal is closed"))
-            } else {
-                #[cfg(test)]
-                if fail_write.swap(false, Ordering::AcqRel) {
-                    Err(io::Error::other("write failed"))
-                } else {
-                    write_bytes(
-                        &mut writer,
-                        &bytes,
-                        &write_stop,
-                        #[cfg(unix)]
-                        wait_fd.as_ref().map(AsRawFd::as_raw_fd),
-                    )
-                }
-                #[cfg(not(test))]
-                {
-                    write_bytes(
-                        &mut writer,
-                        &bytes,
-                        &write_stop,
-                        #[cfg(unix)]
-                        wait_fd.as_ref().map(AsRawFd::as_raw_fd),
-                    )
-                }
-            };
-            if let Some(done) = done {
-                let _ = done.send(match &result {
-                    Ok(()) => Ok(()),
-                    Err(error) => Err(io::Error::new(error.kind(), error.to_string())),
-                });
-            }
-            if result.is_err() {
-                // Finish may have queued several checked writes; settle each instead of
-                // dropping the channel and leaving the caller with Disconnected.
-                while let Ok(leftover) = queued.try_recv() {
-                    if let Outgoing::Checked { done, .. } = leftover {
-                        let _ = done.send(Err(io::Error::other("terminal is closed")));
-                    }
-                }
-                break;
-            }
-        }
-    })
-}
-
-fn write_bytes(
-    writer: &mut dyn Write,
-    bytes: &[u8],
-    write_stop: &AtomicBool,
-    #[cfg(unix)] wait_fd: Option<std::os::fd::RawFd>,
-) -> io::Result<()> {
-    #[cfg(not(unix))]
-    {
-        let _ = write_stop;
-        return writer.write_all(bytes).and_then(|()| writer.flush());
-    }
-    #[cfg(unix)]
-    {
-        let mut offset = 0;
-        while offset < bytes.len() {
-            if write_stop.load(Ordering::Acquire) {
-                return Err(io::Error::other("terminal is closed"));
-            }
-            match writer.write(&bytes[offset..]) {
-                Ok(0) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::WriteZero,
-                        "terminal is closed",
-                    ));
-                }
-                Ok(n) => offset += n,
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
-                    } else {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
-                }
-                Err(error) => return Err(error),
-            }
-        }
-        loop {
-            if write_stop.load(Ordering::Acquire) {
-                return Err(io::Error::other("terminal is closed"));
-            }
-            match writer.flush() {
-                Ok(()) => return Ok(()),
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
-                    } else {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
-                }
-                Err(error) => return Err(error),
-            }
-        }
-    }
-}
-
-fn pty_size(cols: u16, rows: u16) -> io::Result<PtySize> {
-    if cols < MIN_COLS || rows == 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "screen is too small",
-        ));
-    }
-    Ok(PtySize {
-        rows,
-        cols,
-        pixel_width: 0,
-        pixel_height: 0,
-    })
-}
-
-struct Frame {
-    version: u64,
-    grid: Arc<crate::Grid>,
-}
-
-/// Text for the program. Escape and the other control characters go, so the text cannot end a
-/// bracketed paste early or type a command. Tab, newline and carriage return stay.
-fn paste_text(text: &str, bracketed: bool) -> String {
-    let text: String = text.chars().filter(|c| !is_unsafe_control(*c)).collect();
-    if bracketed {
-        format!("\x1b[200~{text}\x1b[201~")
-    } else {
-        text.replace("\r\n", "\r").replace('\n', "\r")
-    }
-}
-
-fn is_unsafe_control(c: char) -> bool {
-    matches!(c, '\0'..='\u{8}' | '\u{b}'..='\u{c}' | '\u{e}'..='\u{1f}' | '\u{7f}'..='\u{9f}')
-}
-
-#[cfg(test)]
-type PollGate = (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>);
-
-// What the reader thread and the terminal share. Versions move and grids are built only with the
-// screen locked, so a grid's version is the screen's version when it was built.
-#[derive(Clone)]
-struct Shared {
-    screen: Arc<Mutex<Screen>>,
-    frame: Arc<Mutex<Frame>>,
-    title: Arc<Mutex<Option<String>>>,
-    versions: Arc<AtomicU64>,
-    // A grid was asked for while the screen was busy: the reader builds one after its chunk.
-    wanted: Arc<AtomicBool>,
-    edits: Arc<Mutex<Vec<Edit>>>,
-    changed: Arc<AtomicBool>,
-    settled: Arc<AtomicBool>,
-    snapshot_bound: Arc<AtomicUsize>,
-    #[cfg(test)]
-    builds: Arc<AtomicUsize>,
-    /// Test only: the reader waits on this before it reports end of file.
-    #[cfg(test)]
-    eof_gate: Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
-    /// Test only: the teardown waits on this before it publishes the final screen.
-    #[cfg(test)]
-    publish_gate: Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
-    // Test only: the reader sends on the first channel when it reaches its poll, then waits on the second.
-    #[cfg(test)]
-    poll_gate: Arc<Mutex<Option<PollGate>>>,
-}
-
-impl Shared {
-    pub(super) fn settled(mut screen: Screen) -> Self {
-        let _ = screen.end_hold();
-        let grid = screen.grid();
-        let title = screen.title().map(str::to_owned);
-        Self {
-            screen: Arc::new(Mutex::new(screen)),
-            frame: Arc::new(Mutex::new(Frame {
-                version: 1,
-                grid: Arc::new(grid),
-            })),
-            title: Arc::new(Mutex::new(title)),
-            versions: Arc::new(AtomicU64::new(1)),
-            wanted: Arc::new(AtomicBool::new(false)),
-            edits: Arc::new(Mutex::new(Vec::new())),
-            changed: Arc::new(AtomicBool::new(false)),
-            settled: Arc::new(AtomicBool::new(true)),
-            snapshot_bound: Arc::new(AtomicUsize::new(SNAPSHOT_MAX)),
-            #[cfg(test)]
-            builds: Arc::default(),
-            #[cfg(test)]
-            eof_gate: Arc::default(),
-            #[cfg(test)]
-            publish_gate: Arc::default(),
-            #[cfg(test)]
-            poll_gate: Arc::default(),
-        }
-    }
-
-    fn feed(&self, bytes: &[u8]) -> Vec<u8> {
-        let mut screen = lock(&self.screen);
-        self.drain(&mut screen);
-        let reply = screen.feed(bytes);
-        self.publish(&screen);
-        reply
-    }
-
-    // Built only when the screen changed since the last grid. It never waits for the reader: while
-    // the reader holds the screen, this is the last grid built.
-    fn grid(&self) -> crate::Grid {
-        if let Some(screen) = try_lock(&self.screen) {
-            self.wanted.store(false, Ordering::Relaxed);
-            self.build(&screen);
-        } else {
-            self.wanted.store(true, Ordering::Relaxed);
-            self.changed.store(true, Ordering::Release);
-        }
-        // The frame lock is held only to clone the Arc. The cells are copied without it.
-        let grid = Arc::clone(&lock(&self.frame).grid);
-        grid.as_ref().clone()
-    }
-
-    fn drained<T>(&self, read: impl FnOnce(&Screen) -> T) -> T {
-        let mut screen = lock(&self.screen);
-        self.drain(&mut screen);
-        read(&screen)
-    }
-
-    /// Applies the queued changes in order and publishes the result. Call with the screen locked.
-    fn drain(&self, screen: &mut Screen) {
-        let edits = std::mem::take(&mut *lock(&self.edits));
-        if edits.is_empty() {
-            return;
-        }
-        for edit in edits {
-            screen.apply(edit);
-        }
-        self.publish(screen);
-    }
-
-    // Marks the screen changed; the grid waits until it is read. Call with the screen locked.
-    fn publish(&self, screen: &Screen) {
-        self.versions.fetch_add(1, Ordering::Relaxed);
-        {
-            let mut title = lock(&self.title);
-            if title.as_deref() != screen.title() {
-                *title = screen.title().map(str::to_owned);
-            }
-        }
-        if self.wanted.swap(false, Ordering::Relaxed) {
-            self.build(screen);
-        }
-        self.changed.store(true, Ordering::Release);
-    }
-
-    // Call with the screen locked.
-    fn build(&self, screen: &Screen) {
-        let version = self.versions.load(Ordering::Relaxed);
-        if lock(&self.frame).version >= version {
-            return;
-        }
-        #[cfg(test)]
-        self.builds.fetch_add(1, Ordering::Relaxed);
-        store_frame(&self.frame, version, screen.grid());
-    }
-}
-
-/// Replaces the frame unless it is newer. The old grid is dropped after the frame lock is released.
-fn store_frame(frame: &Mutex<Frame>, version: u64, grid: crate::Grid) {
-    let previous = {
-        let mut current = lock(frame);
-        if version < current.version {
-            return;
-        }
-        std::mem::replace(
-            &mut *current,
-            Frame {
-                version,
-                grid: Arc::new(grid),
-            },
-        )
-    };
-    drop(previous);
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// Takes the lock only if nobody holds it now. A poisoned lock is still taken.
-fn try_lock<T>(mutex: &Mutex<T>) -> Option<MutexGuard<'_, T>> {
-    match mutex.try_lock() {
-        Ok(guard) => Some(guard),
-        Err(TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
-        Err(TryLockError::WouldBlock) => None,
-    }
-}
-
-fn io_error(err: impl std::fmt::Display) -> io::Error {
-    io::Error::other(err.to_string())
-}
-
-#[cfg(test)]
-mod tests;

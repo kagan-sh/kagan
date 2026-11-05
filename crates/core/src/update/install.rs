@@ -267,3 +267,80 @@ fn executable(path: &Path) -> io::Result<()> {
 fn executable(_: &Path) -> io::Result<()> {
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn posix(path: &str) -> PathBuf {
+        PathBuf::from(path)
+    }
+
+    #[test]
+    fn a_mac_app_is_replaced_in_place() {
+        let exe = posix("/Applications/kagan.app/Contents/MacOS/kg");
+        let target = Target::find("macos", &exe, None, None, &[]);
+        assert_eq!(target.install, InstallKind::App);
+        assert_eq!(target.path, posix("/Applications/kagan.app"));
+        assert_eq!(target.staged, posix("/Applications/.kagan.app.update"));
+    }
+
+    #[test]
+    fn a_cask_app_counts_as_homebrew() {
+        let exe = posix("/opt/homebrew/Caskroom/kagan/kagan.app/Contents/MacOS/kg");
+        let target = Target::find("macos", &exe, None, None, &[posix("/opt/homebrew")]);
+        assert_eq!(target.install, InstallKind::Homebrew);
+    }
+
+    #[test]
+    fn an_executable_outside_a_bundle_is_other() {
+        let exe = posix("/usr/local/bin/kg");
+        let target = Target::find("macos", &exe, None, None, &[]);
+        assert_eq!(target.install, InstallKind::Other);
+        assert_eq!(target.path, exe);
+    }
+
+    #[test]
+    fn a_windows_copy_with_an_uninstaller_is_installer() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("kg.exe");
+        std::fs::write(dir.path().join("uninstall.exe"), "").unwrap();
+        let target = Target::find("windows", &exe, None, None, &[]);
+        assert_eq!(target.install, InstallKind::Installer);
+        assert_eq!(
+            target.staged,
+            std::env::temp_dir().join("kagan-update-setup.exe")
+        );
+    }
+
+    #[test]
+    fn a_windows_copy_without_an_uninstaller_is_other() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("kg.exe");
+        let target = Target::find("windows", &exe, None, None, &[]);
+        assert_eq!(target.install, InstallKind::Other);
+    }
+
+    #[test]
+    fn an_appimage_counts_only_while_the_runtime_mounted_it() {
+        let image = posix("/home/person/kagan.AppImage");
+        let mounted = posix("/tmp/.mount_kagan");
+        let inside = mounted.join("usr/bin/kg");
+        let target = Target::find("linux", &inside, Some(image.clone()), Some(&mounted), &[]);
+        assert_eq!(target.install, InstallKind::AppImage);
+        assert_eq!(target.path, image);
+        assert_eq!(target.staged, posix("/home/person/.kagan.AppImage.update"));
+
+        let outside = posix("/usr/bin/kg");
+        let target = Target::find("linux", &outside, Some(image), Some(&mounted), &[]);
+        assert_eq!(target.install, InstallKind::Other);
+    }
+
+    #[test]
+    fn another_os_is_other() {
+        let exe = posix("/opt/kagan/kg");
+        let target = Target::find("freebsd", &exe, None, None, &[]);
+        assert_eq!(target.install, InstallKind::Other);
+        assert_eq!(target.path, exe);
+    }
+}

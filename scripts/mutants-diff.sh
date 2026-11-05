@@ -7,6 +7,11 @@ set -eu
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 
 base=${1:?usage: sh scripts/mutants-diff.sh <base-ref>}
+# CI splits the mutants across jobs; every shard must see the same diff and the same shard count.
+shard_args=
+if [ -n "${MUTANTS_SHARD:-}" ]; then
+  shard_args="--shard $MUTANTS_SHARD"
+fi
 if ! git rev-parse --verify --quiet "$base^{commit}" > /dev/null; then
   echo "mutants-diff: base $base is not a commit here; fetch it first" >&2
   exit 1
@@ -49,7 +54,8 @@ mutants() {
     --cargo-arg=--locked \
     --output "$dir" \
     --in-place \
-    --timeout 300 || rc=$?
+    --timeout 300 \
+    $shard_args || rc=$?
   missed="$dir/mutants.out/missed.txt"
   if [ -s "$missed" ]; then
     sed "s/^/$pkg: /" "$missed" >> "$found"

@@ -8,7 +8,6 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 use super::{ID, answer_standalone, call, installed, open, plugin_op, probe_plugin, run, thread};
-use crate::manifest;
 use crate::secret::Store;
 use keyring_core::CredentialStore;
 
@@ -47,7 +46,7 @@ export class Side extends View {
 
 fn secret_plugin() -> TempDir {
     let plugin = probe_plugin(&[], READS_SECRET);
-    let path = plugin.path().join(manifest::FILE);
+    let path = plugin.path().join(crate::manifest::FILE);
     let mut value: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     value["settings"]["token"] = json!({ "type": "secret", "title": "Linear API key" });
     value["ui"]["panels"] =
@@ -352,7 +351,7 @@ fn an_update_that_drops_a_secret_forgets_it(cx: &mut TestAppContext) {
     open(cx, &[installed(plugin.path())]);
     let mock = use_mock_keychain(cx);
     set(cx, json!(SECRET)).unwrap();
-    let path = plugin.path().join(manifest::FILE);
+    let path = plugin.path().join(crate::manifest::FILE);
     let mut value: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     value["settings"].as_object_mut().unwrap().remove("token");
     std::fs::write(&path, value.to_string()).unwrap();
@@ -415,7 +414,7 @@ fn a_secret_that_starts_another_is_hidden_whole() {
 #[test]
 fn a_secret_key_fits_the_keychain() {
     let plugin = secret_plugin();
-    let path = plugin.path().join(manifest::FILE);
+    let path = plugin.path().join(crate::manifest::FILE);
     let mut value: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     value["settings"]["k".repeat(65)] = json!({ "type": "secret", "title": "Long" });
     std::fs::write(&path, value.to_string()).unwrap();

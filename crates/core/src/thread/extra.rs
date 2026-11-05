@@ -4,7 +4,7 @@ use gpui_kit::{AppContext as _, AsyncApp, Context, WeakEntity};
 use kg_domain::{EnvironmentStatus, ExtraTerminal, OpError, OpResult, TerminalOp, ThreadId};
 use kg_terminal::{Launch, Lines, Terminal};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{closed, missing};
 use crate::{Workspace, WorkspaceEvent};
 
@@ -71,8 +71,9 @@ async fn open(this: &WeakEntity<Workspace>, id: ThreadId, cx: &mut AsyncApp) -> 
         })
         .map_err(closed)?;
     let folder = folder.ok_or_else(|| OpError::Invalid("its folder is not ready".into()))?;
-    let shell =
-        crate::program::login_shell(crate::program::program_environment_of(this, cx).as_ref());
+    let shell = crate::host::program::login_shell(
+        crate::host::program::program_environment_of(this, cx).as_ref(),
+    );
     let mut env = super::agent::variables(this, &record, cx)?;
     if let Some(locale) = cx
         .background_spawn(async { super::terminal::utf8_locale() })

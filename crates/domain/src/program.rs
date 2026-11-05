@@ -70,13 +70,29 @@ impl ProgramList {
     }
 }
 
+/// Why a program line cannot be split into a command and its arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum SplitProgramError {
+    #[error("program has an unfinished quote")]
+    UnfinishedQuote,
+    #[error("program is empty")]
+    Empty,
+}
+
+/// Keeps the message for callers that collect program errors as strings.
+impl From<SplitProgramError> for String {
+    fn from(error: SplitProgramError) -> Self {
+        error.to_string()
+    }
+}
+
 /// The program named by `line`: words split on spaces, where single or double quotes keep spaces
 /// together. A backslash is an ordinary character, so Windows paths work unquoted.
 ///
 /// # Errors
 ///
 /// The line has an unfinished quote, or no program name.
-pub fn split_program(line: &str) -> Result<(String, Vec<String>), String> {
+pub fn split_program(line: &str) -> Result<(String, Vec<String>), SplitProgramError> {
     let mut words = Vec::new();
     let mut word: Option<String> = None;
     let mut quote = None;
@@ -92,13 +108,72 @@ pub fn split_program(line: &str) -> Result<(String, Vec<String>), String> {
         }
     }
     if quote.is_some() {
-        return Err("program has an unfinished quote".into());
+        return Err(SplitProgramError::UnfinishedQuote);
     }
     words.extend(word);
     let mut words = words.into_iter();
-    let name = words.next().ok_or("program is empty")?;
+    let name = words.next().ok_or(SplitProgramError::Empty)?;
     if name.is_empty() {
-        return Err("program is empty".into());
+        return Err(SplitProgramError::Empty);
     }
     Ok((name, words.collect()))
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::{SplitProgramError, split_program};
+
+    #[test]
+    fn a_program_line_splits_on_spaces_and_keeps_quoted_words_together() {
+        assert_eq!(
+            split_program("claude --model 'fast model' \"two words\""),
+            Ok((
+                "claude".into(),
+                vec!["--model".into(), "fast model".into(), "two words".into()]
+            ))
+        );
+    }
+
+    #[test]
+    fn a_program_line_refuses_an_unfinished_quote_or_an_empty_program() {
+        assert_eq!(
+            split_program("'claude"),
+            Err(SplitProgramError::UnfinishedQuote)
+        );
+        assert_eq!(split_program("  "), Err(SplitProgramError::Empty));
+        assert_eq!(split_program("\"\""), Err(SplitProgramError::Empty));
+    }
+
+    proptest! {
+        #[test]
+        fn quoted_words_round_trip(words in prop::collection::vec("[^\"\\\\]{1,24}", 1..6)) {
+            let line = words
+                .iter()
+                .map(|word| format!("\"{word}\""))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let (name, args) = split_program(&line).expect("quoted words");
+            prop_assert_eq!(name, words[0].clone());
+            prop_assert_eq!(args, words[1..].to_vec());
+        }
+
+        #[test]
+        fn plain_words_round_trip(words in prop::collection::vec("[A-Za-z0-9._/:-]{1,24}", 1..6)) {
+            let line = words.join(" ");
+            let (name, args) = split_program(&line).expect("plain words");
+            prop_assert_eq!(name, words[0].clone());
+            prop_assert_eq!(args, words[1..].to_vec());
+        }
+    }
+
+    #[test]
+    fn the_refusal_keeps_the_message_callers_print() {
+        assert_eq!(
+            String::from(SplitProgramError::UnfinishedQuote),
+            "program has an unfinished quote"
+        );
+        assert_eq!(String::from(SplitProgramError::Empty), "program is empty");
+    }
 }

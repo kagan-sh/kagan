@@ -1,34 +1,22 @@
 //! The plugin host: discovery, activation, contributions, and the panels and pages plugins add.
 
-mod area;
-mod catalog;
-mod clipboard;
-mod commands;
-mod contributions;
-mod database;
-mod development;
-mod files;
-mod host;
-mod index;
-mod jobs;
-pub mod keys;
-mod log;
-
-pub(crate) use log::{Level, log};
-mod manifest;
-mod ops;
-mod page;
-mod process;
+mod authoring;
+mod install;
+mod runtime;
 mod schedule;
-mod secret;
-mod share;
-mod source;
+
+pub(crate) use authoring::{catalog, contributions, development, manifest, share};
+pub(crate) use install::{index, source};
+pub use runtime::keys;
+pub(crate) use runtime::log;
+pub(crate) use runtime::log::{Level, log};
+pub(crate) use runtime::{
+    area, clipboard, commands, database, files, host, jobs, ops, page, process, secret, threads,
+    ui_host, watchdog, web_store,
+};
+
 #[cfg(test)]
 mod tests;
-mod threads;
-mod ui_host;
-mod watchdog;
-mod web_store;
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -41,7 +29,7 @@ use serde_json::Value;
 use crate::manifest::{Fetch, Grant};
 pub use catalog::{Example, capabilities, capabilities_in, examples, kinds_in};
 pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
-pub(crate) use host::{Agents, Discovered, PluginHostGlobal, activate, discover};
+pub(crate) use host::{Agents, Discovered, PluginHostGlobal, discover};
 pub use host::{MountError, PluginHost, PluginHostEvent, init};
 pub use index::shown;
 pub use manifest::{AgentChoice, Setting};
@@ -64,7 +52,9 @@ fn event_data(kind: &kg_domain::EventKind) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn http_grants(fetch: &[Fetch]) -> std::result::Result<Vec<HttpRequestGrant>, String> {
+fn http_grants(
+    fetch: &[Fetch],
+) -> std::result::Result<Vec<HttpRequestGrant>, manifest::FetchError> {
     fetch.iter().map(Fetch::http_grant).collect()
 }
 

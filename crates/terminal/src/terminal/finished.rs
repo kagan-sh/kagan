@@ -2,7 +2,7 @@ use crate::screen::{Edit, MAX_COLS, MAX_ROWS, MIN_COLS, SNAPSHOT_MAX, SelectMode
 
 use std::sync::atomic::Ordering;
 
-use super::{Shared, lock};
+use super::shared::{Shared, lock};
 
 /// The screen of a program that has ended. It keeps no pty, so input is not possible.
 #[derive(Clone)]

@@ -43,7 +43,7 @@ errors = []
 
 ui = root / "crates" / "ui" / "src"
 for path in product_rs(ui):
-    if path.name == "theme.rs":
+    if path.name == "theme.rs" or path.parent.name == "theme":
         continue
     text = path.read_text(encoding="utf-8")
     for lineno, line in line_hits(text):

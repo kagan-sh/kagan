@@ -189,3 +189,65 @@ fn config_set_checks_strings_and_numbers_against_the_schema(cx: &mut TestAppCont
         assert!(message.contains("does not match its schema"), "{message}");
     }
 }
+
+#[gpui_kit::test]
+fn config_set_checks_select_project_and_secret_settings(cx: &mut TestAppContext) {
+    let dir = plugin(&json!({
+        "mode": { "type": "select", "title": "Mode", "options": ["fast", "slow"] },
+        "board": { "type": "project", "title": "Board" },
+        "token": { "type": "secret", "title": "Token" },
+        "name": { "type": "string", "title": "Name" }
+    }));
+    open(cx, &[installed(dir.path())]);
+
+    for (key, value) in [
+        ("mode", json!("fast")),
+        ("board", json!("prj_test")),
+        ("name", json!("kagan")),
+        ("token", json!("s3cret")),
+    ] {
+        run(
+            cx,
+            config(ConfigOp::Set {
+                key: key.into(),
+                value: Some(value),
+            }),
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        run(cx, config(ConfigOp::Get { key: "mode".into() })).unwrap(),
+        OpResult::Setting(json!("fast"))
+    );
+    assert_eq!(
+        run(
+            cx,
+            config(ConfigOp::Get {
+                key: "board".into()
+            })
+        )
+        .unwrap(),
+        OpResult::Setting(json!("prj_test"))
+    );
+
+    for (key, value) in [
+        ("mode", json!("other")),
+        ("board", json!("")),
+        ("board", json!("a\nb")),
+        ("name", json!(3)),
+        ("token", json!("")),
+    ] {
+        let error = run(
+            cx,
+            config(ConfigOp::Set {
+                key: key.into(),
+                value: Some(value),
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains(&format!("setting {key}")),
+            "{error}"
+        );
+    }
+}

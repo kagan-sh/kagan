@@ -13,3 +13,6 @@ plugins/**/jsconfig.json
 
 .superpowers/
 
+
+.desloppify/
+/scorecard.png

@@ -3,7 +3,7 @@
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{BrowserOp, OpResult};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::{UiJob, Workspace};
 
 pub(crate) async fn run(
@@ -11,5 +11,5 @@ pub(crate) async fn run(
     op: BrowserOp,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    crate::ui::drive(this, UiJob::Browser(op), cx).await
+    crate::dispatch::ui::drive(this, UiJob::Browser(op), cx).await
 }

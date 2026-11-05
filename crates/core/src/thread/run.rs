@@ -9,8 +9,16 @@ use kg_process::{find_program, pathext};
 
 use super::clean_title;
 use crate::Workspace;
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{id, missing, time};
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub(crate) enum ResolveError {
+    #[error("{0}")]
+    Line(kg_domain::SplitProgramError),
+    #[error("program {0} was not found")]
+    NotFound(String),
+}
 
 pub(crate) struct ResolvedProgram {
     pub(crate) path: PathBuf,
@@ -25,15 +33,15 @@ pub(crate) struct ResolvedProgram {
 /// The line is empty, a quote is unfinished, or the program is not on the login `PATH`.
 pub(crate) fn resolve_program(
     line: &str,
-    environment: Option<&crate::program::ProgramEnvironment>,
-) -> std::result::Result<ResolvedProgram, String> {
-    let (name, args) = kg_domain::split_program(line)?;
+    environment: Option<&crate::host::program::ProgramEnvironment>,
+) -> std::result::Result<ResolvedProgram, ResolveError> {
+    let (name, args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
     let found = find_program(
         Path::new(&name),
-        crate::program::search_path(environment).as_deref(),
+        crate::host::program::search_path(environment).as_deref(),
         pathext().as_deref(),
     )
-    .ok_or_else(|| format!("program {name} was not found"))?;
+    .ok_or(ResolveError::NotFound(name))?;
     Ok(ResolvedProgram {
         path: found,
         args: args.into_iter().map(OsString::from).collect(),
@@ -59,7 +67,7 @@ pub(crate) fn worktree_branch(
             slug
         }
     };
-    if crate::git::valid_branch(&name) {
+    if crate::host::git::valid_branch(&name) {
         Ok(Some(name))
     } else {
         Err(OpError::Invalid(format!(
@@ -86,8 +94,9 @@ pub(crate) async fn prepare(
     run: Run,
     cx: &mut AsyncApp,
 ) -> Result<PreparedRun> {
-    let environment = crate::program::program_environment_of(this, cx);
-    resolve_program(&run.program, environment.as_ref()).map_err(OpError::Invalid)?;
+    let environment = crate::host::program::program_environment_of(this, cx);
+    resolve_program(&run.program, environment.as_ref())
+        .map_err(|error| OpError::Invalid(error.to_string()))?;
     let program = run.program.clone();
     let project_id = run.project_id.clone();
     let database = crate::workspace::database(this, cx)?;

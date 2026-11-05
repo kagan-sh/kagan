@@ -4,7 +4,9 @@ use gpui_kit::TestAppContext;
 use kg_domain::*;
 use serde_json::json;
 
-use super::{Fixture, claude_line, events, fake_agent, op, ran, started, wait_for_status};
+use super::{Fixture, events, op, started, wait_for_status};
+#[cfg(unix)]
+use super::{claude_line, fake_agent, ran};
 
 fn claude_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let config = fixture.dir.path().join("claude");
@@ -33,6 +35,7 @@ async fn stop(id: &ThreadId, cx: &mut TestAppContext) {
     wait_for_status(id, ThreadStatus::Idle, cx).await;
 }
 
+#[cfg(unix)]
 async fn start_again(id: &ThreadId, run: &Path, cx: &mut TestAppContext) -> Vec<String> {
     std::fs::remove_file(run.join("out").join("env")).unwrap();
     op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
@@ -67,6 +70,7 @@ async fn integration(on: bool, cx: &mut TestAppContext) {
     .unwrap();
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn start_again_resumes_the_conversation_the_first_start_named(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -85,6 +89,7 @@ async fn start_again_resumes_the_conversation_the_first_start_named(cx: &mut Tes
     assert!(notices(&id, cx).await.is_empty());
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn start_again_begins_a_new_conversation_when_the_last_one_is_gone(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -109,6 +114,7 @@ async fn start_again_begins_a_new_conversation_when_the_last_one_is_gone(cx: &mu
     assert_eq!(after(&third, "--resume"), Some(fresh));
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_thread_without_a_saved_conversation_starts_a_new_one_and_says_so(
     cx: &mut TestAppContext,
@@ -131,6 +137,7 @@ async fn a_thread_without_a_saved_conversation_starts_a_new_one_and_says_so(
     );
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn threads_in_one_folder_resume_their_own_conversations(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -162,6 +169,7 @@ async fn threads_in_one_folder_resume_their_own_conversations(cx: &mut TestAppCo
     );
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn agent_integration_off_adds_no_conversation_on_start_again(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -174,6 +182,7 @@ async fn agent_integration_off_adds_no_conversation_on_start_again(cx: &mut Test
     assert_eq!(start_again(&id, &run, cx).await, vec!["--person-arg"]);
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_restart_waits_for_start_again_and_then_resumes(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -193,6 +202,7 @@ async fn a_restart_waits_for_start_again_and_then_resumes(cx: &mut TestAppContex
     );
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -339,6 +349,7 @@ async fn codex_thread(
     (id, run, reap)
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn start_again_resumes_the_one_codex_conversation_begun_in_its_folder(
     cx: &mut TestAppContext,
@@ -374,6 +385,7 @@ async fn start_again_resumes_the_one_codex_conversation_begun_in_its_folder(
     assert!(fourth.ends_with(&["resume".to_owned(), next]), "{fourth:?}");
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn start_again_resumes_the_cursor_conversation_the_first_start_named(
     cx: &mut TestAppContext,
@@ -465,6 +477,7 @@ async fn start_again_resumes_the_cursor_conversation_the_first_start_named(
     );
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_worktree_name_is_not_a_cursor_subcommand(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
@@ -512,6 +525,7 @@ fn forget(home: &Path, conversation: &str) {
     panic!("no file for {conversation}");
 }
 
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn start_again_on_codex_starts_a_new_conversation_when_none_or_two_match(
     cx: &mut TestAppContext,

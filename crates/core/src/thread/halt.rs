@@ -1,7 +1,7 @@
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{EventKind, ThreadStatus, TurnOutcome};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{closed, time};
 use crate::{Thread, Workspace};
 

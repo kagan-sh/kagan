@@ -39,6 +39,7 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
                 .pop()
                 .ok_or_else(|| OpError::Failed("plugin dev returned no plugin".into()))?;
             let mut before = snapshot(&plugin.root)?;
+            // shortcut: dev follows until the person stops it; the CLI has nothing to tear down.
             loop {
                 std::thread::sleep(Duration::from_millis(500));
                 let after = snapshot(&plugin.root)?;
@@ -62,6 +63,7 @@ pub(crate) fn run(op: Op, json: bool) -> Result<(), OpError> {
             after,
         }) => {
             let mut after = after;
+            // shortcut: logs follow until the person stops it; the CLI has nothing to tear down.
             loop {
                 let result = client.call(&Op::Plugin(PluginOp::Logs {
                     id: id.clone(),
@@ -400,6 +402,7 @@ fn format_ui_snapshot(snapshot: &UiSnapshot) -> String {
     out
 }
 
+// shortcut: exit skips destructors; the CLI holds no state that needs dropping.
 fn exit_with(code: i32) {
     if code != 0 {
         std::process::exit(code);
