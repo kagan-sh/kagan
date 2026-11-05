@@ -49,6 +49,8 @@ pub(crate) enum Error {
     HeaderCommand,
     #[error("a menu command needs when thread")]
     MenuCommand,
+    #[error("{0}")]
+    Schedule(String),
     #[error("$hotkeys is reserved for keyboard shortcuts")]
     ReservedHotkeys,
     #[error("tool name {0:?} must be 1 to 64 letters, digits, _ or -")]
@@ -134,8 +136,19 @@ pub(crate) struct Manifest {
     #[serde(default)]
     pub(crate) events: BTreeSet<String>,
     #[serde(default)]
+    pub(crate) schedules: Vec<Schedule>,
+    #[serde(default)]
     themes: Vec<Theme>,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Schedule {
+    pub(crate) id: String,
+    pub(crate) every: u32,
+}
+
+pub(crate) const MAX_EVERY: u32 = 1440;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -237,6 +250,7 @@ impl Manifest {
         self.check_commands()?;
         self.check_hotkeys()?;
         self.check_events()?;
+        self.check_schedules()?;
         self.check_tools(root)?;
         self.check_options()?;
         self.check_native()?;
@@ -370,6 +384,22 @@ impl Manifest {
         }
         if !self.events.is_empty() && !self.powers.areas.contains(&Area::Threads) {
             return Err(Error::EventsArea);
+        }
+        Ok(())
+    }
+
+    fn check_schedules(&self) -> Result<(), Error> {
+        let mut ids = BTreeSet::new();
+        for schedule in &self.schedules {
+            if schedule.id.trim().is_empty() || !ids.insert(&schedule.id) {
+                return Err(Error::Schedule("schedules need unique nonempty ids".into()));
+            }
+            if !(1..=MAX_EVERY).contains(&schedule.every) {
+                return Err(Error::Schedule(format!(
+                    "schedule {} runs every 1 to {MAX_EVERY} minutes",
+                    schedule.id
+                )));
+            }
         }
         Ok(())
     }

@@ -7,6 +7,7 @@ mod jobs;
 mod manifest;
 mod page;
 mod runtime;
+mod schedule;
 mod secret;
 mod settings;
 

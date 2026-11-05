@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 
 use crate::jobs::Jobs;
 use crate::manifest::{self, AgentChoice, Grant, Setting, Tool};
-use crate::{Level, Result, area, commands, http_grants, process, secret, watchdog};
+use crate::{Level, Result, area, commands, http_grants, process, schedule, secret, watchdog};
 
 use super::{Active, Discovered, Loaded, PluginHost, Schema};
 
@@ -131,6 +131,7 @@ pub(crate) async fn activate(
         let manifest = &discovered.manifest;
         let identity = (manifest.name.clone(), manifest.version.clone());
         host.identities.insert(record.id.clone(), identity);
+        let schedules = schedule::start(&record.id, &manifest.schedules, cx);
         host.active.insert(
             record.id.clone(),
             Active {
@@ -147,6 +148,7 @@ pub(crate) async fn activate(
                 loaded: None,
                 generation,
                 activation,
+                _schedules: schedules,
             },
         );
         cx.notify();
@@ -411,6 +413,15 @@ impl Active {
 }
 impl PluginHost {
     pub(crate) fn load(&mut self, id: &PluginId, cx: &mut Context<Self>) -> Result<Rc<Jobs>> {
+        // A load whose view crashed is dead: retire it before handing out its queue again.
+        let crashed = self
+            .active
+            .get(id)
+            .and_then(|active| active.loaded.as_ref())
+            .is_some_and(|loaded| loaded.watchdog.error.is_some());
+        if crashed {
+            self.unload(id, cx);
+        }
         if let Some(loaded) = self
             .active
             .get(id)

@@ -22,6 +22,9 @@ pub(crate) struct Grant {
     pub(crate) instruct: bool,
     #[serde(default)]
     pub(crate) skills: bool,
+    /// Each schedule id with its interval in minutes.
+    #[serde(default)]
+    pub(crate) schedules: BTreeMap<String, u32>,
 }
 
 impl Grant {
@@ -47,6 +50,11 @@ impl Grant {
                 || crate::development::calls_webview_store(root),
             instruct: manifest.instruct,
             skills: !manifest.skills.is_empty(),
+            schedules: manifest
+                .schedules
+                .iter()
+                .map(|schedule| (schedule.id.clone(), schedule.every))
+                .collect(),
         }
     }
 
@@ -115,6 +123,12 @@ impl Grant {
             page_store: self.page_store && other.page_store,
             instruct: self.instruct && other.instruct,
             skills: self.skills && other.skills,
+            schedules: self
+                .schedules
+                .iter()
+                .filter(|(id, every)| other.schedules.get(*id) == Some(every))
+                .map(|(id, every)| (id.clone(), *every))
+                .collect(),
         }
     }
 
@@ -144,6 +158,10 @@ impl Grant {
             && (!self.page_store || approved.page_store)
             && (!self.instruct || approved.instruct)
             && (!self.skills || approved.skills)
+            && self
+                .schedules
+                .iter()
+                .all(|(id, every)| approved.schedules.get(id) == Some(every))
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -211,6 +229,12 @@ impl Grant {
         }
         if powers.open_url {
             lines.push("opens links in your browser".into());
+        }
+        for every in self.schedules.values() {
+            let unit = if *every == 1 { "minute" } else { "minutes" };
+            lines.push(format!(
+                "runs on its own every {every} {unit} while kagan is open"
+            ));
         }
         lines
     }

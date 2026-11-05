@@ -271,6 +271,12 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 - **Changes**: reloads the installed code [docs:self-extend]. Unload cancels the plugin's tasks, closes its job queue, fails its open jobs, kills processes it started, and releases its port [docs:plugin-api].
 - **Refused when**: the person declines — `failed` [docs:self-extend] [book:plugins] [op/].
 
+### `Schedule` (a manifest entry, no operation)
+
+- **Allowed when**: the plugin is enabled and its manifest declares `schedules` with `every` from 1 to 1440 whole minutes [docs:plugin-api] [decision 146].
+- **Changes**: runs the plugin's `schedule` job every interval while kagan is open, loading the plugin for the run if needed. Runs never overlap [docs:plugin-api].
+- **Refused when**: an interval out of range or a duplicate id — the manifest is refused at install and check [docs:plugin-api]. A run that fails or passes 2 minutes is logged to the plugin log; a timeout retires that load so the next run starts a new one, and the next wait still starts.
+
 ### `Dev`
 
 - **Allowed when**: the path is an installed local plugin [docs:self-extend].

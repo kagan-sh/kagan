@@ -3,6 +3,7 @@
 mod authoring;
 mod install;
 mod runtime;
+mod schedule;
 
 pub(crate) use authoring::{catalog, contributions, development, manifest, share};
 pub(crate) use install::{index, source};

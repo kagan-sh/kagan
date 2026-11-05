@@ -210,6 +210,8 @@ pub(crate) struct Active {
     /// Counts each load of this plugin, so a view from an older load can be told apart.
     pub(crate) generation: u64,
     pub(crate) activation: u64,
+    /// Dropping these stops the plugin's schedules.
+    pub(crate) _schedules: Vec<Task<()>>,
 }
 
 // Kept apart from the other settings so `host.settings()` never shows them. `None` until picked.

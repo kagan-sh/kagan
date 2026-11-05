@@ -111,6 +111,10 @@ _Avoid_: Extension, add-on
 A JSON list of plugins a team publishes, by name, with each one's git source. Search reads it; install by name still asks a person.
 _Avoid_: Marketplace (the decision-3 goal, not the file), catalog, store, registry
 
+**Schedule**:
+A plugin's timer. Kagan runs one of its jobs every so many minutes while kagan is open, loading the plugin for the run if needed. Not a cron expression, and not a process that keeps running.
+_Avoid_: cron job, cron, background job, service
+
 **Skill**:
 A packaged set of instructions an agent can load for one kind of task.
 
