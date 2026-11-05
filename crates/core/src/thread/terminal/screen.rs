@@ -14,7 +14,7 @@ pub(super) async fn persist(
     cx: &mut AsyncApp,
 ) {
     for (id, seq, finished) in keep {
-        #[cfg(any(test, feature = "test-support"))]
+        #[cfg(any(test, feature = "test"))]
         if let Ok(Some(hold)) = this.update(cx, |workspace, _| workspace.screen_hold.clone()) {
             let _ = hold.recv().await;
         }

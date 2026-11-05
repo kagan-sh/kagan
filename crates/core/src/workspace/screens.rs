@@ -17,7 +17,7 @@ impl Workspace {
     pub fn screen_note(&self, id: &ThreadId) -> Option<&'static str> {
         self.losses.get(id).copied().map(crate::end::Loss::note)
     }
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test"))]
     pub fn set_snapshot_bound(&mut self, id: &ThreadId, bound: usize) -> bool {
         let Some(crate::thread::Shown::Running(terminal)) = self.terminals.get(id) else {
             return false;

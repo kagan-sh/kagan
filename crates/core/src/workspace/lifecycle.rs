@@ -82,7 +82,7 @@ impl Workspace {
             }
         })
     }
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test"))]
     pub fn hold_screen_save(&mut self, hold: async_channel::Receiver<()>) {
         self.screen_hold = Some(hold);
     }
@@ -93,7 +93,7 @@ impl Workspace {
             .filter(|thread| thread.read(cx).running())
             .count()
     }
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test"))]
     #[must_use]
     pub fn terminal_process_id(&self, id: &kg_domain::ThreadId) -> Option<u32> {
         match self.terminals.get(id)? {

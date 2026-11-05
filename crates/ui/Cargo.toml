@@ -42,7 +42,7 @@ gpui-webview = { workspace = true, features = ["windows-composition"] }
 
 [dev-dependencies]
 dunce.workspace = true
-kg-core = { workspace = true, features = ["test-support"] }
+kg-core = { workspace = true, features = ["test"] }
 kg-store.workspace = true
 tempfile.workspace = true
 gpui-kit = { workspace = true, features = ["test-support", "tree-sitter-diff"] }

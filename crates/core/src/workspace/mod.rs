@@ -154,7 +154,7 @@ pub struct Workspace {
     pub(crate) run_hold: Option<async_channel::Receiver<()>>,
     #[cfg(test)]
     pub(crate) delete_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test"))]
     pub(crate) screen_hold: Option<async_channel::Receiver<()>>,
     _database_task: Task<()>,
     _requests_task: Task<()>,
@@ -275,7 +275,7 @@ impl Workspace {
                         run_hold: None,
                         #[cfg(test)]
                         delete_hold: None,
-                        #[cfg(any(test, feature = "test-support"))]
+                        #[cfg(any(test, feature = "test"))]
                         screen_hold: None,
                         _database_task: database_task,
                         _requests_task: requests_task,
@@ -361,7 +361,7 @@ impl Workspace {
     }
     /// Finds this workspace's programs on `path` and starts them with `shell`, instead of the login
     /// PATH and the shell. A test calls this so its program list does not depend on the machine.
-    #[cfg(any(test, feature = "test-support"))]
+    #[cfg(any(test, feature = "test"))]
     pub fn use_program_environment(&mut self, path: &std::path::Path, shell: &std::path::Path) {
         self.program_environment = Some(crate::host::program::ProgramEnvironment {
             path: path.as_os_str().to_owned(),

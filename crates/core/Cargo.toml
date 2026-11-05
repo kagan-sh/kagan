@@ -30,7 +30,7 @@ libc.workspace = true
 tar = { version = "=0.4.46", default-features = false }
 
 [features]
-test-support = []
+test = []
 
 [lints]
 workspace = true
