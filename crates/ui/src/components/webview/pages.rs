@@ -1,6 +1,10 @@
-use gpui_kit::{App, Entity, WeakEntity, Window};
+use gpui_kit::{App, Window};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use gpui_kit::{Entity, WeakEntity};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_shell::ScriptView;
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use super::Held;
 use super::Pages;
 

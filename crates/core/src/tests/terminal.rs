@@ -4,10 +4,11 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, Reap, alive, dispatch_delete, dispatch_send, events, gone, job_pid, kinds_of, op,
-    pending_delete, pid_of, program, screen, screen_lines, screen_of, screen_with, script,
-    sent_text, started, thread, type_in, wait_for_status, wait_until_busy,
+    Fixture, Reap, alive, dispatch_delete, events, gone, kinds_of, op, pending_delete, pid_of,
+    program, screen, screen_of, screen_with, started, thread, type_in, wait_for_status,
 };
+#[cfg(unix)]
+use super::{dispatch_send, job_pid, screen_lines, script, sent_text, wait_until_busy};
 
 #[gpui_kit::test]
 async fn run_puts_the_programs_output_on_the_screen(cx: &mut TestAppContext) {

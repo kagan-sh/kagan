@@ -2,13 +2,16 @@ use std::path::Path;
 
 use gpui_kit::{AnyWindowHandle, AppContext as _, TestAppContext, px, size};
 use kg_core::Workspace;
-use kg_domain::{Op, PluginId, PluginOp};
+use kg_domain::PluginId;
+#[cfg(target_os = "macos")]
+use kg_domain::{Op, PluginOp};
 use serde_json::json;
 
 use super::{
-    body, box_of, close_surface, install_pair, item, manifest, open_surface, run, surfaces, wide,
-    write_plugin,
+    body, box_of, install_pair, item, manifest, open_surface, surfaces, wide, write_plugin,
 };
+#[cfg(target_os = "macos")]
+use super::{close_surface, run};
 use crate::tests::kagan::{
     click, focused_of, label, open_with_plugins_then, present, selected_of, shows, wait_until,
 };

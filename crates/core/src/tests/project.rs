@@ -5,9 +5,11 @@ use crate::Workspace;
 
 use super::{
     Fixture, SshRewrite, dispatch_delete, empty_repo, environment_of, git_in, hold_removal,
-    hold_run, op, pending_delete, program, repo_dir, started, started_personal, stopped_worktree,
-    thread, wait_for_status, wait_until_gone, worktree_run,
+    hold_run, op, pending_delete, program, repo_dir, started, started_personal, thread,
+    wait_for_status, worktree_run,
 };
+#[cfg(unix)]
+use super::{stopped_worktree, wait_until_gone};
 
 #[gpui_kit::test]
 async fn adding_a_folder_makes_one_project(cx: &mut TestAppContext) {

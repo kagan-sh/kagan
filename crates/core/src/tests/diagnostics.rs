@@ -1,8 +1,10 @@
 use gpui_kit::TestAppContext;
 use kg_domain::*;
 
+#[cfg(unix)]
+use super::script;
 use super::{
-    Fixture, assert_diagnostics_keeps_secrets_out, idle_thread, op, plant_secret_plugins, script,
+    Fixture, assert_diagnostics_keeps_secrets_out, idle_thread, op, plant_secret_plugins,
     wait_for_status, wait_saved,
 };
 

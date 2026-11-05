@@ -5,9 +5,10 @@ use crate::Workspace;
 
 use super::{
     Fixture, empty_repo, environment_branch, environment_of, events, kinds_of, op, pid_of,
-    plant_old_turn, program, script, socket_rename, started, stop_archive_and_settle, thread,
-    wait_for_status, worktree_run,
+    plant_old_turn, program, socket_rename, started, thread, wait_for_status, worktree_run,
 };
+#[cfg(unix)]
+use super::{script, stop_archive_and_settle};
 
 #[gpui_kit::test]
 async fn a_bad_program_does_not_start_a_thread(cx: &mut TestAppContext) {

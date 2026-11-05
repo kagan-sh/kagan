@@ -6,10 +6,9 @@ use serde_json::json;
 
 use crate::Workspace;
 
-use super::{
-    Fixture, claude_line, events, fake_agent, install_plugin, op, ran, screen_with, started,
-    thread, type_in, wait_for_status,
-};
+use super::{Fixture, events, op, screen_with, started, thread, type_in, wait_for_status};
+#[cfg(unix)]
+use super::{claude_line, fake_agent, install_plugin, ran};
 
 #[cfg(unix)]
 #[gpui_kit::test]

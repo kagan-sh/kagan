@@ -4,10 +4,14 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, ask_op, ask_options, assert_quit_leaves_the_turn, begin_wait, busy_and_unread,
-    busy_of, finish_quit, finish_wait, kinds_of, op, outcome, pending, row_end_after_its_event,
-    screen_with, script, set_row_status, settle, sleeping, started, thread, turn_counts,
-    wait_for_status, wait_for_waiting, wait_until_busy, waiting_count,
+    Fixture, ask_op, ask_options, busy_of, kinds_of, op, outcome, screen_with, started, thread,
+    turn_counts, wait_for_status,
+};
+#[cfg(unix)]
+use super::{
+    assert_quit_leaves_the_turn, begin_wait, busy_and_unread, finish_quit, finish_wait, pending,
+    row_end_after_its_event, script, set_row_status, settle, sleeping, wait_for_waiting,
+    wait_until_busy, waiting_count,
 };
 
 #[cfg(unix)]

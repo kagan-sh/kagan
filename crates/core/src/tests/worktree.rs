@@ -4,10 +4,12 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, GitTrack, commit_file, empty_repo, environment_of, error_rows, events, git_in, op,
-    pending_delete, pid_of, program, repo_dir, started_personal, stop_archive_and_settle,
-    tracks_upstream, wait_for_status, worktree_count, worktree_run,
+    Fixture, GitTrack, commit_file, empty_repo, environment_of, events, git_in, op, pending_delete,
+    pid_of, program, repo_dir, started_personal, tracks_upstream, wait_for_status, worktree_count,
+    worktree_run,
 };
+#[cfg(unix)]
+use super::{error_rows, stop_archive_and_settle};
 
 #[gpui_kit::test]
 fn a_repo_script_may_run_for_ten_minutes(_cx: &mut TestAppContext) {
