@@ -56,6 +56,10 @@ fn a_windows_page_keeps_the_plugin_origin_through_webview2() {
         "http://kagan-plugin.dev.kagan.page:8080/x"
     ));
     assert!(!allows_navigation(PLUGIN, "http://example.com/"));
+    assert!(!allows_navigation(
+        PLUGIN,
+        "http://kagan-plugin.dev.kagan.page@evil.com/"
+    ));
     let own = page_url(PLUGIN, "ui/index.html").unwrap();
     assert!(allows_navigation(PLUGIN, &own));
 }
