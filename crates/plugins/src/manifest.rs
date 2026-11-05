@@ -397,8 +397,7 @@ impl Setting {
     }
 }
 
-/// The first way `value` fails `setting`'s schema, in plain words. `None` when it passes or the
-/// setting declares no schema.
+/// `Some` for the first failure, or for a schema that does not compile; callers treat any `Some` as invalid.
 pub(crate) fn schema_failure(key: &str, setting: &Setting, value: &Value) -> Option<String> {
     let schema = setting.schema()?;
     let validator = match jsonschema::validator_for(schema) {
@@ -448,8 +447,7 @@ pub(crate) enum Scope {
     Tagged,
 }
 
-/// Refuses `multiline` and `schema` on a setting type that does not take them, naming the key.
-/// Serde would refuse them as unknown fields, without the key, so this runs on the raw JSON.
+// Serde refuses an unknown field without naming the setting key, so the check runs on the raw JSON.
 fn check_setting_fields(value: &Value) -> Result<(), String> {
     let Some(settings) = value.get("settings").and_then(Value::as_object) else {
         return Ok(());

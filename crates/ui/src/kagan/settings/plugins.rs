@@ -1326,7 +1326,6 @@ thread_local! {
     /// test does not keep the input alive.
     static TEXT_INPUTS: std::cell::RefCell<BTreeMap<String, gpui_kit::WeakEntity<InputState>>> =
         const { std::cell::RefCell::new(BTreeMap::new()) };
-    /// The editor of each multiline setting, kept apart because it is another state type.
     static TEXTAREAS: std::cell::RefCell<BTreeMap<String, gpui_kit::WeakEntity<TextareaState>>> =
         const { std::cell::RefCell::new(BTreeMap::new()) };
 }
