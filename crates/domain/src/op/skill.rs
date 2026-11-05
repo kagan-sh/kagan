@@ -144,3 +144,35 @@ pub enum SkillSource {
     User,
     Project,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Skill, SkillSource};
+
+    const SKILL: &str = "\
+---
+name: demo
+description: Does one thing
+argument-hint: <path>
+---
+
+Body
+";
+
+    #[test]
+    fn a_skill_reads_its_frontmatter_and_body() {
+        let (skill, body) = Skill::parse("demo", SKILL, SkillSource::User, None).expect("a skill");
+        assert_eq!(skill.name, "demo");
+        assert_eq!(skill.description, "Does one thing");
+        assert_eq!(skill.hint.as_deref(), Some("<path>"));
+        assert_eq!(body, "Body");
+    }
+
+    #[test]
+    fn a_skill_refuses_a_mismatched_name_or_missing_frontmatter() {
+        assert!(Skill::parse("other", SKILL, SkillSource::User, None).is_err());
+        assert!(Skill::parse("demo", "Body", SkillSource::User, None).is_err());
+        let bad_hint = SKILL.replace("<path>", "\"two\\nlines\"");
+        assert!(Skill::parse("demo", &bad_hint, SkillSource::User, None).is_err());
+    }
+}

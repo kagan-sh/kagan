@@ -96,3 +96,53 @@ fn present(text: &str) -> Option<String> {
         Some(text.to_owned())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{EnvironmentSpec, environment_spec};
+    use crate::EnvironmentId;
+
+    #[test]
+    fn an_environment_word_names_its_kind() {
+        assert_eq!(
+            environment_spec("project-default"),
+            Ok(EnvironmentSpec::ProjectDefault)
+        );
+        assert_eq!(environment_spec("personal"), Ok(EnvironmentSpec::Personal));
+        assert_eq!(
+            environment_spec("worktree"),
+            Ok(EnvironmentSpec::Worktree {
+                base_branch: None,
+                branch: None
+            })
+        );
+        assert_eq!(
+            environment_spec("worktree:main:thread-1"),
+            Ok(EnvironmentSpec::Worktree {
+                base_branch: Some("main".into()),
+                branch: Some("thread-1".into())
+            })
+        );
+        assert_eq!(
+            environment_spec("worktree::thread-1"),
+            Ok(EnvironmentSpec::Worktree {
+                base_branch: None,
+                branch: Some("thread-1".into())
+            })
+        );
+        assert_eq!(
+            environment_spec("reuse:env_1"),
+            Ok(EnvironmentSpec::Reuse {
+                environment_id: EnvironmentId("env_1".into())
+            })
+        );
+    }
+
+    #[test]
+    fn an_unknown_environment_is_refused() {
+        assert_eq!(
+            environment_spec("elsewhere"),
+            Err("unknown environment \"elsewhere\"".into())
+        );
+    }
+}
