@@ -310,7 +310,7 @@ pub(crate) fn extend(
             crate::clipboard::write(&images, arguments)
         })
         .function("setStatus", move |arguments| {
-            crate::status::set_status(
+            crate::strip::set_status(
                 &statuses,
                 status_title.as_deref(),
                 &status_secrets,

@@ -228,7 +228,7 @@ impl Kagan {
                 ),
             })
             .flex_1()
-            .min_w_0()
+            .min_w(px(120.))
             .items_center()
             .gap_2()
             .child(dot)
@@ -314,7 +314,9 @@ impl Kagan {
             1 => "1 agent working".into(),
             count => format!("{count} agents working").into(),
         };
-        let plugins: Vec<StatusItem> = if self.prefs.read(cx).plugin_status
+        let prefs = self.prefs.read(cx);
+        let plugins: Vec<StatusItem> = if prefs.loaded
+            && prefs.plugin_status
             && f32::from(window.viewport_size().width) >= PLUGIN_WIDTH
         {
             PluginStrip::global(cx)
@@ -378,7 +380,7 @@ fn plugin_item(item: StatusItem, cx: &App) -> impl IntoElement + use<> {
             disabled: false,
             selected: None,
         })
-        .flex_none()
+        .flex_shrink_1()
         .max_w(px(PLUGIN_ITEM_MAX))
         .min_w_0()
         .items_center()

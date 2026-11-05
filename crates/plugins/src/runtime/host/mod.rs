@@ -51,7 +51,7 @@ impl Global for PluginHostGlobal {}
 /// When the installed plugin records cannot be read.
 pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Task<Result<()>> {
     HostUi::init(cx);
-    crate::status::PluginStrip::init(cx);
+    crate::PluginStrip::init(cx);
     gpui_shell::init(cx);
     let workspace = Workspace::global(cx);
     let records = workspace.read(cx).plugins();

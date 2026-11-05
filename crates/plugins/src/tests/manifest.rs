@@ -239,7 +239,7 @@ fn a_status_item_is_an_install_line_and_needs_approval_again() {
     value["ui"]["status"] = json!({ "title": "Tokens" });
     write_plugin(plugin.path(), &value);
     let renamed = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
-    assert!(with.within(&renamed));
+    assert!(!with.within(&renamed));
     assert!(
         renamed
             .added(&with)

@@ -173,7 +173,7 @@ impl Grant {
                 .schedules
                 .iter()
                 .all(|(id, every)| approved.schedules.get(id) == Some(every))
-            && (self.status.is_none() || approved.status.is_some())
+            && (self.status.is_none() || self.status == approved.status)
     }
 
     /// The lines `approved` did not have; all lines when only details changed.

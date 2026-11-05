@@ -61,13 +61,15 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
 
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each flag is one independent row on the settings page"
+    reason = "each flag is an independent settings row or a read marker"
 )]
 pub(super) struct Prefs {
     pub(super) agent_integration: bool,
     pub(super) notify: bool,
     pub(super) plugin_status: bool,
     pub(super) update_check: bool,
+    /// Whether the stored preferences have been read once.
+    pub(super) loaded: bool,
 }
 
 pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
@@ -76,6 +78,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
         notify: true,
         plugin_status: true,
         update_check: false,
+        loaded: false,
     })
 }
 
@@ -235,6 +238,7 @@ impl Kagan {
                 prefs.notify = notifications;
                 prefs.plugin_status = status;
                 prefs.update_check = update_check;
+                prefs.loaded = true;
                 cx.notify();
             });
         })

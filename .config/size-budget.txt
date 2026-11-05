@@ -1,10 +1,5 @@
 # Product Rust line ceilings. A count may grow up to its ceiling, never past it.
 target 35000
-<<<<<<< HEAD
 ceiling 66950
-allow_expect 5
-crates/core/src/thread/agent/files.rs 754
-=======
-total 65331
 allow_expect 6
->>>>>>> f6b16b57 (feat: show one plugin status line in the activity strip)
+crates/core/src/thread/agent/files.rs 754

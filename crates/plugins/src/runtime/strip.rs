@@ -87,14 +87,10 @@ pub(crate) fn set_status(
             "plugin {plugin} has no status item; declare ui.status in kagan.json"
         )));
     };
-    let text = match arguments.get(0) {
-        None | Some(HostValue::Null) => None,
-        Some(HostValue::Str(text)) => {
-            let text = status_text(text)?;
-            let text = status_text(&secrets.redact(plugin, &text))?;
-            Some(text)
-        }
-        Some(_) => {
+    let text = match arguments.value(0)? {
+        HostValue::Null => None,
+        HostValue::Str(text) => Some(status_text(&secrets.redact(plugin, text))?),
+        _ => {
             return Err(HostError::new(
                 "setStatus needs one line of text, or null to hide it",
             ));
@@ -132,18 +128,23 @@ fn status_text(text: &str) -> Result<String, HostError> {
         )));
     }
     if text.chars().any(forbidden_status_char) {
-        return Err(HostError::new(
-            "status text must be one plain line of at most 120 characters, with no control characters",
-        ));
+        return Err(HostError::new(format!(
+            "status text must be one plain line of at most {STATUS_CAP} characters, with no control or bidi/format characters"
+        )));
     }
     Ok(text.to_owned())
 }
 
-fn forbidden_status_char(ch: char) -> bool {
+pub(crate) fn forbidden_status_char(ch: char) -> bool {
     ch.is_control()
         || matches!(
             ch,
-            '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{200E}' | '\u{200F}'
+            '\u{061C}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{2028}'..='\u{202E}'
+                | '\u{2060}'..='\u{2064}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{FEFF}'
         )
 }
 

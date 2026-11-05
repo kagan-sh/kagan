@@ -269,6 +269,7 @@ fn a_status_item_is_one_titled_line() {
         json!({ "title": "   " }),
         json!({ "title": "x".repeat(41) }),
         json!({ "title": "a\nb" }),
+        json!({ "title": "a\u{202E}b" }),
         json!({ "title": "Usage", "view": "Usage" }),
     ] {
         declared["ui"]["status"] = status.clone();

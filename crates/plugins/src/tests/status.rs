@@ -39,6 +39,7 @@ export default class Plugin extends View {
               ["bidi", () => setStatus("a\u202Eb", {})],
               ["tone", () => setStatus("ok", { tone: "loud" })],
               ["option", () => setStatus("ok", { top: "x" })],
+              ["missing", () => setStatus()],
             ];
             const errors = {};
             for (const [name, run] of cases) {
@@ -261,6 +262,11 @@ fn a_refused_value_names_its_limit(cx: &mut TestAppContext) {
         "{:?}",
         errors["option"]
     );
+    assert!(
+        errors["missing"].contains("argument 1 is missing"),
+        "{:?}",
+        errors["missing"]
+    );
 }
 
 #[gpui_kit::test]
@@ -282,4 +288,103 @@ fn the_same_value_does_not_notify(cx: &mut TestAppContext) {
     assert_eq!(call(cx, json!({ "op": "same" })), "ok");
     cx.run_until_parked();
     assert_eq!(seen.get(), 0, "the same status notified");
+}
+
+#[gpui_kit::test]
+fn a_load_that_fails_after_set_status_leaves_no_stale_line(cx: &mut TestAppContext) {
+    let plugin = tempfile::tempdir().unwrap();
+    status_plugin(
+        plugin.path(),
+        STATUS,
+        Some("Usage"),
+        r#"setStatus("stale"); throw new Error("boom");"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    assert!(items(cx).is_empty(), "a failed load kept its line");
+}
+
+#[gpui_kit::test]
+fn a_crashed_load_clears_the_line(cx: &mut TestAppContext) {
+    let plugin = tempfile::tempdir().unwrap();
+    status_plugin(
+        plugin.path(),
+        STATUS,
+        Some("Usage"),
+        r#"setStatus("42%", { tone: "busy" });"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    assert_eq!(items(cx).len(), 1);
+
+    let id = PluginId(STATUS.into());
+    cx.update(|cx| {
+        crate::PluginHost::global(cx).update(cx, |host, cx| {
+            host.active
+                .get_mut(&id)
+                .and_then(|active| active.loaded.as_mut())
+                .expect("the status plugin loaded")
+                .watchdog
+                .error = Some("crashed".into());
+            host.sample(cx);
+        });
+    });
+    assert!(items(cx).is_empty(), "a crashed load kept its line");
+}
+
+#[gpui_kit::test]
+fn the_secret_redaction_runs_before_the_line_is_shown(cx: &mut TestAppContext) {
+    let plugin = tempfile::tempdir().unwrap();
+    status_plugin(
+        plugin.path(),
+        STATUS,
+        Some("Usage"),
+        r#"setStatus("42%", { tone: "busy" });"#,
+    );
+    open(cx, &[installed_at(plugin.path())]);
+    let id = PluginId(STATUS.into());
+    let secrets = cx.read(|cx| crate::PluginHost::global(cx).read(cx).secrets.clone());
+    secrets.set(&id, "token", "hunter2").unwrap();
+
+    assert_eq!(call(cx, json!({ "op": "value", "text": "hunter2" })), "ok");
+    assert_eq!(items(cx)[0].text, "[secret]");
+}
+
+#[gpui_kit::test]
+fn five_plugins_keep_their_id_order(cx: &mut TestAppContext) {
+    let plugins: Vec<tempfile::TempDir> = (1..=5)
+        .map(|number| {
+            let plugin = tempfile::tempdir().unwrap();
+            status_plugin(
+                plugin.path(),
+                &format!("dev.test.status{number}"),
+                Some("Usage"),
+                r#"setStatus("42%", { tone: "busy" });"#,
+            );
+            plugin
+        })
+        .collect();
+    let installed: Vec<_> = plugins
+        .iter()
+        .map(|plugin| installed_at(plugin.path()))
+        .collect();
+    open(cx, &installed);
+
+    let ids: Vec<String> = items(cx).into_iter().map(|item| item.id.0).collect();
+    assert_eq!(
+        ids,
+        [
+            "dev.test.status1",
+            "dev.test.status2",
+            "dev.test.status3",
+            "dev.test.status4",
+            "dev.test.status5",
+        ]
+    );
+}
+
+#[gpui_kit::test]
+fn a_declared_item_that_is_never_set_draws_nothing(cx: &mut TestAppContext) {
+    let plugin = tempfile::tempdir().unwrap();
+    status_plugin(plugin.path(), STATUS, Some("Usage"), "");
+    open(cx, &[installed_at(plugin.path())]);
+    assert!(items(cx).is_empty());
 }

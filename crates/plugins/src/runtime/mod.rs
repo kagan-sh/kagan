@@ -11,7 +11,7 @@ pub(crate) mod ops;
 pub(crate) mod page;
 pub(crate) mod process;
 pub(crate) mod secret;
-pub(crate) mod status;
+pub(crate) mod strip;
 pub(crate) mod threads;
 pub(crate) mod ui_host;
 pub(crate) mod watchdog;

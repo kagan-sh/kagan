@@ -58,38 +58,67 @@ const STATUS: &str = "dev.test.status";
 const STATUS_ITEM: &str = "activity-plugin-dev.test.status";
 
 fn install_status(data: &std::path::Path) {
-    let root = data.join("status");
+    install_status_plugin(data, STATUS, "Usage", "42%");
+}
+
+fn install_status_plugin(data: &std::path::Path, id: &str, title: &str, text: &str) {
+    let root = data.join(id.rsplit('.').next().unwrap_or(id));
     std::fs::create_dir(&root).unwrap();
     let manifest = serde_json::json!({
-        "id": STATUS,
+        "id": id,
         "name": "Status",
         "version": "1.0.0",
         "kagan": ">=0.1.0",
         "entry": "main.js",
         "instructions": "Show a line in the activity strip.",
         "powers": {},
-        "ui": { "status": { "title": "Usage" } }
+        "ui": { "status": { "title": title } },
+        "tools": [{
+            "name": "status",
+            "description": "Change the status line",
+            "input": "schemas/any.json",
+            "scope": "all"
+        }]
     });
     std::fs::write(root.join("kagan.json"), manifest.to_string()).unwrap();
     std::fs::write(
         root.join("main.js"),
-        r#"import { View } from "gpui-kit";
-import { setStatus } from "kagan/host";
-export default class Plugin extends View {
-  init() { setStatus("42%", { tone: "busy" }); }
-}
+        format!(
+            r#"import {{ View }} from "gpui-kit";
+import {{ next, reply }} from "kagan/jobs";
+import {{ setStatus }} from "kagan/host";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    setStatus({text}, {{ tone: "busy" }});
+    cx.spawn(async () => {{
+      for (;;) {{
+        const job = await next();
+        if (job.kind === "tool" && job.name === "status") {{
+          setStatus(job.input.text);
+          reply(job.id, {{ text: "ok" }});
+        }} else {{
+          reply(job.id, {{ text: "ok" }});
+        }}
+      }}
+    }});
+  }}
+}}
 "#,
+            text = serde_json::to_string(text).unwrap(),
+        ),
     )
     .unwrap();
+    std::fs::create_dir(root.join("schemas")).unwrap();
+    std::fs::write(root.join("schemas/any.json"), r#"{"type":"object"}"#).unwrap();
     let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
     store
         .insert_plugin(&Plugin {
-            id: PluginId(STATUS.into()),
+            id: PluginId(id.into()),
             source: root.display().to_string(),
             root,
             commit: None,
             enabled: true,
-            approved: serde_json::json!({"powers": {}, "folders": {}, "status": "Usage"}),
+            approved: serde_json::json!({"powers": {}, "folders": {}, "status": title}),
             error: None,
         })
         .unwrap();
@@ -350,7 +379,7 @@ fn the_open_strip_keeps_its_log_across_a_thread_switch(cx: &mut TestAppContext) 
 #[gpui_kit::test]
 fn a_plugin_status_item_is_one_text_line_in_the_strip(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
-    assert!(shows(cx, window, STATUS_ITEM));
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
     assert_eq!(
         role_of(cx, window, STATUS_ITEM),
         Some(gpui_kit::Role::Status)
@@ -364,7 +393,7 @@ fn a_plugin_status_item_is_one_text_line_in_the_strip(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_plugin_status_preference_hides_and_shows_every_item(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
-    assert!(shows(cx, window, STATUS_ITEM));
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
 
     click(cx, window, "settings-gear");
     click(cx, window, "plugin-status");
@@ -383,7 +412,7 @@ fn the_plugin_status_preference_hides_and_shows_every_item(cx: &mut TestAppConte
 #[gpui_kit::test]
 fn a_narrow_window_keeps_the_host_summary_and_hides_plugin_items(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
-    assert!(shows(cx, window, STATUS_ITEM));
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
 
     cx.simulate_window_resize(window, size(px(700.), px(720.)));
     assert!(!shows(cx, window, STATUS_ITEM));
@@ -396,7 +425,7 @@ fn a_narrow_window_keeps_the_host_summary_and_hides_plugin_items(cx: &mut TestAp
 #[gpui_kit::test]
 fn disabling_the_plugin_removes_its_item(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
-    assert!(shows(cx, window, STATUS_ITEM));
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
 
     let disabled = cx.update(|cx| {
         Workspace::dispatch(
@@ -408,6 +437,64 @@ fn disabling_the_plugin_removes_its_item(cx: &mut TestAppContext) {
     });
     cx.foreground_executor().block_test(disabled).unwrap();
     wait_until(cx, |cx| !shows(cx, window, STATUS_ITEM));
+}
+
+#[gpui_kit::test]
+fn a_plugin_push_redraws_the_strip(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
+    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
+
+    let id = run_shell(cx);
+    let task = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::CallTool {
+                id,
+                name: "status".into(),
+                input: serde_json::json!({ "text": "77%" }),
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(task).unwrap();
+    wait_until(cx, |cx| {
+        value_of(cx, window, STATUS_ITEM).as_deref() == Some("77%")
+    });
+}
+
+#[gpui_kit::test]
+fn four_long_items_fit_beside_the_summary_at_720(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        for number in 1..=4 {
+            install_status_plugin(
+                data,
+                &format!("dev.test.status{number}"),
+                &format!("Usage {number}"),
+                &"x".repeat(120),
+            );
+        }
+    });
+    cx.simulate_window_resize(window, size(px(720.), px(720.)));
+    let names: Vec<String> = (1..=4)
+        .map(|number| format!("activity-plugin-dev.test.status{number}"))
+        .collect();
+    wait_until(cx, |cx| names.iter().all(|name| shows(cx, window, name)));
+
+    let (strip_x, _, strip_width, _) = bounds_of(cx, window, "activity-strip");
+    let (_, _, summary_width, summary_height) = bounds_of(cx, window, "activity-summary");
+    assert!(
+        summary_width > 0. && summary_height > 0.,
+        "the summary collapsed: {summary_width} by {summary_height}"
+    );
+    for name in &names {
+        let (x, _, width, height) = bounds_of(cx, window, name);
+        assert!(width > 0. && height > 0., "{name} has no bounds");
+        assert!(
+            x + width <= strip_x + strip_width + 0.5,
+            "{name} ends at {} past the strip's right edge {}",
+            x + width,
+            strip_x + strip_width
+        );
+    }
 }
 
 #[gpui_kit::test]

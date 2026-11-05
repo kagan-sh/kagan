@@ -11,9 +11,9 @@ pub(crate) use install::{index, source};
 pub use runtime::keys;
 pub(crate) use runtime::log;
 pub(crate) use runtime::log::{Level, log};
-pub use runtime::status::{PluginStrip, StatusItem, StatusTone};
+pub use runtime::strip::{PluginStrip, StatusItem, StatusTone};
 pub(crate) use runtime::{
-    area, clipboard, commands, database, files, host, jobs, ops, page, process, secret, status,
+    area, clipboard, commands, database, files, host, jobs, ops, page, process, secret, strip,
     threads, ui_host, watchdog, web_store,
 };
 

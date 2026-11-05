@@ -47,7 +47,9 @@ pub(crate) enum Error {
         "ui.status-bar is not in this version of kagan; declare ui.status for one line in the activity strip"
     )]
     StatusBar,
-    #[error("ui.status needs a title of 1 to 40 characters, with no control characters")]
+    #[error(
+        "ui.status needs a title of 1 to 40 characters, with no control or bidi/format characters"
+    )]
     StatusTitle,
     #[error("ui.{0} is not in this version of kagan; remove it")]
     Spot(&'static str),
@@ -159,7 +161,10 @@ impl Contributions {
         if let Some(status) = &self.status
             && (status.title.trim().is_empty()
                 || status.title.chars().count() > 40
-                || status.title.chars().any(char::is_control))
+                || status
+                    .title
+                    .chars()
+                    .any(crate::strip::forbidden_status_char))
         {
             return Err(Error::StatusTitle);
         }
