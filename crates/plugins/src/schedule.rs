@@ -37,8 +37,7 @@ pub(crate) fn start(
         .collect()
 }
 
-/// Loads the plugin if it is not loaded, then sends one `schedule` job and waits for its answer.
-/// `None` when kagan has dropped the host.
+/// `None` once kagan has dropped the host.
 async fn tick(
     host: &WeakEntity<PluginHost>,
     plugin: &PluginId,
