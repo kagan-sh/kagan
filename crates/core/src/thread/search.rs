@@ -3,7 +3,7 @@ use kg_domain::{Found, OpResult, SEARCH_DEFAULT, Snippet, Visibility};
 use kg_terminal::Lines;
 
 use crate::Workspace;
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::closed;
 
 use super::Shown;

@@ -1,6 +1,8 @@
+pub(crate) mod section;
+
 use kg_domain::{OpError, Project, ProjectId, ProjectKind};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{closed, id};
 
 pub(crate) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Result<Project> {
@@ -47,7 +49,7 @@ pub(crate) fn add_project(store: &kg_store::Store, path: &std::path::Path) -> Re
         name,
         // `get-url` applies url.*.insteadOf, so a machine's https token rewrite
         // would store an ssh origin as https. The repo config is the origin.
-        git_remote_url: crate::git::git(
+        git_remote_url: crate::host::git::git(
             &path,
             &["config", "--local", "--get", "remote.origin.url"],
         )

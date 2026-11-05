@@ -6,7 +6,7 @@ use kg_domain::{
     EventKind, OpError, OpResult, Order, ThreadId, ThreadOp, ThreadStatus, WaitOutcome,
 };
 
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::workspace::{closed, missing};
 use crate::{PluginRequest, Workspace};
 

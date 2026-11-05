@@ -2,7 +2,7 @@ use async_channel::Sender;
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{OpError, OpResult, PendingInteractionId, ThreadId, Timestamp};
 
-use crate::database::Result;
+use crate::host::database::Result;
 use crate::workspace::{closed, id, missing, time};
 use crate::{Thread, Workspace};
 

@@ -7,8 +7,8 @@ use kg_domain::{DiagnosticsOp, OpError, OpResult, ThreadId, ThreadStatus};
 use kg_store::{ScreenRow, Store};
 use kg_terminal::SNAPSHOT_MAX;
 
-use crate::database::Result;
 use crate::end::End;
+use crate::host::database::Result;
 use crate::workspace::{Workspace, closed};
 
 pub(crate) async fn export(

@@ -11,8 +11,8 @@ use kg_domain::{
 };
 use kg_process::{find_program, pathext, user_path};
 
-use crate::database::{Database, Result};
-use crate::git::program_stdout;
+use crate::host::database::{Database, Result};
+use crate::host::git::program_stdout;
 
 const VERSION_LIMIT: Duration = Duration::from_secs(3);
 const RECENT_LIMIT: usize = 5;

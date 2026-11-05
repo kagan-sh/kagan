@@ -12,7 +12,7 @@ use kg_domain::{
 };
 
 use crate::Workspace;
-use crate::database::{Database, Result};
+use crate::host::database::{Database, Result};
 use crate::workspace::missing;
 
 pub(crate) const GIT_LIMIT: Duration = Duration::from_secs(20);

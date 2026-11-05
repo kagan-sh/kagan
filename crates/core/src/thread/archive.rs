@@ -1,8 +1,8 @@
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{InteractionOption, OpError, OpResult, ThreadId};
 
-use crate::database::{Database, Result};
 use crate::environment;
+use crate::host::database::{Database, Result};
 use crate::workspace::{closed, time};
 use crate::{Requester, Workspace};
 
