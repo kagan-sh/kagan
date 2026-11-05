@@ -63,7 +63,9 @@ fn event_data(kind: &kg_domain::EventKind) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn http_grants(fetch: &[Fetch]) -> std::result::Result<Vec<HttpRequestGrant>, String> {
+fn http_grants(
+    fetch: &[Fetch],
+) -> std::result::Result<Vec<HttpRequestGrant>, manifest::FetchError> {
     fetch.iter().map(Fetch::http_grant).collect()
 }
 

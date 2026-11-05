@@ -158,7 +158,7 @@ pub struct PluginHost {
     /// The source of the install that runs now, if one does. One install runs at a time.
     pub(crate) installing: Rc<RefCell<Option<String>>>,
     /// Index locations, searched in this order, or why the saved list cannot be read.
-    pub(crate) indexes: std::result::Result<Vec<String>, String>,
+    pub(crate) indexes: std::result::Result<Vec<String>, index::Error>,
     /// Dropping this sender stops the install that runs now.
     pub(crate) install_stop: Rc<RefCell<Option<async_channel::Sender<()>>>>,
     /// Each installed plugin's name and version from its manifest, kept whether or not it runs.
@@ -1026,7 +1026,7 @@ impl PluginHost {
         self.indexes
             .as_ref()
             .map(|saved| saved.iter().map(|known| index::shown(known)).collect())
-            .map_err(|error| OpError::Failed(error.clone()))
+            .map_err(|error| OpError::Failed(error.to_string()))
     }
 
     #[must_use]

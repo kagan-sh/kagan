@@ -31,6 +31,20 @@ pub enum PageFileError {
     TooBig,
 }
 
+/// Why a declared `web` file cannot be the panel's page.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("web {0:?} must be an .html file inside the plugin")]
+    Shape(String),
+    #[error("web {0:?} leaves the plugin folder")]
+    Leaves(String),
+    #[error("web {relative:?} cannot be the panel page: {source}")]
+    File {
+        relative: String,
+        source: PageFileError,
+    },
+}
+
 impl std::fmt::Display for PageFileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -60,11 +74,13 @@ pub fn read_plugin_file(root: &Path, relative: &str) -> Result<Vec<u8>, PageFile
 }
 
 // Checks the declared `web` file when the manifest is read.
-pub(crate) fn require_html(root: &Path, relative: &str) -> Result<(), String> {
+pub(crate) fn require_html(root: &Path, relative: &str) -> Result<(), Error> {
     shape(relative)?;
-    read_plugin_file(root, relative)
-        .map(|_| ())
-        .map_err(|error| format!("web {relative:?} cannot be the panel page: {error}"))
+    read_plugin_file(root, relative).map_err(|source| Error::File {
+        relative: relative.to_owned(),
+        source,
+    })?;
+    Ok(())
 }
 
 /// `raw` is one JSON value, at most [`MESSAGE_CAP`] bytes.
@@ -126,7 +142,7 @@ pub(crate) fn enqueue(
     jobs.send_page(job, alive, bytes)
 }
 
-fn shape(relative: &str) -> Result<(), String> {
+fn shape(relative: &str) -> Result<(), Error> {
     if !is_html(relative)
         || relative.starts_with('/')
         || relative.contains('\\')
@@ -135,9 +151,7 @@ fn shape(relative: &str) -> Result<(), String> {
             .split('/')
             .any(|part| part.is_empty() || part.eq_ignore_ascii_case(RESERVED))
     {
-        return Err(format!(
-            "web {relative:?} must be an .html file inside the plugin"
-        ));
+        return Err(Error::Shape(relative.to_owned()));
     }
     let path = Path::new(relative);
     if path.is_absolute()
@@ -145,7 +159,7 @@ fn shape(relative: &str) -> Result<(), String> {
             .components()
             .all(|part| matches!(part, Component::Normal(_)))
     {
-        return Err(format!("web {relative:?} leaves the plugin folder"));
+        return Err(Error::Leaves(relative.to_owned()));
     }
     Ok(())
 }

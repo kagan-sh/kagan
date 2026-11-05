@@ -17,6 +17,40 @@ const MAX_LIST_NAME_BYTES: usize = 1024 * 1024;
 
 pub(crate) const DECLARATIONS: &str = "export function read(path: string, options: { offset: number; maxBytes: number }): Promise<{ text: string; next: number; size: number }>;\nexport function list(dir: string): Promise<{ path: string; size: number; modifiedMs: number }[]>;";
 
+/// Why a `kagan/files` call failed.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("{path}: {source}", path = .path.display())]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("{path} is not valid UTF-8 at {offset}", path = .path.display())]
+    NotUtf8 { path: PathBuf, offset: u64 },
+    #[error("read is too long")]
+    TooLong,
+    #[error("maxBytes does not fit")]
+    MaxBytes,
+    #[error("{} is not a granted folder", .0.display())]
+    NotGranted(PathBuf),
+    #[error("{} is not a directory", .0.display())]
+    NotDirectory(PathBuf),
+    #[error("{} changed while it was opened", .0.display())]
+    Changed(PathBuf),
+    #[error(
+        "directory exceeded the {MAX_LIST_ENTRIES}-entry or {MAX_LIST_NAME_BYTES}-name-byte list limit"
+    )]
+    ListLimit,
+    #[error("{0}")]
+    IoMessage(std::io::Error),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(source: std::io::Error) -> Self {
+        Self::IoMessage(source)
+    }
+}
+
 pub(crate) fn module(
     roots: Option<&[PathBuf]>,
     id: &kg_domain::PluginId,
@@ -29,7 +63,7 @@ pub(crate) fn module(
     let id = id.clone();
     let secrets = secrets.clone();
     let held = Arc::new(open_roots(roots, |error| {
-        let _ = secrets.log(&id, crate::log::Level::Error, error);
+        let _ = secrets.log(&id, crate::log::Level::Error, &error.to_string());
     }));
     let list_roots = Arc::clone(&held);
     module
@@ -47,7 +81,7 @@ pub(crate) fn module(
 }
 
 fn spawn(
-    work: impl FnOnce() -> Result<serde_json::Value, String> + Send + 'static,
+    work: impl FnOnce() -> Result<serde_json::Value, Error> + Send + 'static,
 ) -> Result<impl std::future::Future<Output = Result<HostValue, HostError>> + Send, HostError> {
     let (sender, receiver) = async_channel::bounded(1);
     with_app(|cx| {
@@ -62,7 +96,7 @@ fn spawn(
             .await
             .map_err(|_| HostError::new("the read was dropped"))?
             .map(to_host)
-            .map_err(HostError::new)
+            .map_err(|error| HostError::new(error.to_string()))
     })
 }
 
@@ -103,7 +137,7 @@ fn read_at(
     path: &Path,
     offset: u64,
     max_bytes: u64,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, Error> {
     let opened = accept(roots, path)?;
     read_opened(&opened, offset, max_bytes)
 }
@@ -112,58 +146,53 @@ fn read_opened(
     opened: &Opened<'_>,
     offset: u64,
     max_bytes: u64,
-) -> Result<serde_json::Value, String> {
-    let mut file = opened
-        .dir
-        .open(&opened.relative)
-        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
-    let size = file
-        .metadata()
-        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?
-        .len();
+) -> Result<serde_json::Value, Error> {
+    let at = |source| Error::Io {
+        path: opened.absolute.clone(),
+        source,
+    };
+    let mut file = opened.dir.open(&opened.relative).map_err(at)?;
+    let size = file.metadata().map_err(at)?.len();
     if offset >= size || max_bytes == 0 {
         return Ok(json!({ "text": "", "next": offset.min(size), "size": size }));
     }
-    file.seek(std::io::SeekFrom::Start(offset))
-        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
-    let len = usize::try_from(max_bytes).map_err(|_| "maxBytes does not fit".to_owned())?;
+    file.seek(std::io::SeekFrom::Start(offset)).map_err(at)?;
+    let len = usize::try_from(max_bytes).map_err(|_| Error::MaxBytes)?;
     let mut bytes = vec![0; len];
-    let read = file
-        .read(&mut bytes)
-        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
+    let read = file.read(&mut bytes).map_err(at)?;
     bytes.truncate(read);
     let end = match std::str::from_utf8(&bytes) {
         Ok(text) => text.len(),
         Err(error) => error.valid_up_to(),
     };
     if end == 0 && read > 0 {
-        return Err(format!(
-            "{} is not valid UTF-8 at {offset}",
-            opened.absolute.display()
-        ));
+        return Err(Error::NotUtf8 {
+            path: opened.absolute.clone(),
+            offset,
+        });
     }
     bytes.truncate(end);
-    let text = String::from_utf8(bytes).map_err(|error| error.to_string())?;
-    let next = offset + u64::try_from(end).map_err(|_| "read is too long".to_owned())?;
+    let text = String::from_utf8(bytes).map_err(|error| {
+        Error::IoMessage(std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+    })?;
+    let next = offset + u64::try_from(end).map_err(|_| Error::TooLong)?;
     Ok(json!({ "text": text, "next": next, "size": size }))
 }
 
-fn list_dir(roots: &[Root], path: &Path) -> Result<serde_json::Value, String> {
+fn list_dir(roots: &[Root], path: &Path) -> Result<serde_json::Value, Error> {
     let opened = accept(roots, path)?;
+    let at = |source| Error::Io {
+        path: opened.absolute.clone(),
+        source,
+    };
     let mut rows = Vec::new();
     let mut name_bytes = 0;
-    for entry in opened
-        .dir
-        .read_dir(&opened.relative)
-        .map_err(|error| format!("{}: {error}", opened.absolute.display()))?
-    {
-        let entry = entry.map_err(|error| format!("{}: {error}", opened.absolute.display()))?;
+    for entry in opened.dir.read_dir(&opened.relative).map_err(at)? {
+        let entry = entry.map_err(at)?;
         let name = entry.file_name();
         name_bytes += name.len();
         if rows.len() == MAX_LIST_ENTRIES || name_bytes > MAX_LIST_NAME_BYTES {
-            return Err(format!(
-                "directory exceeded the {MAX_LIST_ENTRIES}-entry or {MAX_LIST_NAME_BYTES}-name-byte list limit"
-            ));
+            return Err(Error::ListLimit);
         }
         let Ok(metadata) = entry.metadata() else {
             continue;
@@ -195,7 +224,7 @@ struct Opened<'a> {
     absolute: PathBuf,
 }
 
-fn open_roots(roots: &[PathBuf], mut fail: impl FnMut(&str)) -> Vec<Root> {
+fn open_roots(roots: &[PathBuf], mut fail: impl FnMut(&Error)) -> Vec<Root> {
     let mut opened = Vec::new();
     for root in roots {
         match hold(root) {
@@ -207,18 +236,18 @@ fn open_roots(roots: &[PathBuf], mut fail: impl FnMut(&str)) -> Vec<Root> {
 }
 
 // The handle is the grant. A later swap of `root` cannot redirect reads.
-fn hold(root: &Path) -> Result<Root, String> {
-    let path = dunce::canonicalize(root).map_err(|error| error.to_string())?;
+fn hold(root: &Path) -> Result<Root, Error> {
+    let path = dunce::canonicalize(root)?;
     let marked = directory_key(&path)?;
     let dir = open_grant(&path)?;
-    let opened = held_key(&dir).map_err(|error| error.to_string())?;
+    let opened = held_key(&dir)?;
     if marked != opened {
-        return Err(format!("{} changed while it was opened", path.display()));
+        return Err(Error::Changed(path));
     }
     Ok(Root { dir, path })
 }
 
-fn accept<'a>(roots: &'a [Root], path: &Path) -> Result<Opened<'a>, String> {
+fn accept<'a>(roots: &'a [Root], path: &Path) -> Result<Opened<'a>, Error> {
     for root in roots {
         let Some((relative, absolute)) = relative_inside(&root.path, path) else {
             continue;
@@ -229,7 +258,7 @@ fn accept<'a>(roots: &'a [Root], path: &Path) -> Result<Opened<'a>, String> {
             absolute,
         });
     }
-    Err(format!("{} is not a granted folder", path.display()))
+    Err(Error::NotGranted(path.to_path_buf()))
 }
 
 fn relative_inside(root: &Path, path: &Path) -> Option<(PathBuf, PathBuf)> {
@@ -254,19 +283,19 @@ fn relative_inside(root: &Path, path: &Path) -> Option<(PathBuf, PathBuf)> {
     Some((relative, absolute))
 }
 
-fn open_grant(path: &Path) -> Result<Dir, String> {
+fn open_grant(path: &Path) -> Result<Dir, Error> {
     // cap-std lists a directory by turning this handle back into a path.
     // `open_ambient_dir` omits `FILE_SHARE_DELETE`, so the name cannot be
     // removed and reused while the grant is held.
-    Dir::open_ambient_dir(path, ambient_authority()).map_err(|error| error.to_string())
+    Dir::open_ambient_dir(path, ambient_authority()).map_err(Error::IoMessage)
 }
 
 #[cfg(unix)]
-fn directory_key(path: &Path) -> Result<(u64, u64), String> {
+fn directory_key(path: &Path) -> Result<(u64, u64), Error> {
     use std::os::unix::fs::MetadataExt;
-    let marked = std::fs::symlink_metadata(path).map_err(|error| error.to_string())?;
+    let marked = std::fs::symlink_metadata(path)?;
     if !real_directory(&marked) {
-        return Err(format!("{} is not a directory", path.display()));
+        return Err(Error::NotDirectory(path.to_path_buf()));
     }
     Ok((marked.dev(), marked.ino()))
 }
@@ -281,13 +310,13 @@ fn held_key(dir: &Dir) -> std::io::Result<(u64, u64)> {
 }
 
 #[cfg(windows)]
-fn directory_key(path: &Path) -> Result<(u32, u64), String> {
-    let file = open_no_follow(path).map_err(|error| error.to_string())?;
-    let marked = file.metadata().map_err(|error| error.to_string())?;
+fn directory_key(path: &Path) -> Result<(u32, u64), Error> {
+    let file = open_no_follow(path)?;
+    let marked = file.metadata()?;
     if !real_directory(&marked) {
-        return Err(format!("{} is not a directory", path.display()));
+        return Err(Error::NotDirectory(path.to_path_buf()));
     }
-    file_key(&file).map_err(|error| error.to_string())
+    Ok(file_key(&file)?)
 }
 
 #[cfg(windows)]
@@ -368,15 +397,15 @@ mod tests {
     #[cfg(unix)]
     use std::path::Path;
 
+    use super::{Error, hold, list_dir, open_roots};
     #[cfg(unix)]
     use super::{accept, read_at, read_opened};
-    use super::{hold, list_dir, open_roots};
 
     #[cfg(unix)]
-    fn unread(result: &Result<serde_json::Value, String>, secret: &str) {
+    fn unread(result: &Result<serde_json::Value, Error>, secret: &str) {
         match result {
             Ok(value) => assert!(!value.to_string().contains(secret), "{value}"),
-            Err(error) => assert!(!error.contains(secret), "{error}"),
+            Err(error) => assert!(!error.to_string().contains(secret), "{error}"),
         }
     }
 
@@ -466,6 +495,7 @@ mod tests {
         let Err(error) = hold(&file) else {
             panic!("a file opened as a directory");
         };
+        let error = error.to_string();
         assert!(error.contains("is not a directory"), "{error}");
         assert!(!error.contains("secret-file"), "{error}");
     }
@@ -479,12 +509,18 @@ mod tests {
             panic!("missing folder opened");
         };
         let roots = open_roots(std::slice::from_ref(&missing), |error| {
-            crate::log(data.path(), &id, crate::log::Level::Error, error).unwrap();
+            crate::log(
+                data.path(),
+                &id,
+                crate::log::Level::Error,
+                &error.to_string(),
+            )
+            .unwrap();
         });
         assert!(roots.is_empty());
         let text =
             std::fs::read_to_string(data.path().join("plugins").join(&id.0).join("logs.jsonl"))
                 .unwrap();
-        assert!(text.contains(&reason), "{text}");
+        assert!(text.contains(&reason.to_string()), "{text}");
     }
 }

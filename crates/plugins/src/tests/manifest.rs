@@ -494,8 +494,11 @@ fn a_manifest_declares_theme_files_inside_the_plugin() {
         let mut declared = sample_manifest();
         declared["themes"] = themes;
         write_plugin(plugin.path(), &declared);
-        read_manifest(plugin.path())
-            .and_then(|manifest| manifest.themes(plugin.path()).map_err(OpError::Invalid))
+        read_manifest(plugin.path()).and_then(|manifest| {
+            manifest
+                .themes(plugin.path())
+                .map_err(|error| OpError::Invalid(error.to_string()))
+        })
     };
 
     let read = declare(json!([{ "id": "midnight", "file": "themes/midnight.json" }])).unwrap();
