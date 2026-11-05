@@ -33,11 +33,10 @@ pub(crate) mod agent;
 #[cfg(any(test, target_os = "macos", target_os = "windows"))]
 pub(super) mod snapshot;
 
-/// The page a thread drives, while it drives it.
+/// A thread's hold on the Browser's one page, while it drives it.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(super) struct Agent {
     pub(super) thread: ThreadId,
-    pub(super) page: Entity<WebPage>,
     /// The last URL the page reported.
     pub(super) url: String,
     /// The last command that reached it, for the 30-minute rule.
@@ -137,18 +136,15 @@ impl Browser {
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     fn sync_page(&self, shown: bool, cx: &mut App) {
-        let person = self.page.iter();
-        let driven = self.agent.as_ref().map(|agent| &agent.page);
-        for page in person.chain(driven) {
-            if page.read(cx).visible(cx) != shown {
-                page.update(cx, |page, cx| {
-                    if shown {
-                        page.show(cx);
-                    } else {
-                        page.hide(cx);
-                    }
-                });
-            }
+        let Some(page) = &self.page else { return };
+        if page.read(cx).visible(cx) != shown {
+            page.update(cx, |page, cx| {
+                if shown {
+                    page.show(cx);
+                } else {
+                    page.hide(cx);
+                }
+            });
         }
     }
 
@@ -170,7 +166,9 @@ impl Browser {
     pub(super) fn leave_thread(&mut self, window: &mut Window, cx: &mut App) {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
-            self.page = None;
+            if self.agent.is_none() {
+                self.page = None;
+            }
         }
         self.note = None;
         self.address.update(cx, |address, cx| {
@@ -335,19 +333,14 @@ impl Kagan {
                     .label("Stop agent")
                     .on_click(cx.listener(|this, _, window, cx| this.stop_agent(window, cx))),
             ));
+        let page = self.browser.page.clone();
         v_flex()
             .id("browser")
             .ui_container()
             .size_full()
             .min_h_0()
             .child(row)
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .child(agent.page.clone())
-                    .into_any_element(),
-            )
+            .child(div().flex_1().min_h_0().children(page).into_any_element())
             .into_any_element()
     }
 

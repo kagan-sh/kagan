@@ -35,6 +35,9 @@ struct WireControl {
     name: String,
     #[serde(default)]
     value: Option<String>,
+    /// Set by the script for an `input` whose `type` is `password`.
+    #[serde(default)]
+    secret: bool,
     #[serde(default)]
     focused: bool,
     #[serde(default)]
@@ -74,8 +77,9 @@ pub(super) fn parse_snapshot(raw: &str) -> Result<BrowserSnapshot, OpError> {
         .controls
         .into_iter()
         .map(|control| {
-            // The script never reads a password; this is the second guard on the way to a person.
-            let password = control.role == "password";
+            // The script marks a password input by its type, never by its role. This is the
+            // second guard on the way to a person.
+            let password = control.secret || control.role == "password";
             BrowserControl {
                 ref_id: control.ref_id,
                 role: control.role,
@@ -112,6 +116,8 @@ pub(super) const SNAPSHOT: &str = r#"(() => {
     const flat = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
     return flat.length > limit ? flat.slice(0, limit) + "\u2026" : flat;
   };
+  const marker = (count) => "\u2026 " + count + " more controls not shown";
+  const size = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
   try {
     const store = window[Symbol.for("kagan.browser")] || (window[Symbol.for("kagan.browser")] = { refs: [] });
     const refs = [];
@@ -150,8 +156,11 @@ pub(super) const SNAPSHOT: &str = r#"(() => {
       }
       return "generic";
     };
-    const valueOf = (element, role) => {
-      if (role === "password" || role === "file") return null;
+    // A password field is found by its input type, so an explicit role cannot make it readable.
+    const secretOf = (element) =>
+      element.tagName.toLowerCase() === "input" && (element.getAttribute("type") || "").toLowerCase() === "password";
+    const valueOf = (element, role, secret) => {
+      if (secret || role === "password" || role === "file") return null;
       const tag = element.tagName.toLowerCase();
       if (tag === "select") {
         const option = element.options[element.selectedIndex];
@@ -182,16 +191,18 @@ pub(super) const SNAPSHOT: &str = r#"(() => {
       if (element.getClientRects().length === 0) continue;
       found.push(element);
     }
-    const dropped = Math.max(0, found.length - LIMIT.controls);
+    let cut = Math.max(0, found.length - LIMIT.controls);
     const controls = found.slice(0, LIMIT.controls).map((element, index) => {
       const role = roleOf(element);
+      const secret = secretOf(element);
       const name = clip(nameOf(element), LIMIT.name);
       refs.push(element);
       return {
         ref: index + 1,
         role,
         name: role === "iframe" ? name + " (not inspected)" : name,
-        value: valueOf(element, role),
+        value: valueOf(element, role, secret),
+        secret,
         focused: document.activeElement === element,
         disabled: Boolean(element.disabled) || element.getAttribute("aria-disabled") === "true",
         checked: checkedOf(element, role),
@@ -199,20 +210,40 @@ pub(super) const SNAPSHOT: &str = r#"(() => {
     });
     const whole = String((document.body && document.body.innerText) || "").replace(/\s+/g, " ").trim();
     let text = whole.slice(0, LIMIT.text);
-    let truncated = dropped > 0 || whole.length > LIMIT.text;
-    if (dropped > 0) text = (text ? text + "\n" : "") + "\u2026 " + dropped + " more controls not shown";
-    const result = { ok: true, url: location.href, title: document.title || "", controls, text, truncated };
-    const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
-    while (bytes(result) > LIMIT.json) {
+    const result = { ok: true, url: location.href, title: document.title || "", controls, text, truncated: cut > 0 || whole.length > LIMIT.text };
+    let shortened = false;
+    while (size(result) > LIMIT.json) {
       if (result.text.length > 0) {
         result.text = result.text.slice(0, Math.floor(result.text.length / 2));
+        shortened = true;
       } else if (result.controls.length > 0) {
         result.controls.pop();
+        cut += 1;
       } else {
         result.title = "";
         break;
       }
       result.truncated = true;
+    }
+    if (cut > 0 || shortened) {
+      result.truncated = true;
+      for (;;) {
+        const suffix = cut > 0 ? marker(cut) : "\u2026 text cut at the size limit";
+        const next = (result.text ? result.text + "\n" : "") + suffix;
+        if (size({ ...result, text: next }) <= LIMIT.json) {
+          result.text = next;
+          break;
+        }
+        if (result.text.length > 0) {
+          result.text = result.text.slice(0, Math.floor(result.text.length / 2));
+        } else if (result.controls.length > 0) {
+          result.controls.pop();
+          cut += 1;
+        } else {
+          result.text = suffix;
+          break;
+        }
+      }
     }
     return result;
   } catch (error) {
@@ -280,6 +311,22 @@ mod tests {
             snapshot.controls[1].value.as_deref(),
             Some("ada@example.com")
         );
+    }
+
+    #[test]
+    fn a_role_cannot_make_a_password_readable() {
+        // `<input type="password" role="textbox" value="hunter2">`: the type, not the role,
+        // makes it secret, and the host drops the value even if the page sends one.
+        let snapshot = parse_snapshot(
+            r#"{"ok":true,"url":"https://example.com/","title":"",
+                "controls":[
+                  {"ref":1,"role":"textbox","name":"Password","value":"hunter2","secret":true,"focused":false,"disabled":false,"checked":null}
+                ],
+                "text":"","truncated":false}"#,
+        )
+        .expect("a snapshot");
+        assert_eq!(snapshot.controls[0].role, "textbox");
+        assert_eq!(snapshot.controls[0].value, None);
     }
 
     #[test]

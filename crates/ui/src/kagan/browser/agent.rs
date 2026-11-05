@@ -53,16 +53,13 @@ async fn open(
         return Err(OpError::Invalid(BAD_URL.into()));
     };
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
-        kagan.begin_open(thread_id, &url, window, cx)
+        kagan.begin_open(thread_id, &url, Instant::now(), window, cx)
     })??;
     wait_for_load(kagan, handle, &page, cx).await;
-    let info = evaluate(&page, INFO, handle, WAIT, cx)
-        .await
-        .ok()
-        .and_then(|text| parse_info(&text).ok())
-        .map(|(url, title, _)| (url, title));
+    let text = evaluate(&page, INFO, handle, WAIT, cx).await?;
+    let (url, title, _) = parse_info(&text)?;
     let view = on_window(kagan, handle, cx, |kagan, _, cx| {
-        kagan.view(thread_id, info, cx)
+        kagan.view(thread_id, (url, title), cx)
     })??;
     Ok(OpResult::Browser(view))
 }
@@ -74,12 +71,12 @@ async fn status(
     cx: &mut AsyncApp,
 ) -> Result<OpResult, OpError> {
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
-        kagan.require(thread_id, window, cx)
+        kagan.require(thread_id, Instant::now(), window, cx)
     })??;
     let text = evaluate(&page, INFO, handle, WAIT, cx).await?;
     let (url, title, _) = parse_info(&text)?;
     let view = on_window(kagan, handle, cx, |kagan, _, cx| {
-        kagan.view(thread_id, Some((url, title)), cx)
+        kagan.view(thread_id, (url, title), cx)
     })??;
     Ok(OpResult::Browser(view))
 }
@@ -91,7 +88,7 @@ async fn snapshot(
     cx: &mut AsyncApp,
 ) -> Result<OpResult, OpError> {
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
-        kagan.require(thread_id, window, cx)
+        kagan.require(thread_id, Instant::now(), window, cx)
     })??;
     let text = evaluate(&page, SNAPSHOT, handle, WAIT, cx).await?;
     let snapshot = parse_snapshot(&text)?;
@@ -113,7 +110,7 @@ async fn goto(
         return Err(OpError::Invalid(BAD_URL.into()));
     };
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
-        kagan.require(thread_id, window, cx)
+        kagan.require(thread_id, Instant::now(), window, cx)
     })??;
     let url = url.as_str().to_owned();
     on_window(kagan, handle, cx, |_, _, cx| {
@@ -133,7 +130,7 @@ fn history(
     cx: &mut AsyncApp,
 ) -> Result<OpResult, OpError> {
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
-        kagan.require(thread_id, window, cx)
+        kagan.require(thread_id, Instant::now(), window, cx)
     })??;
     on_window(kagan, handle, cx, |_, _, cx| {
         let moved = if back {
@@ -154,7 +151,7 @@ async fn reload(
     cx: &mut AsyncApp,
 ) -> Result<OpResult, OpError> {
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
-        kagan.require(thread_id, window, cx)
+        kagan.require(thread_id, Instant::now(), window, cx)
     })??;
     on_window(kagan, handle, cx, |_, _, cx| {
         page.read(cx).forget_loads();
@@ -172,7 +169,7 @@ fn close(
     cx: &mut AsyncApp,
 ) -> Result<OpResult, OpError> {
     on_window(kagan, handle, cx, |kagan, window, cx| {
-        kagan.require(thread_id, window, cx)?;
+        kagan.require(thread_id, Instant::now(), window, cx)?;
         kagan.end_agent(window, cx);
         kagan.sync_browser(cx);
         cx.notify();
@@ -254,6 +251,7 @@ impl Kagan {
     fn require(
         &mut self,
         thread_id: &ThreadId,
+        now: Instant,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<Entity<WebPage>, OpError> {
@@ -261,7 +259,7 @@ impl Kagan {
             .browser
             .agent
             .as_ref()
-            .is_some_and(|agent| agent.thread == *thread_id && idle(agent.used, Instant::now()))
+            .is_some_and(|agent| agent.thread == *thread_id && idle(agent.used, now))
         {
             self.end_agent(window, cx);
             self.sync_browser(cx);
@@ -274,7 +272,10 @@ impl Kagan {
         if !owns(&agent.thread, thread_id) {
             return Err(OpError::Invalid(self.owner_refusal(&agent.thread, cx)));
         }
-        Ok(agent.page.clone())
+        self.browser
+            .page
+            .clone()
+            .ok_or_else(|| OpError::NotFound(ENDED.into()))
     }
 
     /// Gives the page to this thread, or loads the URL in the page it already drives.
@@ -282,27 +283,39 @@ impl Kagan {
         &mut self,
         thread_id: &ThreadId,
         url: &url::Url,
+        now: Instant,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Result<Entity<WebPage>, OpError> {
-        if let Some(agent) = &self.browser.agent
-            && !owns(&agent.thread, thread_id)
-        {
-            return Err(OpError::Invalid(self.owner_refusal(&agent.thread, cx)));
-        }
-        if self
+        if let Some(owner) = self
             .browser
             .agent
             .as_ref()
-            .is_some_and(|agent| idle(agent.used, Instant::now()))
+            .map(|agent| agent.thread.clone())
         {
-            self.end_agent(window, cx);
+            if !owns(&owner, thread_id) {
+                return Err(OpError::Invalid(self.owner_refusal(&owner, cx)));
+            }
+            // The first command after 30 idle minutes ends the drive and says so.
+            if self
+                .browser
+                .agent
+                .as_ref()
+                .is_some_and(|agent| idle(agent.used, now))
+            {
+                self.end_agent(window, cx);
+                self.sync_browser(cx);
+                cx.notify();
+                return Err(OpError::NotFound(IDLE_ENDED.into()));
+            }
         }
         let page = if let Some(agent) = &mut self.browser.agent {
-            let page = agent.page.clone();
+            let Some(page) = self.browser.page.clone() else {
+                return Err(OpError::NotFound(ENDED.into()));
+            };
             page.read(cx).forget_loads();
             page.update(cx, |page, cx| page.load_url(url.as_str(), cx));
-            agent.used = Instant::now();
+            agent.used = now;
             url.as_str().clone_into(&mut agent.url);
             page
         } else {
@@ -312,11 +325,11 @@ impl Kagan {
                 .browser
                 .page_for(url, window, cx)
                 .map_err(OpError::Failed)?;
+            self.browser.page = Some(page.clone());
             self.browser.agent = Some(Agent {
                 thread: thread_id.clone(),
-                page: page.clone(),
                 url: url.as_str().to_owned(),
-                used: Instant::now(),
+                used: now,
             });
             page
         };
@@ -334,16 +347,12 @@ impl Kagan {
     fn view(
         &mut self,
         thread_id: &ThreadId,
-        info: Option<(String, String)>,
+        (url, title): (String, String),
         cx: &mut Context<Self>,
     ) -> Result<BrowserView, OpError> {
-        let Some(agent) = &self.browser.agent else {
+        if self.browser.agent.is_none() {
             return Err(OpError::NotFound(ENDED.into()));
-        };
-        let url = info
-            .as_ref()
-            .map_or_else(|| agent.page.read(cx).url(cx), |(url, _)| url.clone());
-        let title = info.map_or_else(String::new, |(_, title)| title);
+        }
         let thread = self
             .record(thread_id, cx)
             .map_or_else(|| thread_id.to_string(), |thread| thread.title.clone());
@@ -376,7 +385,6 @@ impl Kagan {
         let Some(agent) = self.browser.agent.take() else {
             return;
         };
-        self.browser.page = Some(agent.page);
         self.browser.address.update(cx, |address, cx| {
             address.set_value(agent.url, window, cx);
         });
@@ -418,18 +426,43 @@ fn idle(used: Instant, now: Instant) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{idle, owns};
-    use kg_domain::ThreadId;
+    use super::{Agent, idle};
+    use crate::kagan::Kagan;
+    use crate::kagan::browser::page_url;
+    use gpui_kit::{AnyWindowHandle, AppContext as _, Entity, TestAppContext};
+    use kg_core::Workspace;
+    use kg_domain::{OpError, ThreadId};
     use std::time::{Duration, Instant};
+
+    const IDLE_ENDED: &str = "the browser session ended after 30 idle minutes";
 
     fn thread(name: &str) -> ThreadId {
         ThreadId(name.to_owned())
     }
 
-    #[test]
-    fn only_the_owner_thread_may_drive_the_page() {
-        assert!(owns(&thread("a"), &thread("a")));
-        assert!(!owns(&thread("a"), &thread("b")));
+    fn with_sh(cx: &mut TestAppContext) {
+        let path = std::env::var_os("PATH").unwrap_or_default();
+        cx.update(|cx| {
+            Workspace::global(cx).update(cx, |workspace, _| {
+                workspace.use_program_environment(
+                    std::path::Path::new(&path),
+                    std::path::Path::new("/bin/sh"),
+                );
+            });
+        });
+    }
+
+    /// An open window and one thread the sidebar knows, for the drive tests.
+    fn harness(cx: &mut TestAppContext) -> (Entity<Kagan>, AnyWindowHandle, ThreadId) {
+        let (kagan, window, _data) = crate::tests::kagan::open(cx);
+        with_sh(cx);
+        let owner = crate::tests::kagan::run_shell(cx);
+        (kagan, window, owner)
+    }
+
+    fn stale(now: Instant) -> Instant {
+        now.checked_sub(Duration::from_mins(31))
+            .expect("the test clock is past the epoch plus 31 minutes")
     }
 
     #[test]
@@ -437,5 +470,97 @@ mod tests {
         let used = Instant::now();
         assert!(!idle(used, used + Duration::from_mins(29)));
         assert!(idle(used, used + Duration::from_mins(31)));
+    }
+
+    #[gpui_kit::test]
+    fn an_idle_drive_ends_before_the_next_command(cx: &mut TestAppContext) {
+        let (kagan, window, owner) = harness(cx);
+        let now = Instant::now();
+        for begin in [false, true] {
+            let result = cx
+                .update_window(window, |_, window, cx| {
+                    kagan.update(cx, |kagan, cx| {
+                        kagan.browser.agent = Some(Agent {
+                            thread: owner.clone(),
+                            url: "https://example.com/".into(),
+                            used: stale(now),
+                        });
+                        kagan.browser.page = None;
+                        if begin {
+                            kagan
+                                .begin_open(
+                                    &owner,
+                                    &page_url("example.com").expect("a URL"),
+                                    now,
+                                    window,
+                                    cx,
+                                )
+                                .map(|_| ())
+                        } else {
+                            kagan.require(&owner, now, window, cx).map(|_| ())
+                        }
+                    })
+                })
+                .expect("a window");
+            assert_eq!(
+                result,
+                Err(OpError::NotFound(IDLE_ENDED.into())),
+                "begin={begin}"
+            );
+            assert!(
+                cx.update(|cx| kagan.read(cx).browser.agent.is_none()),
+                "the drive ended, begin={begin}"
+            );
+        }
+    }
+
+    #[gpui_kit::test]
+    fn another_thread_is_refused_with_the_owners_name(cx: &mut TestAppContext) {
+        let (kagan, window, owner) = harness(cx);
+        let caller = thread("thr_other");
+        let title = cx
+            .update(|cx| {
+                kagan
+                    .read(cx)
+                    .record(&owner, cx)
+                    .map(|thread| thread.title.clone())
+            })
+            .expect("the owner thread");
+        let refused = OpError::Invalid(format!(
+            "thread {title} is driving the browser; close it with kg browser close"
+        ));
+        let now = Instant::now();
+        for begin in [false, true] {
+            let result = cx
+                .update_window(window, |_, window, cx| {
+                    kagan.update(cx, |kagan, cx| {
+                        kagan.browser.agent = Some(Agent {
+                            thread: owner.clone(),
+                            url: String::new(),
+                            used: now,
+                        });
+                        kagan.browser.page = None;
+                        if begin {
+                            kagan
+                                .begin_open(
+                                    &caller,
+                                    &page_url("example.com").expect("a URL"),
+                                    now,
+                                    window,
+                                    cx,
+                                )
+                                .map(|_| ())
+                        } else {
+                            kagan.require(&caller, now, window, cx).map(|_| ())
+                        }
+                    })
+                })
+                .expect("a window");
+            assert_eq!(result, Err(refused.clone()), "begin={begin}");
+            assert!(
+                cx.update(|cx| kagan.read(cx).browser.agent.is_some()),
+                "the owner keeps the drive, begin={begin}"
+            );
+        }
     }
 }
