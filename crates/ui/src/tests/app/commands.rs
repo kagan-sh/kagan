@@ -694,6 +694,12 @@ fn a_plugin_menu_command_runs_from_the_thread_actions_menu(cx: &mut TestAppConte
     let (kagan, window, _data) = open_with_plugins_then(cx, |data| {
         install_header_plugin(
             data,
+            "dev.acme.alpha",
+            "Alpha",
+            &[("alpha", "Alpha", false, true, None)],
+        );
+        install_header_plugin(
+            data,
             "dev.acme.menu",
             "Menu",
             &[
@@ -711,15 +717,24 @@ fn a_plugin_menu_command_runs_from_the_thread_actions_menu(cx: &mut TestAppConte
     wait_until(cx, |cx| shows_id(cx, window, &header));
 
     click(cx, window, "thread-actions-trigger");
+    let alpha = menu_id("dev.acme.alpha", "alpha");
     let notes = menu_id("dev.acme.menu", "notes");
     let both = menu_id("dev.acme.menu", "both");
     let quiet = menu_id("dev.acme.menu", "quiet");
     wait_until(cx, |cx| {
-        shows_id(cx, window, &notes) && shows_id(cx, window, &both)
+        shows_id(cx, window, &alpha) && shows_id(cx, window, &notes) && shows_id(cx, window, &both)
     });
     assert!(
         !shows_id(cx, window, &quiet),
         "a command without menu true was listed"
+    );
+    // Plugin id order, then manifest order within the plugin.
+    let alpha_top = bounds_of(cx, window, &alpha).expect("alpha row").1;
+    let notes_top = bounds_of(cx, window, &notes).expect("notes row").1;
+    let both_top = bounds_of(cx, window, &both).expect("both row").1;
+    assert!(
+        alpha_top < notes_top && notes_top < both_top,
+        "rows out of order: alpha {alpha_top}, notes {notes_top}, both {both_top}"
     );
 
     click_id(cx, window, &notes);
