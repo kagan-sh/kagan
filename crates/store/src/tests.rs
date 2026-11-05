@@ -664,6 +664,7 @@ fn pending_interactions() {
                 label: "Reject".into(),
             },
         ],
+        fields: None,
         created_at: Timestamp(3),
     };
     store.put_pending_interaction(&interaction).unwrap();
@@ -842,6 +843,7 @@ fn old_experiment_rows_and_the_predict_setting_still_load() {
         EventKind::Answered {
             title: "Allow?".into(),
             option: "allow".into(),
+            fields: std::collections::BTreeMap::new(),
         }
     );
 }

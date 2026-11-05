@@ -1,5 +1,6 @@
 use crate::theme::TypeScale as _;
 mod archived;
+mod ask_form;
 pub(crate) mod attention;
 pub(crate) mod browser;
 pub(crate) mod changes;
@@ -83,7 +84,7 @@ use gpui_kit::component::{TitleBar, WindowExt as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AnyWindowHandle, App, AppContext as _, ClickEvent, Context, ElementId, Entity,
-    FocusHandle, Focusable as _, Global, InteractiveElement as _, IntoElement, ParentElement as _,
+    FocusHandle, Global, InteractiveElement as _, IntoElement, ParentElement as _,
     PathPromptOptions, Render, ScrollHandle, SharedString, StatefulInteractiveElement as _,
     Styled as _, Subscription, Task, WeakEntity, Window, WindowBounds, WindowOptions, actions, div,
     px, size,
@@ -244,6 +245,9 @@ pub(crate) struct Kagan {
     plugin_watch: Option<Subscription>,
     host_events: Vec<Subscription>,
     overlays: Vec<overlays::Overlay>,
+    ask_drafts: BTreeMap<PendingInteractionId, ask_form::Draft>,
+    ask_hidden: BTreeSet<PendingInteractionId>,
+    ask_popup: Option<FocusHandle>,
     toast: Option<Toast>,
     toast_epoch: u64,
     _release: Subscription,
@@ -531,6 +535,9 @@ impl Kagan {
             plugin_watch: None,
             host_events: Vec::new(),
             overlays: Vec::new(),
+            ask_drafts: BTreeMap::new(),
+            ask_hidden: BTreeSet::new(),
+            ask_popup: None,
             toast: None,
             toast_epoch: 0,
             _release: cx.on_release(release_window),
@@ -1076,7 +1083,7 @@ impl Kagan {
         }
         let view = cx.new(|cx| TerminalView::new(id.clone(), None, self.terminal_font_size, cx));
         self.show_work(Shown::Thread(view.clone()), window, cx);
-        window.focus(&view.focus_handle(cx), cx);
+        self.focus_work(window, cx);
         self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.load_changes(cx);
@@ -1631,7 +1638,7 @@ impl Kagan {
                         .child(self.left_side(window, cx)),
                 )
             })
-            .child(self.center_column(main, cx))
+            .child(self.center_column(main, window, cx))
             .when(self.panes.right, |columns| {
                 columns.child(
                     resizable_panel()
@@ -1644,7 +1651,13 @@ impl Kagan {
             .into_any_element()
     }
 
-    fn center_column(&self, main: AnyElement, cx: &mut Context<Self>) -> ResizablePanel {
+    fn center_column(
+        &mut self,
+        main: AnyElement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> ResizablePanel {
+        let popup = ask_form::popup(self, window, cx);
         resizable_panel()
             .size_range(px(layout::CENTER_MIN)..px(f32::MAX))
             .child(
@@ -1674,6 +1687,7 @@ impl Kagan {
                     )
                     .child(main)
                     .children(overlays::render(self, cx))
+                    .children(popup)
                     .when_some(self.toast.clone(), |main, toast| {
                         main.child(Self::render_toast(&toast, cx))
                     }),

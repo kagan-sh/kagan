@@ -240,12 +240,20 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
         .approvals()
         .cloned()
         .collect();
-    let weak = cx.entity().downgrade();
+    let entity = cx.entity();
+    let weak = entity.downgrade();
     let cards: Vec<AnyElement> = approvals
         .iter()
         .map(|approval| {
-            question::card(question::Question::standalone(approval), &weak, window, cx)
-                .into_any_element()
+            question::card(
+                question::Question::standalone(approval),
+                None,
+                &entity,
+                &weak,
+                window,
+                cx,
+            )
+            .into_any_element()
         })
         .collect();
     let views: Vec<_> = pages::plugin_entries(cx)

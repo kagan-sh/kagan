@@ -3915,6 +3915,22 @@ pub(super) fn click(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str
     cx.run_until_parked();
 }
 
+pub(super) fn click_within(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    name: &str,
+    within: &str,
+) {
+    cx.update_window(window, |_, window, cx| {
+        let id = ElementId::Name(name.to_owned().into());
+        let scope = ElementId::Name(within.to_owned().into());
+        crate::ui_dispatch::click_within(window, &id, Some(&scope), cx)
+            .unwrap_or_else(|error| panic!("{name} in {within}: {error}"));
+    })
+    .unwrap();
+    cx.run_until_parked();
+}
+
 /// Counts how often the view asks to be drawn. Keep the subscription alive as long as the count.
 fn count_repaints(
     cx: &mut TestAppContext,
@@ -4030,6 +4046,7 @@ fn a_thread_marks_busy_then_done_then_idle_once_read(cx: &mut TestAppContext) {
                         label: "No".into(),
                     },
                 ],
+                fields: None,
             }),
             cx,
         )
@@ -4038,7 +4055,12 @@ fn a_thread_marks_busy_then_done_then_idle_once_read(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", thread.0));
     wait_for_mark(cx, window, &mark, "needs you");
     let question = pending(cx, &thread).into_iter().next().expect("question");
-    click(cx, window, &format!("answer-{}-yes", question.id.0));
+    click_within(
+        cx,
+        window,
+        &format!("answer-{}-yes", question.id.0),
+        "ask-popup",
+    );
     cx.foreground_executor().block_test(asking).unwrap();
     wait_for_mark(cx, window, &mark, "idle");
 }
@@ -4066,6 +4088,7 @@ fn a_pending_question_stays_needs_you_after_the_thread_is_opened(cx: &mut TestAp
                         label: "No".into(),
                     },
                 ],
+                fields: None,
             }),
             cx,
         )
@@ -4077,7 +4100,12 @@ fn a_pending_question_stays_needs_you_after_the_thread_is_opened(cx: &mut TestAp
     assert_eq!(value_of(cx, window, &row).as_deref(), Some("needs you"));
     let question = pending(cx, &id).into_iter().next().expect("question");
     click(cx, window, &row);
-    click(cx, window, &format!("answer-{}-yes", question.id.0));
+    click_within(
+        cx,
+        window,
+        &format!("answer-{}-yes", question.id.0),
+        "ask-popup",
+    );
     cx.foreground_executor().block_test(asking).unwrap();
     wait_for_mark(cx, window, &mark, "idle");
 }

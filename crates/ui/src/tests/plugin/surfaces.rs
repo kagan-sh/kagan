@@ -459,6 +459,7 @@ fn ask(cx: &mut TestAppContext, id: &ThreadId) {
                         label: option.into(),
                     })
                     .into(),
+                fields: None,
             }),
             cx,
         )

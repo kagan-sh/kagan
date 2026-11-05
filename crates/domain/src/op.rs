@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    AgentTool, Environment, EnvironmentId, Event, IndexEntry, InteractionOption, Listing,
+    AgentTool, AskField, Environment, EnvironmentId, Event, IndexEntry, InteractionOption, Listing,
     PendingInteraction, Plugin, PluginId, ProgramList, Project, ProjectId, SectionId, Sidebar,
     Thread, ThreadId, Timestamp, Visibility,
 };
@@ -1391,6 +1391,10 @@ pub enum ThreadOp {
         /// An option, as id=label. Repeat for at least two
         #[arg(long = "option", value_name = "ID=LABEL", value_parser = parse_option)]
         options: Vec<InteractionOption>,
+        /// Host-drawn form fields (JSON). Omitted or empty still marks a plugin ask for a popup.
+        #[arg(skip)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fields: Option<Vec<AskField>>,
     },
     /// Run a stopped or recovered thread's program again, in its folder. Only a request does this.
     ///

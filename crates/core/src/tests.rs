@@ -1011,6 +1011,7 @@ fn plant_old_turn(db: &Path, id: &ThreadId) {
                 id: "allow".into(),
                 label: "Allow".into(),
             }],
+            fields: None,
             created_at: Timestamp(1),
         })
         .unwrap();
@@ -3028,6 +3029,7 @@ fn ask_op(id: ThreadId, title: &str, options: Vec<InteractionOption>) -> Op {
         id,
         title: title.into(),
         options,
+        fields: None,
     })
 }
 
@@ -3151,6 +3153,478 @@ async fn ask_returns_the_open_question_until_the_person_answers(cx: &mut TestApp
         EventKind::Answered {
             title: "Ship it?".into(),
             option: "yes".into(),
+            fields: std::collections::BTreeMap::new(),
+        }
+    );
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_with_fields_stores_them_and_answered_carries_values(cx: &mut TestAppContext) {
+    let (fixture, id) = sleeping(cx).await;
+    let fields = vec![
+        kg_domain::AskField::String {
+            id: "name".into(),
+            label: "Name".into(),
+            placeholder: None,
+            default: Some("Ada".into()),
+        },
+        kg_domain::AskField::Boolean {
+            id: "notify".into(),
+            label: "Notify".into(),
+            default: Some(true),
+        },
+    ];
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(fields.clone()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let open = pending(&id, cx).await;
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0].fields, Some(fields));
+    assert!(cx.read(|cx| fixture.workspace.read(cx).needs_a_person(&open[0].id)));
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("name".into(), serde_json::json!("Grace"));
+    values.insert("notify".into(), serde_json::json!(false));
+    cx.update(|cx| {
+        Workspace::answer_fields(
+            &id,
+            PendingInteractionId(interaction.clone()),
+            "yes".into(),
+            values.clone(),
+            cx,
+        )
+    })
+    .await
+    .unwrap();
+    assert!(pending(&id, cx).await.is_empty());
+    let OpResult::Event(Some(event)) = op(
+        Op::Thread(ThreadOp::WaitEvent {
+            id: id.clone(),
+            kind: "answered".into(),
+            after_seq: None,
+            timeout_ms: 1_000,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("answered");
+    };
+    assert_eq!(
+        event.kind,
+        EventKind::Answered {
+            title: "Ship it?".into(),
+            option: "yes".into(),
+            fields: values,
+        }
+    );
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_rejects_duplicate_select_choice_ids(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let error = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Pick".into(),
+            options: ask_options(),
+            fields: Some(vec![kg_domain::AskField::Select {
+                id: "mode".into(),
+                label: "Mode".into(),
+                choices: vec![
+                    InteractionOption {
+                        id: "a".into(),
+                        label: "A".into(),
+                    },
+                    InteractionOption {
+                        id: "a".into(),
+                        label: "Also A".into(),
+                    },
+                ],
+                default: None,
+                required: false,
+            }]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("select choice id a is repeated"),
+        "{error}"
+    );
+}
+
+#[cfg(unix)]
+async fn ask_refused(id: &ThreadId, fields: Vec<AskField>, cx: &mut TestAppContext) -> String {
+    op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(fields),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err()
+    .to_string()
+}
+
+fn text_field(id: &str, label: &str) -> AskField {
+    AskField::String {
+        id: id.into(),
+        label: label.into(),
+        placeholder: None,
+        default: None,
+    }
+}
+
+fn select_field(choices: Vec<InteractionOption>, default: Option<&str>) -> AskField {
+    AskField::Select {
+        id: "mode".into(),
+        label: "Mode".into(),
+        choices,
+        default: default.map(Into::into),
+        required: false,
+    }
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_refuses_repeated_field_ids_text_over_its_caps_and_a_default_outside_the_choices(
+    cx: &mut TestAppContext,
+) {
+    let (_fixture, id) = sleeping(cx).await;
+    let long_id = "i".repeat(65);
+    let long_label = "l".repeat(129);
+    let long_text = "t".repeat(4097);
+    let cases = [
+        (
+            vec![text_field("same", "One"), text_field("same", "Two")],
+            "ask field id same is repeated",
+        ),
+        (
+            vec![text_field(&long_id, "Name")],
+            "field id is at most 64 characters",
+        ),
+        (
+            vec![text_field("name", &long_label)],
+            "field label is at most 128 characters",
+        ),
+        (
+            vec![AskField::String {
+                id: "name".into(),
+                label: "Name".into(),
+                placeholder: Some(long_text.clone()),
+                default: None,
+            }],
+            "ask placeholder is at most 4096 characters",
+        ),
+        (
+            vec![AskField::String {
+                id: "name".into(),
+                label: "Name".into(),
+                placeholder: None,
+                default: Some(long_text.clone()),
+            }],
+            "ask default is at most 4096 characters",
+        ),
+        (
+            vec![select_field(
+                vec![InteractionOption {
+                    id: "fast".into(),
+                    label: "Fast".into(),
+                }],
+                Some("slow"),
+            )],
+            "a select field default must be one of its choices",
+        ),
+    ];
+    for (fields, expected) in cases {
+        let error = ask_refused(&id, fields, cx).await;
+        assert!(error.contains(expected), "{error} does not name {expected}");
+    }
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_refuses_more_fields_or_choices_than_the_caps_and_takes_a_full_form(
+    cx: &mut TestAppContext,
+) {
+    let (_fixture, id) = sleeping(cx).await;
+    let fields: Vec<_> = (0..33)
+        .map(|n| text_field(&format!("f{n:02}"), "Field"))
+        .collect();
+    let error = ask_refused(&id, fields, cx).await;
+    assert!(error.contains("at most 32 fields"), "{error}");
+
+    let choices: Vec<_> = (0..33)
+        .map(|n| InteractionOption {
+            id: format!("c{n:02}"),
+            label: "Choice".into(),
+        })
+        .collect();
+    let error = ask_refused(&id, vec![select_field(choices, None)], cx).await;
+    assert!(error.contains("at most 32 choices"), "{error}");
+
+    let fields: Vec<_> = (0..31)
+        .map(|n| text_field(&format!("f{n:02}"), "Field"))
+        .collect();
+    let choices: Vec<_> = (0..32)
+        .map(|n| InteractionOption {
+            id: format!("c{n:02}"),
+            label: "Choice".into(),
+        })
+        .collect();
+    op(
+        Op::Thread(ThreadOp::Ask {
+            id,
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some([fields, vec![select_field(choices, None)]].concat()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_answer_refuses_a_missing_unknown_or_wrong_kind_field(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(vec![
+                text_field("name", "Name"),
+                AskField::Boolean {
+                    id: "notify".into(),
+                    label: "Notify".into(),
+                    default: None,
+                },
+            ]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let cases = [
+        (
+            std::collections::BTreeMap::from([("notify".to_owned(), json!(true))]),
+            "ask answer is missing field name",
+        ),
+        (
+            std::collections::BTreeMap::from([
+                ("name".to_owned(), json!("Ada")),
+                ("notify".to_owned(), json!(true)),
+                ("surprise".to_owned(), json!(1)),
+            ]),
+            "ask answer has unknown field surprise",
+        ),
+        (
+            std::collections::BTreeMap::from([
+                ("name".to_owned(), json!(1)),
+                ("notify".to_owned(), json!(true)),
+            ]),
+            "ask answer field name has the wrong kind of value",
+        ),
+    ];
+    for (values, expected) in cases {
+        let error = cx
+            .update(|cx| {
+                Workspace::answer_fields(
+                    &id,
+                    PendingInteractionId(interaction.clone()),
+                    "yes".into(),
+                    values,
+                    cx,
+                )
+            })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+    }
+    assert_eq!(pending(&id, cx).await.len(), 1, "the question stays");
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_answer_requires_a_whole_number(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(vec![kg_domain::AskField::Number {
+                id: "retries".into(),
+                label: "Retries".into(),
+                default: Some(1),
+            }]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("retries".into(), serde_json::json!(1.5));
+    let error = cx
+        .update(|cx| {
+            Workspace::answer_fields(
+                &id,
+                PendingInteractionId(interaction),
+                "yes".into(),
+                values,
+                cx,
+            )
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ask answer field retries has the wrong kind of value"),
+        "{error}"
+    );
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn a_required_select_refuses_none_and_takes_a_choice(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let fields = serde_json::from_value(json!([{
+        "type": "select",
+        "id": "mode",
+        "label": "Mode",
+        "required": true,
+        "choices": [{ "id": "fast", "label": "Fast" }]
+    }]))
+    .unwrap();
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(fields),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("mode".into(), serde_json::Value::Null);
+    let error = cx
+        .update(|cx| {
+            Workspace::answer_fields(
+                &id,
+                PendingInteractionId(interaction.clone()),
+                "yes".into(),
+                values,
+                cx,
+            )
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ask answer field mode needs a choice"),
+        "{error}"
+    );
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("mode".into(), json!("fast"));
+    cx.update(|cx| {
+        Workspace::answer_fields(
+            &id,
+            PendingInteractionId(interaction),
+            "yes".into(),
+            values,
+            cx,
+        )
+    })
+    .await
+    .unwrap();
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_answer_accepts_none_for_a_select(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(vec![kg_domain::AskField::Select {
+                id: "mode".into(),
+                label: "Mode".into(),
+                choices: vec![InteractionOption {
+                    id: "fast".into(),
+                    label: "Fast".into(),
+                }],
+                default: None,
+                required: false,
+            }]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let mut values = std::collections::BTreeMap::new();
+    values.insert("mode".into(), serde_json::Value::Null);
+    cx.update(|cx| {
+        Workspace::answer_fields(
+            &id,
+            PendingInteractionId(interaction),
+            "yes".into(),
+            values.clone(),
+            cx,
+        )
+    })
+    .await
+    .unwrap();
+    let OpResult::Event(Some(event)) = op(
+        Op::Thread(ThreadOp::WaitEvent {
+            id: id.clone(),
+            kind: "answered".into(),
+            after_seq: None,
+            timeout_ms: 1_000,
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("answered");
+    };
+    assert_eq!(
+        event.kind,
+        EventKind::Answered {
+            title: "Ship it?".into(),
+            option: "yes".into(),
+            fields: values,
         }
     );
 }

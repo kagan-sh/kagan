@@ -90,9 +90,12 @@ pub(crate) async fn dispatch_thread(
             Ok(OpResult::Done)
         }
         ThreadOp::Rename { id, title } => rename(this, database, id, title, true, cx).await,
-        ThreadOp::Ask { id, title, options } => {
-            interaction::ask(this, id, title, options, cx).await
-        }
+        ThreadOp::Ask {
+            id,
+            title,
+            options,
+            fields,
+        } => interaction::ask(this, id, title, options, fields, cx).await,
         ThreadOp::MarkRead { id } => {
             let at = time(this, cx)?;
             database.call(move |store| store.mark_read(&id, at)).await?;
