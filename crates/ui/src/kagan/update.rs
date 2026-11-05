@@ -66,7 +66,6 @@ pub(super) fn progress_sentence(state: &UpdateState) -> Option<String> {
     }
 }
 
-/// The version the person put off with Not now.
 pub(super) fn hidden(cx: &App) -> Option<String> {
     cx.try_global::<Hidden>().map(|hidden| hidden.0.clone())
 }

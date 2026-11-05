@@ -21,7 +21,6 @@ use crate::ui_registry::Facts;
 
 const HEIGHT: f32 = 28.;
 const KEEP: usize = 100;
-/// The rows the log shows, newest last.
 const ROWS: u16 = 7;
 const ROW: f32 = 20.;
 const DOT: f32 = 6.;
