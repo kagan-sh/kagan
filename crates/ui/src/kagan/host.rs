@@ -21,13 +21,17 @@ impl Kagan {
         let Some(host) = kg_plugins::PluginHost::try_global(cx) else {
             return;
         };
-        self.plugin_watch = Some(cx.observe_in(&host, window, |this, _, window, cx| {
+        self.plugin_watch = Some(cx.observe_in(&host, window, |this, host, window, cx| {
+            this.activity
+                .installing(host.read(cx).installing().as_deref());
             this.sync_slots(window, cx);
             this.sync_replaced(window, cx);
             this.reconcile_plugin_views(window, cx);
             this.sync_overlays(window, cx);
             cx.notify();
         }));
+        self.activity
+            .installing(host.read(cx).installing().as_deref());
         self.sync_overlays(window, cx);
         if let Some(ui) = HostUi::global(cx) {
             self.host_events.push(cx.subscribe_in(
@@ -190,6 +194,7 @@ impl Kagan {
         let Some(host) = PluginHost::try_global(cx) else {
             return;
         };
+        self.activity.plugin_command(&action.plugin().0);
         let task = PluginHost::dispatch_command(
             &host,
             action.plugin(),

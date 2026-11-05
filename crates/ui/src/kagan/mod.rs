@@ -1,6 +1,7 @@
 use changes::Changes;
 use layout::Layout;
 use plugin_actions::Plugins;
+mod activity;
 mod archived;
 mod ask_form;
 pub(crate) mod attention;
@@ -226,6 +227,8 @@ pub(crate) struct Kagan {
     ask_popup: Option<FocusHandle>,
     toast: Option<Toast>,
     toast_epoch: u64,
+    activity: activity::Strip,
+    _update_watch: Subscription,
     _release: Subscription,
     _poll: Task<()>,
     commands: Option<commands::CommandList>,

@@ -1,7 +1,7 @@
 use super::{Changes, Kagan, Layout, Plugins, Shown, TITLE, window::release_window};
 use super::{
-    archived, attention, browser, changes, details, layout, picker, replace, review, right, screen,
-    settings, sidebar, start, surface, tabs,
+    activity, archived, attention, browser, changes, details, layout, picker, replace, review,
+    right, screen, settings, sidebar, start, surface, tabs,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -10,7 +10,7 @@ use gpui_kit::component::resizable::{ResizablePanelEvent, ResizableState};
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, ScrollHandle, Subscription, Task, Window,
 };
-use kg_core::{Workspace, WorkspaceEvent};
+use kg_core::{Updater, Workspace, WorkspaceEvent};
 use kg_domain::ProjectId;
 
 impl Kagan {
@@ -107,14 +107,22 @@ impl Kagan {
             ask_popup: None,
             toast: None,
             toast_epoch: 0,
+            activity: activity::Strip::new(cx.focus_handle().tab_stop(true)),
+            _update_watch: activity::watch(cx),
             _release: cx.on_release(release_window),
             _poll: changes::poll_open_changes(cx),
             commands: None,
         };
-        this.load_settings(cx);
-        this.refresh(window, cx);
-        this.show_newest(window, cx);
+        this.started(window, cx);
         this
+    }
+
+    fn started(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.load_settings(cx);
+        self.activity
+            .update_state(Updater::global(cx).read(cx).state());
+        self.refresh(window, cx);
+        self.show_newest(window, cx);
     }
 
     pub(super) fn show_newest(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -215,10 +223,15 @@ fn listen(
                     this.refresh(window, cx);
                     this.load_settings(cx);
                 }
-                WorkspaceEvent::Event { .. } => this.refresh(window, cx),
-                WorkspaceEvent::Waiting(id) | WorkspaceEvent::Finished(id) => {
+                WorkspaceEvent::Event { event, .. } => {
+                    this.saw_turn(event, cx);
+                    this.refresh(window, cx);
+                }
+                WorkspaceEvent::Waiting(id) => {
+                    this.saw_needs(id, cx);
                     this.waited(id, window, cx);
                 }
+                WorkspaceEvent::Finished(id) => this.waited(id, window, cx),
                 WorkspaceEvent::Open
                 | WorkspaceEvent::Settings
                 | WorkspaceEvent::SettingsPlugins

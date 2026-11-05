@@ -1,0 +1,408 @@
+//! The activity strip at the bottom of the window: what the workspace is doing, in one line, and
+//! a short log when opened (decision 148).
+
+use std::collections::VecDeque;
+
+use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    AnyElement, App, Context, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
+    KeyDownEvent, ParentElement as _, Role, SharedString, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Window, div, px,
+};
+use kg_core::{Updater, Workspace};
+use kg_domain::{Event, EventKind, ThreadId, UpdateState};
+
+use super::Kagan;
+use crate::theme::{Tone, TypeScale as _};
+use crate::ui_observe::UiObserveExt as _;
+use crate::ui_registry::Facts;
+
+/// The strip's height closed. A layout constant, like the rail's 48 points.
+const HEIGHT: f32 = 28.;
+/// The most the log keeps. It lives in memory and is gone when kagan quits.
+const KEEP: usize = 100;
+/// The rows the log shows, newest last.
+const ROWS: u16 = 7;
+const ROW: f32 = 20.;
+const DOT: f32 = 6.;
+
+/// The strip's own state: whether it is open, and the log it keeps.
+pub(super) struct Strip {
+    focus: FocusHandle,
+    open: bool,
+    next: u64,
+    lines: VecDeque<(u64, SharedString)>,
+    update: Option<SharedString>,
+    install: Option<SharedString>,
+}
+
+impl Strip {
+    pub(super) fn new(focus: FocusHandle) -> Self {
+        Self {
+            focus,
+            open: false,
+            next: 0,
+            lines: VecDeque::new(),
+            update: None,
+            install: None,
+        }
+    }
+
+    fn open(&self) -> bool {
+        self.open
+    }
+
+    fn say(&mut self, line: String) {
+        if self.lines.len() == KEEP {
+            self.lines.pop_front();
+        }
+        self.lines.push_back((self.next, line.into()));
+        self.next += 1;
+    }
+
+    fn toggle(&mut self) {
+        self.open = !self.open;
+    }
+
+    fn close(&mut self) {
+        self.open = false;
+    }
+
+    fn turn(&mut self, event: &Event, title: &str) {
+        match event.kind {
+            EventKind::TurnStarted => self.say(format!("{title}: turn started")),
+            EventKind::TurnEnded { .. } => self.say(format!("{title}: turn ended")),
+            _ => {}
+        }
+    }
+
+    fn needs(&mut self, title: &str) {
+        self.say(format!("{title}: needs you"));
+    }
+
+    pub(super) fn plugin_command(&mut self, plugin: &str) {
+        self.say(format!("{plugin}: ran a command"));
+    }
+
+    /// Logs each update state once, so a repeat does not fill the log.
+    pub(super) fn update_state(&mut self, state: &UpdateState) {
+        let line = match state {
+            UpdateState::Available { version, .. } => format!("kagan {version} is available"),
+            UpdateState::Downloading { version } => format!("Downloading kagan {version}…"),
+            UpdateState::Ready { version, .. } => format!("kagan {version} is ready to install"),
+            _ => return,
+        };
+        if self.update.as_deref() == Some(line.as_str()) {
+            return;
+        }
+        self.update = Some(line.clone().into());
+        self.say(line);
+    }
+
+    /// Tracks the one plugin install the host allows at a time.
+    pub(super) fn installing(&mut self, running: Option<&str>) {
+        let line = running.map(|name| format!("Installing {name}"));
+        if self.install.as_deref() == line.as_deref() {
+            return;
+        }
+        if let Some(line) = line {
+            self.install = Some(line.clone().into());
+            self.say(line);
+        } else {
+            self.install = None;
+        }
+    }
+
+    #[cfg(test)]
+    fn kept(&self) -> usize {
+        self.lines.len()
+    }
+}
+
+fn title_of(id: &ThreadId, cx: &App) -> String {
+    Workspace::global(cx)
+        .read(cx)
+        .thread(id)
+        .map(|thread| thread.read(cx).record().title.clone())
+        .filter(|title| !title.is_empty())
+        .unwrap_or_else(|| "Thread".into())
+}
+
+pub(super) fn watch(cx: &mut Context<Kagan>) -> Subscription {
+    cx.observe(&Updater::global(cx), |this, updater, cx| {
+        let state = updater.read(cx).state().clone();
+        this.activity.update_state(&state);
+        cx.notify();
+    })
+}
+
+impl Kagan {
+    /// A turn started or ended in a thread's log.
+    pub(super) fn saw_turn(&mut self, event: &Event, cx: &App) {
+        let title = title_of(&event.thread_id, cx);
+        self.activity.turn(event, &title);
+    }
+
+    /// The person is needed: a reply, a question, or a failure.
+    pub(super) fn saw_needs(&mut self, id: &ThreadId, cx: &App) {
+        let title = title_of(id, cx);
+        self.activity.needs(&title);
+    }
+
+    /// Threads that need the person, as `NextThreadNeedingYou` reads them.
+    fn needs_you(&self, cx: &App) -> usize {
+        let attention = super::attention::global(cx);
+        let attention = attention.read(cx);
+        self.listed(cx)
+            .filter(|thread| attention.tone(thread, cx) == Tone::Needs)
+            .count()
+    }
+
+    fn clicked_strip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.activity.open() {
+            window.focus(&self.activity.focus, cx);
+        }
+        self.activity.toggle();
+        cx.notify();
+    }
+
+    /// Escape closes it. Enter and Space are the click GPUI makes from a focused element.
+    fn strip_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        if event.keystroke.key == "escape" && self.activity.open() {
+            self.activity.close();
+            cx.notify();
+        }
+    }
+
+    fn strip_summary(
+        &self,
+        summary: SharedString,
+        working: usize,
+        needs: usize,
+        open: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let dot = div()
+            .flex_none()
+            .size(px(DOT))
+            .rounded_full()
+            .bg(if working > 0 {
+                Tone::Busy.color(cx)
+            } else {
+                cx.theme().muted_foreground
+            });
+        let head = h_flex()
+            .id("activity-summary")
+            .ui_observe_as(Facts {
+                role: Role::Button,
+                name: "Activity".into(),
+                value: Some(summary.clone()),
+                disabled: false,
+                selected: Some(open),
+                focus: None,
+                hint: Some(
+                    if open {
+                        "Hide what the workspace is doing"
+                    } else {
+                        "Show what the workspace is doing"
+                    }
+                    .into(),
+                ),
+            })
+            .flex_1()
+            .min_w_0()
+            .items_center()
+            .gap_2()
+            .child(dot)
+            .child(div().min_w_0().text_ellipsis().child(summary));
+        let needs_part = (needs > 0).then(|| {
+            div()
+                .id("activity-needs")
+                .flex_none()
+                .type_small()
+                .text_color(Tone::Needs.color(cx))
+                .on_click(cx.listener(|_, _, window, cx| {
+                    cx.stop_propagation();
+                    window.dispatch_action(Box::new(super::navigation::NextThreadNeedingYou), cx);
+                }))
+                .ui_observe_as(Facts {
+                    role: Role::Button,
+                    name: "Needs you".into(),
+                    value: Some(needs.to_string().into()),
+                    disabled: false,
+                    selected: None,
+                    focus: None,
+                    hint: Some("Go to the next thread that needs you".into()),
+                })
+                .child(format!("{needs} needs you"))
+        });
+        let update_part = matches!(
+            Updater::global(cx).read(cx).state(),
+            UpdateState::Available { .. }
+        )
+        .then(|| {
+            div()
+                .id("activity-update")
+                .ui_container()
+                .flex_none()
+                .type_small()
+                .text_color(cx.theme().muted_foreground)
+                .child("Update available")
+        });
+        let install_part = self.activity.install.clone().map(|install| {
+            div()
+                .id("activity-install")
+                .ui_container()
+                .flex_none()
+                .max_w(px(240.))
+                .min_w_0()
+                .text_ellipsis()
+                .type_small()
+                .text_color(cx.theme().muted_foreground)
+                .child(install)
+        });
+        h_flex()
+            .h(px(HEIGHT))
+            .flex_none()
+            .items_center()
+            .gap_3()
+            .px_3()
+            .type_small()
+            .text_color(cx.theme().muted_foreground)
+            .child(head)
+            .children(needs_part)
+            .children(update_part)
+            .children(install_part)
+    }
+
+    /// The strip across the bottom of the window. It takes height only, never the columns' widths.
+    pub(super) fn activity_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let working = Workspace::global(cx).read(cx).busy_threads(cx);
+        let needs = self.needs_you(cx);
+        let open = self.activity.open();
+        let summary: SharedString = match working {
+            0 => "Quiet".into(),
+            1 => "1 agent working".into(),
+            count => format!("{count} agents working").into(),
+        };
+        let rows: Vec<(u64, SharedString)> = self
+            .activity
+            .lines
+            .iter()
+            .rev()
+            .take(usize::from(ROWS))
+            .rev()
+            .cloned()
+            .collect();
+        let log = strip_log(rows, cx);
+        let summary_row = self.strip_summary(summary, working, needs, open, cx);
+        let height = px(if open {
+            HEIGHT + f32::from(ROWS) * ROW
+        } else {
+            HEIGHT
+        });
+        v_flex()
+            .id("activity-strip")
+            .ui_observe_as(Facts {
+                role: Role::Unknown,
+                name: "Activity strip".into(),
+                value: None,
+                disabled: false,
+                selected: None,
+                focus: Some(self.activity.focus.clone()),
+                hint: None,
+            })
+            .flex_none()
+            .w_full()
+            .h(height)
+            .overflow_hidden()
+            .border_t_1()
+            .border_color(cx.theme().border)
+            .key_context("ActivityStrip")
+            .focus_visible(|strip| strip.border_1().border_color(cx.theme().ring))
+            .on_click(cx.listener(|this, _, window, cx| this.clicked_strip(window, cx)))
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                this.strip_key(event, cx);
+            }))
+            .child(summary_row)
+            .when(open, |strip| strip.child(log))
+    }
+}
+
+fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use<> {
+    let rows: Vec<AnyElement> = if rows.is_empty() {
+        vec![
+            div()
+                .id("activity-empty")
+                .flex_none()
+                .h(px(ROW))
+                .type_small()
+                .text_color(cx.theme().muted_foreground)
+                .child("Nothing has happened yet.")
+                .into_any_element(),
+        ]
+    } else {
+        rows.into_iter()
+            .map(|(seq, line)| {
+                h_flex()
+                    .id(ElementId::Name(format!("activity-row-{seq}").into()))
+                    .ui_container()
+                    .flex_none()
+                    .h(px(ROW))
+                    .min_w_0()
+                    .items_center()
+                    .type_small()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(div().min_w_0().text_ellipsis().child(line))
+                    .into_any_element()
+            })
+            .collect()
+    };
+    v_flex()
+        .id("activity-log")
+        .ui_container()
+        .flex_1()
+        .min_h_0()
+        .px_3()
+        .children(rows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn strip(cx: &mut gpui_kit::TestAppContext) -> Strip {
+        Strip::new(cx.update(|cx| cx.focus_handle()))
+    }
+
+    #[gpui_kit::test]
+    fn the_log_keeps_the_last_hundred_lines(cx: &mut gpui_kit::TestAppContext) {
+        let mut strip = strip(cx);
+        for line in 0..120 {
+            strip.say(line.to_string());
+        }
+        assert_eq!(strip.kept(), KEEP);
+        assert_eq!(
+            strip.lines.front().map(|(_, line)| line.as_ref()),
+            Some("20")
+        );
+    }
+
+    #[gpui_kit::test]
+    fn a_repeated_update_or_install_line_is_written_once(cx: &mut gpui_kit::TestAppContext) {
+        let mut strip = strip(cx);
+        let ready = UpdateState::Ready {
+            version: "2.0.0".into(),
+            notes: String::new(),
+            at_quit: false,
+        };
+        strip.update_state(&ready);
+        strip.update_state(&ready);
+        strip.installing(Some("demo"));
+        strip.installing(Some("demo"));
+        strip.installing(None);
+        assert_eq!(strip.kept(), 2);
+    }
+}

@@ -41,6 +41,19 @@ From top to bottom, the rail has:
 
 A plugin icon opens its tool below the threads or its page in the center. Click the icon again, or **Close**, to return. **New plugin…** starts a Personal thread with your first installed agent and a prompt to make a plugin.
 
+## Activity strip
+
+At the bottom of the window, one line says what is happening. It stays below the sidebars and the center, and it is closed by default.
+
+- **Quiet** means no program is busy with a reply. **2 agents working** means two threads are.
+- **2 needs you** means threads want you. Click it, or press Option+Cmd+J, to open the next one.
+- **Update available** means a check found a newer kagan.
+- **Installing kagan-tools** means a plugin install is running.
+
+Click the line, or press Enter or Space while it has focus, to see the last seven things that happened: turns started and ended, threads that need you, updates, and plugin installs. A new row is added at the bottom. Click again or press Escape to close it.
+
+The list is kept in memory and is gone when kagan quits. A question or a finished turn never takes your keyboard. Plugins cannot draw in the strip.
+
 ## Thread
 
 The center shows the terminal of the selected thread. The terminal has scrollback, mouse support, and copy and paste.
