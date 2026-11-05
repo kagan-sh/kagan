@@ -495,6 +495,7 @@ mod tests {
         let Err(error) = hold(&file) else {
             panic!("a file opened as a directory");
         };
+        assert!(matches!(&error, super::Error::NotDirectory(_)), "{error}");
         let error = error.to_string();
         assert!(error.contains("is not a directory"), "{error}");
         assert!(!error.contains("secret-file"), "{error}");

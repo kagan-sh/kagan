@@ -431,3 +431,17 @@ pub(crate) async fn search(
         .await;
     Ok(OpResult::Listings { listings, warnings })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Error, SAVED, load};
+
+    #[test]
+    fn an_unreadable_saved_list_is_a_typed_error_naming_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(SAVED), "{").unwrap();
+        let error = load(dir.path()).unwrap_err();
+        assert!(matches!(&error, Error::Parse { .. }), "{error}");
+        assert!(error.to_string().contains("indexes.json"), "{error}");
+    }
+}

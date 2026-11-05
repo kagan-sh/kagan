@@ -264,3 +264,19 @@ fn check_view(view: &str) -> Result<(), Error> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Contributions, Error};
+
+    #[test]
+    fn a_refused_spot_is_a_typed_error() {
+        let contributions: Contributions = serde_json::from_str(r#"{"toolbar": [{}]}"#).unwrap();
+        let error = contributions.check().unwrap_err();
+        assert!(matches!(&error, Error::Spot("toolbar")), "{error}");
+        assert_eq!(
+            error.to_string(),
+            "ui.toolbar is not in this version of kagan; remove it"
+        );
+    }
+}
