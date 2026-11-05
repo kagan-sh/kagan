@@ -116,17 +116,33 @@ mod tests {
 
     #[test]
     fn capture_keeps_stdout_stderr_and_the_code() {
-        let output = capture(&mut shell("printf out; printf err >&2; exit 3")).unwrap();
+        #[cfg(unix)]
+        let mut command = shell("printf out; printf err >&2; exit 3");
+        #[cfg(windows)]
+        let mut command = shell("echo out & echo err 1>&2 & exit /b 3");
+        let output = capture(&mut command).unwrap();
         assert_eq!(output.code, 3);
-        assert_eq!(output.stdout, b"out");
-        assert_eq!(output.stderr, "err");
+        #[cfg(unix)]
+        {
+            assert_eq!(output.stdout, b"out");
+            assert_eq!(output.stderr, "err");
+        }
+        #[cfg(windows)]
+        {
+            assert!(String::from_utf8_lossy(&output.stdout).contains("out"));
+            assert!(output.stderr.contains("err"));
+        }
     }
 
     #[test]
     fn capture_with_limit_returns_a_fast_command() {
-        let output = capture_with_limit(&mut shell("printf fast"), Duration::from_secs(5)).unwrap();
+        #[cfg(unix)]
+        let mut command = shell("printf fast");
+        #[cfg(windows)]
+        let mut command = shell("echo fast");
+        let output = capture_with_limit(&mut command, Duration::from_secs(5)).unwrap();
         assert_eq!(output.code, 0);
-        assert_eq!(output.stdout, b"fast");
+        assert!(String::from_utf8_lossy(&output.stdout).contains("fast"));
     }
 
     #[test]
