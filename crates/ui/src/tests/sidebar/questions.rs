@@ -402,6 +402,90 @@ fn a_select_in_the_ask_form_picks_none_from_its_menu(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn an_untouched_optional_select_answers_none(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let interaction = ask_fields(
+        cx,
+        &id,
+        serde_json::json!([{
+            "type": "select",
+            "id": "mode",
+            "label": "Mode",
+            "choices": [{ "id": "fast", "label": "Fast" }]
+        }]),
+    );
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let select = format!("ask-select-{interaction}-mode");
+    assert_eq!(value_of(cx, window, &select), Some("None".into()));
+    click(cx, window, &format!("answer-{interaction}-yes"));
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    assert_eq!(
+        answered_fields(cx, &id).get("mode"),
+        Some(&serde_json::Value::Null)
+    );
+}
+
+#[gpui_kit::test]
+fn a_declared_select_default_is_the_initial_choice(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    let interaction = ask_fields(
+        cx,
+        &id,
+        serde_json::json!([{
+            "type": "select",
+            "id": "mode",
+            "label": "Mode",
+            "default": "fast",
+            "choices": [{ "id": "fast", "label": "Fast" }]
+        }]),
+    );
+    wait_until(cx, |cx| shows(cx, window, "ask-popup"));
+    let select = format!("ask-select-{interaction}-mode");
+    assert_eq!(value_of(cx, window, &select), Some("Fast".into()));
+    click(cx, window, &format!("answer-{interaction}-yes"));
+    wait_until(cx, |cx| !shows(cx, window, "ask-popup"));
+    assert_eq!(
+        answered_fields(cx, &id).get("mode"),
+        Some(&serde_json::json!("fast"))
+    );
+}
+
+/// The field values on the thread's newest `answered` event.
+fn answered_fields(
+    cx: &mut TestAppContext,
+    thread: &kg_domain::ThreadId,
+) -> std::collections::BTreeMap<String, serde_json::Value> {
+    let events = cx
+        .foreground_executor()
+        .block_test(cx.update(|cx| {
+            Workspace::dispatch(
+                Op::Thread(ThreadOp::Events {
+                    id: thread.clone(),
+                    after_seq: None,
+                    limit: None,
+                    order: None,
+                }),
+                cx,
+            )
+        }))
+        .unwrap();
+    let OpResult::Events(events) = events else {
+        panic!("events");
+    };
+    events
+        .into_iter()
+        .find_map(|event| match event.kind {
+            kg_domain::EventKind::Answered { fields, .. } => Some(fields),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no answered event"))
+}
+
+#[gpui_kit::test]
 fn an_install_approval_does_not_open_the_ask_popup(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     let _ = run_shell(cx);

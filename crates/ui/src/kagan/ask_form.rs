@@ -150,11 +150,14 @@ impl Draft {
                     id,
                     choices,
                     default,
+                    required,
                     ..
                 } => {
-                    let pick = default
-                        .clone()
-                        .or_else(|| choices.first().map(|choice| choice.id.clone()));
+                    let pick = match default {
+                        Some(default) => Some(default.clone()),
+                        None if *required => choices.first().map(|choice| choice.id.clone()),
+                        None => None,
+                    };
                     picks.insert(id.clone(), pick);
                 }
             }

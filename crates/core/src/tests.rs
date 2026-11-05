@@ -3266,6 +3266,204 @@ async fn ask_rejects_duplicate_select_choice_ids(cx: &mut TestAppContext) {
     );
 }
 
+#[cfg(unix)]
+async fn ask_refused(id: &ThreadId, fields: Vec<AskField>, cx: &mut TestAppContext) -> String {
+    op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(fields),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err()
+    .to_string()
+}
+
+fn text_field(id: &str, label: &str) -> AskField {
+    AskField::String {
+        id: id.into(),
+        label: label.into(),
+        placeholder: None,
+        default: None,
+    }
+}
+
+fn select_field(choices: Vec<InteractionOption>, default: Option<&str>) -> AskField {
+    AskField::Select {
+        id: "mode".into(),
+        label: "Mode".into(),
+        choices,
+        default: default.map(Into::into),
+        required: false,
+    }
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_refuses_repeated_field_ids_text_over_its_caps_and_a_default_outside_the_choices(
+    cx: &mut TestAppContext,
+) {
+    let (_fixture, id) = sleeping(cx).await;
+    let long_id = "i".repeat(65);
+    let long_label = "l".repeat(129);
+    let long_text = "t".repeat(4097);
+    let cases = [
+        (
+            vec![text_field("same", "One"), text_field("same", "Two")],
+            "ask field id same is repeated",
+        ),
+        (
+            vec![text_field(&long_id, "Name")],
+            "field id is at most 64 characters",
+        ),
+        (
+            vec![text_field("name", &long_label)],
+            "field label is at most 128 characters",
+        ),
+        (
+            vec![AskField::String {
+                id: "name".into(),
+                label: "Name".into(),
+                placeholder: Some(long_text.clone()),
+                default: None,
+            }],
+            "ask placeholder is at most 4096 characters",
+        ),
+        (
+            vec![AskField::String {
+                id: "name".into(),
+                label: "Name".into(),
+                placeholder: None,
+                default: Some(long_text.clone()),
+            }],
+            "ask default is at most 4096 characters",
+        ),
+        (
+            vec![select_field(
+                vec![InteractionOption {
+                    id: "fast".into(),
+                    label: "Fast".into(),
+                }],
+                Some("slow"),
+            )],
+            "a select field default must be one of its choices",
+        ),
+    ];
+    for (fields, expected) in cases {
+        let error = ask_refused(&id, fields, cx).await;
+        assert!(error.contains(expected), "{error} does not name {expected}");
+    }
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_refuses_more_fields_or_choices_than_the_caps_and_takes_a_full_form(
+    cx: &mut TestAppContext,
+) {
+    let (_fixture, id) = sleeping(cx).await;
+    let fields: Vec<_> = (0..33)
+        .map(|n| text_field(&format!("f{n:02}"), "Field"))
+        .collect();
+    let error = ask_refused(&id, fields, cx).await;
+    assert!(error.contains("at most 32 fields"), "{error}");
+
+    let choices: Vec<_> = (0..33)
+        .map(|n| InteractionOption {
+            id: format!("c{n:02}"),
+            label: "Choice".into(),
+        })
+        .collect();
+    let error = ask_refused(&id, vec![select_field(choices, None)], cx).await;
+    assert!(error.contains("at most 32 choices"), "{error}");
+
+    let fields: Vec<_> = (0..31)
+        .map(|n| text_field(&format!("f{n:02}"), "Field"))
+        .collect();
+    let choices: Vec<_> = (0..32)
+        .map(|n| InteractionOption {
+            id: format!("c{n:02}"),
+            label: "Choice".into(),
+        })
+        .collect();
+    op(
+        Op::Thread(ThreadOp::Ask {
+            id,
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some([fields, vec![select_field(choices, None)]].concat()),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+}
+
+#[gpui_kit::test]
+#[cfg(unix)]
+async fn ask_answer_refuses_a_missing_unknown_or_wrong_kind_field(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let OpResult::Text(interaction) = op(
+        Op::Thread(ThreadOp::Ask {
+            id: id.clone(),
+            title: "Ship it?".into(),
+            options: ask_options(),
+            fields: Some(vec![
+                text_field("name", "Name"),
+                AskField::Boolean {
+                    id: "notify".into(),
+                    label: "Notify".into(),
+                    default: None,
+                },
+            ]),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("ask");
+    };
+    let cases = [
+        (
+            std::collections::BTreeMap::from([("notify".to_owned(), json!(true))]),
+            "ask answer is missing field name",
+        ),
+        (
+            std::collections::BTreeMap::from([
+                ("name".to_owned(), json!("Ada")),
+                ("notify".to_owned(), json!(true)),
+                ("surprise".to_owned(), json!(1)),
+            ]),
+            "ask answer has unknown field surprise",
+        ),
+        (
+            std::collections::BTreeMap::from([
+                ("name".to_owned(), json!(1)),
+                ("notify".to_owned(), json!(true)),
+            ]),
+            "ask answer field name has the wrong kind of value",
+        ),
+    ];
+    for (values, expected) in cases {
+        let error = cx
+            .update(|cx| {
+                Workspace::answer_fields(
+                    &id,
+                    PendingInteractionId(interaction.clone()),
+                    "yes".into(),
+                    values,
+                    cx,
+                )
+            })
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+    }
+    assert_eq!(pending(&id, cx).await.len(), 1, "the question stays");
+}
+
 #[gpui_kit::test]
 #[cfg(unix)]
 async fn ask_answer_requires_a_whole_number(cx: &mut TestAppContext) {
