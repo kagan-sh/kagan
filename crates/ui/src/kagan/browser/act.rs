@@ -1,6 +1,6 @@
 //! The fixed scripts that act on the page, and the text and key they carry.
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
 use kg_domain::BrowserOp;
 
 /// A file input is refused before any event, because it would open the person's chooser.
@@ -34,16 +34,27 @@ const TAIL: &str = r#"
   }
 })()"#;
 
+/// A text action never relays the page's exception, which may quote the value it was given.
+const TEXT_TAIL: &str = r#"
+  } catch (error) {
+    return { ok: false, code: "failed", message: "the page refused the text" };
+  }
+})()"#;
+
 fn finish(body: &str) -> String {
     format!("{HEAD}{body}{TAIL}")
 }
 
-/// JSON-encodes a caller's text, so a quote, newline or `</script>` stays data.
-fn quoted(text: &str) -> String {
-    serde_json::to_string(text).unwrap_or_default()
+fn finish_text(body: &str) -> String {
+    format!("{HEAD}{body}{TEXT_TAIL}")
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+/// JSON-encodes a caller's text, so a quote, newline or `</script>` stays data.
+fn quoted(text: &str) -> String {
+    serde_json::Value::String(text.to_owned()).to_string()
+}
+
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
 pub(super) fn script(op: &BrowserOp) -> Result<String, String> {
     Ok(match op {
         BrowserOp::Click { ref_id, .. } => click(*ref_id),
@@ -94,7 +105,7 @@ pub(super) fn fill(ref_id: u32, text: &str) -> String {
     .replace("__REF__", &ref_id.to_string())
     .replace("__FILE__", &quoted(FILE_REFUSAL))
     .replace("__TEXT__", &quoted(text));
-    finish(&body)
+    finish_text(&body)
 }
 
 pub(super) fn type_text(text: &str) -> String {
@@ -112,7 +123,7 @@ pub(super) fn type_text(text: &str) -> String {
     return ok();
 "#
     .replace("__TEXT__", &quoted(text));
-    finish(&body)
+    finish_text(&body)
 }
 
 pub(super) fn press(key: &str) -> Result<String, String> {
@@ -158,21 +169,27 @@ pub(super) fn press(key: &str) -> Result<String, String> {
     const options = { bubbles: true, cancelable: true, composed: true, key: __KEY__, code: __CODE__, keyCode: __KEYCODE__, which: __KEYCODE__ };
     const down = new KeyboardEvent("keydown", options);
     element.dispatchEvent(down);
-    element.dispatchEvent(new KeyboardEvent("keypress", options));
+    const pressed = new KeyboardEvent("keypress", options);
+    element.dispatchEvent(pressed);
     element.dispatchEvent(new KeyboardEvent("keyup", options));
-    if (!down.defaultPrevented && __KEY__ === "Tab") {
+    if (!down.defaultPrevented && !pressed.defaultPrevented && __KEY__ === "Tab") {
       const focusable = Array.from(document.querySelectorAll("a[href],button,input:not([type=hidden]),select,textarea,[tabindex]:not([tabindex='-1']),[contenteditable]"))
         .filter((item) => item.getClientRects().length > 0 && !item.disabled);
       const next = focusable[(focusable.indexOf(element) + 1) % focusable.length];
       if (next) next.focus();
     }
-    if (!down.defaultPrevented && __KEY__ === "Enter") {
+    if (!down.defaultPrevented && !pressed.defaultPrevented && __KEY__ === "Enter") {
       const tag = element.tagName;
       const form = element.form || element.closest("form");
       if (tag === "BUTTON" || (tag === "INPUT" && /^(submit|button)$/i.test(element.type || ""))) {
         element.click();
       } else if (tag === "INPUT" && form) {
-        form.requestSubmit();
+        const submit = form.querySelector("button[type=submit],input[type=submit],button:not([type])");
+        // A submit button runs validation and the submit event; `requestSubmit` does the same;
+        // `submit` skips both, and is the fallback for macOS 11 and 12, whose WebKit predates it.
+        if (submit) submit.click();
+        else if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
       }
     }
     return ok();
@@ -205,7 +222,11 @@ pub(super) fn select(ref_id: u32, option: &str) -> String {
 }
 
 pub(super) fn scroll(dy: f32) -> String {
-    let dy = serde_json::to_string(&dy).unwrap_or_default();
+    let dy = if dy.is_finite() {
+        dy.to_string()
+    } else {
+        "0".to_owned()
+    };
     let body = r#"
     window.scrollBy({ top: __DY__, left: 0, behavior: "instant" });
     return ok();
@@ -216,9 +237,9 @@ pub(super) fn scroll(dy: f32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{FILE_REFUSAL, click, fill, press, select, type_text};
+    use super::{FILE_REFUSAL, click, fill, press, script, scroll, select, type_text};
     use crate::kagan::browser::snapshot::parse_info;
-    use kg_domain::OpError;
+    use kg_domain::{BrowserOp, OpError, ThreadId};
 
     #[test]
     fn a_text_argument_stays_inside_a_json_string() {
@@ -289,8 +310,100 @@ mod tests {
         assert!(letter.contains(r#"key: "a""#));
         assert!(letter.contains(r#"code: "KeyA""#));
         assert!(letter.contains("keyCode: 65"));
+        let space = press("space").expect("space");
+        assert!(space.contains(r#"key: " ""#));
+        assert!(space.contains(r#"code: "Space""#));
+        assert!(space.contains("keyCode: 32"));
         assert!(press("f13").is_err());
         assert!(press("").is_err());
         assert!(press(" ").is_ok());
+        assert!(press("\t").is_err());
+    }
+
+    #[test]
+    fn scroll_embeds_a_finite_pixel_count() {
+        for (dy, want) in [
+            (-240.0, "top: -240,"),
+            (0.0, "top: 0,"),
+            (10_000.0, "top: 10000,"),
+        ] {
+            let script = scroll(dy);
+            assert!(script.contains(want), "{script}");
+            assert!(!script.contains("__DY__"), "{script}");
+        }
+        assert!(scroll(f32::INFINITY).contains("top: 0,"));
+    }
+
+    #[test]
+    fn script_maps_the_acting_verbs_and_refuses_the_rest() {
+        let thread = || ThreadId("thr_1".into());
+        let built = |op: BrowserOp| script(&op).expect("a script");
+        assert!(
+            built(BrowserOp::Click {
+                ref_id: 1,
+                thread_id: thread()
+            })
+            .contains("pointerdown")
+        );
+        assert!(
+            built(BrowserOp::Fill {
+                ref_id: 1,
+                text: Some("x".into()),
+                file: None,
+                thread_id: thread(),
+            })
+            .contains("put(element,")
+        );
+        assert!(
+            built(BrowserOp::Type {
+                text: "x".into(),
+                thread_id: thread()
+            })
+            .contains("insertText")
+        );
+        assert!(
+            built(BrowserOp::Press {
+                key: "enter".into(),
+                thread_id: thread()
+            })
+            .contains(r#"key: "Enter""#)
+        );
+        assert!(
+            built(BrowserOp::Select {
+                ref_id: 1,
+                option: "x".into(),
+                thread_id: thread(),
+            })
+            .contains("options.find")
+        );
+        assert!(
+            built(BrowserOp::Scroll {
+                dy: 5.0,
+                thread_id: thread()
+            })
+            .contains("scrollBy")
+        );
+        assert_eq!(
+            script(&BrowserOp::Open {
+                url: "x".into(),
+                thread_id: thread()
+            }),
+            Err("this browser verb does not act on the page".into())
+        );
+        assert!(
+            script(&BrowserOp::Press {
+                key: "f13".into(),
+                thread_id: thread()
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_text_action_never_relays_the_page_exception() {
+        for script in [fill(1, "hunter2"), type_text("hunter2")] {
+            assert!(script.contains("the page refused the text"), "{script}");
+            assert!(!script.contains("error && error.message"), "{script}");
+        }
     }
 }

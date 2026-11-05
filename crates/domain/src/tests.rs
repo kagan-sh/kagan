@@ -930,6 +930,11 @@ fn a_browser_op_needs_a_plain_thread_and_a_web_address() {
         })),
         Ok(())
     );
+}
+
+#[test]
+fn browser_acting_ops_are_checked_and_named_on_the_wire() {
+    use crate::BrowserOp;
     let thread_id = || ThreadId("thr_1".into());
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Type {
@@ -964,6 +969,24 @@ fn a_browser_op_needs_a_plain_thread_and_a_web_address() {
         Err("pass the text or --file")
     );
     assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Fill {
+            ref_id: 1,
+            text: Some("x".repeat(1024 * 1024 + 1)),
+            file: None,
+            thread_id: thread_id(),
+        })),
+        Err("text is over 1 MiB")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Fill {
+            ref_id: 1,
+            text: Some("ada@example.com".into()),
+            file: None,
+            thread_id: thread_id(),
+        })),
+        Ok(())
+    );
+    assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Press {
             key: " ".into(),
             thread_id: thread_id(),
@@ -973,6 +996,13 @@ fn a_browser_op_needs_a_plain_thread_and_a_web_address() {
     assert_eq!(
         crate::check(&Op::Browser(BrowserOp::Scroll {
             dy: f32::NAN,
+            thread_id: thread_id(),
+        })),
+        Err("scroll must be a number")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Scroll {
+            dy: f32::INFINITY,
             thread_id: thread_id(),
         })),
         Err("scroll must be a number")

@@ -346,6 +346,8 @@ impl Kagan {
                 .browser
                 .page_for(url, window, cx)
                 .map_err(OpError::Failed)?;
+            #[cfg(target_os = "windows")]
+            page.read(cx).quiet_dialogs(cx).map_err(OpError::Failed)?;
             self.browser.page = Some(page.clone());
             self.browser.agent = Some(Agent {
                 thread: thread_id.clone(),

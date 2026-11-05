@@ -559,20 +559,21 @@ mod tests {
     #[test]
     fn every_browser_verb_names_the_platform() {
         let id = || ThreadId("thr_1".into());
+        #[rustfmt::skip]
         let verbs = [
-            BrowserOp::Open {
-                url: "https://example.com".into(),
-                thread_id: id(),
-            },
+            BrowserOp::Open { url: "https://example.com".into(), thread_id: id() },
             BrowserOp::Status { thread_id: id() },
             BrowserOp::Snapshot { thread_id: id() },
-            BrowserOp::Goto {
-                url: "https://example.com".into(),
-                thread_id: id(),
-            },
+            BrowserOp::Goto { url: "https://example.com".into(), thread_id: id() },
             BrowserOp::Back { thread_id: id() },
             BrowserOp::Forward { thread_id: id() },
             BrowserOp::Reload { thread_id: id() },
+            BrowserOp::Click { ref_id: 1, thread_id: id() },
+            BrowserOp::Fill { ref_id: 1, text: Some("x".into()), file: None, thread_id: id() },
+            BrowserOp::Type { text: "x".into(), thread_id: id() },
+            BrowserOp::Press { key: "enter".into(), thread_id: id() },
+            BrowserOp::Select { ref_id: 1, option: "x".into(), thread_id: id() },
+            BrowserOp::Scroll { dy: 10.0, thread_id: id() },
             BrowserOp::Close { thread_id: id() },
         ];
         for verb in verbs {
