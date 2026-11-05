@@ -216,14 +216,13 @@ fn page_paths_round_trip_through_the_url() {
     std::fs::write(ui.join("my page.html"), b"<p>space</p>").unwrap();
     std::fs::write(ui.join("café.html"), b"<p>unicode</p>").unwrap();
     std::fs::write(ui.join("100%.html"), b"<p>percent</p>").unwrap();
-    std::fs::write(ui.join("a?b.html"), b"<p>query</p>").unwrap();
+    // Windows cannot create `?` in a name; `a_query_and_a_hash_stay_in_the_page_path` covers it.
     std::fs::write(ui.join("a#b.html"), b"<p>hash</p>").unwrap();
 
     for (file, body) in [
         ("ui/my page.html", b"<p>space</p>".as_slice()),
         ("ui/café.html", b"<p>unicode</p>"),
         ("ui/100%.html", b"<p>percent</p>"),
-        ("ui/a?b.html", b"<p>query</p>"),
         ("ui/a#b.html", b"<p>hash</p>"),
     ] {
         let url = page_url(PLUGIN, file).unwrap();
@@ -259,6 +258,17 @@ fn page_paths_round_trip_through_the_url() {
         .status,
         403
     );
+}
+
+#[test]
+fn a_query_and_a_hash_stay_in_the_page_path() {
+    for (file, encoded) in [
+        ("ui/a?b.html", "ui/a%3Fb.html"),
+        ("ui/a#b.html", "ui/a%23b.html"),
+    ] {
+        let url = page_url(PLUGIN, file).unwrap();
+        assert!(url.ends_with(encoded), "{url}");
+    }
 }
 
 #[cfg(target_os = "macos")]

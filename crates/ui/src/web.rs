@@ -7,6 +7,7 @@ use std::path::{Component, Path};
 
 use kg_plugins::{PageFileError, SCHEME};
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use crate::theme::ThemeState;
 
 const THEME_FILE: &str = "__kagan/theme.css";
@@ -93,6 +94,7 @@ pub(crate) fn mime(path: &str) -> &'static str {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn theme_css(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
@@ -108,6 +110,7 @@ fn stylesheet(tokens: &[(&'static str, kg_domain::Color)], scheme: &str) -> Stri
     format!(":root{{{declarations};color-scheme:{scheme}}}\n")
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn scheme(mode: gpui_kit::component::ThemeMode) -> &'static str {
     match mode {
         gpui_kit::component::ThemeMode::Light => "light",
@@ -115,6 +118,7 @@ fn scheme(mode: gpui_kit::component::ThemeMode) -> &'static str {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn tokens(palette: &kg_domain::Palette) -> [(&'static str, kg_domain::Color); 12] {
     let hover = palette.hover.unwrap_or(palette.raised);
     [
@@ -245,9 +249,11 @@ pub(crate) fn page_event(message: &str) -> Option<String> {
     ))
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) const BRIDGE: &str = r#"(function(){function post(message){var text;try{text=JSON.stringify(message);}catch(e){return;}if(typeof text!=="string")return;window.ipc.postMessage(text);}window.kagan=Object.freeze({post:post});var link=document.getElementById("kagan-theme");if(!link){link=document.createElement("link");link.id="kagan-theme";link.rel="stylesheet";link.href=new URL("/__kagan/theme.css",window.location.href).href;(document.head||document.documentElement).appendChild(link);}})();"#;
 
 // Sets the theme tokens, then changes the stylesheet's `?v=` so the view fetches it again.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) fn theme_refresh(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
@@ -292,6 +298,7 @@ mod tests;
 // The stylesheet text the web view's protocol callback reads.
 //
 // That callback is not a GPUI context, so the text cannot live in an entity.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod theme_cell {
     #![expect(
         clippy::disallowed_types,
@@ -324,4 +331,5 @@ mod theme_cell {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) use theme_cell::ThemeCss;
