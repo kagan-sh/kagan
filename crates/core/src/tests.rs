@@ -2386,7 +2386,63 @@ async fn a_failing_tool_call_writes_ended_error(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-async fn an_unknown_tool_writes_both_rows_with_error(cx: &mut TestAppContext) {
+async fn a_plugin_error_reply_writes_ended_error(cx: &mut TestAppContext) {
+    let (fixture, id) = tool_thread(cx).await;
+    set_tool_host(&fixture, cx, |_| {
+        Ok(OpResult::ToolReply {
+            text: "no luck".into(),
+            is_error: true,
+        })
+    });
+    let reply = call_tool(&id, "editor_open", json!({}), cx).await.unwrap();
+    assert_eq!(
+        reply,
+        OpResult::ToolReply {
+            text: "no luck".into(),
+            is_error: true,
+        }
+    );
+    let (name, _, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "editor_open");
+    assert_eq!(status, ToolOutcome::Error);
+}
+
+#[gpui_kit::test]
+async fn two_tool_calls_get_distinct_paired_ids(cx: &mut TestAppContext) {
+    let (fixture, id) = tool_thread(cx).await;
+    set_tool_host(&fixture, cx, |_| {
+        Ok(OpResult::ToolReply {
+            text: "done".into(),
+            is_error: false,
+        })
+    });
+    call_tool(&id, "editor_open", json!({}), cx).await.unwrap();
+    call_tool(&id, "editor_open", json!({}), cx).await.unwrap();
+    let kinds: Vec<EventKind> = events(&id, cx)
+        .await
+        .into_iter()
+        .map(|event| event.kind)
+        .collect();
+    let [
+        EventKind::ToolStarted {
+            id: first_start, ..
+        },
+        EventKind::ToolEnded { id: first_end, .. },
+        EventKind::ToolStarted {
+            id: second_start, ..
+        },
+        EventKind::ToolEnded { id: second_end, .. },
+    ] = kinds.as_slice()
+    else {
+        panic!("tool events: {kinds:?}");
+    };
+    assert_eq!(first_start, first_end);
+    assert_eq!(second_start, second_end);
+    assert_ne!(first_start, second_start);
+}
+
+#[gpui_kit::test]
+async fn a_tool_with_no_host_writes_both_rows_with_error(cx: &mut TestAppContext) {
     let (_fixture, id) = tool_thread(cx).await;
     let error = call_tool(&id, "editor_open", json!({}), cx)
         .await
@@ -2437,4 +2493,16 @@ async fn skill_load_writes_tool_events(cx: &mut TestAppContext) {
     let (name, _, status) = tool_pair(&id, cx).await;
     assert_eq!(name, "skill_load");
     assert_eq!(status, ToolOutcome::Ok);
+}
+
+#[gpui_kit::test]
+async fn a_failing_skill_load_writes_ended_error(cx: &mut TestAppContext) {
+    let (_fixture, id) = tool_thread(cx).await;
+    let error = call_tool(&id, "skill_load", json!({ "name": "missing" }), cx)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, OpError::NotFound(_)), "{error}");
+    let (name, _, status) = tool_pair(&id, cx).await;
+    assert_eq!(name, "skill_load");
+    assert_eq!(status, ToolOutcome::Error);
 }

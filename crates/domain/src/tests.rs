@@ -652,6 +652,7 @@ fn tool_events_are_live_and_an_old_tool_row_still_reads() {
     for live in ["tool.started", "tool.ended"] {
         assert!(EventKind::LIVE_TYPES.contains(&live), "{live}");
     }
+    assert!(!EventKind::LIVE_TYPES.contains(&"tool"));
     let old: EventKind = serde_json::from_value(json!({
         "type": "tool",
         "data": { "id": "tool_1", "status": "completed" }
