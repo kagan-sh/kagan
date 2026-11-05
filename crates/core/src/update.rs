@@ -42,6 +42,34 @@ struct Asset {
     signature: String,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum UpdateError {
+    #[error("bad public key: {0}")]
+    Key(String),
+    #[error("the update has no readable signature")]
+    Signature,
+    #[error("the update's signature does not match kagan's key")]
+    Mismatch,
+    #[error("{0}")]
+    Client(String),
+    #[error("bad link {url}: {reason}")]
+    Link { url: String, reason: String },
+    #[error("kagan updates only over HTTPS, not {0}")]
+    Insecure(String),
+    #[error("could not reach {url}: {reason}")]
+    Reach { url: String, reason: String },
+    #[error("{url} is larger than {} MiB", LIMIT / 1024 / 1024)]
+    TooBig { url: String },
+    #[error("could not download {url}: {reason}")]
+    Download { url: String, reason: String },
+    #[error("the update list's signature does not match kagan's key")]
+    ListSignature,
+    #[error("the update list is not valid: {0}")]
+    List(String),
+    #[error("{0}")]
+    Step(String),
+}
+
 struct UpdaterGlobal(Entity<Updater>);
 impl Global for UpdaterGlobal {}
 
@@ -144,7 +172,8 @@ impl Updater {
                     this.set(state, cx);
                     Ok(())
                 }
-                Err(reason) => {
+                Err(error) => {
+                    let reason = error.to_string();
                     this.set(
                         UpdateState::Failed {
                             reason: reason.clone(),
@@ -193,10 +222,14 @@ impl Updater {
         let key = self.key.clone();
         let target = self.target.clone();
         let work = cx.background_spawn(async move {
-            target.prepare().map_err(|error| error.to_string())?;
+            target
+                .prepare()
+                .map_err(|error| UpdateError::Step(error.to_string()))?;
             let bytes = get(&asset.url)?;
             verify(&bytes, &asset.signature, &key)?;
-            target.stage(&bytes).map_err(|error| error.to_string())
+            target
+                .stage(&bytes)
+                .map_err(|error| UpdateError::Step(error.to_string()))
         });
         cx.spawn(async move |this, cx| {
             let staged = work.await;
@@ -213,7 +246,8 @@ impl Updater {
                     );
                     Ok(())
                 }
-                Err(reason) => {
+                Err(error) => {
+                    let reason = error.to_string();
                     this.set(UpdateState::Available { version, notes }, cx);
                     Err(OpError::Failed(reason))
                 }
@@ -341,17 +375,16 @@ pub(crate) fn newer(current: &Version, offered: &str) -> Option<Version> {
 }
 
 /// `signature` is the `.sig` file cargo-packager writes: a minisign signature, base64 encoded.
-pub(crate) fn verify(bytes: &[u8], signature: &str, key: &str) -> std::result::Result<(), String> {
-    let key = PublicKey::from_base64(key).map_err(|error| format!("bad public key: {error}"))?;
+fn verify(bytes: &[u8], signature: &str, key: &str) -> std::result::Result<(), UpdateError> {
+    let key = PublicKey::from_base64(key).map_err(|error| UpdateError::Key(error.to_string()))?;
     let text = base64::engine::general_purpose::STANDARD
         .decode(signature.trim())
         .ok()
         .and_then(|text| String::from_utf8(text).ok())
-        .ok_or("the update has no readable signature")?;
-    let signature =
-        Signature::decode(&text).map_err(|_| "the update has no readable signature".to_owned())?;
+        .ok_or(UpdateError::Signature)?;
+    let signature = Signature::decode(&text).map_err(|_| UpdateError::Signature)?;
     key.verify(bytes, &signature, false)
-        .map_err(|_| "the update's signature does not match kagan's key".to_owned())
+        .map_err(|_| UpdateError::Mismatch)
 }
 
 /// HTTPS, or plain HTTP to this machine for tests and local proof. Everything read is signed.
@@ -361,7 +394,7 @@ fn allowed(url: &reqwest::Url) -> bool {
             && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")))
 }
 
-fn client() -> std::result::Result<reqwest::blocking::Client, String> {
+fn client() -> std::result::Result<reqwest::blocking::Client, UpdateError> {
     reqwest::blocking::Client::builder()
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if attempt.previous().len() > 10 {
@@ -376,20 +409,28 @@ fn client() -> std::result::Result<reqwest::blocking::Client, String> {
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(600))
         .build()
-        .map_err(|error| error.to_string())
+        .map_err(|error| UpdateError::Client(error.to_string()))
 }
 
-fn get(url: &str) -> std::result::Result<Vec<u8>, String> {
-    let parsed = reqwest::Url::parse(url).map_err(|error| format!("bad link {url}: {error}"))?;
+fn get(url: &str) -> std::result::Result<Vec<u8>, UpdateError> {
+    let parsed = reqwest::Url::parse(url).map_err(|error| UpdateError::Link {
+        url: url.to_owned(),
+        reason: error.to_string(),
+    })?;
     if !allowed(&parsed) {
-        return Err(format!("kagan updates only over HTTPS, not {url}"));
+        return Err(UpdateError::Insecure(url.to_owned()));
     }
     let response = client()?
         .get(parsed)
         .send()
         .and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|error| format!("could not reach {url}: {error}"))?;
-    let too_big = || format!("{url} is larger than {} MiB", LIMIT / 1024 / 1024);
+        .map_err(|error| UpdateError::Reach {
+            url: url.to_owned(),
+            reason: error.to_string(),
+        })?;
+    let too_big = || UpdateError::TooBig {
+        url: url.to_owned(),
+    };
     if response
         .content_length()
         .is_some_and(|length| length > LIMIT)
@@ -400,17 +441,20 @@ fn get(url: &str) -> std::result::Result<Vec<u8>, String> {
     response
         .take(LIMIT + 1)
         .read_to_end(&mut bytes)
-        .map_err(|error| format!("could not download {url}: {error}"))?;
+        .map_err(|error| UpdateError::Download {
+            url: url.to_owned(),
+            reason: error.to_string(),
+        })?;
     if bytes.len() as u64 > LIMIT {
         return Err(too_big());
     }
     Ok(bytes)
 }
 
-fn manifest(url: &str, key: &str) -> std::result::Result<Manifest, String> {
+fn manifest(url: &str, key: &str) -> std::result::Result<Manifest, UpdateError> {
     let bytes = get(url)?;
     let signature = get(&format!("{url}.sig"))?;
     verify(&bytes, &String::from_utf8_lossy(&signature), key)
-        .map_err(|_| "the update list's signature does not match kagan's key".to_owned())?;
-    serde_json::from_slice(&bytes).map_err(|error| format!("the update list is not valid: {error}"))
+        .map_err(|_| UpdateError::ListSignature)?;
+    serde_json::from_slice(&bytes).map_err(|error| UpdateError::List(error.to_string()))
 }

@@ -5,7 +5,10 @@ fn a_program_splits_on_spaces_outside_quotes() {
     let Err(error) = crate::thread::resolve_program("kg-no-such-program trailing", None) else {
         panic!("resolved");
     };
-    assert_eq!(error, "program kg-no-such-program was not found");
+    assert_eq!(
+        error.to_string(),
+        "program kg-no-such-program was not found"
+    );
     let line = if cfg!(windows) {
         "cmd.exe /c echo"
     } else {
@@ -49,14 +52,14 @@ fn a_program_with_a_bad_quote_or_no_name_is_refused() {
     assert_eq!(
         crate::thread::resolve_program("'/bin/sh -c x", None)
             .err()
-            .as_deref(),
-        Some("program has an unfinished quote")
+            .map(|error| error.to_string()),
+        Some("program has an unfinished quote".to_owned())
     );
     assert_eq!(
         crate::thread::resolve_program("\"\" -c x", None)
             .err()
-            .as_deref(),
-        Some("program is empty")
+            .map(|error| error.to_string()),
+        Some("program is empty".to_owned())
     );
 }
 

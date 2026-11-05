@@ -12,6 +12,14 @@ use crate::Workspace;
 use crate::database::Result;
 use crate::workspace::{id, missing, time};
 
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub(crate) enum ResolveError {
+    #[error("{0}")]
+    Line(String),
+    #[error("program {0} was not found")]
+    NotFound(String),
+}
+
 pub(crate) struct ResolvedProgram {
     pub(crate) path: PathBuf,
     pub(crate) args: Vec<OsString>,
@@ -26,14 +34,14 @@ pub(crate) struct ResolvedProgram {
 pub(crate) fn resolve_program(
     line: &str,
     environment: Option<&crate::program::ProgramEnvironment>,
-) -> std::result::Result<ResolvedProgram, String> {
-    let (name, args) = kg_domain::split_program(line)?;
+) -> std::result::Result<ResolvedProgram, ResolveError> {
+    let (name, args) = kg_domain::split_program(line).map_err(ResolveError::Line)?;
     let found = find_program(
         Path::new(&name),
         crate::program::search_path(environment).as_deref(),
         pathext().as_deref(),
     )
-    .ok_or_else(|| format!("program {name} was not found"))?;
+    .ok_or_else(|| ResolveError::NotFound(name))?;
     Ok(ResolvedProgram {
         path: found,
         args: args.into_iter().map(OsString::from).collect(),
@@ -87,7 +95,8 @@ pub(crate) async fn prepare(
     cx: &mut AsyncApp,
 ) -> Result<PreparedRun> {
     let environment = crate::program::program_environment_of(this, cx);
-    resolve_program(&run.program, environment.as_ref()).map_err(OpError::Invalid)?;
+    resolve_program(&run.program, environment.as_ref())
+        .map_err(|error| OpError::Invalid(error.to_string()))?;
     let program = run.program.clone();
     let project_id = run.project_id.clone();
     let database = crate::workspace::database(this, cx)?;

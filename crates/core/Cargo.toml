@@ -21,6 +21,7 @@ reqwest = { package = "gpui-pre-reqwest", version = "=0.12.15", default-features
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 uuid.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
