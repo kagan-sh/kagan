@@ -149,8 +149,7 @@ impl Kagan {
         self.activity.turn(event, &title);
     }
 
-    /// The person is needed: a reply, a question, or a failure. The shown thread is left out, as
-    /// the strip's needs count is.
+    /// Leaves out the shown thread, as the summary's needs count does.
     pub(super) fn saw_needs(&mut self, id: &ThreadId, cx: &App) {
         if self.shown_thread(cx).as_ref() == Some(id) {
             return;
@@ -159,8 +158,8 @@ impl Kagan {
         self.activity.needs(&title);
     }
 
-    /// Threads `NextThreadNeedingYou` can reach: not archived, not the one on screen, unread or
-    /// asking. The Dock badge is wider, because it counts the shown thread too.
+    /// The threads `NextThreadNeedingYou` reaches. The Dock badge is wider, because it counts the
+    /// shown thread too.
     fn needs_you(&self, cx: &App) -> usize {
         let shown = self.shown_thread(cx);
         let questions = self.questions.read(cx).questions.clone();
@@ -295,7 +294,7 @@ impl Kagan {
             .children(install_part)
     }
 
-    /// Takes height only, never a column's width.
+    /// Takes height only: the sidebars' width preferences do not account for it.
     pub(super) fn activity_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let working = Workspace::global(cx).read(cx).busy_threads(cx);
         let needs = self.needs_you(cx);

@@ -94,7 +94,7 @@ impl Workspace {
             .count()
     }
 
-    /// Threads whose program's title says it is busy with a reply (CONTEXT).
+    /// Counts threads whose program title says it is busy with a reply.
     #[must_use]
     pub fn busy_threads(&self, cx: &App) -> usize {
         self.threads
