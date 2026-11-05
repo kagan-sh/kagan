@@ -3,28 +3,28 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, SharedString, Styled as _, px};
 use kg_domain::PluginId;
-use kg_plugins::{CommandWhen, PluginHost, RunCommand};
+use kg_plugins::{CommandContribution, CommandWhen, PluginHost, RunCommand};
 
 use super::controls::{control, dispatch};
 use crate::ui_registry::Facts;
 
 pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
-    commands(cx)
+    placed(cx, |command| command.header)
         .into_iter()
-        .map(|(plugin, id, title)| {
-            let run = RunCommand::new(plugin.clone(), id.clone());
-            let tooltip = tip(&title, &plugin, &id, cx);
-            let key = id_for(&plugin, &id);
+        .map(|command| {
+            let run = RunCommand::new(command.plugin.clone(), command.id.clone());
+            let tooltip = tip(&command.title, &command.plugin, &command.id, cx);
+            let key = id_for(&command.plugin, &command.id);
             control(
                 key.clone(),
                 Facts {
                     hint: Some(SharedString::from(tooltip.clone())),
-                    ..Facts::button(title.clone())
+                    ..Facts::button(command.title.clone())
                 },
                 Button::new(key)
                     .small()
                     .ghost()
-                    .label(title)
+                    .label(command.title)
                     .tooltip(tooltip)
                     .max_w(px(120.))
                     .on_click(dispatch(run)),
@@ -34,7 +34,21 @@ pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
         .collect()
 }
 
+/// The commands a plugin placed in the shown thread's actions menu.
+pub(super) fn menu(cx: &App) -> Vec<CommandContribution> {
+    placed(cx, |command| command.menu)
+}
+
 pub(crate) fn id_for(plugin: &PluginId, id: &str) -> ElementId {
+    ElementId::Name(format!("header/{}", encoded(plugin, id)).into())
+}
+
+pub(crate) fn menu_id_for(plugin: &PluginId, id: &str) -> ElementId {
+    ElementId::Name(format!("thread-menu/{}", encoded(plugin, id)).into())
+}
+
+/// `<plugin>/<command>`, with `%` escapes so a command name cannot merge into the plugin id.
+fn encoded(plugin: &PluginId, id: &str) -> String {
     let mut command = String::new();
     for byte in id.bytes() {
         if matches!(byte, b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' | b'-' | b'_' | b'.') {
@@ -45,24 +59,17 @@ pub(crate) fn id_for(plugin: &PluginId, id: &str) -> ElementId {
         }
     }
     // Plugin ids are reverse-DNS, so they contain neither '/' nor '%'.
-    ElementId::Name(format!("header/{}/{command}", plugin.0).into())
+    format!("{}/{command}", plugin.0)
 }
 
-fn commands(cx: &App) -> Vec<(PluginId, String, String)> {
+fn placed(cx: &App, place: fn(&CommandContribution) -> bool) -> Vec<CommandContribution> {
     let Some(host) = PluginHost::try_global(cx) else {
         return Vec::new();
     };
     host.read(cx)
         .commands()
         .into_iter()
-        .filter(|command| command.header && command.when == CommandWhen::Thread)
-        .map(|command| {
-            (
-                command.plugin.clone(),
-                command.id.clone(),
-                command.title.clone(),
-            )
-        })
+        .filter(|command| command.when == CommandWhen::Thread && place(command))
         .collect()
 }
 

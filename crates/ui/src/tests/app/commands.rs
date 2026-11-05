@@ -20,14 +20,21 @@ fn install_header(data: &std::path::Path) {
         "dev.kagan.header",
         "Header",
         &[
-            ("handoff", "Hand off", true, Some("secondary-shift-h")),
+            (
+                "handoff",
+                "Hand off",
+                true,
+                false,
+                Some("secondary-shift-h"),
+            ),
             (
                 "ship",
                 "Ship it now please",
                 true,
+                false,
                 Some("secondary-shift-u"),
             ),
-            ("quiet", "Quiet", false, None),
+            ("quiet", "Quiet", false, false, None),
         ],
     );
 }
@@ -36,18 +43,19 @@ fn install_header_plugin(
     data: &std::path::Path,
     id: &str,
     name: &str,
-    commands: &[(&str, &str, bool, Option<&str>)],
+    commands: &[(&str, &str, bool, bool, Option<&str>)],
 ) {
     let root = data.join("plugins").join(id);
     std::fs::create_dir_all(&root).unwrap();
     let commands = commands
         .iter()
-        .map(|(command, title, header, key)| {
+        .map(|(command, title, header, menu, key)| {
             let mut entry = serde_json::json!({
                 "id": command,
                 "title": title,
                 "when": "thread",
                 "header": header,
+                "menu": menu,
             });
             if let Some(key) = key {
                 entry
@@ -601,13 +609,13 @@ fn hyphen_joined_header_ids_stay_distinct(cx: &mut TestAppContext) {
             data,
             "dev.acme.header",
             "Header",
-            &[("hand-off", "One", true, None)],
+            &[("hand-off", "One", true, false, None)],
         );
         install_header_plugin(
             data,
             "dev.acme.header-hand",
             "Header hand",
-            &[("off", "Two", true, None)],
+            &[("off", "Two", true, false, None)],
         );
     });
     let id = run_shell(cx);
@@ -674,6 +682,57 @@ fn hyphen_joined_header_ids_stay_distinct(cx: &mut TestAppContext) {
     wait_until(cx, |cx| {
         plugin_log(cx, "dev.acme.header-hand").contains(&format!("off {}", id.0))
     });
+}
+
+fn menu_id(plugin: &str, command: &str) -> ElementId {
+    crate::kagan::header::menu_id_for(&PluginId(plugin.into()), command)
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_plugin_menu_command_runs_from_the_thread_actions_menu(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        install_header_plugin(
+            data,
+            "dev.acme.menu",
+            "Menu",
+            &[
+                ("notes", "Notes", false, true, None),
+                ("both", "Both", true, true, None),
+                ("quiet", "Quiet", false, false, None),
+            ],
+        );
+    });
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+
+    // A command with both flags stays on the title bar as well as in the menu.
+    let header = header_id("dev.acme.menu", "both");
+    wait_until(cx, |cx| shows_id(cx, window, &header));
+
+    click(cx, window, "thread-actions-trigger");
+    let notes = menu_id("dev.acme.menu", "notes");
+    let both = menu_id("dev.acme.menu", "both");
+    let quiet = menu_id("dev.acme.menu", "quiet");
+    wait_until(cx, |cx| {
+        shows_id(cx, window, &notes) && shows_id(cx, window, &both)
+    });
+    assert!(
+        !shows_id(cx, window, &quiet),
+        "a command without menu true was listed"
+    );
+
+    click_id(cx, window, &notes);
+    wait_until(cx, |cx| {
+        plugin_log(cx, "dev.acme.menu").contains(&format!("notes {}", id.0))
+    });
+    assert!(!shows(cx, window, "popup-menu"), "the menu stayed open");
+    let focused = cx
+        .update_window(window, |_, window, cx| {
+            screen_read::terminal_focused(kagan.read(cx), window, cx)
+        })
+        .unwrap();
+    assert!(focused, "focus did not return to the terminal");
 }
 
 #[gpui_kit::test]
