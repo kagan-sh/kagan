@@ -593,6 +593,14 @@ fn event_type_names_match_the_wire_tag() {
             name: None,
             status: ToolStatus::Completed,
         },
+        EventKind::ToolStarted {
+            id: String::new(),
+            name: String::new(),
+        },
+        EventKind::ToolEnded {
+            id: String::new(),
+            status: crate::ToolOutcome::Ok,
+        },
         EventKind::RestoreFailed {
             error: String::new(),
         },
@@ -637,6 +645,50 @@ fn live_event_types_are_all_known_types() {
         assert!(EventKind::TYPES.contains(&live), "{live}");
     }
     assert!(EventKind::LIVE_TYPES.len() < EventKind::TYPES.len());
+}
+
+#[test]
+fn tool_events_are_live_and_an_old_tool_row_still_reads() {
+    for live in ["tool.started", "tool.ended"] {
+        assert!(EventKind::LIVE_TYPES.contains(&live), "{live}");
+    }
+    let old: EventKind = serde_json::from_value(json!({
+        "type": "tool",
+        "data": { "id": "tool_1", "status": "completed" }
+    }))
+    .unwrap();
+    assert_eq!(
+        old,
+        EventKind::Tool {
+            id: "tool_1".into(),
+            name: None,
+            status: crate::ToolStatus::Completed,
+        }
+    );
+    let started: EventKind = serde_json::from_value(json!({
+        "type": "tool.started",
+        "data": { "id": "tool_1", "name": "editor_open" }
+    }))
+    .unwrap();
+    assert_eq!(
+        started,
+        EventKind::ToolStarted {
+            id: "tool_1".into(),
+            name: "editor_open".into(),
+        }
+    );
+    let ended: EventKind = serde_json::from_value(json!({
+        "type": "tool.ended",
+        "data": { "id": "tool_1", "status": "error" }
+    }))
+    .unwrap();
+    assert_eq!(
+        ended,
+        EventKind::ToolEnded {
+            id: "tool_1".into(),
+            status: crate::ToolOutcome::Error,
+        }
+    );
 }
 
 #[test]

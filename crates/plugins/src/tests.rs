@@ -24,8 +24,9 @@ use crate::PluginHostGlobal;
 use crate::manifest::Grant;
 
 use kg_domain::{
-    ConfigOp, IndexOp, Op, OpError, OpResult, Plugin, PluginId, PluginOp, Project, ProjectId,
-    ProjectKind, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
+    ConfigOp, EventKind, IndexOp, Op, OpError, OpResult, Plugin, PluginId, PluginOp, Project,
+    ProjectId, ProjectKind, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, ToolOutcome,
+    Visibility,
 };
 
 const THREAD: &str = "thr_1";
@@ -1166,6 +1167,122 @@ fn plugin_loaded(cx: &mut TestAppContext, id: &str) -> bool {
             .read(cx)
             .is_loaded(&PluginId(id.into()))
     })
+}
+
+#[gpui_kit::test]
+fn tool_events_reach_a_subscribed_plugin(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    let subscriber = event_plugin(
+        "dev.test.tools",
+        &["thread.tool.started", "thread.tool.ended"],
+    );
+    open(
+        cx,
+        &[installed(plugin.path()), installed_at(subscriber.path())],
+    );
+    let data = cx.read(|cx| Workspace::global(cx).read(cx).data_dir().to_owned());
+    let dir = data.join("plugins").join("dev.test.tools").join("data");
+    let started_path = dir.join("started.json");
+    let ended_path = dir.join("ended.json");
+    let started_js = serde_json::to_string(&started_path.display().to_string()).unwrap();
+    let ended_js = serde_json::to_string(&ended_path.display().to_string()).unwrap();
+    std::fs::write(
+        subscriber.path().join("main.js"),
+        format!(
+            r#"
+import {{ View }} from "gpui-kit";
+import {{ next, reply }} from "kagan/jobs";
+import {{ writeFile }} from "fs/promises";
+export default class Plugin extends View {{
+  init(_props, cx) {{
+    cx.spawn(async () => {{
+      for (;;) {{
+        const job = await next();
+        if (job.kind !== "event") continue;
+        const path = job.type === "tool.started" ? {started_js} : {ended_js};
+        await writeFile(path, JSON.stringify({{
+          kind: job.kind, type: job.type, threadId: job.threadId, projectId: job.projectId, data: job.data
+        }}));
+        reply(job.id, null);
+      }}
+    }});
+  }}
+  render() {{ return "plugin"; }}
+}}
+"#
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        call(cx, "echo", json!({ "text": "hi" })).unwrap(),
+        OpResult::ToolReply {
+            text: format!("{ID} hi true"),
+            is_error: false,
+        }
+    );
+    let started = job_seen(cx, &started_path, "tool.started");
+    let ended = job_seen(cx, &ended_path, "tool.ended");
+    assert_eq!(started["data"]["name"], "echo", "{started}");
+    assert_eq!(ended["data"]["status"], "ok", "{ended}");
+    assert_eq!(
+        started["data"]["id"], ended["data"]["id"],
+        "{started} {ended}"
+    );
+    assert_eq!(started["data"].as_object().unwrap().len(), 2, "{started}");
+    assert_eq!(ended["data"].as_object().unwrap().len(), 2, "{ended}");
+    assert!(
+        started["data"]["id"].as_str().unwrap().starts_with("tool_"),
+        "{started}"
+    );
+}
+
+const WAIT_TOOL_ENDED: &str = r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+import * as threads from "kagan/threads";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        if (job.kind !== "tool" || job.name !== "probe") continue;
+        const event = await threads.waitEvent(job.threadId, {
+          type: "thread.tool.ended",
+          timeoutMs: 5000,
+        });
+        reply(job.id, { text: JSON.stringify(event), isError: false });
+      }
+    });
+  }
+  render() { return "plugin"; }
+}
+"#;
+
+#[gpui_kit::test]
+fn wait_event_returns_a_tool_ended_row(cx: &mut TestAppContext) {
+    let plugin = probe_plugin(&["threads"], WAIT_TOOL_ENDED);
+    open(cx, &[installed(plugin.path())]);
+    let data = cx.read(|cx| Workspace::global(cx).read(cx).data_dir().to_owned());
+    let mut store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store
+        .append_events(
+            &thread(),
+            Timestamp(2),
+            [EventKind::ToolEnded {
+                id: "tool_seed".into(),
+                status: ToolOutcome::Ok,
+            }],
+        )
+        .unwrap();
+    drop(store);
+    let Ok(OpResult::ToolReply { text, is_error }) = call(cx, "probe", json!({})) else {
+        panic!("probe")
+    };
+    assert!(!is_error);
+    let event: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(event["type"], "tool.ended", "{event}");
+    assert_eq!(event["data"]["id"], "tool_seed", "{event}");
+    assert_eq!(event["data"]["status"], "ok", "{event}");
 }
 
 fn job_seen(cx: &mut TestAppContext, path: &Path, kind: &str) -> Value {

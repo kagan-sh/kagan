@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use gpui_kit::{App, AsyncApp, Entity, Task, WeakEntity};
 use kg_domain::{
-    EventKind, OpError, OpResult, Order, ThreadId, ThreadOp, ThreadStatus, WaitOutcome,
+    EventKind, OpError, OpResult, Order, ThreadId, ThreadOp, ThreadStatus, ToolOutcome, WaitOutcome,
 };
 
 use crate::host::database::{Database, Result};
@@ -373,17 +373,43 @@ async fn call_tool(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let entity = thread(this, &id, cx)?;
-    if name == "skill_load" {
-        return crate::skill::load(this, &entity, &input, cx).await;
-    }
-    forward(
+    let tool = crate::workspace::id("tool");
+    record(
         this,
-        PluginRequest::CallTool {
-            thread_id: id,
-            name,
-            input,
+        &id,
+        EventKind::ToolStarted {
+            id: tool.clone(),
+            name: name.clone(),
         },
         cx,
     )
-    .await
+    .await;
+    let result = if name == "skill_load" {
+        crate::skill::load(this, &entity, &input, cx).await
+    } else {
+        forward(
+            this,
+            PluginRequest::CallTool {
+                thread_id: id.clone(),
+                name,
+                input,
+            },
+            cx,
+        )
+        .await
+    };
+    let status = match &result {
+        Ok(OpResult::ToolReply {
+            is_error: false, ..
+        }) => ToolOutcome::Ok,
+        _ => ToolOutcome::Error,
+    };
+    record(this, &id, EventKind::ToolEnded { id: tool, status }, cx).await;
+    result
+}
+
+async fn record(this: &WeakEntity<Workspace>, id: &ThreadId, kind: EventKind, cx: &mut AsyncApp) {
+    if let Err(error) = Workspace::events(this, id.clone(), vec![kind], cx).await {
+        eprintln!("kg: could not record a tool event: {error}");
+    }
 }
