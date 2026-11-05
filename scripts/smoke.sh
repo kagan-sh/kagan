@@ -111,13 +111,8 @@ while :; do
   sleep 1
 done
 
-"$binary" ui screenshot "$shot" --json >"$tmp/capture.json" 2>&1 || {
-  if [ "$strict" -eq 1 ]; then
-    fail "ui screenshot failed: $(tr -d '\n' <"$tmp/capture.json")"
-  fi
-  echo "smoke: warning: ui screenshot failed: $(tr -d '\n' <"$tmp/capture.json")" >&2
-}
-if [ -s "$shot" ]; then
+if "$binary" ui screenshot "$shot" --json >"$tmp/capture.json" 2>&1; then
+  [ -s "$shot" ] || fail "ui screenshot wrote no image to $shot"
   if grep -q '"current":false' "$tmp/capture.json"; then
     if [ "$strict" -eq 1 ]; then
       fail "the window had not drawn a new frame before the screenshot"
@@ -126,9 +121,9 @@ if [ -s "$shot" ]; then
   fi
 else
   if [ "$strict" -eq 1 ]; then
-    fail "ui screenshot wrote no image to $shot"
+    fail "ui screenshot failed: $(tr -d '\n' <"$tmp/capture.json")"
   fi
-  echo "smoke: warning: ui screenshot wrote no image to $shot" >&2
+  echo "smoke: warning: ui screenshot failed: $(tr -d '\n' <"$tmp/capture.json")" >&2
 fi
 
 "$binary" window quit >/dev/null || fail "kg window quit failed"
