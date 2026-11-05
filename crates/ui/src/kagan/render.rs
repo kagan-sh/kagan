@@ -1,3 +1,4 @@
+use super::ask_form;
 use super::{
     AddProject, CONTEXT, DismissLeftOverlay, DismissRightOverlay, Kagan, NewTheme, OpenThemes,
     Shown, commands, settings, web_panel,
@@ -179,7 +180,7 @@ impl Kagan {
                         .child(self.left_side(window, cx)),
                 )
             })
-            .child(self.center_column(main, cx))
+            .child(self.center_column(main, window, cx))
             .when(self.panes.right, |columns| {
                 columns.child(
                     resizable_panel()
@@ -192,7 +193,13 @@ impl Kagan {
             .into_any_element()
     }
 
-    pub(super) fn center_column(&self, main: AnyElement, cx: &mut Context<Self>) -> ResizablePanel {
+    pub(super) fn center_column(
+        &mut self,
+        main: AnyElement,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> ResizablePanel {
+        let popup = ask_form::popup(self, window, cx);
         resizable_panel()
             .size_range(px(layout::CENTER_MIN)..px(f32::MAX))
             .child(
@@ -222,6 +229,7 @@ impl Kagan {
                     )
                     .child(main)
                     .children(overlays::render(self, cx))
+                    .children(popup)
                     .when_some(self.toast.clone(), |main, toast| {
                         main.child(Self::render_toast(&toast, cx))
                     }),

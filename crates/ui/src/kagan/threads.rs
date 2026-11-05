@@ -112,7 +112,7 @@ impl Kagan {
         }
         let view = cx.new(|cx| TerminalView::new(id.clone(), None, self.terminal_font_size, cx));
         self.show_work(Shown::Thread(view.clone()), window, cx);
-        window.focus(&view.focus_handle(cx), cx);
+        self.focus_work(window, cx);
         self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.load_changes(cx);

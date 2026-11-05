@@ -197,6 +197,7 @@ fn old_experiment_rows_and_the_predict_setting_still_load() {
         EventKind::Answered {
             title: "Allow?".into(),
             option: "allow".into(),
+            fields: std::collections::BTreeMap::new(),
         }
     );
 }

@@ -19,7 +19,7 @@ use crate::kagan::{Kagan, tab_stop};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 pub(super) fn tab_body(
-    kagan: &Kagan,
+    kagan: &mut Kagan,
     id: &str,
     window: &mut Window,
     cx: &mut Context<Kagan>,

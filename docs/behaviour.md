@@ -132,9 +132,10 @@ A thread is one program running in one environment, with a status (`pending`, `i
 ### `Ask`
 
 - **Allowed when**: the thread exists and is not archived [op/].
-- **Changes**: stores a question with that title and those options, for the person to answer. A second ask while that question is open does not add another [op/].
-- **Shows**: the interaction id at once. The person's choice is an `answered` event (`title` and the option id) [event.rs]. Questions draws that title and those options from the pending row.
-- **Refused when**: an empty title, or fewer than two options — `invalid` [op/]. Nothing is stored. A missing thread — `not-found` [op/]. An archived thread — `invalid` [op/]. A plugin cannot answer it, and the card stays for the person [docs:plugin-api].
+- **Changes**: stores a question with that title, those options, and its fields when it declares any, for the person to answer. A field is a `string`, `boolean`, `number`, or `select`; a number answer is a whole number (`i64`). A select carries choices; an optional one also has a None item that answers `null`, and `required: true` drops that item [decision 144]. A second ask while that question is open does not add another [op/].
+- **Shows**: the interaction id at once. The person's choice is an `answered` event carrying the title, the option id, and one value per field (empty when no fields were declared) [event.rs]. Questions draws that title and those options from the pending row.
+- **Refused when**: an empty title, fewer than two options, a field or choice with an empty id or label, a repeated field id, a repeated choice id, a select with no choice, or a select default that is not one of its choices — `invalid` [op/]. Also `invalid`: more than 32 fields, more than 32 choices in one select, an id over 64 characters, a label over 128, or a placeholder, default, or string answer over 4096 [op/]. Nothing is stored. A missing thread — `not-found` [op/]. An archived thread — `invalid` [op/]. An answer that misses a declared field, names a field the question did not declare, gives a value of the wrong kind, or answers `null` to a required select — `invalid`, and the question stays [op/]. A plugin cannot answer it, and the card stays for the person [docs:plugin-api].
+
 
 ### `Tools`
 
@@ -442,7 +443,7 @@ A thread environment's diff reads git and never writes the worktree [book:cli]. 
 - **Allowed when**: the caller owns the browser session, or no browser session exists [decision 143].
 - **Changes**: takes the Browser's one page, dropping the person's page if one was there, and loads the URL. A bare name gets https, a local host gets http, and anything that is not http or https is refused [decision 117]. It shows the tab, opens the right sidebar, and selects it only when the caller is the thread on screen, and it never takes the keyboard [decision 143]. Another thread's browser session is left alone.
 - **Shows**: the driven page: thread id, thread title, url, title, and whether the tab is drawn.
-- **Refused when**: an empty or non-web address — `type a web address, such as example.com` — `invalid` [op.rs]. Another thread's browser session — `thread <title> is driving the browser; close it with kg browser close` — `invalid`. No window — `browser control needs a kagan window` — `failed`. Linux — `failed` [decision 143].
+- **Refused when**: an empty or non-web address — `type a web address, such as example.com` — `invalid` [op/]. Another thread's browser session — `thread <title> is driving the browser; close it with kg browser close` — `invalid`. No window — `browser control needs a kagan window` — `failed`. Linux — `failed` [decision 143].
 
 ### `Status`
 
@@ -616,7 +617,7 @@ Finds a newer kagan on the GitHub releases page (decision 113). Installing is no
 ## Cross-Op rules
 
 - `KG_SOCKET` names the socket. When it is unset and `KG_DATA_DIR` is set, that folder is made absolute and the socket follows it: `<data>/kg.sock` on macOS and Linux, or `/tmp/kagan-<sha256>/kg.sock` when that path does not fit a local socket. The `/tmp` folder must be mode `0700`, owned by this user, and not a symlink, or the connection is refused. On Windows the pipe name is derived from the absolute folder. A file that is not a socket is not removed. It is not the default socket of the app that uses `~/.kagan` [decision 124] [book:data]. `KG_SOCKET` still overrides. With both unset, the socket stays the platform default.
-- Only a person answers a pending question. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin cannot answer either. An answer removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title and the chosen option. That is the trace of an approval on the thread [docs:architecture] [event.rs].
+- Only a person answers a pending question. Answering is not an `Op`. `kg ui` cannot answer, and synthetic `kg ui` cannot answer [decision 10]. A plugin cannot answer either. An answer removes the pending row and writes `answered`. Deleting the row is not an answer [docs:plugin-api]. Every answer appends `answered` with the interaction's title, the chosen option, and the field values when the question declared fields. That is the trace of an approval on the thread [docs:architecture] [event.rs].
 - Archive, unarchive, and stop never ask [decision 12] [docs:architecture] [docs:plugin-api].
 - The database is the truth for thread rows and the event log [decision 5] [docs:architecture].
 - Opening the app does not resume a program. A thread left active is marked failed with "kagan quit while the program was running". A thread left starting is marked failed with "kagan stopped while the thread was starting". A thread left stopping is marked failed. Archive and environment-removal deadlines resume [docs:architecture].

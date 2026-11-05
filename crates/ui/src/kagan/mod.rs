@@ -2,6 +2,7 @@ use changes::Changes;
 use layout::Layout;
 use plugin_actions::Plugins;
 mod archived;
+mod ask_form;
 pub(crate) mod attention;
 pub(crate) mod browser;
 pub(crate) mod changes;
@@ -220,6 +221,9 @@ pub(crate) struct Kagan {
     plugin_watch: Option<Subscription>,
     host_events: Vec<Subscription>,
     overlays: Vec<overlays::Overlay>,
+    ask_drafts: BTreeMap<PendingInteractionId, ask_form::Draft>,
+    ask_hidden: BTreeSet<PendingInteractionId>,
+    ask_popup: Option<FocusHandle>,
     toast: Option<Toast>,
     toast_epoch: u64,
     _release: Subscription,

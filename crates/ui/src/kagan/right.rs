@@ -69,7 +69,7 @@ pub(super) fn plugin_panel_id(plugin: &PluginId, panel: &str) -> String {
 }
 
 pub(super) fn render(
-    kagan: &Kagan,
+    kagan: &mut Kagan,
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> impl IntoElement {

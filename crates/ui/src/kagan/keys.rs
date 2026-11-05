@@ -166,6 +166,11 @@ pub(crate) fn install_keys(cx: &mut App) {
         ),
         KeyBinding::new("escape", CloseCustomCommand, Some(super::picker::CONTEXT)),
         KeyBinding::new(
+            "escape",
+            super::ask_form::DismissAskPopup,
+            Some(super::ask_form::CONTEXT),
+        ),
+        KeyBinding::new(
             if cfg!(target_os = "macos") {
                 "cmd-a"
             } else {

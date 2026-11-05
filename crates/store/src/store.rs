@@ -145,6 +145,7 @@ UPDATE projects SET sort = (
         OR (other.name = projects.name AND other.id < projects.id))
 );
 ",
+    "ALTER TABLE pending_interactions ADD COLUMN fields TEXT;",
 ];
 
 pub struct Store {

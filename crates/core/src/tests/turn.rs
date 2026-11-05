@@ -610,6 +610,7 @@ async fn ask_returns_the_open_question_until_the_person_answers(cx: &mut TestApp
         EventKind::Answered {
             title: "Ship it?".into(),
             option: "yes".into(),
+            fields: std::collections::BTreeMap::new(),
         }
     );
 }

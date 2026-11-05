@@ -176,6 +176,22 @@ pub(in crate::tests) fn set_preference(
     cx.run_until_parked();
 }
 
+pub(in crate::tests) fn click_within(
+    cx: &mut TestAppContext,
+    window: AnyWindowHandle,
+    name: &str,
+    within: &str,
+) {
+    cx.update_window(window, |_, window, cx| {
+        let id = ElementId::Name(name.to_owned().into());
+        let scope = ElementId::Name(within.to_owned().into());
+        crate::ui_dispatch::click_within(window, &id, Some(&scope), cx)
+            .unwrap_or_else(|error| panic!("{name} in {within}: {error}"));
+    })
+    .unwrap();
+    cx.run_until_parked();
+}
+
 pub(in crate::tests) fn click(cx: &mut TestAppContext, window: AnyWindowHandle, name: &str) {
     cx.update_window(window, |_, window, cx| {
         let id = ElementId::Name(name.to_owned().into());

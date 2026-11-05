@@ -149,6 +149,11 @@ impl Kagan {
         self.open_overlay(Side::Right, Activation::Focus, window, cx);
     }
 
+    /// The center column is drawn. Full screen on the right replaces it.
+    pub(in crate::kagan) fn center_drawn(&self) -> bool {
+        !(self.right_fill == right::Fill::Window && self.panes.right)
+    }
+
     /// The right sidebar is on screen, as a column or as an overlay.
     pub(in crate::kagan) fn right_drawn(&self) -> bool {
         self.panes.right || (self.screen.drawn(Side::Right) && !self.in_settings())

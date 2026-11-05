@@ -83,9 +83,12 @@ pub enum EventKind {
         text: String,
     },
     /// The person answered a pending interaction. `option` is the choice; `title` is the request.
+    /// `fields` holds values from an ask form when the question declared them (decision 144).
     Answered {
         title: String,
         option: String,
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        fields: std::collections::BTreeMap<String, serde_json::Value>,
     },
     /// An edit, delete, or move tool named this path.
     #[serde(rename = "file.changed")]

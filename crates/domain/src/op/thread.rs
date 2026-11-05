@@ -5,7 +5,7 @@ use clap::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{InteractionOption, PluginId, ProjectId, ThreadId, Timestamp, Visibility};
+use crate::{AskField, InteractionOption, PluginId, ProjectId, ThreadId, Timestamp, Visibility};
 
 use super::EnvironmentSpec;
 use super::environment::environment_spec;
@@ -256,6 +256,10 @@ pub enum ThreadOp {
         /// An option, as id=label. Repeat for at least two
         #[arg(long = "option", value_name = "ID=LABEL", value_parser = parse_option)]
         options: Vec<InteractionOption>,
+        /// Host-drawn form fields (JSON). Omitted or empty still marks a plugin ask for a popup.
+        #[arg(skip)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fields: Option<Vec<AskField>>,
     },
     /// Run a stopped or recovered thread's program again, in its folder. Only a request does this.
     ///
@@ -417,4 +421,23 @@ fn parse_option(raw: &str) -> Result<InteractionOption, &'static str> {
         id: id.to_owned(),
         label: label.to_owned(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InteractionOption, parse_option};
+
+    #[test]
+    fn an_option_is_a_nonempty_id_and_label() {
+        assert_eq!(
+            parse_option("allow=Allow once"),
+            Ok(InteractionOption {
+                id: "allow".into(),
+                label: "Allow once".into(),
+            })
+        );
+        for raw in ["allow", "=label", "id=", "="] {
+            assert_eq!(parse_option(raw), Err("an option is id=label"), "{raw:?}");
+        }
+    }
 }

@@ -47,6 +47,7 @@ pub(crate) enum Request {
         thread_id: ThreadId,
         interaction_id: PendingInteractionId,
         option_id: String,
+        fields: std::collections::BTreeMap<String, serde_json::Value>,
     },
     AnswerStandalone {
         interaction_id: PendingInteractionId,
@@ -323,7 +324,10 @@ impl Workspace {
                 thread_id,
                 interaction_id,
                 option_id,
-            } => crate::thread::answer(this, thread_id, interaction_id, option_id, cx).await,
+                fields,
+            } => {
+                crate::thread::answer(this, thread_id, interaction_id, option_id, fields, cx).await
+            }
             Request::AnswerStandalone {
                 interaction_id,
                 option_id,

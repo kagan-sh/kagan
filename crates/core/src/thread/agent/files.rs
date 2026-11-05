@@ -284,3 +284,147 @@ fn codex_overrides(id: &str, cli: &Path, socket: Option<&OsStr>) -> Vec<OsString
         .map(OsString::from)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    use super::{SKILL_LINK, git_exclude, hide_from_git, link_skill};
+
+    fn skill(dir: &Path, name: &str) -> PathBuf {
+        let path = dir.join(name);
+        std::fs::create_dir_all(&path).unwrap();
+        dunce::canonicalize(path).unwrap()
+    }
+
+    fn folder(dir: &Path, name: &str) -> PathBuf {
+        let path = dir.join(name);
+        std::fs::create_dir_all(path.join(".git/info")).unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn link_skill_links_the_skill_and_hides_it_from_git_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = skill(dir.path(), "source");
+        let work = folder(dir.path(), "work");
+
+        link_skill(&work, &source).unwrap();
+        assert_eq!(
+            std::fs::read_link(work.join(".agents/skills/kg-threads")).unwrap(),
+            source
+        );
+        let exclude = work.join(".git/info/exclude");
+        assert_eq!(
+            std::fs::read_to_string(&exclude)
+                .unwrap()
+                .matches(SKILL_LINK)
+                .count(),
+            1
+        );
+
+        link_skill(&work, &source).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&exclude)
+                .unwrap()
+                .matches(SKILL_LINK)
+                .count(),
+            1
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn link_skill_leaves_a_person_s_folder_or_unrelated_link_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = skill(dir.path(), "source");
+        let other = skill(dir.path(), "other");
+
+        let folder_path = dir.path().join("folder");
+        std::fs::create_dir_all(folder_path.join(".agents/skills/kg-threads")).unwrap();
+        link_skill(&folder_path, &source).unwrap();
+        assert!(!folder_path.join(".agents/skills/kg-threads").is_symlink());
+
+        let linked = dir.path().join("linked");
+        std::fs::create_dir_all(linked.join(".agents/skills")).unwrap();
+        std::os::unix::fs::symlink(&other, linked.join(".agents/skills/kg-threads")).unwrap();
+        link_skill(&linked, &source).unwrap();
+        assert_eq!(
+            std::fs::read_link(linked.join(".agents/skills/kg-threads")).unwrap(),
+            other
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn link_skill_replaces_an_older_kagan_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = skill(dir.path(), "source");
+        let work = folder(dir.path(), "work");
+        let old = dir.path().join("agent/skills/kg-threads");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::create_dir_all(work.join(".agents/skills")).unwrap();
+        std::os::unix::fs::symlink(&old, work.join(".agents/skills/kg-threads")).unwrap();
+
+        link_skill(&work, &source).unwrap();
+        assert_eq!(
+            std::fs::read_link(work.join(".agents/skills/kg-threads")).unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn hide_from_git_keeps_existing_text_and_adds_one_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = folder(dir.path(), "work");
+        let exclude = work.join(".git/info/exclude");
+        std::fs::write(&exclude, "target").unwrap();
+
+        hide_from_git(&work).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&exclude).unwrap(),
+            format!("target\n{SKILL_LINK}\n")
+        );
+        hide_from_git(&work).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&exclude)
+                .unwrap()
+                .matches(SKILL_LINK)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn hide_from_git_does_nothing_without_a_git_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        hide_from_git(dir.path()).unwrap();
+        assert!(!dir.path().join(".git/info/exclude").exists());
+    }
+
+    #[test]
+    fn hide_from_git_refuses_an_exclude_it_cannot_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = folder(dir.path(), "work");
+        let exclude = work.join(".git/info/exclude");
+        std::fs::remove_file(&exclude).ok();
+        std::fs::create_dir(&exclude).unwrap();
+        assert!(hide_from_git(&work).is_err());
+    }
+
+    #[test]
+    fn git_exclude_follows_a_gitdir_file_and_skips_a_folder_without_git() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        std::fs::create_dir_all(real.join("info")).unwrap();
+        let tree = dir.path().join("tree");
+        std::fs::create_dir_all(&tree).unwrap();
+        std::fs::write(tree.join(".git"), format!("gitdir: {}\n", real.display())).unwrap();
+        assert_eq!(git_exclude(&tree), Some(real.join("info/exclude")));
+
+        let plain = dir.path().join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+        assert_eq!(git_exclude(&plain), None);
+    }
+}

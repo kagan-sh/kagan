@@ -7,7 +7,8 @@ use gpui_kit::{AnyWindowHandle, TestAppContext};
 use kg_domain::{InteractionOption, Op, OpResult, Plugin, PluginId, PluginOp, ThreadOp};
 
 use super::{
-    click, label, open, pending, run_op, run_program, run_shell, shows, value_of, wait_until,
+    click, click_within, label, open, pending, run_op, run_program, run_shell, shows, value_of,
+    wait_until,
 };
 
 #[cfg(unix)]
@@ -45,6 +46,7 @@ fn a_thread_marks_busy_then_done_then_idle_once_read(cx: &mut TestAppContext) {
                         label: "No".into(),
                     },
                 ],
+                fields: None,
             }),
             cx,
         )
@@ -53,7 +55,12 @@ fn a_thread_marks_busy_then_done_then_idle_once_read(cx: &mut TestAppContext) {
     click(cx, window, &format!("thread-{}", thread.0));
     wait_for_mark(cx, window, &mark, "needs you");
     let question = pending(cx, &thread).into_iter().next().expect("question");
-    click(cx, window, &format!("answer-{}-yes", question.id.0));
+    click_within(
+        cx,
+        window,
+        &format!("answer-{}-yes", question.id.0),
+        "ask-popup",
+    );
     cx.foreground_executor().block_test(asking).unwrap();
     wait_for_mark(cx, window, &mark, "idle");
 }
@@ -81,6 +88,7 @@ fn a_pending_question_stays_needs_you_after_the_thread_is_opened(cx: &mut TestAp
                         label: "No".into(),
                     },
                 ],
+                fields: None,
             }),
             cx,
         )
@@ -92,7 +100,12 @@ fn a_pending_question_stays_needs_you_after_the_thread_is_opened(cx: &mut TestAp
     assert_eq!(value_of(cx, window, &row).as_deref(), Some("needs you"));
     let question = pending(cx, &id).into_iter().next().expect("question");
     click(cx, window, &row);
-    click(cx, window, &format!("answer-{}-yes", question.id.0));
+    click_within(
+        cx,
+        window,
+        &format!("answer-{}-yes", question.id.0),
+        "ask-popup",
+    );
     cx.foreground_executor().block_test(asking).unwrap();
     wait_for_mark(cx, window, &mark, "idle");
 }

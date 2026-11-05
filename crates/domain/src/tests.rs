@@ -176,6 +176,7 @@ fn ask_op() {
                     label: "No".into(),
                 },
             ],
+            fields: None,
         }),
         &json!({ "thread": { "ask": {
             "id": "thr_1",
@@ -360,6 +361,7 @@ fn interactions_result() {
                 id: "allow-once".into(),
                 label: "Allow once".into(),
             }],
+            fields: None,
             created_at: Timestamp(5),
         }]),
         &json!({ "interactions": [{
@@ -604,6 +606,7 @@ fn event_type_names_match_the_wire_tag() {
         EventKind::Answered {
             title: String::new(),
             option: String::new(),
+            fields: std::collections::BTreeMap::new(),
         },
         EventKind::FileChanged {
             path: String::new(),

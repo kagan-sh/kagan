@@ -8,16 +8,17 @@ use crate::column::{Json, Text};
 impl super::Store {
     pub fn put_pending_interaction(&self, interaction: &PendingInteraction) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO pending_interactions (id, thread_id, title, options, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO pending_interactions (id, thread_id, title, options, fields, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT(id) DO UPDATE SET thread_id = excluded.thread_id,
                 title = excluded.title, options = excluded.options,
-                created_at = excluded.created_at",
+                fields = excluded.fields, created_at = excluded.created_at",
             params![
                 Text(&interaction.id),
                 Text(&interaction.thread_id),
                 interaction.title,
                 Json(&interaction.options),
+                interaction.fields.as_ref().map(Json),
                 interaction.created_at.0,
             ],
         )?;
@@ -27,7 +28,7 @@ impl super::Store {
     /// Oldest first.
     pub fn pending_interactions(&self, thread_id: &ThreadId) -> Result<Vec<PendingInteraction>> {
         let mut statement = self.conn.prepare(
-            "SELECT id, thread_id, title, options, created_at FROM pending_interactions
+            "SELECT id, thread_id, title, options, fields, created_at FROM pending_interactions
              WHERE thread_id = ?1 ORDER BY created_at, rowid",
         )?;
         let interactions = statement
@@ -37,7 +38,10 @@ impl super::Store {
                     thread_id: row.get::<_, Text<_>>(1)?.0,
                     title: row.get(2)?,
                     options: row.get::<_, Json<_>>(3)?.0,
-                    created_at: Timestamp(row.get(4)?),
+                    fields: row
+                        .get::<_, Option<Json<Vec<kg_domain::AskField>>>>(4)?
+                        .map(|json| json.0),
+                    created_at: Timestamp(row.get(5)?),
                 })
             })?
             .collect::<Result<_, _>>()?;

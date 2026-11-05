@@ -20,6 +20,7 @@ fn pending_interactions() {
                 label: "Reject".into(),
             },
         ],
+        fields: None,
         created_at: Timestamp(3),
     };
     store.put_pending_interaction(&interaction).unwrap();
