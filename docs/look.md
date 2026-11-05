@@ -42,7 +42,7 @@ Settings takes over the window. It opens with Cmd+, (Ctrl+Shift+, off macOS), th
 
 The terminal has its own set, in an optional `terminal` object on each mode. It holds `bg`, `fg`, `cursor`, and the 16 ANSI colors by name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and the same eight as `bright…`. The terminal box is painted with `bg`, and the cursor with `cursor`. Ember Fjord gives the same set in both modes, and the table below shows its values.
 
-A theme without a `terminal` object keeps the xterm colors, with the window's `bg` as the terminal background and `ink` as the text and cursor color. A theme file requires `working`. Only `hover`, `added` and `terminal` may be omitted.
+A theme without a `terminal` object keeps the xterm colors, with the window's `bg` as the terminal background and `ink` as the text and cursor color. A theme file requires `working`. Only `hover`, `added`, `terminal` and `highlight` may be omitted.
 
 Every text color on the window, surface, and raised backgrounds measures at least 4.5:1 (WCAG relative luminance). Both modes of Ember Fjord use the dark terminal set.
 
@@ -86,6 +86,25 @@ Use `<dataDir>/themes/<id>.json`. `KG_DATA_DIR` overrides the data directory; ot
 
 Copy [ocean.json](themes/ocean.json) as a starting point, or run `kg theme new <id> [--from <theme>]`, or press New theme… in Settings → Appearance. The file contains a `name`, a complete `light` palette and a complete `dark` palette.
 
-A theme file is a regular file of at most 64 KiB, and its `name` is one line of at most 64 characters. Both palettes are required, and so is every token except `hover`, `added` and `terminal`. Colors must be opaque `#RRGGBB`; unknown fields, missing fields, invalid colors and blank names are errors. This format projects onto the pinned GPUI Kit `ThemeConfigColors` roles. It is not CSS or a GPUI Kit theme file. Highlight syntax uses the GPUI default for the active mode. The window paints no literal colors of its own.
+A theme file is a regular file of at most 64 KiB, and its `name` is one line of at most 64 characters. Both palettes are required, and so is every token except `hover`, `added`, `terminal` and `highlight`. Colors must be opaque `#RRGGBB`; unknown fields, missing fields, invalid colors and blank names are errors. This format projects onto the pinned GPUI Kit `ThemeConfigColors` roles. It is not CSS or a GPUI Kit theme file. The window paints no literal colors of its own.
+
+An optional `highlight` object gives the review and the Editor their syntax colors. `light` and `dark` each hold one theme in [Zed's syntax format](https://zed.dev/docs/extensions/languages#syntax-highlighting): a `name`, an optional `appearance` (`light` or `dark`), and a `style` with `syntax` and the status colors (`error`, `warning`, `created`, `modified` and so on). Each syntax name (`keyword`, `string`, `comment`, …) takes a `color`, a `font_style` (`normal`, `italic` or `underline`) and a `font_weight` (100 to 900 in steps of 100). Colors are `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa`. `kagan` keeps the object as it is and hands it to GPUI Kit's `HighlightTheme`, so a theme file does not need to name every token. A theme without `highlight`, or with only one of the two modes, keeps the GPUI Kit default syntax for the missing mode. A bad value is refused with its field named, the way a bad palette is.
+
+```json
+"highlight": {
+  "dark": {
+    "name": "Ember code",
+    "appearance": "dark",
+    "style": {
+      "syntax": {
+        "keyword": { "color": "#f0905f" },
+        "string": { "color": "#a8c98e" },
+        "comment": { "color": "#a7afbf", "font_style": "italic" }
+      },
+      "editor.background": "#22262f"
+    }
+  }
+}
+```
 
 The theme picker shows a card per theme: built in, then the person's files, then plugin themes, each labelled Built in, Your file, or the plugin's name. A file that does not load shows its id and error on its card, and cannot be picked. The theme entity reads the folder on the background executor every 500 ms and follows the plugin host. Saving, replacing or adding a JSON file updates the catalog. When the chosen file stops loading, its last good colors stay and a toast says so once; a chosen file that never loaded uses the default palette. When the chosen theme is missing, Appearance shows that line under the cards and the default palette is used for the selected mode; a chosen plugin theme that goes away says so once in a toast. The chosen ID is retained, so a corrected or restored file, or a re-enabled plugin, becomes the selected theme again. Only `kg theme new` and New theme… create a file, and never over an existing one; no file is repaired.
