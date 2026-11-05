@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use super::ThreadId;
 
-/// The largest text a browser verb carries.
 const BROWSER_TEXT_MAX: usize = 1024 * 1024;
 
 /// What a thread may do with the Browser tab's one page.
