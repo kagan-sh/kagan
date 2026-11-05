@@ -1,11 +1,13 @@
-use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext};
+use gpui_kit::{AnyWindowHandle, AppContext as _, ElementId, TestAppContext, px, size};
 use kg_core::{Target, Updater, Workspace};
-use kg_domain::{InteractionOption, Op, OpResult, PluginOp, ThreadId, ThreadOp, UpdateState};
+use kg_domain::{
+    InteractionOption, Op, OpResult, Plugin, PluginId, PluginOp, ThreadId, ThreadOp, UpdateState,
+};
 
 use crate::kagan::screen_read;
 use crate::tests::kagan::{
-    click, focused_of, label, open, open_with_plugins_then, run_shell, selected_of, shown, shows,
-    thread_record, value_of, wait_until,
+    click, focused_of, label, open, open_with_plugins_then, role_of, run_shell, selected_of, shown,
+    shows, thread_record, value_of, wait_until,
 };
 
 #[cfg(unix)]
@@ -51,6 +53,47 @@ fn raise(cx: &mut TestAppContext, id: &ThreadId, title: &str) -> gpui_kit::Task<
 }
 
 type TestAnswer = std::result::Result<String, kg_domain::OpError>;
+
+const STATUS: &str = "dev.test.status";
+const STATUS_ITEM: &str = "activity-plugin-dev.test.status";
+
+fn install_status(data: &std::path::Path) {
+    let root = data.join("status");
+    std::fs::create_dir(&root).unwrap();
+    let manifest = serde_json::json!({
+        "id": STATUS,
+        "name": "Status",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "instructions": "Show a line in the activity strip.",
+        "powers": {},
+        "ui": { "status": { "title": "Usage" } }
+    });
+    std::fs::write(root.join("kagan.json"), manifest.to_string()).unwrap();
+    std::fs::write(
+        root.join("main.js"),
+        r#"import { View } from "gpui-kit";
+import { setStatus } from "kagan/host";
+export default class Plugin extends View {
+  init() { setStatus("42%", { tone: "busy" }); }
+}
+"#,
+    )
+    .unwrap();
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store
+        .insert_plugin(&Plugin {
+            id: PluginId(STATUS.into()),
+            source: root.display().to_string(),
+            root,
+            commit: None,
+            enabled: true,
+            approved: serde_json::json!({"powers": {}, "folders": {}, "status": "Usage"}),
+            error: None,
+        })
+        .unwrap();
+}
 
 #[cfg(unix)]
 fn busy_program() -> String {
@@ -302,6 +345,69 @@ fn the_open_strip_keeps_its_log_across_a_thread_switch(cx: &mut TestAppContext) 
     assert!(shows(cx, window, "activity-strip"));
     assert!(shows(cx, window, "activity-log"));
     assert!(shows(cx, window, "activity-row-0"));
+}
+
+#[gpui_kit::test]
+fn a_plugin_status_item_is_one_text_line_in_the_strip(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
+    assert!(shows(cx, window, STATUS_ITEM));
+    assert_eq!(
+        role_of(cx, window, STATUS_ITEM),
+        Some(gpui_kit::Role::Status)
+    );
+    assert_eq!(label(cx, window, STATUS_ITEM), "Usage");
+    assert_eq!(value_of(cx, window, STATUS_ITEM).as_deref(), Some("42%"));
+    assert_eq!(focused_of(cx, window, STATUS_ITEM), None);
+    assert_eq!(focused_of(cx, window, "activity-strip"), Some(false));
+}
+
+#[gpui_kit::test]
+fn the_plugin_status_preference_hides_and_shows_every_item(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
+    assert!(shows(cx, window, STATUS_ITEM));
+
+    click(cx, window, "settings-gear");
+    click(cx, window, "plugin-status");
+    wait_until(cx, |cx| {
+        crate::tests::settings::page::saved(cx, "plugin-status") == serde_json::json!(false)
+    });
+    assert!(!shows(cx, window, STATUS_ITEM));
+
+    click(cx, window, "plugin-status");
+    wait_until(cx, |cx| {
+        crate::tests::settings::page::saved(cx, "plugin-status") == serde_json::json!(true)
+    });
+    assert!(shows(cx, window, STATUS_ITEM));
+}
+
+#[gpui_kit::test]
+fn a_narrow_window_keeps_the_host_summary_and_hides_plugin_items(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
+    assert!(shows(cx, window, STATUS_ITEM));
+
+    cx.simulate_window_resize(window, size(px(700.), px(720.)));
+    assert!(!shows(cx, window, STATUS_ITEM));
+    assert!(shows(cx, window, "activity-summary"));
+
+    cx.simulate_window_resize(window, size(px(1000.), px(720.)));
+    assert!(shows(cx, window, STATUS_ITEM));
+}
+
+#[gpui_kit::test]
+fn disabling_the_plugin_removes_its_item(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
+    assert!(shows(cx, window, STATUS_ITEM));
+
+    let disabled = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Plugin(PluginOp::Disable {
+                id: PluginId(STATUS.into()),
+            }),
+            cx,
+        )
+    });
+    cx.foreground_executor().block_test(disabled).unwrap();
+    wait_until(cx, |cx| !shows(cx, window, STATUS_ITEM));
 }
 
 #[gpui_kit::test]

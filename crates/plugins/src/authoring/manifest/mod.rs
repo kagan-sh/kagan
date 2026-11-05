@@ -519,6 +519,7 @@ impl Manifest {
             .chain(powers.fetch.iter().map(|fetch| fetch.host.as_str()))
             .chain(powers.read.iter().map(String::as_str))
             .chain(self.settings.values().map(Setting::title))
+            .chain(self.ui.status.iter().map(|status| status.title.as_str()))
     }
 }
 

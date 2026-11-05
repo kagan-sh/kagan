@@ -14,3 +14,12 @@ export function addComment(comment: { path: string; side?: 'old' | 'new'; start:
 export function pasteIntoThread(threadId: string, text: string): Promise<void>;
 /** Writes a PNG to the clipboard. `pngBase64` is standard base64, at most 8 MiB decoded. Needs `powers.clipboard.write`. On Linux it fails: png clipboard is not available on this platform. */
 export function writeClipboardPng(pngBase64: string): void;
+/**
+ * Sets this plugin's one line in the activity strip, or hides it with null.
+ * Plain text, one line, at most 120 characters. `tone` is quiet, busy, needs or failed.
+ * Needs `ui.status` in kagan.json.
+ */
+export function setStatus(
+  text: string | null,
+  options?: { tone?: "quiet" | "busy" | "needs" | "failed" },
+): void;

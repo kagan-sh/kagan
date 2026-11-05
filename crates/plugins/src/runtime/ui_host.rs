@@ -277,7 +277,12 @@ pub(crate) fn app<R>(
     .ok_or_else(|| HostError::new("the application context is unavailable"))?
 }
 
-pub(crate) fn extend(module: HostModule, plugin: &PluginId) -> HostModule {
+pub(crate) fn extend(
+    module: HostModule,
+    plugin: &PluginId,
+    status: Option<&str>,
+    secrets: &crate::secret::Store,
+) -> HostModule {
     let declarations = format!(
         "{}\n{}",
         module.declared().unwrap_or(""),
@@ -289,6 +294,9 @@ pub(crate) fn extend(module: HostModule, plugin: &PluginId) -> HostModule {
     let comments = plugin.clone();
     let images = plugin.clone();
     let urls = plugin.clone();
+    let statuses = plugin.clone();
+    let status_title = status.map(str::to_owned);
+    let status_secrets = secrets.clone();
     module
         .async_function("openThread", open_thread)
         .async_function("openPanel", move |arguments| open_panel(&panels, arguments))
@@ -300,6 +308,14 @@ pub(crate) fn extend(module: HostModule, plugin: &PluginId) -> HostModule {
         .async_function("pasteIntoThread", paste_into_thread)
         .function("writeClipboardPng", move |arguments| {
             crate::clipboard::write(&images, arguments)
+        })
+        .function("setStatus", move |arguments| {
+            crate::status::set_status(
+                &statuses,
+                status_title.as_deref(),
+                &status_secrets,
+                arguments,
+            )
         })
 }
 

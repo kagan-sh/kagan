@@ -50,6 +50,7 @@ async fn the_preference_keys_named_in_help_are_accepted(cx: &mut TestAppContext)
         "confirm-archive",
         "agent-integration",
         "notify",
+        "plugin-status",
         "terminal-font-size",
         "main.left-sidebar",
         "main.right-sidebar",
@@ -60,6 +61,44 @@ async fn the_preference_keys_named_in_help_are_accepted(cx: &mut TestAppContext)
         let result = op(Op::Preference(PreferenceOp::Get { key: key.into() }), cx).await;
         assert!(result.is_ok(), "help names {key}, which is refused");
     }
+}
+
+#[gpui_kit::test]
+async fn plugin_status_is_a_boolean(cx: &mut TestAppContext) {
+    let _fixture = Fixture::new(cx).await;
+    let refused = op(
+        Op::Preference(PreferenceOp::Set {
+            key: "plugin-status".into(),
+            value: json!("yes"),
+        }),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(refused, OpError::Invalid(ref message) if message.contains("boolean")),
+        "{refused}"
+    );
+    op(
+        Op::Preference(PreferenceOp::Set {
+            key: "plugin-status".into(),
+            value: json!(false),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    let OpResult::Setting(value) = op(
+        Op::Preference(PreferenceOp::Get {
+            key: "plugin-status".into(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("preference")
+    };
+    assert_eq!(value, json!(false));
 }
 
 #[gpui_kit::test]

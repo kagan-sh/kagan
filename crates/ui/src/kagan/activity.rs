@@ -13,6 +13,7 @@ use gpui_kit::{
 };
 use kg_core::{Updater, Workspace};
 use kg_domain::{Event, EventKind, ThreadId, UpdateState};
+use kg_plugins::{PluginStrip, StatusItem, StatusTone};
 
 use super::Kagan;
 use crate::theme::{Tone, TypeScale as _};
@@ -24,6 +25,9 @@ const KEEP: usize = 100;
 const ROWS: u16 = 7;
 const ROW: f32 = 20.;
 const DOT: f32 = 6.;
+const PLUGIN_WIDTH: f32 = 720.;
+const PLUGIN_ITEM_MAX: f32 = 200.;
+const PLUGIN_ITEMS: usize = 4;
 
 pub(super) struct Strip {
     focus: FocusHandle,
@@ -190,6 +194,7 @@ impl Kagan {
     fn strip_summary(
         &self,
         summary: SharedString,
+        plugins: Vec<StatusItem>,
         working: usize,
         needs: usize,
         open: bool,
@@ -292,10 +297,15 @@ impl Kagan {
             .children(needs_part)
             .children(update_part)
             .children(install_part)
+            .children(plugins.into_iter().map(|item| plugin_item(item, cx)))
     }
 
     /// Takes height only: the sidebars' width preferences do not account for it.
-    pub(super) fn activity_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn activity_strip(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let working = Workspace::global(cx).read(cx).busy_threads(cx);
         let needs = self.needs_you(cx);
         let open = self.activity.open();
@@ -304,8 +314,17 @@ impl Kagan {
             1 => "1 agent working".into(),
             count => format!("{count} agents working").into(),
         };
+        let plugins: Vec<StatusItem> = if self.prefs.read(cx).plugin_status
+            && f32::from(window.viewport_size().width) >= PLUGIN_WIDTH
+        {
+            PluginStrip::global(cx)
+                .map(|strip| strip.read(cx).items().take(PLUGIN_ITEMS).cloned().collect())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         let log = strip_log(self.activity.tail(), cx);
-        let summary_row = self.strip_summary(summary, working, needs, open, cx);
+        let summary_row = self.strip_summary(summary, plugins, working, needs, open, cx);
         let height = px(if open {
             HEIGHT + f32::from(ROWS) * ROW
         } else {
@@ -337,6 +356,50 @@ impl Kagan {
             .child(summary_row)
             .when(open, |strip| strip.child(log))
     }
+}
+
+fn plugin_item(item: StatusItem, cx: &App) -> impl IntoElement + use<> {
+    let color = match item.tone {
+        StatusTone::Quiet => cx.theme().muted_foreground,
+        StatusTone::Busy => Tone::Busy.color(cx),
+        StatusTone::Needs => Tone::Needs.color(cx),
+        StatusTone::Failed => Tone::Failed.color(cx),
+    };
+    h_flex()
+        .id(ElementId::Name(
+            format!("activity-plugin-{}", item.id.0).into(),
+        ))
+        .ui_observe_as(Facts {
+            role: Role::Status,
+            name: item.title.clone().into(),
+            value: Some(item.text.clone().into()),
+            focus: None,
+            hint: None,
+            disabled: false,
+            selected: None,
+        })
+        .flex_none()
+        .max_w(px(PLUGIN_ITEM_MAX))
+        .min_w_0()
+        .items_center()
+        .gap_1()
+        .child(
+            div()
+                .min_w_0()
+                .max_w(px(PLUGIN_ITEM_MAX / 2.))
+                .text_ellipsis()
+                .type_small(cx)
+                .text_color(cx.theme().muted_foreground)
+                .child(item.title),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .text_ellipsis()
+                .type_small(cx)
+                .text_color(color)
+                .child(item.text),
+        )
 }
 
 fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use<> {

@@ -59,9 +59,14 @@ pub(crate) fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is one independent row on the settings page"
+)]
 pub(super) struct Prefs {
     pub(super) agent_integration: bool,
     pub(super) notify: bool,
+    pub(super) plugin_status: bool,
     pub(super) update_check: bool,
 }
 
@@ -69,6 +74,7 @@ pub(super) fn state(cx: &mut App) -> Entity<Prefs> {
     cx.new(|_| Prefs {
         agent_integration: true,
         notify: true,
+        plugin_status: true,
         update_check: false,
     })
 }
@@ -216,15 +222,18 @@ impl Kagan {
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
         let agent = super::layout::read::<bool>("agent-integration", cx);
         let notify = super::layout::read::<bool>("notify", cx);
+        let plugin_status = super::layout::read::<bool>("plugin-status", cx);
         let update = super::layout::read::<bool>("update-check", cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.ok().flatten().unwrap_or(true);
             let notifications = notify.await.ok().flatten().unwrap_or(true);
+            let status = plugin_status.await.ok().flatten().unwrap_or(true);
             let update_check = update.await.ok().flatten().unwrap_or(false);
             prefs.update(cx, |prefs, cx| {
                 prefs.agent_integration = on;
                 prefs.notify = notifications;
+                prefs.plugin_status = status;
                 prefs.update_check = update_check;
                 cx.notify();
             });

@@ -15,6 +15,12 @@ impl Kagan {
         // The plugin host starts after the UI's own setup, so the key bindings for its commands are
         // installed here, once the host exists. Installing them again does nothing.
         crate::plugins::init(cx);
+        if self.plugin_watch.is_none()
+            && let Some(strip) = kg_plugins::PluginStrip::global(cx)
+        {
+            self.host_events
+                .push(cx.observe(&strip, |_, _, cx| cx.notify()));
+        }
         if self.plugin_watch.is_some() {
             return;
         }

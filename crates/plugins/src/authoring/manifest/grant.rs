@@ -25,6 +25,9 @@ pub(crate) struct Grant {
     /// Each schedule id with its interval in minutes.
     #[serde(default)]
     pub(crate) schedules: BTreeMap<String, u32>,
+    /// The approved title of this plugin's activity strip item.
+    #[serde(default)]
+    pub(crate) status: Option<String>,
 }
 
 impl Grant {
@@ -55,6 +58,11 @@ impl Grant {
                 .iter()
                 .map(|schedule| (schedule.id.clone(), schedule.every))
                 .collect(),
+            status: manifest
+                .ui
+                .status
+                .as_ref()
+                .map(|status| status.title.clone()),
         }
     }
 
@@ -130,6 +138,7 @@ impl Grant {
                 .filter(|(id, every)| other.schedules.get(*id) == Some(every))
                 .map(|(id, every)| (id.clone(), *every))
                 .collect(),
+            status: self.status.clone().filter(|_| other.status.is_some()),
         }
     }
 
@@ -164,6 +173,7 @@ impl Grant {
                 .schedules
                 .iter()
                 .all(|(id, every)| approved.schedules.get(id) == Some(every))
+            && (self.status.is_none() || approved.status.is_some())
     }
 
     /// The lines `approved` did not have; all lines when only details changed.
@@ -239,6 +249,11 @@ impl Grant {
             let unit = if *every == 1 { "minute" } else { "minutes" };
             lines.push(format!(
                 "runs on its own every {every} {unit} while kagan is open"
+            ));
+        }
+        if let Some(title) = &self.status {
+            lines.push(format!(
+                "starts with kagan to show {title} in the activity strip"
             ));
         }
         lines

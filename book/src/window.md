@@ -52,7 +52,9 @@ At the bottom of the window, one line says what is happening. It stays below the
 
 Click the line, or press Enter or Space while it has focus, to see the last seven things that happened: turns started and ended, other threads that need you, updates, and plugin installs. A new row is added at the bottom. Click again or press Escape to close it.
 
-The list is kept in memory and is gone when kagan quits. A question or a finished turn never takes your keyboard. Plugins cannot draw in the strip.
+At the right of the line, a plugin may add one short piece of plain text, such as a usage figure. It shows the plugin's own label first, then the text in a color for quiet, busy, needs you, or failed. These items are text only: you cannot click them, and they never take the keyboard. At most four show, and only while the window is at least 720 px wide. Turn **Plugin status** off in Settings → Appearance to hide them all, or turn one plugin off in Installed.
+
+The list is kept in memory and is gone when kagan quits. A question or a finished turn never takes your keyboard. Plugins cannot draw panels in the strip.
 
 ## Thread
 

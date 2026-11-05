@@ -14,6 +14,8 @@ pub struct Contributions {
     pub settings: Option<String>,
     /// The exported view class that draws over the terminal.
     pub overlay: Option<String>,
+    /// One plain line in the activity strip.
+    pub status: Option<StatusContribution>,
     // Spots kagan does not draw yet. They are read only to refuse them: see `check_spots`.
     pub(crate) toolbar: Vec<IgnoredAny>,
     pub(crate) status_bar: Vec<IgnoredAny>,
@@ -41,6 +43,12 @@ pub(crate) enum Error {
         "ui.thread-list is not in this version of kagan; declare a left panel with \"replaces\": \"threads\""
     )]
     ThreadList,
+    #[error(
+        "ui.status-bar is not in this version of kagan; declare ui.status for one line in the activity strip"
+    )]
+    StatusBar,
+    #[error("ui.status needs a title of 1 to 40 characters, with no control characters")]
+    StatusTitle,
     #[error("ui.{0} is not in this version of kagan; remove it")]
     Spot(&'static str),
     #[error("UI contribution id {0:?} is blank, repeated or contains control characters")]
@@ -84,8 +92,20 @@ impl Contributions {
                 name: "Overlay",
                 detail: "draws over the terminal",
             },
+            Capability {
+                id: "status",
+                name: "Status item",
+                detail: "adds a line to the activity strip",
+            },
         ]
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatusContribution {
+    /// The label shown before the line, and the screen-reader name.
+    pub title: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -130,8 +150,20 @@ pub enum Follows {
 impl Contributions {
     pub(crate) fn check(&self) -> Result<(), Error> {
         self.check_spots()?;
+        self.check_status()?;
         self.check_panels()?;
         self.check_views()
+    }
+
+    fn check_status(&self) -> Result<(), Error> {
+        if let Some(status) = &self.status
+            && (status.title.trim().is_empty()
+                || status.title.chars().count() > 40
+                || status.title.chars().any(char::is_control))
+        {
+            return Err(Error::StatusTitle);
+        }
+        Ok(())
     }
 
     fn check_panels(&self) -> Result<(), Error> {
@@ -191,6 +223,7 @@ impl Contributions {
         ];
         match spots.iter().find(|(_, declared)| *declared) {
             Some(("thread-list", _)) => Err(Error::ThreadList),
+            Some(("status-bar", _)) => Err(Error::StatusBar),
             Some((spot, _)) => Err(Error::Spot(spot)),
             None => Ok(()),
         }

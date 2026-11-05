@@ -11,9 +11,10 @@ pub(crate) use install::{index, source};
 pub use runtime::keys;
 pub(crate) use runtime::log;
 pub(crate) use runtime::log::{Level, log};
+pub use runtime::status::{PluginStrip, StatusItem, StatusTone};
 pub(crate) use runtime::{
-    area, clipboard, commands, database, files, host, jobs, ops, page, process, secret, threads,
-    ui_host, watchdog, web_store,
+    area, clipboard, commands, database, files, host, jobs, ops, page, process, secret, status,
+    threads, ui_host, watchdog, web_store,
 };
 
 #[cfg(test)]
@@ -29,7 +30,9 @@ use serde_json::Value;
 
 use crate::manifest::{Fetch, Grant};
 pub use catalog::{Example, capabilities, capabilities_in, examples, kinds_in};
-pub use contributions::{Capability, Contributions, Follows, PanelContribution, Placement};
+pub use contributions::{
+    Capability, Contributions, Follows, PanelContribution, Placement, StatusContribution,
+};
 pub(crate) use host::{Agents, Discovered, PluginHostGlobal, discover};
 pub use host::{MountError, PluginHost, PluginHostEvent, init};
 pub use index::shown;

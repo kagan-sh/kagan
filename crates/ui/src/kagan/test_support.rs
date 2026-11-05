@@ -91,4 +91,10 @@ impl Kagan {
     pub(crate) fn picker_entity(&self) -> Entity<picker::Picker> {
         self.picker.clone()
     }
+
+    /// The window this view draws in, for the tests.
+    #[cfg(test)]
+    pub(crate) fn window_handle(&self) -> gpui_kit::AnyWindowHandle {
+        self.window
+    }
 }
