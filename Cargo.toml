@@ -86,6 +86,10 @@ split-debuginfo = "unpacked"
 opt-level = 1
 
 # Panics stay unwinding: gpui-shell and `ui` catch a plugin's panic instead of losing the app.
+[profile.mutants]
+inherits = "test"
+debug = "none"
+
 [profile.release]
 lto = "thin"
 strip = "symbols"

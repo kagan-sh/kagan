@@ -1,5 +1,14 @@
 # cargo-mutants skips these. Each entry names the mutant it skips and why no test can catch it.
 
+profile = "mutants"
+
+exclude_globs = [
+    "crates/*/src/tests/**",
+    "crates/*/tests/**",
+    "**/tests.rs",
+    "**/*_test.rs",
+]
+
 exclude_re = [
     # Required by gpui-kit Collapsible for SidebarItem; nothing reads it.
     'sidebar\.rs:\d+:\d+: replace <impl Collapsible for Row>::is_collapsed -> bool with true',
