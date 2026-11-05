@@ -13,3 +13,5 @@ plugins/**/jsconfig.json
 
 .superpowers/
 
+
+.desloppify/
