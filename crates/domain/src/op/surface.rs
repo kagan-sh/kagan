@@ -60,21 +60,30 @@ pub enum SlotChoice {
     Plugin(PluginId),
 }
 
+/// Why a slot choice is neither `kagan` nor a plugin id.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum SlotChoiceError {
+    #[error("{value:?} must be a plugin id or kagan")]
+    Invalid { value: String },
+}
+
 impl std::str::FromStr for SlotChoice {
-    type Err = String;
+    type Err = SlotChoiceError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let id = PluginId(value.to_owned());
         match value {
             "kagan" => Ok(Self::Kagan),
             _ if id.valid() => Ok(Self::Plugin(id)),
-            _ => Err(format!("{value:?} must be a plugin id or kagan")),
+            _ => Err(SlotChoiceError::Invalid {
+                value: value.to_owned(),
+            }),
         }
     }
 }
 
 impl TryFrom<String> for SlotChoice {
-    type Error = String;
+    type Error = SlotChoiceError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         value.parse()
@@ -93,6 +102,33 @@ impl std::fmt::Display for SlotChoice {
             Self::Kagan => f.write_str("kagan"),
             Self::Plugin(id) => f.write_str(&id.0),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SlotChoice, SlotChoiceError};
+    use crate::PluginId;
+
+    #[test]
+    fn a_slot_choice_names_its_refusal() {
+        assert_eq!(
+            "single".parse::<SlotChoice>(),
+            Err(SlotChoiceError::Invalid {
+                value: "single".into()
+            })
+        );
+        assert_eq!(
+            SlotChoiceError::Invalid {
+                value: "single".into()
+            }
+            .to_string(),
+            "\"single\" must be a plugin id or kagan"
+        );
+        assert_eq!(
+            "dev.example.list".parse::<SlotChoice>(),
+            Ok(SlotChoice::Plugin(PluginId("dev.example.list".into())))
+        );
     }
 }
 
