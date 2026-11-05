@@ -4,20 +4,36 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use gpui_kit::{AnyWindowHandle, App, AppContext as _, ElementId, ScrollDelta, point, px};
+use gpui_kit::{AnyWindowHandle, App, AppContext as _, ElementId, ScrollDelta, Task, point, px};
 use kg_core::{UiJob, Workspace};
-use kg_domain::{OpError, OpResult, SurfaceOp, UI_PERSON_ONLY, UI_UNAVAILABLE, UiOp};
+use kg_domain::{BrowserOp, OpError, OpResult, SurfaceOp, UI_PERSON_ONLY, UI_UNAVAILABLE, UiOp};
 
 pub(crate) fn install(cx: &mut App) {
     Workspace::global(cx).update(cx, |workspace, _| {
         workspace.set_ui_driver(Rc::new(|job, cx| match job {
             UiJob::NewTheme { id, from } => crate::theme::new_theme(&id, from.as_deref(), cx),
+            UiJob::Browser(op) => browser(op, cx),
             UiJob::Op(UiOp::Screenshot { window, path }) => {
                 cx.spawn(async move |cx| capture_after_present(window, path, cx).await)
             }
             job => cx.spawn(async move |cx| drive(job, cx)),
         }));
     });
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn browser(op: BrowserOp, cx: &mut App) -> Task<Result<OpResult, OpError>> {
+    cx.spawn(async move |cx| crate::kagan::browser::agent::run(op, cx).await)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn browser(op: BrowserOp, cx: &mut App) -> Task<Result<OpResult, OpError>> {
+    cx.spawn(async move |_| refuse(&op))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn refuse(_: &BrowserOp) -> Result<OpResult, OpError> {
+    Err(OpError::Failed(crate::kagan::browser::UNSUPPORTED.into()))
 }
 
 fn closed() -> OpError {
@@ -532,5 +548,40 @@ mod windows {
             .save(path)
             .map_err(|error| OpError::Failed(error.to_string()))?;
         Ok(())
+    }
+}
+
+#[cfg(all(test, not(any(target_os = "macos", target_os = "windows"))))]
+mod tests {
+    use super::refuse;
+    use kg_domain::{BrowserOp, OpError, ThreadId};
+
+    #[test]
+    fn every_browser_verb_names_the_platform() {
+        let id = || ThreadId("thr_1".into());
+        let verbs = [
+            BrowserOp::Open {
+                url: "https://example.com".into(),
+                thread_id: id(),
+            },
+            BrowserOp::Status { thread_id: id() },
+            BrowserOp::Snapshot { thread_id: id() },
+            BrowserOp::Goto {
+                url: "https://example.com".into(),
+                thread_id: id(),
+            },
+            BrowserOp::Back { thread_id: id() },
+            BrowserOp::Forward { thread_id: id() },
+            BrowserOp::Reload { thread_id: id() },
+            BrowserOp::Close { thread_id: id() },
+        ];
+        for verb in verbs {
+            assert_eq!(
+                refuse(&verb),
+                Err(OpError::Failed(
+                    "The browser works on macOS and Windows only for now.".into()
+                ))
+            );
+        }
     }
 }

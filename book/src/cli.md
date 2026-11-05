@@ -31,6 +31,7 @@ Commands:
   keymap       Keyboard shortcuts: built-in ones and plugin commands
   preference   Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   ui           Native window for QA and agents
+  browser      The Browser tab's page, driven by this thread
   diff         A thread environment's diff. Reads git and never writes the worktree
   diagnostics  Write a local diagnostics file
   update       Check for a newer kagan
@@ -2713,6 +2714,166 @@ Options:
       --window <WINDOW>
           [default: 0]
 
+  -h, --help
+          Print help
+```
+
+## `kg browser`
+
+```text
+The Browser tab's page, driven by this thread
+
+Usage: kg browser [OPTIONS] <COMMAND>
+
+Commands:
+  open      Give this thread the Browser tab's page and load a URL
+  status    The page this thread drives: thread, url, title, and whether the tab is drawn
+  snapshot  Controls and text on the page, each control with a ref for the next command
+  goto      Load another URL in the page
+  back      Go back in the page's history
+  forward   Go forward in the page's history
+  reload    Load the page again
+  close     Stop driving; the page stays as the person's
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Print compact JSON; failures print the error envelope
+
+  -h, --help
+          Print help
+```
+
+## `kg browser open`
+
+```text
+Give this thread the Browser tab's page and load a URL
+
+Usage: kg browser open <URL> <THREAD_ID>
+
+Arguments:
+  <URL>
+          
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser status`
+
+```text
+The page this thread drives: thread, url, title, and whether the tab is drawn
+
+Usage: kg browser status <THREAD_ID>
+
+Arguments:
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser snapshot`
+
+```text
+Controls and text on the page, each control with a ref for the next command
+
+Usage: kg browser snapshot <THREAD_ID>
+
+Arguments:
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser goto`
+
+```text
+Load another URL in the page
+
+Usage: kg browser goto <URL> <THREAD_ID>
+
+Arguments:
+  <URL>
+          
+
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser back`
+
+```text
+Go back in the page's history
+
+Usage: kg browser back <THREAD_ID>
+
+Arguments:
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser forward`
+
+```text
+Go forward in the page's history
+
+Usage: kg browser forward <THREAD_ID>
+
+Arguments:
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser reload`
+
+```text
+Load the page again
+
+Usage: kg browser reload <THREAD_ID>
+
+Arguments:
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
+  -h, --help
+          Print help
+```
+
+## `kg browser close`
+
+```text
+Stop driving; the page stays as the person's
+
+Usage: kg browser close <THREAD_ID>
+
+Arguments:
+  <THREAD_ID>
+          [env: KG_THREAD_ID=]
+
+Options:
   -h, --help
           Print help
 ```

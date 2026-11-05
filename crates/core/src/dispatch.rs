@@ -22,6 +22,10 @@ fn read_sidebar(store: &mut kg_store::Store) -> kg_store::Result<OpResult> {
     )))
 }
 
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "one arm per Op variant; the router is a flat table"
+)]
 pub(crate) async fn execute(
     this: &WeakEntity<Workspace>,
     op: Op,
@@ -87,6 +91,7 @@ pub(crate) async fn execute(
         Op::Keymap(op) => keymap(this, database, op, cx).await,
         Op::Preference(op) => preference(this, database, op, cx).await,
         Op::Ui(op) => crate::ui::run(this, op, cx).await,
+        Op::Browser(op) => crate::browser::run(this, op, cx).await,
         Op::Surface(op) => crate::ui::drive(this, crate::UiJob::Surface(op), cx).await,
         Op::Diff(op) => crate::diff::run(database, op, cx).await,
         Op::Diagnostics(op) => crate::diagnostics::export(this, op, cx).await,
@@ -170,6 +175,7 @@ pub(crate) fn serialized(op: &Op) -> bool {
         | Op::Plugin(_)
         | Op::Diff(_)
         | Op::Diagnostics(_)
+        | Op::Browser(_)
         | Op::Update(_) => false,
         Op::Project(ProjectOp::Add { .. } | ProjectOp::Reorder { .. })
         | Op::Environment(

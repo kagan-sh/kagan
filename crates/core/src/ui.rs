@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui_kit::{App, AsyncApp, Task, WeakEntity};
-use kg_domain::{OpError, OpResult, SurfaceOp, UI_UNAVAILABLE, UiOp};
+use kg_domain::{BrowserOp, OpError, OpResult, SurfaceOp, UI_UNAVAILABLE, UiOp};
 
 use crate::Workspace;
 use crate::database::Result;
@@ -11,6 +11,7 @@ use crate::workspace::closed;
 pub enum UiJob {
     Op(UiOp),
     Surface(SurfaceOp),
+    Browser(BrowserOp),
     NewTheme { id: String, from: Option<String> },
 }
 

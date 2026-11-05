@@ -851,6 +851,32 @@ fn surface_ids_and_window_indexes_match_the_documented_checks() {
 }
 
 #[test]
+fn a_browser_op_needs_a_plain_thread_and_a_web_address() {
+    use crate::BrowserOp;
+    let open = |url: &str| {
+        crate::check(&Op::Browser(BrowserOp::Open {
+            url: url.into(),
+            thread_id: ThreadId("thr_1".into()),
+        }))
+    };
+    assert_eq!(open("  "), Err("type a web address, such as example.com"));
+    assert_eq!(open("example.com"), Ok(()));
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Goto {
+            url: "example.com".into(),
+            thread_id: ThreadId("not plain".into()),
+        })),
+        Err("thread id must be a plain identifier")
+    );
+    assert_eq!(
+        crate::check(&Op::Browser(BrowserOp::Snapshot {
+            thread_id: ThreadId("thr_1".into()),
+        })),
+        Ok(())
+    );
+}
+
+#[test]
 fn op_fields_are_camel_case_on_the_wire() {
     let op = Op::Status {
         thread_id: Some(ThreadId("thr_1".into())),

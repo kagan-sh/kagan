@@ -69,6 +69,8 @@ When a program prints a local address, **Open localhost:3000** appears over the 
 
 On macOS and Windows, click **+** in the right sidebar and choose **Browser**. Type an address and press Enter. Only http and https pages open. A local address such as `localhost:3000` opens over http. Your logins end when the page closes, and it cannot use your camera or microphone. Closing the tab closes the page. On Linux, the tab tells you that the browser works on macOS and Windows only.
 
+A thread's agent can drive the same page with `kg browser`. The tab then shows **Driven by** the thread and **Stop agent** instead of the address field. Stop agent, or `kg browser close`, leaves the page open for you with its address in the field. Showing another thread hides the page but keeps the browser session, and the Browser tab comes back with that thread. Plugins cannot drive the page.
+
 ## Details
 
 **Details** shows the selected thread's folder, folder kind, and program. Click the copy icon to copy the folder path.
