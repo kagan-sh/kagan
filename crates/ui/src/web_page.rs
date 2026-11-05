@@ -67,7 +67,7 @@ impl WebPage {
         (self.loads.clone(), self.finished.clone())
     }
 
-    /// Drops the load signals of a page that already finished loading.
+    /// Clears earlier load signals, so the next load wait does not return before the new document loads.
     pub(crate) fn forget_loads(&self) {
         while self.finished.try_recv().is_ok() {}
     }

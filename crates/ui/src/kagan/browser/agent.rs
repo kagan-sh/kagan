@@ -415,7 +415,6 @@ impl Kagan {
     }
 }
 
-/// Whether `caller` may act on the page `owner` drives.
 fn owns(owner: &ThreadId, caller: &ThreadId) -> bool {
     owner == caller
 }
