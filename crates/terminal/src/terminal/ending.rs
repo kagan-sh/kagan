@@ -5,7 +5,8 @@ use std::thread::JoinHandle;
 
 use portable_pty::{Child, MasterPty};
 
-use super::{Outgoing, Shared, lock};
+use super::shared::{Shared, lock};
+use super::stream::Outgoing;
 
 pub(super) struct Ending {
     pub(super) child: Box<dyn Child + Send + Sync>,

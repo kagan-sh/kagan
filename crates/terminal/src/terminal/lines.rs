@@ -1,6 +1,7 @@
 use std::fmt;
 
-use super::{Finished, Screen, Shared, Terminal};
+use super::shared::Shared;
+use super::{Finished, Screen, Terminal};
 
 /// The kept text as lines, oldest first, with the grid's row count and how many of the last rows
 /// are on the screen.
