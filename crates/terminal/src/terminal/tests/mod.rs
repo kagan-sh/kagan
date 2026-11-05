@@ -1,6 +1,8 @@
 use std::ffi::{OsStr, OsString};
 use std::process::{Command, Stdio};
+#[cfg(unix)]
 use std::sync::Arc;
+#[cfg(unix)]
 use std::sync::atomic::AtomicU64;
 use std::sync::mpsc;
 use std::thread;
@@ -8,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use super::Launch;
 use super::Terminal;
+#[cfg(unix)]
 use super::shared::lock;
 
 fn shell_launch() -> Launch {
@@ -133,6 +136,7 @@ impl Drop for Reap {
         }
     }
 }
+#[cfg(unix)]
 impl Terminal {
     /// Makes the reader withhold end of file until `gate` is used, and reads the drain cap from `clock`.
     pub(crate) fn controlled(

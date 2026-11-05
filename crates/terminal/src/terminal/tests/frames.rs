@@ -1,14 +1,19 @@
+#[cfg(unix)]
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+use crate::SelectMode;
+use crate::Terminal;
 use crate::screen::Screen;
-use crate::{SelectMode, Terminal};
 
 use super::super::shared::{Frame, lock, store_frame};
-use super::{Reap, quit_within, sh, shell_launch, wait_for, within};
+use super::{Reap, quit_within, shell_launch, within};
+#[cfg(unix)]
+use super::{sh, wait_for};
 
 #[cfg(unix)]
 #[test]
@@ -202,6 +207,7 @@ fn the_title_the_program_sets_is_kept() {
     quit_within(terminal, Duration::from_secs(3));
 }
 
+#[cfg(unix)]
 pub(super) fn row_text(terminal: &Terminal, row: usize) -> String {
     let grid = terminal.grid();
     grid.lines[row]

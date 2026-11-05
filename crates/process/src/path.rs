@@ -1,6 +1,7 @@
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
 use super::process::poll_child;
 
 /// The `PATH` of the user's login shell, which an app started from the desktop does not inherit,

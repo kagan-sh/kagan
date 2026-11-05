@@ -1,15 +1,22 @@
 use std::sync::Arc;
+#[cfg(unix)]
 use std::sync::atomic::AtomicU64;
+#[cfg(unix)]
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 use crate::Terminal;
 use crate::screen::Edit;
 
 use super::super::shared::lock;
 use super::super::stream::paste_text;
+#[cfg(unix)]
 use super::frames::row_text;
-use super::{Reap, quit_within, sh, shell_launch, wait_for};
+use super::{Reap, quit_within, shell_launch};
+#[cfg(unix)]
+use super::{sh, wait_for};
 
 #[test]
 fn a_paste_keeps_its_newlines_as_the_program_reads_them() {

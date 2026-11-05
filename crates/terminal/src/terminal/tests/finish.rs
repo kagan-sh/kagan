@@ -1,12 +1,22 @@
+#[cfg(unix)]
 use std::sync::Arc;
+#[cfg(unix)]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(unix)]
 use std::sync::mpsc;
+#[cfg(unix)]
 use std::thread;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
-use super::super::exit::{DRAIN, finished_exit};
+#[cfg(unix)]
+use super::super::exit::DRAIN;
+use super::super::exit::finished_exit;
+#[cfg(unix)]
 use super::{Reap, sh};
-use crate::{Exit, Finished, Terminal};
+use crate::Exit;
+#[cfg(unix)]
+use crate::{Finished, Terminal};
 
 #[test]
 fn a_finished_process_needs_a_signalled_handle() {
