@@ -12,6 +12,7 @@ use gpui_kit::{
 };
 use kg_core::{Color, Workspace};
 use kg_domain::{Op, Thread, ThreadId, ThreadOp, ThreadStatus};
+use kg_plugins::RunCommand;
 
 use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, tip};
 use super::{
@@ -72,8 +73,10 @@ impl Kagan {
         let focus = self.focus.clone();
         let pinned = thread.pinned;
         let pin = if pinned { "Unpin" } else { "Pin" };
+        let plugin_commands = super::header::menu(cx);
         let menu = PopupMenu::build(window, cx, move |menu, _, _| {
-            menu.action_context(focus)
+            let menu = menu
+                .action_context(focus)
                 .menu_element(Box::new(TogglePinned), move |_, _| {
                     menu_item("thread-pin", pin)
                 })
@@ -84,8 +87,23 @@ impl Kagan {
                 .separator()
                 .menu_element(Box::new(RenameThread), |_, _| {
                     menu_item("thread-rename", "Rename…")
+                });
+            let menu = plugin_commands.into_iter().fold(menu, |menu, command| {
+                let run = RunCommand::new(command.plugin.clone(), command.id.clone());
+                let row = super::header::menu_id_for(&command.plugin, &command.id);
+                let title = command.title;
+                menu.separator().menu_element(Box::new(run), move |_, _| {
+                    control(
+                        row.clone(),
+                        Facts {
+                            role: Role::MenuItem,
+                            ..Facts::button(title.clone())
+                        },
+                        title.clone(),
+                    )
                 })
-                .separator()
+            });
+            menu.separator()
                 .menu_element(Box::new(SaveDiagnostics), |_, _| {
                     menu_item("save-diagnostics", "Save diagnostics")
                 })

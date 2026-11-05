@@ -561,6 +561,9 @@ impl Manifest {
             if command.header && command.when != crate::commands::CommandWhen::Thread {
                 return Err("a header command needs when thread".into());
             }
+            if command.menu && command.when != crate::commands::CommandWhen::Thread {
+                return Err("a menu command needs when thread".into());
+            }
             if let Some(key) = &command.key {
                 crate::commands::checked_key(key).map_err(|error| error.to_string())?;
             }

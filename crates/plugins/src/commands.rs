@@ -57,6 +57,8 @@ pub(crate) struct Command {
     pub(crate) when: CommandWhen,
     #[serde(default)]
     pub(crate) header: bool,
+    #[serde(default)]
+    pub(crate) menu: bool,
 }
 
 /// Where a command's key comes from. A key the person saved is bound before any manifest's.
@@ -74,6 +76,7 @@ pub struct CommandContribution {
     pub key: Option<String>,
     pub when: CommandWhen,
     pub header: bool,
+    pub menu: bool,
     pub source: KeySource,
 }
 
@@ -83,6 +86,27 @@ impl CommandContribution {
     pub fn action(&self) -> String {
         format!("{}:{}", self.plugin, self.id)
     }
+
+    fn of(
+        plugin: &PluginId,
+        command: &Command,
+        bindings: &BTreeMap<String, Option<String>>,
+    ) -> Self {
+        let (key, source) = match bindings.get(&command.id) {
+            Some(saved) => (saved.clone(), KeySource::Saved),
+            None => (command.key.clone(), KeySource::Manifest),
+        };
+        Self {
+            plugin: plugin.clone(),
+            id: command.id.clone(),
+            title: command.title.clone(),
+            key,
+            when: command.when,
+            header: command.header,
+            menu: command.menu,
+            source,
+        }
+    }
 }
 
 impl PluginHost {
@@ -91,21 +115,11 @@ impl PluginHost {
         self.active
             .iter()
             .flat_map(|(plugin, active)| {
-                active.manifest.commands.iter().map(|command| {
-                    let (key, source) = match active.bindings.get(&command.id) {
-                        Some(saved) => (saved.clone(), KeySource::Saved),
-                        None => (command.key.clone(), KeySource::Manifest),
-                    };
-                    CommandContribution {
-                        plugin: plugin.clone(),
-                        id: command.id.clone(),
-                        title: command.title.clone(),
-                        key,
-                        when: command.when,
-                        header: command.header,
-                        source,
-                    }
-                })
+                active
+                    .manifest
+                    .commands
+                    .iter()
+                    .map(|command| CommandContribution::of(plugin, command, &active.bindings))
             })
             .collect()
     }
@@ -306,3 +320,6 @@ async fn store_bindings(
         .await?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

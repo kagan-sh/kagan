@@ -571,3 +571,7 @@ Rules out: kagan's own syntax color vocabulary, a per-token merge over the defau
 Why: a board or CI plugin stores JSON in a string setting and parses it by hand today; the host can refuse a wrong shape before it is saved, and a textarea makes a list or object editable.
 Cost: one more compile of the declared schema when a setting is saved.
 Rules out: a schema on secret, folder, project, select or boolean, a secret with newlines, a schema-driven widget (a schema does not turn a string into a select), and a remote `$ref`.
+
+**141. A plugin command can sit in the thread actions menu.** A command with `"menu": true` and `"when": "thread"` is a row in the shown thread's actions menu (the ellipsis), in a section after Rename and before Save diagnostics, labeled with its title. Rows follow plugin id then manifest order. A click runs that command for the shown thread, closes the menu, and returns focus to the terminal, the same path as its key and the command list; it dispatches no new `Op`. `kg plugin check` and install refuse `menu` without `when: "thread"`. A command may set `header` and `menu` together; `menu` is a placement, not a binding, and `kg keymap` and Settings → Keyboard do not change. It amends 129: the menu is for thread commands that should not all be title-bar buttons, and no header button folds into the menu on its own.
+Why: a plugin with several thread commands needs somewhere to put them that is not the title bar.
+Rules out: a submenu, a plugin-chosen section or group, and a menu row for a command that did not declare `menu`.
