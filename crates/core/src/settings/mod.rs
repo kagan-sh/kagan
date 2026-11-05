@@ -375,7 +375,7 @@ mod review_wrap_tests {
 
     #[test]
     fn guide_names_every_preference() {
-        let guide = include_str!("../dispatch/guide-map.md");
+        let guide = include_str!("../guide-map.md");
         let behaviour = include_str!("../../../../docs/behaviour.md");
         let help = include_str!("../../../domain/src/op/mod.rs")
             .lines()
