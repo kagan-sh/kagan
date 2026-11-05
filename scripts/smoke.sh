@@ -1,6 +1,5 @@
 #!/bin/sh
-# Live UI smoke gate on macOS: an isolated data dir, a real window, one snapshot, one screenshot,
-# a clean quit. Linux has no `kg ui screenshot`, so `--strict` needs macOS.
+# `--strict` needs macOS: Linux has no `kg ui screenshot`.
 set -eu
 
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
@@ -52,8 +51,8 @@ if [ ! -x "$binary" ]; then
   [ -x "$binary" ] || { echo "smoke: $binary is missing after the build" >&2; exit 1; }
 fi
 
-# The caller's app is left alone: this run gets its own data dir and socket. The socket path
-# must fit sun_path (103 bytes on macOS); a mktemp folder does.
+# Own data dir and socket, so the caller's app is left alone; the path must fit sun_path
+# (103 bytes on macOS), and a mktemp folder does.
 tmp=$(mktemp -d) || { echo "smoke: cannot make a temp folder" >&2; exit 1; }
 KG_DATA_DIR=$tmp/data
 KG_SOCKET=$tmp/kg.sock
