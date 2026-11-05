@@ -195,9 +195,9 @@ Badge	plugin-api.md	Badge	gpui-kit component name
 Sandbox	picker.rs	sandbox	Provider permission sandbox wording
 Sandbox	tests/app/commands.rs	sandbox	Provider permission test copy
 Sandbox	plugins/src/runtime/files.rs	sandbox	tempdir variable in path tests
-Sandbox	thread/agent/mod.rs	--sandbox	Cursor Agent's own flag name
+Sandbox	thread/agent.rs	--sandbox	Cursor Agent's own flag name
 Session	thread/conversation	"--	Claude Code's own flag names
 Session	*	--session-id	Claude Code's own flag name
 Session	*	--new-session-id	Cursor Agent's own flag name
-Chat	thread/agent/mod.rs	create-chat	Cursor Agent's own subcommand
+Chat	thread/agent.rs	create-chat	Cursor Agent's own subcommand
 ```
