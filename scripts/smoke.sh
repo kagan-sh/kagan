@@ -97,7 +97,7 @@ fail() {
 "$binary" --headless >"$log" 2>&1 &
 app=$!
 
-# A client call can start its own app, so readiness is the socket file, not `kg status`.
+# Clients never start an app here (KG_NO_START=1), so readiness is the socket file, not `kg status`.
 i=0
 while [ ! -S "$KG_SOCKET" ]; do
   alive || fail "$binary exited before it made its socket"
