@@ -360,3 +360,36 @@ fn entries(folder: &Path) -> impl Iterator<Item = PathBuf> + use<> {
         .flatten()
         .map(|entry| entry.path())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(items: &[&str]) -> Vec<OsString> {
+        items.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn a_flag_picks_a_conversation_only_as_a_whole_flag() {
+        assert!(picks_claude(&args(&["--resume", "abc"])));
+        assert!(picks_claude(&args(&["--resume=abc"])));
+        assert!(picks_claude(&args(&["-c"])));
+        assert!(!picks_claude(&args(&["--resume-from", "abc"])));
+        assert!(!picks_claude(&args(&["--person-arg"])));
+    }
+
+    #[test]
+    fn a_codex_subcommand_picks_a_conversation() {
+        assert!(picks_codex(&args(&["resume", "abc"])));
+        assert!(picks_codex(&args(&["fork"])));
+        assert!(!picks_codex(&args(&["--model", "x"])));
+    }
+
+    #[test]
+    fn a_cursor_resume_or_new_id_picks_a_conversation() {
+        assert!(picks_cursor(&args(&["--resume", "abc"])));
+        assert!(picks_cursor(&args(&["--continue"])));
+        assert!(picks_cursor(&args(&["--new-session-id=abc"])));
+        assert!(!picks_cursor(&args(&["--plugin-dir", "x"])));
+    }
+}

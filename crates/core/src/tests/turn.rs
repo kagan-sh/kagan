@@ -662,3 +662,47 @@ async fn a_program_that_sets_no_spinner_title_is_never_busy(cx: &mut TestAppCont
         .advance_clock(std::time::Duration::from_secs(2));
     assert_eq!(busy_and_unread(&id, cx), (false, false));
 }
+
+#[gpui_kit::test]
+async fn an_unknown_answer_option_leaves_the_question_open(cx: &mut TestAppContext) {
+    let (fixture, id) = sleeping(cx).await;
+    let OpResult::Text(first) = op(ask_op(id.clone(), "Ship it?", ask_options()), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("ask");
+    };
+    let error = cx
+        .update(|cx| {
+            Workspace::answer(&id, PendingInteractionId(first.clone()), "maybe".into(), cx)
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, OpError::Invalid(ref message) if message.contains("unknown interaction option")),
+        "{error}"
+    );
+    assert_eq!(pending(&id, cx).await.len(), 1);
+    assert!(fixture.workspace.read_with(cx, |workspace, _| {
+        workspace.needs_a_person(&PendingInteractionId(first))
+    }));
+}
+
+#[gpui_kit::test]
+async fn answering_the_same_question_twice_is_not_found(cx: &mut TestAppContext) {
+    let (_fixture, id) = sleeping(cx).await;
+    let OpResult::Text(first) = op(ask_op(id.clone(), "Ship it?", ask_options()), cx)
+        .await
+        .unwrap()
+    else {
+        panic!("ask");
+    };
+    cx.update(|cx| Workspace::answer(&id, PendingInteractionId(first.clone()), "yes".into(), cx))
+        .await
+        .unwrap();
+    let error = cx
+        .update(|cx| Workspace::answer(&id, PendingInteractionId(first), "no".into(), cx))
+        .await
+        .unwrap_err();
+    assert!(matches!(error, OpError::NotFound(_)), "{error}");
+}

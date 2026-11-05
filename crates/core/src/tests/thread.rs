@@ -1174,3 +1174,25 @@ async fn a_program_that_vanishes_before_start_refuses_the_thread(cx: &mut TestAp
     );
     assert!(pid_of(&threads[0].id, cx).is_none());
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_stop_after_the_program_ended_records_nothing(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let OpResult::Thread(started) = op(fixture.run("/bin/sh -c \"exit 0\""), cx).await.unwrap()
+    else {
+        panic!("thread")
+    };
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    let before = kinds_of(&started.id, cx).await;
+    op(
+        Op::Thread(ThreadOp::Stop {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(kinds_of(&started.id, cx).await, before);
+    assert_eq!(thread(&started.id, cx).await.status, ThreadStatus::Idle);
+}

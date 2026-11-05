@@ -12,6 +12,7 @@ mod guide;
 mod plugin;
 mod program;
 mod project;
+mod read;
 #[cfg(unix)]
 mod resume;
 mod screen;
