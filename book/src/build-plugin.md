@@ -31,6 +31,7 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 - `entry`: the main script, `main.js`.
 - `instructions`: a short standing text for agents.
 - `instruct`: when `true`, the plugin gets a job each time a program starts and may append text for that start only.
+- `schedules`: runs a job every so many minutes while kagan is open, for example `[{ "id": "sync", "every": 15 }]`. Kagan loads the plugin for each run. A missed run is not made up.
 - `powers`: what the plugin can do. The starter asks for none.
 - `commands`: commands that you can bind to a key. `"header": true` with `"when": "thread"` also draws the command as a button on the thread title. `"menu": true` with `"when": "thread"` also lists the command in the thread actions menu.
 - `ui.panels`: `"placement": "left"` puts a tool below the threads. `"placement": "center"` puts a page in the center. `"placement": "right"` puts a tab in the right sidebar. A panel names `"view"` (a class the entry exports) or `"web"` (an HTML file in the plugin, such as `ui/index.html`). A web panel draws that file. The page calls `kagan.post` and the script answers with `kagan/panel`. See `examples/plugins/web-panel`.
@@ -38,7 +39,7 @@ To let an agent do the work, click **New plugin…** on the rail. The agent can 
 
 kagan refuses a manifest with an unknown key. Run `kg plugin check ./hello` to find manifest errors. [docs/plugin-api.md](https://github.com/kagan-sh/kagan/blob/main/docs/plugin-api.md) lists every key, power, and the JavaScript API.
 
-The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has a panel, a web panel, a sidebar, a review, an overlay, a header button, a `kg` command, and a theme.
+The [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) folder has a panel, a web panel, a sidebar, a review, an overlay, a header button, a `kg` command, a theme, and a schedule that runs every minute.
 
 ## Share it
 

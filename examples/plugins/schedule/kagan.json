@@ -1,0 +1,11 @@
+{
+  "id": "dev.kagan.schedule",
+  "name": "Schedule",
+  "version": "0.1.0",
+  "kagan": ">=0.1.0",
+  "entry": "main.js",
+  "icon": "icon.svg",
+  "instructions": "Logs a line every minute while kagan is open.",
+  "schedules": [{ "id": "heartbeat", "every": 1 }],
+  "powers": {}
+}

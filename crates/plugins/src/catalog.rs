@@ -32,7 +32,7 @@ pub fn capabilities() -> Vec<Capability> {
 }
 
 /// Manifest keys besides `ui` that declare a contribution. Each id is a key in the manifest.
-const DECLARED: [Capability; 7] = [
+const DECLARED: [Capability; 8] = [
     Capability {
         id: "commands",
         name: "Command",
@@ -67,6 +67,11 @@ const DECLARED: [Capability; 7] = [
         id: "instruct",
         name: "Instructions",
         detail: "adds instructions to a thread's program",
+    },
+    Capability {
+        id: "schedules",
+        name: "Schedule",
+        detail: "runs on its own while kagan is open",
     },
 ];
 
@@ -162,7 +167,7 @@ mod tests {
     #[test]
     fn bundled_examples_pass_check() {
         let examples = super::examples();
-        assert_eq!(examples.len(), 9);
+        assert_eq!(examples.len(), 10);
         for example in &examples {
             let data = tempfile::tempdir().unwrap();
             crate::development::check(&example.root, data.path()).unwrap();
