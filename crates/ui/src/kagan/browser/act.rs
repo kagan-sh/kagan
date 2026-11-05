@@ -49,7 +49,7 @@ fn finish_text(body: &str) -> String {
     format!("{HEAD}{body}{TEXT_TAIL}")
 }
 
-/// JSON-encodes a caller's text, so a quote, newline or `</script>` stays data.
+/// Embeds the text in the script as a JSON string, so a quote or newline cannot end it.
 fn quoted(text: &str) -> String {
     serde_json::Value::String(text.to_owned()).to_string()
 }
