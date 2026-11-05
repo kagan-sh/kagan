@@ -9,11 +9,6 @@ use super::{
 };
 use crate::tests::kagan::{click, open, open_with_plugins_then, present, selected_of, shows};
 
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 #[gpui_kit::test]
 fn appearance_shows_a_missing_theme_and_keeps_its_id(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);

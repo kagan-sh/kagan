@@ -6,11 +6,6 @@ use super::{install_plugins, set_mode};
 use crate::tests::kagan::{chord, click, open, open_with_plugins_then, shows};
 use crate::theme::follow_system;
 
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 #[gpui_kit::test]
 fn system_mode_follows_the_operating_system(cx: &mut TestAppContext) {
     let (_kagan, _window, _data) = open(cx);

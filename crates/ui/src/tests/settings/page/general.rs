@@ -11,9 +11,6 @@ use crate::tests::kagan::{
 };
 
 const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
 
 pub(in crate::tests) fn painted_bg(cx: &mut TestAppContext) -> Color {
     cx.update(|cx| crate::theme::ThemeState::global(cx).read(cx).palette.bg)

@@ -12,9 +12,6 @@ use crate::tests::kagan::{
 };
 
 const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
 
 #[gpui_kit::test]
 fn agent_integration_saved_as_off_shows_off_at_start(cx: &mut TestAppContext) {

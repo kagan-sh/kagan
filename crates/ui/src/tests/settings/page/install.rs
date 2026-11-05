@@ -9,11 +9,6 @@ use crate::tests::kagan::{
     wait_until,
 };
 
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 #[gpui_kit::test]
 fn cancel_install_with_nothing_installing_says_so(cx: &mut TestAppContext) {
     let (_kagan, _window, _data) = open_with_plugins_then(cx, |_| {});

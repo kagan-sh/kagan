@@ -10,9 +10,6 @@ use super::{
 use crate::tests::kagan::{click, open_with_plugins_then, present, selected_of, value_of};
 
 const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
 
 #[gpui_kit::test]
 fn cancelling_a_folder_picker_and_a_file_path_do_not_change_the_setting(cx: &mut TestAppContext) {

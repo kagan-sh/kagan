@@ -12,11 +12,6 @@ use crate::tests::kagan::{
 };
 use crate::tests::sidebar::layout::span;
 
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 #[gpui_kit::test]
 fn settings_saves_terminal_size_and_notifications(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);

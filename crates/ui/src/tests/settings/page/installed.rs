@@ -9,9 +9,6 @@ use super::{aria_label, install_plugins, run_op};
 use crate::tests::kagan::{click, open, open_with_plugins_then, present, shows};
 
 const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
 
 #[gpui_kit::test]
 fn installed_names_how_to_make_a_plugin_when_none_are_installed(cx: &mut TestAppContext) {

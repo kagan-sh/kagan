@@ -5,11 +5,6 @@ use super::{aria_label, bound_keycap, run_op};
 use crate::tests::kagan::{chord, click, open, present, shows};
 use crate::tests::sidebar::layout::span;
 
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 #[gpui_kit::test]
 fn leaving_settings_at_480_brings_back_the_window_layout(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);

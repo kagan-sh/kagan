@@ -11,11 +11,6 @@ use crate::tests::kagan::{
     press_key, shows, wait_until,
 };
 
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 pub(in crate::tests) const TWIN: &str = "dev.kagan.twin";
 
 /// A second plugin whose only command wants the key Navigator's Show already has.

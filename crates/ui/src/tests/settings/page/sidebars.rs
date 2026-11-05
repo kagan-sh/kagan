@@ -8,11 +8,6 @@ use crate::tests::kagan::{
     chord, click, open, open_with_plugins_then, run_shell, set_preference, shows,
 };
 
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 #[gpui_kit::test]
 fn a_long_note_above_a_settings_row_does_not_block_its_click(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {

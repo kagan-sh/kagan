@@ -1,15 +1,10 @@
-const PREFS: &str = "dev.test.prefs";
-const VIEW: &str = "dev.test.view";
-const OTHER: &str = "dev.test.other";
-const OLD: &str = "dev.test.old";
-
 mod general;
 mod install;
 mod installed;
 mod keyboard;
 mod keys;
+mod layout;
 mod mode;
-mod page;
 mod plugins;
 mod saves;
 mod settings;
