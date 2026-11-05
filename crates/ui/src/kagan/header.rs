@@ -46,7 +46,7 @@ pub(crate) fn menu_id_for(plugin: &PluginId, id: &str) -> ElementId {
     ElementId::Name(format!("thread-menu/{}", encoded(plugin, id)).into())
 }
 
-/// `<plugin>/<command>`, with `%` escapes so a command name cannot merge into the plugin id.
+// Command ids can hold any byte; %-escaping keeps the "/" separator unambiguous.
 fn encoded(plugin: &PluginId, id: &str) -> String {
     let mut command = String::new();
     for byte in id.bytes() {
