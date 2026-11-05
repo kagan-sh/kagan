@@ -34,7 +34,6 @@ pub(super) fn buttons(cx: &App) -> Vec<AnyElement> {
         .collect()
 }
 
-/// The commands a plugin placed in the shown thread's actions menu.
 pub(super) fn menu(cx: &App) -> Vec<CommandContribution> {
     placed(cx, |command| command.menu)
 }

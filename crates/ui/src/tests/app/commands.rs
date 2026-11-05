@@ -712,7 +712,6 @@ fn a_plugin_menu_command_runs_from_the_thread_actions_menu(cx: &mut TestAppConte
     let id = run_shell(cx);
     click(cx, window, &format!("thread-{}", id.0));
 
-    // A command with both flags stays on the title bar as well as in the menu.
     let header = header_id("dev.acme.menu", "both");
     wait_until(cx, |cx| shows_id(cx, window, &header));
 

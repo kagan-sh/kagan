@@ -1,5 +1,5 @@
 target 35000
-total 58274
+total 58273
 allow_expect 4
 crates/core/src/diff.rs 895
 crates/core/src/environment.rs 1044
