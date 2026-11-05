@@ -454,7 +454,7 @@ fn a_declared_select_default_is_the_initial_choice(cx: &mut TestAppContext) {
     );
 }
 
-/// The field values on the thread's newest `answered` event.
+/// The field values on the thread's first `answered` event.
 fn answered_fields(
     cx: &mut TestAppContext,
     thread: &kg_domain::ThreadId,
