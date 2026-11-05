@@ -1,5 +1,5 @@
 #!/bin/sh
-# `--strict` needs macOS: Linux has no `kg ui screenshot`.
+# Linux has no `kg ui screenshot`; `--strict` turns that into a failure.
 set -eu
 
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
