@@ -22,9 +22,23 @@ use crate::{Environment, Project, Requester, Thread};
 pub(crate) const GRACE: i64 = 10_000;
 const QUIT_DEADLINE: Duration = Duration::from_secs(3);
 
+/// The activation a plugin setting write belongs to, and the gate that can revoke it.
+pub struct Permit {
+    activation: u64,
+    gate: Arc<Mutex<Option<u64>>>,
+}
+
+impl Permit {
+    #[must_use]
+    pub fn new(activation: u64, gate: Arc<Mutex<Option<u64>>>) -> Self {
+        Self { activation, gate }
+    }
+}
+
 fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
     let personal = data_dir.join("personal");
-    std::fs::create_dir_all(&personal)?;
+    std::fs::create_dir_all(&personal)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", personal.display())))?;
     if store
         .project(&kg_domain::ProjectId("personal".into()))
         .map_err(closed)?
@@ -35,13 +49,26 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
                 id: kg_domain::ProjectId("personal".into()),
                 kind: kg_domain::ProjectKind::Personal,
                 name: "Personal".into(),
-                path: dunce::canonicalize(&personal)?,
+                path: dunce::canonicalize(&personal)
+                    .map_err(|error| OpError::Failed(format!("{}: {error}", personal.display())))?,
                 git_remote_url: None,
                 sort: 0,
             })
             .map_err(closed)?;
     }
     Ok(())
+}
+
+pub(crate) fn open_data(data_dir: &Path) -> Result<(Store, PathBuf)> {
+    std::fs::create_dir_all(data_dir)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", data_dir.display())))?;
+    let data_dir = dunce::canonicalize(data_dir)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", data_dir.display())))?;
+    let database = data_dir.join("kagan.sqlite3");
+    let store = Store::open(&database)
+        .map_err(|error| OpError::Failed(format!("{}: {error}", database.display())))?;
+    ensure_personal(&data_dir, &store)?;
+    Ok((store, data_dir))
 }
 
 pub(crate) enum Request {
@@ -74,7 +101,7 @@ pub(crate) enum Request {
         exit: kg_terminal::Exit,
     },
     /// A locked title stays, and the rename fails.
-    SocketRename {
+    RenameOnce {
         id: ThreadId,
         title: String,
     },
@@ -143,7 +170,7 @@ pub struct Workspace {
     keymap: kg_domain::Keymap,
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
-    pub(crate) program_environment: Option<crate::program::Environment>,
+    pub(crate) program_environment: Option<crate::program::ProgramEnvironment>,
     /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
     pub(crate) claude_config: Option<std::path::PathBuf>,
     /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
@@ -216,14 +243,7 @@ impl Workspace {
     /// Returns an error if the data folder or database cannot be opened.
     pub fn open(data_dir: PathBuf, cli: PathBuf, cx: &mut App) -> Task<Result<Entity<Self>>> {
         let executor = cx.background_executor().clone();
-        let opened = executor.spawn(async move {
-            std::fs::create_dir_all(&data_dir)?;
-            let data_dir = dunce::canonicalize(&data_dir)?;
-            let store = Store::open(data_dir.join("kagan.sqlite3"))
-                .map_err(|error| OpError::Failed(error.to_string()))?;
-            ensure_personal(&data_dir, &store)?;
-            Ok::<_, OpError>((store, data_dir))
-        });
+        let opened = executor.spawn(async move { open_data(&data_dir) });
         cx.spawn(async move |cx| {
             let (store, data_dir) = opened.await?;
             let (database, database_task) = Database::new(store, &executor);
@@ -323,7 +343,7 @@ impl Workspace {
         cx: &mut AsyncApp,
     ) -> Result<OpResult> {
         match request {
-            Request::Op(op) => crate::thread::execute(this, op, None, cx).await,
+            Request::Op(op) => crate::dispatch::execute(this, op, None, cx).await,
             Request::RemoveProject { id, threads } => {
                 this.update(cx, |workspace, _| {
                     if workspace.preparing_projects.contains_key(&id) {
@@ -335,7 +355,7 @@ impl Workspace {
                     Ok(())
                 })
                 .map_err(closed)??;
-                let result = crate::thread::remove_project(this, id.clone(), threads, cx).await;
+                let result = crate::project::remove_project(this, id.clone(), threads, cx).await;
                 this.update(cx, |workspace, _| {
                     workspace.removing_projects.remove(&id);
                 })
@@ -365,8 +385,8 @@ impl Workspace {
             Request::Exited { thread_id, exit } => {
                 crate::thread::exited(this, thread_id, exit, cx).await
             }
-            Request::SocketRename { id, title } => {
-                crate::thread::rename_from_socket(this, id, title, cx).await
+            Request::RenameOnce { id, title } => {
+                crate::thread::rename_once(this, id, title, cx).await
             }
         }
     }
@@ -374,7 +394,7 @@ impl Workspace {
     /// Picks up what the previous process left: interrupted removals.
     async fn resume(this: &WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
         Self::refresh(this, cx).await?;
-        crate::thread::remember_keymap(this, cx).await?;
+        crate::settings::remember_keymap(this, cx).await?;
         let submitted = this
             .update(cx, |workspace, _| workspace.submit(Request::Leftovers))
             .map_err(closed)?;
@@ -390,13 +410,13 @@ impl Workspace {
     /// PATH and the shell. A test calls this so its program list does not depend on the machine.
     #[cfg(any(test, feature = "test-support"))]
     pub fn use_program_environment(&mut self, path: &std::path::Path, shell: &std::path::Path) {
-        self.program_environment = Some(crate::program::Environment {
+        self.program_environment = Some(crate::program::ProgramEnvironment {
             path: path.as_os_str().to_owned(),
             shell: shell.as_os_str().to_owned(),
         });
     }
 
-    pub fn rename_from_socket(id: ThreadId, title: String, cx: &mut App) -> Task<Result<OpResult>> {
+    pub fn rename_once(id: ThreadId, title: String, cx: &mut App) -> Task<Result<OpResult>> {
         let op = Op::Thread(kg_domain::ThreadOp::Rename {
             id: id.clone(),
             title: title.clone(),
@@ -407,10 +427,7 @@ impl Workspace {
         let Some(global) = cx.try_global::<WorkspaceGlobal>() else {
             return Task::ready(Err(OpError::Failed("workspace is not open".into())));
         };
-        let submitted = global
-            .0
-            .read(cx)
-            .submit(Request::SocketRename { id, title });
+        let submitted = global.0.read(cx).submit(Request::RenameOnce { id, title });
         cx.spawn(async move |_| submitted.await)
     }
 
@@ -434,7 +451,10 @@ impl Workspace {
         let this = workspace.downgrade();
         match op {
             Op::Preference(kg_domain::PreferenceOp::Set { key, .. })
-                if requester.is_some() && key.starts_with("slot.") =>
+                if requester.is_some()
+                    && kg_domain::Slot::ALL
+                        .iter()
+                        .any(|slot| slot.preference() == key.as_str()) =>
             {
                 Task::ready(Err(OpError::Invalid(format!(
                     "{key} is set in Settings, or with kg plugin use, which asks a person"
@@ -494,12 +514,12 @@ impl Workspace {
                     result
                 })
             }
-            op if crate::thread::serialized(&op) => {
+            op if crate::dispatch::serialized(&op) => {
                 let submitted = workspace.read(cx).submit(Request::Op(op));
                 cx.spawn(async move |_| submitted.await)
             }
             op => detached(cx, async move |cx| {
-                crate::thread::execute(&this, op, requester, cx).await
+                crate::dispatch::execute(&this, op, requester, cx).await
             }),
         }
     }
@@ -741,7 +761,7 @@ impl Workspace {
     /// # Errors
     /// When the database is closed or removing the plugin fails.
     pub fn remove_plugin(&self, id: PluginId) -> impl Future<Output = Result<()>> + use<> {
-        self.call(move |store| store.remove_plugin(&id))
+        self.call(move |store| store.delete_plugin(&id))
     }
 
     /// # Errors
@@ -765,37 +785,29 @@ impl Workspace {
         self.call(move |store| store.set_plugin_value(&id, &key, &value))
     }
 
-    /// Writes the setting value only while `permit` is `Some(activation)`. A folder save
-    /// also writes that path on `approved` when the key is still a folder, and does not
-    /// change `root`, `source`, `commit`, or `enabled`. When that path cannot be written,
-    /// it writes nothing.
+    /// Writes the setting value only while `permit` still names the plugin's activation. A
+    /// folder save also writes that path on `approved` when the key is still a folder, and
+    /// does not change `root`, `source`, `commit`, or `enabled`. When that path cannot be
+    /// written, it writes nothing.
     ///
     /// # Errors
-    /// When the database is closed or the query fails.
+    /// When the database is closed or the query fails, or the permit is stale, the plugin is
+    /// gone, or the key is no longer a folder setting.
     pub fn commit_plugin_config(
         &self,
         id: PluginId,
         key: String,
         value: Value,
         folder: Option<String>,
-        permit: Arc<Mutex<Option<u64>>>,
-        activation: u64,
-    ) -> impl Future<Output = Result<bool>> + use<> {
+        permit: Permit,
+    ) -> impl Future<Output = Result<()>> + use<> {
         self.call(move |store| {
-            write_plugin_config(
-                store,
-                &id,
-                &key,
-                &value,
-                folder.as_deref(),
-                &permit,
-                activation,
-            )
+            write_plugin_config(store, &id, &key, &value, folder.as_deref(), &permit)
         })
     }
 
     /// Answers a pending question. Not an `Op`, so the socket and MCP cannot answer.
-    /// The threads host calls this for a question a plugin may answer.
+    /// Only the window calls this, as a person's choice.
     pub fn answer(
         thread_id: &ThreadId,
         interaction_id: PendingInteractionId,
@@ -815,8 +827,9 @@ impl Workspace {
     }
 
     /// Raises a question on the thread and resolves with the chosen option id.
-    /// [`Self::answer`] answers it, including from a plugin. Fails when the thread
+    /// [`Self::answer`] answers it. Fails when the thread
     /// stops or the question is otherwise cancelled.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn ask(
         thread_id: &ThreadId,
         title: String,
@@ -904,32 +917,17 @@ impl Workspace {
 
     #[must_use]
     pub fn sidebar(&self, cx: &App) -> kg_domain::Sidebar {
-        let mut sidebar = kg_domain::Sidebar {
-            projects: self
-                .projects
+        kg_domain::Sidebar::new(
+            self.projects
                 .values()
                 .map(|project| project.read(cx).record().clone())
                 .collect(),
-            sections: self.sections.clone(),
-            threads: self
-                .threads
+            self.sections.clone(),
+            self.threads
                 .values()
-                .map(|thread| thread.read(cx).record())
-                .filter(|thread| {
-                    thread.visibility == kg_domain::Visibility::Visible
-                        && thread.archived_at.is_none()
-                })
-                .cloned()
+                .map(|thread| thread.read(cx).record().clone())
                 .collect(),
-        };
-        kg_domain::order_sidebar_projects(&mut sidebar.projects);
-        sidebar.threads.sort_by(|left, right| {
-            right
-                .created_at
-                .cmp(&left.created_at)
-                .then_with(|| right.id.cmp(&left.id))
-        });
-        sidebar
+        )
     }
 
     #[must_use]
@@ -970,7 +968,7 @@ impl Workspace {
                 Ok((
                     projects,
                     environments,
-                    store.threads(None, None, None, None)?,
+                    store.all_threads()?,
                     store.sections()?,
                     store.endings()?,
                     store.screens()?,
@@ -1047,7 +1045,7 @@ impl Workspace {
         self.losses.get(id).copied().map(crate::end::Loss::note)
     }
 
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn set_snapshot_bound(&mut self, id: &ThreadId, bound: usize) -> bool {
         let Some(crate::thread::Shown::Running(terminal)) = self.terminals.get(id) else {
             return false;
@@ -1169,14 +1167,9 @@ impl Workspace {
 
 fn interrupted(store: &mut Store) -> kg_store::Result<()> {
     let at = now();
-    for mut record in store.threads(None, None, None, None)? {
+    for mut record in store.all_threads()? {
         close_left_turn(store, &mut record, at)?;
-        if !matches!(
-            record.status,
-            kg_domain::ThreadStatus::Starting | kg_domain::ThreadStatus::Active
-        ) {
-            clear_pending(store, &record.id)?;
-        }
+        clear_pending(store, &record.id)?;
     }
     close_left_environments(store)
 }
@@ -1212,13 +1205,13 @@ fn close_left_turn(
 
 fn clear_pending(store: &Store, id: &ThreadId) -> kg_store::Result<()> {
     for interaction in store.pending_interactions(id)? {
-        store.remove_pending_interaction(&interaction.id)?;
+        store.delete_pending_interaction(&interaction.id)?;
     }
     Ok(())
 }
 
 fn close_left_environments(store: &mut Store) -> kg_store::Result<()> {
-    let threads = store.threads(None, None, None, None)?;
+    let threads = store.all_threads()?;
     for project in store.projects()? {
         for mut environment in store.environments(&project.id)? {
             if matches!(
@@ -1333,6 +1326,11 @@ fn remember(
     losses
 }
 
+pub(crate) fn database(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Result<Database> {
+    this.update(cx, |workspace, _| workspace.database.clone())
+        .map_err(closed)
+}
+
 pub(crate) fn time(
     this: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,
@@ -1360,26 +1358,33 @@ fn write_plugin_config(
     key: &str,
     value: &Value,
     folder: Option<&str>,
-    permit: &Mutex<Option<u64>>,
-    activation: u64,
-) -> kg_store::Result<bool> {
+    permit: &Permit,
+) -> kg_store::Result<()> {
     let guard = permit
+        .gate
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if *guard != Some(activation) {
-        return Ok(false);
+    if *guard != Some(permit.activation) {
+        return Err(kg_store::Error::Conflict(format!(
+            "plugin {id} changed while this was saving"
+        )));
     }
     if let Some(path) = folder {
         let Some(mut row) = store.plugins()?.into_iter().find(|plugin| plugin.id == *id) else {
-            return Ok(false);
+            return Err(kg_store::Error::NotFound {
+                what: "plugin",
+                id: id.to_string(),
+            });
         };
         if !patch_folder(&mut row, key, path) {
-            return Ok(false);
+            return Err(kg_store::Error::Conflict(format!(
+                "plugin {id} setting {key} is no longer a folder"
+            )));
         }
         store.set_plugin_approved(&row.id, &row.approved)?;
     }
     store.set_plugin_value(id, key, value)?;
-    Ok(true)
+    Ok(())
 }
 
 fn copy_kept_paths(approved: &mut Value, existing: &Value) {

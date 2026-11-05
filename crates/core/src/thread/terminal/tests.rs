@@ -101,6 +101,17 @@ fn a_spinner_after_stop_clears_busy_does_not_open_another_turn(cx: &mut gpui_kit
     });
 }
 
+#[test]
+fn a_start_failure_names_the_program_and_folder() {
+    let message = super::start_failure(
+        std::path::Path::new("tools/claude"),
+        std::path::Path::new("work/folder"),
+        &std::io::Error::from(std::io::ErrorKind::NotFound),
+    );
+    assert!(message.contains("tools/claude"), "{message}");
+    assert!(message.contains("work/folder"), "{message}");
+}
+
 fn running() -> kg_domain::Thread {
     use kg_domain::{ProjectId, Thread, ThreadId, ThreadStatus, Timestamp, Visibility};
     let at = Timestamp(0);
@@ -111,8 +122,6 @@ fn running() -> kg_domain::Thread {
         title: "claude".into(),
         title_locked: false,
         provider: "claude".into(),
-        model: String::new(),
-        reasoning_level: String::new(),
         status: ThreadStatus::Active,
         visibility: Visibility::Visible,
         parent_thread_id: None,

@@ -1,3 +1,5 @@
+mod index;
+mod page;
 mod secret;
 
 use std::path::Path;
@@ -7,8 +9,8 @@ use std::time::Duration;
 use gpui_kit::TestAppContext;
 use kg_core::Workspace;
 use kg_domain::{
-    ConfigOp, EnvironmentSpec, EventKind, IndexOp, KeymapOp, Metadata, Op, OpError, OpResult,
-    Plugin, PluginId, PluginOp, Project, ProjectId, ProjectKind, Run, Thread, ThreadId, ThreadOp,
+    ConfigOp, EnvironmentSpec, EventKind, IndexOp, KeymapOp, Op, OpError, OpResult, Plugin,
+    PluginId, PluginOp, Project, ProjectId, ProjectKind, Run, Thread, ThreadId, ThreadOp,
     ThreadStatus, Timestamp, TurnOutcome, Visibility,
 };
 use serde_json::{Value, json};
@@ -249,8 +251,6 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
             title: "Thread".into(),
             title_locked: false,
             provider: "claude-code".into(),
-            model: String::new(),
-            reasoning_level: String::new(),
             status: ThreadStatus::Idle,
             visibility: Visibility::Visible,
             parent_thread_id: None,
@@ -352,7 +352,7 @@ fn answer_standalone(cx: &mut TestAppContext, option: &str) {
             .unwrap()
     });
     let answered =
-        cx.update(|cx| Workspace::answer_standalone(approval.id().clone(), option.into(), cx));
+        cx.update(|cx| Workspace::answer_standalone(approval.id.clone(), option.into(), cx));
     cx.foreground_executor().block_test(answered).unwrap();
 }
 
@@ -462,10 +462,10 @@ fn manifests_reject_unknown_keys_bad_ids_and_newer_requirements() {
         let error = read_manifest(dir.path()).unwrap_err().to_string();
         assert!(error.contains(expected), "{error}");
     };
-    rejected(&|value| value["extra"] = json!(1), "unknown key \"extra\"");
+    rejected(&|value| value["extra"] = json!(1), "unknown field `extra`");
     rejected(
         &|value| value["downloads"] = json!({}),
-        "unknown key \"downloads\"",
+        "unknown field `downloads`",
     );
     rejected(
         &|value| value["powers"]["spawn"] = json!([{ "program": "tool/bin/server" }]),
@@ -522,6 +522,7 @@ fn manifests_reject_unknown_keys_bad_ids_and_newer_requirements() {
         "unknown variant",
     );
     let mut value = manifest();
+    value["powers"]["areas"] = json!(["threads"]);
     value["events"] = json!(["thread.idle", "thread.turn.ended"]);
     std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
     let read = read_manifest(dir.path()).unwrap();
@@ -669,6 +670,31 @@ fn page_store_is_an_install_line_and_needs_approval_again() {
 }
 
 #[test]
+fn open_url_is_an_install_line_and_needs_approval_again() {
+    let plugin = plugin_dir();
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        !base
+            .lines()
+            .iter()
+            .any(|line| line == "opens links in your browser")
+    );
+    let mut value = manifest();
+    value["powers"]["openUrl"] = json!(true);
+    write_plugin(plugin.path(), &value);
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(
+        with.lines()
+            .iter()
+            .any(|line| line == "opens links in your browser"),
+        "{:?}",
+        with.lines()
+    );
+    assert!(base.within(&with));
+    assert!(!with.within(&base));
+}
+
+#[test]
 fn webview_store_true_in_the_script_asks_for_page_data() {
     let plugin = plugin_dir();
     std::fs::write(
@@ -753,7 +779,7 @@ fn a_grant_grows_only_when_it_asks_for_more() {
             "runs gh",
             "talks to api.github.com (GET, POST)",
             "writes to your clipboard",
-            "reads a folder you choose (Notes)"
+            "reads a folder you choose (Notes)",
         ]
     );
 }
@@ -806,6 +832,29 @@ fn local_fetch_grants_http_on_that_port_and_install_line() {
 }
 
 #[test]
+fn thread_events_need_the_threads_area() {
+    let dir = plugin_dir();
+    let mut value = manifest();
+    value["events"] = json!(["thread.message"]);
+    std::fs::write(dir.path().join(manifest::FILE), value.to_string()).unwrap();
+    let error = read_manifest(dir.path()).unwrap_err().to_string();
+    assert!(error.contains("threads area"), "{error}");
+}
+
+#[test]
+fn a_shown_source_has_no_credentials() {
+    assert_eq!(
+        crate::index::shown("git:https://user:token@example.com/acme/plugin@main"),
+        "git:https://example.com/acme/plugin@main"
+    );
+    assert_eq!(
+        crate::index::shown("git:ssh://git@example.com/acme/plugin@main"),
+        "git:ssh://git@example.com/acme/plugin@main"
+    );
+    assert_eq!(crate::index::shown("/local/plugin"), "/local/plugin");
+}
+
+#[test]
 fn local_fetch_hosts_are_checked() {
     let dir = plugin_dir();
     let rejected = |host: &str, expected: &str| {
@@ -835,6 +884,8 @@ fn local_fetch_hosts_are_checked() {
         "hostname, or http://127.0.0.1:<port>",
     );
     rejected("http://[::1]:3847", "only for 127.0.0.1 or localhost");
+    rejected("127.0.0.1:3847", "hostname, or http://127.0.0.1:<port>");
+    rejected("example.com:443", "hostname, or http://127.0.0.1:<port>");
 
     for host in ["http://127.0.0.1:80", "http://localhost:80"] {
         let mut value = manifest();
@@ -866,17 +917,17 @@ fn tools_follow_scope_and_thread_metadata(cx: &mut TestAppContext) {
     open(cx, &[installed(plugin.path())]);
 
     let (instructions, names) = tool_names(cx);
-    assert!(instructions.unwrap().starts_with("Echo things back."));
+    let instructions = instructions.unwrap();
+    assert!(instructions.starts_with("Plugin "));
+    assert!(instructions.contains("Echo things back."));
     assert_eq!(names, ["echo", "broken", "hang", "peek", "skill_load"]);
 
     run(
         cx,
         Op::Thread(ThreadOp::SetMetadata {
             id: thread(),
-            metadata: Metadata {
-                plugin_id: PluginId(ID.into()),
-                value: json!({ "master": true }),
-            },
+            plugin_id: PluginId(ID.into()),
+            value: json!({ "master": true }),
         }),
     )
     .unwrap();
@@ -885,6 +936,32 @@ fn tools_follow_scope_and_thread_metadata(cx: &mut TestAppContext) {
         ["echo", "broken", "hang", "secret", "peek", "skill_load"]
     );
     assert!(!loaded(cx), "listing tools runs no plugin code");
+}
+
+#[gpui_kit::test]
+fn a_tool_name_two_plugins_share_is_a_note_naming_both(cx: &mut TestAppContext) {
+    let first = plugin_dir();
+    let second = tempfile::tempdir().unwrap();
+    let mut other = manifest();
+    other["id"] = json!("dev.test.echo.two");
+    other["name"] = json!("Echo Two");
+    write_plugin(second.path(), &other);
+    open(cx, &[installed(first.path()), installed_at(second.path())]);
+    let notes = cx.read(|cx| {
+        cx.global::<PluginHostGlobal>()
+            .0
+            .read(cx)
+            .status()
+            .into_iter()
+            .filter_map(|status| status.note.map(|note| (status.id.0, note)))
+            .collect::<Vec<_>>()
+    });
+    let [(id, note)] = notes.as_slice() else {
+        panic!("{notes:?}");
+    };
+    assert_eq!(id, "dev.test.echo.two");
+    assert!(note.contains(ID), "{note}");
+    assert!(note.contains("is also declared by plugin"), "{note}");
 }
 
 #[gpui_kit::test]
@@ -991,6 +1068,80 @@ fn a_job_without_an_answer_times_out(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let error = cx.foreground_executor().block_test(pending).unwrap_err();
     assert!(error.to_string().contains("did not answer hang"), "{error}");
+}
+
+fn cli_plugin() -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let mut value = manifest();
+    value["cli"] = json!([{ "name": "probe", "commands": [{ "name": "hang" }] }]);
+    write_plugin(dir.path(), &value);
+    dir
+}
+
+fn hanging_calls(cx: &mut TestAppContext) -> [gpui_kit::Task<Result<OpResult, OpError>>; 2] {
+    let tool = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Thread(ThreadOp::CallTool {
+                id: thread(),
+                name: "hang".into(),
+                input: json!({}),
+            }),
+            cx,
+        )
+    });
+    let cli = cx.update(|cx| {
+        Workspace::dispatch(
+            Op::Plugin(PluginOp::Cli {
+                name: "probe".into(),
+                command: "hang".into(),
+                argv: vec![],
+                cwd: "/work".into(),
+                thread_id: None,
+                project_id: None,
+            }),
+            cx,
+        )
+    });
+    [tool, cli]
+}
+
+#[gpui_kit::test]
+fn an_unloaded_plugin_reports_the_same_reason_to_tools_and_cli(cx: &mut TestAppContext) {
+    let plugin = cli_plugin();
+    open(cx, &[installed(plugin.path())]);
+    let calls = hanging_calls(cx);
+    cx.run_until_parked();
+    run(
+        cx,
+        Op::Plugin(PluginOp::Disable {
+            id: PluginId(ID.into()),
+        }),
+    )
+    .unwrap();
+    let expected = format!("plugin {ID} was unloaded before it answered hang");
+    for call in calls {
+        let error = cx.foreground_executor().block_test(call).unwrap_err();
+        assert_eq!(error.to_string(), expected);
+    }
+}
+
+#[gpui_kit::test]
+fn a_hung_plugin_reports_the_same_timeout_to_tools_and_cli(cx: &mut TestAppContext) {
+    let plugin = cli_plugin();
+    open(cx, &[installed(plugin.path())]);
+    let calls = hanging_calls(cx);
+    cx.run_until_parked();
+    cx.executor()
+        .advance_clock(TOOL_TIMEOUT + Duration::from_secs(1));
+    cx.run_until_parked();
+    let expected = format!(
+        "plugin {ID} did not answer hang within {} s",
+        TOOL_TIMEOUT.as_secs()
+    );
+    for call in calls {
+        let error = cx.foreground_executor().block_test(call).unwrap_err();
+        assert_eq!(error.to_string(), expected);
+    }
 }
 
 #[gpui_kit::test]
@@ -1290,9 +1441,9 @@ fn installing_needs_a_person_with_or_without_a_thread(cx: &mut TestAppContext) {
             .cloned()
             .unwrap()
     });
-    assert!(approval.title().contains("writes to your clipboard"));
+    assert!(approval.title.contains("writes to your clipboard"));
     let invalid =
-        cx.update(|cx| Workspace::answer_standalone(approval.id().clone(), "invented".into(), cx));
+        cx.update(|cx| Workspace::answer_standalone(approval.id.clone(), "invented".into(), cx));
     assert!(cx.foreground_executor().block_test(invalid).is_err());
     assert_eq!(
         cx.read(|cx| Workspace::global(cx).read(cx).approvals().count()),
@@ -2432,7 +2583,19 @@ fn reload_and_dev_wait_for_app_approval_for_added_powers(cx: &mut TestAppContext
         id: PluginId(ID.into()),
         thread_id,
     };
-    assert!(run(cx, Op::Plugin(reload(None))).is_err());
+    let declined = plugin_op(cx, reload(None));
+    let approval = cx.read(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .approvals()
+            .next()
+            .cloned()
+            .expect("a standalone approval")
+    });
+    assert!(approval.title.contains("reads your clipboard"));
+    assert_eq!(approval.options[0].label, "Cancel");
+    answer_standalone(cx, "decline");
+    assert!(cx.foreground_executor().block_test(declined).is_err());
     let pending = plugin_op(cx, reload(Some(thread())));
     assert!(answer(cx, "decline").contains("reads your clipboard"));
     assert!(cx.foreground_executor().block_test(pending).is_err());
@@ -2515,13 +2678,13 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
     });
     let attempts = Rc::new(Cell::new(0));
     let count = attempts.clone();
-    let _hook = crate::page::set_remove_hook(move |_| {
+    let _hook = crate::web_store::set_remove_hook(move |_| {
         let n = count.get() + 1;
         count.set(n);
         if n < 3 {
-            crate::page::StoreAttempt::InUse
+            crate::web_store::StoreAttempt::InUse
         } else {
-            crate::page::StoreAttempt::Removed
+            crate::web_store::StoreAttempt::Removed
         }
     });
     let data = cx.update(|cx| {
@@ -2550,7 +2713,7 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
         "store.id stays until WebKit accepts the delete"
     );
     cx.executor().advance_clock(
-        crate::page::RELEASE_WAIT
+        crate::web_store::RELEASE_WAIT
             .checked_sub(Duration::from_millis(1))
             .expect("release wait"),
     );
@@ -2893,6 +3056,57 @@ export default class Plugin extends View {
 }
 "#;
 
+const RENAME_PROBE: &str = r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+import * as threads from "kagan/threads";
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        try {
+          await threads.rename(job.threadId, "Agent");
+          reply(job.id, { text: "renamed" });
+        } catch (error) {
+          reply(job.id, { text: String(error) });
+        }
+      }
+    });
+  }
+  render() { return "probe"; }
+}
+"#;
+
+#[gpui_kit::test]
+fn a_plugin_rename_keeps_a_locked_title(cx: &mut TestAppContext) {
+    let plugin = probe_plugin(&["threads"], RENAME_PROBE);
+    open(cx, &[installed(plugin.path())]);
+    let OpResult::Thread(named) = run(
+        cx,
+        Op::Thread(ThreadOp::Rename {
+            id: thread(),
+            title: "Named".into(),
+        }),
+    )
+    .unwrap() else {
+        panic!("window rename")
+    };
+    assert!(named.title_locked);
+    let OpResult::ToolReply { text, .. } = real_call(cx, "probe").unwrap() else {
+        panic!("tool reply")
+    };
+    assert!(
+        text.contains("the title is kept; rename it in the window"),
+        "{text}"
+    );
+    let OpResult::Thread(kept) = run(cx, Op::Thread(ThreadOp::Get { id: thread() })).unwrap()
+    else {
+        panic!("thread")
+    };
+    assert_eq!(kept.title, "Named");
+}
+
 #[gpui_kit::test]
 fn approved_areas_dispatch_core_and_keep_database_transactions(cx: &mut TestAppContext) {
     let plugin = probe_plugin(&["threads", "database"], AREAS_PROBE);
@@ -2936,7 +3150,7 @@ fn approved_areas_dispatch_core_and_keep_database_transactions(cx: &mut TestAppC
     )
     .unwrap();
     let commands = cx.update(|cx| crate::PluginHost::global(cx).read(cx).commands());
-    assert_eq!(commands[0].key(), Some("ctrl-alt-o"));
+    assert_eq!(commands[0].key.as_deref(), Some("ctrl-alt-o"));
 }
 
 const THREAD_OPS: &str = r#"
@@ -2987,14 +3201,7 @@ export default class Plugin extends View {
               { id: "yes", label: "Yes" },
               { id: "no", label: "No" },
             ]);
-            let refused = "";
-            try {
-              await threads.answer(id, interaction, "yes");
-              refused = "answered";
-            } catch (error) {
-              refused = String(error);
-            }
-            return { interaction, refused };
+            return { interaction };
           }],
           ["stop", () => threads.stop(id)],
           ["archive", () => threads.archive(id)],
@@ -3091,14 +3298,6 @@ fn a_plugin_calls_every_thread_operation(cx: &mut TestAppContext) {
             .unwrap()
             .starts_with("interaction_")
     );
-    assert!(
-        asked["refused"]
-            .as_str()
-            .unwrap()
-            .contains("a person answers this"),
-        "{}",
-        asked["refused"]
-    );
     err("wait", "unknown event type");
     ok("pin");
     ok("read");
@@ -3148,192 +3347,6 @@ fn hides_agent(value: &Value) {
         );
     }
     assert!(!value.to_string().contains("claude-code"), "{value}");
-}
-
-const ANSWER_PLUGIN: &str = r#"
-import { View } from "gpui-kit";
-import { next, reply } from "kagan/jobs";
-import * as threads from "kagan/threads";
-export default class Plugin extends View {
-  init(_props, cx) {
-    cx.spawn(async () => {
-      for (;;) {
-        const job = await next();
-        try {
-          const value = await threads.answer(job.input.thread, job.input.interaction, job.input.option);
-          reply(job.id, { text: JSON.stringify({ ok: true, value }) });
-        } catch (error) {
-          reply(job.id, { text: JSON.stringify({ ok: false, error: String(error) }) });
-        }
-      }
-    });
-  }
-  render() { return "answer"; }
-}
-"#;
-
-fn questions(cx: &mut TestAppContext) -> Vec<(String, String)> {
-    let Ok(OpResult::Interactions(rows)) =
-        run(cx, Op::Thread(ThreadOp::Interactions { id: thread() }))
-    else {
-        panic!("interactions")
-    };
-    rows.into_iter().map(|row| (row.id.0, row.title)).collect()
-}
-
-fn answered_events(cx: &mut TestAppContext) -> Vec<(String, String)> {
-    let Ok(OpResult::Events(events)) = run(
-        cx,
-        Op::Thread(ThreadOp::Events {
-            id: thread(),
-            after_seq: None,
-            limit: None,
-            order: None,
-        }),
-    ) else {
-        panic!("events")
-    };
-    events
-        .into_iter()
-        .filter_map(|event| match event.kind {
-            EventKind::Answered { title, option } => Some((title, option)),
-            _ => None,
-        })
-        .collect()
-}
-
-fn choice(id: &str, label: &str) -> kg_domain::InteractionOption {
-    kg_domain::InteractionOption {
-        id: id.into(),
-        label: label.into(),
-    }
-}
-
-fn plugin_refuses(cx: &mut TestAppContext, interaction: &str) {
-    let rows = questions(cx);
-    let refused = plugin_answer(cx, interaction, "approve");
-    assert_eq!(refused["ok"], false, "{refused}");
-    assert!(
-        refused["error"]
-            .as_str()
-            .unwrap()
-            .contains("a person answers this"),
-        "{refused}"
-    );
-    assert_eq!(questions(cx), rows);
-}
-
-fn person_declines(cx: &mut TestAppContext, interaction: &str) {
-    cx.foreground_executor()
-        .block_test(cx.update(|cx| {
-            Workspace::answer(
-                &thread(),
-                kg_domain::PendingInteractionId(interaction.to_owned()),
-                "decline".into(),
-                cx,
-            )
-        }))
-        .unwrap();
-}
-
-fn plugin_answer(cx: &mut TestAppContext, interaction: &str, option: &str) -> Value {
-    let OpResult::ToolReply { text, is_error } = call(
-        cx,
-        "probe",
-        json!({ "thread": THREAD, "interaction": interaction, "option": option }),
-    )
-    .unwrap() else {
-        panic!("reply")
-    };
-    assert!(!is_error, "{text}");
-    serde_json::from_str(&text).unwrap()
-}
-
-#[gpui_kit::test]
-fn a_plugin_answers_a_question_and_leaves_person_approvals(cx: &mut TestAppContext) {
-    let plugin = probe_plugin(&["threads"], ANSWER_PLUGIN);
-    open(cx, &[installed(plugin.path())]);
-
-    let asked =
-        cx.update(|cx| Workspace::ask(&thread(), "Ship it".into(), vec![choice("yes", "Yes")], cx));
-    cx.run_until_parked();
-    let rows = questions(cx);
-    assert_eq!(rows.len(), 1, "{rows:?}");
-    let replied = plugin_answer(cx, &rows[0].0, "yes");
-    assert_eq!(replied["ok"], true, "{replied}");
-    assert!(questions(cx).is_empty());
-    assert_eq!(cx.foreground_executor().block_test(asked).unwrap(), "yes");
-    assert_eq!(answered_events(cx), vec![("Ship it".into(), "yes".into())]);
-
-    let removing = plugin_op(
-        cx,
-        PluginOp::Remove {
-            id: PluginId(ID.into()),
-            thread_id: Some(thread()),
-        },
-    );
-    cx.run_until_parked();
-    let rows = questions(cx);
-    assert!(rows[0].1.starts_with("Remove "), "{rows:?}");
-    plugin_refuses(cx, &rows[0].0);
-    assert_eq!(answered_events(cx), vec![("Ship it".into(), "yes".into())]);
-    person_declines(cx, &rows[0].0);
-    assert!(
-        cx.foreground_executor()
-            .block_test(removing)
-            .unwrap_err()
-            .to_string()
-            .contains("declined")
-    );
-
-    let deleting = cx.update(|cx| {
-        Workspace::dispatch(
-            Op::Thread(ThreadOp::Delete {
-                id: thread(),
-                thread_id: Some(thread()),
-            }),
-            cx,
-        )
-    });
-    cx.run_until_parked();
-    let rows = questions(cx);
-    assert!(rows[0].1.starts_with("Delete "), "{rows:?}");
-    plugin_refuses(cx, &rows[0].0);
-    person_declines(cx, &rows[0].0);
-    assert!(
-        cx.foreground_executor()
-            .block_test(deleting)
-            .unwrap_err()
-            .to_string()
-            .contains("declined")
-    );
-
-    let standalone = cx.update(|cx| {
-        Workspace::ask_for_person(
-            None,
-            None,
-            "Install powers?".into(),
-            vec![choice("approve", "Approve"), choice("decline", "Decline")],
-            cx,
-        )
-    });
-    cx.run_until_parked();
-    let approval = cx.read(|cx| {
-        Workspace::global(cx)
-            .read(cx)
-            .approvals()
-            .next()
-            .unwrap()
-            .id()
-            .clone()
-    });
-    plugin_refuses(cx, &approval.0);
-    assert!(cx.read(|cx| Workspace::global(cx).read(cx).approvals().next().is_some()));
-    answer_standalone(cx, "decline");
-    assert_eq!(
-        cx.foreground_executor().block_test(standalone).unwrap(),
-        "decline"
-    );
 }
 
 #[test]
@@ -3443,7 +3456,7 @@ fn bounded_programs_capture_output_and_stop_on_timeout() {
     let mut command = Command::new("git");
     command.arg("--version");
     let (_keep, never) = async_channel::bounded::<()>(1);
-    let output = crate::program::run(command, Duration::from_secs(5), &never).unwrap();
+    let output = crate::source::run(command, Duration::from_secs(5), &never).unwrap();
     assert!(output.status.success());
     assert!(
         String::from_utf8(output.stdout)
@@ -3451,10 +3464,9 @@ fn bounded_programs_capture_output_and_stop_on_timeout() {
             .starts_with("git version")
     );
     let started = std::time::Instant::now();
-    let error =
-        crate::program::run(sleep_command(), Duration::from_millis(30), &never).unwrap_err();
+    let error = crate::source::run(sleep_command(), Duration::from_millis(30), &never).unwrap_err();
     assert!(
-        matches!(error, crate::program::RunError::Timeout),
+        matches!(error, crate::source::RunError::Timeout),
         "{error:?}"
     );
     assert!(started.elapsed() < Duration::from_secs(5));
@@ -4214,11 +4226,11 @@ fn a_right_panel_loads_without_a_skip_note(cx: &mut TestAppContext) {
             let status = host
                 .status()
                 .into_iter()
-                .find(|status| status.id().0 == ID)
+                .find(|status| status.id.0 == ID)
                 .expect("status");
             (
-                status.error().map(str::to_owned),
-                status.note().map(str::to_owned),
+                status.error.clone(),
+                status.note.as_deref().map(str::to_owned),
                 host.failure(&PluginId(ID.into())),
             )
         })
@@ -4252,7 +4264,7 @@ fn an_overlay_names_one_exported_view() {
     declared["ui"]["overlay"] = json!("Plate");
     write_plugin(plugin.path(), &declared);
     let read = read_manifest(plugin.path()).unwrap();
-    assert_eq!(read.ui.overlay(), Some("Plate"));
+    assert_eq!(read.ui.overlay.as_deref(), Some("Plate"));
     for overlay in [json!(""), json!(["Plate"]), json!({ "view": "Plate" })] {
         declared["ui"]["overlay"] = overlay;
         write_plugin(plugin.path(), &declared);
@@ -4946,7 +4958,8 @@ fn event_plugin(id: &str, events: &[&str]) -> TempDir {
         "name": "Events",
         "version": "1.0.0",
         "kagan": ">=0.1.0",
-        "entry": "main.js"
+        "entry": "main.js",
+        "powers": { "areas": ["threads"] }
     });
     manifest["events"] = json!(events);
     std::fs::write(dir.path().join(manifest::FILE), manifest.to_string()).unwrap();
@@ -5205,7 +5218,7 @@ fn created_and_deleted_events_carry_the_project(cx: &mut TestAppContext) {
         Workspace::dispatch(
             Op::Thread(ThreadOp::Delete {
                 id: forked.id.clone(),
-                thread_id: None,
+                approval_thread_id: None,
             }),
             cx,
         )
@@ -5290,11 +5303,11 @@ fn a_disabled_plugin_keeps_its_name_and_version_from_its_manifest(cx: &mut TestA
             .read(cx)
             .status()
             .into_iter()
-            .find(|status| status.id().0 == ID)
+            .find(|status| status.id.0 == ID)
             .expect("the plugin is listed")
     });
-    assert!(!status.is_enabled());
-    assert_eq!(status.name(), "Echo");
+    assert!(!status.enabled);
+    assert_eq!(status.name.as_str(), "Echo");
     assert_eq!(status.version.as_deref(), Some("1.0.0"));
 }
 
@@ -5347,11 +5360,11 @@ fn a_plugin_without_powers_says_what_it_cannot_do(cx: &mut TestAppContext) {
             .unwrap()
     });
     assert!(
-        approval.title().contains(
+        approval.title.contains(
             "It asks for no extra powers. It cannot run programs or read your other files."
         ),
         "{}",
-        approval.title()
+        approval.title
     );
     answer_standalone(cx, "decline");
     assert!(cx.foreground_executor().block_test(install_task).is_err());
@@ -5885,7 +5898,7 @@ fn open_page(cx: &mut TestAppContext) -> PageRun {
     }
 }
 
-fn deliver_page(cx: &mut TestAppContext, run: &PageRun, raw: &str) -> Result<(), String> {
+fn deliver_page(cx: &mut TestAppContext, run: &PageRun, raw: &str) -> Result<(), OpError> {
     let alive = std::sync::Arc::downgrade(&run.life);
     cx.update(|cx| {
         crate::PluginHost::global(cx).update(cx, |host, cx| {
@@ -5925,7 +5938,7 @@ fn a_page_message_round_trips_through_the_plugin(cx: &mut TestAppContext) {
 fn a_page_message_over_the_cap_is_refused(cx: &mut TestAppContext) {
     let run = open_page(cx);
     let over = deliver_page(cx, &run, &format!("\"{}\"", "y".repeat(crate::MESSAGE_CAP)));
-    assert!(over.unwrap_err().contains("over the"));
+    assert!(over.unwrap_err().to_string().contains("over the"));
     deliver_page(cx, &run, r#"{"big":true}"#).unwrap();
     for _ in 0..2000 {
         cx.run_until_parked();
@@ -6011,7 +6024,11 @@ export default class Plugin extends View {{
     plugin
 }
 
-fn flood_page(cx: &mut TestAppContext, life: &std::sync::Arc<()>, raw: &str) -> Result<(), String> {
+fn flood_page(
+    cx: &mut TestAppContext,
+    life: &std::sync::Arc<()>,
+    raw: &str,
+) -> Result<(), OpError> {
     let alive = std::sync::Arc::downgrade(life);
     cx.update(|cx| {
         crate::PluginHost::global(cx).update(cx, |host, cx| {
@@ -6039,7 +6056,9 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
             Ok(()) => accepted += 1,
             Err(error) => {
                 assert!(
-                    error.contains("cannot take another page message"),
+                    error
+                        .to_string()
+                        .contains("cannot take another page message"),
                     "{error}"
                 );
                 break;
@@ -6055,6 +6074,7 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
     assert!(
         flood_page(cx, &life, r#"{"n":"over"}"#)
             .unwrap_err()
+            .to_string()
             .contains("cannot take another page message")
     );
 
@@ -6068,7 +6088,9 @@ fn a_page_flood_while_next_is_withheld_is_bounded(cx: &mut TestAppContext) {
             Ok(()) => after += 1,
             Err(error) => {
                 assert!(
-                    error.contains("cannot take another page message"),
+                    error
+                        .to_string()
+                        .contains("cannot take another page message"),
                     "{error}"
                 );
                 break;
@@ -6233,7 +6255,7 @@ fn ask_instruct(cx: &mut TestAppContext) -> String {
     let host = cx.update(|cx| cx.global::<PluginHostGlobal>().0.clone());
     let task = cx.update(|cx| {
         cx.spawn(async move |cx| {
-            crate::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
+            crate::host::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
         })
     });
     cx.run_until_parked();
@@ -6294,7 +6316,7 @@ export default class Plugin extends View {
     let host = cx.update(|cx| cx.global::<PluginHostGlobal>().0.clone());
     let pending = cx.update(|cx| {
         cx.spawn(async move |cx| {
-            crate::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
+            crate::host::instruct(&host, &thread(), &ProjectId("prj_test".into()), cx).await
         })
     });
     cx.run_until_parked();
@@ -6409,13 +6431,16 @@ export default class Plugin extends View {{
 
 #[gpui_kit::test]
 fn a_failed_store_delete_keeps_its_id_and_says_why(cx: &mut TestAppContext) {
-    let _hook = crate::page::set_remove_hook(|_| {
-        crate::page::StoreAttempt::Failed("the store is locked".into())
+    let _hook = crate::web_store::set_remove_hook(|_| {
+        crate::web_store::StoreAttempt::Failed("the store is locked".into())
     });
     let mut async_cx = cx.to_async();
     let removal = cx
         .foreground_executor()
-        .block_test(crate::page::remove_web_stores(vec![[7; 16]], &mut async_cx));
+        .block_test(crate::web_store::remove_web_stores(
+            vec![[7; 16]],
+            &mut async_cx,
+        ));
     assert!(removal.removed.is_empty(), "a failed delete keeps store.id");
     assert_eq!(removal.warnings, vec!["the store is locked".to_owned()]);
 }

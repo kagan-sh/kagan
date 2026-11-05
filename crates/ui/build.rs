@@ -1,18 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=build.rs");
-    let manifest = match std::env::var("CARGO_MANIFEST_DIR") {
-        Ok(value) => PathBuf::from(value),
-        Err(error) => panic!("CARGO_MANIFEST_DIR is set by cargo: {error}"),
-    };
+    let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     let root = manifest.join("../..");
     // A source tarball unpacked inside another repository must not take that repository's commit.
     let ours = git(&root, &["rev-parse", "--show-toplevel"])
         .is_some_and(|top| same(Path::new(&top), &root));
     if !ours {
-        return;
+        return Ok(());
     }
     // The HEAD log moves on every commit, checkout and pull, even when the branch ref is packed.
     for name in ["HEAD", "logs/HEAD"] {
@@ -26,6 +23,7 @@ fn main() {
     if let Some(commit) = git(&root, &["rev-parse", "--short=7", "HEAD"]) {
         println!("cargo:rustc-env=KG_COMMIT={commit}");
     }
+    Ok(())
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {

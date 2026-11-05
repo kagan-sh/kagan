@@ -353,9 +353,7 @@ impl Terminal {
         }
     }
 
-    /// Whether the program has ended. A background job it left can keep the pty open, so the
-    /// output may not be at its end.
-    /// How the program ended, once it has. `None` while it runs.
+    /// How the program ended, once it has. `None` while it runs and until the 500 ms drain ends.
     #[must_use]
     pub fn exit(&self) -> Option<Exit> {
         if let Some(exit) = self.ended_with.get() {
@@ -456,6 +454,8 @@ impl Terminal {
         }
     }
 
+    /// Whether the program has ended. A background job it left can keep the pty open, so the
+    /// output may not be at its end.
     #[must_use]
     pub fn exited(&self) -> bool {
         // ConPTY keeps the output open after the program exits, so ask the process too.
@@ -722,7 +722,6 @@ struct Frame {
     grid: Arc<crate::Grid>,
 }
 
-/// Text for the program, with its newlines as the program reads them.
 /// Text for the program. Escape and the other control characters go, so the text cannot end a
 /// bracketed paste early or type a command. Tab, newline and carriage return stay.
 fn paste_text(text: &str, bracketed: bool) -> String {

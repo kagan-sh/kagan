@@ -1,5 +1,4 @@
 #[cfg(test)]
-#[path = "../tests/layout_read.rs"]
 pub(crate) mod read;
 use crate::theme::TypeScale as _;
 use std::future::Future;
@@ -14,7 +13,7 @@ use gpui_kit::{
     Window, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{Op, OpResult, PreferenceOp};
+use kg_domain::{Op, OpError, OpResult, PreferenceOp};
 use serde::{Serialize, de::DeserializeOwned};
 
 use super::{
@@ -83,17 +82,29 @@ fn key(name: &str) -> String {
     format!("{WINDOW}.{name}")
 }
 
-pub(super) fn read<T: DeserializeOwned>(
+pub(crate) fn read<T: DeserializeOwned>(
     key: &str,
     cx: &mut App,
-) -> impl Future<Output = Option<T>> + use<T> {
-    let task = Workspace::dispatch(Op::Preference(PreferenceOp::Get { key: key.into() }), cx);
+) -> impl Future<Output = Result<Option<T>, OpError>> + use<T> {
+    let name = key.to_owned();
+    let task = Workspace::dispatch(Op::Preference(PreferenceOp::Get { key: name.clone() }), cx);
     async move {
-        match task.await {
-            Ok(OpResult::Setting(value)) => serde_json::from_value(value).ok(),
-            _ => None,
+        match task.await? {
+            OpResult::Setting(serde_json::Value::Null) => Ok(None),
+            OpResult::Setting(value) => serde_json::from_value(value).map(Some).map_err(|error| {
+                OpError::Failed(format!(
+                    "preference {name} is not the value it was saved as: {error}"
+                ))
+            }),
+            _ => Err(OpError::Failed(format!(
+                "preference {name} did not read as a setting"
+            ))),
         }
     }
+}
+
+fn saved_or<T>(read: Result<Option<T>, OpError>, fallback: T) -> T {
+    read.ok().flatten().unwrap_or(fallback)
 }
 
 pub(super) fn save(key: &str, value: impl Serialize, cx: &mut App) {
@@ -119,17 +130,17 @@ impl Kagan {
         cx.spawn(async move |this, cx| {
             let defaults = Layout::default();
             let next = Layout {
-                left_open: left_open.await.unwrap_or(defaults.left_open),
-                right_open: right_open.await.unwrap_or(defaults.right_open),
+                left_open: saved_or(left_open.await, defaults.left_open),
+                right_open: saved_or(right_open.await, defaults.right_open),
                 left_width: clamp_width(
-                    left_width.await.unwrap_or(defaults.left_width),
+                    saved_or(left_width.await, defaults.left_width),
                     LEFT_RANGE,
                 ),
                 right_width: clamp_width(
-                    right_width.await.unwrap_or(defaults.right_width),
+                    saved_or(right_width.await, defaults.right_width),
                     right::WIDTH_RANGE,
                 ),
-                review_wrap: review_wrap.await.unwrap_or(false),
+                review_wrap: saved_or(review_wrap.await, false),
             };
             _ = this.update_in(cx, |this, window, cx| this.apply_layout(next, window, cx));
         })
@@ -812,7 +823,7 @@ fn bar_button(
     action: impl Action + Clone,
     cx: &App,
 ) -> Button {
-    let tip = super::shown::tip(&name, &action, cx);
+    let tip = super::controls::tip(&name, &action, cx);
     Button::new(ElementId::Name(SharedString::from(format!("{id}-button"))))
         .small()
         .ghost()

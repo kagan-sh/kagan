@@ -355,12 +355,17 @@ impl Screen {
             };
         }
         let mut lines = self.history_rows();
-        let mut dropped = 0u32;
-        while !lines.is_empty() && packed(&lines, padding) + visible.len() > limit {
-            lines.remove(0);
-            dropped = dropped.saturating_add(1);
+        let mut size = packed(&lines, padding);
+        let mut dropped = 0;
+        while dropped < lines.len() && size + visible.len() > limit {
+            size -= lines[dropped].len();
+            dropped += 1;
+            if dropped == lines.len() {
+                size -= padding;
+            }
         }
-        let mut replay = Vec::with_capacity(packed(&lines, padding) + visible.len());
+        lines.drain(..dropped);
+        let mut replay = Vec::with_capacity(size + visible.len());
         for line in &lines {
             replay.extend_from_slice(line);
         }
@@ -374,7 +379,7 @@ impl Screen {
             cols,
             rows,
             replay,
-            history_dropped: dropped,
+            history_dropped: u32::try_from(dropped).unwrap_or(u32::MAX),
             screen_kept: true,
         }
     }
@@ -546,11 +551,13 @@ fn sgr((fg, bg, flags): (Color, Color, Flags)) -> String {
 fn color(color: Color, background: bool) -> String {
     let base = if background { 40 } else { 30 };
     match color {
-        Color::Named(name) => match name as usize {
-            index @ 0..8 => (base + index).to_string(),
-            index @ 8..16 => (base + 60 + index - 8).to_string(),
-            index @ 259..267 => (base + index - 259).to_string(),
-            _ => (base + 9).to_string(),
+        Color::Named(name) => match crate::grid::dim_index(name) {
+            Some(index) => (base + index).to_string(),
+            None => match name as usize {
+                index @ 0..8 => (base + index).to_string(),
+                index @ 8..16 => (base + 60 + index - 8).to_string(),
+                _ => (base + 9).to_string(),
+            },
         },
         Color::Indexed(index) => format!("{};5;{index}", base + 8),
         Color::Spec(Rgb { r, g, b }) => format!("{};2;{r};{g};{b}", base + 8),

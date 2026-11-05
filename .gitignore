@@ -12,3 +12,4 @@ plugins/**/jsconfig.json
 /.playwright-mcp/
 
 .superpowers/
+

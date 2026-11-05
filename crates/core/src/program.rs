@@ -11,8 +11,8 @@ use kg_domain::{
 };
 use kg_process::{find_program, pathext, user_path};
 
-use crate::changes::program_stdout;
 use crate::database::{Database, Result};
+use crate::git::program_stdout;
 
 const VERSION_LIMIT: Duration = Duration::from_secs(3);
 const RECENT_LIMIT: usize = 5;
@@ -25,7 +25,7 @@ pub(crate) async fn list(
     include_versions: bool,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    let environment = environment_of(this, cx);
+    let environment = program_environment_of(this, cx);
     if let Some(environment) = &environment
         && !Path::new(&environment.shell).is_file()
     {
@@ -35,7 +35,7 @@ pub(crate) async fn list(
         )));
     }
     let recent = database
-        .call(|store| store.threads(None, None, None, None))
+        .call(|store| store.all_threads())
         .await?
         .into_iter()
         .filter(|thread| thread.visibility == Visibility::Visible && !thread.provider.is_empty())
@@ -151,7 +151,7 @@ fn shell_variable() -> &'static str {
 }
 
 /// The person's login shell: the one `environment` names, else `SHELL` (`COMSPEC` on Windows).
-pub(crate) fn login_shell(environment: Option<&Environment>) -> OsString {
+pub(crate) fn login_shell(environment: Option<&ProgramEnvironment>) -> OsString {
     environment
         .map(|environment| environment.shell.clone())
         .or_else(|| std::env::var_os(shell_variable()))
@@ -159,32 +159,31 @@ pub(crate) fn login_shell(environment: Option<&Environment>) -> OsString {
         .unwrap_or_else(|| if cfg!(windows) { "cmd.exe" } else { "/bin/sh" }.into())
 }
 
-/// The login PATH, the executable extensions, and the shell, as the list reads them.
 /// Where one workspace finds its programs: a PATH and a shell. A test sets them, so the list does
 /// not depend on what the machine has. The app leaves them unset and reads the login PATH.
 #[derive(Clone, Debug)]
-pub(crate) struct Environment {
+pub(crate) struct ProgramEnvironment {
     pub(crate) path: OsString,
     pub(crate) shell: OsString,
 }
 
 /// The PATH `environment` names, or the login PATH when it names none.
-pub(crate) fn search_path(environment: Option<&Environment>) -> Option<OsString> {
+pub(crate) fn search_path(environment: Option<&ProgramEnvironment>) -> Option<OsString> {
     environment.map_or_else(user_path, |environment| Some(environment.path.clone()))
 }
 
 /// The environment `this` workspace finds programs in, or None for the login PATH.
-pub(crate) fn environment_of(
+pub(crate) fn program_environment_of(
     this: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,
-) -> Option<Environment> {
+) -> Option<ProgramEnvironment> {
     this.read_with(cx, |workspace, _| workspace.program_environment.clone())
         .ok()
         .flatten()
 }
 
 fn read_environment(
-    environment: Option<Environment>,
+    environment: Option<ProgramEnvironment>,
 ) -> (Option<OsString>, Option<OsString>, Option<OsString>) {
     match environment {
         Some(environment) => (Some(environment.path), None, Some(environment.shell)),

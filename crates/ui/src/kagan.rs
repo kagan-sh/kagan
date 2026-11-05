@@ -4,6 +4,7 @@ pub(crate) mod attention;
 mod browser;
 pub(crate) mod changes;
 pub(crate) mod commands;
+mod controls;
 mod details;
 #[cfg(target_os = "macos")]
 mod dock;
@@ -18,7 +19,7 @@ mod needs;
 mod notify;
 mod overlays;
 pub(crate) mod picker;
-mod plugins_box;
+mod plugin_actions;
 mod question;
 pub(crate) mod quit;
 mod replace;
@@ -30,7 +31,6 @@ pub(crate) use review::read as review_read;
 mod right;
 mod screen;
 #[cfg(test)]
-#[path = "tests/screen_read.rs"]
 pub(crate) mod screen_read;
 mod settings;
 mod shown;
@@ -47,7 +47,7 @@ pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing
 use changes::Changes;
 use kg_domain::ProjectOp;
 use layout::Layout;
-use plugins_box::PluginsBox;
+use plugin_actions::Plugins;
 use screen::{Activation, Side};
 use sidebar::{Event, Shows};
 use surface::ClosePage;
@@ -198,7 +198,7 @@ pub(crate) struct Kagan {
     tabs: tabs::Tabs,
     review_drafts: review::Drafts,
     replaced: replace::Replaced,
-    plugins: PluginsBox,
+    plugins: Plugins,
     panels: Vec<right::Panel>,
     right_slots: Vec<surface::Slot>,
     right_tab: Option<String>,
@@ -433,7 +433,7 @@ impl Kagan {
         let epoch = self.terminal_font_epoch;
         let read = layout::read::<u8>("terminal-font-size", cx);
         cx.spawn(async move |this, cx| {
-            let size = read.await.unwrap_or(12).clamp(9, 24);
+            let size = read.await.ok().flatten().unwrap_or(12).clamp(9, 24);
             _ = this.update(cx, |this, cx| {
                 if this.terminal_font_epoch == epoch {
                     this.apply_terminal_size(size, cx);
@@ -485,7 +485,7 @@ impl Kagan {
             tabs: tabs::Tabs::default(),
             review_drafts: review::Drafts::default(),
             replaced: replace::Replaced::default(),
-            plugins: PluginsBox::new(window, cx),
+            plugins: Plugins::new(window, cx),
             panels: right::built_in(),
             right_slots: Vec::new(),
             right_tab: None,
@@ -654,9 +654,9 @@ impl Kagan {
             .map(|list| {
                 list.into_iter()
                     .filter(|(_, ui)| {
-                        ui.panels()
+                        ui.panels
                             .iter()
-                            .any(|panel| matches!(panel.follows(), Some(Follows::Thread)))
+                            .any(|panel| matches!(panel.follows, Some(Follows::Thread)))
                     })
                     .map(|(plugin, _)| plugin)
                     .collect()
@@ -751,8 +751,8 @@ impl Kagan {
                         message: message.clone().into(),
                         action: action.as_ref().map(|action| ToastCommand {
                             plugin: plugin.clone(),
-                            command: action.command().to_owned(),
-                            label: action.label().to_owned().into(),
+                            command: action.command.clone(),
+                            label: action.label.clone().into(),
                         }),
                         undo: Vec::new(),
                     },
@@ -1094,7 +1094,7 @@ impl Kagan {
         self.show_work(Shown::Start(project.clone()), window, cx);
         self.sidebar
             .update(cx, |sidebar, _| sidebar.choose(Some(project.clone())));
-        self.start.show();
+        self.start.reset();
         self.load_branches(project, cx);
         self.picker.update(cx, |picker, cx| picker.load(window, cx));
         self.picker
@@ -1347,29 +1347,14 @@ impl Kagan {
 
 // Unarchive fails while the owner is still archived, so the owner is listed first.
 fn archived_with(threads: &[Thread], id: &ThreadId) -> Vec<ThreadId> {
-    let mut placed = BTreeSet::from([id.clone()]);
     let mut ids = vec![id.clone()];
-    loop {
-        let mut progressed = false;
-        for thread in threads {
-            if placed.contains(&thread.id) {
-                continue;
-            }
-            let in_tree = thread
-                .lifecycle_owner_thread_id
-                .as_ref()
-                .is_some_and(|owner| placed.contains(owner));
-            if !in_tree {
-                continue;
-            }
-            placed.insert(thread.id.clone());
-            if thread.archived_at.is_none() {
-                ids.push(thread.id.clone());
-            }
-            progressed = true;
-        }
-        if !progressed {
-            break;
+    for owned in kg_domain::owned_thread_ids(threads, id).into_iter().skip(1) {
+        if threads
+            .iter()
+            .find(|thread| thread.id == owned)
+            .is_some_and(|thread| thread.archived_at.is_none())
+        {
+            ids.push(owned);
         }
     }
     ids
@@ -1720,7 +1705,7 @@ fn toast_button(
     label: SharedString,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    shown::control(
+    controls::control(
         id,
         Facts::button(label.clone()),
         Button::new(SharedString::from(format!("{id}-control")))

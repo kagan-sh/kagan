@@ -1,8 +1,10 @@
+mod review;
+
 use crate::{
-    AgentTool, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event, EventKind,
-    InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId, PluginId,
-    PluginOp, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, TurnOutcome, Visibility,
-    branch_slug, format_notes, invalid_json, parse_notes,
+    AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
+    EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,
+    PluginId, PluginOp, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, TurnOutcome,
+    UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json, parse_notes,
 };
 use serde_json::{Value, json};
 
@@ -121,8 +123,7 @@ fn a_branch_slug_comes_from_the_title() {
 fn thread_unread_when_attention_is_newer_than_read() {
     let wire = json!({
         "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false,
-        "provider": "claude-code", "model": "opus", "reasoningLevel": "high",
-        "status": "idle", "visibility": "visible",
+        "provider": "claude-code", "status": "idle", "visibility": "visible",
         "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
         "pinned": false, "lastReadAt": 5, "latestAttentionAt": 5, "mark": "none", "archivedAt": null,
         "createdAt": 1, "updatedAt": 5,
@@ -235,6 +236,24 @@ fn error_wire() {
     let done = serde_json::to_value(OpResult::Done).unwrap();
     assert!(done.get("ok").is_none());
     assert!(done.get("hint").is_none());
+}
+
+#[test]
+fn wait_outcome_wire() {
+    for (outcome, wire) in [
+        (WaitOutcome::Waiting, "waiting"),
+        (WaitOutcome::Exited, "exited"),
+        (WaitOutcome::Failed, "failed"),
+        (WaitOutcome::NotBusy, "not-busy"),
+        (WaitOutcome::Timeout, "timeout"),
+    ] {
+        round_trip(&outcome, &json!(wire));
+        assert_eq!(outcome.to_string(), wire);
+    }
+    assert_eq!(
+        serde_json::to_value(OpResult::Wait(WaitOutcome::NotBusy)).unwrap(),
+        json!({ "text": "not-busy" })
+    );
 }
 
 #[test]
@@ -523,6 +542,14 @@ fn event_type_names_match_the_wire_tag() {
 }
 
 #[test]
+fn live_event_types_are_all_known_types() {
+    for live in EventKind::LIVE_TYPES {
+        assert!(EventKind::TYPES.contains(&live), "{live}");
+    }
+    assert!(EventKind::LIVE_TYPES.len() < EventKind::TYPES.len());
+}
+
+#[test]
 fn reset_drops_the_saved_shortcut_and_ignores_old_platform_maps() {
     use crate::Keymap;
     let mut keymap = Keymap::from_setting(Some(json!({
@@ -540,9 +567,8 @@ fn reset_drops_the_saved_shortcut_and_ignores_old_platform_maps() {
 
 #[test]
 fn every_platform_keeps_the_same_effective_bindings() {
-    use crate::{KeyPlatform, Keymap, SHORTCUTS, effective_chord};
-    let keymap = Keymap::default();
-    let chord = |name, platform| effective_chord(name, &keymap, platform);
+    use crate::{KeyPlatform, SHORTCUTS, default_chord};
+    let chord = |name, platform| default_chord(name, platform).expect("a built-in shortcut");
     for shortcut in SHORTCUTS {
         assert_eq!(
             chord(shortcut.name, KeyPlatform::Windows),
@@ -572,7 +598,7 @@ fn every_platform_keeps_the_same_effective_bindings() {
 
 #[test]
 fn no_two_default_shortcuts_share_a_key_on_any_platform() {
-    use crate::{KeyPlatform, Keymap, SHORTCUTS, effective_chord};
+    use crate::{KeyPlatform, SHORTCUTS, default_chord};
     fn keys(chord: &str) -> (Vec<&str>, &str) {
         let mut modifiers = Vec::new();
         let mut rest = chord;
@@ -586,23 +612,24 @@ fn no_two_default_shortcuts_share_a_key_on_any_platform() {
         modifiers.sort_unstable();
         (modifiers, rest)
     }
-    let keymap = Keymap::default();
     for platform in [KeyPlatform::Mac, KeyPlatform::Windows, KeyPlatform::Linux] {
         let chords: Vec<_> = SHORTCUTS
             .iter()
             .map(|shortcut| {
                 (
                     shortcut.name,
-                    effective_chord(shortcut.name, &keymap, platform),
+                    default_chord(shortcut.name, platform).expect("a built-in shortcut"),
                 )
             })
             .collect();
         let mut seen = std::collections::HashMap::new();
-        for (name, chord) in &chords {
-            if let Some(other) = seen.insert(keys(chord), name) {
-                panic!("{other} and {name} share {chord} on {platform:?}");
-            }
-        }
+        let duplicate = chords
+            .iter()
+            .find_map(|(name, chord)| seen.insert(keys(chord), name).map(|other| (other, name)));
+        assert!(
+            duplicate.is_none(),
+            "duplicate shortcut on {platform:?}: {duplicate:?}"
+        );
     }
 }
 
@@ -670,8 +697,6 @@ fn sample(
         title: id.into(),
         title_locked: false,
         provider: String::new(),
-        model: String::new(),
-        reasoning_level: String::new(),
         status: ThreadStatus::Idle,
         visibility,
         parent_thread_id: None,
@@ -710,6 +735,111 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         metadata: None,
     }));
     assert_eq!(crate::check(&run), Ok(()));
+}
+
+#[test]
+fn surface_ids_and_window_indexes_match_the_documented_checks() {
+    use crate::{SurfaceOp, WindowOp};
+    let open = |id: &str| {
+        crate::check(&Op::Surface(SurfaceOp::Open {
+            plugin: PluginId("dev.example".into()),
+            id: id.into(),
+        }))
+    };
+    assert_eq!(open(""), Err("surface id must be a plain name"));
+    assert_eq!(open("a\nb"), Err("surface id must be a plain name"));
+    assert_eq!(open("notes"), Ok(()));
+    assert_eq!(
+        crate::check(&Op::Window(WindowOp::Thread { index: 0 })),
+        Err("thread index must be between 1 and 9")
+    );
+    assert_eq!(
+        crate::check(&Op::Window(WindowOp::Thread { index: 10 })),
+        Err("thread index must be between 1 and 9")
+    );
+    assert_eq!(
+        crate::check(&Op::Window(WindowOp::Thread { index: 9 })),
+        Ok(())
+    );
+}
+
+#[test]
+fn op_fields_are_camel_case_on_the_wire() {
+    let op = Op::Status {
+        thread_id: Some(ThreadId("thr_1".into())),
+        project_id: None,
+        environment_id: None,
+    };
+    let wire = serde_json::to_value(&op).unwrap();
+    assert_eq!(wire["status"]["threadId"], "thr_1");
+    assert!(wire["status"].get("thread_id").is_none());
+    assert_eq!(serde_json::from_value::<Op>(wire).unwrap(), op);
+    let delete = Op::Thread(ThreadOp::Delete {
+        id: ThreadId("thr_1".into()),
+        approval_thread_id: Some(ThreadId("thr_2".into())),
+    });
+    let wire = serde_json::to_value(&delete).unwrap();
+    assert_eq!(wire["thread"]["delete"]["approvalThreadId"], "thr_2");
+    let branches = Op::Environment(crate::EnvironmentOp::Branches {
+        project_id: crate::ProjectId("prj_1".into()),
+    });
+    let wire = serde_json::to_value(&branches).unwrap();
+    assert_eq!(wire["environment"]["branches"]["projectId"], "prj_1");
+}
+
+#[test]
+fn event_kind_fields_are_camel_case_on_the_wire() {
+    let kind = EventKind::Message {
+        role: crate::Role::Agent,
+        text: "hi".into(),
+        message_id: Some("turn-1".into()),
+        attachments: Vec::new(),
+    };
+    let wire = serde_json::to_value(&kind).unwrap();
+    assert_eq!(wire["data"]["messageId"], "turn-1");
+    assert!(wire["data"].get("message_id").is_none());
+    assert_eq!(serde_json::from_value::<EventKind>(wire).unwrap(), kind);
+    let rewound = serde_json::to_value(EventKind::Rewound { before_seq: 7 }).unwrap();
+    assert_eq!(rewound["data"]["beforeSeq"], 7);
+}
+
+#[test]
+fn attachment_fields_are_camel_case_on_the_wire() {
+    let image = Attachment::Image {
+        name: "a.png".into(),
+        mime_type: "image/png".into(),
+        data: "AA==".into(),
+    };
+    let wire = serde_json::to_value(&image).unwrap();
+    assert_eq!(wire["kind"], "image");
+    assert_eq!(wire["mimeType"], "image/png");
+    assert_eq!(serde_json::from_value::<Attachment>(wire).unwrap(), image);
+    let stored = json!({
+        "kind": "file",
+        "name": "a",
+        "uri": "file:///a",
+        "mime_type": "text/plain"
+    });
+    assert_eq!(
+        serde_json::from_value::<Attachment>(stored).unwrap(),
+        Attachment::File {
+            name: "a".into(),
+            uri: "file:///a".into(),
+            mime_type: Some("text/plain".into()),
+        }
+    );
+}
+
+#[test]
+fn update_state_fields_are_camel_case_on_the_wire() {
+    let ready = UpdateState::Ready {
+        version: "2".into(),
+        notes: "notes".into(),
+        at_quit: true,
+    };
+    let wire = serde_json::to_value(&ready).unwrap();
+    assert_eq!(wire["ready"]["atQuit"], true);
+    assert_eq!(serde_json::from_value::<UpdateState>(wire).unwrap(), ready);
 }
 
 #[test]

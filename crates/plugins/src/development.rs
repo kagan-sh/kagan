@@ -39,18 +39,17 @@ pub(crate) fn new(
         std::fs::create_dir_all(parent).map_err(name_too_long)?;
     }
     std::fs::create_dir(&root).map_err(name_too_long)?;
-    let manifest = serde_json::json!({ "id": format!("dev.kagan.{name}"), "name": name, "version": "0.1.0", "kagan": format!(">={}", env!("CARGO_PKG_VERSION")), "entry": "main.js", "instructions": "A starter plugin: a hello tool under the threads. A panel may also be a center page or a right tab. Bottom is refused. A hello command writes to its log; a person binds its key in Settings, Keyboard.", "powers": {}, "commands": [{ "id": "hello", "title": "Say hello" }], "ui": { "panels": [{ "id": "hello", "title": "Hello", "view": "HelloPanel", "placement": "left" }] }, "tools": [], "skills": [] });
-    std::fs::write(
-        root.join("kagan.json"),
-        serde_json::to_string_pretty(&manifest)?,
-    )?;
+    let manifest = include_str!("../assets/starter/kagan.json")
+        .replace("__NAME__", name)
+        .replace("__VERSION__", env!("CARGO_PKG_VERSION"));
+    std::fs::write(root.join("kagan.json"), manifest)?;
     std::fs::write(
         root.join("main.js"),
-        "// @ts-check\nimport { View, div } from 'gpui-kit';\nimport { KgButton } from 'gpui-component';\nimport { log } from 'kagan/host';\nimport { next, reply, fail } from 'kagan/jobs';\n\nexport default class Plugin extends View {\n  init(_props, cx) {\n    cx.spawn(async () => {\n      for (;;) {\n        const job = await next();\n        handle(job).then(value => reply(job.id, value), error => fail(job.id, String(error)));\n      }\n    });\n  }\n}\n\nexport class HelloPanel extends View {\n  init() {\n    this.count = 0;\n  }\n\n  render() {\n    return div().child(\n      new KgButton('count')\n        .label(`Count ${this.count}`)\n        .on_click((_event, cx) => {\n          this.count++;\n          cx.notify();\n        }),\n    );\n  }\n}\n\nasync function handle(job) {\n  if (job.kind === 'command' && job.command === 'hello') {\n    log('info', 'hello from the starter plugin');\n    return null;\n  }\n  throw new Error(`Unknown job ${job.kind}: ${job.name ?? ''}`);\n}\n",
+        include_str!("../assets/starter/main.js"),
     )?;
     std::fs::write(
         root.join("jsconfig.json"),
-        "{\n  \"compilerOptions\": { \"checkJs\": true, \"target\": \"ES2022\", \"module\": \"ESNext\", \"moduleResolution\": \"bundler\", \"noEmit\": true },\n  \"include\": [\"**/*.js\", \"*.d.ts\"]\n}\n",
+        include_str!("../assets/starter/jsconfig.json"),
     )?;
     let mut files = types(&root, components)?;
     files.extend([

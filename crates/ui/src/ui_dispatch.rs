@@ -23,9 +23,9 @@ pub(crate) fn click_within(
 ) -> Result<(), OpError> {
     bring_into_view(window, id, within, cx);
     if let crate::ui_registry::Located::One(target) = crate::ui_registry::locate(window, id, within)
-        && !target.visible()
+        && !target.visible
     {
-        move_pointer(window, target.bounds().center(), None, cx);
+        move_pointer(window, target.bounds.center(), None, cx);
     }
     let position = locate(window, id, within)?;
     click_at(window, position, cx);
@@ -38,21 +38,21 @@ fn bring_into_view(window: &mut Window, id: &ElementId, within: Option<&ElementI
     while let crate::ui_registry::Located::One(target) =
         crate::ui_registry::locate(window, id, within)
     {
-        if target.visible() || previous == Some(target.bounds()) {
+        if target.visible || previous == Some(target.bounds) {
             break;
         }
-        previous = Some(target.bounds());
+        previous = Some(target.bounds);
         let ancestor = snapshots(window)
             .into_iter()
             .filter(|element| {
-                element.visible()
-                    && target.path().starts_with(element.path())
-                    && element.path().len() < target.path().len()
+                element.visible
+                    && target.path.starts_with(&element.path)
+                    && element.path.len() < target.path.len()
             })
-            .max_by_key(|element| element.path().len());
+            .max_by_key(|element| element.path.len());
         let Some(ancestor) = ancestor else { break };
-        let position = ancestor.clipped().center();
-        let target_position = target.bounds().center();
+        let position = ancestor.clipped.center();
+        let target_position = target.bounds.center();
         move_pointer(window, position, None, cx);
         window.dispatch_event(
             ScrollEvent {
@@ -160,17 +160,17 @@ fn spot(
     at: DropSide,
 ) -> Result<Point<Pixels>, OpError> {
     let target = located(window, id, within)?;
-    let bounds = target.bounds();
+    let bounds = target.bounds;
     let share = match at {
         DropSide::Top => 0.125,
         DropSide::Middle => 0.5,
         DropSide::Bottom => 0.875,
     };
     let position = point(
-        target.clipped().center().x,
+        target.clipped.center().x,
         bounds.origin.y + bounds.size.height * share,
     );
-    if !target.clipped().contains(&position) {
+    if !target.clipped.contains(&position) {
         return Err(OpError::NotFound(format!(
             "the {at:?} of element {id:?} is not visible"
         )));
@@ -210,29 +210,29 @@ fn observed_elements(window: &Window) -> Vec<kg_domain::UiElement> {
     snapshots(window)
         .iter()
         .map(|element| {
-            let path = element.path().iter().map(|id| format!("{id:?}")).collect();
+            let path = element.path.iter().map(|id| format!("{id:?}")).collect();
             let id = element
-                .path()
+                .path
                 .last()
                 .map(|id| format!("{id:?}"))
                 .unwrap_or_default();
-            let bounds = element.bounds();
+            let bounds = element.bounds;
             kg_domain::UiElement {
                 id,
                 path,
-                role: element.role().map(|role| format!("{role:?}")),
-                label: element.label().map(str::to_owned),
-                value: element.value().map(str::to_owned),
+                role: element.role.map(|role| format!("{role:?}")),
+                label: element.label.as_deref().map(str::to_owned),
+                value: element.value.as_deref().map(str::to_owned),
                 bounds: kg_domain::UiBounds {
                     x: bounds.origin.x.as_f32(),
                     y: bounds.origin.y.as_f32(),
                     width: bounds.size.width.as_f32(),
                     height: bounds.size.height.as_f32(),
                 },
-                focused: element.focused(),
-                disabled: element.disabled(),
-                selected: element.selected(),
-                visible: element.visible(),
+                focused: element.focused,
+                disabled: element.disabled,
+                selected: element.selected,
+                visible: element.visible,
             }
         })
         .collect()
@@ -247,7 +247,7 @@ fn locate(
     id: &ElementId,
     within: Option<&ElementId>,
 ) -> Result<Point<Pixels>, OpError> {
-    Ok(located(window, id, within)?.clipped().center())
+    Ok(located(window, id, within)?.clipped.center())
 }
 
 fn located(
@@ -270,7 +270,7 @@ fn located(
         }
         crate::ui_registry::Located::One(target) => target,
     };
-    if !target.visible() {
+    if !target.visible {
         return Err(OpError::NotFound(format!("element {id:?} is not visible")));
     }
     Ok(target)

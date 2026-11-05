@@ -16,7 +16,6 @@ use super::surface::Slot;
 #[cfg(target_os = "macos")]
 mod native;
 #[cfg(target_os = "macos")]
-#[path = "page_watch.rs"]
 mod page_watch;
 use crate::theme::TypeScale as _;
 use crate::ui_observe::UiObserveExt as _;
@@ -141,8 +140,7 @@ fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
 
 #[cfg(test)]
 #[cfg(target_os = "macos")]
-#[path = "web_panel_test.rs"]
-mod web_panel_test;
+mod tests;
 
 #[cfg(all(test, target_os = "macos"))]
-pub(crate) use web_panel_test::{inject, mark_stale, queue_page, testing_page};
+pub(crate) use tests::{inject, mark_stale, queue_page, testing_page};

@@ -213,6 +213,12 @@ fn every_kind_of_color_has_its_code() {
         (NamedColor::BrightBlack, "90", "100"),
         (NamedColor::BrightWhite, "97", "107"),
         (NamedColor::DimBlack, "30", "40"),
+        (NamedColor::DimRed, "31", "41"),
+        (NamedColor::DimGreen, "32", "42"),
+        (NamedColor::DimYellow, "33", "43"),
+        (NamedColor::DimBlue, "34", "44"),
+        (NamedColor::DimMagenta, "35", "45"),
+        (NamedColor::DimCyan, "36", "46"),
         (NamedColor::DimWhite, "37", "47"),
         (NamedColor::Foreground, "39", "49"),
         (NamedColor::Background, "39", "49"),
@@ -526,6 +532,21 @@ fn a_snapshot_stays_within_the_total_bound_and_names_the_dropped_history() {
     let text = copy.transcript();
     assert!(text.contains("line-39-xxxxxxxx"), "{text}");
     assert!(!text.contains("line-00-xxxxxxxx"), "{text}");
+}
+
+#[test]
+fn a_snapshot_drops_every_history_line_when_only_the_screen_and_padding_fit() {
+    let mut screen = Screen::new(20, 3);
+    for index in 0..20 {
+        screen.feed(format!("line-{index:02}-xxxxxxxx\r\n").as_bytes());
+    }
+    let history = u32::try_from(screen.history_rows().len()).unwrap();
+    let limit = screen.visible_replay().len() + 4;
+    let snap = screen.snapshot_within(limit);
+    assert!(snap.screen_kept);
+    assert!(snap.replay.len() <= limit, "{}", snap.replay.len());
+    assert_eq!(snap.history_dropped, history);
+    assert!(!String::from_utf8_lossy(&snap.replay).contains("line-00"));
 }
 
 #[test]

@@ -232,7 +232,7 @@ impl Kagan {
                             .text_ellipsis()
                             .child(format!("{label}: {}", note.text)),
                     )
-                    .child(super::super::shown::control(
+                    .child(super::super::controls::control(
                         gpui_kit::ElementId::Name(format!("review-remove-{index}").into()),
                         Facts::button("Remove comment"),
                         Button::new(gpui_kit::ElementId::Name(
@@ -305,7 +305,7 @@ impl Kagan {
             .child(
                 h_flex()
                     .gap_2()
-                    .child(super::super::shown::control(
+                    .child(super::super::controls::control(
                         "review-cancel-comment",
                         Facts::button("Cancel"),
                         Button::new("button-review-cancel-comment")
@@ -316,7 +316,7 @@ impl Kagan {
                                 this.cancel_comment(window, cx);
                             })),
                     ))
-                    .child(super::super::shown::control(
+                    .child(super::super::controls::control(
                         "review-add-comment",
                         Facts::button("Add comment"),
                         Button::new("button-review-add-comment")
@@ -356,7 +356,7 @@ impl Kagan {
     }
 
     fn undo_discard(cx: &mut Context<Self>) -> AnyElement {
-        super::super::shown::control(
+        super::super::controls::control(
             "review-undo-discard",
             Facts::button("Undo discard"),
             Button::new("button-review-undo-discard")
@@ -428,7 +428,7 @@ impl Kagan {
 
     fn review_footer_actions(count: usize, can_undo: bool, cx: &mut Context<Self>) -> AnyElement {
         let undo = Self::undo_discard(cx);
-        let discard = super::super::shown::control(
+        let discard = super::super::controls::control(
             "review-discard",
             Facts {
                 disabled: count == 0,
@@ -449,7 +449,7 @@ impl Kagan {
                     cx.notify();
                 })),
         );
-        let send = super::super::shown::control(
+        let send = super::super::controls::control(
             "review-send",
             Facts {
                 disabled: count == 0,

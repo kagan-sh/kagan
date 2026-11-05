@@ -64,7 +64,7 @@ fn cli_thread_terminal_parses_its_verbs() {
         Op::Thread(ThreadOp::Terminal(TerminalOp::New { id: id.clone() }))
     );
     assert_eq!(
-        parse(&["thread", "terminal", "close", "--id", "thr_1", "2"]),
+        parse(&["thread", "terminal", "close", "thr_1", "2"]),
         Op::Thread(ThreadOp::Terminal(TerminalOp::Close {
             id: id.clone(),
             number: 2
@@ -129,7 +129,7 @@ fn cli_run_parses_a_program() {
         "prj_1",
         "--program",
         "codex",
-        "--metadata-plugin",
+        "--plugin-id",
         "p",
         "--metadata",
         r#"{"master":true}"#,
@@ -144,15 +144,7 @@ fn cli_run_parses_a_program() {
         })
     );
     assert!(
-        Cli::try_parse_from([
-            "kg",
-            "thread",
-            "set-metadata",
-            "t",
-            "--metadata-plugin",
-            "p"
-        ])
-        .is_err()
+        Cli::try_parse_from(["kg", "thread", "set-metadata", "t", "--plugin-id", "p"]).is_err()
     );
     assert!(
         Cli::try_parse_from(["kg", "thread", "spawn", "--project-id", "p", "--input", "x"])
@@ -448,18 +440,24 @@ struct EnvVar {
 
 fn set_env(key: &'static str, value: &std::ffi::OsStr) -> EnvVar {
     let previous = std::env::var_os(key);
+    // SAFETY: nextest runs each test in its own process, so this test owns these
+    // process-global variables while the guard is alive and restores them on drop.
     unsafe { std::env::set_var(key, value) };
     EnvVar { key, previous }
 }
 
 fn unset_env(key: &'static str) -> EnvVar {
     let previous = std::env::var_os(key);
+    // SAFETY: nextest runs each test in its own process, so this test owns these
+    // process-global variables while the guard is alive and restores them on drop.
     unsafe { std::env::remove_var(key) };
     EnvVar { key, previous }
 }
 
 impl Drop for EnvVar {
     fn drop(&mut self) {
+        // SAFETY: nextest runs each test in its own process, so nothing else reads this
+        // variable while the guard restores it.
         unsafe {
             match self.previous.take() {
                 Some(value) => std::env::set_var(self.key, value),
@@ -673,6 +671,7 @@ fn chown_away(dir: &std::path::Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let mut bytes = dir.as_os_str().as_bytes().to_vec();
     bytes.push(0);
+    // SAFETY: `bytes` is a NUL-terminated path owned by `dir`, and lchown only reads it.
     unsafe { libc::lchown(bytes.as_ptr().cast(), 65_534, libc::gid_t::MAX) == 0 }
 }
 
@@ -681,6 +680,7 @@ fn chown_back(dir: &std::path::Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
     let mut bytes = dir.as_os_str().as_bytes().to_vec();
     bytes.push(0);
+    // SAFETY: `bytes` is a NUL-terminated path owned by `dir`, and lchown only reads it.
     unsafe { libc::lchown(bytes.as_ptr().cast(), libc::geteuid(), libc::getegid()) == 0 }
 }
 
@@ -690,6 +690,8 @@ struct SocketVar(Option<std::ffi::OsString>);
 #[cfg(unix)]
 fn socket_var(location: &std::ffi::OsStr) -> SocketVar {
     let previous = std::env::var_os("KG_SOCKET");
+    // SAFETY: nextest runs each test in its own process, so this test owns the variable while
+    // the guard is alive and restores it on drop.
     unsafe { std::env::set_var("KG_SOCKET", location) };
     SocketVar(previous)
 }
@@ -697,6 +699,8 @@ fn socket_var(location: &std::ffi::OsStr) -> SocketVar {
 #[cfg(unix)]
 impl Drop for SocketVar {
     fn drop(&mut self) {
+        // SAFETY: nextest runs each test in its own process, so nothing else reads this
+        // variable while the guard restores it.
         unsafe {
             match self.0.take() {
                 Some(value) => std::env::set_var("KG_SOCKET", value),
@@ -859,6 +863,9 @@ fn self_extension_commands_derive_from_ops() {
             after: None
         })
     );
+    let wire =
+        serde_json::to_value(parse(&["plugin", "logs", "dev.test.plugin", "--follow"])).unwrap();
+    assert!(wire["plugin"]["logs"].get("follow").is_none());
 }
 
 #[test]
@@ -969,9 +976,9 @@ fn a_missing_id_names_the_variable_that_would_fill_it() {
 }
 
 #[test]
-fn thread_tool_defaults_leave_the_tool_name_positional() {
+fn thread_tool_takes_its_id_and_name_positionally() {
     if std::env::var_os("KG_TEST_DEFAULTS").is_some() {
-        let cli = Cli::try_parse_from(["kg", "thread", "call-tool", "echo"]).unwrap();
+        let cli = Cli::try_parse_from(["kg", "thread", "call-tool", "thr_1", "echo"]).unwrap();
         let Some(Command::Op(op)) = cli.command else {
             panic!("call-tool is not an op");
         };
@@ -984,10 +991,9 @@ fn thread_tool_defaults_leave_the_tool_name_positional() {
     }
     let output = std::process::Command::new(std::env::current_exe().unwrap())
         .env("KG_TEST_DEFAULTS", "1")
-        .env("KG_THREAD_ID", "thr_1")
         .args([
             "--exact",
-            "tests::thread_tool_defaults_leave_the_tool_name_positional",
+            "tests::thread_tool_takes_its_id_and_name_positionally",
         ])
         .output()
         .unwrap();
@@ -1123,7 +1129,7 @@ fn cli_talks_to_a_threads_terminal() {
         })
     );
     assert_eq!(
-        parse(&["thread", "rename", "--id", "thr_1", "New title"]),
+        parse(&["thread", "rename", "thr_1", "New title"]),
         Op::Thread(ThreadOp::Rename {
             id: id.clone(),
             title: "New title".into()
@@ -1201,7 +1207,7 @@ fn thread_search_takes_text_a_limit_and_archived() {
 
 #[test]
 fn a_setting_left_off_the_command_line_is_read_as_text_and_never_parsed() {
-    use crate::development::take_value_with;
+    use crate::cli::take_value_with;
     let set = |value| {
         Op::Plugin(PluginOp::Config {
             id: PluginId("p".into()),
@@ -1243,7 +1249,7 @@ fn a_setting_left_off_the_command_line_is_read_as_text_and_never_parsed() {
 
 #[test]
 fn paste_reads_a_file_or_stdin_and_sends_the_text() {
-    use crate::development::take_paste_from;
+    use crate::cli::take_paste_from;
     let id = ThreadId("thr_1".into());
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("note.txt");
@@ -1333,7 +1339,7 @@ fn paste_reads_a_file_or_stdin_and_sends_the_text() {
 
 #[test]
 fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
-    use crate::development::take_paste_from;
+    use crate::cli::take_paste_from;
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("bad");
     std::fs::write(&path, [0xff, 0xfe]).unwrap();
@@ -1363,7 +1369,7 @@ fn paste_rejects_invalid_utf8_from_a_file_or_stdin() {
 fn paste_rejects_a_fifo_past_the_cap() {
     use std::io::Write;
 
-    use crate::development::take_paste_from;
+    use crate::cli::take_paste_from;
     let dir = tempfile::tempdir().unwrap();
     let fifo = dir.path().join("paste.fifo");
     assert!(
@@ -1405,7 +1411,7 @@ fn paste_rejects_a_fifo_past_the_cap() {
 
 #[test]
 fn install_sends_a_bare_name_to_the_indexes_and_a_folder_as_its_path() {
-    use crate::development::paths;
+    use crate::cli::paths;
     let source = |args: &[&str]| match paths(parse(args)).unwrap() {
         Op::Plugin(PluginOp::Install { source, .. }) => source,
         Op::Plugin(PluginOp::Index {

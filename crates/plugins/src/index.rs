@@ -26,7 +26,7 @@ fn plain(name: &str) -> bool {
 
 /// Where a `git:` source lives: its host and owner, lowercased. The owner is the first part of
 /// the path, in a URL or in `user@host:owner/repo`.
-pub(crate) fn place(source: &str) -> Option<(String, String)> {
+pub(crate) fn source_place(source: &str) -> Option<(String, String)> {
     let Ok(Source::Git { url, .. }) = Source::parse(source) else {
         return None;
     };
@@ -76,11 +76,11 @@ pub(crate) fn origin(
         public(&url),
         commit.unwrap_or_default()
     );
-    let caution = match place(source) {
+    let caution = match source_place(source) {
         Some(place)
             if indexes
                 .iter()
-                .any(|index| self::place(index).as_ref() == Some(&place)) =>
+                .any(|index| self::source_place(index).as_ref() == Some(&place)) =>
         {
             return vec![from];
         }
@@ -109,7 +109,8 @@ pub(crate) fn public(url: &str) -> String {
 }
 
 /// An index location as people and agents see it: a `git:` address without a password.
-pub(crate) fn shown(location: &str) -> String {
+#[must_use]
+pub fn shown(location: &str) -> String {
     match Source::parse(location) {
         Ok(Source::Git { url, reference }) => format!("git:{}@{reference}", public(&url)),
         _ => location.to_owned(),
@@ -117,7 +118,7 @@ pub(crate) fn shown(location: &str) -> String {
 }
 
 /// A source that is neither `git:` nor an absolute path names a plugin in the indexes.
-pub(crate) fn named(source: &str) -> bool {
+pub(crate) fn names_an_index(source: &str) -> bool {
     !source.starts_with("git:") && Path::new(source).is_relative()
 }
 
@@ -273,7 +274,7 @@ pub(crate) fn resolve(
     plugin: Option<String>,
     stop: &async_channel::Receiver<()>,
 ) -> Result<(String, Option<String>, Option<Listing>)> {
-    if !named(&source) {
+    if !names_an_index(&source) {
         return Ok((source, plugin, None));
     }
     if plugin.is_some() {

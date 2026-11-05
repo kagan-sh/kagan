@@ -17,17 +17,25 @@ use std::{
 /// Owned facts from the last paint of an observed element.
 #[derive(Clone)]
 pub(crate) struct ElementSnapshot {
-    role: Option<gpui_kit::Role>,
-    path: Vec<ElementId>,
-    value: Option<SharedString>,
-    bounds: Bounds<Pixels>,
-    clipped: Bounds<Pixels>,
-    visible: bool,
-    focused: Option<bool>,
-    disabled: Option<bool>,
-    selected: Option<bool>,
-    label: Option<SharedString>,
-    hint: Option<SharedString>,
+    pub(crate) role: Option<gpui_kit::Role>,
+    pub(crate) path: Vec<ElementId>,
+    /// The native accessibility value, not rendered text or pixels.
+    pub(crate) value: Option<SharedString>,
+    pub(crate) bounds: Bounds<Pixels>,
+    pub(crate) clipped: Bounds<Pixels>,
+    pub(crate) visible: bool,
+    /// Whether the tracked focus scope contains the current keyboard focus.
+    /// `None` means no focus binding was observed.
+    pub(crate) focused: Option<bool>,
+    /// `None` means the native element does not expose a disabled flag.
+    /// Absence is not evidence that a control accepts input.
+    pub(crate) disabled: Option<bool>,
+    /// Whether the view states the control is selected. Nothing native reports it.
+    pub(crate) selected: Option<bool>,
+    /// The accessibility label; it can intentionally differ from visible text.
+    pub(crate) label: Option<SharedString>,
+    /// The tooltip text the control shows on hover.
+    pub(crate) hint: Option<SharedString>,
 }
 impl fmt::Debug for ElementSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -44,53 +52,6 @@ impl fmt::Debug for ElementSnapshot {
             .field("label", &self.label)
             .field("hint", &self.hint)
             .finish()
-    }
-}
-
-impl ElementSnapshot {
-    pub(crate) fn role(&self) -> Option<gpui_kit::Role> {
-        self.role
-    }
-    pub(crate) fn path(&self) -> &[ElementId] {
-        &self.path
-    }
-    /// The native accessibility value, not rendered text or pixels.
-    pub(crate) fn value(&self) -> Option<&str> {
-        self.value.as_deref()
-    }
-
-    /// The tooltip text the control shows on hover.
-    #[cfg(test)]
-    pub(crate) fn hint(&self) -> Option<&str> {
-        self.hint.as_deref()
-    }
-
-    pub(crate) fn bounds(&self) -> Bounds<Pixels> {
-        self.bounds
-    }
-    pub(crate) fn clipped(&self) -> Bounds<Pixels> {
-        self.clipped
-    }
-    pub(crate) fn visible(&self) -> bool {
-        self.visible
-    }
-    /// Whether the tracked focus scope contains the current keyboard focus.
-    /// `None` means no focus binding was observed.
-    pub(crate) fn focused(&self) -> Option<bool> {
-        self.focused
-    }
-    /// `None` means the native element does not expose a disabled flag.
-    /// Absence is not evidence that a control accepts input.
-    pub(crate) fn disabled(&self) -> Option<bool> {
-        self.disabled
-    }
-    /// Whether the view states the control is selected. Nothing native reports it.
-    pub(crate) fn selected(&self) -> Option<bool> {
-        self.selected
-    }
-    /// The accessibility label; it can intentionally differ from visible text.
-    pub(crate) fn label(&self) -> Option<&str> {
-        self.label.as_deref()
     }
 }
 

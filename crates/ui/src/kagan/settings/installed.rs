@@ -17,12 +17,12 @@ use kg_domain::{Op, PluginId, PluginOp};
 use kg_plugins::{PluginHost, PluginStatus};
 
 use super::Kagan;
-use super::pages::{Group, Row, row, switch};
-use crate::kagan::plugins_box::{
+use super::row::{Group, Row, row, switch};
+use crate::kagan::controls::{act, answer, control, dispatch};
+use crate::kagan::plugin_actions::{
     InstallPlugin, ReloadPlugin, RemovePlugin, ShowPluginLogs, ToggleInstallForm,
-    TogglePluginDetails, TogglePluginEnabled, UpdatePlugin, act, answer,
+    TogglePluginDetails, TogglePluginEnabled, UpdatePlugin,
 };
-use crate::kagan::shown::{control, dispatch};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -60,7 +60,7 @@ pub(super) fn group(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>)
     for status in &statuses {
         rows.extend(plugin_rows(kagan, status, window, cx));
     }
-    super::pages::group("installed", "Installed", rows)
+    super::row::group("installed", "Installed", rows)
 }
 
 fn install_row(kagan: &Kagan) -> Row {
@@ -145,27 +145,27 @@ fn plugin_rows(
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> Vec<Row> {
-    let id = status.id().clone();
+    let id = status.id.clone();
     let open = kagan.plugins.expanded.as_ref() == Some(&id);
     let version = status
         .version
         .as_deref()
         .map_or(String::new(), |version| format!(" {version}"));
     let mut parts = Vec::new();
-    if status.error().is_some() {
+    if status.error.as_deref().is_some() {
         parts.push("Failed".to_owned());
-    } else if !status.is_enabled() {
+    } else if !status.enabled {
         parts.push("Off".to_owned());
     }
-    if status.is_slow() {
+    if status.slow {
         parts.push("slow".to_owned());
     }
-    if let Some(note) = status.note() {
+    if let Some(note) = status.note.as_deref() {
         parts.push(note.to_owned());
     }
-    let added = added(status, cx);
-    if !added.is_empty() {
-        parts.push(added);
+    let addition = addition_note(status, cx);
+    if !addition.is_empty() {
+        parts.push(addition);
     }
     let note = parts.join(" · ");
     let focus = super::super::tab_stop(
@@ -183,8 +183,8 @@ fn plugin_rows(
     let switch_focus = focus.clone();
     let toggle = switch(
         &format!("plugin-{}", id.0),
-        status.name(),
-        status.is_enabled(),
+        status.name.as_str(),
+        status.enabled,
         move |_, window, cx| {
             window.focus(&switch_focus, cx);
             window.dispatch_action(Box::new(TogglePluginEnabled), cx);
@@ -201,11 +201,11 @@ fn plugin_rows(
         .ui_observe_as(Facts {
             role: Role::ListBoxOption,
             focus: Some(focus.clone()),
-            ..Facts::button(status.name().to_owned())
+            ..Facts::button(status.name.as_str().to_owned())
         })
         .track_focus(&focus)
         .tab_stop(true)
-        .key_context(if git_source(&status.source) {
+        .key_context(if is_git_source(&status.source) {
             "PluginRow PluginUpdate"
         } else {
             "PluginRow"
@@ -216,7 +216,7 @@ fn plugin_rows(
         .type_small()
         .text_color(cx.theme().muted_foreground)
         .child("•");
-    let anchor = row_keys(anchor, &id, git_source(&status.source), cx);
+    let anchor = row_keys(anchor, &id, is_git_source(&status.source), cx);
     let head = h_flex()
         .gap_2()
         .items_center()
@@ -225,7 +225,7 @@ fn plugin_rows(
         .child(toggle);
     let head = row(
         &id.0,
-        &format!("{}{version}", status.name()),
+        &format!("{}{version}", status.name.as_str()),
         &note,
         head.into_any_element(),
     );
@@ -241,23 +241,23 @@ fn plugin_rows(
     rows
 }
 
-fn git_source(source: &str) -> bool {
+fn is_git_source(source: &str) -> bool {
     source.starts_with("git:")
 }
 
-fn added(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
-    if !status.is_enabled() {
+fn addition_note(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
+    if !status.enabled {
         return String::new();
     }
-    let id = status.id();
+    let id = status.id.clone();
     let mut parts = Vec::new();
     if let Ok(list) = kg_plugins::contributions(cx)
-        && let Some((_, ui)) = list.iter().find(|(plugin, _)| plugin == id)
+        && let Some((_, ui)) = list.iter().find(|(plugin, _)| plugin == &id)
     {
-        for panel in ui.panels() {
-            match (panel.replaces(), panel.placement()) {
+        for panel in &ui.panels {
+            match (panel.replaces, panel.placement) {
                 (Some(slot), _) => parts.push(format!("offers a {}", slot.name())),
-                (None, _) => parts.push(panel.title().to_owned()),
+                (None, _) => parts.push(panel.title.clone()),
             }
         }
     }
@@ -266,9 +266,9 @@ fn added(status: &PluginStatus, cx: &mut Context<Kagan>) -> String {
         let commands = host
             .commands()
             .iter()
-            .filter(|command| command.plugin() == id)
+            .filter(|command| command.plugin == id)
             .count();
-        let settings = host.settings(id).len();
+        let settings = host.settings(&id).len();
         if settings > 0 {
             parts.push(format!(
                 "{settings} {}",
@@ -331,20 +331,20 @@ fn row_keys<E: InteractiveElement>(row: E, id: &PluginId, git: bool, cx: &mut Co
 }
 
 fn details_row(status: &PluginStatus, focus: &gpui_kit::FocusHandle) -> Row {
-    let id = status.id().clone();
+    let id = status.id.clone();
     let powers = if status.powers.is_empty() {
         "no powers".to_owned()
     } else {
         status.powers.join("; ")
     };
     let mut note = format!("{} · {powers}", status.source);
-    if let Some(error) = status.error() {
+    if let Some(error) = status.error.as_deref() {
         note = format!("{note} · {error}");
     }
-    if let Some(extra) = status.note() {
+    if let Some(extra) = status.note.as_deref() {
         note = format!("{note} · {extra}");
     }
-    let git = git_source(&status.source);
+    let git = is_git_source(&status.source);
     let mut actions = h_flex().gap_2().flex_wrap();
     if git {
         actions = actions.child(act(

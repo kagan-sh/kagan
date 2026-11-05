@@ -8,9 +8,12 @@ use serde::de::IgnoredAny;
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Contributions {
-    pub(crate) panels: Vec<PanelContribution>,
-    pub(crate) settings: Option<String>,
-    pub(crate) overlay: Option<String>,
+    /// The panels this plugin declares, in manifest order.
+    pub panels: Vec<PanelContribution>,
+    /// The exported view class that draws this plugin's settings page.
+    pub settings: Option<String>,
+    /// The exported view class that draws over the terminal.
+    pub overlay: Option<String>,
     // Spots kagan does not draw yet. They are read only to refuse them: see `check_spots`.
     pub(crate) toolbar: Vec<IgnoredAny>,
     pub(crate) status_bar: Vec<IgnoredAny>,
@@ -53,17 +56,25 @@ impl Contributions {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PanelContribution {
-    pub(crate) id: String,
-    pub(crate) title: String,
+    /// The `ui` key this panel is declared under.
+    pub id: String,
+    /// The title the window shows for the panel.
+    pub title: String,
+    /// The exported view class the panel draws, when it is a native view.
     #[serde(default)]
-    pub(crate) view: Option<String>,
+    pub view: Option<String>,
+    /// The HTML file this panel shows, when its body is a web page.
     #[serde(default)]
-    pub(crate) web: Option<String>,
+    pub web: Option<String>,
+    /// Whether the page keeps cookies and storage under this plugin's data folder.
     #[serde(default)]
-    pub(crate) store: bool,
-    pub(crate) placement: Placement,
-    pub(crate) follows: Option<Follows>,
-    pub(crate) replaces: Option<Slot>,
+    pub store: bool,
+    /// Where the panel is placed.
+    pub placement: Placement,
+    /// Whether the panel follows the shown thread.
+    pub follows: Option<Follows>,
+    /// The slot this panel offers to fill, when it is a replacement.
+    pub replaces: Option<Slot>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
@@ -244,56 +255,4 @@ fn check_view(view: &str) -> Result<(), String> {
         return Err(format!("UI view {view:?} must name an exported class"));
     }
     Ok(())
-}
-
-impl Contributions {
-    #[must_use]
-    pub fn panels(&self) -> &[PanelContribution] {
-        &self.panels
-    }
-    #[must_use]
-    pub fn settings(&self) -> Option<&str> {
-        self.settings.as_deref()
-    }
-    #[must_use]
-    pub fn overlay(&self) -> Option<&str> {
-        self.overlay.as_deref()
-    }
-}
-impl PanelContribution {
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.id
-    }
-    #[must_use]
-    pub fn title(&self) -> &str {
-        &self.title
-    }
-    #[must_use]
-    pub fn view(&self) -> Option<&str> {
-        self.view.as_deref()
-    }
-    /// The HTML file this panel shows, when its body is a web page.
-    #[must_use]
-    pub fn web(&self) -> Option<&str> {
-        self.web.as_deref()
-    }
-    /// Whether the page keeps cookies and storage under this plugin's data folder.
-    #[must_use]
-    pub fn store(&self) -> bool {
-        self.store
-    }
-    #[must_use]
-    pub fn placement(&self) -> Placement {
-        self.placement
-    }
-    #[must_use]
-    pub fn follows(&self) -> Option<Follows> {
-        self.follows
-    }
-    /// The slot this panel offers to fill, when it is a replacement.
-    #[must_use]
-    pub fn replaces(&self) -> Option<Slot> {
-        self.replaces
-    }
 }

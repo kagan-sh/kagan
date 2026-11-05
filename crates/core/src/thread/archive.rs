@@ -86,7 +86,7 @@ pub(super) async fn delete(
     this: &WeakEntity<Workspace>,
     database: Database,
     id: ThreadId,
-    thread_id: Option<ThreadId>,
+    approval_thread_id: Option<ThreadId>,
     requester: Option<Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
@@ -125,7 +125,7 @@ pub(super) async fn delete(
             "Delete “{title}” and permanently delete {described}? Its files cannot be recovered."
         )
     };
-    approve(thread_id, requester, question, "Delete", cx).await?;
+    approve(approval_thread_id, requester, question, "Delete", cx).await?;
     #[cfg(test)]
     {
         let hold = this
@@ -157,7 +157,7 @@ pub(super) async fn delete(
     Ok(OpResult::Done)
 }
 
-pub(super) fn forget_deleted(
+pub(crate) fn forget_deleted(
     workspace: &mut Workspace,
     deleted: Vec<(kg_domain::Event, kg_domain::ProjectId)>,
     cx: &mut gpui_kit::Context<Workspace>,
@@ -172,7 +172,7 @@ pub(super) fn forget_deleted(
     cx.notify();
 }
 
-pub(super) async fn approve(
+pub(crate) async fn approve(
     thread_id: Option<ThreadId>,
     requester: Option<Requester>,
     question: String,
@@ -181,11 +181,11 @@ pub(super) async fn approve(
 ) -> Result<()> {
     let options = vec![
         InteractionOption {
-            id: "decline".into(),
+            id: InteractionOption::DECLINE.into(),
             label: "Cancel".into(),
         },
         InteractionOption {
-            id: "approve".into(),
+            id: InteractionOption::APPROVE.into(),
             label: verb.into(),
         },
     ];
@@ -194,7 +194,7 @@ pub(super) async fn approve(
             Workspace::ask_for_person(thread_id.as_ref(), requester, question.clone(), options, cx)
         })
         .await?;
-    if answer == "approve" {
+    if answer == InteractionOption::APPROVE {
         Ok(())
     } else {
         Err(OpError::Invalid(format!("declined: {question}")))

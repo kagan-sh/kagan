@@ -72,6 +72,6 @@ Read [`AGENTS.md`](AGENTS.md) for the contributor rules. The design documents ar
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).
 
 The window uses [Inter](assets/fonts/Inter-OFL.txt), and the terminal uses [JetBrains Mono](assets/fonts/JetBrainsMono-OFL.txt). Both fonts use the SIL Open Font License 1.1. The wordmark sets "kagan" in outlines of Inter. [`assets/THIRD-PARTY-NOTICES.txt`](assets/THIRD-PARTY-NOTICES.txt) has the license of each dependency and ships inside the app.

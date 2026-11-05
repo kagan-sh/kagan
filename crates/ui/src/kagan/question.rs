@@ -37,9 +37,9 @@ impl Question {
     pub(super) fn standalone(approval: &Approval) -> Self {
         Self {
             thread: None,
-            id: approval.id().clone(),
-            title: approval.title().to_owned(),
-            options: approval.options().to_vec(),
+            id: approval.id.clone(),
+            title: approval.title.clone(),
+            options: approval.options.clone(),
         }
     }
 }

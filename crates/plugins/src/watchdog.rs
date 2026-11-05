@@ -44,43 +44,21 @@ impl Watchdog {
 
 #[derive(Clone)]
 pub struct PluginStatus {
-    pub(crate) id: kg_domain::PluginId,
-    pub(crate) name: String,
+    /// This plugin's id.
+    pub id: kg_domain::PluginId,
+    /// The name its manifest gives it.
+    pub name: String,
     /// `None` when the plugin's manifest could not be read.
     pub version: Option<String>,
     pub source: String,
     /// What the person approved, one line each.
     pub powers: Vec<String>,
-    pub(crate) enabled: bool,
-    pub(crate) slow: bool,
-    pub(crate) error: Option<String>,
-    pub(crate) note: Option<String>,
-}
-
-impl PluginStatus {
-    #[must_use]
-    pub fn id(&self) -> &kg_domain::PluginId {
-        &self.id
-    }
-    #[must_use]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    #[must_use]
-    pub fn is_enabled(&self) -> bool {
-        self.enabled
-    }
-    #[must_use]
-    pub fn is_slow(&self) -> bool {
-        self.slow
-    }
-    #[must_use]
-    pub fn error(&self) -> Option<&str> {
-        self.error.as_deref()
-    }
-    #[must_use]
-    pub fn note(&self) -> Option<&str> {
-        self.note.as_deref()
-    }
+    /// Whether the person has it enabled.
+    pub enabled: bool,
+    /// Whether it has been slow enough to warn about.
+    pub slow: bool,
+    /// Why it failed to load, when it did.
+    pub error: Option<String>,
+    /// What the person must know about it, when there is anything.
+    pub note: Option<String>,
 }

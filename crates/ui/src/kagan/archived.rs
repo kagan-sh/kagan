@@ -13,10 +13,11 @@ use gpui_kit::{
 use kg_core::Workspace;
 use kg_domain::{
     EnvironmentId, EnvironmentOp, EnvironmentProvider, Op, OpResult, Thread, ThreadOp, Visibility,
+    newest_first,
 };
 
 use super::Kagan;
-use super::shown::control;
+use super::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -71,12 +72,7 @@ impl Kagan {
             threads.retain(|thread| {
                 thread.visibility == Visibility::Visible && thread.archived_at.is_some()
             });
-            threads.sort_by(|left, right| {
-                right
-                    .created_at
-                    .cmp(&left.created_at)
-                    .then_with(|| right.id.cmp(&left.id))
-            });
+            threads.sort_by(newest_first);
             _ = this.update(cx, |this, cx| {
                 if !this.shows_archived() {
                     return;

@@ -27,7 +27,7 @@ mod order;
 use super::surface::{self, OpenSurface};
 use order::{DragProject, Place};
 
-use super::shown::{control, menu_item, menu_popup, tip};
+use super::controls::{control, menu_item, menu_popup, tip};
 use crate::theme::Tone;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -1167,7 +1167,7 @@ pub(super) fn list(
     sidebar.reveal_selected(&rows);
     let thread_scroll = sidebar.thread_scroll.clone();
     let lines = thread_lines(&rows, sidebar, window, cx);
-    let keys = super::shown::bound_keys(&super::NewThread, cx);
+    let keys = super::controls::bound_keys(&super::NewThread, cx);
     let tooltip = if keys.is_empty() {
         "New thread".to_owned()
     } else {
@@ -1296,7 +1296,7 @@ pub(super) fn rail(
 }
 
 fn gear(active: bool, cx: &mut Context<Sidebar>) -> impl IntoElement {
-    let tip = super::shown::tip("Settings", &super::OpenSettings, cx);
+    let tip = super::controls::tip("Settings", &super::OpenSettings, cx);
     let button = Button::new("settings-gear-button")
         .small()
         .rounded(px(6.))
@@ -1305,7 +1305,7 @@ fn gear(active: bool, cx: &mut Context<Sidebar>) -> impl IntoElement {
         .tooltip(tip)
         .on_click(cx.listener(|_, _, _, cx| cx.emit(Event::Settings)));
     let button = button.ghost().selected(active);
-    super::shown::control(
+    super::controls::control(
         "settings-gear",
         Facts {
             selected: Some(active),
@@ -1492,7 +1492,7 @@ fn footer(sidebar: &Sidebar, window: &mut Window, cx: &mut Context<Sidebar>) -> 
                 .icon(gpui_kit::assets::IconName::FolderPlus)
                 .accessibility_label("Add project")
                 .tooltip({
-                    let keys = super::shown::bound_keys(&super::AddProject, cx);
+                    let keys = super::controls::bound_keys(&super::AddProject, cx);
                     if keys.is_empty() {
                         "Add project".to_owned()
                     } else {

@@ -1,7 +1,10 @@
-#![allow(clippy::print_stdout)]
+#![expect(
+    clippy::print_stdout,
+    reason = "the CLI writes command output and results to stdout"
+)]
 
 mod app;
-mod development;
+mod cli;
 #[cfg(target_os = "macos")]
 mod icon;
 mod mcp;
@@ -176,11 +179,11 @@ fn main() -> ExitCode {
                 })
             })
             .map_err(OpError::from),
-        Command::Op(op) => development::run(*op, cli.json),
+        Command::Op(op) => cli::run(*op, cli.json),
         Command::Plugin(arguments) => {
             let typed = arguments.clone();
             plugin_cli(arguments)
-                .and_then(|op| development::run(op, cli.json))
+                .and_then(|op| cli::run(op, cli.json))
                 .map_err(|error| match error {
                     OpError::NotFound(message) => OpError::NotFound(match suggestion(&typed) {
                         Some(name) => format!("{message}; did you mean {name}?"),

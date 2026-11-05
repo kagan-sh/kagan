@@ -1,17 +1,19 @@
 use std::ffi::OsStr;
+use std::io::{Read as _, Seek as _};
 use std::net::{TcpStream, ToSocketAddrs as _};
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 
+use futures::FutureExt as _;
 use serde::Deserialize;
 
 use kg_domain::{OpError, PluginId};
+use kg_process::Process;
 use tempfile::TempDir;
 
 use crate::index::public;
 use crate::manifest::inside;
-use crate::program::RunError;
 use crate::{Discovered, Result, discover};
 
 const STAGING: &str = ".staging-";
@@ -307,12 +309,71 @@ pub(crate) fn run_git(
     limit: Duration,
     stop: &async_channel::Receiver<()>,
 ) -> Result<std::process::Output> {
-    crate::program::run(command, limit, stop).map_err(|error| match error {
+    run(command, limit, stop).map_err(|error| match error {
         RunError::Timeout => {
             OpError::Failed("git took longer than 2 minutes; check the host and try again".into())
         }
         RunError::Stopped => OpError::Failed("the install was stopped".into()),
         RunError::Other(error) => OpError::Failed(format!("cannot run git: {error}")),
+    })
+}
+
+#[derive(Debug)]
+pub(crate) enum RunError {
+    Timeout,
+    Stopped,
+    Other(OpError),
+}
+
+impl From<std::io::Error> for RunError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Other(error.into())
+    }
+}
+
+pub(crate) fn run(
+    command: Command,
+    timeout: Duration,
+    stop: &async_channel::Receiver<()>,
+) -> std::result::Result<Output, RunError> {
+    let mut stdout = tempfile::tempfile()?;
+    let mut stderr = tempfile::tempfile()?;
+    let mut process = Process::spawn(
+        command,
+        Stdio::null(),
+        stdout.try_clone()?.into(),
+        stderr.try_clone()?.into(),
+    )?;
+    let status = wait(&mut process, timeout, stop)?;
+    let mut output = Output {
+        status,
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+    };
+    stdout.rewind()?;
+    stderr.rewind()?;
+    stdout.read_to_end(&mut output.stdout)?;
+    stderr.read_to_end(&mut output.stderr)?;
+    Ok(output)
+}
+
+/// Waits for the program to end. Its time limit, or the stop being sent or dropped, ends the wait
+/// first; the caller's `Process` then ends the program.
+fn wait(
+    process: &mut Process,
+    timeout: Duration,
+    stop: &async_channel::Receiver<()>,
+) -> std::result::Result<std::process::ExitStatus, RunError> {
+    let status = process.child().status().fuse();
+    let timer = async_io::Timer::after(timeout).fuse();
+    let stopped = stop.recv().fuse();
+    async_io::block_on(async move {
+        futures::pin_mut!(status, timer, stopped);
+        futures::select_biased! {
+            status = status => status.map_err(RunError::from),
+            _ = timer => Err(RunError::Timeout),
+            _ = stopped => Err(RunError::Stopped),
+        }
     })
 }
 

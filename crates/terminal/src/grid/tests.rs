@@ -68,8 +68,18 @@ fn a_color_the_program_set_wins_over_the_default() {
 fn dim_and_bright_names_resolve() {
     let colors = Colors::default();
     let named = |name| color(TermColor::Named(name), &colors);
-    assert_eq!(named(NamedColor::DimRed), Color::Ansi(Ansi::Red));
-    assert_eq!(named(NamedColor::DimWhite), Color::Ansi(Ansi::White));
+    for (name, slot) in [
+        (NamedColor::DimBlack, Ansi::Black),
+        (NamedColor::DimRed, Ansi::Red),
+        (NamedColor::DimGreen, Ansi::Green),
+        (NamedColor::DimYellow, Ansi::Yellow),
+        (NamedColor::DimBlue, Ansi::Blue),
+        (NamedColor::DimMagenta, Ansi::Magenta),
+        (NamedColor::DimCyan, Ansi::Cyan),
+        (NamedColor::DimWhite, Ansi::White),
+    ] {
+        assert_eq!(named(name), Color::Ansi(slot), "{name:?}");
+    }
     assert_eq!(named(NamedColor::BrightForeground), Color::Foreground);
     assert_eq!(named(NamedColor::DimForeground), Color::Foreground);
     assert_eq!(named(NamedColor::Cursor), Color::Foreground);

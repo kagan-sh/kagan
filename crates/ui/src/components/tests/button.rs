@@ -25,10 +25,10 @@ fn a_kg_button_is_found_named_and_clicked_through_kg_ui(cx: &mut TestAppContext)
         window.draw(cx).clear(cx);
         let id = ElementId::Name("press".into());
         let found = crate::ui_registry::find(window, &id).expect("the button is observed");
-        assert_eq!(found.role(), Some(Role::Button));
-        assert_eq!(found.label(), Some("Press me"));
-        assert_eq!(found.disabled(), Some(false));
-        assert!(found.visible());
+        assert_eq!(found.role, Some(Role::Button));
+        assert_eq!(found.label.as_deref(), Some("Press me"));
+        assert_eq!(found.disabled, Some(false));
+        assert!(found.visible);
 
         crate::ui_dispatch::click(window, &id, cx).expect("the button is clicked");
         window.draw(cx).clear(cx);
@@ -46,7 +46,7 @@ fn a_disabled_kg_button_reports_disabled_and_ignores_clicks(cx: &mut TestAppCont
         window.draw(cx).clear(cx);
         let id = ElementId::Name("held".into());
         let found = crate::ui_registry::find(window, &id).expect("the button is observed");
-        assert_eq!(found.disabled(), Some(true));
+        assert_eq!(found.disabled, Some(true));
 
         let _ = crate::ui_dispatch::click(window, &id, cx);
         window.draw(cx).clear(cx);
@@ -127,7 +127,7 @@ fn disabled_and_selected_follow_the_script_across_a_change(cx: &mut TestAppConte
         visual.update(|window, _| {
             let found = crate::ui_registry::find(window, &ElementId::Name("target".into()))
                 .expect("the target is observed");
-            (found.disabled(), found.selected())
+            (found.disabled, found.selected)
         })
     };
     assert_eq!(state(&mut visual), (Some(false), Some(false)));
@@ -148,7 +148,7 @@ fn focus_moves_onto_a_kg_button_and_reports_it(cx: &mut TestAppContext) {
     let focused = |visual: &mut gpui_kit::VisualTestContext| {
         visual.update(|window, _| {
             crate::ui_registry::find(window, &ElementId::Name("every".into()))
-                .and_then(|found| found.focused())
+                .and_then(|found| found.focused)
         })
     };
     visual.update(|window, cx| {
@@ -195,7 +195,7 @@ fn placed(cx: &mut TestAppContext, source: &str, names: &[&str]) -> Vec<[f32; 4]
             .map(|name| {
                 let bounds = observed(window, name)
                     .expect("a KgButton is observed")
-                    .bounds();
+                    .bounds;
                 [
                     f32::from(bounds.origin.x),
                     f32::from(bounds.origin.y),

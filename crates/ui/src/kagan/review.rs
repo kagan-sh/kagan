@@ -1,5 +1,4 @@
 #[cfg(test)]
-#[path = "../tests/review_read.rs"]
 pub(crate) mod read;
 use crate::theme::TypeScale as _;
 mod actions;
@@ -183,7 +182,10 @@ impl Kagan {
                 cx,
             );
             cx.spawn(async move |this, cx| {
-                let marks = loaded.await.unwrap_or_default();
+                let Ok(marks) = loaded.await else {
+                    return;
+                };
+                let marks = marks.unwrap_or_default();
                 _ = this.update(cx, |this, cx| {
                     if this.changes.viewed_checking.is_none() {
                         this.changes.viewed = marks;
@@ -559,7 +561,7 @@ impl Kagan {
         } else {
             "Files"
         };
-        super::shown::control(
+        super::controls::control(
             "review-toggle-files",
             Facts::button(label),
             gpui_kit::component::button::Button::new("button-review-toggle-files")

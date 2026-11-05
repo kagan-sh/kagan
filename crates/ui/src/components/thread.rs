@@ -64,7 +64,7 @@ impl ComponentMaterializer for Part {
             .payload()
             .downcast_ref::<ThreadId>()
             .ok_or_else(|| {
-                super::fail::ComponentError::new(
+                super::component_error::ComponentError::new(
                     "Thread component received an incompatible thread id",
                 )
             })?
@@ -77,7 +77,9 @@ impl ComponentMaterializer for Part {
                 .thread(&id)
                 .cloned()
                 .ok_or_else(|| {
-                    super::fail::ComponentError::new(format!("Thread {id} does not exist"))
+                    super::component_error::ComponentError::new(format!(
+                        "Thread {id} does not exist"
+                    ))
                 })?;
             let kind = match part {
                 Part::Title => "title",

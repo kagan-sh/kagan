@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use gpui_kit::{App, AppContext, AsyncApp, Context, Entity, WeakEntity};
@@ -52,7 +52,7 @@ pub(crate) async fn start(
     let at = crate::workspace::time(this, cx)?;
     let spawned = match folder {
         Some(folder) => spawn(this, &record, folder, size, start, cx).await,
-        None => Err("the thread has no folder".to_owned()),
+        None => Err(OpError::Invalid("the thread has no folder".into())),
     };
     match spawned {
         Ok(terminal) => {
@@ -68,11 +68,11 @@ pub(crate) async fn start(
         }
         Err(error) => {
             let failed = vec![EventKind::Failed {
-                error: Some(error.clone()),
+                error: Some(error.to_string()),
             }];
             Workspace::events(this, record.id, failed, cx).await?;
             status(this, thread, ThreadStatus::Error, cx).await?;
-            Err(OpError::Failed(error))
+            Err(error)
         }
     }
 }
@@ -84,28 +84,32 @@ async fn spawn(
     (cols, rows): (u16, u16),
     start: Start,
     cx: &mut AsyncApp,
-) -> std::result::Result<Terminal, String> {
-    let environment = crate::program::environment_of(this, cx);
-    let program = resolve_program(&record.provider, environment.as_ref())?;
-    let integration = agent::integrate(this, record, &program, &folder, start, cx)
-        .await
-        .map_err(|error| error.to_string())?;
+) -> Result<Terminal> {
+    let environment = crate::program::program_environment_of(this, cx);
+    let program =
+        resolve_program(&record.provider, environment.as_ref()).map_err(OpError::Invalid)?;
+    let integration = agent::integrate(this, record, &program, &folder, start, cx).await?;
     let args = integration.args.into_iter().chain(program.args).collect();
     let mut env = integration.env;
     if let Some(locale) = cx.background_spawn(async { utf8_locale() }).await {
         env.push(("LANG".into(), locale.into()));
     }
-    Terminal::spawn(
-        Launch {
-            program: program.path.into(),
-            args,
-            cwd: Some(folder),
-            env,
-        },
-        cols,
-        rows,
+    let launch = Launch {
+        program: program.path.clone().into(),
+        args,
+        cwd: Some(folder.clone()),
+        env,
+    };
+    Terminal::spawn(launch, cols, rows)
+        .map_err(|error| OpError::Failed(start_failure(&program.path, &folder, &error)))
+}
+
+fn start_failure(program: &Path, folder: &Path, error: &std::io::Error) -> String {
+    format!(
+        "could not start {} in {}: {error}",
+        program.display(),
+        folder.display()
     )
-    .map_err(|error| error.to_string())
 }
 
 #[cfg(not(unix))]
@@ -161,7 +165,7 @@ fn is_utf8(locale: &str) -> bool {
         .contains("utf8")
 }
 
-const SEND_CAP: usize = 1024 * 1024;
+const TEXT_CAP: usize = 1024 * 1024;
 
 pub(crate) async fn submit(
     this: &WeakEntity<Workspace>,
@@ -172,7 +176,7 @@ pub(crate) async fn submit(
     if text.is_empty() {
         return Err(OpError::Invalid("send needs text".into()));
     }
-    if text.len() > SEND_CAP {
+    if text.len() > TEXT_CAP {
         return Err(OpError::Invalid(format!(
             "send is {} bytes; the cap is 1 MiB",
             text.len()
@@ -217,8 +221,14 @@ pub(crate) fn run(
         if file.is_some() {
             return Err(OpError::Invalid("paste carries text, not a path".into()));
         }
-        if text.is_none() {
+        let Some(text) = text else {
             return Err(OpError::Invalid("paste needs text".into()));
+        };
+        if text.len() > TEXT_CAP {
+            return Err(OpError::Invalid(format!(
+                "paste is {} bytes; the cap is 1 MiB",
+                text.len()
+            )));
         }
     }
     let (ThreadOp::Input { id, terminal, .. }
@@ -304,7 +314,7 @@ fn act_ended(finished: &Finished, op: &ThreadOp) -> std::io::Result<OpResult> {
             || finished.transcript(),
             || finished.screen(),
         ),
-        _ => Ok(OpResult::Screen(finished.screen())),
+        _ => Err(std::io::Error::other("not a terminal operation")),
     }
 }
 
@@ -339,7 +349,7 @@ fn act_running(terminal: &Terminal, op: ThreadOp) -> std::io::Result<OpResult> {
             || terminal.transcript(),
             || terminal.screen(),
         ),
-        _ => Ok(OpResult::Screen(terminal.screen())),
+        _ => Err(std::io::Error::other("not a terminal operation")),
     }
 }
 
@@ -637,9 +647,7 @@ pub(crate) async fn start_again(
     if thread.read_with(cx, |thread, _| thread.running()) {
         return Err(OpError::Invalid("the program is still running".into()));
     }
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let folder = record.environment_id.clone();
     let ready = match folder {
         Some(folder) => database
@@ -836,9 +844,7 @@ async fn done(
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     let saved = id.clone();
     database.call(move |store| store.mark_done(&saved)).await?;

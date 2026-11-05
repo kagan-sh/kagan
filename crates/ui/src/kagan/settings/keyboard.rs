@@ -18,7 +18,7 @@ use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS};
 use kg_plugins::{CommandContribution, PluginHost, RunCommand};
 
 use super::Kagan;
-use super::pages::{Group, Row, group, row};
+use super::row::{Group, Row, group, row};
 use crate::plugins::{Refused, Why, refused};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -99,17 +99,18 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
             .map(|command| {
                 let action = command.action();
                 let keys = command
-                    .key()
+                    .key
+                    .as_deref()
                     .filter(|_| !refused.iter().any(|refused| refused.action == action))
                     .map(parse)
                     .unwrap_or_default();
                 let shortcut = Shortcut {
                     target: KeymapAction::Plugin {
                         plugin: plugin.clone(),
-                        command: command.id().to_owned(),
+                        command: command.id.clone(),
                     },
-                    id: format!("plugin-{}-{}", plugin.0, command.id()),
-                    title: command.title().to_owned(),
+                    id: format!("plugin-{}-{}", plugin.0, command.id),
+                    title: command.title.clone(),
                     keys,
                 };
                 shortcut_row(kagan, &shortcut, &refused, &labels, window, cx)
@@ -144,14 +145,14 @@ pub(in crate::kagan) fn plugin_commands(
     let commands = host.commands();
     host.status()
         .iter()
-        .filter(|status| status.is_enabled())
+        .filter(|status| status.enabled)
         .filter_map(|status| {
             let own: Vec<_> = commands
                 .iter()
-                .filter(|command| command.plugin() == status.id())
+                .filter(|command| command.plugin == status.id)
                 .cloned()
                 .collect();
-            (!own.is_empty()).then(|| (status.id().clone(), status.name().to_owned(), own))
+            (!own.is_empty()).then(|| (status.id.clone(), status.name.as_str().to_owned(), own))
         })
         .collect()
 }
@@ -165,7 +166,7 @@ fn labels(cx: &App) -> Labels {
         .flat_map(|(_, name, commands)| {
             commands
                 .into_iter()
-                .map(move |command| (command.action(), format!("{} in {name}", command.title())))
+                .map(move |command| (command.action(), format!("{} in {name}", command.title)))
         });
     built_in.chain(plugins).collect()
 }
@@ -256,7 +257,7 @@ fn controls(
                 this.keyboard.recording = None;
                 cx.notify();
             } else {
-                this.record_shortcut(record.clone(), window, cx);
+                this.begin_shortcut(record.clone(), window, cx);
             }
         },
     ));
@@ -375,7 +376,7 @@ fn keys_text(strokes: &[Keystroke]) -> String {
 
 impl Kagan {
     // Escape stops without saving. Only this window's keys count: About has its own.
-    fn record_shortcut(&mut self, action: String, window: &mut Window, cx: &mut Context<Self>) {
+    fn begin_shortcut(&mut self, action: String, window: &mut Window, cx: &mut Context<Self>) {
         let kagan = cx.entity().downgrade();
         let here = window.window_handle();
         let intercept = cx.intercept_keystrokes(move |event, window, cx| {
@@ -390,7 +391,7 @@ impl Kagan {
             }
             let key = key.clone();
             if kagan
-                .update(cx, |this, cx| this.recorded_shortcut(&key, cx))
+                .update(cx, |this, cx| this.finish_shortcut(&key, cx))
                 .unwrap_or(false)
             {
                 cx.stop_propagation();
@@ -404,7 +405,7 @@ impl Kagan {
     }
 
     // A key pressed after Settings closed some other way still reaches the window.
-    fn recorded_shortcut(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
+    fn finish_shortcut(&mut self, key: &Keystroke, cx: &mut Context<Self>) -> bool {
         let Some((action, _)) = self.keyboard.recording.take() else {
             return false;
         };

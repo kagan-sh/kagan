@@ -26,20 +26,7 @@ pub fn review_rows(view: &DiffFileView) -> Vec<ReviewRow> {
         let start = next_new.saturating_sub(1) as usize;
         let end = start.saturating_add(count).min(file.len());
         if start < end {
-            let lines = file[start..end]
-                .iter()
-                .enumerate()
-                .map(|(offset, text)| {
-                    let offset = u32::try_from(offset).unwrap_or(u32::MAX);
-                    DiffLine {
-                        kind: DiffLineKind::Context,
-                        old: Some(next_old.saturating_add(offset)),
-                        new: Some(next_new.saturating_add(offset)),
-                        text: (*text).to_owned(),
-                    }
-                })
-                .collect();
-            rows.push(ReviewRow::Fold { lines });
+            rows.push(fold(&file, start, end, next_old, next_new));
         }
         next_old = hunk.old_start.max(1);
         next_new = hunk.new_start.max(1);
@@ -95,22 +82,26 @@ pub fn review_rows(view: &DiffFileView) -> Vec<ReviewRow> {
     }
     let start = next_new.saturating_sub(1) as usize;
     if start < file.len() {
-        let lines = file[start..]
-            .iter()
-            .enumerate()
-            .map(|(offset, text)| {
-                let offset = u32::try_from(offset).unwrap_or(u32::MAX);
-                DiffLine {
-                    kind: DiffLineKind::Context,
-                    old: Some(next_old.saturating_add(offset)),
-                    new: Some(next_new.saturating_add(offset)),
-                    text: (*text).to_owned(),
-                }
-            })
-            .collect();
-        rows.push(ReviewRow::Fold { lines });
+        rows.push(fold(&file, start, file.len(), next_old, next_new));
     }
     rows
+}
+
+fn fold(file: &[&str], start: usize, end: usize, next_old: u32, next_new: u32) -> ReviewRow {
+    let lines = file[start..end]
+        .iter()
+        .enumerate()
+        .map(|(offset, text)| {
+            let offset = u32::try_from(offset).unwrap_or(u32::MAX);
+            DiffLine {
+                kind: DiffLineKind::Context,
+                old: Some(next_old.saturating_add(offset)),
+                new: Some(next_new.saturating_add(offset)),
+                text: (*text).to_owned(),
+            }
+        })
+        .collect();
+    ReviewRow::Fold { lines }
 }
 
 fn similar_change(old: &str, new: &str) -> Option<(Range<usize>, Range<usize>)> {

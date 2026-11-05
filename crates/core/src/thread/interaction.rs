@@ -31,9 +31,7 @@ pub(crate) async fn raise(
         created_at: time(this, cx)?,
     };
     let saved = interaction.clone();
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let attention_before = database
         .call(move |store| {
             let before = store
@@ -102,12 +100,7 @@ pub(crate) async fn ask(
     }
     let open = this
         .update(cx, |workspace, _| {
-            workspace.asks.get(&id).and_then(|open| {
-                workspace
-                    .for_a_person
-                    .contains(&open.0)
-                    .then(|| open.0.clone())
-            })
+            workspace.asks.get(&id).map(|open| open.0.clone())
         })
         .map_err(closed)?;
     if let Some(open) = open {
@@ -181,7 +174,7 @@ pub(crate) async fn withdraw(
         .map_err(closed)?;
     database
         .call(move |store| {
-            store.remove_pending_interaction(&raised.id)?;
+            store.delete_pending_interaction(&raised.id)?;
             if store
                 .thread(&raised.thread_id)?
                 .is_some_and(|thread| thread.latest_attention_at == raised.asked_at)
@@ -204,13 +197,11 @@ pub(crate) async fn remove_interactions(
     ids: Vec<kg_domain::PendingInteractionId>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     database
         .call(move |store| {
             for id in &ids {
-                store.remove_pending_interaction(id)?;
+                store.delete_pending_interaction(id)?;
             }
             Ok(())
         })
@@ -223,13 +214,11 @@ pub(crate) async fn clear_interactions(
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let id = thread.read_with(cx, |thread, _| thread.record.id.clone());
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     database
         .call(move |store| {
             for interaction in store.pending_interactions(&id)? {
-                store.remove_pending_interaction(&interaction.id)?;
+                store.delete_pending_interaction(&interaction.id)?;
             }
             Ok(())
         })
@@ -244,9 +233,7 @@ pub(crate) async fn answer(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     thread(this, &id, cx)?;
-    let database = this
-        .update(cx, |workspace, _| workspace.database.clone())
-        .map_err(closed)?;
+    let database = crate::workspace::database(this, cx)?;
     let pending_id = id.clone();
     let pending = database
         .call(move |store| store.pending_interactions(&pending_id))
@@ -277,7 +264,7 @@ pub(crate) async fn answer(
     })
     .map_err(closed)??;
     database
-        .call(move |store| store.remove_pending_interaction(&interaction_id))
+        .call(move |store| store.delete_pending_interaction(&interaction_id))
         .await?;
     Workspace::events(
         this,

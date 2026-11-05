@@ -368,41 +368,53 @@ fn build(
         .web_store(&slot.plugin, &slot.contribution);
     let (store, store_note) = if !wants_store {
         (None, None)
-    } else if crate::page::macos_major() < 14 {
-        (None, Some(crate::page::STORE_NEEDS_MACOS.to_owned()))
+    } else if crate::web_page::macos_major() < 14 {
+        (None, Some(crate::web_page::STORE_NEEDS_MACOS.to_owned()))
     } else {
         let data = PluginHost::global(cx).read(cx).plugin_data(&slot.plugin);
         (
-            Some(kg_plugins::keep_store(&data, &slot.contribution)?),
+            Some(
+                kg_plugins::keep_store(&data, &slot.contribution)
+                    .map_err(|error| error.to_string())?,
+            ),
             None,
         )
     };
-    let builder = crate::page::with_store(crate::page::private(wry::WebViewBuilder::new()), store)
-        .with_url(&url)
-        .with_navigation_handler(move |target| web::allows_navigation(&navigation, &target))
-        .with_file_dialog(false)
-        .with_drag_drop_handler(|_| true)
-        .with_initialization_script(BRIDGE)
-        .with_ipc_handler(move |request: wry::http::Request<String>| {
-            let body = request.into_body();
-            if body.len() <= kg_plugins::MESSAGE_CAP {
-                let _ = sender.try_send(body);
-            }
-        })
-        .with_custom_protocol(SCHEME.to_owned(), move |_id, request| {
-            let css = served_theme.get();
-            let served = web::serve(
-                &root,
-                &protocol_plugin,
-                request.method().as_str(),
-                &request.uri().to_string(),
-                &hosts,
-                &css,
-            );
-            http_response(served)
-        });
+    let builder =
+        crate::web_page::with_store(crate::web_page::private(wry::WebViewBuilder::new()), store)
+            .with_url(&url)
+            .with_navigation_handler(move |target| web::allows_navigation(&navigation, &target))
+            .with_file_dialog(false)
+            .with_drag_drop_handler(|_| true)
+            .with_initialization_script(BRIDGE)
+            .with_ipc_handler(move |request: wry::http::Request<String>| {
+                let body = request.into_body();
+                if body.len() <= kg_plugins::MESSAGE_CAP {
+                    if let Err(error) = sender.try_send(body) {
+                        eprintln!("kg: the page message was not delivered: {error}");
+                    }
+                } else {
+                    eprintln!(
+                        "kg: the page sent {} bytes; the cap is {}",
+                        body.len(),
+                        kg_plugins::MESSAGE_CAP
+                    );
+                }
+            })
+            .with_custom_protocol(SCHEME.to_owned(), move |_id, request| {
+                let css = served_theme.get();
+                let served = web::serve(
+                    &root,
+                    &protocol_plugin,
+                    request.method().as_str(),
+                    &request.uri().to_string(),
+                    &hosts,
+                    &css,
+                );
+                http_response(served)
+            });
     let view = gpui_webview::WebView::build(builder, window, cx)
-        .map_err(|error| crate::page::failure(&error.to_string()))?;
+        .map_err(|error| crate::web_page::failure(&error.to_string()))?;
     let drain = page_watch::watch(receiver, plugin, panel, generation, alive, cx);
     Ok(Built {
         view: cx.new(|_| view),

@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -104,6 +106,15 @@ pub fn order_sidebar_projects(projects: &mut [Project]) {
     });
 }
 
+/// Newest first, then by id, so two threads created in the same tick keep one order.
+#[must_use]
+pub fn newest_first(left: &Thread, right: &Thread) -> Ordering {
+    right
+        .created_at
+        .cmp(&left.created_at)
+        .then_with(|| right.id.cmp(&left.id))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Environment {
@@ -139,8 +150,6 @@ pub struct Thread {
     #[serde(default)]
     pub title_locked: bool,
     pub provider: String,
-    pub model: String,
-    pub reasoning_level: String,
     pub status: ThreadStatus,
     pub visibility: Visibility,
     pub parent_thread_id: Option<ThreadId>,
@@ -164,26 +173,39 @@ impl Thread {
     }
 }
 
+/// `id` first, then every thread whose lifecycle owner is already in the list.
+#[must_use]
+pub fn owned_thread_ids(threads: &[Thread], id: &ThreadId) -> Vec<ThreadId> {
+    let mut placed = BTreeSet::from([id.clone()]);
+    let mut ids = vec![id.clone()];
+    loop {
+        let mut progressed = false;
+        for thread in threads {
+            if placed.contains(&thread.id) {
+                continue;
+            }
+            if thread
+                .lifecycle_owner_thread_id
+                .as_ref()
+                .is_some_and(|owner| placed.contains(owner))
+            {
+                placed.insert(thread.id.clone());
+                ids.push(thread.id.clone());
+                progressed = true;
+            }
+        }
+        if !progressed {
+            break;
+        }
+    }
+    ids
+}
+
 /// Visible, unarchived threads archived with `id` because it owns their lifetime.
 /// A hidden or archived owner is not counted, and still links its visible descendants.
 #[must_use]
 pub fn archive_span(threads: &[Thread], id: &ThreadId) -> usize {
-    let mut owned = std::collections::BTreeSet::from([id.clone()]);
-    loop {
-        let before = owned.len();
-        for thread in threads {
-            if thread
-                .lifecycle_owner_thread_id
-                .as_ref()
-                .is_some_and(|owner| owned.contains(owner))
-            {
-                owned.insert(thread.id.clone());
-            }
-        }
-        if owned.len() == before {
-            break;
-        }
-    }
+    let owned = owned_thread_ids(threads, id);
     threads
         .iter()
         .filter(|thread| {
@@ -219,12 +241,39 @@ pub struct InteractionOption {
     pub label: String,
 }
 
+impl InteractionOption {
+    /// The answer that lets a permission question proceed.
+    pub const APPROVE: &str = "approve";
+    /// The answer that cancels a permission question.
+    pub const DECLINE: &str = "decline";
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Sidebar {
     pub projects: Vec<Project>,
     pub sections: Vec<Section>,
     pub threads: Vec<Thread>,
+}
+
+impl Sidebar {
+    #[must_use]
+    pub fn new(projects: Vec<Project>, sections: Vec<Section>, threads: Vec<Thread>) -> Self {
+        let mut projects = projects;
+        order_sidebar_projects(&mut projects);
+        let mut threads: Vec<Thread> = threads
+            .into_iter()
+            .filter(|thread| {
+                thread.visibility == Visibility::Visible && thread.archived_at.is_none()
+            })
+            .collect();
+        threads.sort_by(newest_first);
+        Self {
+            projects,
+            sections,
+            threads,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
