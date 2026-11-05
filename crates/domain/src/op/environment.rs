@@ -64,6 +64,7 @@ pub struct BranchList {
     pub names: Vec<String>,
 }
 
+// shortcut: a clap value parser reports the message as a String for the CLI to print.
 pub(super) fn environment_spec(text: &str) -> Result<EnvironmentSpec, String> {
     match text.split_once(':') {
         None if text == "project-default" => Ok(EnvironmentSpec::ProjectDefault),

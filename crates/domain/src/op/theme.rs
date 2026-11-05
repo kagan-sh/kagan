@@ -62,6 +62,7 @@ pub fn valid_theme_choice(id: &str) -> bool {
     }
 }
 
+// shortcut: a clap value parser reports the message as a String for the CLI to print.
 fn theme_id(id: &str) -> Result<String, String> {
     if valid_theme_id(id) {
         Ok(id.to_owned())
