@@ -144,14 +144,19 @@ impl AboutWindow {
         cx.notify();
     }
 
-    fn link(id: &'static str, name: &'static str, target: SharedString) -> impl IntoElement {
+    fn link(
+        id: &'static str,
+        name: &'static str,
+        target: SharedString,
+        cx: &App,
+    ) -> impl IntoElement {
         div()
             .id(id)
             .child(
                 Button::new(SharedString::from(format!("{id}-button")))
                     .link()
                     .accessibility_label(name)
-                    .child(div().type_small().child(name))
+                    .child(div().type_small(cx).child(name))
                     .on_click({
                         let target = target.clone();
                         move |_, _, cx| cx.open_url(&target)
@@ -211,7 +216,7 @@ impl Render for AboutWindow {
                 div()
                     .id("about-name")
                     .mt_4()
-                    .type_title()
+                    .type_title(cx)
                     .font_weight(FontWeight::SEMIBOLD)
                     .child("kagan")
                     .ui_observe_as(label("kagan")),
@@ -225,7 +230,7 @@ impl Render for AboutWindow {
                             .text()
                             .accessibility_label(version.clone())
                             .text_color(theme.muted_foreground)
-                            .child(div().type_caption().child(shown))
+                            .child(div().type_caption(cx).child(shown))
                             .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
                     )
                     .ui_observe_as(Facts {
@@ -237,7 +242,7 @@ impl Render for AboutWindow {
                 div()
                     .id("about-tagline")
                     .mt_3()
-                    .type_small()
+                    .type_small(cx)
                     .text_color(theme.muted_foreground)
                     .child(TAGLINE)
                     .ui_observe_as(label(TAGLINE)),
@@ -247,17 +252,18 @@ impl Render for AboutWindow {
                     .id("about-links")
                     .mt_5()
                     .gap_2()
-                    .type_small()
-                    .child(Self::link("about-github", "GitHub", REPO.into()))
+                    .type_small(cx)
+                    .child(Self::link("about-github", "GitHub", REPO.into(), cx))
                     .child(separator())
-                    .child(Self::link("about-book", "Book", BOOK.into()))
+                    .child(Self::link("about-book", "Book", BOOK.into(), cx))
                     .child(separator())
-                    .child(Self::link("about-license", "License", LICENSE.into()))
+                    .child(Self::link("about-license", "License", LICENSE.into(), cx))
                     .child(separator())
                     .child(Self::link(
                         "about-acknowledgements",
                         "Acknowledgements",
                         self.notices.clone(),
+                        cx,
                     ))
                     .ui_container(),
             )
@@ -265,7 +271,7 @@ impl Render for AboutWindow {
                 div()
                     .id("about-footer")
                     .mt_auto()
-                    .type_caption()
+                    .type_caption(cx)
                     .text_color(theme.muted_foreground)
                     .child(FOOTER)
                     .ui_observe_as(label(FOOTER)),

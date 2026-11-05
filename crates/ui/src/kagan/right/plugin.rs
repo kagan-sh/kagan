@@ -1,8 +1,8 @@
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, radius_sm, space};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, Context, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
-    ParentElement as _, Role, Styled as _, Window, div,
+    AnyElement, App, Context, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
+    ParentElement as _, Role, Styled as _, Window, div, px,
 };
 use kg_domain::PluginOp;
 
@@ -14,10 +14,10 @@ use crate::kagan::surface::Slot;
 use crate::kagan::tab_stop;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
-fn recovery_row(id: &str, details: bool, focus: &FocusHandle) -> AnyElement {
+fn recovery_row(id: &str, details: bool, focus: &FocusHandle, cx: &App) -> AnyElement {
     h_flex()
         .flex_wrap()
-        .gap_1()
+        .gap(px(space(SpaceStep::Xs, cx)))
         .child(send(format!("{id}-reload"), "Reload", focus, ReloadPlugin))
         .child(send(format!("{id}-logs"), "Logs", focus, ShowPluginLogs))
         .child(send(
@@ -83,14 +83,14 @@ fn failed_plugin(
         .track_focus(&focus)
         .tab_stop(true)
         .key_context("PluginRow")
-        .rounded(cx.theme().radius)
+        .rounded(px(radius_sm(cx)))
         .focus(|card| card.border_1().border_color(cx.theme().ring))
         .flex_col()
-        .gap_1()
-        .child(div().type_body().child(format!("Could not show {title}")))
+        .gap(px(space(SpaceStep::Xs, cx)))
+        .child(div().type_body(cx).child(format!("Could not show {title}")))
         .child(
             div()
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(reason),
         );
@@ -105,7 +105,7 @@ fn failed_plugin(
     let body = v_flex()
         .id(ElementId::Name(format!("{id}-failed-body").into()))
         .track_focus(&body_focus)
-        .gap_2()
+        .gap(px(space(SpaceStep::Sm, cx)))
         .child(card);
     let body = answer::<ReloadPlugin, _>(body, plugin, cx, |this, id, cx| {
         let op = PluginOp::Reload {
@@ -121,7 +121,7 @@ fn failed_plugin(
     let body = answer::<TogglePluginEnabled, _>(body, plugin, cx, |this, id, cx| {
         this.toggle_plugin_enabled(id, cx);
     });
-    let mut body = body.child(recovery_row(&id, details, &body_focus));
+    let mut body = body.child(recovery_row(&id, details, &body_focus, cx));
     if details {
         body = body.child(
             div()
@@ -131,7 +131,7 @@ fn failed_plugin(
                     value: Some(error.to_owned().into()),
                     ..Facts::button("Error")
                 })
-                .type_small()
+                .type_small(cx)
                 .child(error.to_owned()),
         );
     }

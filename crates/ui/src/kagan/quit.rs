@@ -110,7 +110,7 @@ fn quit_footer(focus: &FocusHandle, cx: &App) -> DialogFooter {
         .rounded(cx.theme().radius)
         .bg(cx.theme().danger)
         .text_color(cx.theme().danger_foreground)
-        .type_body()
+        .type_body(cx)
         .focus(|quit| quit.border_1().border_color(cx.theme().ring))
         .child("Quit")
         .on_click(|_, window, cx| {

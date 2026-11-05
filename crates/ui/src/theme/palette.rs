@@ -1,5 +1,5 @@
 use gpui_kit::component::ThemeMode;
-use kg_domain::{Color, Palette, TerminalColors, ThemeFile};
+use kg_domain::{Color, Look, Palette, TerminalColors, ThemeFile};
 
 use super::catalog::{CatalogEntry, Source};
 
@@ -43,6 +43,8 @@ impl Swatch {
             idle: Color::new(self.muted),
             hover: self.hover.map(Color::new),
             added: self.added.map(Color::new),
+            selection: None,
+            input: None,
             terminal: self.terminal,
         }
     }
@@ -105,6 +107,7 @@ pub(super) fn fjord() -> ThemeFile {
             terminal: Some(FJORD),
         }
         .palette(),
+        look: Look::default(),
         highlight: None,
     }
 }

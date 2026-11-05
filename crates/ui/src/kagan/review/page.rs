@@ -15,7 +15,7 @@ pub(super) const GUTTER: gpui_kit::Pixels = gpui_kit::px(60.);
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, HighlightStyle, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, StyledText, div,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, StyledText, div, px,
 };
 use kg_core::Workspace;
 use kg_domain::{DiffLineKind, DiffOp, DiffScope, Op, OpResult, ReviewRow};
@@ -88,7 +88,7 @@ impl Kagan {
                             .min_w_0()
                             .whitespace_nowrap()
                             .text_ellipsis()
-                            .type_body()
+                            .type_body(cx)
                             .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .child(name),
                     )
@@ -106,7 +106,7 @@ impl Kagan {
                 h_flex()
                     .pb_2()
                     .gap_2()
-                    .type_small()
+                    .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(div().flex_none().child(files_label(count)))
                     .child(counts(added, removed, cx))
@@ -301,7 +301,7 @@ impl Kagan {
                     .items_center()
                     .bg(cx.theme().secondary.opacity(0.5))
                     .hover(|row| row.bg(cx.theme().secondary))
-                    .type_small()
+                    .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(
                         h_flex().w(GUTTER).flex_none().justify_center().child(
@@ -380,7 +380,7 @@ impl Kagan {
             .font_family(cx.theme().mono_font_family.clone())
             .group("review-line")
             .when(!wrap, |row| row.h(gpui_kit::rems(1.125)))
-            .text_size(cx.theme().mono_font_size)
+            .text_size(px(crate::theme::type_mono(cx)))
             .line_height(gpui_kit::rems(1.125))
             .id(ElementId::Name(
                 format!("review-line-{side:?}-{number}").into(),

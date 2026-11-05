@@ -71,7 +71,7 @@ impl Kagan {
                                             .id("start-prompt")
                                             .ui_container()
                                             .aria_label(format!("New thread in {name}"))
-                                            .type_title()
+                                            .type_title(cx)
                                             .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                             .child(format!("New thread in {name}")),
                                     )

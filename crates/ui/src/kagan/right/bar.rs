@@ -5,10 +5,12 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use kg_core::Workspace;
 use kg_domain::{Op, SurfaceOp};
+
+use crate::theme::{SpaceStep, radius_md, space};
 
 use super::tabs::{self, CloseTab};
 use super::{ActivatePanelHeader, Body, Fill, Panel, ToggleFill, plugin_body, tab_available};
@@ -34,7 +36,7 @@ pub(super) fn tab_body(
             div()
                 .id(ElementId::Name(format!("{id}-body").into()))
                 .ui_container()
-                .p_3()
+                .p(px(space(SpaceStep::Md, cx)))
                 .child(body)
                 .into_any_element(),
         );
@@ -89,8 +91,8 @@ pub(super) fn tab_bar(
         .w_full()
         .min_w_0()
         .h_9()
-        .gap_2()
-        .px_2()
+        .gap(px(space(SpaceStep::Sm, cx)))
+        .px(px(space(SpaceStep::Sm, cx)))
         .border_b_1()
         .border_color(cx.theme().border)
         .child(
@@ -101,7 +103,7 @@ pub(super) fn tab_bar(
                 .min_w_0()
                 .flex_1()
                 .overflow_x_scroll()
-                .gap_1()
+                .gap(px(space(SpaceStep::Xs, cx)))
                 .children(tabs),
         )
         .child(plus_button(kagan, cx))
@@ -207,7 +209,7 @@ fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
         .track_focus(&focus)
         .tab_stop(true)
         .key_context("PanelHeader")
-        .rounded(cx.theme().radius)
+        .rounded(px(radius_md(cx)))
         .focus(|add| add.border_1().border_color(cx.theme().ring))
         .on_action(cx.listener(|this, _: &ActivatePanelHeader, window, cx| {
             this.open_right_menu(window, cx);

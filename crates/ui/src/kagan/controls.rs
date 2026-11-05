@@ -7,12 +7,12 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, Anchor, AnyElement, App, ClickEvent, Context, ElementId, Entity, FocusHandle, Hsla,
     InteractiveElement, IntoElement, ParentElement as _, Role, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div,
+    StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div, px,
 };
 use kg_domain::PluginId;
 
 use super::Kagan;
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -45,7 +45,7 @@ pub(super) fn control(
 pub(super) fn segments(cx: &App) -> gpui_kit::Div {
     h_flex()
         .self_start()
-        .h_6()
+        .h(px(crate::theme::control_height(cx)))
         .p_0p5()
         .border_1()
         .border_color(cx.theme().border)
@@ -64,8 +64,8 @@ pub(super) fn segment(id: impl Into<gpui_kit::ElementId>, selected: Selected, cx
     Toggle::new(id)
         .checked(selected)
         .h_5()
-        .px_2()
-        .type_small()
+        .px(px(space(SpaceStep::Sm, cx)))
+        .type_small(cx)
         .font_weight(gpui_kit::FontWeight::MEDIUM)
         .rounded(cx.theme().radius / 2.)
         .text_color(if selected {
@@ -76,13 +76,18 @@ pub(super) fn segment(id: impl Into<gpui_kit::ElementId>, selected: Selected, cx
         .when(selected, |button| button.bg(cx.theme().secondary))
 }
 
-pub(super) fn note(id: &'static str, text: impl Into<SharedString>, color: Hsla) -> AnyElement {
+pub(super) fn note(
+    id: &'static str,
+    text: impl Into<SharedString>,
+    color: Hsla,
+    cx: &App,
+) -> AnyElement {
     let text = text.into();
     div()
         .id(id)
         .ui_container()
         .aria_label(text.clone())
-        .type_small()
+        .type_small(cx)
         .text_color(color)
         .child(text)
         .into_any_element()

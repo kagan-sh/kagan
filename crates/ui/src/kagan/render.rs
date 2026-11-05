@@ -4,7 +4,7 @@ use super::{
     Shown, commands, settings, web_panel,
 };
 use super::{archived, layout, overlays, right, screen, surface, update};
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 
 use crate::ui_observe::UiObserveExt as _;
 use gpui_kit::component::ActiveTheme as _;
@@ -84,7 +84,7 @@ impl Render for Kagan {
         };
         v_flex()
             .id("kagan")
-            .type_body()
+            .type_body(cx)
             .key_context(window_context(self, cx).as_str())
             .track_focus(&self.focus)
             .size_full()
@@ -215,9 +215,9 @@ impl Kagan {
                                 .id("note")
                                 .ui_container()
                                 .aria_label(note.clone())
-                                .px_4()
-                                .py_2()
-                                .type_body()
+                                .px(px(space(SpaceStep::Lg, cx)))
+                                .py(px(space(SpaceStep::Sm, cx)))
+                                .type_body(cx)
                                 .text_color(cx.theme().danger)
                                 .child(note),
                         )

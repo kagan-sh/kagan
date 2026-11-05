@@ -97,7 +97,7 @@ pub(super) fn rail_button(cx: &App) -> impl IntoElement {
         Facts::button("Command list"),
         Button::new("command-list-open-button")
             .small()
-            .rounded(px(6.))
+            .rounded(px(crate::theme::radius_xs(cx)))
             .ghost()
             .icon(IconName::Search)
             .accessibility_label("Command list")
@@ -294,7 +294,7 @@ fn command_item(entry: Entry, keys: Vec<gpui_kit::Keystroke>) -> CommandItem {
                                 .when(off.is_some(), |row| row.text_color(muted))
                                 .child(label.clone()),
                         )
-                        .children(off.map(|off| div().type_small().text_color(muted).child(off))),
+                        .children(off.map(|off| div().type_small(cx).text_color(muted).child(off))),
                 )
                 .child(
                     h_flex()

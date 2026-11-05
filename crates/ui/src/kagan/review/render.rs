@@ -152,7 +152,7 @@ impl Kagan {
                         .border_color(cx.theme().border)
                         .child(
                             Input::new(&review.search)
-                                .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                                .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                                 .small(),
                         ),
                 )
@@ -171,7 +171,7 @@ impl Kagan {
             })
             .flex_none()
             .whitespace_nowrap()
-            .type_small()
+            .type_small(cx)
             .text_color(cx.theme().muted_foreground)
             .child(position)
             .into_any_element()
@@ -216,7 +216,7 @@ impl Kagan {
                     value: Some(notice.clone().into()),
                     ..Facts::button("Review notice")
                 })
-                .type_small()
+                .type_small(cx)
                 .text_color(cx.theme().muted_foreground)
                 .child(notice.clone())
                 .into_any_element(),

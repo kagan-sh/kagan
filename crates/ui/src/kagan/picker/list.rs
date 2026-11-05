@@ -110,7 +110,7 @@ impl ListDelegate for Rows {
     ) -> impl IntoElement {
         div()
             .p_2()
-            .type_body()
+            .type_body(cx)
             .text_color(cx.theme().muted_foreground)
             .child(format!("No program matches “{}”.", self.query))
     }
@@ -160,13 +160,13 @@ pub(super) fn custom_field(
             v_flex()
                 .w_full()
                 .gap_1()
-                .child(div().type_small().text_color(muted).child(title))
-                .child(Input::new(input).text_size(gpui_kit::px(crate::theme::TYPE_BODY)))
+                .child(div().type_small(cx).text_color(muted).child(title))
+                .child(Input::new(input).text_size(gpui_kit::px(crate::theme::type_body(cx))))
                 .children(note.map(|(id, text)| {
                     div()
                         .id(id)
                         .ui_container()
-                        .type_small()
+                        .type_small(cx)
                         .text_color(muted)
                         .aria_label(text.clone())
                         .child(text)

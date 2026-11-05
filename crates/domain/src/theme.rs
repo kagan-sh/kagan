@@ -68,6 +68,10 @@ pub struct Palette {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub added: Option<Color>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection: Option<Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<Color>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal: Option<TerminalColors>,
 }
 
@@ -82,6 +86,113 @@ impl Palette {
     #[must_use]
     pub fn added(&self) -> Color {
         self.added.unwrap_or(self.working)
+    }
+
+    /// Selected text. A theme without `selection` uses `raised`.
+    #[must_use]
+    pub fn selection(&self) -> Color {
+        self.selection.unwrap_or(self.raised)
+    }
+
+    /// Fields and other inputs. A theme without `input` uses `line`.
+    #[must_use]
+    pub fn input(&self) -> Color {
+        self.input.unwrap_or(self.line)
+    }
+}
+
+/// The six spacing steps of the window, from smallest to largest, in pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
+pub struct Space {
+    pub xs: u16,
+    pub sm: u16,
+    pub md: u16,
+    pub lg: u16,
+    pub xl: u16,
+    pub xxl: u16,
+}
+
+impl Default for Space {
+    fn default() -> Self {
+        Self {
+            xs: 4,
+            sm: 8,
+            md: 12,
+            lg: 16,
+            xl: 24,
+            xxl: 32,
+        }
+    }
+}
+
+/// The four corner radii of the window, in pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
+pub struct Radius {
+    pub xs: u16,
+    pub sm: u16,
+    pub md: u16,
+    pub lg: u16,
+}
+
+impl Default for Radius {
+    fn default() -> Self {
+        Self {
+            xs: 6,
+            sm: 8,
+            md: 8,
+            lg: 12,
+        }
+    }
+}
+
+/// The five text sizes of the window, in pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
+pub struct TypeSizes {
+    pub caption: u16,
+    pub small: u16,
+    pub body: u16,
+    pub title: u16,
+    pub mono: u16,
+}
+
+impl Default for TypeSizes {
+    fn default() -> Self {
+        Self {
+            caption: 11,
+            small: 12,
+            body: 13,
+            title: 15,
+            mono: 12,
+        }
+    }
+}
+
+/// The density and type sizes a theme gives the host and its web panels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
+pub struct Look {
+    pub space: Space,
+    pub radius: Radius,
+    #[serde(rename = "type")]
+    pub type_sizes: TypeSizes,
+    /// The height of a list row, such as a thread row, in pixels.
+    pub row: u16,
+    /// The height of a compact row that holds controls, such as a settings row, in pixels.
+    pub control: u16,
+}
+
+impl Default for Look {
+    fn default() -> Self {
+        Self {
+            space: Space::default(),
+            radius: Radius::default(),
+            type_sizes: TypeSizes::default(),
+            row: 28,
+            control: 24,
+        }
     }
 }
 
@@ -153,6 +264,9 @@ pub struct ThemeFile {
     pub name: String,
     pub light: Palette,
     pub dark: Palette,
+    /// Density and type sizes, the same in both modes.
+    #[serde(default)]
+    pub look: Look,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlight: Option<Highlight>,
 }
@@ -169,6 +283,8 @@ pub enum ThemeFileError {
     Json(#[from] serde_json::Error),
     #[error("theme name is empty")]
     BlankName,
+    #[error("theme {field} must be {min} to {max}")]
+    Look { field: String, min: u16, max: u16 },
     #[error("theme name must be one line of at most {MAX_NAME} characters")]
     BadName,
     #[error("{0}")]
@@ -211,6 +327,7 @@ impl ThemeFile {
         if file.name.chars().count() > MAX_NAME || file.name.chars().any(char::is_control) {
             return Err(ThemeFileError::BadName);
         }
+        check_look(&file.look)?;
         if let Some(highlight) = &file.highlight {
             for (field, value) in [
                 ("highlight.light", &highlight.light),
@@ -223,6 +340,55 @@ impl ThemeFile {
         }
         Ok(file)
     }
+}
+
+fn check_look(look: &Look) -> Result<(), ThemeFileError> {
+    for (field, value) in [
+        ("space.xs", look.space.xs),
+        ("space.sm", look.space.sm),
+        ("space.md", look.space.md),
+        ("space.lg", look.space.lg),
+        ("space.xl", look.space.xl),
+        ("space.xxl", look.space.xxl),
+    ] {
+        in_range(field, value, 0..=64)?;
+    }
+    for (field, value) in [
+        ("radius.xs", look.radius.xs),
+        ("radius.sm", look.radius.sm),
+        ("radius.md", look.radius.md),
+        ("radius.lg", look.radius.lg),
+    ] {
+        in_range(field, value, 0..=32)?;
+    }
+    for (field, value) in [
+        ("type.caption", look.type_sizes.caption),
+        ("type.small", look.type_sizes.small),
+        ("type.body", look.type_sizes.body),
+        ("type.title", look.type_sizes.title),
+        ("type.mono", look.type_sizes.mono),
+    ] {
+        in_range(field, value, 8..=48)?;
+    }
+    for (field, value) in [("row", look.row), ("control", look.control)] {
+        in_range(field, value, 16..=64)?;
+    }
+    Ok(())
+}
+
+fn in_range(
+    field: &str,
+    value: u16,
+    range: std::ops::RangeInclusive<u16>,
+) -> Result<(), ThemeFileError> {
+    if range.contains(&value) {
+        return Ok(());
+    }
+    Err(ThemeFileError::Look {
+        field: format!("look.{field}"),
+        min: *range.start(),
+        max: *range.end(),
+    })
 }
 
 /// Checks what GPUI Kit's Zed `HighlightTheme` deserialization requires, so a theme that

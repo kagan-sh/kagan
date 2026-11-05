@@ -1,6 +1,6 @@
 use super::Kagan;
 use super::controls;
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -10,7 +10,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
     App, ClickEvent, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use kg_domain::ThreadId;
 use kg_plugins::RunCommand;
@@ -88,18 +88,18 @@ impl Kagan {
             .id("toast")
             .ui_container()
             .absolute()
-            .left_4()
-            .right_4()
-            .bottom_4()
+            .left(px(space(SpaceStep::Lg, cx)))
+            .right(px(space(SpaceStep::Lg, cx)))
+            .bottom(px(space(SpaceStep::Lg, cx)))
             .min_w_0()
             .bg(cx.theme().popover)
             .border_1()
             .border_color(cx.theme().border)
             .rounded(cx.theme().radius)
-            .px_4()
-            .py_2()
-            .gap_3()
-            .type_body()
+            .px(px(space(SpaceStep::Lg, cx)))
+            .py(px(space(SpaceStep::Sm, cx)))
+            .gap(px(space(SpaceStep::Md, cx)))
+            .type_body(cx)
             .text_color(cx.theme().foreground)
             .child(
                 div()

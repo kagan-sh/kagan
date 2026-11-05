@@ -1,4 +1,4 @@
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, space};
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::{IconName, TitleBar, h_flex};
@@ -108,7 +108,7 @@ impl Kagan {
                         .child(
                             div()
                                 .flex_none()
-                                .type_body()
+                                .type_body(cx)
                                 .text_color(cx.theme().muted_foreground)
                                 .child("·"),
                         )
@@ -117,7 +117,7 @@ impl Kagan {
                                 .min_w_0()
                                 .flex_initial()
                                 .text_ellipsis()
-                                .type_body()
+                                .type_body(cx)
                                 .text_color(cx.theme().muted_foreground)
                                 .child(project),
                         )
@@ -131,9 +131,11 @@ impl Kagan {
             h_flex()
                 .size_full()
                 .items_center()
-                .pr_2()
+                .pr(px(space(SpaceStep::Sm, cx)))
                 .when(cfg!(target_os = "macos"), Styled::pl_20)
-                .when(!cfg!(target_os = "macos"), Styled::pl_3)
+                .when(!cfg!(target_os = "macos"), |bar| {
+                    bar.pl(px(space(SpaceStep::Md, cx)))
+                })
                 .child(toggle(
                     "left-sidebar-toggle",
                     if left_shown {
@@ -150,7 +152,7 @@ impl Kagan {
                 .child(h_flex().flex_1().min_w_0().children(label))
                 .child(
                     h_flex()
-                        .gap_2()
+                        .gap(px(space(SpaceStep::Sm, cx)))
                         .occlude()
                         .flex_none()
                         .children(controls)

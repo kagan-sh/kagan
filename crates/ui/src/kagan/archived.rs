@@ -163,7 +163,7 @@ pub(super) fn list(
                 .max_w(gpui_kit::rems(40.))
                 .child(
                     Input::new(&kagan.archive_query)
-                        .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                        .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                         .prefix(IconName::Search),
                 ),
         )
@@ -191,7 +191,7 @@ fn note(cx: &App, id: &'static str, text: &'static str) -> AnyElement {
         .aria_label(text)
         .px_4()
         .py_2()
-        .type_small()
+        .type_small(cx)
         .text_color(cx.theme().muted_foreground)
         .child(text)
         .into_any_element()
@@ -232,7 +232,7 @@ fn retired_row(
                         .flex()
                         .items_center()
                         .rounded(cx.theme().radius)
-                        .type_body()
+                        .type_body(cx)
                         .text_ellipsis()
                         .when(selected, |row| {
                             row.font_medium().bg(cx.theme().sidebar_accent)
@@ -307,7 +307,7 @@ fn removal_line(
                 .ui_container()
                 .aria_label(message.clone())
                 .w_full()
-                .type_body()
+                .type_body(cx)
                 .text_color(cx.theme().danger)
                 .child(message),
         )

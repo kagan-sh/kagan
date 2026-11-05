@@ -1,6 +1,6 @@
 //! The scrolling settings page. Esc or Close returns to the window.
 
-use crate::theme::TypeScale as _;
+use crate::theme::{SpaceStep, TypeScale as _, control_height, radius_md, space};
 
 mod indexes;
 mod installed;
@@ -19,7 +19,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, Hsla, InteractiveElement as _,
     IntoElement, KeyBinding, ParentElement as _, StatefulInteractiveElement as _, Styled as _,
-    Subscription, Window, actions, div, rems,
+    Subscription, Window, actions, div, px, rems,
 };
 use kg_core::{Approval, Workspace};
 use kg_domain::PluginId;
@@ -267,8 +267,8 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
         .enumerate()
         .map(|(index, (id, name, view))| {
             v_flex()
-                .gap_2()
-                .child(div().type_caption().font_semibold().child(name))
+                .gap(px(space(SpaceStep::Sm, cx)))
+                .child(div().type_caption(cx).font_semibold().child(name))
                 .child(
                     div()
                         .id(ElementId::Name(
@@ -293,7 +293,7 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
     let items = [
         settings_header(window, cx),
         v_flex()
-            .gap_2()
+            .gap(px(space(SpaceStep::Sm, cx)))
             .when(!cards.is_empty(), |block| {
                 block.child("Questions").children(cards)
             })
@@ -312,8 +312,8 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
                 .id("settings-page")
                 .size_full()
                 .items_center()
-                .p_6()
-                .gap_6()
+                .p(px(space(SpaceStep::Xl, cx)))
+                .gap(px(space(SpaceStep::Xl, cx)))
                 .track_scroll(&kagan.settings_scroll)
                 .overflow_y_scroll()
                 .children(items.map(|item| div().w_full().max_w(rems(39.5)).child(item)))
@@ -325,20 +325,20 @@ pub(super) fn main(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) 
 
 fn settings_header(window: &mut Window, cx: &mut Context<Kagan>) -> AnyElement {
     let close = super::tab_stop(window, cx, "settings-close-focus");
-    let radius = cx.theme().radius;
+    let radius = px(radius_md(cx));
     h_flex()
         .justify_between()
         .items_center()
-        .child(div().type_title().font_semibold().child("Settings"))
+        .child(div().type_title(cx).font_semibold().child("Settings"))
         .child(
             div()
                 .id("settings-close")
                 .key_context(CLOSE)
                 .track_focus(&close)
-                .px_2()
-                .py_1()
+                .px(px(space(SpaceStep::Sm, cx)))
+                .py(px(space(SpaceStep::Xs, cx)))
                 .rounded(radius)
-                .type_body()
+                .type_body(cx)
                 .focus(|close| close.border_1().border_color(cx.theme().ring))
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.leave_settings(window, cx);
@@ -368,11 +368,11 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
                 format!("settings-group-{}", group.key).into(),
             ))
             .ui_container()
-            .gap_2()
+            .gap(px(space(SpaceStep::Sm, cx)))
             .when(first_shortcut, |card| {
                 card.child(
                     div()
-                        .type_caption()
+                        .type_caption(cx)
                         .font_semibold()
                         .text_color(muted)
                         .child("Keyboard"),
@@ -386,7 +386,7 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
                         ))
                         .ui_container()
                         .aria_label(title.clone())
-                        .type_caption()
+                        .type_caption(cx)
                         .font_semibold()
                         .text_color(muted)
                         .child(title),
@@ -399,11 +399,9 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
                     .border_color(line)
                     .bg(card)
                     .overflow_hidden()
-                    .children(
-                        group.rows.into_iter().enumerate().map(|(ix, row)| {
-                            row_element(row, ix + 1 == rows, line, muted, shortcut)
-                        }),
-                    ),
+                    .children(group.rows.into_iter().enumerate().map(|(ix, row)| {
+                        row_element(row, ix + 1 == rows, line, muted, shortcut, cx)
+                    })),
             )
             .into_any_element();
     if first_shortcut {
@@ -420,7 +418,14 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
 
 /// One row of a card. A wide control, such as the theme cards, sits under its title instead of
 /// beside it, so the title keeps its width.
-fn row_element(row: row::Row, last: bool, line: Hsla, muted: Hsla, shortcut: bool) -> AnyElement {
+fn row_element(
+    row: row::Row,
+    last: bool,
+    line: Hsla,
+    muted: Hsla,
+    shortcut: bool,
+    cx: &App,
+) -> AnyElement {
     let show_text = row.id != "setting-row-install-form";
     let noted = !row.note.is_empty();
     let alias = if row.id == "setting-row-theme" {
@@ -438,7 +443,7 @@ fn row_element(row: row::Row, last: bool, line: Hsla, muted: Hsla, shortcut: boo
         .flex_1()
         .gap_0p5()
         .when(show_text && !row.title.is_empty(), |text| {
-            let title = div().type_body().child(row.title.clone());
+            let title = div().type_body(cx).child(row.title.clone());
             match alias {
                 Some(alias) => text.child(
                     div()
@@ -457,15 +462,18 @@ fn row_element(row: row::Row, last: bool, line: Hsla, muted: Hsla, shortcut: boo
                     .id(ElementId::Name(format!("{}-note", row.id).into()))
                     .ui_container()
                     .aria_label(row.note.clone())
-                    .type_small()
+                    .type_small(cx)
                     .text_color(muted)
                     .child(note),
             )
         });
     let frame = if row.wide {
-        v_flex().gap_3()
+        v_flex().gap(px(space(SpaceStep::Md, cx)))
     } else {
-        h_flex().gap_4().justify_between().items_center()
+        h_flex()
+            .gap(px(space(SpaceStep::Lg, cx)))
+            .justify_between()
+            .items_center()
     };
     let body = frame
         .when(
@@ -477,10 +485,12 @@ fn row_element(row: row::Row, last: bool, line: Hsla, muted: Hsla, shortcut: boo
         .id(row.id)
         .ui_container()
         .aria_label(row.title)
-        .when(shortcut, gpui_kit::Styled::px_4)
-        .when(shortcut && !noted, gpui_kit::Styled::h_6)
-        .when(shortcut && noted, gpui_kit::Styled::py_1)
-        .when(!shortcut, gpui_kit::Styled::p_6)
+        .when(shortcut, |item| item.px(px(space(SpaceStep::Lg, cx))))
+        .when(shortcut && !noted, |item| item.h(px(control_height(cx))))
+        .when(shortcut && noted, |item| {
+            item.py(px(space(SpaceStep::Xs, cx)))
+        })
+        .when(!shortcut, |item| item.p(px(space(SpaceStep::Xl, cx))))
         .when(!last, |item| item.border_b_1().border_color(line))
         .child(body)
         .into_any_element();

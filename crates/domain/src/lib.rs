@@ -47,6 +47,7 @@ pub use record::{
 };
 pub use review::{ReviewRow, review_rows};
 pub use theme::{
-    Color, Highlight, MAX_THEME_BYTES, Palette, TerminalColors, ThemeFile, ThemeFileError,
+    Color, Highlight, Look, MAX_THEME_BYTES, Palette, Radius, Space, TerminalColors, ThemeFile,
+    ThemeFileError, TypeSizes,
 };
 pub use update::{InstallKind, UpdateOp, UpdateState, UpdateStatus};

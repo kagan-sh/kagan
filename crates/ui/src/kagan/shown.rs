@@ -228,7 +228,7 @@ impl Kagan {
                 .flex_initial()
                 .min_w_0()
                 .text_ellipsis()
-                .type_body()
+                .type_body(cx)
                 .font_weight(gpui_kit::FontWeight::MEDIUM)
                 .child(thread.title.clone())
                 .into_any_element();
@@ -242,7 +242,7 @@ impl Kagan {
                 this.cancel_rename_to_terminal(window, cx);
             }))
             .ui_observe_as(Facts::input("Thread title", input, cx))
-            .child(Input::new(input).text_size(gpui_kit::px(crate::theme::TYPE_BODY)))
+            .child(Input::new(input).text_size(gpui_kit::px(crate::theme::type_body(cx))))
             .into_any_element()
     }
 
@@ -280,7 +280,7 @@ impl Kagan {
             .gap_3()
             .px_4()
             .h_9()
-            .type_body()
+            .type_body(cx)
             .text_color(cx.theme().foreground)
             .ui_observe_as(Facts {
                 role: Role::Label,
@@ -396,7 +396,7 @@ impl Kagan {
                 div()
                     .id("welcome-title")
                     .ui_container()
-                    .type_title()
+                    .type_title(cx)
                     .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .child("Run your agent in a thread"),
             )
@@ -435,7 +435,7 @@ impl Kagan {
             .items_center()
             .justify_center()
             .gap_3()
-            .type_body()
+            .type_body(cx)
             .text_color(cx.theme().muted_foreground)
             .child(crate::brand::mark(crate::theme::brand_color(cx), 40.))
             .child(text)

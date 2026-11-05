@@ -197,7 +197,7 @@ fn field(
         .min_w_0()
         .child(
             Input::new(state)
-                .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                 .small(),
         );
     div()

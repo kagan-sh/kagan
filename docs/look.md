@@ -39,10 +39,50 @@ Settings takes over the window. It opens with Cmd+, (Ctrl+Shift+, off macOS), th
 | `failed` | `#a62f3c` | `#ec959c` | failed |
 | `added` | `#3c6a2c` | `#a8c98e` | optional. Without it, `working` |
 | `working` | `#285f73` | `#8fc7d6` | busy. A theme file requires it |
+| `selection` | `#d8dee7` | `#2f3440` | optional. Selected text. Without it, `raised` |
+| `input` | `#d3d9e2` | `#353b48` | optional. Field and input borders. Without it, `line` |
 
 The terminal has its own set, in an optional `terminal` object on each mode. It holds `bg`, `fg`, `cursor`, and the 16 ANSI colors by name: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and the same eight as `bright…`. The terminal box is painted with `bg`, and the cursor with `cursor`. Ember Fjord gives the same set in both modes, and the table below shows its values.
 
-A theme without a `terminal` object keeps the xterm colors, with the window's `bg` as the terminal background and `ink` as the text and cursor color. A theme file requires `working`. Only `hover`, `added`, `terminal` and `highlight` may be omitted.
+A theme without a `terminal` object keeps the xterm colors, with the window's `bg` as the terminal background and `ink` as the text and cursor color. A theme file requires `working`. Only `hover`, `added`, `selection`, `input`, `look`, `terminal` and `highlight` may be omitted.
+
+**Density and type.** An optional top-level `look` object sets the spacing, radii, text sizes and row heights of the host and the plugin web panels, in whole pixels. It is the same in light and dark. Every field is optional; a file without `look` keeps the numbers below, so an older theme paints exactly as before. An unknown field inside `look` is refused like any other unknown field. A value outside its range is refused with the field named: `space` 0 to 64, `radius` 0 to 32, `type` 8 to 48, and `row` and `control` 16 to 64.
+
+| Field | Default | Use |
+|---|---|---|
+| `space.xs` | 4 | between a mark and its label |
+| `space.sm` | 8 | row padding, the gap inside a control row |
+| `space.md` | 12 | sidebar padding, a panel body |
+| `space.lg` | 16 | between a title and its control |
+| `space.xl` | 24 | a settings card inset, the settings page |
+| `space.xxl` | 32 | web panels only for now |
+| `radius.xs` | 6 | a rail icon button |
+| `radius.sm` | 8 | a list row |
+| `radius.md` | 8 | a general control; the GPUI Kit radius |
+| `radius.lg` | 12 | a question or the approval |
+| `type.caption` | 11 | section headers and hints |
+| `type.small` | 12 | metadata and tabs |
+| `type.body` | 13 | body text |
+| `type.title` | 15 | a page title |
+| `type.mono` | 12 | diff code and other monospace text |
+| `row` | 28 | a list row, such as a thread row |
+| `control` | 24 | a compact row that holds controls, such as a settings keyboard row |
+
+No host view uses `space.xxl` yet; a plugin web panel still gets it. A theme can set density and type without a new file version: `docs/themes/ocean.json` carries an example.
+
+A few sizes are not on the six-step space scale and stay fixed: 2 px gaps (a settings title to its note, and the inset inside a segmented control), 6 px gaps (between rail icons and in the title bar's thread heading), the 20 px height of one item in a scope segment, a 24 px child-thread indent, the 36 px tab bars and terminal strip, and the 80 px left inset the macOS traffic lights need. They are the same in every theme.
+
+```json
+"look": {
+  "space": { "xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32 },
+  "radius": { "xs": 2, "sm": 2, "md": 2, "lg": 4 },
+  "type": { "caption": 11, "small": 12, "body": 13, "title": 15, "mono": 12 },
+  "row": 26,
+  "control": 22
+}
+```
+
+Each value is also a CSS custom property on a plugin page: `--space-xs` to `--space-xxl`, `--radius-xs` to `--radius-lg`, `--text-caption`, `--text-small`, `--text-body`, `--text-title`, `--text-mono`, `--row` and `--control`, with `px` already applied. The page also gets `--selection` and `--input`, with the other color tokens.
 
 Every text color on the window, surface, and raised backgrounds measures at least 4.5:1 (WCAG relative luminance). Both modes of Ember Fjord use the dark terminal set.
 
@@ -84,9 +124,9 @@ These ratios describe the fjord palette. The window does not report them, and it
 
 Use `<dataDir>/themes/<id>.json`. `KG_DATA_DIR` overrides the data directory; otherwise it is `~/.kagan` (`USERPROFILE` on Windows). IDs are nonempty lowercase ASCII letters, digits and dashes. `fjord`, `ember` and `grey` are reserved. Paths, dots and traversal are rejected by the operation boundary. A plugin theme is a file inside the plugin, declared in its manifest, with the id `<plugin id>/<theme id>` ([plugin-api.md](plugin-api.md)).
 
-Copy [ocean.json](themes/ocean.json) as a starting point, or run `kg theme new <id> [--from <theme>]`, or press New theme… in Settings → Appearance. The file contains a `name`, a complete `light` palette and a complete `dark` palette.
+Copy [ocean.json](themes/ocean.json) as a starting point, or run `kg theme new <id> [--from <theme>]`, or press New theme… in Settings → Appearance. The file contains a `name`, a complete `light` palette and a complete `dark` palette, and may set `look`.
 
-A theme file is a regular file of at most 64 KiB, and its `name` is one line of at most 64 characters. Both palettes are required, and so is every token except `hover`, `added`, `terminal` and `highlight`. Colors must be opaque `#RRGGBB`; unknown fields, missing fields, invalid colors and blank names are errors. This format projects onto the pinned GPUI Kit `ThemeConfigColors` roles. It is not CSS or a GPUI Kit theme file. The window paints no literal colors of its own.
+A theme file is a regular file of at most 64 KiB, and its `name` is one line of at most 64 characters. Both palettes are required, and so is every token except `hover`, `added`, `selection`, `input`, `terminal` and `highlight`. Colors must be opaque `#RRGGBB`; unknown fields, missing fields, invalid colors and blank names are errors. This format projects onto the pinned GPUI Kit `ThemeConfigColors` roles. It is not CSS or a GPUI Kit theme file. The window paints no literal colors of its own.
 
 An optional `highlight` object gives the review and the Editor their syntax colors. `light` and `dark` each hold one theme in [Zed's syntax format](https://zed.dev/docs/extensions/languages#syntax-highlighting): a `name`, an optional `appearance` (`light` or `dark`), and a `style` with `syntax` and the status colors (`error`, `warning`, `created`, `modified` and so on). Each syntax name (`keyword`, `string`, `comment`, …) takes a `color`, a `font_style` (`normal`, `italic` or `underline`) and a `font_weight` (100 to 900 in steps of 100). Colors are `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa`. `kagan` keeps the object as it is and hands it to GPUI Kit's `HighlightTheme`, so a theme file does not need to name every token. A theme without `highlight`, or with only one of the two modes, keeps the GPUI Kit default syntax for the missing mode. A bad value is refused with its field named, the way a bad palette is.
 

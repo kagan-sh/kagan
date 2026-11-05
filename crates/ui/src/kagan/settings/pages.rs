@@ -228,7 +228,7 @@ fn theme_cards(window: &mut Window, cx: &mut App) -> AnyElement {
                 let selected = entry.id == in_use;
                 theme_card(&entry, file, selected, mode, look, window, cx)
             }
-            Err(problem) => broken_card(&entry.id, problem, look),
+            Err(problem) => broken_card(&entry.id, problem, look, cx),
         }));
     let mut column = v_flex().gap_2().child(theme_actions());
     if let Some(error) = error {
@@ -237,7 +237,7 @@ fn theme_cards(window: &mut Window, cx: &mut App) -> AnyElement {
                 .id("theme-error")
                 .ui_container()
                 .aria_label(SharedString::from(error.clone()))
-                .type_small()
+                .type_small(cx)
                 .text_color(look.danger)
                 .child(error),
         );
@@ -311,8 +311,8 @@ fn theme_card(
                 )
                 .children(selected.then(|| Icon::new(IconName::Check).text_color(look.accent))),
         )
-        .child(div().type_small().child(file.name.clone()))
-        .child(div().type_caption().text_color(look.muted).child(source))
+        .child(div().type_small(cx).child(file.name.clone()))
+        .child(div().type_caption(cx).text_color(look.muted).child(source))
         .on_click(move |_, _, cx| save_theme(clicked.clone(), cx));
     let focused = focus.is_focused(window);
     div()
@@ -333,7 +333,7 @@ fn theme_card(
         .into_any_element()
 }
 
-fn broken_card(id: &str, problem: &str, look: CardLook) -> AnyElement {
+fn broken_card(id: &str, problem: &str, look: CardLook, cx: &App) -> AnyElement {
     let label = format!("{id} theme, does not load: {problem}");
     div()
         .id(ElementId::Name(format!("theme-{id}").into()))
@@ -352,10 +352,10 @@ fn broken_card(id: &str, problem: &str, look: CardLook) -> AnyElement {
                 .rounded(look.radius)
                 .border_2()
                 .border_color(look.line)
-                .child(div().type_small().child(id.to_owned()))
+                .child(div().type_small(cx).child(id.to_owned()))
                 .child(
                     div()
-                        .type_caption()
+                        .type_caption(cx)
                         .text_color(look.danger)
                         .child(problem.to_owned()),
                 ),

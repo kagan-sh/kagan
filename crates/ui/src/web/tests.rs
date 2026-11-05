@@ -9,16 +9,111 @@ const PLUGIN: &str = "dev.kagan.page";
 #[test]
 fn the_stylesheet_and_the_refresh_script_share_every_token() {
     let tokens = [
-        ("--bg", kg_domain::Color::new(0x0001_0203)),
-        ("--ink", kg_domain::Color::new(0x00aa_bbcc)),
+        ("--bg", "#010203".to_owned()),
+        ("--ink", "#aabbcc".to_owned()),
     ];
     let css = stylesheet(&tokens, "dark");
     let script = refresh(&tokens, "dark");
     assert!(css.starts_with(":root{--bg:#010203;--ink:#aabbcc;color-scheme:dark}"));
-    for (name, color) in tokens {
-        assert!(script.contains(&format!("'{name}':'{}'", color.hex())));
+    for (name, value) in &tokens {
+        assert!(script.contains(&format!("'{name}':'{value}'")));
     }
     assert!(script.contains("r.style.colorScheme='dark'"));
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[test]
+fn the_page_gets_the_themes_density_and_type() {
+    let json = r##"{
+        "name":"Tight",
+        "light":{
+            "bg":"#ffffff","surface":"#eeeeee","raised":"#dddddd","ink":"#111111",
+            "muted":"#555555","line":"#cccccc","accent":"#aa0000",
+            "primaryForeground":"#ffffff","working":"#0000aa","needs":"#aa8800",
+            "failed":"#aa0000","idle":"#777777","selection":"#112233","input":"#445566"
+        },
+        "dark":{
+            "bg":"#111111","surface":"#222222","raised":"#333333","ink":"#eeeeee",
+            "muted":"#999999","line":"#444444","accent":"#ff8800",
+            "primaryForeground":"#111111","working":"#7799ff","needs":"#e8cf80",
+            "failed":"#ffa1ad","idle":"#999999"
+        },
+        "look":{
+            "space":{"xs":2,"sm":6,"md":10,"lg":14,"xl":20,"xxl":28},
+            "radius":{"xs":0,"sm":0,"md":2,"lg":4},
+            "type":{"caption":10,"small":11,"body":12,"title":14,"mono":11},
+            "row":24,"control":20
+        }
+    }"##;
+    let file = kg_domain::ThemeFile::parse(json.as_bytes()).unwrap();
+    let css = stylesheet(&super::tokens(&file.light, &file.look), "light");
+    for want in [
+        "--space-xs:2px",
+        "--space-sm:6px",
+        "--space-md:10px",
+        "--space-lg:14px",
+        "--space-xl:20px",
+        "--space-xxl:28px",
+        "--radius-xs:0px",
+        "--radius-sm:0px",
+        "--radius-md:2px",
+        "--radius-lg:4px",
+        "--text-caption:10px",
+        "--text-small:11px",
+        "--text-body:12px",
+        "--text-title:14px",
+        "--text-mono:11px",
+        "--row:24px",
+        "--control:20px",
+        "--selection:#112233",
+        "--input:#445566",
+        "--bg:#ffffff",
+    ] {
+        assert!(css.contains(want), "{want} missing from {css}");
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[test]
+fn a_default_look_keeps_the_numbers_the_page_had_before() {
+    let file = kg_domain::ThemeFile::parse(
+        br##"{"name":"Tight","light":{
+            "bg":"#ffffff","surface":"#eeeeee","raised":"#dddddd","ink":"#111111",
+            "muted":"#555555","line":"#cccccc","accent":"#aa0000",
+            "primaryForeground":"#ffffff","working":"#0000aa","needs":"#aa8800",
+            "failed":"#aa0000","idle":"#777777"
+        },"dark":{
+            "bg":"#111111","surface":"#222222","raised":"#333333","ink":"#eeeeee",
+            "muted":"#999999","line":"#444444","accent":"#ff8800",
+            "primaryForeground":"#111111","working":"#7799ff","needs":"#e8cf80",
+            "failed":"#ffa1ad","idle":"#999999"
+        }}"##,
+    )
+    .unwrap();
+    let css = stylesheet(&super::tokens(&file.light, &file.look), "light");
+    for want in [
+        "--space-xs:4px",
+        "--space-sm:8px",
+        "--space-md:12px",
+        "--space-lg:16px",
+        "--space-xl:24px",
+        "--space-xxl:32px",
+        "--radius-xs:6px",
+        "--radius-sm:8px",
+        "--radius-md:8px",
+        "--radius-lg:12px",
+        "--text-caption:11px",
+        "--text-small:12px",
+        "--text-body:13px",
+        "--text-title:15px",
+        "--text-mono:12px",
+        "--row:28px",
+        "--control:24px",
+        "--selection:#dddddd",
+        "--input:#cccccc",
+    ] {
+        assert!(css.contains(want), "{want} missing from {css}");
+    }
 }
 
 #[test]

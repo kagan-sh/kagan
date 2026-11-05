@@ -111,7 +111,7 @@ pub(super) fn secret_control(
         .items_center()
         .child(
             div()
-                .type_small()
+                .type_small(cx)
                 .child(if set { "Set" } else { "Not set" }),
         )
         .child(
@@ -122,7 +122,7 @@ pub(super) fn secret_control(
                 .h(rems(1.75))
                 .child(
                     Input::new(input)
-                        .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                        .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                         .small(),
                 ),
         )
@@ -364,12 +364,13 @@ pub(super) fn folder_control(
     id: &PluginId,
     key: &str,
     shown: String,
+    cx: &App,
 ) -> AnyElement {
     let (plugin, setting, scope) = (id.clone(), key.to_owned(), scope.to_owned());
     let weak = weak.clone();
     h_flex()
         .gap_2()
-        .child(div().type_small().child(SharedString::from(shown)))
+        .child(div().type_small(cx).child(SharedString::from(shown)))
         .child(control(
             format!("choose-{}/{key}", id.0),
             Facts::button("Choose…"),

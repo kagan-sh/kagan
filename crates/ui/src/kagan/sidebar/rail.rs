@@ -16,7 +16,7 @@ use kg_domain::{PluginId, Thread};
 use crate::kagan::surface::{self, OpenSurface};
 
 use crate::kagan::controls::{control, tip};
-use crate::theme::Tone;
+use crate::theme::{SpaceStep, Tone, radius_xs, space};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -65,8 +65,8 @@ pub(in crate::kagan) fn rail(
         .flex_shrink_0()
         .items_center()
         .gap(px(6.))
-        .pt_3()
-        .pb_3()
+        .pt(px(space(SpaceStep::Md, cx)))
+        .pb(px(space(SpaceStep::Md, cx)))
         .bg(cx.theme().sidebar)
         .child(super::brand_menu::button(sidebar, cx))
         .child(top)
@@ -79,7 +79,7 @@ pub(super) fn gear(active: bool, cx: &mut Context<Sidebar>) -> impl IntoElement 
     let tip = crate::kagan::controls::tip("Settings", &crate::kagan::OpenSettings, cx);
     let button = Button::new("settings-gear-button")
         .small()
-        .rounded(px(6.))
+        .rounded(px(radius_xs(cx)))
         .icon(IconName::Settings)
         .accessibility_label("Settings")
         .tooltip(tip)
@@ -157,7 +157,7 @@ pub(super) fn rail_tool(
                 surface::row_id(&PluginId(action.plugin.clone()), &action.id)
             )))
             .small()
-            .rounded(px(6.))
+            .rounded(px(radius_xs(cx)))
             .ghost()
             .selected(selected)
             .icon(icon)
@@ -182,7 +182,7 @@ pub(super) fn threads_home(shows: &Shows, cx: &mut Context<Sidebar>) -> impl Int
             .absolute()
             .top_0()
             .right_0()
-            .type_caption()
+            .type_caption(cx)
             .text_color(Tone::Needs.color(cx))
             .child(count.to_string())
     });
@@ -194,7 +194,7 @@ pub(super) fn threads_home(shows: &Shows, cx: &mut Context<Sidebar>) -> impl Int
             Facts::button("Threads"),
             Button::new("threads-home-button")
                 .small()
-                .rounded(px(6.))
+                .rounded(px(radius_xs(cx)))
                 .ghost()
                 .selected(shows.tool.is_none() && !shows.in_settings && shows.page.is_none())
                 .icon(gpui_kit::assets::IconName::House)
@@ -224,7 +224,7 @@ pub(super) fn manage_row(manage_focus: FocusHandle, cx: &mut Context<Sidebar>) -
         .child(
             Button::new("plugins-manage-button")
                 .small()
-                .rounded(px(6.))
+                .rounded(px(radius_xs(cx)))
                 .ghost()
                 .icon(gpui_kit::assets::IconName::Puzzle)
                 .accessibility_label("Manage plugins")
@@ -243,7 +243,7 @@ pub(super) fn new_plugin_row(cx: &mut Context<Sidebar>) -> impl IntoElement {
         Facts::button("New plugin…"),
         Button::new("plugins-add-button")
             .small()
-            .rounded(px(6.))
+            .rounded(px(radius_xs(cx)))
             .ghost()
             .icon(IconName::Plus)
             .accessibility_label("New plugin…")
@@ -262,9 +262,9 @@ pub(super) fn footer(
         .id("sidebar-add")
         .flex_shrink_0()
         .w_full()
-        .pt_2()
-        .pb_3()
-        .px_3()
+        .pt(px(space(SpaceStep::Sm, cx)))
+        .pb(px(space(SpaceStep::Md, cx)))
+        .px(px(space(SpaceStep::Md, cx)))
         .justify_between()
         .items_center()
         .child(control(

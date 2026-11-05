@@ -98,13 +98,13 @@ pub(crate) fn mime(path: &str) -> &'static str {
 pub(crate) fn theme_css(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
-    stylesheet(&tokens(&state.palette), scheme(state.mode))
+    stylesheet(&tokens(&state.palette, &state.look()), scheme(state.mode))
 }
 
-fn stylesheet(tokens: &[(&'static str, kg_domain::Color)], scheme: &str) -> String {
+fn stylesheet(tokens: &[(&'static str, String)], scheme: &str) -> String {
     let declarations = tokens
         .iter()
-        .map(|(name, color)| format!("{name}:{}", color.hex()))
+        .map(|(name, value)| format!("{name}:{value}"))
         .collect::<Vec<_>>()
         .join(";");
     format!(":root{{{declarations};color-scheme:{scheme}}}\n")
@@ -119,9 +119,10 @@ fn scheme(mode: gpui_kit::component::ThemeMode) -> &'static str {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn tokens(palette: &kg_domain::Palette) -> [(&'static str, kg_domain::Color); 12] {
+fn tokens(palette: &kg_domain::Palette, look: &kg_domain::Look) -> Vec<(&'static str, String)> {
     let hover = palette.hover.unwrap_or(palette.raised);
-    [
+    let px = |value: u16| format!("{value}px");
+    let mut tokens: Vec<(&'static str, String)> = [
         ("--bg", palette.bg),
         ("--surface", palette.surface),
         ("--raised", palette.raised),
@@ -134,7 +135,32 @@ fn tokens(palette: &kg_domain::Palette) -> [(&'static str, kg_domain::Color); 12
         ("--failed", palette.failed),
         ("--added", palette.added()),
         ("--working", palette.working),
+        ("--selection", palette.selection()),
+        ("--input", palette.input()),
     ]
+    .into_iter()
+    .map(|(name, color)| (name, color.hex()))
+    .collect();
+    tokens.extend([
+        ("--space-xs", px(look.space.xs)),
+        ("--space-sm", px(look.space.sm)),
+        ("--space-md", px(look.space.md)),
+        ("--space-lg", px(look.space.lg)),
+        ("--space-xl", px(look.space.xl)),
+        ("--space-xxl", px(look.space.xxl)),
+        ("--radius-xs", px(look.radius.xs)),
+        ("--radius-sm", px(look.radius.sm)),
+        ("--radius-md", px(look.radius.md)),
+        ("--radius-lg", px(look.radius.lg)),
+        ("--text-caption", px(look.type_sizes.caption)),
+        ("--text-small", px(look.type_sizes.small)),
+        ("--text-body", px(look.type_sizes.body)),
+        ("--text-title", px(look.type_sizes.title)),
+        ("--text-mono", px(look.type_sizes.mono)),
+        ("--row", px(look.row)),
+        ("--control", px(look.control)),
+    ]);
+    tokens
 }
 
 pub(crate) fn serve(
@@ -257,13 +283,13 @@ pub(crate) const BRIDGE: &str = r#"(function(){function post(message){var text;t
 pub(crate) fn theme_refresh(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
-    refresh(&tokens(&state.palette), scheme(state.mode))
+    refresh(&tokens(&state.palette, &state.look()), scheme(state.mode))
 }
 
-fn refresh(tokens: &[(&'static str, kg_domain::Color)], scheme: &str) -> String {
+fn refresh(tokens: &[(&'static str, String)], scheme: &str) -> String {
     let vars = tokens
         .iter()
-        .map(|(name, color)| format!("'{name}':'{}'", color.hex()))
+        .map(|(name, value)| format!("'{name}':'{value}'"))
         .collect::<Vec<_>>()
         .join(",");
     format!(

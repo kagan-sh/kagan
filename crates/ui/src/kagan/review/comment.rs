@@ -278,7 +278,7 @@ impl Kagan {
             .gap_1()
             .child(
                 div()
-                    .type_caption()
+                    .type_caption(cx)
                     .text_color(cx.theme().muted_foreground)
                     .child(format!(
                         "Comment on line {label} for the agent · Enter to add"
@@ -298,7 +298,7 @@ impl Kagan {
                     .overflow_hidden()
                     .child(
                         Textarea::new(input)
-                            .text_size(gpui_kit::px(crate::theme::TYPE_BODY))
+                            .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                             .small(),
                     ),
             )
@@ -417,7 +417,7 @@ impl Kagan {
                             .id("review-comment-hint")
                             .ui_container()
                             .aria_label(hint.clone())
-                            .type_caption()
+                            .type_caption(cx)
                             .text_color(cx.theme().muted_foreground)
                             .child(hint),
                     )
