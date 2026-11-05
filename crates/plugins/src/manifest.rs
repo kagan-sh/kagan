@@ -401,7 +401,15 @@ impl Setting {
 /// setting declares no schema.
 pub(crate) fn schema_failure(key: &str, setting: &Setting, value: &Value) -> Option<String> {
     let schema = setting.schema()?;
-    let validator = jsonschema::validator_for(schema).ok()?;
+    let validator = match jsonschema::validator_for(schema) {
+        Ok(validator) => validator,
+        Err(error) => {
+            return Some(format!(
+                "setting {key} ({}) schema does not compile: {error}",
+                setting.title()
+            ));
+        }
+    };
     let failure = validator.iter_errors(value).next()?;
     Some(format!(
         "setting {key} ({}) does not match its schema: {failure}",

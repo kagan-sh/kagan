@@ -525,6 +525,82 @@ fn a_multiline_setting_saves_its_lines_from_the_editor(cx: &mut TestAppContext) 
     click(cx, window, &format!("setting-save-{PREFS}/log"));
     cx.run_until_parked();
     assert_eq!(plugin_config(cx, "log"), json!("first\nsecond"));
+
+    let select_all = if cfg!(target_os = "macos") {
+        "cmd-a"
+    } else {
+        "ctrl-a"
+    };
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "draft");
+    cx.run_until_parked();
+    assert_eq!(settings_text(cx, "log"), "draft");
+    click(cx, window, &format!("setting-revert-{PREFS}/log"));
+    cx.run_until_parked();
+    assert_eq!(settings_text(cx, "log"), "first\nsecond");
+    assert_eq!(plugin_config(cx, "log"), json!("first\nsecond"));
+}
+
+fn set_multiline(data: &Path, key: &str, on: bool) {
+    let path = data.join("prefs-plugin").join("kagan.json");
+    let mut manifest: Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let setting = manifest["settings"][key].as_object_mut().unwrap();
+    if on {
+        setting.insert("multiline".into(), json!(true));
+    } else {
+        setting.remove("multiline");
+    }
+    std::fs::write(&path, manifest.to_string()).unwrap();
+}
+
+#[gpui_kit::test]
+fn a_reload_that_toggles_multiline_swaps_the_row_widget_and_saves_both_ways(
+    cx: &mut TestAppContext,
+) {
+    let (_kagan, window, data) = open_with_plugins_then(cx, install_plugins);
+    cx.run_until_parked();
+    click(cx, window, "settings-gear");
+    let field = format!("plugin-text-{PREFS}/label");
+    let select_all = if cfg!(target_os = "macos") {
+        "cmd-a"
+    } else {
+        "ctrl-a"
+    };
+
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "one line");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "label"), json!("one line"));
+
+    set_multiline(data.path(), "label", true);
+    reload_prefs(cx);
+    cx.run_until_parked();
+    assert!(present(cx, window, &format!("setting-save-{PREFS}/label")));
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "first");
+    cx.simulate_keystrokes(window, "enter");
+    cx.simulate_input(window, "second");
+    cx.run_until_parked();
+    assert_eq!(settings_text(cx, "label"), "first\nsecond");
+    click(cx, window, &format!("setting-save-{PREFS}/label"));
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "label"), json!("first\nsecond"));
+
+    set_multiline(data.path(), "label", false);
+    reload_prefs(cx);
+    cx.run_until_parked();
+    assert!(!present(cx, window, &format!("setting-save-{PREFS}/label")));
+    click(cx, window, &field);
+    cx.simulate_keystrokes(window, select_all);
+    cx.simulate_input(window, "back to one line");
+    cx.simulate_keystrokes(window, "enter");
+    cx.run_until_parked();
+    assert_eq!(plugin_config(cx, "label"), json!("back to one line"));
 }
 
 #[gpui_kit::test]

@@ -165,6 +165,23 @@ fn sync_text(
             kept.life = life;
             if replaced {
                 forget_queued(drafts, &scope);
+                let stale = match &field.read(cx).input {
+                    FieldInput::Area(_) => kind != FieldKind::Multiline,
+                    FieldInput::Line(_) => kind == FieldKind::Multiline,
+                };
+                if stale {
+                    let fresh = text_field(&weak, &id, &key, kind, text, window, cx);
+                    let watch = cx.observe(&fresh, |_, _, cx| cx.notify());
+                    drafts.text.insert(
+                        scope,
+                        Kept {
+                            field: fresh,
+                            _watch: watch,
+                            life,
+                        },
+                    );
+                    continue;
+                }
                 field.update(cx, |field, cx| {
                     field.kind = kind;
                     field.drop_pending(cx);

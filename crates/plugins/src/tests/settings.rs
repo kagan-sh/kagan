@@ -133,6 +133,16 @@ fn config_set_checks_strings_and_numbers_against_the_schema(cx: &mut TestAppCont
             "type": "number",
             "title": "Retries",
             "schema": { "type": "number", "minimum": 1, "maximum": 5 }
+        },
+        "name": {
+            "type": "string",
+            "title": "Name",
+            "schema": { "type": "string", "minLength": 1 }
+        },
+        "workers": {
+            "type": "number",
+            "title": "Workers",
+            "schema": { "type": "integer" }
         }
     }));
     open(cx, &[installed(dir.path())]);
@@ -141,6 +151,9 @@ fn config_set_checks_strings_and_numbers_against_the_schema(cx: &mut TestAppCont
         ("notes", json!("one\ntwo")),
         ("tag", json!("alpha")),
         ("retries", json!(3)),
+        ("retries", json!(2.5)),
+        ("name", json!("kagan")),
+        ("workers", json!(2)),
     ] {
         run(
             cx,
@@ -160,6 +173,8 @@ fn config_set_checks_strings_and_numbers_against_the_schema(cx: &mut TestAppCont
         ("notes", json!("far too many characters")),
         ("tag", json!("gamma")),
         ("retries", json!(9)),
+        ("name", json!("")),
+        ("workers", json!(2.5)),
     ] {
         let error = run(
             cx,
