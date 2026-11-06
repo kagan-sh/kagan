@@ -170,10 +170,10 @@ async fn long_text_keeps_two_thousand_lines_and_cuts_a_long_line(cx: &mut TestAp
 #[gpui_kit::test]
 async fn a_nul_byte_and_invalid_utf8_are_refused(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
-    std::fs::write(fixture.dir.path().join("nul.txt"), b"a\0b").unwrap();
+    std::fs::write(fixture.dir.path().join("binary.txt"), b"a\0b").unwrap();
     std::fs::write(fixture.dir.path().join("bad.txt"), [0xff, 0xfe, 0x41]).unwrap();
     let thread = started(&fixture, cx).await;
-    let nul = preview(Some(&thread), "nul.txt", cx).await.unwrap();
+    let nul = preview(Some(&thread), "binary.txt", cx).await.unwrap();
     assert!(matches!(nul.kind, PreviewKind::Unavailable { .. }));
     let bad = preview(Some(&thread), "bad.txt", cx).await.unwrap();
     assert_eq!(
