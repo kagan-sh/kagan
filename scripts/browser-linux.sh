@@ -14,6 +14,13 @@ if [ -z "${DISPLAY:-}" ]; then
   exec xvfb-run -a -s "-screen 0 1280x800x24" sh "$0" "$@"
 fi
 
+# Ubuntu blocks the user namespaces WebKit's sandbox needs, so the page never starts.
+if [ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] &&
+  [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" != 0 ]; then
+  sudo -n sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 ||
+    echo "browser-linux: could not allow user namespaces; WebKit's sandbox may not start" >&2
+fi
+
 binary=${1:-target/debug/kg}
 if [ ! -x "$binary" ]; then
   echo "browser-linux: building $binary" >&2

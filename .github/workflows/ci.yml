@@ -188,10 +188,6 @@ jobs:
       - name: Browser page
         run: |
           sudo apt-get install -y xvfb
-          # Ubuntu blocks the user namespaces WebKit's sandbox needs, so the page never starts.
-          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
           sh scripts/browser-linux.sh
 
   macos-clippy:
