@@ -23,7 +23,21 @@ fi
 tmp=$(mktemp -d)
 page=$tmp/page
 mkdir -p "$page" "$tmp/proj"
-printf '%s\n' '<!doctype html><title>kagan-linux-page</title><p>kagan linux page</p>' >"$page/index.html"
+cat >"$page/index.html" <<'EOF'
+<!doctype html>
+<title>kagan-linux-page</title>
+<p id="out">kagan linux page</p>
+<label>Name <input id="name"></label>
+<button type="button" id="go">Mark</button>
+<input type="file" aria-label="Upload">
+<script>
+document.getElementById("go").addEventListener("click", function () {
+  alert("stay");
+  var name = document.getElementById("name").value;
+  document.getElementById("out").textContent = "marked " + name;
+});
+</script>
+EOF
 port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
 python3 -m http.server --bind 127.0.0.1 "$port" --directory "$page" >"$tmp/http.log" 2>&1 &
 http=$!
@@ -163,6 +177,72 @@ while :; do
     fail "the page did not load"
   fi
   [ "$i" -lt 20 ] || fail "the local page was never requested"
+  i=$((i + 1))
+  sleep 1
+done
+
+if KG_THREAD_ID=$thread "$binary" browser open 'file:///etc/passwd' >"$tmp/file-url.out" 2>"$tmp/file-url.err"; then
+  fail "a file URL opened in the browser"
+fi
+if ! grep -Fq 'web address' "$tmp/file-url.err"; then
+  fail "a file URL was not refused"
+fi
+
+KG_THREAD_ID=$thread "$binary" --json browser open "http://127.0.0.1:${port}/" >"$tmp/driven.json" \
+  || fail "kg browser open failed"
+if ! grep -Fq 'kagan-linux-page' "$tmp/driven.json"; then
+  fail "kg browser open did not report the page title"
+fi
+
+i=0
+while :; do
+  if KG_THREAD_ID=$thread "$binary" --json browser snapshot >"$tmp/snap.json" 2>/dev/null &&
+    grep -Fq '"name":"Mark"' "$tmp/snap.json" &&
+    grep -Fq '"name":"Upload"' "$tmp/snap.json"; then
+    break
+  fi
+  [ "$i" -lt 20 ] || fail "the page snapshot never listed Mark and Upload"
+  i=$((i + 1))
+  sleep 1
+done
+
+refs=$(python3 - "$tmp/snap.json" <<'PY'
+import json, sys
+snap = json.load(open(sys.argv[1]))["browser-snapshot"]
+want = {("textbox", "Name"): "name", ("button", "Mark"): "mark", ("file", "Upload"): "upload"}
+found = {}
+for control in snap["controls"]:
+    key = (control["role"], control["name"])
+    if key in want:
+        found[want[key]] = control["ref"]
+missing = [name for name in want.values() if name not in found]
+if missing:
+    raise SystemExit("missing " + ", ".join(missing))
+print(found["name"], found["mark"], found["upload"])
+PY
+) || fail "could not read the snapshot refs"
+set -- $refs
+name=$1
+mark=$2
+upload=$3
+
+if KG_THREAD_ID=$thread "$binary" browser click "$upload" >"$tmp/upload.out" 2>"$tmp/upload.err"; then
+  fail "a file input was accepted"
+fi
+if ! grep -Fq 'cannot choose a file' "$tmp/upload.err"; then
+  fail "a file input did not say why"
+fi
+
+KG_THREAD_ID=$thread "$binary" browser fill "$name" ada >/dev/null || fail "could not fill the name"
+KG_THREAD_ID=$thread "$binary" browser click "$mark" >/dev/null || fail "could not click Mark; a script dialog may have stalled it"
+
+i=0
+while :; do
+  if KG_THREAD_ID=$thread "$binary" --json browser snapshot >"$tmp/after.json" 2>/dev/null &&
+    grep -Fq 'marked ada' "$tmp/after.json"; then
+    break
+  fi
+  [ "$i" -lt 10 ] || fail "the click did not mark the page"
   i=$((i + 1))
   sleep 1
 done

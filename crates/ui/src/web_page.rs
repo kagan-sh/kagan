@@ -302,7 +302,7 @@ pub(crate) fn page_failure(error: &str) -> String {
 // Linux pages cannot use the camera or microphone, and a script dialog cannot stall the window.
 #[cfg(target_os = "linux")]
 fn restrain(view: &gpui_webview::WebView, cx: &App) {
-    use webkit2gtk::prelude::{
+    use webkit2gtk::{
         FileChooserRequestExt as _, PermissionRequestExt as _, SettingsExt as _, WebViewExt as _,
     };
     use wry::WebViewExtUnix as _;
@@ -319,7 +319,14 @@ fn restrain(view: &gpui_webview::WebView, cx: &App) {
         true
     });
     page.connect_script_dialog(|_, dialog| {
-        dialog.close();
+        match dialog.dialog_type() {
+            webkit2gtk::ScriptDialogType::Confirm
+            | webkit2gtk::ScriptDialogType::BeforeUnloadConfirm => {
+                dialog.confirm_set_confirmed(false);
+            }
+            webkit2gtk::ScriptDialogType::Prompt => dialog.prompt_set_text(""),
+            _ => {}
+        }
         true
     });
     page.connect_run_file_chooser(|_, request| {
