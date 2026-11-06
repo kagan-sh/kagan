@@ -626,7 +626,7 @@ mod tests {
         let previous_home = std::env::var_os(home_var);
         let previous_kimi = std::env::var_os("KIMI_CODE_HOME");
         // SAFETY: nextest runs each test in its own process, so this test owns these
-        // process-global variables while the guard restores them.
+        // process-global variables; the unsafe block below puts them back.
         unsafe {
             std::env::set_var(home_var, dir.path());
             std::env::remove_var("KIMI_CODE_HOME");
