@@ -12,7 +12,7 @@ use crate::web_page::WebPage;
 
 const NEEDS_WINDOW: &str = "browser control needs a kagan window";
 const NO_SESSION: &str = "no browser session; run kg browser open <url> first";
-const ENDED: &str = "the browser session ended";
+pub(super) const ENDED: &str = "the browser session ended";
 const IDLE_ENDED: &str = "the browser session ended after 30 idle minutes";
 const BAD_URL: &str = "type a web address, such as example.com";
 /// How long a drive may sit unused before its next command ends it.

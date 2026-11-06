@@ -254,7 +254,7 @@ pub(super) async fn evaluate(
             .eval(script, reply, cx)
             .map_err(OpError::Failed)
     })
-    .map_err(|_| OpError::NotFound("the browser session ended".into()))??;
+    .map_err(|_| OpError::NotFound(super::agent::ENDED.into()))??;
     cx.spawn(async move |cx| {
         cx.background_executor().timer(wait).await;
         let _ = sender.try_send(None);
