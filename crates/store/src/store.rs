@@ -146,7 +146,10 @@ UPDATE projects SET sort = (
 );
 ",
     "ALTER TABLE pending_interactions ADD COLUMN fields TEXT;",
+    REPAIR_THREAD_COLUMNS,
 ];
+
+pub(crate) const REPAIR_THREAD_COLUMNS: &str = "-- repair conflicting thread migrations";
 
 pub struct Store {
     pub(crate) conn: Connection,
