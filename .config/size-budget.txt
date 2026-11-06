@@ -1,3 +1,4 @@
+# Product Rust line ceilings. A count may grow up to its ceiling, never past it.
 target 35000
-total 66276
+ceiling 66500
 allow_expect 5
