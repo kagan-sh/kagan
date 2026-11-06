@@ -408,7 +408,7 @@ A thread environment's diff reads git and never writes the worktree [book:cli]. 
 
 ## Preview
 
-One file, read-only, in the Preview tab of the right sidebar [docs:look] [decision 149]. The window shows the file on screen from a review, or one the person picks; `kg preview show` reads either [book:cli]. Nothing is edited, saved, searched or fetched, and there is no plugin entry (decision 70).
+One file, read-only, in the Preview tab of the right sidebar [docs:look] [decision 149]. The window shows the file on screen from a review, or one the person picks; `kg preview show` shows it in the tab and opens the named thread first [book:cli]. Nothing is edited, saved, searched or fetched, and there is no plugin entry (decision 70).
 
 ### `Show`
 

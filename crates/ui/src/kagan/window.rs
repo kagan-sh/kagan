@@ -85,6 +85,25 @@ pub(crate) fn show_plugin_settings(cx: &mut App) -> gpui_kit::Result<()> {
     Ok(())
 }
 
+/// Shows one file in the Preview tab, selecting the named thread first. Does nothing when no
+/// window is open.
+pub(crate) fn show_preview(thread: Option<ThreadId>, path: String, cx: &mut App) {
+    let Some((handle, kagan)) = front(cx) else {
+        return;
+    };
+    cx.activate(true);
+    _ = cx.update_window(handle, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| {
+            if let Some(id) = thread.as_ref()
+                && kagan.shown_thread(cx).as_ref() != Some(id)
+            {
+                kagan.select(id.clone(), window, cx);
+            }
+            kagan.show_preview(thread, path, window, cx);
+        });
+    });
+}
+
 pub(crate) fn start_plugin(cx: &mut App) -> gpui_kit::Result<()> {
     show(cx)?;
     if let Some((handle, kagan)) = front(cx) {
