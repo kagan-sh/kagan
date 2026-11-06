@@ -252,6 +252,57 @@ fn a_file_opener_is_refused_with_a_reason() {
     );
 }
 
+#[test]
+fn a_status_item_is_one_titled_line() {
+    let plugin = plugin_dir();
+    let mut declared = sample_manifest();
+    declared["ui"]["status"] = json!({ "title": "Usage" });
+    write_plugin(plugin.path(), &declared);
+    let read = read_manifest(plugin.path()).unwrap();
+    assert_eq!(
+        read.ui.status.as_ref().map(|status| status.title.as_str()),
+        Some("Usage")
+    );
+    for status in [
+        json!({}),
+        json!({ "title": "" }),
+        json!({ "title": "   " }),
+        json!({ "title": "x".repeat(41) }),
+        json!({ "title": "a\nb" }),
+        json!({ "title": "a\u{202E}b" }),
+        json!({ "title": "Usage", "view": "Usage" }),
+    ] {
+        declared["ui"]["status"] = status.clone();
+        write_plugin(plugin.path(), &declared);
+        assert!(read_manifest(plugin.path()).is_err(), "accepted {status}");
+    }
+}
+
+#[test]
+fn status_bar_points_to_the_status_item() {
+    let plugin = plugin_dir();
+    let mut declared = sample_manifest();
+    declared["ui"] = json!({ "status-bar": [{}] });
+    write_plugin(plugin.path(), &declared);
+    let error = read_manifest(plugin.path()).unwrap_err().to_string();
+    assert_eq!(
+        error,
+        format!(
+            "kagan.json in {}: ui.status-bar is not in this version of kagan; declare ui.status for one line in the activity strip",
+            plugin.path().display()
+        )
+    );
+}
+
+#[test]
+fn a_status_item_names_its_capability() {
+    let kinds = crate::capabilities_in(&json!({ "ui": { "status": { "title": "Usage" } } }));
+    assert_eq!(kinds.len(), 1);
+    assert_eq!(kinds[0].id, "status");
+    assert_eq!(kinds[0].name, "Status item");
+    assert_eq!(kinds[0].detail, "adds a line to the activity strip");
+}
+
 #[gpui_kit::test]
 fn check_names_the_invalid_javascript_file_and_line(cx: &mut TestAppContext) {
     let plugin = plugin_dir();

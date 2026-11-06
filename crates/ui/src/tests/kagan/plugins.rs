@@ -533,7 +533,7 @@ pub(in crate::tests) fn open_with_plugins_then(
     let data = host_then(cx, install);
     let kagan = cx.update(|cx| crate::kagan::open(cx).unwrap());
     cx.run_until_parked();
-    let window = cx.update(|cx| cx.windows()[0]);
+    let window = cx.update(|cx| kagan.read(cx).window_handle());
     (kagan, window, data)
 }
 

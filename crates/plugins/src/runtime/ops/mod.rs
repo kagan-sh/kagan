@@ -251,6 +251,9 @@ async fn start(
             host.warnings.insert(id, reason);
         });
     }
+    if started.is_ok() {
+        crate::host::load_status(host, &record.id, cx);
+    }
     started
 }
 

@@ -217,6 +217,44 @@ fn open_url_is_an_install_line_and_needs_approval_again() {
 }
 
 #[test]
+fn a_status_item_is_an_install_line_and_needs_approval_again() {
+    let plugin = plugin_dir();
+    let base = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(base.status.is_none());
+    let mut value = sample_manifest();
+    value["ui"]["status"] = json!({ "title": "Usage" });
+    write_plugin(plugin.path(), &value);
+    let with = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert_eq!(with.status.as_deref(), Some("Usage"));
+    assert!(
+        with.lines()
+            .iter()
+            .any(|line| line == "starts with kagan to show Usage in the activity strip"),
+        "{:?}",
+        with.lines()
+    );
+    assert!(base.within(&with));
+    assert!(!with.within(&base));
+
+    value["ui"]["status"] = json!({ "title": "Tokens" });
+    write_plugin(plugin.path(), &value);
+    let renamed = Grant::of(&read_manifest(plugin.path()).unwrap(), plugin.path());
+    assert!(!with.within(&renamed));
+    assert!(
+        renamed
+            .added(&with)
+            .iter()
+            .any(|line| { line == "starts with kagan to show Tokens in the activity strip" })
+    );
+}
+
+#[test]
+fn an_old_stored_grant_without_status_still_reads() {
+    let grant: Grant = serde_json::from_value(json!({ "powers": {} })).unwrap();
+    assert!(grant.status.is_none());
+}
+
+#[test]
 fn webview_store_true_in_the_script_asks_for_page_data() {
     let plugin = plugin_dir();
     std::fs::write(

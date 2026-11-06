@@ -51,6 +51,7 @@ impl Global for PluginHostGlobal {}
 /// When the installed plugin records cannot be read.
 pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Task<Result<()>> {
     HostUi::init(cx);
+    crate::PluginStrip::init(cx);
     gpui_shell::init(cx);
     let workspace = Workspace::global(cx);
     let records = workspace.read(cx).plugins();
@@ -156,7 +157,34 @@ async fn boot(
         host.started = true;
         cx.notify();
     });
+    let with_status: Vec<PluginId> = host.read_with(cx, |host, _| {
+        host.active
+            .iter()
+            .filter(|(_, active)| active.manifest.ui.status.is_some())
+            .map(|(id, _)| id.clone())
+            .collect()
+    });
+    for id in with_status {
+        load_status(&host, &id, cx);
+    }
     Ok(())
+}
+
+/// Loads a plugin whose manifest declares `ui.status`, so its line can appear without opening a
+/// panel. Failures go to the plugin log and do not stop the others.
+pub(crate) fn load_status(host: &Entity<PluginHost>, id: &PluginId, cx: &mut AsyncApp) {
+    let declared = host.read_with(cx, |host, _| {
+        host.active
+            .get(id)
+            .is_some_and(|active| active.manifest.ui.status.is_some())
+    });
+    if !declared {
+        return;
+    }
+    if let Err(error) = host.update(cx, |host, cx| host.load(id, cx)) {
+        let message = error.to_string();
+        host.update(cx, |host, _| host.report(id, &message));
+    }
 }
 
 pub struct PluginHost {
@@ -364,6 +392,7 @@ impl PluginHost {
         cx: &mut Context<Self>,
     ) -> Vec<(secret::Store, PluginId, String)> {
         let mut marks = Vec::new();
+        let mut crashed = Vec::new();
         for (id, active) in &mut self.active {
             let Some(loaded) = &mut active.loaded else {
                 continue;
@@ -381,9 +410,21 @@ impl PluginHost {
             {
                 marks.push((self.secrets.clone(), id.clone(), message));
             }
+            if loaded.watchdog.error.is_some() {
+                crashed.push(id.clone());
+            }
         }
         if !marks.is_empty() {
             cx.notify();
+        }
+        if !crashed.is_empty()
+            && let Some(strip) = crate::PluginStrip::global(cx)
+        {
+            strip.update(cx, |strip, cx| {
+                for id in &crashed {
+                    strip.clear(id, cx);
+                }
+            });
         }
         marks
     }
@@ -463,6 +504,9 @@ impl PluginHost {
     }
 
     pub(crate) fn unload(&mut self, id: &PluginId, cx: &mut App) {
+        if let Some(strip) = crate::PluginStrip::global(cx) {
+            strip.update(cx, |strip, cx| strip.clear(id, cx));
+        }
         if let Some(ui) = HostUi::global(cx) {
             ui.update(cx, |ui, _| ui.unload(id));
         }

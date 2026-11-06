@@ -142,7 +142,7 @@ impl Render for Kagan {
             .on_action(|_: &settings::PreviousItem, window, cx| window.focus_prev(cx))
             .child(self.title_bar(window, cx))
             .child(window_body(self, columns, window, cx))
-            .child(self.activity_strip(cx))
+            .child(self.activity_strip(window, cx))
     }
 }
 

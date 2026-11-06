@@ -79,6 +79,7 @@ pub(crate) fn types(
         crate::area::Values {
             settings: std::rc::Rc::default(),
             secrets: crate::secret::Store::new(None, root.to_path_buf()),
+            status: None,
         },
         &std::rc::Rc::default(),
         &jobs,

@@ -70,6 +70,7 @@ enum Preference {
     ConfirmArchive,
     AgentIntegration,
     Notify,
+    PluginStatus,
     UpdateCheck,
     TerminalFontSize,
     SlotThreads,
@@ -83,6 +84,7 @@ const PREFERENCES: &[(&str, Preference)] = &[
     ("confirm-archive", Preference::ConfirmArchive),
     ("agent-integration", Preference::AgentIntegration),
     ("notify", Preference::Notify),
+    ("plugin-status", Preference::PluginStatus),
     ("update-check", Preference::UpdateCheck),
     ("terminal-font-size", Preference::TerminalFontSize),
     (Slot::Threads.preference(), Preference::SlotThreads),
@@ -141,6 +143,9 @@ impl Preference {
             Self::Notify => serde_json::from_value::<bool>(value.clone())
                 .map(|_| ())
                 .map_err(|_| OpError::Invalid("notify must be a boolean".into())),
+            Self::PluginStatus => serde_json::from_value::<bool>(value.clone())
+                .map(|_| ())
+                .map_err(|_| OpError::Invalid("plugin-status must be a boolean".into())),
             Self::ReviewViewed => {
                 serde_json::from_value::<std::collections::BTreeMap<String, String>>(value.clone())
                     .map(|_| ())

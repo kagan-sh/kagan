@@ -29,7 +29,7 @@ Commands:
   window       The application menu and the window
   surface      Plugin surfaces in the window
   keymap       Keyboard shortcuts: built-in ones and plugin commands
-  preference   Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+  preference   Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
   ui           Native window for QA and agents
   browser      The Browser tab's page, driven by this thread
   diff         A thread environment's diff. Reads git and never writes the worktree
@@ -2475,7 +2475,7 @@ Options:
 ## `kg preference`
 
 ```text
-Read or save a preference: confirm-archive, agent-integration, notify, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
+Read or save a preference: confirm-archive, agent-integration, notify, plugin-status, update-check, terminal-font-size, review-viewed, slot.threads and slot.review (set from the window or with kg plugin use), or one window's `<window>.left-sidebar`, `<window>.left-width`, `<window>.right-sidebar`, `<window>.right-width` and `<window>.review-wrap`, where `<window>` is a window id such as main
 
 Usage: kg preference [OPTIONS] <COMMAND>
 

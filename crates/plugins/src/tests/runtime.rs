@@ -51,6 +51,7 @@ fn scaffold_and_types_match_the_running_shell() {
     let host = std::fs::read_to_string(root.join("kagan.d.ts")).unwrap();
     assert!(host.contains("declare module \"kagan/jobs\""));
     assert!(host.contains("export function next(): Promise<Job>"));
+    assert!(host.contains("export function setStatus"));
     assert!(host.contains("declare module \"kagan/process\""));
     assert!(!host.contains("kagan/downloads"));
     assert!(host.contains("overlay?: { width: number; height: number }"));

@@ -385,6 +385,12 @@ impl Active {
             area::Values {
                 settings: self.settings.clone(),
                 secrets: secrets.clone(),
+                status: self
+                    .manifest
+                    .ui
+                    .status
+                    .as_ref()
+                    .map(|status| status.title.clone()),
             },
             &self.agents,
             jobs,
@@ -475,6 +481,9 @@ impl PluginHost {
                     processes.update(cx, |processes, _| processes.close());
                     let _ = window.update(cx, |_, window, _| window.remove_window());
                     let _ = self.secrets.log(id, Level::Error, &error.to_string());
+                    if let Some(strip) = crate::PluginStrip::global(cx) {
+                        strip.update(cx, |strip, cx| strip.clear(id, cx));
+                    }
                     self.warnings.insert(id.clone(), error.to_string());
                     return Err(error);
                 }

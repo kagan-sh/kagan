@@ -20,6 +20,8 @@ pub(crate) struct Bound<'a> {
 pub(crate) struct Values {
     pub settings: Rc<RefCell<Map<String, Value>>>,
     pub secrets: crate::secret::Store,
+    /// The approved title of this plugin's activity strip item.
+    pub status: Option<String>,
 }
 
 pub(crate) enum Gate {
@@ -47,10 +49,15 @@ pub(crate) fn modules(
         None => HostModule::new("kagan/process").declarations(crate::process::DECLARATIONS),
     };
     let files = crate::files::module(bound.map(|bound| bound.read_roots), id, &values.secrets);
+    let status = values.status.clone();
+    let secrets = values.secrets.clone();
     vec![
         (Gate::Always, jobs.module()),
         (Gate::Always, crate::page::module(id)),
-        (Gate::Always, crate::ui_host::extend(host(id, values), id)),
+        (
+            Gate::Always,
+            crate::ui_host::extend(host(id, values), id, status.as_deref(), &secrets),
+        ),
         (Gate::Area(Area::Process), process),
         (
             Gate::Area(Area::Threads),
@@ -68,7 +75,9 @@ pub(crate) fn modules(
 pub(crate) fn host(id: &PluginId, values: Values) -> HostModule {
     let named = id.0.clone();
     let (logged, read, caller) = (id.clone(), id.clone(), id.clone());
-    let Values { settings, secrets } = values;
+    let Values {
+        settings, secrets, ..
+    } = values;
     let hidden = secrets.clone();
     HostModule::new("kagan/host")
         .declarations(

@@ -11,6 +11,7 @@ mod runtime;
 mod schedule;
 mod secret;
 mod settings;
+mod status;
 
 use std::path::Path;
 use std::process::Command;

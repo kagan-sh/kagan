@@ -28,15 +28,16 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
 pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>) -> Vec<Group> {
-    let (agent, notify) = {
+    let (agent, notify, plugin_status) = {
         let prefs = kagan.prefs.read(cx);
-        (prefs.agent_integration, prefs.notify)
+        (prefs.agent_integration, prefs.notify, prefs.plugin_status)
     };
     let mut appearance = theme_group(window, cx);
     appearance.key = "appearance".into();
     appearance.title = "Appearance".into();
     appearance.rows.extend(mode_group(cx).rows);
     appearance.rows.push(terminal_size(kagan));
+    appearance.rows.push(plugin_status_row(plugin_status));
     appearance
         .rows
         .extend(Slot::ALL.map(|slot| super::slots::row(kagan, slot, cx)));
@@ -130,6 +131,23 @@ fn general(agent: bool, notify: bool) -> Group {
                 }),
             ),
         ],
+    )
+}
+
+fn plugin_status_row(on: bool) -> Row {
+    row(
+        "plugin-status",
+        "Plugin status",
+        "Show items that plugins add to the activity strip. Off hides them all; each plugin can still be turned off in Installed.",
+        switch("plugin-status", "Plugin status", on, |on, _, cx| {
+            save(
+                Op::Preference(PreferenceOp::Set {
+                    key: "plugin-status".into(),
+                    value: json!(on),
+                }),
+                cx,
+            );
+        }),
     )
 }
 

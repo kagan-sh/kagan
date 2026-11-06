@@ -91,4 +91,9 @@ impl Kagan {
     pub(crate) fn picker_entity(&self) -> Entity<picker::Picker> {
         self.picker.clone()
     }
+
+    #[cfg(test)]
+    pub(crate) fn window_handle(&self) -> gpui_kit::AnyWindowHandle {
+        self.window
+    }
 }

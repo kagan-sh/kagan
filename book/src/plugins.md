@@ -79,6 +79,24 @@ kg plugin use threads kagan
 
 [Keyboard shortcuts](keys.md#change-a-key) explains plugin keys. [Troubleshooting](troubleshooting.md#a-plugin-fails) covers logs and recovery.
 
+## Add a status line
+
+A plugin can put one short line in the [activity strip](window.md#activity-strip). Declare it in `kagan.json`:
+
+```json
+"ui": { "status": { "title": "Usage" } }
+```
+
+The title is 1 to 40 characters, and it is the label shown before the value. Then call `setStatus` from `kagan/host`:
+
+```js
+import { setStatus } from "kagan/host";
+
+setStatus("42% used", { tone: "busy" });
+```
+
+The text is one plain line of at most 120 characters. `tone` is `quiet`, `busy`, `needs`, or `failed`, and defaults to `quiet`. Call `setStatus(null)` to hide the line. A plugin that declares `ui.status` starts with kagan, so the line appears without opening a panel. It is text only: a plugin cannot put a button, click, or view in the strip. If it needs an action, declare a command. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
+
 ## Call another plugin
 
 A plugin can run a function another plugin offers. The caller lists the other plugin in `powers.calls`, and the install screen says it asks that plugin to do work. The other plugin lists the function name in `exports`. The caller then uses `call(plugin, name, input)` from `kagan/host`, and gets the reply as JSON. A call that is not approved, names a disabled plugin, or names a function that is not exported is refused. A call times out after 30 seconds. See decision 155.
