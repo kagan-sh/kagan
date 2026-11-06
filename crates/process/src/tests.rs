@@ -267,7 +267,13 @@ fn capture_closes_descendant_output_after_the_parent_exits() -> std::io::Result<
 #[test]
 fn capture_timeout_kills_the_entire_tree() -> std::io::Result<()> {
     let path = TempPath::new("capture-timeout");
-    let error = crate::capture_with_limit(tree_command(&path.0), Duration::from_secs(1))
+    // `cscript` can spend seconds starting on a busy Windows runner; the tree
+    // itself never exits, so the capture still has to time out.
+    #[cfg(windows)]
+    let limit = Duration::from_secs(15);
+    #[cfg(not(windows))]
+    let limit = Duration::from_secs(1);
+    let error = crate::capture_with_limit(tree_command(&path.0), limit)
         .expect_err("the tree waits for its child");
     let pid = read_pid(&path.0)?;
     let _reap = Reap(pid);
