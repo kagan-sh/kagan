@@ -229,6 +229,7 @@ pub(super) fn is_web(url: &str) -> bool {
     url::Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
 }
 
+#[cfg(any(test, target_os = "macos", target_os = "windows"))]
 pub(super) fn secure(typed: &str) -> bool {
     page_url(typed).is_some_and(|url| url.scheme() == "https")
 }
@@ -287,7 +288,11 @@ impl Kagan {
             .size_full()
             .gap_2()
             .p_2()
-            .when(WEB, |browser| browser.child(self.address_row(cx)))
+            .when(WEB, |row| {
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                let row = row.child(self.address_row(cx));
+                row
+            })
             .children(note)
             .child(match page {
                 Some(page) => div().flex_1().min_h_0().child(page).into_any_element(),

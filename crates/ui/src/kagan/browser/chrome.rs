@@ -1,15 +1,7 @@
 //! Back, forward, reload, and open-in-the-system-browser for the Browser tab.
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use super::Kagan;
-use gpui_kit::{AnyElement, Context, IntoElement, div};
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-impl Kagan {
-    pub(super) fn address_row(&self, _cx: &mut Context<Self>) -> AnyElement {
-        div().into_any_element()
-    }
-}
-
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use {
     crate::kagan::controls::control,
@@ -21,8 +13,8 @@ use {
     gpui_kit::component::input::Input,
     gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, Sizable as _, h_flex},
     gpui_kit::{
-        App, ElementId, Entity, Focusable as _, InteractiveElement as _, ParentElement as _,
-        Styled as _,
+        AnyElement, App, Context, ElementId, Entity, Focusable as _, InteractiveElement as _,
+        IntoElement, ParentElement as _, Styled as _, div,
     },
     std::time::Duration,
 };
