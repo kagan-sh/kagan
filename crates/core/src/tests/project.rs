@@ -685,9 +685,12 @@ async fn a_refresh_keeps_the_project_and_environment_entities(cx: &mut TestAppCo
             workspace
                 .environment(&environment_id)
                 .map(gpui_kit::Entity::entity_id),
+            workspace
+                .thread(&thread_id)
+                .map(gpui_kit::Entity::entity_id),
         )
     });
-    assert!(before.0.is_some() && before.1.is_some());
+    assert!(before.0.is_some() && before.1.is_some() && before.2.is_some());
 
     op(
         Op::Project(ProjectOp::Reorder {
@@ -706,6 +709,9 @@ async fn a_refresh_keeps_the_project_and_environment_entities(cx: &mut TestAppCo
                 .map(gpui_kit::Entity::entity_id),
             workspace
                 .environment(&environment_id)
+                .map(gpui_kit::Entity::entity_id),
+            workspace
+                .thread(&thread_id)
                 .map(gpui_kit::Entity::entity_id),
         )
     });
