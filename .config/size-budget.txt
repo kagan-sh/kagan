@@ -1,3 +1,3 @@
 target 35000
-total 66273
+total 66271
 allow_expect 5

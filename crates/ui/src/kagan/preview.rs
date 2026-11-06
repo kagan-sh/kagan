@@ -25,7 +25,6 @@ pub(super) struct Preview {
     path: String,
     file: Option<PreviewFile>,
     image: Option<Arc<Image>>,
-    /// The sentence shown instead of the file when it cannot be shown.
     notice: Option<SharedString>,
     loading: bool,
     generation: u64,
@@ -199,7 +198,6 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Reads the bytes of the image the Op named, after checking the path again.
     fn load_image(&mut self, generation: u64, cx: &mut Context<Self>) {
         let Some(preview) = self.tabs.preview.as_ref() else {
             return;
