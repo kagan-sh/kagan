@@ -106,11 +106,6 @@ impl Kagan {
             if self.right_tab.as_deref().is_some_and(|tab| {
                 tab == BROWSER || tab == super::preview::TAB || terminal_number(tab).is_some()
             }) {
-            if self
-                .right_tab
-                .as_ref()
-                .is_some_and(|tab| matches!(tab, Tab::Browser | Tab::Terminal(_)))
-            {
                 self.right_tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.
@@ -309,19 +304,19 @@ impl Kagan {
     /// The Browser tab and a tab for each extra terminal, for the right sidebar's tab row.
     pub(super) fn right_tabs(
         &self,
-        selected: Option<&Tab>,
+        selected: Option<&str>,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let browser = self.tabs.browser.then(|| {
             let close: CloseTab = (
-                "right-tab-close-browser".into(),
+                format!("right-tab-close-{BROWSER}").into(),
                 Box::new(Kagan::close_browser),
             );
             tab(
-                "right-tab-browser",
+                format!("right-tab-{BROWSER}"),
                 "Browser".into(),
-                selected == Some(&Tab::Browser),
-                |this, window, cx| this.show_right_tab(Tab::Browser, window, cx),
+                selected == Some(BROWSER),
+                |this, window, cx| this.show_right_tab(BROWSER, window, cx),
                 Some(close),
                 None,
                 cx,
@@ -349,8 +344,6 @@ impl Kagan {
             })
             .collect();
         let preview = if self.tabs.preview.is_some() {
-        let terminals = self.tabs.numbers().map(|number| {
-            let id = Tab::Terminal(number).id().into_owned();
             let close: CloseTab = (
                 "right-tab-close-preview".into(),
                 Box::new(Kagan::close_preview),
@@ -360,12 +353,6 @@ impl Kagan {
                 "Preview".into(),
                 selected == Some(crate::kagan::preview::TAB),
                 |this, window, cx| this.show_right_tab(crate::kagan::preview::TAB, window, cx),
-            let selected = selected == Some(&Tab::Terminal(number));
-            tab(
-                format!("right-tab-{id}"),
-                format!("Terminal {number}").into(),
-                selected,
-                move |this, window, cx| this.show_right_tab(Tab::Terminal(number), window, cx),
                 Some(close),
                 None,
                 cx,
