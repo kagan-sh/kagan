@@ -2,40 +2,38 @@
 
 ## `kg` is not found
 
-The macOS download does not add `kg` to your `PATH`. [Add the command link](start.md#download), or install kagan with Homebrew.
+The macOS download does not put `kg` on your `PATH`. [Add the command link](start.md#download), or install with Homebrew.
 
 ## A program does not start
 
-If `kg` reports `program claude was not found`, install the program or select a different program.
+When `kg` reports `program claude was not found`, install that program or select a different program.
 
-If a setup script fails, read the error on the New thread screen. Correct the script, then click **Retry**. The program does not start until the script succeeds.
+When a setup script fails, read the error on the New thread screen. Correct the script, and click **Retry**. The program does not start until the script is successful.
 
 ## kagan does not remove a worktree
 
-The worktree has files that git does not ignore. Commit, delete, or ignore the named files, then click **Remove again**. The branch and its commits stay.
+The worktree has files that git does not ignore. Commit the named files, delete them, or ignore them. Then click **Remove again**. The branch and its commits stay.
 
 ## Review comments do not reach the program
 
-This error can occur after the program stops. Click **Start again**, then send the review again. kagan keeps your comments after **Not sent**.
+This can occur after the program stops. Click **Start again**, and then send the review again. Your comments stay after **Not sent**.
 
 ## A plugin fails
 
-In Settings → Plugins, click **Details…** for the plugin, then click **Logs**. If a plugin tool or page fails, it shows **Logs**, **Reload**, and **Disable**.
-
-From a terminal:
+In Settings → Plugins, open **Details…**, and then **Logs**. A tool or a page that fails shows **Logs**, **Reload**, and **Disable**.
 
 ```bash
 kg plugin logs <id> --follow
 ```
 
-The command prints new log lines until you stop it.
+That command prints new log lines until you stop it.
 
-If a plugin draws the thread list or the review, kagan returns to the built-in version after a failure or when you disable it. Press Cmd+Alt+B to restore the thread list or Cmd+Alt+V to restore the review yourself.
+When a plugin draws the thread list or the review, kagan uses the built-in version after a failure. kagan also uses the built-in version when you disable the plugin. Cmd+Alt+B restores the thread list. Cmd+Alt+V restores the review.
 
 ## A theme has an error
 
-[Themes](themes.md#make-your-own-theme) covers theme errors.
+[Themes](themes.md#make-your-own-theme) gives the procedure for a theme file that is not correct.
 
 ## Report a problem
 
-[Your data and privacy](data.md#diagnostics) explains the diagnostics file. Attach the file to a [GitHub issue](https://github.com/kagan-sh/kagan/issues).
+[Your data and privacy](data.md#diagnostics) gives the procedure for the diagnostics file. Attach that file to a [GitHub issue](https://github.com/kagan-sh/kagan/issues).
