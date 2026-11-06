@@ -277,7 +277,7 @@ impl Kagan {
             div()
                 .id("activity-install")
                 .ui_container()
-                .flex_none()
+                .flex_shrink_1()
                 .max_w(px(240.))
                 .min_w_0()
                 .text_ellipsis()

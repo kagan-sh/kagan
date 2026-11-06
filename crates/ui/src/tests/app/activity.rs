@@ -124,6 +124,50 @@ export default class Plugin extends View {{
         .unwrap();
 }
 
+const TIMER: &str = "dev.test.push";
+const TIMER_ITEM: &str = "activity-plugin-dev.test.push";
+
+fn install_timer_status(data: &std::path::Path) {
+    let root = data.join("timer");
+    std::fs::create_dir(&root).unwrap();
+    let manifest = serde_json::json!({
+        "id": TIMER,
+        "name": "Push",
+        "version": "1.0.0",
+        "kagan": ">=0.1.0",
+        "entry": "main.js",
+        "instructions": "Push a line in the activity strip.",
+        "powers": {},
+        "ui": { "status": { "title": "Push" } }
+    });
+    std::fs::write(root.join("kagan.json"), manifest.to_string()).unwrap();
+    std::fs::write(
+        root.join("main.js"),
+        r#"import { View } from "gpui-kit";
+import { setStatus } from "kagan/host";
+export default class Plugin extends View {
+  init(_props, cx) {
+    setStatus("42%", { tone: "busy" });
+    cx.timer.after(100, () => setStatus("77%"));
+  }
+}
+"#,
+    )
+    .unwrap();
+    let store = kg_store::Store::open(data.join("kagan.sqlite3")).unwrap();
+    store
+        .insert_plugin(&Plugin {
+            id: PluginId(TIMER.into()),
+            source: root.display().to_string(),
+            root,
+            commit: None,
+            enabled: true,
+            approved: serde_json::json!({"powers": {}, "folders": {}, "status": "Push"}),
+            error: None,
+        })
+        .unwrap();
+}
+
 #[cfg(unix)]
 fn busy_program() -> String {
     "/bin/sh -c \"printf '\\033]0;\\342\\240\\213 working\\007'; sleep 30\"".into()
@@ -440,24 +484,12 @@ fn disabling_the_plugin_removes_its_item(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn a_plugin_push_redraws_the_strip(cx: &mut TestAppContext) {
-    let (_kagan, window, _data) = open_with_plugins_then(cx, install_status);
-    wait_until(cx, |cx| shows(cx, window, STATUS_ITEM));
-
-    let id = run_shell(cx);
-    let task = cx.update(|cx| {
-        Workspace::dispatch(
-            Op::Thread(ThreadOp::CallTool {
-                id,
-                name: "status".into(),
-                input: serde_json::json!({ "text": "77%" }),
-            }),
-            cx,
-        )
-    });
-    cx.foreground_executor().block_test(task).unwrap();
+fn a_timer_push_redraws_the_strip_without_a_workspace_event(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_timer_status);
+    wait_until(cx, |cx| shows(cx, window, TIMER_ITEM));
+    assert_eq!(value_of(cx, window, TIMER_ITEM).as_deref(), Some("42%"));
     wait_until(cx, |cx| {
-        value_of(cx, window, STATUS_ITEM).as_deref() == Some("77%")
+        value_of(cx, window, TIMER_ITEM).as_deref() == Some("77%")
     });
 }
 
@@ -495,6 +527,34 @@ fn four_long_items_fit_beside_the_summary_at_720(cx: &mut TestAppContext) {
             strip_x + strip_width
         );
     }
+}
+
+#[gpui_kit::test]
+fn the_strip_draws_four_of_five_items(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        for number in 1..=5 {
+            install_status_plugin(
+                data,
+                &format!("dev.test.status{number}"),
+                &format!("Usage {number}"),
+                "42%",
+            );
+        }
+    });
+    cx.simulate_window_resize(window, size(px(1400.), px(720.)));
+    let names: Vec<String> = (1..=5)
+        .map(|number| format!("activity-plugin-dev.test.status{number}"))
+        .collect();
+    wait_until(cx, |cx| {
+        names[..4].iter().all(|name| shows(cx, window, name))
+    });
+    assert!(!shows(cx, window, &names[4]), "the fifth item was drawn");
+    let kept = cx.read(|cx| {
+        kg_plugins::PluginStrip::global(cx)
+            .map(|strip| strip.read(cx).items().count())
+            .unwrap_or_default()
+    });
+    assert_eq!(kept, 5, "the host dropped an item instead of the strip");
 }
 
 #[gpui_kit::test]
