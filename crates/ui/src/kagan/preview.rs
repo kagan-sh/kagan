@@ -25,7 +25,7 @@ pub(super) struct Preview {
     path: String,
     file: Option<PreviewFile>,
     image: Option<Arc<Image>>,
-    /// A refusal, in one sentence.
+    /// The sentence shown instead of the file when it cannot be shown.
     notice: Option<SharedString>,
     loading: bool,
     generation: u64,
