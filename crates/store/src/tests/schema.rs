@@ -40,6 +40,37 @@ fn conflicting_schema_five_keeps_threads_and_accepts_new_ones() {
 }
 
 #[test]
+fn conflicting_earlier_schemas_upgrade_without_repeating_columns() {
+    let migrations = &crate::store::MIGRATIONS;
+    for (name, earlier) in [
+        ("sort", vec![migrations[0], migrations[1], migrations[3]]),
+        ("fields", vec![migrations[0], migrations[1], migrations[4]]),
+        (
+            "both",
+            vec![migrations[0], migrations[1], migrations[3], migrations[4]],
+        ),
+    ] {
+        let path = std::env::temp_dir().join(format!(
+            "kg-store-conflict-{name}-{}.sqlite3",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let mut conn = rusqlite::Connection::open(&path).unwrap();
+        crate::migrate(&mut conn, earlier).unwrap();
+        drop(conn);
+        let store = Store::open(&path).unwrap();
+        assert_eq!(
+            store.schema_version().unwrap(),
+            i64::try_from(migrations.len()).unwrap()
+        );
+        store.conn.execute("INSERT INTO projects (id, kind, name, path) VALUES ('prj_1', 'standard', 'kagan', '/code/kagan')", []).unwrap();
+        store.put_thread(&thread("thr_1", 1)).unwrap();
+        drop(store);
+        std::fs::remove_file(&path).unwrap();
+    }
+}
+
+#[test]
 fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
     let path = std::env::temp_dir().join(format!("kg-store-v1-{}.sqlite3", std::process::id()));
     let _ = std::fs::remove_file(&path);

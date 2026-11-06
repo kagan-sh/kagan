@@ -51,14 +51,15 @@ fn migrate<'a>(
     let applied: usize = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
     let mut version = applied;
     for sql in statements.into_iter().skip(applied) {
+        if sql == store::MIGRATIONS[3] && has_column(&tx, "projects", "sort")?
+            || sql == store::MIGRATIONS[4] && has_column(&tx, "pending_interactions", "fields")?
+        {
+            version += 1;
+            continue;
+        }
         if sql == store::REPAIR_THREAD_COLUMNS {
             for column in ["model", "reasoning_level"] {
-                let exists: bool = tx.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('threads') WHERE name = ?1)",
-                    [column],
-                    |row| row.get(0),
-                )?;
-                if exists {
+                if has_column(&tx, "threads", column)? {
                     tx.execute_batch(&format!("ALTER TABLE threads DROP COLUMN {column}"))?;
                 }
             }
@@ -72,4 +73,12 @@ fn migrate<'a>(
     }
     tx.commit()?;
     Ok(())
+}
+
+fn has_column(conn: &rusqlite::Connection, table: &str, column: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name = ?2)",
+        [table, column],
+        |row| row.get(0),
+    )?)
 }
