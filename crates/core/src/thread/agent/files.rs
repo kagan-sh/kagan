@@ -331,8 +331,26 @@ fn hide_from_git(folder: &Path, root: &str, owned: &[String]) -> std::io::Result
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(error),
     };
-    let mut lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
+    let prefix = format!("{root}/");
+    let mut lines = Vec::new();
     let mut changed = false;
+    for line in text.lines() {
+        let keep = match line.trim().strip_prefix(&prefix) {
+            Some(name) if !name.is_empty() && !name.contains('/') => {
+                let link = folder.join(root).join(name);
+                !matches!(
+                    std::fs::symlink_metadata(&link),
+                    Ok(meta) if !meta.file_type().is_symlink()
+                )
+            }
+            _ => true,
+        };
+        if keep {
+            lines.push(line.to_owned());
+        } else {
+            changed = true;
+        }
+    }
     for name in owned {
         let line = format!("{root}/{name}");
         if !lines.iter().any(|existing| existing.trim() == line) {
@@ -564,7 +582,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn hide_from_git_keeps_existing_lines_and_adds_only_owned_names() {
+    fn hide_from_git_keeps_absent_lines_and_drops_a_real_folder_line() {
         let dir = tempfile::tempdir().unwrap();
         let work = folder(dir.path(), "work");
         let exclude = work.join(".git/info/exclude");
@@ -578,7 +596,7 @@ mod tests {
         hide_from_git(&work, ".agents/skills", &names(&["kept"])).unwrap();
         assert_eq!(
             std::fs::read_to_string(&exclude).unwrap(),
-            "target\n.agents/skills/gone\n.agents/skills/mine\n.agents/skills/future\n.agents/skills/kept\n"
+            "target\n.agents/skills/gone\n.agents/skills/future\n.agents/skills/kept\n"
         );
     }
 
@@ -679,7 +697,6 @@ mod tests {
             dunce::canonicalize(repo.join(".git/info/exclude")).unwrap()
         );
         std::fs::create_dir_all(worktree.join(".agents/skills")).unwrap();
-        std::fs::write(worktree.join(".agents/skills/one"), "one\n").unwrap();
         let second = dir.path().join("worktree2");
         git(
             &repo,

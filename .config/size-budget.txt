@@ -2,4 +2,4 @@
 target 35000
 ceiling 66500
 allow_expect 5
-crates/core/src/thread/agent/files.rs 736
+crates/core/src/thread/agent/files.rs 753
