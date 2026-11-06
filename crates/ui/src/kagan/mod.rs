@@ -83,7 +83,7 @@ pub(crate) use window::shows;
 #[cfg(test)]
 pub(crate) use window::window_options;
 pub(crate) use window::{
-    front, show, show_plugin_settings, show_settings, start_plugin, watch_waiting,
+    front, show, show_plugin_settings, show_preview, show_settings, start_plugin, watch_waiting,
 };
 
 use std::collections::{BTreeMap, BTreeSet};

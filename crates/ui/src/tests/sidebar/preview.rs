@@ -3,7 +3,9 @@ use kg_core::Workspace;
 use kg_domain::{Op, ThreadOp};
 
 use crate::kagan::Kagan;
-use crate::tests::kagan::{click, open, present, repo_thread, shows, value_of, wait_until};
+use crate::tests::kagan::{
+    click, open, present, repo_thread, run_shell, shows, value_of, wait_until,
+};
 
 fn with_sh(cx: &mut TestAppContext) {
     let path = std::env::var_os("PATH").unwrap_or_default();
@@ -123,6 +125,27 @@ fn a_thread_switch_closes_the_preview(cx: &mut TestAppContext) {
     cx.run_until_parked();
     click(cx, window, &format!("thread-{}", thread.id.0));
     wait_until(cx, |cx| !present(cx, window, "right-tab-preview"));
+}
+
+#[gpui_kit::test]
+fn a_preview_for_a_named_thread_opens_that_thread_and_its_tab(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (thread, _repo) = repo_thread(cx, window, data.path());
+    let other = run_shell(cx);
+    click(cx, window, &format!("thread-{}", other.0));
+    wait_until(cx, |cx| {
+        cx.update(|cx| kagan.read(cx).shown_thread(cx)) == Some(other.clone())
+    });
+
+    cx.update(|cx| crate::show_preview(Some(thread.clone()), "notes.txt".into(), cx));
+
+    wait_until(cx, |cx| shows(cx, window, "right-tab-preview"));
+    wait_until(cx, |cx| shows(cx, window, "preview-text-rows"));
+    assert_eq!(
+        cx.update(|cx| kagan.read(cx).shown_thread(cx)),
+        Some(thread)
+    );
+    assert_eq!(value_of(cx, window, "preview-size"), Some("8 B".into()));
 }
 
 #[gpui_kit::test]

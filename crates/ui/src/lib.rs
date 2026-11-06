@@ -72,6 +72,12 @@ pub fn open_window(cx: &mut App) -> gpui_kit::Result<()> {
     kagan::show(cx)
 }
 
+/// Shows one file in the Preview tab of the open window, selecting the thread first when one is
+/// named. Does nothing when no window is open.
+pub fn show_preview(thread: Option<kg_domain::ThreadId>, path: String, cx: &mut App) {
+    kagan::show_preview(thread, path, cx);
+}
+
 /// Shows why kagan could not start in a small window. Quit, or closing it, ends the app.
 ///
 /// # Errors
