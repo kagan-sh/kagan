@@ -401,24 +401,7 @@ type Keyless = (
     Rc<dyn Action>,
 );
 
-fn group_of(name: &str, action: &str) -> &'static str {
-    if action.starts_with("review::") {
-        return "Review";
-    }
-    match name {
-        "UseProjectFolder"
-        | "UseWorktreeFolder"
-        | "RetryBranches"
-        | "RetryPrograms"
-        | "ToggleCustomCommand" => "New thread",
-        "OpenSettings" | "UseBuiltInSidebar" | "UseBuiltInReview" => "Settings",
-        "Bigger" | "Smaller" | "ActualSize" | "ToggleSidebar" | "ToggleRightSidebar"
-        | "FocusSidebar" | "AddProject" | "Preview" => "Window",
-        _ => "Threads",
-    }
-}
-
-fn keyless() -> [(&'static str, &'static str, &'static str, Rc<dyn Action>); 13] {
+fn keyless() -> [Keyless; 13] {
     [
         (
             "Threads",

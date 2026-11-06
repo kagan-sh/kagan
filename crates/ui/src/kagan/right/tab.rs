@@ -12,6 +12,7 @@ pub(in crate::kagan) enum Tab {
     Details,
     Browser,
     Terminal(u32),
+    Preview,
     Plugin(String),
 }
 
@@ -23,6 +24,7 @@ impl Tab {
             Self::Details => "details".into(),
             Self::Browser => "browser".into(),
             Self::Terminal(number) => format!("terminal-{number}").into(),
+            Self::Preview => "preview".into(),
             Self::Plugin(id) => id.as_str().into(),
         }
     }
@@ -32,6 +34,7 @@ impl Tab {
             Self::Questions => kagan.waiting_count(cx) > 0,
             Self::Changes | Self::Details => kagan.thread_visible(cx),
             Self::Browser => kagan.tabs.browser && kagan.thread_visible(cx),
+            Self::Preview => kagan.tabs.preview.is_some() && kagan.thread_visible(cx),
             Self::Terminal(number) => {
                 kagan.tabs.view(*number).is_some() && kagan.thread_visible(cx)
             }
@@ -50,6 +53,11 @@ impl Tab {
                 return kagan.browser.focus(window, cx);
             }
             Self::Terminal(number) => kagan.tabs.view(*number).map(|view| view.focus_handle(cx)),
+            Self::Preview => kagan
+                .tabs
+                .preview
+                .as_ref()
+                .map(crate::kagan::preview::Preview::focus_handle),
             Self::Plugin(id) => kagan
                 .right_slots
                 .iter()

@@ -41,6 +41,7 @@ pub(super) fn tab_body(
             let view = kagan.tabs.view(*number)?.clone();
             return Some(div().size_full().child(view).into_any_element());
         }
+        Tab::Preview => return Some(kagan.tabs.preview.as_ref()?.render(cx)),
         Tab::Plugin(_) => None,
     };
     if let Some(body) = body {
@@ -52,16 +53,6 @@ pub(super) fn tab_body(
                 .child(body)
                 .into_any_element(),
         );
-    }
-    if id == crate::kagan::preview::TAB {
-        return Some(kagan.tabs.preview.as_ref()?.render(cx));
-    }
-    if id == tabs::BROWSER {
-        return Some(kagan.render_browser(cx));
-    }
-    if let Some(number) = tabs::terminal_number(id) {
-        let view = kagan.tabs.view(number)?.clone();
-        return Some(div().size_full().child(view).into_any_element());
     }
     let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
     let page = slot.web.is_some() || slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));

@@ -103,9 +103,11 @@ impl Kagan {
                 ..Tabs::default()
             };
             self.browser.leave_thread(window, cx);
-            if self.right_tab.as_deref().is_some_and(|tab| {
-                tab == BROWSER || tab == super::preview::TAB || terminal_number(tab).is_some()
-            }) {
+            if self
+                .right_tab
+                .as_ref()
+                .is_some_and(|tab| matches!(tab, Tab::Browser | Tab::Terminal(_) | Tab::Preview))
+            {
                 self.right_tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.
@@ -301,22 +303,22 @@ impl Kagan {
         cx.notify();
     }
 
-    /// The Browser tab and a tab for each extra terminal, for the right sidebar's tab row.
+    /// Browser, Preview, and each extra terminal, for the right sidebar's tab row.
     pub(super) fn right_tabs(
         &self,
-        selected: Option<&str>,
+        selected: Option<&Tab>,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let browser = self.tabs.browser.then(|| {
             let close: CloseTab = (
-                format!("right-tab-close-{BROWSER}").into(),
+                "right-tab-close-browser".into(),
                 Box::new(Kagan::close_browser),
             );
             tab(
-                format!("right-tab-{BROWSER}"),
+                "right-tab-browser",
                 "Browser".into(),
-                selected == Some(BROWSER),
-                |this, window, cx| this.show_right_tab(BROWSER, window, cx),
+                selected == Some(&Tab::Browser),
+                |this, window, cx| this.show_right_tab(Tab::Browser, window, cx),
                 Some(close),
                 None,
                 cx,
@@ -326,40 +328,38 @@ impl Kagan {
             .tabs
             .numbers()
             .map(|number| {
-                let id = terminal_tab(number);
+                let id = Tab::Terminal(number).id().into_owned();
                 let close: CloseTab = (
                     format!("right-tab-close-{id}").into(),
                     Box::new(move |this, window, cx| this.close_right_terminal(number, window, cx)),
                 );
-                let selected = selected == Some(id.as_str());
+                let selected = selected == Some(&Tab::Terminal(number));
                 tab(
                     format!("right-tab-{id}"),
                     format!("Terminal {number}").into(),
                     selected,
-                    move |this, window, cx| this.show_right_tab(&id, window, cx),
+                    move |this, window, cx| this.show_right_tab(Tab::Terminal(number), window, cx),
                     Some(close),
                     None,
                     cx,
                 )
             })
             .collect();
-        let preview = if self.tabs.preview.is_some() {
+        let preview = self.tabs.preview.is_some().then(|| {
             let close: CloseTab = (
                 "right-tab-close-preview".into(),
                 Box::new(Kagan::close_preview),
             );
-            Some(tab(
+            tab(
                 "right-tab-preview",
                 "Preview".into(),
-                selected == Some(crate::kagan::preview::TAB),
-                |this, window, cx| this.show_right_tab(crate::kagan::preview::TAB, window, cx),
+                selected == Some(&Tab::Preview),
+                |this, window, cx| this.show_right_tab(Tab::Preview, window, cx),
                 Some(close),
                 None,
                 cx,
-            ))
-        } else {
-            None
-        };
+            )
+        });
         browser
             .into_iter()
             .chain(terminals)

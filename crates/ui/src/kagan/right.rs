@@ -10,6 +10,9 @@ use super::Kagan;
 use super::tabs;
 use crate::ui_observe::UiObserveExt as _;
 
+mod tab;
+pub(super) use tab::Tab;
+
 pub(super) const WIDTH: f32 = 320.;
 pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
 
@@ -94,19 +97,6 @@ pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<Tab> {
         Some(want)
     } else {
         kagan.default_right_tab(cx)
-    }
-}
-
-pub(super) fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
-    match id {
-        "needs-you" => kagan.waiting_count(cx) > 0,
-        "changes" | "details" => kagan.thread_visible(cx),
-        tabs::BROWSER => kagan.tabs.browser && kagan.thread_visible(cx),
-        super::preview::TAB => kagan.tabs.preview.is_some() && kagan.thread_visible(cx),
-        _ => match tabs::terminal_number(id) {
-            Some(number) => kagan.tabs.view(number).is_some() && kagan.thread_visible(cx),
-            None => kagan.right_slots.iter().any(|slot| slot.id == id),
-        },
     }
 }
 
