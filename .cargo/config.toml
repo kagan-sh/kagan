@@ -1,5 +1,5 @@
-# ld64.lld is on PATH here (Homebrew). Ubuntu CI already sets the same flag.
-# macOS CI and release install lld before they build. Dev profiles stay
+# ld64.lld is on PATH here (Homebrew). macOS CI and the release install lld
+# before they build. Ubuntu CI links with mold. Dev profiles stay
 # line-tables-only in Cargo.toml; this only changes the linker.
 [target.'cfg(target_os = "macos")']
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]

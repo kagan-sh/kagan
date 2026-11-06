@@ -9,6 +9,7 @@ permissions: {}
 jobs:
   title:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Follow Conventional Commits
         env:
