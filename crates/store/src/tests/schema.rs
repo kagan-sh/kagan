@@ -4,6 +4,42 @@ use super::{id, store, thread};
 use crate::{Error, Store};
 
 #[test]
+fn conflicting_schema_five_keeps_threads_and_accepts_new_ones() {
+    let path =
+        std::env::temp_dir().join(format!("kg-store-conflict-{}.sqlite3", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let mut conn = rusqlite::Connection::open(&path).unwrap();
+    let migrations = &crate::store::MIGRATIONS;
+    let initial = migrations[0]
+        .replace("model TEXT NOT NULL DEFAULT ''", "model TEXT NOT NULL")
+        .replace(
+            "reasoning_level TEXT NOT NULL DEFAULT ''",
+            "reasoning_level TEXT NOT NULL",
+        );
+    crate::migrate(
+        &mut conn,
+        [
+            initial.as_str(),
+            migrations[1],
+            migrations[3],
+            migrations[4],
+        ],
+    )
+    .unwrap();
+    conn.pragma_update(None, "user_version", 5).unwrap();
+    conn.execute("INSERT INTO projects (id, kind, name, path) VALUES ('prj_1', 'standard', 'kagan', '/code/kagan')", []).unwrap();
+    conn.execute("INSERT INTO threads (id, project_id, title, provider, model, reasoning_level, status, visibility, pinned, latest_attention_at, created_at, updated_at) VALUES ('thr_1', 'prj_1', 'existing', 'codex', '', '', 'idle', 'visible', 0, 1, 1, 1)", []).unwrap();
+    drop(conn);
+
+    let store = Store::open(&path).unwrap();
+    assert!(store.thread(&id("thr_1")).unwrap().is_some());
+    store.put_thread(&thread("thr_2", 2)).unwrap();
+    assert!(store.thread(&id("thr_2")).unwrap().is_some());
+    drop(store);
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[test]
 fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
     let path = std::env::temp_dir().join(format!("kg-store-v1-{}.sqlite3", std::process::id()));
     let _ = std::fs::remove_file(&path);

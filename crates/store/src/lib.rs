@@ -51,7 +51,20 @@ fn migrate<'a>(
     let applied: usize = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
     let mut version = applied;
     for sql in statements.into_iter().skip(applied) {
-        tx.execute_batch(sql)?;
+        if sql == store::REPAIR_THREAD_COLUMNS {
+            for column in ["model", "reasoning_level"] {
+                let exists: bool = tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('threads') WHERE name = ?1)",
+                    [column],
+                    |row| row.get(0),
+                )?;
+                if exists {
+                    tx.execute_batch(&format!("ALTER TABLE threads DROP COLUMN {column}"))?;
+                }
+            }
+        } else {
+            tx.execute_batch(sql)?;
+        }
         version += 1;
     }
     if version != applied {
