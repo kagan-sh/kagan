@@ -258,10 +258,10 @@ fn read_image(root: Option<&Path>, absolute: &Path) -> Option<Vec<u8>> {
             return None;
         }
     }
-    let file = std::fs::File::open(&absolute).ok()?;
-    if !file.metadata().ok()?.is_file() {
+    if !std::fs::metadata(&absolute).ok()?.is_file() {
         return None;
     }
+    let file = std::fs::File::open(&absolute).ok()?;
     let mut bytes = Vec::new();
     file.take(IMAGE_LIMIT + 1).read_to_end(&mut bytes).ok()?;
     if bytes.len() as u64 > IMAGE_LIMIT {
