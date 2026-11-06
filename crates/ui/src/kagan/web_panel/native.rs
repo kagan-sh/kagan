@@ -362,7 +362,11 @@ fn build(
     let panel = slot.contribution.clone();
     let navigation = plugin_id.clone();
     let protocol_plugin = plugin_id.clone();
+    #[cfg(target_os = "macos")]
     let (store, store_note) = store_for(slot, cx)?;
+    // Windows deletes its profile when the page closes, and Linux has no durable store.
+    #[cfg(not(target_os = "macos"))]
+    let (store, store_note) = (None, None);
     let view = crate::web_page::open_view(window, cx, move |builder| {
         crate::web_page::with_store(builder, store)
             .with_url(&url)
@@ -408,8 +412,7 @@ fn build(
     })
 }
 
-// Only macOS has a durable store (a `WKWebsiteDataStore`). Windows deletes the WebView2 profile
-// when the page closes, and Linux has no matching store, so "store": true stays private there.
+// Only macOS has a durable store (a `WKWebsiteDataStore`). Elsewhere "store": true stays private.
 #[cfg(target_os = "macos")]
 fn store_for(slot: &Slot, cx: &App) -> Result<(Option<[u8; 16]>, Option<String>), String> {
     let wants_store = PluginHost::global(cx)
@@ -425,11 +428,6 @@ fn store_for(slot: &Slot, cx: &App) -> Result<(Option<[u8; 16]>, Option<String>)
     let store =
         kg_plugins::keep_store(&data, &slot.contribution).map_err(|error| error.to_string())?;
     Ok((Some(store), None))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn store_for(_slot: &Slot, _cx: &App) -> Result<(Option<[u8; 16]>, Option<String>), String> {
-    Ok((None, None))
 }
 
 fn http_response(

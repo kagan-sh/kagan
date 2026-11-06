@@ -64,9 +64,6 @@ pub(super) struct Browser {
     _enter: Subscription,
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-const UNSUPPORTED: &str = "The browser works on macOS, Windows and Linux only for now.";
-
 impl Browser {
     pub(super) fn new(window: &mut Window, cx: &mut Context<Kagan>) -> Self {
         let address = cx

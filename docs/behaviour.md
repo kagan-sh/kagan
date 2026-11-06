@@ -459,7 +459,7 @@ One file, read-only, in the Preview tab of the right sidebar [docs:look] [decisi
 ### `Open`
 
 - **Allowed when**: the caller owns the browser session, or no browser session exists [decision 143].
-- **Changes**: takes the Browser's one page, dropping the person's page if one was there, and loads the URL. A bare name gets https, a local host gets http, and anything that is not http or https is refused [decision 117]. It shows the tab, opens the right sidebar, and selects it only when the caller is the thread on screen, and it never takes the keyboard [decision 143]. Another thread's browser session is left alone.
+- **Changes**: takes the Browser's one page and loads the URL. macOS and Windows drop the person's page; Linux loads the new address in the same native page [decision 164]. A bare name gets https, a local host gets http, and anything that is not http or https is refused [decision 117]. It shows the tab, opens the right sidebar, and selects it only when the caller is the thread on screen, and it never takes the keyboard [decision 143]. Another thread's browser session is left alone.
 - **Shows**: the driven page: thread id, thread title, url, title, and whether the tab is drawn.
 - **Refused when**: an empty or non-web address — `type a web address, such as example.com` — `invalid` [op/]. Another thread's browser session — `thread <title> is driving the browser; close it with kg browser close` — `invalid`. No window — `browser control needs a kagan window` — `failed`. A Linux window that is not on X11 — `The browser needs an X11 window. On Wayland, start kagan where DISPLAY is set (XWayland).` — `failed` [decision 164].
 

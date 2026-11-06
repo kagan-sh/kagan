@@ -195,8 +195,11 @@ if ! grep -Fq 'web address' "$tmp/file-url.err"; then
   fail "a file URL was not refused"
 fi
 
-KG_THREAD_ID=$thread "$binary" --json browser open "http://127.0.0.1:${port}/" >"$tmp/driven.json" \
-  || fail "kg browser open failed"
+if ! KG_THREAD_ID=$thread "$binary" --json browser open "http://127.0.0.1:${port}/" \
+  >"$tmp/driven.json" 2>"$tmp/driven.err"; then
+  echo "browser-linux: $(cat "$tmp/driven.err")" >&2
+  fail "kg browser open failed"
+fi
 if ! grep -Fq 'kagan-linux-page' "$tmp/driven.json"; then
   fail "kg browser open did not report the page title"
 fi
