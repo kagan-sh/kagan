@@ -32,7 +32,7 @@ kg thread run --project-id <id> --program <command> --environment <spec> --title
 ```
 
 - `--project-id` is required. Pass it. Inside a thread, `KG_PROJECT_ID` supplies this project when you mean this project.
-- `--program` is the command, such as `claude`, `codex`, or `cursor-agent`. `kg program list --json` lists what is installed and the default. Words split on spaces. Single or double quotes keep spaces together. A backslash is an ordinary character.
+- `--program` is the command, such as `claude`, `codex`, `cursor-agent`, `opencode`, `pi`, or `kimi`. `kg program list --json` lists what is installed and the default. Words split on spaces. Single or double quotes keep spaces together. A backslash is an ordinary character.
 - kagan does not take a model. A model flag belongs to the program, inside `--program`: `--program 'claude --model <name>'`.
 - `--environment` chooses the folder. `project-default` is the project folder. `personal` is the personal folder. `worktree` is a new worktree and is the default when you omit the flag. `worktree:<base>` and `worktree:<base>:<branch>` name the base and the branch. `reuse:<environment-id>` uses a folder that already exists. A folder that is not a git repository refuses `worktree` and names `--environment project-default`.
 - `--title` is the thread's name. Omit it and the title starts as the program. The program may rename the thread once, with `kg thread rename`. A later rename says the title was kept. A name set in the window stays.

@@ -326,7 +326,7 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 
 ## Skill
 
-A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matches the folder, a `description`, then the instructions [docs:self-extend] [book:skills]. Sources, lowest first: bundled, plugin, user (`<dataDir>/skills`), project (`<project>/.kagan/skills`) [docs:self-extend]. A higher source overrides a lower one with the same name [decision 24]. Two skills with the same name in one source are both dropped, and `List` shows the error [decision 24].
+A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matches the folder, a `description`, then the instructions [docs:self-extend] [book:skills]. Sources, lowest first: bundled, plugin, user (`<dataDir>/skills`), project (`<project>/.kagan/skills`) [docs:self-extend]. A higher source overrides a lower one with the same name [decision 24]. Two skills with the same name in one source are both dropped, and `List` shows the error [decision 24]. A user or project skill whose name starts with `kg-` is dropped with an error; that prefix is reserved for bundled and plugin skills [decision 158]. Every start with agent integration writes the resolved kagan skills (bundled, plugin, user, project) and the person's BB user skills (`<BB_DATA_DIR or ~/.bb>/skills`) and the thread folder's `.bb/skills` to an immutable per-content catalog, and exposes it natively to the known programs; a kagan skill wins a name collision with a BB skill [decision 158]. `List` shows only the four kagan sources, not the BB skills.
 
 ### `List`
 
@@ -347,12 +347,12 @@ A skill is a folder with a `SKILL.md`: a lowercase hyphenated `name` that matche
 ### `New`
 
 - **Changes**: writes a skill folder into user skills, or into the project when `--project` is set [book:skills] [docs:self-extend].
-- **Refused when**: a name that is not lowercase and hyphenated, or a name that already exists in that source — `invalid` [docs:self-extend] [op/] [person 2026-10-08].
+- **Refused when**: a name that is not lowercase and hyphenated, starts with `kg-`, or already exists in that source — `invalid` [docs:self-extend] [op/] [person 2026-10-08].
 
 ### `Add`
 
 - **Changes**: copies an existing skill folder into user skills, or into the project when `--project` is set [book:skills].
-- **Refused when**: a path that is not a skill folder — `invalid` [op/].
+- **Refused when**: a path that is not a skill folder, or a skill name that starts with `kg-` — `invalid` [op/].
 
 ### `Remove`
 

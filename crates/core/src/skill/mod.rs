@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -70,17 +71,100 @@ static MIRROR: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(crate) async fn mirror(
     this: &WeakEntity<Workspace>,
-    root: PathBuf,
+    agent: PathBuf,
+    folder: PathBuf,
+    project_id: ProjectId,
     cx: &mut AsyncApp,
-) -> Result<()> {
-    let database = crate::workspace::database(this, cx)?;
-    let plugins = database.call(|store| store.plugins()).await?;
+) -> Result<(PathBuf, Vec<String>, Vec<String>)> {
+    let mut resolved = catalog(this, Some(project_id), cx).await?;
+    let bb_data_dir = this
+        .update(cx, |workspace, _| workspace.bb_data_dir.clone())
+        .map_err(closed)?;
     cx.background_spawn(async move {
-        let catalog = shared(plugins)?;
+        let mut external = Catalog {
+            skills: BTreeMap::new(),
+            errors: Vec::new(),
+        };
+        if let Some(bb) = bb_data_dir.or_else(bb_root) {
+            external.folder(&bb.join("skills"), SkillSource::External);
+        }
+        external.folder(&folder.join(".bb/skills"), SkillSource::External);
+        resolved.errors.extend(external.errors);
+        for (name, loaded) in external.skills {
+            if name.starts_with("kg-") {
+                continue;
+            }
+            resolved.skills.entry(name).or_insert(loaded);
+        }
+        let names = resolved.skills.keys().cloned().collect();
+        let errors = resolved.errors.clone();
         let _turn = MIRROR.get_or_init(|| Mutex::new(())).lock().await;
-        write(&root, &catalog)
+        let catalogs = agent.join("catalogs");
+        std::fs::create_dir_all(&catalogs)?;
+        let temp = catalogs.join(format!(
+            ".tmp-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let result = (|| -> Result<PathBuf> {
+            write(&temp.join("skills"), &resolved)?;
+            let plugin = temp.join(".claude-plugin");
+            std::fs::create_dir_all(&plugin)?;
+            std::fs::write(plugin.join("plugin.json"), "{\"name\": \"kagan\"}\n")?;
+            let hash = hash_tree(&temp.join("skills"))?;
+            let stable = catalogs.join(hash);
+            if stable.is_dir() {
+                std::fs::remove_dir_all(&temp)?;
+            } else {
+                std::fs::rename(&temp, &stable)?;
+            }
+            Ok(stable.join("skills"))
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_dir_all(&temp);
+        }
+        let root = result?;
+        Ok((root, names, errors))
     })
     .await
+}
+
+fn hash_tree(root: &Path) -> std::io::Result<String> {
+    use sha2::{Digest as _, Sha256};
+    fn visit(dir: &Path, root: &Path, hash: &mut Sha256) -> std::io::Result<()> {
+        let mut entries = std::fs::read_dir(dir)?.collect::<std::io::Result<Vec<_>>>()?;
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        for entry in entries {
+            let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap_or(&path);
+            if path.is_dir() {
+                hash.update(b"dir\0");
+                hash.update(relative.to_string_lossy().as_bytes());
+                hash.update(b"\0");
+                visit(&path, root, hash)?;
+            } else {
+                hash.update(b"file\0");
+                hash.update(relative.to_string_lossy().as_bytes());
+                hash.update(b"\0");
+                hash.update(std::fs::read(&path)?);
+            }
+        }
+        Ok(())
+    }
+    let mut hash = Sha256::new();
+    visit(root, root, &mut hash)?;
+    Ok(format!("{:x}", hash.finalize()))
+}
+
+// shortcut: reads BB's cross-app data folder; remove when kagan has its own shared skill catalog.
+fn bb_root() -> Option<PathBuf> {
+    std::env::var_os("BB_DATA_DIR")
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                .map(|home| PathBuf::from(home).join(".bb"))
+        })
 }
 pub(crate) async fn run(
     this: &WeakEntity<Workspace>,
@@ -116,9 +200,10 @@ pub(crate) async fn run(
         }
         SkillOp::Files { name, .. } => Ok(OpResult::Files(catalog.get(&name)?.paths())),
         SkillOp::New { name, project, .. } => {
-            if !valid_name(&name) {
+            if !valid_name(&name) || name.starts_with("kg-") {
                 return Err(OpError::Invalid(
-                    "skill name must be lowercase and hyphenated".into(),
+                    "skill name must be lowercase and hyphenated, and must not start with kg-"
+                        .into(),
                 ));
             }
             let root = destination(this, project, project_id.as_ref(), cx)?.join(&name);
@@ -133,6 +218,11 @@ pub(crate) async fn run(
             let target = destination(this, project, project_id.as_ref(), cx)?;
             cx.background_spawn(async move {
                 let loaded = read(&path, SkillSource::User)?;
+                if loaded.skill.name.starts_with("kg-") {
+                    return Err(OpError::Invalid(
+                        "a skill name must not start with kg-".into(),
+                    ));
+                }
                 let target = target.join(&loaded.skill.name);
                 std::fs::create_dir_all(
                     target

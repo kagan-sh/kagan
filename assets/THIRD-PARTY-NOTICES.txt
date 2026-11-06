@@ -1,5 +1,5 @@
 Third-party notices for the kg binary.
-cargo-lock 303e60dfdbae907d043493459f829b2c80c95681525ad63defcfdf5dbbe4000c
+cargo-lock 5b644ba7bff93f563c2aa3ae8ca659a6e1b553d05dbec2b5949984d843c62ffe
 
 kagan itself is Apache-2.0. See LICENSE.
 

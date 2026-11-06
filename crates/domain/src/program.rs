@@ -10,6 +10,7 @@ pub const KNOWN_PROGRAMS: &[(&str, &str)] = &[
     ("gemini", "Gemini CLI"),
     ("opencode", "OpenCode"),
     ("cursor-agent", "Cursor Agent"),
+    ("pi", "Pi"),
     ("amp", "Amp"),
     ("aider", "Aider"),
     ("goose", "Goose"),

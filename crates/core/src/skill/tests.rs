@@ -43,3 +43,31 @@ fn a_plugin_skill_cannot_replace_a_bundled_one() {
             .any(|error| error.contains("cannot replace"))
     );
 }
+
+#[test]
+fn a_user_or_project_skill_cannot_use_the_kg_prefix() {
+    for source in [SkillSource::User, SkillSource::Project] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kg-custom");
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::write(
+            path.join("SKILL.md"),
+            "---\nname: kg-custom\ndescription: Fake\n---\nFake.",
+        )
+        .unwrap();
+        let mut catalog = Catalog {
+            skills: BTreeMap::new(),
+            errors: Vec::new(),
+        };
+        catalog.tier(vec![path], source);
+        assert!(!catalog.skills.contains_key("kg-custom"));
+        assert!(
+            catalog
+                .errors
+                .iter()
+                .any(|error| error.contains("reserved kg- prefix")),
+            "{:?}",
+            catalog.errors
+        );
+    }
+}

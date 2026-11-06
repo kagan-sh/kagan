@@ -30,7 +30,7 @@ kagan uses the network only to fetch a git plugin or a plugin index that you add
 
 Programs in threads can use the network. A plugin can use the network only after you approve its network power.
 
-kagan runs each known agent on your `PATH` with `--version` to show its version. The known agents are `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, and `droid`. kagan does not run other programs this way.
+kagan runs each known agent on your `PATH` with `--version` to show its version. The known agents are `claude`, `codex`, `gemini`, `opencode`, `cursor-agent`, `pi`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, `kimi`, `cline`, and `droid`. kagan does not run other programs this way.
 
 ## Programs in threads
 
@@ -38,7 +38,7 @@ A program runs with your user access and gets your environment variables. These 
 
 The program also gets `kg`. With `kg`, it can control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve a request to delete a thread.
 
-For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Claude Code also gets the kagan skills. Use Settings → Agents to disable this integration.
+For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Claude Code also gets the kagan skills. Codex, Kimi, OpenCode, Pi, and Cursor Agent get the composed skill folders described in [Skills](skills.md#bb-skills-in-a-thread). Use Settings → Agents to disable this integration.
 
 ## Plugins
 

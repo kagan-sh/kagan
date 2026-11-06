@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use gpui_kit::TestAppContext;
 use kg_domain::*;
@@ -107,7 +107,8 @@ async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext
     assert_eq!(args[0], "--mcp-config");
     assert_eq!(args[1], files.join("mcp.json").display().to_string());
     assert_eq!(args[2], "--plugin-dir");
-    assert_eq!(args[3], agent.display().to_string());
+    let plugin = PathBuf::from(&args[3]);
+    assert!(plugin.starts_with(agent.join("catalogs")), "{plugin:?}");
     assert_eq!(args[4], "--append-system-prompt-file");
     assert_eq!(args[5], files.join("note.txt").display().to_string());
     assert_eq!(args[6], "--session-id");
@@ -136,10 +137,11 @@ async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext
         "{}",
         env["PATH"]
     );
-    assert!(agent.join(".claude-plugin/plugin.json").exists());
-    assert!(agent.join("skills/kg-cli/SKILL.md").exists());
-    assert!(agent.join("skills/kg-plugin-port/SKILL.md").exists());
-    assert!(agent.join("skills/demo/notes.md").exists());
+    let plugin = Path::new(&args[3]);
+    assert!(plugin.join(".claude-plugin/plugin.json").exists());
+    assert!(plugin.join("skills/kg-cli/SKILL.md").exists());
+    assert!(plugin.join("skills/kg-plugin-port/SKILL.md").exists());
+    assert!(plugin.join("skills/demo/notes.md").exists());
 }
 
 #[cfg(unix)]
@@ -148,15 +150,17 @@ async fn the_next_claude_thread_drops_a_deleted_file_and_a_disabled_plugin(
     cx: &mut TestAppContext,
 ) {
     let fixture = Fixture::new(cx).await;
-    let agent = fixture.dir.path().join("agent");
     install_plugin(fixture.dir.path(), true);
     let (_id, _reap) = started(&fixture, &claude_line(&fixture.dir.path().join("one")), cx).await;
-    ran(&fixture.dir.path().join("one"));
+    let (args, _env) = ran(&fixture.dir.path().join("one"));
+    let first = PathBuf::from(&args[3]).join("skills");
+    assert!(first.join("demo/notes.md").exists());
     std::fs::remove_file(fixture.dir.path().join("demo-plugin/skills/demo/notes.md")).unwrap();
     let (_id, _reap) = started(&fixture, &claude_line(&fixture.dir.path().join("two")), cx).await;
-    ran(&fixture.dir.path().join("two"));
-    assert!(agent.join("skills/demo/SKILL.md").exists());
-    assert!(!agent.join("skills/demo/notes.md").exists());
+    let (args, _env) = ran(&fixture.dir.path().join("two"));
+    let second = PathBuf::from(&args[3]).join("skills");
+    assert!(second.join("demo/SKILL.md").exists());
+    assert!(!second.join("demo/notes.md").exists());
     install_plugin(fixture.dir.path(), false);
     let (_id, _reap) = started(
         &fixture,
@@ -164,10 +168,11 @@ async fn the_next_claude_thread_drops_a_deleted_file_and_a_disabled_plugin(
         cx,
     )
     .await;
-    ran(&fixture.dir.path().join("three"));
-    assert!(!agent.join("skills/demo").exists());
-    assert!(agent.join("skills/kg-cli/SKILL.md").exists());
-    assert!(agent.join("skills/kg-threads/SKILL.md").exists());
+    let (args, _env) = ran(&fixture.dir.path().join("three"));
+    let third = PathBuf::from(&args[3]).join("skills");
+    assert!(!third.join("demo").exists());
+    assert!(third.join("kg-cli/SKILL.md").exists());
+    assert!(third.join("kg-threads/SKILL.md").exists());
 }
 
 #[cfg(unix)]
@@ -267,12 +272,9 @@ async fn a_cursor_agent_thread_receives_the_threads_skill(cx: &mut TestAppContex
     assert_eq!(args[0], "--plugin-dir");
     assert_eq!(args[1], cursor.display().to_string());
     assert_eq!(args.last().map(String::as_str), Some("--person-arg"));
-    let skill = std::fs::read_to_string(agent.join("skills/kg-threads/SKILL.md")).unwrap();
-    assert!(skill.contains("name: kg-threads"), "{skill}");
-    assert_eq!(
-        std::fs::read_link(cursor.join("skills")).unwrap(),
-        dunce::canonicalize(agent.join("skills")).unwrap()
-    );
+    let skills = std::fs::read_link(cursor.join("skills")).unwrap();
+    assert!(skills.join("kg-threads/SKILL.md").exists());
+    assert!(skills.join("kg-cli/SKILL.md").exists());
     let rule = std::fs::read_to_string(cursor.join("rules/kagan.mdc")).unwrap();
     assert!(rule.contains("alwaysApply: true"), "{rule}");
     assert!(rule.contains("kg-threads"), "{rule}");
@@ -457,4 +459,424 @@ async fn archive_and_delete_remove_the_thread_agent_files(cx: &mut TestAppContex
         .unwrap();
     deleting.await.unwrap();
     assert!(!agent.join("threads").join(&deleted.0).exists());
+}
+
+#[cfg(unix)]
+fn bb_root(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    let root = fixture.dir.path().join("bb");
+    cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| {
+            workspace.bb_data_dir = Some(root.clone());
+        });
+    });
+    root
+}
+
+#[cfg(unix)]
+fn write_skill(root: &Path, name: &str, body: &str) {
+    write_skill_as(root, name, name, body);
+}
+
+#[cfg(unix)]
+fn write_skill_as(root: &Path, folder: &str, name: &str, body: &str) {
+    let root = root.join(folder);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(
+        root.join("SKILL.md"),
+        format!("---\nname: {name}\ndescription: {name} skill.\n---\n\n{body}\n"),
+    )
+    .unwrap();
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn bb_skills_join_the_plugin_tree_with_kagan_winning_a_name(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let bb = bb_root(&fixture, cx);
+    write_skill(&bb.join("skills"), "bb-user", "user body");
+    write_skill(&bb.join("skills"), "same", "user body");
+    write_skill(&bb.join("skills"), "kg-cli", "bb body");
+    write_skill(&bb.join("skills"), "kg-extra", "bb body");
+    write_skill(
+        &fixture.dir.path().join(".bb/skills"),
+        "same",
+        "project body",
+    );
+    write_skill(
+        &fixture.dir.path().join(".bb/skills"),
+        "bb-project",
+        "project body",
+    );
+    let run = fixture.dir.path().join("claude-bb");
+    let (_id, _reap) = started(&fixture, &claude_line(&run), cx).await;
+    let (args, _env) = ran(&run);
+    let skills = PathBuf::from(&args[3]).join("skills");
+    assert!(skills.join("bb-user/SKILL.md").exists());
+    assert!(skills.join("bb-project/SKILL.md").exists());
+    assert!(!skills.join("kg-extra").exists());
+    let same = std::fs::read_to_string(skills.join("same/SKILL.md")).unwrap();
+    assert!(same.contains("project body"), "{same}");
+    let kagan = std::fs::read_to_string(skills.join("kg-cli/SKILL.md")).unwrap();
+    assert!(kagan.contains("Find the running kagan app"), "{kagan}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn codex_and_kimi_share_workspace_links_without_touching_person_entries(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    assert!(
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(fixture.dir.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let bb = bb_root(&fixture, cx);
+    write_skill(&bb.join("skills"), "bb-user", "user body");
+    let mine = fixture.dir.path().join(".agents/skills/mine");
+    std::fs::create_dir_all(&mine).unwrap();
+    std::fs::write(
+        mine.join("SKILL.md"),
+        "---\nname: mine\ndescription: mine.\n---\n\nmine\n",
+    )
+    .unwrap();
+    let codex_run = fixture.dir.path().join("codex-bb");
+    let codex_program = fake_agent(&codex_run, "codex");
+    let (codex_id, _codex_reap) = started(&fixture, codex_program.to_str().unwrap(), cx).await;
+    ran(&codex_run);
+    let root = dunce::canonicalize(fixture.dir.path()).unwrap();
+    assert!(root.join(".agents/skills/kg-threads/SKILL.md").exists());
+    assert!(root.join(".agents/skills/bb-user/SKILL.md").exists());
+    assert!(root.join(".agents/skills/mine/SKILL.md").exists());
+    let visible = std::fs::read_to_string(codex_run.join("out/agents-skills")).unwrap();
+    assert!(visible.lines().any(|line| line == "kg-cli"), "{visible}");
+    assert!(visible.lines().any(|line| line == "bb-user"), "{visible}");
+    let exclude = std::fs::read_to_string(root.join(".git/info/exclude")).unwrap();
+    assert!(
+        exclude
+            .lines()
+            .any(|line| line.trim() == ".agents/skills/kg-threads"),
+        "{exclude}"
+    );
+    assert!(
+        exclude
+            .lines()
+            .any(|line| line.trim() == ".agents/skills/bb-user"),
+        "{exclude}"
+    );
+    assert!(
+        !exclude.lines().any(|line| line.trim() == ".agents/skills/"),
+        "{exclude}"
+    );
+
+    let kimi_run = fixture.dir.path().join("kimi-bb");
+    let kimi_program = fake_agent(&kimi_run, "kimi");
+    let (kimi_id, _kimi_reap) = started(&fixture, kimi_program.to_str().unwrap(), cx).await;
+    let (args, _env) = ran(&kimi_run);
+    assert_ne!(codex_id, kimi_id);
+    let mut pairs = args.chunks(2);
+    assert!(
+        pairs.any(|pair| pair[0] == "--skills-dir"
+            && Path::new(&pair[1]).ends_with("skills")
+            && Path::new(&pair[1]).join("bb-user/SKILL.md").exists()),
+        "{args:?}"
+    );
+    assert!(!root.join(".kimi-code").exists());
+    assert!(root.join(".agents/skills/mine/SKILL.md").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn opencode_gets_the_composed_skills_in_its_own_folder(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let bb = bb_root(&fixture, cx);
+    write_skill(&bb.join("skills"), "bb-user", "user body");
+    let run = fixture.dir.path().join("opencode-bb");
+    let program = fake_agent(&run, "opencode");
+    let (_id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
+    let (args, _env) = ran(&run);
+    assert_eq!(args, vec!["--person-arg"]);
+    let root = dunce::canonicalize(fixture.dir.path()).unwrap();
+    let visible = std::fs::read_to_string(run.join("out/opencode-skills")).unwrap();
+    assert!(visible.lines().any(|line| line == "kg-cli"), "{visible}");
+    assert!(visible.lines().any(|line| line == "bb-user"), "{visible}");
+    assert!(root.join(".opencode/skills/kg-threads/SKILL.md").exists());
+    assert!(root.join(".opencode/skills/bb-user/SKILL.md").exists());
+    assert!(!root.join(".agents").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn pi_gets_the_composed_skill_root_as_an_explicit_option(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let bb = bb_root(&fixture, cx);
+    write_skill(&bb.join("skills"), "bb-user", "user body");
+    let run = fixture.dir.path().join("pi-bb");
+    let program = fake_agent(&run, "pi");
+    let (_id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
+    let (args, _env) = ran(&run);
+    assert_eq!(args[0], "--skill");
+    let skills = PathBuf::from(&args[1]);
+    assert_eq!(args[2], "--person-arg");
+    assert!(skills.join("bb-user/SKILL.md").exists());
+    assert!(!fixture.dir.path().join(".agents").exists());
+    assert!(!fixture.dir.path().join(".opencode").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_new_program_subcommand_line_gets_no_skill_integration(cx: &mut TestAppContext) {
+    for (name, line) in [
+        ("pi", "config"),
+        ("kimi", "doctor"),
+        ("opencode", "debug config"),
+    ] {
+        let fixture = Fixture::new(cx).await;
+        let run = fixture.dir.path().join(format!("{name}-subcommand"));
+        let program = fake_agent(&run, name);
+        let (_id, _reap) = started(&fixture, &format!("{} {line}", program.display()), cx).await;
+        let (args, _env) = ran(&run);
+        assert_eq!(args, line.split(' ').map(str::to_owned).collect::<Vec<_>>());
+        assert!(!fixture.dir.path().join("agent").exists());
+        assert!(!fixture.dir.path().join(".agents").exists());
+        assert!(!fixture.dir.path().join(".opencode").exists());
+        assert!(!fixture.dir.path().join(".kimi-code").exists());
+    }
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_refreshes_workspace_links_and_removes_stale_ones(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    assert!(
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(fixture.dir.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let bb = bb_root(&fixture, cx);
+    write_skill(&bb.join("skills"), "first", "first body");
+    let run = fixture.dir.path().join("codex-restart");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
+    ran(&run);
+    let root = dunce::canonicalize(fixture.dir.path()).unwrap();
+    assert!(root.join(".agents/skills/first/SKILL.md").exists());
+    op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Idle, cx).await;
+    std::fs::remove_dir_all(bb.join("skills/first")).unwrap();
+    write_skill(&bb.join("skills"), "second", "second body");
+    std::fs::remove_file(run.join("out/env")).unwrap();
+    std::fs::remove_file(run.join("out/args")).unwrap();
+    op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
+        .await
+        .unwrap();
+    wait_for_status(&id, ThreadStatus::Active, cx).await;
+    ran(&run);
+    assert!(!root.join(".agents/skills/first").exists());
+    assert!(root.join(".agents/skills/second/SKILL.md").exists());
+    assert!(root.join(".agents/skills/kg-threads/SKILL.md").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn kagan_user_and_project_skills_join_the_native_tree_with_decision_24(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    write_skill(&fixture.dir.path().join("skills"), "from-user", "user body");
+    write_skill(&fixture.dir.path().join("skills"), "same", "user body");
+    write_skill(
+        &fixture.dir.path().join(".kagan/skills"),
+        "from-project",
+        "project body",
+    );
+    write_skill(
+        &fixture.dir.path().join(".kagan/skills"),
+        "same",
+        "project body",
+    );
+    let run = fixture.dir.path().join("claude-kagan-skills");
+    let (_id, _reap) = started(&fixture, &claude_line(&run), cx).await;
+    let (args, _env) = ran(&run);
+    let skills = PathBuf::from(&args[3]).join("skills");
+    assert!(skills.join("from-user/SKILL.md").exists());
+    assert!(skills.join("from-project/SKILL.md").exists());
+    let same = std::fs::read_to_string(skills.join("same/SKILL.md")).unwrap();
+    assert!(same.contains("project body"), "{same}");
+    let cli = std::fs::read_to_string(skills.join("kg-cli/SKILL.md")).unwrap();
+    assert!(cli.contains("Find the running kagan app"), "{cli}");
+    assert!(!fixture.dir.path().join("skills/kg-cli").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_second_project_keeps_the_first_catalog_and_its_links(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    write_skill(
+        &fixture.dir.path().join(".kagan/skills"),
+        "first-skill",
+        "first body",
+    );
+    let first_run = fixture.dir.path().join("codex-first");
+    let first_program = fake_agent(&first_run, "codex");
+    let (first_id, _first_reap) = started(&fixture, first_program.to_str().unwrap(), cx).await;
+    ran(&first_run);
+    let first_link = fixture.dir.path().join(".agents/skills/first-skill");
+    assert_eq!(
+        std::fs::read_to_string(first_link.join("SKILL.md")).unwrap(),
+        "---\nname: first-skill\ndescription: first-skill skill.\n---\n\nfirst body\n"
+    );
+
+    let second_dir = fixture.dir.path().join("project-b");
+    std::fs::create_dir_all(second_dir.join(".kagan/skills/second-skill")).unwrap();
+    std::fs::write(
+        second_dir.join(".kagan/skills/second-skill/SKILL.md"),
+        "---\nname: second-skill\ndescription: second-skill skill.\n---\n\nsecond body\n",
+    )
+    .unwrap();
+    let OpResult::Project(second) = op(
+        Op::Project(ProjectOp::Add {
+            path: second_dir.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("project");
+    };
+    let second_run = second_dir.join("codex-second");
+    let second_program = fake_agent(&second_run, "codex");
+    let OpResult::Thread(second_thread) = op(
+        Op::Thread(ThreadOp::Run(Run {
+            project_id: second.id.clone(),
+            program: second_program.display().to_string(),
+            title: None,
+            environment: EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("thread");
+    };
+    ran(&second_run);
+    assert!(
+        second_dir
+            .join(".agents/skills/second-skill/SKILL.md")
+            .exists()
+    );
+    assert_eq!(
+        std::fs::read_to_string(first_link.join("SKILL.md")).unwrap(),
+        "---\nname: first-skill\ndescription: first-skill skill.\n---\n\nfirst body\n"
+    );
+    assert_ne!(first_id, second_thread.id);
+    assert!(first_link.is_symlink());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn two_bb_skills_with_one_name_in_a_source_are_both_dropped(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let bb = bb_root(&fixture, cx);
+    write_skill_as(&bb.join("skills"), "dup-a", "dup", "first body");
+    write_skill_as(&bb.join("skills"), "dup-b", "dup", "second body");
+    let run = fixture.dir.path().join("claude-dup");
+    let (_id, _reap) = started(&fixture, &claude_line(&run), cx).await;
+    let (args, _env) = ran(&run);
+    let skills = PathBuf::from(&args[3]).join("skills");
+    assert!(!skills.join("dup").exists());
+    assert!(skills.join("kg-cli/SKILL.md").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_failed_skill_link_warns_but_starts_the_program(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    std::fs::write(fixture.dir.path().join(".agents"), "not a folder").unwrap();
+    let run = fixture.dir.path().join("codex-link-failure");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
+    let (args, _env) = ran(&run);
+    let kg = std::env::current_exe().unwrap().display().to_string();
+    assert!(
+        args.contains(&format!("mcp_servers.kagan.command='{kg}'")),
+        "{args:?}"
+    );
+    let recorded = events(&id, cx).await;
+    assert!(
+        recorded.iter().any(|event| matches!(
+            &event.kind,
+            EventKind::Notice { severity: NoticeSeverity::Warning, text }
+                if text.contains("could not offer the composed skills")
+        )),
+        "{recorded:?}"
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn kimi_uses_skills_dir_without_a_git_root(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let bb = bb_root(&fixture, cx);
+    write_skill(&bb.join("skills"), "bb-user", "user body");
+    let run = fixture.dir.path().join("kimi-no-git");
+    let program = fake_agent(&run, "kimi");
+    let (_id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
+    let (args, _env) = ran(&run);
+    assert!(
+        args.chunks(2).any(|pair| pair[0] == "--skills-dir"
+            && Path::new(&pair[1]).join("bb-user/SKILL.md").exists()),
+        "{args:?}"
+    );
+    assert!(!fixture.dir.path().join(".agents").exists());
+    assert!(!fixture.dir.path().join(".kimi-code").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_start_retires_the_old_agent_skills_links(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    assert!(
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(fixture.dir.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let old = fixture.dir.path().join("agent/skills/kg-threads");
+    std::fs::create_dir_all(&old).unwrap();
+    std::fs::write(
+        old.join("SKILL.md"),
+        "---\nname: kg-threads\ndescription: old\n---\n\nold body\n",
+    )
+    .unwrap();
+    let old = dunce::canonicalize(old).unwrap();
+    let link = fixture.dir.path().join(".agents/skills/kg-threads");
+    std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&old, &link).unwrap();
+    let exclude = fixture.dir.path().join(".git/info/exclude");
+    std::fs::write(&exclude, ".agents/skills/kg-threads\n").unwrap();
+
+    let run = fixture.dir.path().join("claude-legacy");
+    let (_id, _reap) = started(&fixture, &claude_line(&run), cx).await;
+    ran(&run);
+    assert!(!link.exists());
+    assert!(
+        std::fs::read_to_string(&exclude)
+            .unwrap()
+            .contains(".agents/skills/kg-threads")
+    );
 }
