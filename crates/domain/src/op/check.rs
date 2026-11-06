@@ -2,8 +2,8 @@ use crate::ThreadId;
 
 use super::browser::browser_check;
 use super::{
-    DiffOp, EnvironmentOp, Op, PluginOp, SEARCH_LIMIT, SEARCH_TEXT_MAX, SectionOp, SurfaceOp,
-    TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThreadOp, WindowOp,
+    DiffOp, EnvironmentOp, Op, PluginOp, PreviewOp, SEARCH_LIMIT, SEARCH_TEXT_MAX, SectionOp,
+    SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThreadOp, WindowOp,
 };
 
 /// Rejects an op a client must not send.
@@ -62,6 +62,19 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
             DiffOp::List { query } | DiffOp::Show { query, .. } => plain(&query.thread_id),
             DiffOp::Commits { thread_id } => plain(thread_id),
         },
+        Op::Preview(op) => match op {
+            PreviewOp::Show { thread_id, path } => {
+                plain_opt(thread_id.as_ref()).and_then(|()| plain_path(path))
+            }
+        },
+    }
+}
+
+fn plain_path(path: &str) -> Result<(), &'static str> {
+    if path.is_empty() || path.chars().any(char::is_control) {
+        Err("preview path must be a plain path")
+    } else {
+        Ok(())
     }
 }
 

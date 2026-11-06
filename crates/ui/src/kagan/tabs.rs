@@ -71,6 +71,7 @@ pub(super) struct Tabs {
     thread: Option<ThreadId>,
     views: Vec<(u32, Entity<TerminalView>, Subscription)>,
     pub(super) browser: bool,
+    pub(super) preview: Option<super::preview::Preview>,
     local: Option<String>,
     looking: Option<Task<()>>,
 }
@@ -112,11 +113,9 @@ impl Kagan {
                 ..Tabs::default()
             };
             self.browser.leave_thread(window, cx);
-            if self
-                .right_tab
-                .as_deref()
-                .is_some_and(|tab| tab == BROWSER || terminal_number(tab).is_some())
-            {
+            if self.right_tab.as_deref().is_some_and(|tab| {
+                tab == BROWSER || tab == super::preview::TAB || terminal_number(tab).is_some()
+            }) {
                 self.right_tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.
@@ -255,6 +254,11 @@ impl Kagan {
     pub(super) fn right_holds_focus(&self, window: &Window, cx: &App) -> bool {
         self.right_add_focus.is_focused(window)
             || self.browser.holds_focus(window, cx)
+            || self
+                .tabs
+                .preview
+                .as_ref()
+                .is_some_and(|preview| preview.holds_focus(window, cx))
             || self.focused_terminal(window, cx).is_some()
             || self
                 .right_slots
@@ -336,24 +340,49 @@ impl Kagan {
                 cx,
             )
         });
-        let terminals = self.tabs.numbers().map(|number| {
-            let id = terminal_tab(number);
+        let terminals: Vec<AnyElement> = self
+            .tabs
+            .numbers()
+            .map(|number| {
+                let id = terminal_tab(number);
+                let close: CloseTab = (
+                    format!("right-tab-close-{id}").into(),
+                    Box::new(move |this, window, cx| this.close_right_terminal(number, window, cx)),
+                );
+                let selected = selected == Some(id.as_str());
+                tab(
+                    format!("right-tab-{id}"),
+                    format!("Terminal {number}").into(),
+                    selected,
+                    move |this, window, cx| this.show_right_tab(&id, window, cx),
+                    Some(close),
+                    None,
+                    cx,
+                )
+            })
+            .collect();
+        let preview = if self.tabs.preview.is_some() {
             let close: CloseTab = (
-                format!("right-tab-close-{id}").into(),
-                Box::new(move |this, window, cx| this.close_right_terminal(number, window, cx)),
+                "right-tab-close-preview".into(),
+                Box::new(Kagan::close_preview),
             );
-            let selected = selected == Some(id.as_str());
-            tab(
-                format!("right-tab-{id}"),
-                format!("Terminal {number}").into(),
-                selected,
-                move |this, window, cx| this.show_right_tab(&id, window, cx),
+            Some(tab(
+                "right-tab-preview",
+                "Preview".into(),
+                selected == Some(crate::kagan::preview::TAB),
+                |this, window, cx| this.show_right_tab(crate::kagan::preview::TAB, window, cx),
                 Some(close),
                 None,
                 cx,
-            )
-        });
-        browser.into_iter().chain(terminals).collect()
+            ))
+        } else {
+            None
+        };
+        browser
+            .into_iter()
+            .chain(terminals)
+            .chain(preview)
+            .collect()
     }
 
     /// The row over the program's terminal, drawn only while it offers a local link.

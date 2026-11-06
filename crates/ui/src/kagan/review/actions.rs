@@ -35,6 +35,7 @@ impl Kagan {
                         this.focus_review(window, cx);
                     })),
             ))
+            .child(preview_button(cx))
             .child(div().w_px().h_4().bg(cx.theme().border))
             .child(
                 h_flex()
@@ -105,6 +106,23 @@ impl Kagan {
             ))
             .into_any_element()
     }
+}
+
+fn preview_button(cx: &mut Context<Kagan>) -> AnyElement {
+    control(
+        "review-preview",
+        Facts::button("Preview"),
+        Button::new("button-review-preview")
+            .ghost()
+            .small()
+            .icon(IconName::Eye)
+            .accessibility_label("Preview")
+            .tooltip("Preview")
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.preview_review(window, cx);
+            })),
+    )
+    .into_any_element()
 }
 
 pub(super) fn tool<A: Action + Clone>(

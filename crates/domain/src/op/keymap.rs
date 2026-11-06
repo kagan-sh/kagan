@@ -307,6 +307,12 @@ pub const SHORTCUTS: &[Shortcut] = &[
         chord: "secondary-alt-o",
         label: "Open local link",
     },
+    Shortcut {
+        name: "Preview",
+        action: "kagan::Preview",
+        chord: "secondary-shift-v",
+        label: "Preview a file",
+    },
 ];
 
 /// A shortcut as `kg keymap` names it: a built-in by its name, or a plugin's command as

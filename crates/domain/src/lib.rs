@@ -4,6 +4,7 @@ mod diff;
 mod event;
 mod id;
 mod op;
+mod preview;
 mod program;
 mod record;
 mod review;
@@ -35,6 +36,7 @@ pub use op::{
     UiSnapshot, WaitOutcome, WindowOp, branch_slug, check, default_chord, expand_secondary,
     invalid_json, valid_theme_choice, valid_theme_id,
 };
+pub use preview::{PreviewCut, PreviewFile, PreviewImageFormat, PreviewKind, PreviewOp};
 pub use program::{
     KNOWN_PROGRAMS, LISTED_WHEN_MISSING, Program, ProgramList, ProgramSource, SplitProgramError,
     split_program,

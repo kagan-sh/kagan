@@ -41,6 +41,9 @@ pub(super) fn tab_body(
                 .into_any_element(),
         );
     }
+    if id == crate::kagan::preview::TAB {
+        return Some(kagan.tabs.preview.as_ref()?.render(cx));
+    }
     if id == tabs::BROWSER {
         return Some(kagan.render_browser(cx));
     }

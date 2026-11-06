@@ -111,6 +111,7 @@ pub(super) fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
         "needs-you" => kagan.waiting_count(cx) > 0,
         "changes" | "details" => kagan.thread_visible(cx),
         tabs::BROWSER => kagan.tabs.browser && kagan.thread_visible(cx),
+        super::preview::TAB => kagan.tabs.preview.is_some() && kagan.thread_visible(cx),
         _ => match tabs::terminal_number(id) {
             Some(number) => kagan.tabs.view(number).is_some() && kagan.thread_visible(cx),
             None => kagan.right_slots.iter().any(|slot| slot.id == id),

@@ -406,6 +406,17 @@ A thread environment's diff reads git and never writes the worktree [book:cli]. 
 - **Shows**: commits that can be reviewed, newest first [book:cli].
 - **Refused when**: a missing git — `failed` [docs:architecture] [op/].
 
+## Preview
+
+One file, read-only, in the Preview tab of the right sidebar [docs:look] [decision 149]. The window shows the file on screen from a review, or one the person picks; `kg preview show` reads either [book:cli]. Nothing is edited, saved, searched or fetched, and there is no plugin entry (decision 70).
+
+### `Show`
+
+- **Allowed when**: a thread names the file, in which case a relative path joins that thread's environment folder and the resolved path must stay inside it; with no thread the path must be absolute [decision 149]. A folder, a missing file and a special file are refused — `invalid` and `not-found`. `--thread-id` defaults to `KG_THREAD_ID` [op/].
+- **Shows**: `path`, the resolved `absolute` path, `bytes` and one kind: text, Markdown, CSV/TSV, an image's format and pixel size, or one sentence saying why nothing is shown [decision 149]. Extension picks Markdown and CSV; PNG and JPEG magic bytes pick the image; any other UTF-8 file is plain text [decision 149]. Text and Markdown stop at 1 MiB, 2,000 lines and 4,000 bytes a line; CSV/TSV also at 100 rows, 20 columns and 120 characters a cell; images at 8 MiB and 40 megapixels. A NUL byte in the first 8 KiB is binary and invalid UTF-8 is refused, never guessed; a UTF-8 BOM is dropped and CRLF becomes LF. A file past a cap shows no content and says so in one sentence [decision 149].
+- **Refused when**: the path leaves the thread's folder, or a relative path has no thread — `invalid` [decision 149]. An empty path or one with a control character is refused by `check` [op/].
+- **Notes**: an image's bytes never travel in the reply; the window reads the path again, canonicalizes it, and checks it against the thread's folder before drawing (decision 149).
+
 ## Ui
 
 `kg ui` drives the native window without the operating system's mouse or keyboard, including while the window is in the background [docs:ui-driver]. Input goes through the window's own event dispatch [docs:ui-driver] [docs:architecture]. `--window` is a zero-based index into open windows; the default is 0 [docs:ui-driver]. The app must already be running with a window; `Open` installs the driver [docs:ui-driver]. Synthetic input cannot answer a person-only approval [decision 10] [docs:ui-driver].
@@ -547,7 +558,7 @@ Built-in shortcut overrides, and the keys of plugin commands, named `<plugin-id>
 
 ### `Get`
 
-- **Shows**: the saved overrides under `shared`, and under `plugins` each enabled plugin command with its key, or null when it has none [decision 102]. Defaults, before an override, are NewThread `secondary-n`, StopThread `secondary-.`, ArchiveThread `secondary-shift-backspace`, TogglePinned `secondary-shift-p`, OpenSettings `secondary-,`, UseProjectFolder `secondary-alt-p`, UseWorktreeFolder `secondary-alt-w`, RetryBranches `secondary-alt-r`, RetryPrograms `secondary-alt-l`, ToggleCustomCommand `secondary-alt-c`, ThreadActions `secondary-shift-m`, ToggleSidebar `secondary-b`, ToggleRightSidebar `secondary-\`, AddProject `secondary-shift-o`, NextHunk `alt-]`, PrevHunk `alt-[`, FindInDiff `secondary-f`, NextMatch `secondary-g`, PrevMatch `secondary-alt-g`, StartAgain `secondary-shift-s`, FocusSidebar `secondary-shift-l`, RestoreThread `secondary-shift-r`, UseBuiltInSidebar `secondary-alt-b`, UseBuiltInReview `secondary-alt-v`, OpenCommandList `secondary-shift-a`, and SearchThreads `secondary-alt-f` [op/]. Off macOS a `secondary` chord is bound as `ctrl-shift` plus the rest, and a following `shift-` is already in that. A saved override is used as saved. ShowHelp, NextFile and PrevFile were removed as unused (decision 54). The command list came back as OpenCommandList (decision 107).
+- **Shows**: the saved overrides under `shared`, and under `plugins` each enabled plugin command with its key, or null when it has none [decision 102]. Defaults, before an override, are NewThread `secondary-n`, StopThread `secondary-.`, ArchiveThread `secondary-shift-backspace`, TogglePinned `secondary-shift-p`, OpenSettings `secondary-,`, UseProjectFolder `secondary-alt-p`, UseWorktreeFolder `secondary-alt-w`, RetryBranches `secondary-alt-r`, RetryPrograms `secondary-alt-l`, ToggleCustomCommand `secondary-alt-c`, ThreadActions `secondary-shift-m`, ToggleSidebar `secondary-b`, ToggleRightSidebar `secondary-\`, AddProject `secondary-shift-o`, NextHunk `alt-]`, PrevHunk `alt-[`, FindInDiff `secondary-f`, NextMatch `secondary-g`, PrevMatch `secondary-alt-g`, StartAgain `secondary-shift-s`, FocusSidebar `secondary-shift-l`, RestoreThread `secondary-shift-r`, UseBuiltInSidebar `secondary-alt-b`, UseBuiltInReview `secondary-alt-v`, OpenCommandList `secondary-shift-a`, SearchThreads `secondary-alt-f`, and Preview `secondary-shift-v` [op/]. Off macOS a `secondary` chord is bound as `ctrl-shift` plus the rest, and a following `shift-` is already in that. A saved override is used as saved. ShowHelp, NextFile and PrevFile were removed as unused (decision 54). The command list came back as OpenCommandList (decision 107).
 
 ### `Set`
 

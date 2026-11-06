@@ -10,6 +10,7 @@ mod environment;
 mod extra;
 mod guide;
 mod plugin;
+mod preview;
 mod program;
 mod project;
 mod read;
