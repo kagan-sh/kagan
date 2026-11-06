@@ -15,7 +15,13 @@ fn kg(args: &[&str]) -> std::io::Result<std::process::Output> {
 fn a_missing_thread_id_prints_a_hint() {
     let output = kg(&["thread", "get", "--json"]).unwrap();
     assert!(!output.status.success());
-    let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let value: Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "{error}; status={:?}; stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
     assert_eq!(value["error"]["kind"], "invalid");
     assert!(
         value["error"]["message"]
@@ -49,5 +55,10 @@ fn a_missing_thread_id_prints_a_hint() {
 fn a_missing_plugin_name_gives_an_example() {
     let output = kg(&["plugin", "new"]).unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Try: kg plugin new hello"));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Try: kg plugin new hello"),
+        "status={:?}; stderr={stderr}",
+        output.status
+    );
 }
