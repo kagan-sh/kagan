@@ -1,7 +1,29 @@
 //! One opener for the Browser and for a plugin page, on macOS and Windows.
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering::Relaxed},
+};
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_kit::{App, AppContext as _, Context, Entity, IntoElement, Render, Window};
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+struct LoadMark {
+    armed: AtomicU64,
+    started: AtomicU64,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+type LoadSignal = (async_channel::Sender<u64>, Arc<LoadMark>);
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+type LoadWait = (
+    async_channel::Sender<u64>,
+    async_channel::Receiver<u64>,
+    u64,
+);
 
 #[cfg(any(test, target_os = "macos", target_os = "windows"))]
 const RUNTIME: &str = "This page needs the Microsoft Edge WebView2 Runtime. Download it from https://developer.microsoft.com/microsoft-edge/webview2/.";
@@ -51,9 +73,9 @@ fn sweep_page_dirs(data: &std::path::Path) {
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) struct WebPage {
     view: Entity<gpui_webview::WebView>,
-    /// Fires when the page finishes a load. A command's deadline sends on it too.
-    loads: async_channel::Sender<()>,
-    finished: async_channel::Receiver<()>,
+    loads: async_channel::Sender<u64>,
+    finished: async_channel::Receiver<u64>,
+    mark: Arc<LoadMark>,
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -62,14 +84,18 @@ impl WebPage {
         self.view.update(cx, |view, _| view.load_url(url));
     }
 
-    /// The next load the page finishes, and the sender a deadline can signal with.
-    pub(crate) fn loading(&self) -> (async_channel::Sender<()>, async_channel::Receiver<()>) {
-        (self.loads.clone(), self.finished.clone())
+    pub(crate) fn loading(&self) -> LoadWait {
+        (
+            self.loads.clone(),
+            self.finished.clone(),
+            self.mark.armed.load(Relaxed),
+        )
     }
 
-    /// Clears earlier load signals, so the next load wait does not return before the new document loads.
-    pub(crate) fn forget_loads(&self) {
+    pub(crate) fn arm(&self) -> u64 {
+        let epoch = self.mark.armed.fetch_add(1, Relaxed).wrapping_add(1);
         while self.finished.try_recv().is_ok() {}
+        epoch
     }
 
     /// Runs one host script in the page. Its reply arrives later, as JSON text.
@@ -151,12 +177,22 @@ pub(crate) fn open(
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
 ) -> Result<Entity<WebPage>, String> {
-    let (loads, finished) = async_channel::bounded(1);
-    let view = open_view_with_loads(window, cx, configure, Some(loads.clone()))?;
+    let (loads, finished) = async_channel::unbounded();
+    let mark = Arc::new(LoadMark {
+        armed: AtomicU64::new(0),
+        started: AtomicU64::new(0),
+    });
+    let view = open_view_with_loads(
+        window,
+        cx,
+        configure,
+        Some((loads.clone(), Arc::clone(&mark))),
+    )?;
     Ok(cx.new(|_| WebPage {
         view,
         loads,
         finished,
+        mark,
     }))
 }
 
@@ -175,7 +211,7 @@ fn open_view_with_loads(
     window: &mut Window,
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
-    loads: Option<async_channel::Sender<()>>,
+    loads: Option<LoadSignal>,
 ) -> Result<Entity<gpui_webview::WebView>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -193,14 +229,15 @@ fn open_view_with_loads(
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 fn with_loads(
     builder: wry::WebViewBuilder<'_>,
-    loads: Option<async_channel::Sender<()>>,
+    loads: Option<LoadSignal>,
 ) -> wry::WebViewBuilder<'_> {
-    let Some(loads) = loads else {
+    let Some((loads, mark)) = loads else {
         return builder;
     };
-    builder.with_on_page_load_handler(move |event, _| {
-        if matches!(event, wry::PageLoadEvent::Finished) {
-            let _ = loads.try_send(());
+    builder.with_on_page_load_handler(move |event, _| match event {
+        wry::PageLoadEvent::Started => mark.started.store(mark.armed.load(Relaxed), Relaxed),
+        wry::PageLoadEvent::Finished => {
+            let _ = loads.try_send(mark.started.load(Relaxed));
         }
     })
 }
@@ -218,7 +255,7 @@ fn open_windows(
     window: &mut Window,
     cx: &mut App,
     configure: impl for<'a> FnOnce(wry::WebViewBuilder<'a>) -> wry::WebViewBuilder<'a>,
-    loads: Option<async_channel::Sender<()>>,
+    loads: Option<LoadSignal>,
 ) -> Result<Entity<gpui_webview::WebView>, String> {
     let data = kg_core::Workspace::global(cx)
         .read(cx)

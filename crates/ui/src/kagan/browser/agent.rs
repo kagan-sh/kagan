@@ -6,7 +6,7 @@ use gpui_kit::{AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity,
 use kg_domain::{BrowserOp, BrowserView, OpError, OpResult, ThreadId};
 
 use super::Agent;
-use super::snapshot::{INFO, SNAPSHOT, UNREADABLE, parse_info, parse_snapshot};
+use super::snapshot::{INFO, SNAPSHOT, parse_info, parse_snapshot};
 use crate::kagan::Kagan;
 use crate::web_page::WebPage;
 
@@ -14,18 +14,12 @@ const NEEDS_WINDOW: &str = "browser control needs a kagan window";
 const NO_SESSION: &str = "no browser session; run kg browser open <url> first";
 const ENDED: &str = "the browser session ended";
 const IDLE_ENDED: &str = "the browser session ended after 30 idle minutes";
-const DEADLINE: &str = "the page did not answer within 10 seconds";
 const BAD_URL: &str = "type a web address, such as example.com";
 /// How long a drive may sit unused before its next command ends it.
 const IDLE: Duration = Duration::from_mins(30);
-/// How long one command waits for the page.
 const WAIT: Duration = Duration::from_secs(10);
 
 /// Runs one Browser verb for the window's page.
-///
-/// # Errors
-///
-/// When no window is open, when another thread owns the page, or when the page cannot be read.
 pub(crate) async fn run(op: BrowserOp, cx: &mut AsyncApp) -> Result<OpResult, OpError> {
     let Some((handle, kagan)) = cx.update(|cx| crate::kagan::front(cx)) else {
         return Err(OpError::Failed(NEEDS_WINDOW.into()));
@@ -62,10 +56,10 @@ async fn open(
         kagan.begin_open(thread_id, &url, Instant::now(), window, cx)
     })??;
     wait_for_load(kagan, handle, &page, cx).await;
-    let text = evaluate(&page, INFO, handle, WAIT, cx).await?;
+    let text = super::chrome::evaluate(&page, INFO, handle, WAIT, cx).await?;
     let (url, title, _) = parse_info(&text)?;
     let view = on_window(kagan, handle, cx, |kagan, _, cx| {
-        kagan.view(thread_id, (url, title), cx)
+        kagan.view(thread_id, &page, (url, title), cx)
     })??;
     Ok(OpResult::Browser(view))
 }
@@ -79,10 +73,10 @@ async fn status(
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
         kagan.require(thread_id, Instant::now(), window, cx)
     })??;
-    let text = evaluate(&page, INFO, handle, WAIT, cx).await?;
+    let text = super::chrome::evaluate(&page, INFO, handle, WAIT, cx).await?;
     let (url, title, _) = parse_info(&text)?;
     let view = on_window(kagan, handle, cx, |kagan, _, cx| {
-        kagan.view(thread_id, (url, title), cx)
+        kagan.view(thread_id, &page, (url, title), cx)
     })??;
     Ok(OpResult::Browser(view))
 }
@@ -96,7 +90,7 @@ async fn snapshot(
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
         kagan.require(thread_id, Instant::now(), window, cx)
     })??;
-    let text = evaluate(&page, SNAPSHOT, handle, WAIT, cx).await?;
+    let text = super::chrome::evaluate(&page, SNAPSHOT, handle, WAIT, cx).await?;
     let snapshot = parse_snapshot(&text)?;
     on_window(kagan, handle, cx, |kagan, _, cx| {
         kagan.touch(&page, cx)?;
@@ -119,9 +113,10 @@ async fn goto(
         kagan.require(thread_id, Instant::now(), window, cx)
     })??;
     let url = url.as_str().to_owned();
-    on_window(kagan, handle, cx, |_, _, cx| {
-        page.read(cx).forget_loads();
+    on_window(kagan, handle, cx, |kagan, _, cx| {
+        page.read(cx).arm();
         page.update(cx, |page, cx| page.load_url(&url, cx));
+        kagan.follow_address(page.clone(), cx);
     })?;
     wait_for_load(kagan, handle, &page, cx).await;
     touch(kagan, handle, &page, cx)?;
@@ -138,15 +133,18 @@ fn history(
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
         kagan.require(thread_id, Instant::now(), window, cx)
     })??;
-    on_window(kagan, handle, cx, |_, _, cx| {
+    on_window(kagan, handle, cx, |kagan, _, cx| {
+        page.read(cx).arm();
         let moved = if back {
             page.update(cx, |page, cx| page.back(cx))
         } else {
             page.update(cx, |page, cx| page.forward(cx))
         };
+        if moved.is_ok() {
+            kagan.follow_address(page.clone(), cx);
+        }
         moved.map_err(OpError::Failed)
     })??;
-    touch(kagan, handle, &page, cx)?;
     Ok(OpResult::Done)
 }
 
@@ -159,9 +157,13 @@ async fn reload(
     let page = on_window(kagan, handle, cx, |kagan, window, cx| {
         kagan.require(thread_id, Instant::now(), window, cx)
     })??;
-    on_window(kagan, handle, cx, |_, _, cx| {
-        page.read(cx).forget_loads();
-        page.read(cx).reload(cx).map_err(OpError::Failed)
+    on_window(kagan, handle, cx, |kagan, _, cx| {
+        page.read(cx).arm();
+        let moved = page.read(cx).reload(cx).map_err(OpError::Failed);
+        if moved.is_ok() {
+            kagan.follow_address(page.clone(), cx);
+        }
+        moved
     })??;
     wait_for_load(kagan, handle, &page, cx).await;
     touch(kagan, handle, &page, cx)?;
@@ -194,7 +196,7 @@ async fn act(
         kagan.require(op.thread(), Instant::now(), window, cx)
     })??;
     let script = super::act::script(&op).map_err(OpError::Invalid)?;
-    let text = evaluate(&page, &script, handle, WAIT, cx).await?;
+    let text = super::chrome::evaluate(&page, &script, handle, WAIT, cx).await?;
     let _ = parse_info(&text)?;
     touch(kagan, handle, &page, cx)?;
     Ok(OpResult::Done)
@@ -212,51 +214,27 @@ fn on_window<R>(
     .map_err(|_| OpError::NotFound(ENDED.into()))
 }
 
-/// Runs one host script in the page and waits for its JSON reply.
-async fn evaluate(
-    page: &Entity<WebPage>,
-    script: &str,
-    handle: AnyWindowHandle,
-    wait: Duration,
-    cx: &mut AsyncApp,
-) -> Result<String, OpError> {
-    let (sender, receiver) = async_channel::bounded::<Option<String>>(1);
-    let reply = sender.clone();
-    cx.update_window(handle, |_, _, cx| {
-        page.read(cx)
-            .eval(script, reply, cx)
-            .map_err(OpError::Failed)
-    })
-    .map_err(|_| OpError::NotFound(ENDED.into()))??;
-    cx.spawn(async move |cx| {
-        cx.background_executor().timer(wait).await;
-        let _ = sender.try_send(None);
-    })
-    .detach();
-    match receiver.recv().await {
-        Ok(Some(text)) if !text.trim().is_empty() => Ok(text),
-        Ok(Some(_)) | Err(_) => Err(OpError::Failed(UNREADABLE.into())),
-        Ok(None) => Err(OpError::Failed(DEADLINE.into())),
-    }
-}
-
-/// Waits for the document that `load_url` started, or for the deadline.
 async fn wait_for_load(
     kagan: &Entity<Kagan>,
     handle: AnyWindowHandle,
     page: &Entity<WebPage>,
     cx: &mut AsyncApp,
 ) {
-    let Ok((signal, wait)) = on_window(kagan, handle, cx, |_, _, cx| page.read(cx).loading())
+    let Ok((signal, wait, epoch)) =
+        on_window(kagan, handle, cx, |_, _, cx| page.read(cx).loading())
     else {
         return;
     };
     cx.spawn(async move |cx| {
         cx.background_executor().timer(WAIT).await;
-        let _ = signal.try_send(());
+        let _ = signal.try_send(epoch);
     })
     .detach();
-    let _ = wait.recv().await;
+    while let Ok(got) = wait.recv().await {
+        if got == epoch {
+            return;
+        }
+    }
 }
 
 fn touch(
@@ -334,13 +312,14 @@ impl Kagan {
             let Some(page) = self.browser.page.clone() else {
                 return Err(OpError::NotFound(ENDED.into()));
             };
-            page.read(cx).forget_loads();
+            page.read(cx).arm();
             page.update(cx, |page, cx| page.load_url(url.as_str(), cx));
             agent.used = now;
             url.as_str().clone_into(&mut agent.url);
             page
         } else {
             // One tab, one page: a person's page gives way, and a fresh document drops old refs.
+            self.browser.follow = self.browser.follow.wrapping_add(1);
             self.browser.page = None;
             let page = self
                 .browser
@@ -361,6 +340,7 @@ impl Kagan {
             self.select_right_tab(crate::kagan::right::Tab::Browser, cx);
             self.show_right_quiet(window, cx);
         }
+        self.follow_address(page.clone(), cx);
         self.sync_browser(cx);
         cx.notify();
         Ok(page)
@@ -370,10 +350,17 @@ impl Kagan {
     fn view(
         &mut self,
         thread_id: &ThreadId,
+        page: &Entity<WebPage>,
         (url, title): (String, String),
         cx: &mut Context<Self>,
     ) -> Result<BrowserView, OpError> {
-        if self.browser.agent.is_none() {
+        let Some(agent) = &self.browser.agent else {
+            return Err(OpError::NotFound(ENDED.into()));
+        };
+        if !owns(&agent.thread, thread_id) {
+            return Err(OpError::Invalid(self.owner_refusal(&agent.thread, cx)));
+        }
+        if self.browser.page.as_ref() != Some(page) {
             return Err(OpError::NotFound(ENDED.into()));
         }
         let thread = self
@@ -397,6 +384,9 @@ impl Kagan {
         let Some(agent) = &mut self.browser.agent else {
             return Err(OpError::NotFound(ENDED.into()));
         };
+        if self.browser.page.as_ref() != Some(page) {
+            return Err(OpError::NotFound(ENDED.into()));
+        }
         agent.url = page.read(cx).url(cx);
         agent.used = Instant::now();
         Ok(())

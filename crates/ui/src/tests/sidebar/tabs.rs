@@ -9,6 +9,8 @@ use crate::tests::kagan::label;
 use crate::tests::kagan::{
     click, focused_of, open, present, run_shell, selected_of, shows, wait_for_shell, wait_until,
 };
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use crate::tests::plugin::panels::disabled_of;
 
 fn with_sh(cx: &mut TestAppContext) {
     let path = std::env::var_os("PATH").unwrap_or_default();
@@ -174,6 +176,28 @@ fn without_a_native_page_the_browser_shows_a_note(cx: &mut TestAppContext) {
         label(cx, window, "browser-hint"),
         "The browser works on macOS and Windows only for now."
     );
+    assert!(!present(cx, window, "browser-back"));
+    assert!(!present(cx, window, "browser-external"));
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[gpui_kit::test]
+fn the_browser_bar_goes_back_forward_reloads_and_opens_outside(cx: &mut TestAppContext) {
+    let (_, window, _data) = open(cx);
+    shown(cx, window);
+    add(cx, window, "right-add-browser");
+    for id in ["browser-back", "browser-forward", "browser-reload"] {
+        assert_eq!(disabled_of(cx, window, id), Some(true), "{id}");
+    }
+    assert_eq!(disabled_of(cx, window, "browser-external"), Some(true));
+    assert!(!present(cx, window, "browser-secure"));
+
+    cx.simulate_input(window, "https://example.com");
+    cx.run_until_parked();
+    assert!(present(cx, window, "browser-secure"));
+    assert_eq!(disabled_of(cx, window, "browser-external"), Some(false));
+    click(cx, window, "browser-external");
+    assert_eq!(cx.opened_url().as_deref(), Some("https://example.com/"));
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]

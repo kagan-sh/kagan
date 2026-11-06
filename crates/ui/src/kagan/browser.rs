@@ -2,7 +2,7 @@ use crate::theme::TypeScale as _;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_kit::FocusHandle;
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -35,6 +35,7 @@ use crate::web_page::WebPage;
 pub(super) mod act;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) mod agent;
+mod chrome;
 #[cfg(any(test, target_os = "macos", target_os = "windows"))]
 pub(super) mod snapshot;
 
@@ -57,6 +58,9 @@ pub(super) struct Browser {
     /// Where the keys go while a thread drives the page, since the address field is hidden.
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     driven_focus: FocusHandle,
+    /// Bumped so a late load does not write over a newer address.
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    follow: u64,
     note: Option<String>,
     _enter: Subscription,
 }
@@ -78,6 +82,8 @@ impl Browser {
             agent: None,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             driven_focus: cx.focus_handle().tab_stop(true),
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            follow: 0,
             note: None,
             _enter: enter,
         }
@@ -150,6 +156,7 @@ impl Browser {
         {
             self.page = None;
             self.agent = None;
+            self.follow = self.follow.wrapping_add(1);
         }
         self.note = None;
         self.address.update(cx, |address, cx| {
@@ -161,6 +168,7 @@ impl Browser {
     pub(super) fn leave_thread(&mut self, window: &mut Window, cx: &mut App) {
         #[cfg(any(target_os = "macos", target_os = "windows"))]
         {
+            self.follow = self.follow.wrapping_add(1);
             if self.agent.is_none() {
                 self.page = None;
             }
@@ -221,6 +229,10 @@ pub(super) fn is_web(url: &str) -> bool {
     url::Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
 }
 
+pub(super) fn secure(typed: &str) -> bool {
+    page_url(typed).is_some_and(|url| url.scheme() == "https")
+}
+
 impl Kagan {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) fn browser_drawn(&self, cx: &App) -> bool {
@@ -275,9 +287,7 @@ impl Kagan {
             .size_full()
             .gap_2()
             .p_2()
-            .when(WEB, |browser| {
-                browser.child(Input::new(&self.browser.address))
-            })
+            .when(WEB, |browser| browser.child(self.address_row(cx)))
             .children(note)
             .child(match page {
                 Some(page) => div().flex_1().min_h_0().child(page).into_any_element(),
@@ -311,6 +321,7 @@ impl Kagan {
             .items_center()
             .track_focus(&self.browser.driven_focus)
             .tab_stop(true)
+            .child(self.browser_nav(cx))
             .child(
                 div()
                     .flex_none()
@@ -326,8 +337,12 @@ impl Kagan {
                     .truncate()
                     .type_small(cx)
                     .text_color(cx.theme().muted_foreground)
-                    .child(agent.url.clone()),
+                    .child(self.live_url(cx)),
             )
+            .when(secure(&self.live_url(cx)), |row| {
+                row.child(Self::secure_mark(cx))
+            })
+            .child(self.external_button(cx))
             .child(control(
                 "browser-stop-agent",
                 Facts::button("Stop agent"),
@@ -353,7 +368,17 @@ impl Kagan {
         match page_url(&typed) {
             Some(url) => {
                 self.browser.note = None;
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                if let Some(page) = self.browser.page.clone() {
+                    page.read(cx).arm();
+                }
                 self.browser.open(&url, window, cx);
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                if self.browser.note.is_none()
+                    && let Some(page) = self.browser.page.clone()
+                {
+                    self.follow_address(page, cx);
+                }
             }
             None => {
                 self.browser.note = Some("Type a web address, such as example.com.".into());
@@ -364,44 +389,4 @@ impl Kagan {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{is_web, page_url};
-
-    #[test]
-    fn a_bare_name_opens_over_https() {
-        let url = page_url(" example.com ").map(|url| url.to_string());
-        assert_eq!(url.as_deref(), Some("https://example.com/"));
-    }
-
-    #[test]
-    fn a_local_host_opens_over_http() {
-        let url = |typed| page_url(typed).map(|url| url.to_string());
-        assert_eq!(
-            url("localhost:3000").as_deref(),
-            Some("http://localhost:3000/")
-        );
-        assert_eq!(
-            url("127.0.0.1:5173/a").as_deref(),
-            Some("http://127.0.0.1:5173/a")
-        );
-        assert_eq!(
-            url("localhost.example.com").as_deref(),
-            Some("https://localhost.example.com/")
-        );
-    }
-
-    #[test]
-    fn only_web_addresses_open() {
-        assert!(page_url("http://example.com/a").is_some());
-        assert!(page_url("file:///etc/passwd").is_none());
-        assert!(page_url("javascript:alert(1)").is_none());
-        assert!(page_url("   ").is_none());
-    }
-
-    #[test]
-    fn only_web_pages_may_be_navigated_to() {
-        assert!(is_web("https://example.com/next"));
-        assert!(!is_web("file:///etc/passwd"));
-        assert!(!is_web("about:blank"));
-    }
-}
+mod tests;

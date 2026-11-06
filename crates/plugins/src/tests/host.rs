@@ -242,7 +242,7 @@ fn a_stored_number_coerces_or_falls_back_on_load(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn native_modules_exist_only_when_their_areas_are_granted(cx: &mut TestAppContext) {
-    for area in ["process", "threads"] {
+    for area in ["process", "threads", "browser"] {
         let plugin = plugin_dir();
         let import = format!("import * as native from 'kagan/{area}';\n");
         std::fs::write(plugin.path().join("main.js"), format!("{import}{MAIN}")).unwrap();
@@ -270,6 +270,53 @@ fn native_modules_exist_only_when_their_areas_are_granted(cx: &mut TestAppContex
             })
         ));
     }
+}
+
+const BROWSER_FORWARD: &str = r#"
+import { View } from "gpui-kit";
+import { next, reply } from "kagan/jobs";
+import * as browser from "kagan/browser";
+
+const modules = { browser };
+export default class Plugin extends View {
+  init(_props, cx) {
+    cx.spawn(async () => {
+      for (;;) {
+        const job = await next();
+        try {
+          const { module, call, args } = job.input;
+          const value = await modules[module][call](...args);
+          reply(job.id, { text: JSON.stringify(value ?? null) });
+        } catch (error) { reply(job.id, { text: String(error), isError: true }); }
+      }
+    });
+  }
+  render() { return "forward"; }
+}
+"#;
+
+#[gpui_kit::test]
+fn a_plugin_reaches_the_browser_only_through_its_area(cx: &mut TestAppContext) {
+    let plugin = probe_plugin(&["browser"], BROWSER_FORWARD);
+    open(cx, &[installed(plugin.path())]);
+    let mut call = |name: &str, args: Value| {
+        forwarded_reply(answered(
+            cx,
+            Op::Thread(ThreadOp::CallTool {
+                id: thread(),
+                name: "probe".into(),
+                input: json!({ "module": "browser", "call": name, "args": args }),
+            }),
+        ))
+    };
+    let refused = call("click", json!([THREAD, 1.5])).unwrap_err();
+    assert!(refused.contains("ref must be a whole number"), "{refused}");
+    let missing = call("open", json!([THREAD, "example.com"])).unwrap_err();
+    assert!(missing.contains("kagan/browser.open"), "{missing}");
+    assert!(
+        missing.contains("the ui driver needs a kagan window"),
+        "{missing}"
+    );
 }
 
 #[gpui_kit::test]
