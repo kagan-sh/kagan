@@ -538,7 +538,8 @@ mod tests {
         assert!(owned.is_empty());
         assert!(!folder_path.join(".agents/skills/kg-threads").is_symlink());
 
-        let other = skill(dir.path(), "other");
+        let other_dir = tempfile::tempdir().unwrap();
+        let other = skill(other_dir.path(), "other");
         let linked = dir.path().join("linked");
         std::fs::create_dir_all(linked.join(".agents/skills")).unwrap();
         std::os::unix::fs::symlink(&other, linked.join(".agents/skills/kg-threads")).unwrap();
