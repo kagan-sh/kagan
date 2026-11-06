@@ -19,7 +19,6 @@ fn the_stylesheet_and_the_refresh_script_share_every_token() {
     assert!(script.contains("r.style.colorScheme='dark'"));
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[test]
 fn the_page_gets_the_themes_density_and_type() {
     let json = r##"{
@@ -71,7 +70,6 @@ fn the_page_gets_the_themes_density_and_type() {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 #[test]
 fn a_default_look_keeps_the_numbers_the_page_had_before() {
     let file = kg_domain::ThemeFile::parse(

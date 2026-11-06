@@ -103,15 +103,16 @@ pub(in crate::tests) fn placed(native: Option<bool>, note: &str) -> bool {
     native == Some(true)
         || note.contains("could not open")
         || note.contains("WebView2 Runtime")
+        || note.contains("needs an X11 window")
         || platform_note(note)
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(in crate::tests) const fn platform_note(_note: &str) -> bool {
     false
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub(in crate::tests) fn platform_note(note: &str) -> bool {
     note == crate::components::UNAVAILABLE
 }

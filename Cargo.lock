@@ -5482,6 +5482,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "url",
+ "webkit2gtk",
  "windows 0.61.3",
 ]
 

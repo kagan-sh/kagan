@@ -1,8 +1,8 @@
 //! Back, forward, reload, and open-in-the-system-browser for the Browser tab.
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use super::Kagan;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use {
     crate::kagan::controls::control,
     crate::ui_observe::UiObserveExt as _,
@@ -19,7 +19,7 @@ use {
     std::time::Duration,
 };
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[derive(Clone, Copy)]
 enum Nav {
     Back,
@@ -27,7 +27,7 @@ enum Nav {
     Reload,
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 impl Kagan {
     pub(super) fn address_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let typed = self.browser.address.read(cx).value().to_string();
@@ -229,7 +229,7 @@ impl Kagan {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(super) async fn evaluate(
     page: &Entity<WebPage>,
     script: &str,

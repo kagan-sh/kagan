@@ -2,7 +2,7 @@
 
 ## Install
 
-On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage.
+On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage. The Linux app needs WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`); the `.deb` asks for that package.
 
 ### Download
 
@@ -33,7 +33,8 @@ That puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
      ```bash
      sudo apt-get install build-essential pkg-config \
        libfontconfig-dev libwayland-dev libxkbcommon-x11-dev \
-       libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev
+       libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev \
+       libwebkit2gtk-4.1-dev libgtk-3-dev
      ```
 
    - Windows: Visual Studio Build Tools with C++, and MinGW for `dlltool` (`choco install mingw`).

@@ -409,7 +409,7 @@ fn build(
 }
 
 // Only macOS has a durable store (a `WKWebsiteDataStore`). Windows deletes the WebView2 profile
-// when the page closes, so "store": true leaves the page private there.
+// when the page closes, and Linux has no matching store, so "store": true stays private there.
 #[cfg(target_os = "macos")]
 fn store_for(slot: &Slot, cx: &App) -> Result<(Option<[u8; 16]>, Option<String>), String> {
     let wants_store = PluginHost::global(cx)
@@ -427,7 +427,7 @@ fn store_for(slot: &Slot, cx: &App) -> Result<(Option<[u8; 16]>, Option<String>)
     Ok((Some(store), None))
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(target_os = "macos"))]
 fn store_for(_slot: &Slot, _cx: &App) -> Result<(Option<[u8; 16]>, Option<String>), String> {
     Ok((None, None))
 }

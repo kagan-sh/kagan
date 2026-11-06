@@ -145,7 +145,7 @@ jobs:
       - name: Linux build packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev mold
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libwebkit2gtk-4.1-dev libgtk-3-dev mold
           # gcc resolves -fuse-ld=mold to ld.mold. Some packages ship only mold.
           command -v ld.mold >/dev/null || sudo ln -sf "$(command -v mold)" /usr/local/bin/ld.mold
       - run: rustup toolchain install --profile minimal
@@ -168,7 +168,7 @@ jobs:
       - name: Linux build packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev mold
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libwebkit2gtk-4.1-dev libgtk-3-dev mold
           # gcc resolves -fuse-ld=mold to ld.mold. Some packages ship only mold.
           command -v ld.mold >/dev/null || sudo ln -sf "$(command -v mold)" /usr/local/bin/ld.mold
       - run: rustup toolchain install --profile minimal
@@ -185,6 +185,10 @@ jobs:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
       - name: Tests
         run: cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
+      - name: Browser page
+        run: |
+          sudo apt-get install -y xvfb
+          sh scripts/browser-linux.sh
 
   macos-clippy:
     needs: scope
@@ -367,7 +371,7 @@ jobs:
       - name: Linux build packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev mold
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libwebkit2gtk-4.1-dev libgtk-3-dev mold
           # gcc resolves -fuse-ld=mold to ld.mold. Some packages ship only mold.
           command -v ld.mold >/dev/null || sudo ln -sf "$(command -v mold)" /usr/local/bin/ld.mold
       - run: rustup toolchain install --profile minimal

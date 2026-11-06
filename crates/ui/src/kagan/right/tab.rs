@@ -49,7 +49,13 @@ impl Tab {
         cx: &mut Context<Kagan>,
     ) {
         let focus = match self {
-            Self::Browser if cfg!(any(target_os = "macos", target_os = "windows")) => {
+            Self::Browser
+                if cfg!(any(
+                    target_os = "linux",
+                    target_os = "macos",
+                    target_os = "windows"
+                )) =>
+            {
                 return kagan.browser.focus(window, cx);
             }
             Self::Terminal(number) => kagan.tabs.view(*number).map(|view| view.focus_handle(cx)),

@@ -26,8 +26,8 @@ use super::component_error::ComponentError;
 pub(crate) const REFUSED_SCHEME: &str = "WebView only opens an http or https page.";
 pub(crate) const REFUSED_HOST: &str =
     "WebView only opens 127.0.0.1, localhost, or a host this plugin may fetch.";
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-pub(crate) const UNAVAILABLE: &str = "This page works on macOS and Windows only for now.";
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+pub(crate) const UNAVAILABLE: &str = "This page works on macOS, Windows and Linux only for now.";
 
 /// The script's root is a `WebView`, so the panel can sit edge to edge.
 pub(crate) fn fills_panel(view: &Entity<ScriptView>, cx: &App) -> bool {
@@ -157,7 +157,7 @@ impl ComponentMaterializer for WebView {
 
 struct Shown {
     note: Option<String>,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     page: Option<Entity<crate::web_page::WebPage>>,
 }
 
@@ -167,11 +167,11 @@ fn frame(
     cx: &App,
 ) -> impl gpui_kit::Styled + gpui_kit::ParentElement + gpui_kit::IntoElement {
     let note = shown.note.clone();
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     let page = shown.page.clone();
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     let fill_note = page.is_none();
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     let fill_note = true;
     let element = div()
         .id(ElementId::Name(format!("webview-{id}").into()))
@@ -184,7 +184,7 @@ fn frame(
         .when_some(note, |element, note| {
             element.child(sentence(id, note.as_str(), fill_note, cx))
         });
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     let element = element.when_some(page, |element, page| element.child(page).min_h_0().flex_1());
     element
 }
@@ -213,7 +213,7 @@ fn sentence(id: &str, note: &str, fill: bool, cx: &App) -> AnyElement {
 enum Gate {
     Empty,
     Note(&'static str),
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     Open,
 }
 
@@ -224,9 +224,9 @@ fn gate(url: &str, hosts: &[String]) -> Gate {
     if let Err(reason) = allowed(url, hosts) {
         return Gate::Note(reason);
     }
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     return Gate::Open;
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     Gate::Note(UNAVAILABLE)
 }
 
@@ -259,18 +259,20 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
 }
 
 fn loose(
-    #[cfg(any(target_os = "macos", target_os = "windows"))] id: &str,
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _id: &str,
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))] id: &str,
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))] _id: &str,
     url: &str,
-    #[cfg(any(target_os = "macos", target_os = "windows"))] window: &mut Window,
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _window: &mut Window,
-    #[cfg(any(target_os = "macos", target_os = "windows"))] cx: &mut App,
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _cx: &mut App,
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    window: &mut Window,
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    _window: &mut Window,
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))] cx: &mut App,
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))] _cx: &mut App,
 ) -> Shown {
     match gate(url, &[]) {
         Gate::Empty => blank(),
         Gate::Note(reason) => noted(reason),
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         Gate::Open => {
             let key = ElementId::Name(format!("webview-loose-{id}-{url}").into());
             let state =
@@ -291,14 +293,16 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
-    #[cfg(any(target_os = "macos", target_os = "windows"))] keep: Option<
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))] keep: Option<
         Result<Option<[u8; 16]>, String>,
     >,
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _keep: Option<
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))] _keep: Option<
         Result<Option<[u8; 16]>, String>,
     >,
-    #[cfg(any(target_os = "macos", target_os = "windows"))] window: &mut Window,
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))] _window: &mut Window,
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    window: &mut Window,
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    _window: &mut Window,
     cx: &mut App,
 ) -> Shown {
     let index = find(cx, owner.entity_id(), id);
@@ -306,7 +310,7 @@ fn owned(
         Gate::Empty => {
             if let Some(index) = index {
                 conceal_at(cx, index);
-                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
                 {
                     cx.default_global::<Pages>().pages[index].page = None;
                 }
@@ -321,7 +325,7 @@ fn owned(
             }
             noted(reason)
         }
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         Gate::Open => match keep {
             Some(Err(message)) if message == crate::web_page::STORE_NEEDS_MACOS => {
                 let mut shown = open_owned(
@@ -368,7 +372,7 @@ fn owned(
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 struct Open<'a> {
     owner: WeakEntity<ScriptView>,
     id: &'a str,
@@ -381,7 +385,7 @@ struct Open<'a> {
 fn blank() -> Shown {
     Shown {
         note: None,
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         page: None,
     }
 }
@@ -389,12 +393,12 @@ fn blank() -> Shown {
 fn noted(reason: &str) -> Shown {
     Shown {
         note: Some(reason.to_owned()),
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         page: None,
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn page_shown(page: Entity<crate::web_page::WebPage>) -> Shown {
     Shown {
         note: None,
@@ -402,7 +406,7 @@ fn page_shown(page: Entity<crate::web_page::WebPage>) -> Shown {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn open_owned(open: Open<'_>, window: &mut Window, cx: &mut App) -> Shown {
     let Open {
         owner,
@@ -465,7 +469,7 @@ fn open_owned(open: Open<'_>, window: &mut Window, cx: &mut App) -> Shown {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn build(
     url: &str,
     hosts: &[String],
@@ -482,21 +486,21 @@ fn build(
     })
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn reveal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if !page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.show(cx));
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn conceal(page: &Entity<crate::web_page::WebPage>, cx: &mut App) {
     if page.read(cx).visible(cx) {
         page.update(cx, |page, cx| page.hide(cx));
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn conceal_at(cx: &mut App, index: usize) {
     let Some(page) = cx.default_global::<Pages>().pages[index].page.clone() else {
         return;
@@ -504,7 +508,7 @@ fn conceal_at(cx: &mut App, index: usize) {
     conceal(&page, cx);
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 fn conceal_at(_cx: &mut App, _index: usize) {}
 
 #[derive(Default)]
@@ -519,11 +523,11 @@ struct Held {
     id: String,
     url: String,
     note: Option<String>,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     hosts: Vec<String>,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     store: Option<[u8; 16]>,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     page: Option<Entity<crate::web_page::WebPage>>,
 }
 
@@ -534,5 +538,5 @@ pub(crate) use pages::native_shown;
 pub(crate) use pages::{drop_stores, sync_pages};
 
 use pages::{find, write};
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use pages::{held, save, write_page};

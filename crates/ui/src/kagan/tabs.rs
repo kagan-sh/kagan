@@ -111,7 +111,7 @@ impl Kagan {
                 self.right_tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             if self
                 .tabs
                 .thread

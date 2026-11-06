@@ -1,40 +1,40 @@
-//! One opener for the Browser and for a plugin page, on macOS and Windows.
+//! One opener for the Browser and for a plugin page.
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering::Relaxed},
 };
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use gpui_kit::{App, AppContext as _, Context, Entity, IntoElement, Render, Window};
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 struct LoadMark {
     armed: AtomicU64,
     started: AtomicU64,
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 type LoadSignal = (async_channel::Sender<u64>, Arc<LoadMark>);
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 type LoadWait = (
     async_channel::Sender<u64>,
     async_channel::Receiver<u64>,
     u64,
 );
 
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
 const RUNTIME: &str = "This page needs the Microsoft Edge WebView2 Runtime. Download it from https://developer.microsoft.com/microsoft-edge/webview2/.";
 
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn hresult(code: &str) -> String {
     // `0x` and the digits stay apart in source so view-colors.sh does not treat the HRESULT as a color.
     format!("0x{code}")
 }
 
-#[cfg(any(test, target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(crate) fn failure(error: &str) -> String {
     if error.contains(&hresult("80070002")) || error.contains(&hresult("80040154")) {
         RUNTIME.to_owned()
@@ -70,7 +70,7 @@ fn sweep_page_dirs(data: &std::path::Path) {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(crate) struct WebPage {
     view: Entity<gpui_webview::WebView>,
     loads: async_channel::Sender<u64>,
@@ -78,7 +78,7 @@ pub(crate) struct WebPage {
     mark: Arc<LoadMark>,
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 impl WebPage {
     pub(crate) fn load_url(&self, url: &str, cx: &mut App) {
         self.view.update(cx, |view, _| view.load_url(url));
@@ -164,14 +164,14 @@ impl WebPage {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 impl Render for WebPage {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.view.clone()
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(crate) fn open(
     window: &mut Window,
     cx: &mut App,
@@ -197,7 +197,7 @@ pub(crate) fn open(
 }
 
 // The native view alone, for a caller that drives the page itself, such as a plugin web panel.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(crate) fn open_view(
     window: &mut Window,
     cx: &mut App,
@@ -206,7 +206,7 @@ pub(crate) fn open_view(
     open_view_with_loads(window, cx, configure, None)
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn open_view_with_loads(
     window: &mut Window,
     cx: &mut App,
@@ -217,16 +217,18 @@ fn open_view_with_loads(
     {
         open_windows(window, cx, configure, loads)
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "windows"))]
     {
         let builder = with_loads(configure(private(wry::WebViewBuilder::new())), loads);
         let view = build_view(builder, window, cx)?;
+        #[cfg(target_os = "linux")]
+        restrain(&view, cx);
         Ok(cx.new(|_| view))
     }
 }
 
 /// Tells `loads` when the page finishes loading, once per navigation.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn with_loads(
     builder: wry::WebViewBuilder<'_>,
     loads: Option<LoadSignal>,
@@ -242,7 +244,7 @@ fn with_loads(
     })
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(crate) fn private(builder: wry::WebViewBuilder<'_>) -> wry::WebViewBuilder<'_> {
     builder
         .with_incognito(true)
@@ -277,17 +279,63 @@ fn open_windows(
     Ok(cx.new(|_| view))
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn build_view(
     builder: wry::WebViewBuilder<'_>,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<gpui_webview::WebView, String> {
-    gpui_webview::WebView::build(builder, window, cx).map_err(|error| failure(&error.to_string()))
+    gpui_webview::WebView::build(builder, window, cx)
+        .map_err(|error| page_failure(&error.to_string()))
+}
+
+// WebKitGTK can embed only in an X11 window. Say that in one sentence.
+pub(crate) fn page_failure(error: &str) -> String {
+    if error.contains("requires an X11 window") {
+        "The browser needs an X11 window. On Wayland, start kagan where DISPLAY is set (XWayland)."
+            .to_owned()
+    } else {
+        failure(error)
+    }
+}
+
+// Linux pages cannot use the camera or microphone, and a script dialog cannot stall the window.
+#[cfg(target_os = "linux")]
+fn restrain(view: &gpui_webview::WebView, cx: &App) {
+    use webkit2gtk::prelude::{
+        FileChooserRequestExt as _, PermissionRequestExt as _, SettingsExt as _, WebViewExt as _,
+    };
+    use wry::WebViewExtUnix as _;
+
+    let page = view.raw().webview();
+    if let Some(settings) = page.settings() {
+        settings.set_allow_modal_dialogs(false);
+        settings.set_enable_media_stream(false);
+        settings.set_enable_webrtc(false);
+        settings.set_javascript_can_open_windows_automatically(false);
+    }
+    page.connect_permission_request(|_, request| {
+        request.deny();
+        true
+    });
+    page.connect_script_dialog(|_, dialog| {
+        dialog.close();
+        true
+    });
+    page.connect_run_file_chooser(|_, request| {
+        request.cancel();
+        true
+    });
+    let mode = crate::theme::ThemeState::global(cx).read(cx).mode;
+    let native = match mode {
+        gpui_kit::component::ThemeMode::Light => wry::Theme::Light,
+        gpui_kit::component::ThemeMode::Dark => wry::Theme::Dark,
+    };
+    let _ = view.set_theme(native);
 }
 
 // A per-plugin `WKWebsiteDataStore` needs macOS 14 or later. Older versions keep the page private.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
 
 #[cfg(target_os = "macos")]
@@ -302,7 +350,7 @@ pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 
 
 // Gives a page its own durable store. Run it after `page::private`: a durable store needs
 // incognito off, and the last call wins.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(crate) fn with_store(
     builder: wry::WebViewBuilder<'_>,
     store: Option<[u8; 16]>,
@@ -337,6 +385,9 @@ mod tests {
         let other = failure("the window is gone");
         assert!(other.contains("could not open"));
         assert!(!other.contains("WebView2 Runtime"));
+        let x11 = page_failure("WebView on Linux requires an X11 window; start the application");
+        assert!(x11.contains("DISPLAY"));
+        assert!(!x11.contains("could not open"));
     }
 
     #[test]
