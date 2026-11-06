@@ -153,9 +153,9 @@ impl Kagan {
         let handle = preview.window;
         let load = cx.spawn(async move |this, cx| {
             let shown = shown.await;
-            _ = cx.update_window(handle, |_, window, cx| {
+            _ = cx.update_window(handle, |_, _, cx| {
                 _ = this.update(cx, |this, cx| {
-                    this.apply_preview(&expect, shown, window, cx);
+                    this.apply_preview(&expect, shown, cx);
                 });
             });
         });
@@ -168,7 +168,6 @@ impl Kagan {
         &mut self,
         expect: &Expect,
         shown: Result<OpResult, OpError>,
-        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Some(preview) = self.tabs.preview.as_mut() else {
@@ -187,7 +186,7 @@ impl Kagan {
                 preview.path.clone_from(&file.path);
                 preview.notice = None;
                 preview.file = Some(file);
-                self.load_image(expect.generation, window, cx);
+                self.load_image(expect.generation, cx);
             }
             Ok(_) => {
                 // Dispatch answers this Op with Preview, so any other result is a bug.
@@ -201,7 +200,7 @@ impl Kagan {
     }
 
     /// Reads the bytes of the image the Op named, after checking the path again.
-    fn load_image(&mut self, generation: u64, window: &mut Window, cx: &mut Context<Self>) {
+    fn load_image(&mut self, generation: u64, cx: &mut Context<Self>) {
         let Some(preview) = self.tabs.preview.as_ref() else {
             return;
         };
@@ -215,7 +214,7 @@ impl Kagan {
         let root = match &preview.thread {
             Some(thread) => match environment_path(thread, cx) {
                 Some(root) => Some(root),
-                None => return self.apply_image(generation, None, window, cx),
+                None => return self.apply_image(generation, None, cx),
             },
             None => None,
         };
@@ -225,9 +224,9 @@ impl Kagan {
         });
         let load = cx.spawn(async move |this, cx| {
             let image = read.await;
-            _ = cx.update_window(handle, |_, window, cx| {
+            _ = cx.update_window(handle, |_, _, cx| {
                 _ = this.update(cx, |this, cx| {
-                    this.apply_image(generation, image, window, cx);
+                    this.apply_image(generation, image, cx);
                 });
             });
         });
@@ -236,13 +235,7 @@ impl Kagan {
         }
     }
 
-    fn apply_image(
-        &mut self,
-        generation: u64,
-        image: Option<Arc<Image>>,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn apply_image(&mut self, generation: u64, image: Option<Arc<Image>>, cx: &mut Context<Self>) {
         let Some(preview) = self.tabs.preview.as_mut() else {
             return;
         };

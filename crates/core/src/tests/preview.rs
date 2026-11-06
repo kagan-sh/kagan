@@ -273,7 +273,7 @@ async fn csv_stops_at_one_hundred_rows_and_twenty_columns(cx: &mut TestAppContex
 }
 
 #[gpui_kit::test]
-async fn a_file_exactly_at_each_cap_is_accepted(cx: &mut TestAppContext) {
+async fn text_exactly_at_each_cap_is_accepted(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     std::fs::write(
         fixture.dir.path().join("exact.txt"),
@@ -285,26 +285,11 @@ async fn a_file_exactly_at_each_cap_is_accepted(cx: &mut TestAppContext) {
         .collect::<Vec<_>>()
         .concat();
     std::fs::write(fixture.dir.path().join("lines.txt"), lines).unwrap();
-    std::fs::write(fixture.dir.path().join("line.txt"), "x".repeat(4_000)).unwrap();
-    let mut csv = String::new();
-    for row in 0..100 {
-        let cells: Vec<String> = (0..20)
-            .map(|column| {
-                if row == 0 && column == 0 {
-                    "c".repeat(120)
-                } else {
-                    format!("{row}-{column}")
-                }
-            })
-            .collect();
-        csv.push_str(&cells.join(","));
-        csv.push('\n');
-    }
-    std::fs::write(fixture.dir.path().join("exact.csv"), csv).unwrap();
-    let mut heavy = png(2, 2);
-    heavy.resize(8 * 1024 * 1024, 0);
-    std::fs::write(fixture.dir.path().join("exact.png"), heavy).unwrap();
-    std::fs::write(fixture.dir.path().join("many.png"), png(8_000, 5_000)).unwrap();
+    std::fs::write(
+        fixture.dir.path().join("line.txt"),
+        format!("{}\ntail", "x".repeat(4_000)),
+    )
+    .unwrap();
     let thread = started(&fixture, cx).await;
 
     let PreviewKind::Text { text, cut } =
@@ -328,8 +313,35 @@ async fn a_file_exactly_at_each_cap_is_accepted(cx: &mut TestAppContext) {
     else {
         panic!("4,000 bytes at the cap")
     };
-    assert_eq!(text.len(), 4_000);
+    assert_eq!(text.len(), 4_005);
+    assert_eq!(text.lines().next().map(str::len), Some(4_000));
+    assert_eq!(text.lines().nth(1), Some("tail"));
     assert!(cut.is_none());
+}
+
+#[gpui_kit::test]
+async fn csv_and_image_exactly_at_the_caps_are_accepted(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let mut csv = String::new();
+    for row in 0..100 {
+        let cells: Vec<String> = (0..20)
+            .map(|column| {
+                if row == 0 && column == 0 {
+                    "c".repeat(120)
+                } else {
+                    format!("{row}-{column}")
+                }
+            })
+            .collect();
+        csv.push_str(&cells.join(","));
+        csv.push('\n');
+    }
+    std::fs::write(fixture.dir.path().join("exact.csv"), csv).unwrap();
+    let mut heavy = png(2, 2);
+    heavy.resize(8 * 1024 * 1024, 0);
+    std::fs::write(fixture.dir.path().join("exact.png"), heavy).unwrap();
+    std::fs::write(fixture.dir.path().join("many.png"), png(8_000, 5_000)).unwrap();
+    let thread = started(&fixture, cx).await;
 
     let PreviewKind::Csv {
         rows,
@@ -515,6 +527,10 @@ fn the_cut_note_names_only_the_dimension_that_was_cut() {
     };
     assert_eq!(
         crate::preview_note(&cut).as_deref(),
-        Some("Showing the first 2000 of 2001 lines.")
+        Some("Showing the first 2,000 of 2,001 lines.")
+    );
+    assert_eq!(
+        crate::preview_note(&csv(vec![vec!["a"; 20]; 100], 151, 30)).as_deref(),
+        Some("Showing the first 100 of 151 rows. Showing the first 20 of 30 columns.")
     );
 }

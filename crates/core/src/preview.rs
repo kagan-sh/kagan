@@ -252,9 +252,15 @@ fn head(path: &Path, limit: u64) -> Result<Vec<u8>> {
 #[must_use]
 pub fn preview_note(kind: &PreviewKind) -> Option<String> {
     match kind {
-        PreviewKind::Text { cut, .. } | PreviewKind::Markdown { cut, .. } => cut
-            .as_ref()
-            .map(|cut| format!("Showing the first {} of {} lines.", cut.shown, cut.total)),
+        PreviewKind::Text { cut, .. } | PreviewKind::Markdown { cut, .. } => {
+            cut.as_ref().map(|cut| {
+                format!(
+                    "Showing the first {} of {} lines.",
+                    count(cut.shown),
+                    count(cut.total)
+                )
+            })
+        }
         PreviewKind::Csv {
             rows,
             rows_total,
@@ -266,18 +272,34 @@ pub fn preview_note(kind: &PreviewKind) -> Option<String> {
             let mut parts = Vec::new();
             if rows_shown < *rows_total {
                 parts.push(format!(
-                    "Showing the first {rows_shown} of {rows_total} rows."
+                    "Showing the first {} of {} rows.",
+                    count(rows_shown),
+                    count(*rows_total)
                 ));
             }
             if columns_shown < *columns_total {
                 parts.push(format!(
-                    "Showing the first {columns_shown} of {columns_total} columns."
+                    "Showing the first {} of {} columns.",
+                    count(columns_shown),
+                    count(*columns_total)
                 ));
             }
             (!parts.is_empty()).then(|| parts.join(" "))
         }
         PreviewKind::Image { .. } | PreviewKind::Unavailable { .. } => None,
     }
+}
+
+fn count(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
 }
 
 /// Bytes as a person reads them: `8 B`, `1.4 KB` or `2.3 MB`.
