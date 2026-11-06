@@ -1,6 +1,6 @@
 use kg_domain::{
-    Conversation, EnvironmentId, EnvironmentStatus, Event, EventKind, PluginId, ProjectId, Thread,
-    ThreadId, ThreadMark, ThreadStatus, Timestamp,
+    Conversation, EnvironmentId, EnvironmentStatus, Event, EventKind, Metadata, PluginId,
+    ProjectId, Thread, ThreadId, ThreadMark, ThreadStatus, Timestamp,
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 use serde_json::Value;
@@ -47,14 +47,38 @@ impl super::Store {
         Ok(())
     }
 
-    /// Inserts a new thread together with its first events.
+    /// Attaches a new thread to a ready environment with its metadata and first events in one commit.
     pub fn create_thread(
         &mut self,
         thread: &Thread,
+        metadata: Option<&Metadata>,
         kinds: impl IntoIterator<Item = EventKind>,
     ) -> Result<Vec<Event>> {
         let tx = self.conn.transaction()?;
+        let environment = thread.environment_id.as_ref().ok_or_else(|| {
+            Error::Conflict("environment must be ready and belong to this project".into())
+        })?;
+        let folder: std::path::PathBuf = tx
+            .query_row(
+                "SELECT path FROM environments WHERE id = ?1 AND project_id = ?2 AND status = 'ready'",
+                params![Text(environment), Text(&thread.project_id)],
+                |row| Ok(row.get::<_, Text<_>>(0)?.0),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                Error::Conflict("environment must be ready and belong to this project".into())
+            })?;
+        if super::environment::removal_pending(&tx, &folder)? {
+            return Err(Error::Conflict("that folder is being removed".into()));
+        }
+        tx.execute(
+            "UPDATE environments SET retire_at = NULL WHERE id = ?1",
+            [Text(environment)],
+        )?;
         put_thread(&tx, thread)?;
+        if let Some(metadata) = metadata {
+            set_thread_metadata(&tx, &thread.id, &metadata.plugin_id, &metadata.value)?;
+        }
         let events = append_events(&tx, &thread.id, thread.created_at, kinds)?;
         tx.commit()?;
         Ok(events)
@@ -310,13 +334,22 @@ impl super::Store {
         plugin_id: &PluginId,
         value: &Value,
     ) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO thread_metadata (thread_id, plugin_id, value) VALUES (?1, ?2, ?3)
-             ON CONFLICT(thread_id, plugin_id) DO UPDATE SET value = excluded.value",
-            params![Text(id), Text(plugin_id), Json(value)],
-        )?;
-        Ok(())
+        set_thread_metadata(&self.conn, id, plugin_id, value)
     }
+}
+
+fn set_thread_metadata(
+    conn: &Connection,
+    id: &ThreadId,
+    plugin_id: &PluginId,
+    value: &Value,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO thread_metadata (thread_id, plugin_id, value) VALUES (?1, ?2, ?3)
+             ON CONFLICT(thread_id, plugin_id) DO UPDATE SET value = excluded.value",
+        params![Text(id), Text(plugin_id), Json(value)],
+    )?;
+    Ok(())
 }
 
 pub(super) fn owned_threads(conn: &Connection, id: &ThreadId) -> Result<Vec<ThreadId>> {

@@ -453,7 +453,7 @@ fn listed(kagan: &Kagan, cx: &App) -> Vec<(String, bool)> {
         if slot.web.is_some() {
             open.push((
                 slot.id.clone(),
-                right_on && tab.as_deref() == Some(slot.id.as_str()),
+                right_on && tab.as_ref() == Some(&right::Tab::Plugin(slot.id.clone())),
             ));
         }
     }

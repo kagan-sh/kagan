@@ -236,3 +236,52 @@ fn dropping_the_process_kills_a_background_grandchild() -> std::io::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn capture_closes_descendant_output_after_the_parent_exits() -> std::io::Result<()> {
+    let path = TempPath::new("capture-grandchild");
+    let mut command = std::process::Command::new("sh");
+    command.args([
+        "-c",
+        "sleep 3 & echo $! > \"$1\"; printf out; printf err >&2; exit 7",
+        "sh",
+    ]);
+    command.arg(&path.0);
+    let started = Instant::now();
+    let output = crate::capture_with_limit(command, Duration::from_secs(1))?;
+    let pid = read_pid(&path.0)?;
+    let _reap = Reap(pid);
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(output.code, 7);
+    assert_eq!(output.stdout, b"out");
+    assert_eq!(output.stderr, "err");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while alive(pid) {
+        assert!(Instant::now() < deadline, "captured descendant survived");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    Ok(())
+}
+
+#[test]
+fn capture_timeout_kills_the_entire_tree() -> std::io::Result<()> {
+    let path = TempPath::new("capture-timeout");
+    // `cscript` can spend seconds starting on a busy Windows runner; the tree
+    // itself never exits, so the capture still has to time out.
+    #[cfg(windows)]
+    let limit = Duration::from_secs(15);
+    #[cfg(not(windows))]
+    let limit = Duration::from_secs(1);
+    let error = crate::capture_with_limit(tree_command(&path.0), limit)
+        .expect_err("the tree waits for its child");
+    let pid = read_pid(&path.0)?;
+    let _reap = Reap(pid);
+    assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while alive(pid) {
+        assert!(Instant::now() < deadline, "timed out descendant survived");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    Ok(())
+}

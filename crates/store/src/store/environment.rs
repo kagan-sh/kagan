@@ -66,11 +66,7 @@ impl super::Store {
 
     /// Whether `path` lies in a folder that a delete is removing, so nothing new may attach to it.
     pub fn removal_pending(&self, path: &Path) -> Result<bool> {
-        Ok(all_environments(&self.conn)?.iter().any(|environment| {
-            environment.status == EnvironmentStatus::Destroyed
-                && environment.provider == EnvironmentProvider::Personal
-                && path.starts_with(&environment.path)
-        }))
+        removal_pending(&self.conn, path)
     }
 
     /// The Personal folders that deleting `id` would remove: only `id` and its dependents use each,
@@ -78,6 +74,14 @@ impl super::Store {
     pub fn personal_folders(&self, id: &ThreadId) -> Result<Vec<Environment>> {
         personal_folders(&self.conn, id)
     }
+}
+
+pub(super) fn removal_pending(conn: &Connection, path: &Path) -> Result<bool> {
+    Ok(all_environments(conn)?.iter().any(|environment| {
+        environment.status == EnvironmentStatus::Destroyed
+            && environment.provider == EnvironmentProvider::Personal
+            && path.starts_with(&environment.path)
+    }))
 }
 
 fn all_environments(conn: &Connection) -> Result<Vec<Environment>> {

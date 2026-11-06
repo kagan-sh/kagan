@@ -859,9 +859,7 @@ fn a_named_export_mounts_beside_the_default_view(cx: &mut TestAppContext) {
                     panic!("{failed:?}");
                 };
                 assert!(error.contains("export `Side`"), "{error}");
-                assert!(!host.update(cx, |host, cx| {
-                    host.reject_mount(&PluginId(ID.into()), &error, cx)
-                }));
+                assert!(host.read(cx).generation(&PluginId(ID.into())).is_some());
             })
             .unwrap();
     });
@@ -916,7 +914,7 @@ fn a_named_mount_that_fails_to_construct_unloads_and_logs(cx: &mut TestAppContex
     std::fs::write(
         plugin.path().join("main.js"),
         format!(
-            "{MAIN}\nexport class Side extends View {{\n  init() {{ throw new Error(\"side broke\"); }}\n  render() {{ return \"side\"; }}\n}}\n"
+            "{MAIN}\nexport class Side extends View {{\n  init() {{ throw new Error(\"side broke: export `fake` pinned gpui-shell has no panel and does not export\"); }}\n  render() {{ return \"side\"; }}\n}}\n"
         ),
     )
     .unwrap();

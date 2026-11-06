@@ -18,7 +18,7 @@ impl PluginHost {
     ///
     /// The default export stays mounted in the plugin's hidden window for as long
     /// as any named view is alive. A construct or init failure releases that
-    /// generation; [`Self::reject_mount`] then unloads the plugin.
+    /// generation; `fail_mount` then unloads the plugin.
     ///
     /// # Errors
     ///
@@ -240,23 +240,28 @@ impl PluginHost {
                     .runtime
                     .mount_paint_only_view(&loaded.application, export, window, cx)
             }
-        }
-        .map_err(|error| MountError::Failed(format!("{error:#}")));
-        if let Ok(view) = &mounted
-            && let Some(loaded) = self
-                .active
-                .get_mut(id)
-                .and_then(|active| active.loaded.as_mut())
-        {
-            loaded.views.push(view.downgrade());
-        }
+        };
         match mounted {
-            Err(MountError::Failed(error)) => {
-                let error = self.secrets.redact(id, &error);
-                self.reject_mount(id, &error, cx);
+            Ok(view) => {
+                if let Some(loaded) = self
+                    .active
+                    .get_mut(id)
+                    .and_then(|active| active.loaded.as_mut())
+                {
+                    loaded.views.push(view.downgrade());
+                }
+                Ok(view)
+            }
+            Err(error) => {
+                let released = error
+                    .downcast_ref::<gpui_shell::MountViewError>()
+                    .is_none_or(gpui_shell::MountViewError::is_generation_released);
+                let error = self.secrets.redact(id, &format!("{error:#}"));
+                if released {
+                    self.fail_mount(id, &error, cx);
+                }
                 Err(MountError::Failed(error))
             }
-            mounted => mounted,
         }
     }
 
@@ -279,25 +284,14 @@ impl PluginHost {
         cx.notify();
     }
 
-    /// Unloads `id` after a mount releases its generation, records the error on
-    /// the plugin row, and appends it to the plugin log.
-    ///
-    /// A missing export leaves the generation mounted. Those return false.
-    pub fn reject_mount(&mut self, id: &PluginId, error: &str, cx: &mut Context<Self>) -> bool {
-        if error.contains("pinned gpui-shell")
-            || error.contains("export `")
-            || error.contains("has no panel")
-            || error.contains("does not export")
-        {
-            return false;
-        }
+    fn fail_mount(&mut self, id: &PluginId, error: &str, cx: &mut Context<Self>) {
         if self
             .active
             .get(id)
             .and_then(|active| active.fault.as_deref())
             == Some(error)
         {
-            return true;
+            return;
         }
         if let Some(active) = self.active.get_mut(id) {
             active.fault = Some(error.to_owned());
@@ -318,6 +312,5 @@ impl PluginHost {
         })
         .detach();
         cx.notify();
-        true
     }
 }

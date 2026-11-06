@@ -113,7 +113,7 @@ impl Kagan {
             && self
                 .right_tab
                 .as_ref()
-                .is_some_and(|id| !super::right::tab_available(self, id, cx))
+                .is_some_and(|id| !id.available(self, cx))
         {
             self.right_tab = self.default_right_tab(cx);
         }

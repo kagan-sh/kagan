@@ -132,7 +132,7 @@ impl Kagan {
             return;
         }
         if !self.screen.drawn(Side::Right) && self.waiting_count(cx) > 0 {
-            self.select_right_tab("needs-you", cx);
+            self.select_right_tab(crate::kagan::right::Tab::Questions, cx);
         }
         // Save the wide layout when the column fits, even while the overlay is up.
         if self.screen.review().is_none()

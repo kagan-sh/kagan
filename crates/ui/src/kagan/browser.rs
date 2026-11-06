@@ -225,7 +225,7 @@ impl Kagan {
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     pub(super) fn browser_drawn(&self, cx: &App) -> bool {
         self.right_drawn()
-            && super::right::selected_tab(self, cx).as_deref() == Some(super::tabs::BROWSER)
+            && super::right::selected_tab(self, cx) == Some(super::right::Tab::Browser)
     }
 
     /// Hides or shows the native page to match whether the Browser tab is on screen.

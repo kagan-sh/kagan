@@ -13,7 +13,7 @@ use kg_domain::{Op, SurfaceOp};
 use crate::theme::{SpaceStep, radius_md, space};
 
 use super::tabs::{self, CloseTab};
-use super::{ActivatePanelHeader, Body, Fill, Panel, ToggleFill, plugin_body, tab_available};
+use super::{ActivatePanelHeader, Fill, Panel, Tab, ToggleFill, plugin_body};
 use crate::components::fills_panel;
 use crate::kagan::controls::{control, menu_popup};
 use crate::kagan::surface::Slot;
@@ -22,16 +22,29 @@ use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 pub(super) fn tab_body(
     kagan: &mut Kagan,
-    id: &str,
+    tab: &Tab,
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> Option<AnyElement> {
-    if let Some(panel) = kagan.panels.iter().find(|panel| panel.id == id) {
-        let body = match &panel.body {
-            Body::Needs => kagan.render_needs(window, cx).into_any_element(),
-            Body::Changes => kagan.render_changes(cx).into_any_element(),
-            Body::Details => kagan.render_details(cx),
-        };
+    let id = tab.id();
+    if matches!(tab, Tab::Questions | Tab::Changes | Tab::Details)
+        && !kagan.panels.iter().any(|panel| panel.tab == *tab)
+    {
+        return None;
+    }
+    let body = match tab {
+        Tab::Questions => Some(kagan.render_needs(window, cx).into_any_element()),
+        Tab::Changes => Some(kagan.render_changes(cx).into_any_element()),
+        Tab::Details => Some(kagan.render_details(cx)),
+        Tab::Browser => return Some(kagan.render_browser(cx)),
+        Tab::Terminal(number) => {
+            let view = kagan.tabs.view(*number)?.clone();
+            return Some(div().size_full().child(view).into_any_element());
+        }
+        Tab::Preview => return Some(kagan.tabs.preview.as_ref()?.render(cx)),
+        Tab::Plugin(_) => None,
+    };
+    if let Some(body) = body {
         return Some(
             div()
                 .id(ElementId::Name(format!("{id}-body").into()))
@@ -41,21 +54,8 @@ pub(super) fn tab_body(
                 .into_any_element(),
         );
     }
-    if id == crate::kagan::preview::TAB {
-        return Some(kagan.tabs.preview.as_ref()?.render(cx));
-    }
-    if id == tabs::BROWSER {
-        return Some(kagan.render_browser(cx));
-    }
-    if let Some(number) = tabs::terminal_number(id) {
-        let view = kagan.tabs.view(number)?.clone();
-        return Some(div().size_full().child(view).into_any_element());
-    }
     let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
     let page = slot.web.is_some() || slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
-    if !page {
-        crate::components::nudge_once(window, cx);
-    }
     Some(
         div()
             .id(ElementId::Name(format!("{}-body", slot.id).into()))
@@ -71,13 +71,13 @@ pub(super) fn tab_body(
 
 pub(super) fn tab_bar(
     kagan: &Kagan,
-    selected: Option<&str>,
+    selected: Option<&Tab>,
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let mut tabs = Vec::new();
     for panel in &kagan.panels {
-        if tab_available(kagan, &panel.id, cx) {
+        if panel.tab.available(kagan, cx) {
             tabs.push(built_in_tab(panel, selected, window, cx));
         }
     }
@@ -137,27 +137,27 @@ fn full_button(kagan: &Kagan) -> impl IntoElement {
 
 fn built_in_tab(
     panel: &Panel,
-    selected: Option<&str>,
+    selected: Option<&Tab>,
     window: &mut Window,
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
-    let id = panel.id.clone();
+    let id = panel.tab.id().into_owned();
     let focus = tab_stop(
         window,
         cx,
         ElementId::Name(format!("{id}-header-focus").into()),
     );
-    let active = selected == Some(id.as_str());
+    let active = selected == Some(&panel.tab);
     let header = format!("{id}-header");
     let take = focus.clone();
-    let select = id.clone();
+    let select = panel.tab.clone();
     let tab = tabs::tab(
         header,
         panel.title.clone().into(),
         active,
         move |this, window, cx| {
             window.focus(&take, cx);
-            this.select_right_tab(&select, cx);
+            this.select_right_tab(select.clone(), cx);
         },
         None,
         Some(focus),
@@ -171,7 +171,7 @@ fn built_in_tab(
         .into_any_element()
 }
 
-fn plugin_tab(slot: &Slot, selected: Option<&str>, cx: &mut Context<Kagan>) -> AnyElement {
+fn plugin_tab(slot: &Slot, selected: Option<&Tab>, cx: &mut Context<Kagan>) -> AnyElement {
     let (plugin, id) = (slot.plugin.clone(), slot.contribution.clone());
     let close: CloseTab = (
         format!("right-tab-close-{}", slot.id).into(),
@@ -186,12 +186,12 @@ fn plugin_tab(slot: &Slot, selected: Option<&str>, cx: &mut Context<Kagan>) -> A
             .detach();
         }),
     );
-    let select = slot.id.clone();
+    let select = Tab::Plugin(slot.id.clone());
     tabs::tab(
         format!("right-tab-{}", slot.id),
         slot.title.clone().into(),
-        selected == Some(slot.id.as_str()),
-        move |this, _, cx| this.select_right_tab(&select, cx),
+        selected == Some(&select),
+        move |this, _, cx| this.select_right_tab(select.clone(), cx),
         Some(close),
         None,
         cx,

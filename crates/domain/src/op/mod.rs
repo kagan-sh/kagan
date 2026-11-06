@@ -43,8 +43,8 @@ pub use environment::{BranchList, EnvironmentOp, EnvironmentSpec};
 pub use guide::GuideChapter;
 pub use index::IndexOp;
 pub use keymap::{
-    KeyPlatform, Keymap, KeymapAction, KeymapOp, SHORTCUTS, Shortcut, default_chord,
-    expand_secondary,
+    CommandGroup, KeyPlatform, Keymap, KeymapAction, KeymapOp, SHORTCUTS, Shortcut, ShortcutGroup,
+    ShortcutScope, ShortcutWhen, default_chord, expand_secondary,
 };
 pub use plugin::PluginOp;
 pub use preference::PreferenceOp;

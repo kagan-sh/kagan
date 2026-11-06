@@ -10,7 +10,7 @@ mod job;
 #[cfg(test)]
 mod tests;
 
-pub use capture::{Captured, capture, capture_with_limit};
+pub use capture::{Captured, capture_with_limit};
 pub use path::{find_program, pathext, user_path, warm_user_path};
 pub use process::Process;
 

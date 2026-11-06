@@ -24,7 +24,7 @@ impl Kagan {
         let mut ids = Vec::new();
         let full = self.right_fill == right::Fill::Window && self.panes.right;
         if self.right_drawn()
-            && let Some(tab) = right::selected_tab(self, cx)
+            && let Some(right::Tab::Plugin(tab)) = right::selected_tab(self, cx)
             && let Some(view) = self
                 .right_slots
                 .iter()

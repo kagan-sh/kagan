@@ -382,10 +382,14 @@ mod review_wrap_tests {
     fn guide_names_every_preference() {
         let guide = include_str!("../guide-map.md");
         let behaviour = include_str!("../../../../docs/behaviour.md");
-        let help = include_str!("../../../domain/src/op/mod.rs")
-            .lines()
-            .find(|line| line.contains("Read or save a preference:"))
-            .expect("the preference help in the op modules");
+        let command =
+            <kg_domain::Op as clap::Subcommand>::augment_subcommands(clap::Command::new("kg"));
+        let help = command
+            .find_subcommand("preference")
+            .expect("preference command")
+            .get_about()
+            .expect("preference help")
+            .to_string();
         for key in PREFERENCES.iter().map(|(name, _)| *name) {
             assert!(guide.contains(&format!("`{key}`")), "guide missing {key}");
             assert!(

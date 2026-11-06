@@ -2,8 +2,6 @@ use std::io;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use super::process::poll_child;
-
 /// Output of a command that ran to completion.
 #[derive(Debug)]
 pub struct Captured {
@@ -12,75 +10,36 @@ pub struct Captured {
     pub stderr: String,
 }
 
-/// Runs `command` to completion and captures both pipes.
+/// Runs `command` in an owned process tree, killing it after `limit`.
 ///
 /// # Errors
-/// When the program cannot start.
-pub fn capture(command: &mut Command) -> io::Result<Captured> {
-    let output = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
-    Ok(Captured {
-        code: output.status.code().unwrap_or(1),
-        stdout: output.stdout,
-        stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-    })
-}
+/// When the program cannot start, output cannot be read, or it runs past `limit`.
+pub fn capture_with_limit(command: Command, limit: Duration) -> io::Result<Captured> {
+    use io::{Read as _, Seek as _};
 
-/// Runs `command` to completion and captures both pipes, killing it after `limit`.
-///
-/// # Errors
-/// When the program cannot start, or runs past `limit` with [`io::ErrorKind::TimedOut`].
-pub fn capture_with_limit(command: &mut Command, limit: Duration) -> io::Result<Captured> {
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn()?;
-    let stdout = child
-        .stdout
-        .take()
-        .map(|mut pipe| std::thread::spawn(move || read_pipe(&mut pipe)));
-    let stderr = child
-        .stderr
-        .take()
-        .map(|mut pipe| std::thread::spawn(move || read_pipe(&mut pipe)));
-    let status = poll_child(
-        &mut child,
-        std::process::Child::try_wait,
-        |child| {
-            let _ = child.kill();
-            let _ = child.wait();
-        },
-        limit,
+    let mut stdout = tempfile::tempfile()?;
+    let mut stderr = tempfile::tempfile()?;
+    let mut process = crate::Process::spawn(
+        command,
+        Stdio::null(),
+        stdout.try_clone()?.into(),
+        stderr.try_clone()?.into(),
     )?;
-    let Some(status) = status else {
-        return Err(io::Error::new(
-            io::ErrorKind::TimedOut,
-            "the program ran too long",
-        ));
-    };
+    let status = process
+        .wait_within(limit)?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "the program ran too long"))?;
+    process.kill();
+    stdout.rewind()?;
+    stderr.rewind()?;
+    let mut out = Vec::new();
+    stdout.read_to_end(&mut out)?;
+    let mut bytes = Vec::new();
+    stderr.read_to_end(&mut bytes)?;
     Ok(Captured {
         code: status.code().unwrap_or(1),
-        stdout: join_pipe(stdout),
-        stderr: String::from_utf8_lossy(&join_pipe(stderr))
-            .trim()
-            .to_owned(),
+        stdout: out,
+        stderr: String::from_utf8_lossy(&bytes).trim().to_owned(),
     })
-}
-
-fn read_pipe(pipe: &mut impl io::Read) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    let _ = pipe.read_to_end(&mut bytes);
-    bytes
-}
-
-fn join_pipe(handle: Option<std::thread::JoinHandle<Vec<u8>>>) -> Vec<u8> {
-    handle
-        .and_then(|handle| handle.join().ok())
-        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -88,7 +47,7 @@ mod tests {
     use std::process::Command;
     use std::time::Duration;
 
-    use super::{capture, capture_with_limit};
+    use super::capture_with_limit;
 
     #[cfg(unix)]
     fn shell(script: &str) -> Command {
@@ -117,10 +76,10 @@ mod tests {
     #[test]
     fn capture_keeps_stdout_stderr_and_the_code() {
         #[cfg(unix)]
-        let mut command = shell("printf out; printf err >&2; exit 3");
+        let command = shell("printf out; printf err >&2; exit 3");
         #[cfg(windows)]
-        let mut command = shell("echo out & echo err 1>&2 & exit /b 3");
-        let output = capture(&mut command).unwrap();
+        let command = shell("echo out & echo err 1>&2 & exit /b 3");
+        let output = capture_with_limit(command, Duration::from_secs(5)).unwrap();
         assert_eq!(output.code, 3);
         #[cfg(unix)]
         {
@@ -137,10 +96,10 @@ mod tests {
     #[test]
     fn capture_with_limit_returns_a_fast_command() {
         #[cfg(unix)]
-        let mut command = shell("printf fast");
+        let command = shell("printf fast");
         #[cfg(windows)]
-        let mut command = shell("echo fast");
-        let output = capture_with_limit(&mut command, Duration::from_secs(5)).unwrap();
+        let command = shell("echo fast");
+        let output = capture_with_limit(command, Duration::from_secs(5)).unwrap();
         assert_eq!(output.code, 0);
         assert!(String::from_utf8_lossy(&output.stdout).contains("fast"));
     }
@@ -148,7 +107,7 @@ mod tests {
     #[test]
     fn capture_with_limit_reports_a_timeout_and_kills_the_command() {
         let error =
-            capture_with_limit(&mut slow(), Duration::from_millis(50)).expect_err("slow command");
+            capture_with_limit(slow(), Duration::from_millis(50)).expect_err("slow command");
         assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
     }
 }

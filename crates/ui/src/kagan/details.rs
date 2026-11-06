@@ -11,7 +11,7 @@ use kg_domain::{EnvironmentProvider, GitDetails, Op, OpResult, ThreadDetails, Th
 use super::Kagan;
 use super::changes::line;
 use super::controls::control;
-use super::right::Body;
+use super::right::Tab;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -39,9 +39,7 @@ impl Default for Details {
 impl Kagan {
     /// Whether the Details panel exists, so a timer should keep it current.
     pub(super) fn details_open(&self) -> bool {
-        self.panels
-            .iter()
-            .any(|panel| matches!(panel.body, Body::Details))
+        self.panels.iter().any(|panel| panel.tab == Tab::Details)
     }
 
     pub(super) fn load_details(&mut self, cx: &mut Context<Self>) {

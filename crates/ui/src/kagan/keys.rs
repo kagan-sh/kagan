@@ -3,7 +3,7 @@ use gpui_kit::{
     Action, App, Global, KeyBinding, KeyBindingContextPredicate, NoAction, Subscription,
 };
 use kg_core::Workspace;
-use kg_domain::{KeyPlatform, Keymap, SHORTCUTS};
+use kg_domain::{KeyPlatform, Keymap, SHORTCUTS, ShortcutScope};
 
 use super::{
     Bigger, CONTEXT, CloseCustomCommand, DismissLeftOverlay, DismissRightOverlay, settings, sidebar,
@@ -52,37 +52,37 @@ pub(crate) fn chord_for(action: &str, keymap: &Keymap, platform: KeyPlatform) ->
 fn chord_bindings(keymap: &Keymap, cx: &App) -> Vec<KeyBinding> {
     SHORTCUTS
         .iter()
-        .filter_map(|shortcut| {
-            let result = (|| {
-                let action = cx
-                    .build_action(shortcut.action, None)
-                    .map_err(|error| error.to_string())?;
-                let context = if shortcut.action == "review::SendReview" {
-                    "ReviewNav"
-                } else if shortcut.action.starts_with("review::") {
-                    super::review::CONTEXT
-                } else {
-                    CONTEXT
-                };
-                let context = KeyBindingContextPredicate::parse(context)
-                    .map_err(|error| error.to_string())?;
-                KeyBinding::load(
-                    &chord_for(shortcut.name, keymap, KeyPlatform::host()),
-                    action,
-                    Some(context.into()),
-                    false,
-                    None,
-                    cx,
-                )
-                .map_err(|error| error.to_string())
-            })();
-            match result {
-                Ok(binding) => Some(binding),
-                Err(error) => {
-                    eprintln!("kg: could not bind shortcut {}: {error}", shortcut.action);
-                    None
+        .flat_map(|shortcut| {
+            let contexts: &[&str] = match shortcut.scope {
+                ShortcutScope::Window => &[CONTEXT],
+                ShortcutScope::Review => &[super::review::CONTEXT],
+                ShortcutScope::ReviewSend => &["ReviewNav", "Review > Input"],
+            };
+            contexts.iter().filter_map(move |context| {
+                let result = (|| {
+                    let action = cx
+                        .build_action(shortcut.action, None)
+                        .map_err(|error| error.to_string())?;
+                    let context = KeyBindingContextPredicate::parse(context)
+                        .map_err(|error| error.to_string())?;
+                    KeyBinding::load(
+                        &chord_for(shortcut.name, keymap, KeyPlatform::host()),
+                        action,
+                        Some(context.into()),
+                        false,
+                        None,
+                        cx,
+                    )
+                    .map_err(|error| error.to_string())
+                })();
+                match result {
+                    Ok(binding) => Some(binding),
+                    Err(error) => {
+                        eprintln!("kg: could not bind shortcut {}: {error}", shortcut.action);
+                        None
+                    }
                 }
-            }
+            })
         })
         .collect()
 }
@@ -205,7 +205,6 @@ pub(crate) fn install_keys(cx: &mut App) {
     let mut applied = workspace.read(cx).keymap().clone();
     let bindings = chord_bindings(&applied, cx);
     cx.bind_keys(bindings);
-    cx.bind_keys(send_review(&applied, cx));
     super::menus::refresh(cx);
     let watch = cx.observe(&workspace, move |workspace, cx| {
         let keymap = workspace.read(cx).keymap().clone();
@@ -220,7 +219,6 @@ pub(crate) fn install_keys(cx: &mut App) {
             .cloned()
             .collect();
         kept.extend(chord_bindings(&keymap, cx));
-        kept.extend(send_review(&keymap, cx));
         applied = keymap;
         cx.clear_key_bindings();
         cx.bind_keys(kept);
@@ -229,15 +227,6 @@ pub(crate) fn install_keys(cx: &mut App) {
         super::menus::refresh(cx);
     });
     cx.set_global(ChordWatch { _watch: watch });
-}
-
-fn send_review(keymap: &Keymap, cx: &App) -> Option<KeyBinding> {
-    let key = chord_for("SendReview", keymap, KeyPlatform::host());
-    bind(&key, super::review::SendReview, "Review > Input", cx)
-        .inspect_err(|error| {
-            eprintln!("kg: could not bind shortcut review::SendReview to {key}: {error}");
-        })
-        .ok()
 }
 
 /// A binding for a key known only at run time, read the way this host spells it. GPUI's
@@ -264,7 +253,7 @@ mod tests {
         cx.update(|cx| {
             assert_eq!(
                 chord_bindings(&Keymap::default(), cx).len(),
-                SHORTCUTS.len()
+                SHORTCUTS.len() + 1
             );
             for shortcut in SHORTCUTS {
                 assert!(

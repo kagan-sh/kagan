@@ -196,6 +196,74 @@ fn a_plugin_right_panel_mounts_a_web_view(cx: &mut TestAppContext) {
     }
 }
 
+#[gpui_kit::test]
+fn right_panel_padding_follows_each_published_root(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        write_plugin(
+            data,
+            "changing-webview",
+            WEB,
+            &manifest(
+                WEB,
+                "Changing page",
+                json!([{"id": "page", "title": "Page", "view": "Page", "placement": "right"}]),
+                false,
+            ),
+            r#"import { View } from "gpui-kit";
+import { KgButton, WebView } from "gpui-component";
+import { context, onContextChanged } from "kagan/host";
+export default class Plugin extends View { render() { return ""; } }
+export class Page extends View {
+  init(_props, cx) {
+    const apply = value => { this.web = Boolean(value && value.props && value.props.web); };
+    apply(context());
+    cx.spawn(async () => {
+      for (;;) { apply(await onContextChanged()); cx.notify(); }
+    });
+  }
+  render() {
+    return this.web
+      ? new WebView("changing").url("http://127.0.0.1:1/")
+      : new KgButton("padded").label("Padded");
+  }
+}
+"#,
+        );
+    });
+    wide(cx, window);
+    open_surface(cx, WEB, "page").unwrap();
+    wait_until(cx, |cx| shows(cx, window, "padded"));
+    let generation = super::focus::plugin_generation(cx, WEB);
+    for web in [true, false, true] {
+        cx.update(|cx| {
+            kg_plugins::HostUi::global(cx).unwrap().update(cx, |ui, _| {
+                ui.deliver(
+                    window.window_id(),
+                    &PluginId(WEB.into()),
+                    json!({"web": web}),
+                );
+            });
+        });
+        let id = if web { "webview-changing" } else { "padded" };
+        wait_until(cx, |cx| shows(cx, window, id));
+        cx.run_until_parked();
+        let content = box_of(cx, window, id);
+        let panel = box_of(cx, window, &body(WEB, "page"));
+        if web {
+            assert!(
+                (content.0 - panel.0).abs() < 1. && (content.2 - panel.2).abs() < 1.,
+                "page {content:?}, panel {panel:?}"
+            );
+        } else {
+            assert!(
+                content.0 > panel.0 + 1.,
+                "control {content:?}, panel {panel:?}"
+            );
+        }
+        assert_eq!(super::focus::plugin_generation(cx, WEB), generation);
+    }
+}
+
 pub(in crate::tests) const WEB_PANEL: &str = "dev.test.web-panel";
 
 pub(in crate::tests) const WEB_PANEL_SOURCE: &str = r#"import { View } from "gpui-kit";

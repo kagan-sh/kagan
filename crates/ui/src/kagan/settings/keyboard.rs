@@ -14,7 +14,7 @@ use gpui_kit::{
     Window, div,
 };
 use kg_core::Workspace;
-use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS};
+use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS, ShortcutGroup};
 use kg_plugins::{CommandContribution, PluginHost, RunCommand};
 
 use super::Kagan;
@@ -56,19 +56,11 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
         if !seen.insert(short.clone()) {
             continue;
         }
-        let section = if name.starts_with("review::") {
-            3
-        } else {
-            match short.as_str() {
-                "UseProjectFolder"
-                | "UseWorktreeFolder"
-                | "RetryBranches"
-                | "RetryPrograms"
-                | "ToggleCustomCommand" => 2,
-                "StopThread" | "ArchiveThread" | "TogglePinned" | "StartAgain"
-                | "RestoreThread" | "ThreadActions" => 1,
-                _ => 0,
-            }
+        let section = match shortcut.settings_group {
+            ShortcutGroup::Window => 0,
+            ShortcutGroup::Thread => 1,
+            ShortcutGroup::NewThread => 2,
+            ShortcutGroup::Review => 3,
         };
         built_in[section].push(Shortcut {
             target: KeymapAction::BuiltIn(shortcut),
