@@ -92,7 +92,6 @@ impl Kagan {
         self.picker.clone()
     }
 
-    /// The window this view draws in, for the tests.
     #[cfg(test)]
     pub(crate) fn window_handle(&self) -> gpui_kit::AnyWindowHandle {
         self.window

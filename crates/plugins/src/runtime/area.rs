@@ -20,7 +20,7 @@ pub(crate) struct Bound<'a> {
 pub(crate) struct Values {
     pub settings: Rc<RefCell<Map<String, Value>>>,
     pub secrets: crate::secret::Store,
-    /// The approved title of this plugin's activity strip item, when it declares one.
+    /// The approved title of this plugin's activity strip item.
     pub status: Option<String>,
 }
 
