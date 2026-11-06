@@ -20,6 +20,7 @@ A plugin can ask to:
 - Use the clipboard.
 - Read named folders in your home folder, or folders you select in its settings.
 - Read and change your threads, or use its own database.
+- Open and drive the Browser tab for a thread it names.
 
 It can always read its own folder and change its own data folder. A plugin that can run `git` can use your git credentials, such as SSH keys and a GitHub token.
 

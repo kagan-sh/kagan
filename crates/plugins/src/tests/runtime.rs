@@ -53,6 +53,8 @@ fn scaffold_and_types_match_the_running_shell() {
     assert!(host.contains("export function next(): Promise<Job>"));
     assert!(host.contains("export function setStatus"));
     assert!(host.contains("declare module \"kagan/process\""));
+    assert!(host.contains("declare module \"kagan/browser\""));
+    assert!(host.contains("export function open(threadId: string, url: string): Promise<View>"));
     assert!(!host.contains("kagan/downloads"));
     assert!(host.contains("overlay?: { width: number; height: number }"));
     let shell = std::fs::read_to_string(root.join("gpui-kit.d.ts")).unwrap();

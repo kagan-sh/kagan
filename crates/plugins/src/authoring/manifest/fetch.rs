@@ -208,10 +208,11 @@ pub(crate) enum Area {
     Threads,
     Database,
     Process,
+    Browser,
 }
 
 impl Area {
-    pub(crate) const ALL: [Self; 3] = [Self::Threads, Self::Database, Self::Process];
+    pub(crate) const ALL: [Self; 4] = [Self::Threads, Self::Database, Self::Process, Self::Browser];
 
     pub(crate) fn id(self) -> &'static str {
         self.row().0
@@ -237,6 +238,11 @@ impl Area {
                 "process",
                 "Process",
                 "starts and stops the programs listed here",
+            ),
+            Self::Browser => (
+                "browser",
+                "Browser",
+                "opens and drives the Browser tab for a thread it names",
             ),
         }
     }

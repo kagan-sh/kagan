@@ -13,8 +13,8 @@ pub(crate) use runtime::log;
 pub(crate) use runtime::log::{Level, log};
 pub use runtime::strip::{PluginStrip, StatusItem, StatusTone};
 pub(crate) use runtime::{
-    area, clipboard, commands, database, files, host, jobs, ops, page, process, secret, strip,
-    threads, ui_host, watchdog, web_store,
+    area, browser, clipboard, commands, database, files, host, jobs, ops, page, process, secret,
+    strip, threads, ui_host, watchdog, web_store,
 };
 
 #[cfg(test)]
