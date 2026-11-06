@@ -10,6 +10,10 @@ on:
         description: Run cargo-mutants on the Rust lines changed since main
         type: boolean
         default: false
+      mutants_base:
+        description: Tag, branch or commit to mutate the Rust lines since (empty means origin/main)
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -288,13 +292,24 @@ jobs:
         with:
           fetch-depth: 0
       - id: base
-        run: echo "base=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+        env:
+          REF: ${{ inputs.mutants_base }}
+        run: |
+          ref=${REF:-origin/main}
+          git rev-parse --verify --quiet "$ref^{commit}" > /dev/null || { echo "$ref is not a commit here" >&2; exit 1; }
+          from=$(git merge-base "$ref" HEAD) || { echo "$ref shares no history with HEAD" >&2; exit 1; }
+          if git diff --quiet "$from" HEAD -- '*.rs'; then
+            echo "no Rust changed since $ref ($from)" >&2
+            exit 1
+          fi
+          echo "base=$from" >> "$GITHUB_OUTPUT"
+          echo "mutating the Rust changed since $ref ($from)" >&2
 
   mutants:
     needs: mutants-base
     if: github.event_name == 'workflow_dispatch' && inputs.mutants
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
@@ -323,11 +338,14 @@ jobs:
           tool: cargo-nextest@${{ steps.versions.outputs.nextest }},cargo-mutants@${{ steps.versions.outputs.mutants }}
       - name: Mutants on the changed lines
         run: sh scripts/mutants-diff.sh "${{ needs.mutants-base.outputs.base }}"
+      - name: Mark the shard as reported
+        if: always()
+        run: mkdir -p target/mutants && touch target/mutants/done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: mutants-${{ matrix.shard }}
-          path: target/mutants/diff
+          path: target/mutants
           if-no-files-found: ignore
 
   mutants-result:
@@ -341,6 +359,11 @@ jobs:
           path: mutants
       - name: Report the surviving mutants
         run: |
+          reported=$(find mutants -name done 2>/dev/null | wc -l)
+          if [ "$reported" -ne 16 ]; then
+            echo "$reported of 16 shards reported; the run is incomplete" >&2
+            exit 1
+          fi
           missed=$(find mutants -name missed.txt -size +0c -print -exec cat {} \;)
           if [ -n "$missed" ]; then
             echo "$missed"
