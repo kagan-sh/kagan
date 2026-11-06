@@ -875,7 +875,7 @@ async fn a_start_retires_the_old_agent_skills_links(cx: &mut TestAppContext) {
     ran(&run);
     assert!(!link.exists());
     assert!(
-        !std::fs::read_to_string(&exclude)
+        std::fs::read_to_string(&exclude)
             .unwrap()
             .contains(".agents/skills/kg-threads")
     );
