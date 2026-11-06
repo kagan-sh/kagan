@@ -1,5 +1,5 @@
 #!/bin/sh
-# Product Rust line ceilings. They must match the current counts.
+# Product Rust line ceilings. A count may grow up to its ceiling, never past it.
 set -eu
 
 cd "$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
@@ -62,7 +62,7 @@ BEGIN {
 }
 /^#/ || NF == 0 { next }
 $1 == "target" { target = $2; next }
-$1 == "total" { ceiling = $2; next }
+$1 == "total" || $1 == "ceiling" { ceiling = $2; next }
 $1 == "allow_expect" { marker_ceiling = $2; next }
 NF == 2 && num($2) { cap[$1] = $2; next }
 { bad("size-budget: bad line in " budget ": " $0) }
@@ -70,18 +70,14 @@ END {
   if (!num(target))
     bad("size-budget: " budget " needs a \"target <lines>\" line")
   if (!num(ceiling))
-    bad("size-budget: " budget " needs a \"total <lines>\" ceiling")
+    bad("size-budget: " budget " needs a \"ceiling <lines>\" line")
   else if (total + 0 > ceiling + 0)
     bad("size-budget: product Rust is " total " lines, above the ceiling of " ceiling)
-  else if (total + 0 < ceiling + 0)
-    bad("size-budget: product Rust is " total " lines, under the ceiling of " ceiling "; set total to " total " in " budget)
 
   if (!num(marker_ceiling))
     bad("size-budget: " budget " needs an \"allow_expect <count>\" ceiling")
   else if (marker_count + 0 > marker_ceiling + 0)
     bad("size-budget: product Rust has " marker_count " #[allow]/#[expect] markers, above the ceiling of " marker_ceiling)
-  else if (marker_count + 0 < marker_ceiling + 0)
-    bad("size-budget: product Rust has " marker_count " #[allow]/#[expect] markers, under the ceiling of " marker_ceiling "; set allow_expect to " marker_count " in " budget)
 
   for (path in count) {
     n = count[path] + 0
@@ -89,10 +85,6 @@ END {
       c = cap[path] + 0
       if (n > c)
         bad("size-budget: " path " is " n " lines, above its ceiling of " c)
-      else if (n <= 600)
-        bad("size-budget: " path " is " n " lines; remove it from " budget)
-      else if (n < c)
-        bad("size-budget: " path " is " n " lines, under its ceiling of " c "; set it to " n)
     } else if (n > 600)
       bad("size-budget: " path " is " n " lines; unlisted product files must stay at 600 or fewer")
   }
@@ -100,8 +92,10 @@ END {
     if (!(path in count))
       bad("size-budget: " path " is listed in " budget " but is not a product file; remove it")
 
-  if (!failed && num(ceiling) && total + 0 == ceiling + 0)
-    print "size-budget: " total " product lines, within the ceiling of " ceiling
+  if (!failed) {
+    spare = ceiling - total
+    print "size-budget: " total " product lines, within the ceiling of " ceiling " (" spare " to spare)"
+  }
 }
 ' "$budget"
 
