@@ -15,7 +15,6 @@ use super::Kagan;
 
 mod render;
 
-pub(super) const TAB: &str = "preview";
 const IMAGE_LIMIT: u64 = 8 * 1024 * 1024;
 const PIXEL_LIMIT: u64 = 40_000_000;
 
@@ -118,13 +117,13 @@ impl Kagan {
             scroll: ScrollHandle::new(),
             window: window.window_handle(),
         });
-        self.show_right_tab(TAB, window, cx);
+        self.show_right_tab(super::right::Tab::Preview, window, cx);
         self.load_preview(cx);
     }
 
     pub(super) fn close_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.preview = None;
-        if self.right_tab.as_deref() == Some(TAB) {
+        if self.right_tab.as_ref() == Some(&super::right::Tab::Preview) {
             self.right_tab = self.default_right_tab(cx);
         }
         self.focus_right_tab(window, cx);

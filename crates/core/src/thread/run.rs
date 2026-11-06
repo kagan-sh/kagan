@@ -2,9 +2,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
-use kg_domain::{
-    EnvironmentStatus, EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus,
-};
+use kg_domain::{EventKind, NoticeSeverity, OpError, OpResult, Run, ThreadId, ThreadStatus};
 use kg_process::{find_program, pathext};
 
 use super::clean_title;
@@ -174,10 +172,6 @@ pub(crate) async fn commit(
             let _ = hold.recv().await;
         }
     }
-    let folder = environment.path.clone();
-    let mut row = environment.clone();
-    row.retire_at = None;
-    let project_id = project.id.clone();
     let at = time(this, cx)?;
     let record = kg_domain::Thread {
         id: thread_id,
@@ -200,30 +194,19 @@ pub(crate) async fn commit(
         updated_at: at,
     };
     let saved = record.clone();
-    database
-        .call(move |store| {
-            let current = store.environment(&row.id)?;
-            if current.is_none_or(|current| {
-                current.status != EnvironmentStatus::Ready || current.project_id != project_id
-            }) {
-                return Err(kg_store::Error::Conflict(
-                    "environment must be ready and belong to this project".into(),
-                ));
-            }
-            if store.removal_pending(&folder)? {
-                return Err(kg_store::Error::Conflict(
-                    "that folder is being removed".into(),
-                ));
-            }
-            store.put_environment(&row)?;
-            store.put_thread(&saved)?;
-            if let Some(metadata) = metadata {
-                store.set_thread_metadata(&saved.id, &metadata.plugin_id, &metadata.value)?;
-            }
-            Ok(())
-        })
+    let events = database
+        .call(move |store| store.create_thread(&saved, metadata.as_ref(), created_with(notices)))
         .await?;
-    Workspace::events(this, record.id.clone(), created_with(notices), cx).await?;
+    this.update(cx, |_, cx| {
+        for event in events {
+            cx.emit(crate::WorkspaceEvent::Event {
+                event,
+                project_id: record.project_id.clone(),
+            });
+        }
+        cx.notify();
+    })
+    .map_err(crate::workspace::closed)?;
     Workspace::refresh(this, cx).await?;
     let entity = super::thread(this, &record.id, cx)?;
     super::start_terminal(this, &entity, super::agent::Start::First, cx).await?;

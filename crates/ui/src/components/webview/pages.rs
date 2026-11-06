@@ -1,4 +1,4 @@
-use gpui_kit::{App, Window};
+use gpui_kit::App;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui_kit::{Entity, WeakEntity};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -63,23 +63,6 @@ pub(super) fn find(cx: &App, owner: gpui_kit::EntityId, id: &str) -> Option<usiz
         .pages
         .iter()
         .position(|page| page.owner.entity_id() == owner && page.id == id)
-}
-
-/// Re-renders the window once after a plugin panel's first snapshot, so the panel can drop its
-/// padding when that snapshot fills it.
-pub(crate) fn nudge_once(window: &mut Window, cx: &mut App) {
-    let owner = window.current_view();
-    let pages = cx.default_global::<Pages>();
-    if pages.nudged.contains(&owner) {
-        return;
-    }
-    let Some(kagan) = window.window_handle().downcast::<crate::kagan::Kagan>() else {
-        return;
-    };
-    pages.nudged.push(owner);
-    window.defer(cx, move |_, cx| {
-        let _ = kagan.update(cx, |_, _, cx| cx.notify());
-    });
 }
 
 // Drops native pages that hold these stores so `WebKit` releases them before removal.

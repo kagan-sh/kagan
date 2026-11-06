@@ -7,8 +7,11 @@ use gpui_kit::{
 use kg_domain::PluginId;
 
 use super::Kagan;
-use super::tabs::{self};
+use super::tabs;
 use crate::ui_observe::UiObserveExt as _;
+
+mod tab;
+pub(super) use tab::Tab;
 
 pub(super) const WIDTH: f32 = 320.;
 pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
@@ -36,30 +39,21 @@ pub(super) enum Fill {
 }
 
 #[derive(Clone)]
-pub(super) enum Body {
-    Needs,
-    Changes,
-    Details,
-}
-
-#[derive(Clone)]
 pub(super) struct Panel {
-    pub(super) id: String,
+    pub(super) tab: Tab,
     pub(super) title: String,
-    pub(super) body: Body,
 }
 
 pub(super) fn built_in() -> Vec<Panel> {
     [
-        ("needs-you", "Questions", Body::Needs),
-        ("changes", "Changes", Body::Changes),
-        ("details", "Details", Body::Details),
+        (Tab::Questions, "Questions"),
+        (Tab::Changes, "Changes"),
+        (Tab::Details, "Details"),
     ]
     .into_iter()
-    .map(|(id, title, body)| Panel {
-        id: id.into(),
+    .map(|(tab, title)| Panel {
+        tab,
         title: title.into(),
-        body,
     })
     .collect()
 }
@@ -76,13 +70,13 @@ pub(super) fn render(
     let selected = selected_tab(kagan, cx);
     let body = selected
         .as_ref()
-        .and_then(|id| tab_body(kagan, id, window, cx));
+        .and_then(|tab| tab_body(kagan, tab, window, cx));
     v_flex()
         .size_full()
         .ui_container()
         .id("right-sidebar")
         .bg(cx.theme().sidebar)
-        .child(tab_bar(kagan, selected.as_deref(), window, cx))
+        .child(tab_bar(kagan, selected.as_ref(), window, cx))
         .child(
             div()
                 .id("right-sidebar-body")
@@ -94,28 +88,15 @@ pub(super) fn render(
         )
 }
 
-pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<String> {
+pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<Tab> {
     let want = kagan
         .right_tab
         .clone()
         .or_else(|| kagan.default_right_tab(cx))?;
-    if tab_available(kagan, &want, cx) {
+    if want.available(kagan, cx) {
         Some(want)
     } else {
         kagan.default_right_tab(cx)
-    }
-}
-
-pub(super) fn tab_available(kagan: &Kagan, id: &str, cx: &App) -> bool {
-    match id {
-        "needs-you" => kagan.waiting_count(cx) > 0,
-        "changes" | "details" => kagan.thread_visible(cx),
-        tabs::BROWSER => kagan.tabs.browser && kagan.thread_visible(cx),
-        super::preview::TAB => kagan.tabs.preview.is_some() && kagan.thread_visible(cx),
-        _ => match tabs::terminal_number(id) {
-            Some(number) => kagan.tabs.view(number).is_some() && kagan.thread_visible(cx),
-            None => kagan.right_slots.iter().any(|slot| slot.id == id),
-        },
     }
 }
 

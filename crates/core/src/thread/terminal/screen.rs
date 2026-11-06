@@ -81,7 +81,6 @@ fn watch(cx: &mut Context<Workspace>) {
                 let mut waited = Vec::new();
                 let mut started = Vec::new();
                 let mut keep = Vec::new();
-                // Whether anything still needs following: a running program, or a screen still settling.
                 let mut following = false;
                 let now = cx.background_executor().now();
                 for (id, shown) in &workspace.terminals {

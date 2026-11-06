@@ -27,7 +27,7 @@ impl Kagan {
     /// Drops one panel from the registry, so a test can show that the sidebar draws from it.
     #[cfg(test)]
     pub(crate) fn drop_panel_for_test(&mut self, id: &str, cx: &mut Context<Self>) {
-        self.panels.retain(|panel| panel.id != id);
+        self.panels.retain(|panel| panel.tab.id() != id);
         cx.notify();
     }
 

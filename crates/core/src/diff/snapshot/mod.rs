@@ -246,19 +246,16 @@ fn empty_tree(root: &Path) -> Result<String> {
     git_text(root, &["mktree"], None)
 }
 
+#[rustfmt::skip]
 pub(crate) fn resolve_base(
     root: &Path,
     requested: Option<&str>,
     hint: Option<&str>,
 ) -> Result<String> {
-    if let Some(base) = requested.or(hint).filter(|base| !base.is_empty()) {
+    if let Some(base) = requested.filter(|base| !base.is_empty()).or(hint.filter(|base| !base.is_empty())) {
         return Ok(base.to_owned());
     }
-    let origin = git(
-        root,
-        &["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
-        None,
-    )?;
+    let origin = git(root, &["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], None)?;
     if origin.code == 0 {
         let full = text(&origin.stdout);
         if let Some(name) = full
@@ -285,3 +282,6 @@ impl Drop for TempIndex {
         let _ = std::fs::remove_file(lock);
     }
 }
+
+#[cfg(test)]
+mod tests;

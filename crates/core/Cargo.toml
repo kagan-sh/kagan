@@ -38,6 +38,7 @@ test = []
 workspace = true
 
 [dev-dependencies]
+clap.workspace = true
 proptest.workspace = true
 minisign = "=0.10.0"
 gpui-kit = { workspace = true, features = ["test-support"] }

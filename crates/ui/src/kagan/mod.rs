@@ -181,7 +181,7 @@ pub(crate) struct Kagan {
     plugins: Plugins,
     panels: Vec<right::Panel>,
     right_slots: Vec<surface::Slot>,
-    right_tab: Option<String>,
+    right_tab: Option<right::Tab>,
     right_menu: Option<(Entity<PopupMenu>, Subscription)>,
     right_add_focus: FocusHandle,
     right_fill: right::Fill,

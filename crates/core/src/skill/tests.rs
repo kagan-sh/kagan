@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use kg_domain::{Skill, SkillSource};
 
-use super::catalog::{Catalog, Loaded};
+use super::catalog::{Catalog, Loaded, valid_name};
 
 #[test]
 fn a_plugin_skill_cannot_replace_a_bundled_one() {
@@ -70,4 +71,62 @@ fn a_user_or_project_skill_cannot_use_the_kg_prefix() {
             catalog.errors
         );
     }
+}
+
+fn loaded(name: &str, path: Option<&str>, files: Vec<PathBuf>) -> Loaded {
+    let text = format!("---\nname: {name}\ndescription: {name} does the thing\n---\nBody.");
+    let (skill, body) =
+        Skill::parse(name, &text, SkillSource::Bundled, path.map(PathBuf::from)).unwrap();
+    Loaded {
+        skill,
+        body,
+        files,
+        text: None,
+    }
+}
+
+#[test]
+fn valid_name_is_lowercase_words_separated_by_single_dashes() {
+    for name in ["a", "a1", "kg-cli", "1-2-3"] {
+        assert!(valid_name(name), "{name}");
+    }
+    for name in ["", "-", "a-", "-a", "a--b", "A", "a_b", "a.b", "a b", "ä"] {
+        assert!(!valid_name(name), "{name}");
+    }
+}
+
+#[test]
+fn a_catalog_prompt_lists_each_skill_and_error() {
+    let mut catalog = Catalog {
+        skills: BTreeMap::new(),
+        errors: vec!["plugin dev.test: bad manifest".into()],
+    };
+    catalog
+        .skills
+        .insert("kg-cli".into(), loaded("kg-cli", None, Vec::new()));
+    let prompt = catalog.prompt();
+    assert!(prompt.contains("kg-cli: kg-cli does the thing"), "{prompt}");
+    assert!(
+        prompt.contains("Skill error: plugin dev.test: bad manifest"),
+        "{prompt}"
+    );
+}
+
+#[test]
+fn a_loaded_skill_resolves_its_files_beside_skill_md() {
+    let loaded = loaded(
+        "kg-cli",
+        Some("/base/kg-cli/SKILL.md"),
+        vec![PathBuf::from("reference.md")],
+    );
+    assert_eq!(
+        loaded.paths(),
+        vec![PathBuf::from("/base/kg-cli/reference.md")]
+    );
+}
+
+#[test]
+fn a_loaded_skill_without_a_path_has_no_files() {
+    let loaded = loaded("kg-cli", None, vec![PathBuf::from("reference.md")]);
+    assert!(loaded.paths().is_empty());
 }

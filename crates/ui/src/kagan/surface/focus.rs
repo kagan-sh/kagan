@@ -1,4 +1,4 @@
-use gpui_kit::{App, Context, Focusable as _, Window};
+use gpui_kit::{Context, Focusable as _, Window};
 use kg_domain::SurfacePlacement;
 
 use super::{Declared, destinations, row_id};
@@ -6,37 +6,6 @@ use crate::kagan::Kagan;
 use crate::kagan::Shown;
 
 impl Kagan {
-    pub(in crate::kagan) fn focus_right_tab(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(tab) = super::right::selected_tab(self, cx) else {
-            return window.focus(&self.right_add_focus, cx);
-        };
-        if tab == crate::kagan::tabs::BROWSER
-            && cfg!(any(target_os = "macos", target_os = "windows"))
-        {
-            return self.browser.focus(window, cx);
-        }
-        if tab == crate::kagan::preview::TAB
-            && let Some(preview) = self.tabs.preview.as_ref()
-        {
-            return window.focus(&preview.focus_handle(), cx);
-        }
-        let terminal =
-            crate::kagan::tabs::terminal_number(&tab).and_then(|number| self.tabs.view(number));
-        let focus = match terminal {
-            Some(view) => view.focus_handle(cx),
-            None => self
-                .right_slots
-                .iter()
-                .find(|slot| slot.id == tab)
-                .map_or_else(|| self.right_add_focus.clone(), |slot| slot.focus.clone()),
-        };
-        window.focus(&focus, cx);
-    }
-
     pub(in crate::kagan) fn closed_right_panels(&self) -> impl Iterator<Item = &Declared> {
         self.right_panels.iter().filter(|item| {
             !self
@@ -44,25 +13,6 @@ impl Kagan {
                 .iter()
                 .any(|slot| slot.plugin == item.plugin && slot.contribution == item.id)
         })
-    }
-
-    pub(in crate::kagan) fn default_right_tab(&self, cx: &App) -> Option<String> {
-        if self.waiting_count(cx) > 0 {
-            return Some("needs-you".into());
-        }
-        if self.thread_visible(cx) {
-            return Some("changes".into());
-        }
-        self.right_slots.first().map(|slot| slot.id.clone())
-    }
-
-    pub(in crate::kagan) fn select_right_tab(&mut self, id: &str, cx: &mut Context<Self>) {
-        if self.right_tab.as_deref() == Some(id) {
-            return;
-        }
-        self.right_tab = Some(id.to_owned());
-        self.supersede_surface();
-        cx.notify();
     }
 
     pub(in crate::kagan) fn show_right(&mut self, window: &mut Window, cx: &mut Context<Self>) {

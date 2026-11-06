@@ -84,17 +84,11 @@ fn run(
         use std::os::windows::process::CommandExt as _;
         command.creation_flags(0x0800_0000);
     }
-    kg_process::capture_with_limit(&mut command, limit).map_err(|error| match error.kind() {
+    kg_process::capture_with_limit(command, limit).map_err(|error| match error.kind() {
         std::io::ErrorKind::NotFound => ToolError::Missing,
         std::io::ErrorKind::TimedOut => ToolError::TimedOut,
         _ => ToolError::Failed(error.to_string()),
     })
-}
-
-/// What `program` prints with `args`, or None when it is missing, fails, or runs past `limit`.
-pub(crate) fn program_stdout(program: &Path, args: &[&str], limit: Duration) -> Option<String> {
-    let output = run(&program.display().to_string(), Path::new("."), args, limit).ok()?;
-    (output.code == 0).then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 pub(crate) fn git(cwd: &Path, args: &[&str]) -> Result<String> {

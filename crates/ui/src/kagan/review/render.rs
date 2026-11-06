@@ -74,11 +74,11 @@ impl Kagan {
                     this.close_review(window, cx);
                 }
             }))
-            .on_action(cx.listener(|this, _: &NextChange, window, cx| {
-                this.next_change(window, cx);
+            .on_action(cx.listener(|this, _: &NextChange, _, cx| {
+                this.next_change(cx);
             }))
-            .on_action(cx.listener(|this, _: &PrevChange, window, cx| {
-                this.prev_change(window, cx);
+            .on_action(cx.listener(|this, _: &PrevChange, _, cx| {
+                this.prev_change(cx);
             }))
             .on_action(
                 cx.listener(|this, _: &FindInDiff, window, cx| this.find_in_review(window, cx)),

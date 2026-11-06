@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use super::{allows_navigation, csp, mime, page_event, page_url, refresh, serve, stylesheet};
 #[cfg(target_os = "macos")]
 use crate::web_page::durable_store;
@@ -271,7 +269,6 @@ fn the_page_is_served_from_its_own_folder() {
         .status,
         404
     );
-    let _ = Path::new("ui");
 }
 
 #[cfg(unix)]

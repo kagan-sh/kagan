@@ -28,12 +28,13 @@ pub(super) struct Slot {
     pub(super) error: Option<String>,
     pub(super) generation: u64,
     pub(super) focus: FocusHandle,
+    _snapshot_watch: Option<std::rc::Rc<gpui_kit::Subscription>>,
 }
 
 struct Hold {
     tool: Option<Slot>,
     right_slots: Vec<Slot>,
-    right_tab: Option<String>,
+    right_tab: Option<right::Tab>,
     layout: super::layout::Layout,
 }
 

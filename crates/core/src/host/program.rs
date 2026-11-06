@@ -12,7 +12,6 @@ use kg_domain::{
 use kg_process::{find_program, pathext, user_path};
 
 use crate::host::database::{Database, Result};
-use crate::host::git::program_stdout;
 
 const VERSION_LIMIT: Duration = Duration::from_secs(3);
 const RECENT_LIMIT: usize = 5;
@@ -134,14 +133,18 @@ pub(crate) fn discover(
     ProgramList { programs, default }
 }
 
-/// The version each installed known agent prints, read with a short time limit.
 pub(crate) fn versions(list: &mut ProgramList) {
     for program in &mut list.programs {
         if program.source != ProgramSource::Known {
             continue;
         }
         if let Some(path) = &program.path {
-            program.version = program_stdout(path, &["--version"], VERSION_LIMIT);
+            let mut command = std::process::Command::new(path);
+            command.arg("--version");
+            program.version = kg_process::capture_with_limit(command, VERSION_LIMIT)
+                .ok()
+                .filter(|output| output.code == 0)
+                .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned());
         }
     }
 }
@@ -172,7 +175,6 @@ pub(crate) fn search_path(environment: Option<&ProgramEnvironment>) -> Option<Os
     environment.map_or_else(user_path, |environment| Some(environment.path.clone()))
 }
 
-/// The environment `this` workspace finds programs in, or None for the login PATH.
 pub(crate) fn program_environment_of(
     this: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,

@@ -175,18 +175,16 @@ export default class App extends View {
 
 const OUTLINE: &str = r#"
 import { View, div } from "gpui-kit";
-import { Button, KgButton } from "gpui-component";
+import { KgButton } from "gpui-component";
 export default class App extends View {
   render() {
     return div().size_full().flex_col()
-      .child(new Button("pinned").label("Pinned").primary().outline())
       .child(new KgButton("kg").label("Kg").primary().outline())
       .child(new KgButton("reversed").label("Kg").outline().primary());
   }
 }
 "#;
 
-/// The position and size of each named `KgButton`, as drawn: x, y, width, height.
 fn placed(cx: &mut TestAppContext, source: &str, names: &[&str]) -> Vec<[f32; 4]> {
     let (_dir, mut visual, _view, _runtime) = mount_live(cx, source);
     visual.update(|window, _| {
@@ -234,16 +232,43 @@ fn a_compact_kg_button_is_as_wide_in_either_call_order_and_narrower_than_plain(
 
 #[gpui_kit::test]
 fn an_outline_kg_button_is_as_tall_as_the_pinned_one_in_either_call_order(cx: &mut TestAppContext) {
-    // The pinned Button is stacked first, so the KgButton below it starts at the pinned height.
+    use crate::ui_observe::UiObserveExt as _;
+    use gpui_kit::component::button::{Button, ButtonVariants as _};
+    use gpui_kit::{
+        AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _, Render,
+        Window, div, px, size,
+    };
+
+    struct Reference;
+    impl Render for Reference {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("pinned")
+                .ui_container()
+                .child(Button::new("reference").label("Pinned").primary().outline())
+        }
+    }
+
     let [kg, reversed] = placed(cx, OUTLINE, &["kg", "reversed"]).try_into().unwrap();
-    let [_, kg_y, _, kg_h] = kg;
+    let reference = cx.open_window(size(px(400.), px(200.)), |window, cx| {
+        let view = cx.new(|_| Reference);
+        gpui_kit::component::Root::new(view, window, cx)
+    });
+    let mut visual = gpui_kit::VisualTestContext::from_window(reference.into(), cx);
+    visual.update(|window, cx| window.draw(cx).clear(cx));
+    let pinned_h = visual.update(|window, _| {
+        f32::from(
+            observed(window, "pinned")
+                .expect("reference bounds")
+                .bounds
+                .size
+                .height,
+        )
+    });
+    let kg_h = kg[3];
     assert!(
-        same(kg_h, kg_y),
-        "outline KgButton is {kg_h}pt, pinned is {kg_y}pt"
-    );
-    assert!(
-        same(reversed[1], kg_y + kg_h),
-        "the column stacks without gaps"
+        same(kg_h, pinned_h),
+        "outline KgButton is {kg_h}pt, pinned is {pinned_h}pt"
     );
     assert!(
         same(reversed[3], kg_h),

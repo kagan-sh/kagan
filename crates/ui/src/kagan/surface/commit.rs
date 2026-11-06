@@ -189,7 +189,7 @@ impl Kagan {
                     self.right_slots.retain(|slot| {
                         !(slot.plugin == declared.plugin && slot.contribution == declared.id)
                     });
-                    if self.right_tab.as_ref() == Some(&surface) {
+                    if self.right_tab.as_ref() == Some(&super::right::Tab::Plugin(surface)) {
                         self.right_tab = self.default_right_tab(cx);
                     }
                 }
@@ -252,10 +252,11 @@ impl Kagan {
                         let details = self.right_slots[ix].details;
                         self.right_slots[ix] = mount(&declared, details, window, cx);
                     }
-                    self.right_tab = Some(self.right_slots[ix].id.clone());
+                    self.right_tab =
+                        Some(super::right::Tab::Plugin(self.right_slots[ix].id.clone()));
                 } else {
                     let slot = mount(&declared, false, window, cx);
-                    self.right_tab = Some(slot.id.clone());
+                    self.right_tab = Some(super::right::Tab::Plugin(slot.id.clone()));
                     self.right_slots.push(slot);
                 }
             }
