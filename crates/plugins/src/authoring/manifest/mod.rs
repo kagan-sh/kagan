@@ -538,3 +538,6 @@ fn plain_line(text: &str) -> Result<(), Error> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;
