@@ -197,6 +197,10 @@ jobs:
           persist-credentials: false
       - name: Install lld
         # .cargo/config.toml links macOS with ld64.lld. brew exits 1 when llvm's post-install fails, though lld is installed.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_ANALYTICS: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: brew install lld || command -v ld64.lld
       - run: rustup toolchain install --profile minimal
       - run: rustup target add x86_64-apple-darwin
@@ -222,6 +226,10 @@ jobs:
           persist-credentials: false
       - name: Install lld
         # .cargo/config.toml links macOS with ld64.lld. brew exits 1 when llvm's post-install fails, though lld is installed.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_ANALYTICS: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: brew install lld || command -v ld64.lld
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -237,7 +245,7 @@ jobs:
       - name: Tests
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
-          --partition slice:${{ matrix.shard }}/2
+          --partition hash:${{ matrix.shard }}/2
 
   windows-tests:
     needs: scope
@@ -277,7 +285,7 @@ jobs:
       - name: Tests
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
-          --partition slice:${{ matrix.shard }}/2
+          --partition hash:${{ matrix.shard }}/2
 
   # The ruleset requires the checks linux, macos and windows. Each passes only when every job
   # for its OS passed; a skipped job would otherwise count as a pass.
@@ -286,6 +294,7 @@ jobs:
     if: always() && needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
@@ -296,6 +305,7 @@ jobs:
     if: always() && needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
@@ -306,6 +316,7 @@ jobs:
     if: always() && needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
@@ -396,7 +407,7 @@ jobs:
           path: mutants
       - name: Report the surviving mutants
         run: |
-          reported=$(find mutants -name done 2>/dev/null | wc -l)
+          reported=$(find mutants -name 'done' 2>/dev/null | wc -l)
           if [ "$reported" -ne 16 ]; then
             echo "$reported of 16 shards reported; the run is incomplete" >&2
             exit 1
