@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-On Linux and Windows, Cmd in this book means Ctrl+Shift. For example, Cmd+N means Ctrl+Shift+N.
+On Linux and Windows, Cmd in this book means Ctrl+Shift. Cmd+N is Ctrl+Shift+N.
 
 Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. On Linux and Windows, Ctrl+Shift+C copies terminal text and Ctrl+Shift+V pastes it. Ctrl alone always goes to the terminal program. On macOS, Alt is the Option key.
 
@@ -44,19 +44,17 @@ Quit (Cmd+Q) and Close (Cmd+W) are only on macOS. On Linux and Windows, Ctrl+Shi
 | Cmd+Alt+B | Use the built-in thread list |
 | Cmd+Alt+V | Use the built-in review |
 
-In the left sidebar, the Up and Down keys move between rows. Enter or Space opens a thread. In the terminal, the Up and Down keys go to the program.
+In the left sidebar, Up and Down move between rows. Enter or Space opens a thread. In the terminal, Up and Down go to the program.
 
 [Review changes](review.md#review-keys) lists the review keys.
 
 ## Change a key
 
 1. Open Settings → Keyboard.
-2. Click **Change** or **Bind** for a command.
+2. Click **Change** or **Bind**.
 3. Press the new key.
 
 A key must use Cmd, Alt, Ctrl+Shift, or an F key. The terminal needs the plain keys. kagan does not save a key that belongs to a different command.
-
-From a terminal:
 
 ```bash
 kg keymap get

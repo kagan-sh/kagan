@@ -4,39 +4,33 @@ A thread runs one program in one folder. The program can be an agent, a shell, o
 
 ## Start a thread
 
-Click **+** next to a project, or press Cmd+N. The New thread screen lists:
+Click **+** next to a project, or press Cmd+N.
 
-- Claude Code and Codex. These show if your computer does not have them.
-- Other known agents on your `PATH`.
-- Your login shell and recent programs.
-
-Use the arrow keys to select a program, then press Enter. Click **Custom command…** to type a different command.
-
-From a terminal:
+The New thread screen lists Claude Code and Codex even when they are not installed, other known agents on your `PATH`, your login shell, and recent programs. Use the arrow keys, then Enter. **Custom command…** types a different command.
 
 ```bash
 kg thread run --project-id <project-id> --program claude
 ```
 
-`kg project list` shows the project ids. For the Personal project, add `--environment personal`.
+`kg project list` shows the ids. For Personal, add `--environment personal`.
 
 A program line splits at spaces. Single or double quotes keep spaces together, for example `'/Applications/My Tool/bin/tool' --flag "a b"`. A backslash is a usual character, so a Windows path needs no change.
 
-`kg thread paste <id> --file <path>` sends a file to the program, up to 1 MiB. Use `-` for stdin. Paste does not press Enter.
+`kg thread paste <id> --file <path>` sends a file, up to 1 MiB. Use `-` for stdin. Paste does not press Enter.
 
-`kg thread send <id> <text>` types that text and presses Enter, up to 1 MiB. It writes into whatever the program is reading now, so a busy program or a half-typed line still receives it. What Enter does belongs to that program. It writes a user message in the thread log only after the write succeeds. It fails when the program is not running, when the text is empty or only control characters, or when the write fails.
+`kg thread send <id> <text>` types that text and presses Enter, up to 1 MiB. It writes into whatever the program is reading, so a busy program or a half-typed line still receives it. What Enter does belongs to that program. The thread log gets a user message only after the write succeeds. It fails when the program is not running, when the text is empty or only control characters, or when the write fails.
 
 ## Folders
 
 On the New thread screen, a git project offers **New worktree from `<branch>`** and **Project folder**. New worktree is the default.
 
-- **New worktree**: a second checkout on a new branch. Your project folder does not change. The worktree starts from the current branch. kagan does not fetch, and the new branch has no upstream.
-- **Project folder**: the folder that you added.
-- **Personal folder**: a new folder in the data folder, for the Personal project only.
+- **New worktree**: a second checkout on a new branch. Your project folder does not change. It starts from the current branch. kagan does not fetch, and the new branch has no upstream.
+- **Project folder**: the folder you added.
+- **Personal folder**: a new folder in the data folder, for Personal only.
 
 A folder without a git commit always runs in the folder itself. The screen tells you.
 
-From a terminal, `--environment` selects the folder:
+`--environment` selects the folder:
 
 | Value | Folder |
 | --- | --- |
@@ -47,21 +41,21 @@ From a terminal, `--environment` selects the folder:
 
 ### Setup scripts
 
-A repository can have a `.kagan/setup` script and a `.kagan/teardown` script in git. kagan runs `.kagan/setup` in a new worktree before the program starts. It runs `.kagan/teardown` before it removes the worktree. These scripts do not run in a project folder or a Personal folder.
+A repository can have `.kagan/setup` and `.kagan/teardown` in git. kagan runs `.kagan/setup` in a new worktree before the program starts, and `.kagan/teardown` before it removes the worktree. These scripts do not run in a project folder or a Personal folder.
 
 > [!CAUTION]
-> Before you start a thread in a repository that you do not trust, click **Show script** and read the script. The script can cause damage to your files.
+> Before you start a thread in a repository you do not trust, click **Show script** and read it. The script can cause damage to your files.
 
-If the setup script fails, the program does not start. The screen shows the error and **Retry**. Add the files that the script makes to `.gitignore`.
+If setup fails, the program does not start. The screen shows the error and **Retry**. Add the files the script makes to `.gitignore`.
 
 ## Stop and start again
 
-- Click **Stop**, or press Cmd+., to end the program. In a terminal, run `kg thread stop <id>`.
-- Click **Start again**, or press Cmd+Shift+S, to run the same program in the same thread and folder. In a terminal, run `kg thread start-again <id>`.
+- **Stop** (Cmd+.) ends the program. `kg thread stop <id>` does the same.
+- **Start again** (Cmd+Shift+S) runs the same program in the same thread and folder. `kg thread start-again <id>` does the same.
 
-Claude Code picks up its conversation where you left it. If Claude Code no longer has that conversation, it starts a new one, and the thread's events say so.
+Claude Code picks up its conversation. If that conversation is gone, it starts a new one, and the thread's events say so.
 
-Codex started as plain `codex` also picks up its conversation, if kagan can tell which one it was: the only conversation Codex started in that folder since the thread last started. If two Codex threads share a folder, or the line has other words after `codex`, Codex starts a new conversation, and the thread's events say so.
+Codex started as plain `codex` also picks up its conversation, when kagan can tell which one it was: the only conversation Codex started in that folder since the thread last started. If two Codex threads share a folder, or the line has other words after `codex`, Codex starts a new conversation, and the thread's events say so.
 
 With agent integration off in Settings, the program starts fresh.
 
@@ -69,19 +63,19 @@ Only you can start a program again. A restart of kagan does not start it.
 
 ## When a program ends
 
-The line under the terminal tells you why the program ended. The thread keeps the last screen and its scrollback after a restart.
+The line under the terminal says why. The thread keeps the last screen and its scrollback after a restart.
 
 - Exit code 0: the thread is idle.
-- A different exit code or a signal: the thread fails and shows that it needs you.
+- Another exit code, or a signal: the thread fails and shows that it needs you.
 - kagan quit or crashed: the thread fails, and kagan saves no screen for that run.
 
 If a very large screen does not fit, the thread keeps less of it and tells you.
 
 ## Archive and delete
 
-**Archive** removes a thread from the sidebar and keeps its history. The program stops after 10 seconds. To cancel the stop, unarchive the thread in those 10 seconds. Open **Archived** and click **Restore** to get the thread back later.
+**Archive** takes a thread off the sidebar and keeps its history. The program stops after 10 seconds. Unarchive in those 10 seconds cancels the stop. Open **Archived** and click **Restore** to bring it back.
 
-**Delete** removes the thread and its history permanently. kagan asks you first.
+**Delete** removes the thread and its history. kagan asks you first.
 
 ```bash
 kg thread archive <id>
@@ -91,14 +85,14 @@ kg thread delete <id>
 
 After the last thread of a worktree stays archived for 10 seconds, kagan removes the worktree:
 
-- kagan deletes files that git ignores with the folder.
-- If the folder has files that git does not ignore, kagan keeps the folder and names the files. Commit, delete, or ignore them, then click **Remove again**.
+- Files that git ignores go with the folder.
+- If git does not ignore some files, kagan keeps the folder and names them. Commit, delete, or ignore them, then click **Remove again**.
 - The branch and its commits stay. `kg environment restore <thread-id>` makes the folder again.
 
 kagan keeps a Personal folder until you delete its thread. kagan never removes a project folder.
 
 ## Notifications
 
-When a thread needs you and is not on screen, kagan shows a system notification with the thread title. To disable notifications, use the Notifications switch in Settings → Agents, or run `kg preference set notify false`.
+When a thread needs you and is not on screen, kagan shows a system notification with the thread title. Turn them off with the Notifications switch in Settings → Agents, or `kg preference set notify false`.
 
 [`kg` command](cli.md) lists the thread commands and their flags.

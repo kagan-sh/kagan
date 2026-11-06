@@ -2,12 +2,12 @@
 
 ## Install
 
-On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build kagan from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage.
+On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage.
 
 ### Download
 
 1. Download the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases).
-2. Open the file and drag `kagan.app` to `/Applications`.
+2. Open it and drag `kagan.app` to `/Applications`.
 3. Add `kg` to your `PATH`:
 
    ```bash
@@ -21,12 +21,12 @@ On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use
 brew install --cask kagan-sh/tap/kagan
 ```
 
-Homebrew puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
+That puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
 
 ### Build from source
 
-1. Install Rust from [rustup.rs](https://rustup.rs). The file `rust-toolchain.toml` sets the version.
-2. Install the build tools for your system:
+1. Install Rust from [rustup.rs](https://rustup.rs). `rust-toolchain.toml` sets the version.
+2. Install the build tools:
    - macOS: `brew install lld`
    - Debian or Ubuntu:
 
@@ -37,7 +37,7 @@ Homebrew puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
      ```
 
    - Windows: Visual Studio Build Tools with C++, and MinGW for `dlltool` (`choco install mingw`).
-3. Build kagan and open it:
+3. Build and open kagan. The first build takes several minutes, then the window opens.
 
    ```bash
    git clone https://github.com/kagan-sh/kagan.git
@@ -45,16 +45,13 @@ Homebrew puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
    cargo run -p kg --release
    ```
 
-   The first build takes several minutes. Then the window opens.
-4. Add the `kg` command to your `PATH`. On macOS and Linux, add this line to your shell profile:
+4. Put `kg` on your `PATH`. On macOS and Linux, add this to your shell profile. If the clone is not `$HOME/kagan`, change that path. On Windows, add the `target\release` folder to your `Path`.
 
    ```bash
    export PATH="$HOME/kagan/target/release:$PATH"
    ```
 
-   If you cloned kagan to a different folder, change `$HOME/kagan` to that folder. On Windows, add the `target\release` folder to your `Path`.
-
-Run `kg` to open kagan later. On first start, kagan makes its default data folder, `~/.kagan`.
+Run `kg` to open kagan later. On first start, kagan makes `~/.kagan`.
 
 ## First thread
 
@@ -64,7 +61,7 @@ Run `kg` to open kagan later. On first start, kagan makes its default data folde
 4. Type to the program as you do in any terminal.
 5. Click **Changes** in the right sidebar to see the changed files.
 
-For a git repository, the thread gets its own git worktree by default. Your project folder does not change. [Threads](threads.md#folders) explains the folder choices.
+For a git repository, the thread gets its own git worktree by default. Your project folder does not change. [Threads](threads.md#folders) explains the other choices.
 
 [Review changes](review.md) shows how to send comments to the program. On a narrow window, press Cmd+Backslash to show the right sidebar.
 
@@ -79,13 +76,11 @@ kg guide
 kg help
 ```
 
-`kg project list` shows your projects and their ids. `kg guide` explains kagan's terms. `kg help` lists all commands.
-
-To add a project and start a thread:
+`kg project list` shows projects and their ids. `kg guide` explains the terms. `kg help` lists every command.
 
 ```bash
 kg project add ~/code/my-app
 kg thread run --project-id <project-id> --program claude
 ```
 
-`kg project add` shows the id of the new project. If your computer does not have the program, the command fails with `program claude was not found`.
+`kg project add` prints the new id. If the program is missing, the command fails with `program claude was not found`.
