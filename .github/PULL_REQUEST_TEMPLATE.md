@@ -1,5 +1,7 @@
-## Summary
+## What
 
-## Test plan
+## Why
 
-- [ ]
+## How
+
+## Notes
