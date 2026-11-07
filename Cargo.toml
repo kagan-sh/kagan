@@ -24,9 +24,9 @@ async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
 dunce = "=1.0.5"
 futures = "=0.3.34"
-gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "586e01956a344bd1e55e5ad6e987b65ce6a13170", features = ["tree-sitter-diff"] }
-gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "586e01956a344bd1e55e5ad6e987b65ce6a13170", default-features = false, features = ["quickjs", "components"] }
-gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "586e01956a344bd1e55e5ad6e987b65ce6a13170", default-features = false, features = ["gpui-fast"] }
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "7c8314ebf8d09965a96a5d87196ddf448cc23703", features = ["tree-sitter-diff"] }
+gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "7c8314ebf8d09965a96a5d87196ddf448cc23703", default-features = false, features = ["quickjs", "components"] }
+gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "7c8314ebf8d09965a96a5d87196ddf448cc23703", default-features = false, features = ["gpui-fast"] }
 interprocess = "=2.4.4"
 keyring-core = "=1.0.1"
 libc = "=0.2.191"
