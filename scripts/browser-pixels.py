@@ -7,7 +7,7 @@ MARKER = (255, 0, 128)
 TOLERANCE = 24
 
 
-def paeth(left, up, upper_left):
+def predictor(left, up, upper_left):
     estimate = left + up - upper_left
     distances = (
         abs(estimate - left),
@@ -61,7 +61,7 @@ def rows(path):
             elif filter_kind == 3:
                 row[x] = (row[x] + ((left + up) // 2)) & 255
             elif filter_kind == 4:
-                row[x] = (row[x] + paeth(left, up, upper_left)) & 255
+                row[x] = (row[x] + predictor(left, up, upper_left)) & 255
             elif filter_kind != 0:
                 raise SystemExit("bad png filter")
         previous = row

@@ -221,13 +221,19 @@ while :; do
 done
 "$binary" ui click "thread-$thread" >/dev/null || fail "could not show the thread"
 
+# A narrow screen hides the right column. Open it over the center once.
 i=0
+opened=0
 while :; do
   if "$binary" ui snapshot --json >"$snapshot" 2>/dev/null &&
     grep -Fq 'right-tab-add' "$snapshot"; then
     break
   fi
   alive || fail "the app exited before the sidebar opened"
+  if [ "$opened" -eq 0 ] && [ "$i" -ge 2 ]; then
+    "$binary" ui click right-sidebar-toggle >/dev/null 2>&1 || true
+    opened=1
+  fi
   [ "$i" -lt 20 ] || fail "the right sidebar never showed Add tab"
   i=$((i + 1))
   sleep 1
