@@ -3718,7 +3718,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-windows"
 version = "0.1.12"
-source = "git+https://github.com/kagan-sh/gpui-fast?rev=f10a0bbe5ceae572b1b50856aecfecd3ae057802#f10a0bbe5ceae572b1b50856aecfecd3ae057802"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=f4688adc671add4ffa274d92cdb9b7cdfddeec71#f4688adc671add4ffa274d92cdb9b7cdfddeec71"
 dependencies = [
  "accesskit",
  "accesskit_windows",

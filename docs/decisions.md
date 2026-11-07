@@ -675,3 +675,7 @@ Rules out: turning DirectComposition off, and a child-window WebView2.
 Why: opening a page aborted the window, a tab close left the last frame painted, and a Linux page never issued its request, and each of those happened on a system the other jobs do not run.
 Cost: one Browser launch on each desktop after the tests, and a Windows capture of the window.
 Rules out: treating the Linux script as enough, and a capture requirement that a macOS runner without screen recording cannot meet.
+
+**168. A panic in the Windows window procedure leaves the process up.** This amends 166. That procedure cannot unwind. In a release build the panic reached that boundary and Windows aborted kagan (`0xc0000409`). The procedure now catches the panic, logs it, and returns to Windows. The window stays. A frame that panicked is skipped. The Windows test job runs that catch and fails if the process aborts or the test is gone.
+Why: 0.6.0 still aborted while opening a Browser page. The fault was the Rust abort that follows a panic the window procedure cannot unwind. The Browser check on a GitHub runner does not remove the display device, so it stayed green.
+Rules out: aborting from that procedure, and a child-window WebView2.
