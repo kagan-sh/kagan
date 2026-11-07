@@ -4,6 +4,12 @@ use gpui_kit::{Context, Window};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult};
 
+// Git paths use `/`. A `\` stays in the name.
+pub(super) fn directory_and_name(path: &str) -> (&str, &str) {
+    path.rsplit_once('/')
+        .map_or(("", path), |(directory, name)| (directory, name))
+}
+
 impl Kagan {
     pub(super) fn open_answer(op: Op, window: &mut Window, cx: &mut Context<Self>) {
         let task = Workspace::dispatch(op, cx);
@@ -23,5 +29,19 @@ impl Kagan {
             });
         })
         .detach();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::directory_and_name;
+
+    #[test]
+    fn a_git_path_splits_on_slash() {
+        assert_eq!(directory_and_name("src/main.rs"), ("src", "main.rs"));
+        assert_eq!(directory_and_name("a/b/c"), ("a/b", "c"));
+        assert_eq!(directory_and_name(r"src\main.rs"), ("", r"src\main.rs"));
+        assert_eq!(directory_and_name(r"a/b\c"), ("a", r"b\c"));
+        assert_eq!(directory_and_name("main.rs"), ("", "main.rs"));
     }
 }

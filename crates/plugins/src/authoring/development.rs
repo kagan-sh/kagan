@@ -180,35 +180,18 @@ fn plugin_scripts(root: &Path) -> Result<Vec<PathBuf>> {
     Ok(scripts)
 }
 
-/// Whether a script constructs `Button` with `new`. The syntax tree decides, so spacing, comments
-/// and strings do not matter. A script that does not parse is left to the load to report.
+// Spacing, comments and strings do not matter: the syntax tree decides. A script that does not
+// parse is left to the load to report.
 fn constructs_button(source: &str) -> bool {
-    let mut parser = tree_sitter::Parser::new();
-    if parser
-        .set_language(&tree_sitter_javascript::LANGUAGE.into())
-        .is_err()
-    {
-        return false;
-    }
-    let Some(tree) = parser.parse(source, None) else {
-        return false;
-    };
-    let mut nodes = vec![tree.root_node()];
-    while let Some(node) = nodes.pop() {
-        if node.kind() == "new_expression"
+    script_has(source, |node| {
+        node.kind() == "new_expression"
             && node
                 .child_by_field_name("constructor")
                 .is_some_and(|constructor| {
                     constructor.kind() == "identifier"
                         && &source[constructor.byte_range()] == "Button"
                 })
-        {
-            return true;
-        }
-        let mut cursor = node.walk();
-        nodes.extend(node.children(&mut cursor));
-    }
-    false
+    })
 }
 
 // Whether any script calls `.store(true)` on a chain that starts at `new WebView(...)`.
@@ -248,19 +231,8 @@ fn is_webview_chain(node: tree_sitter::Node, source: &str) -> bool {
 }
 
 fn calls_store_true(source: &str) -> bool {
-    let mut parser = tree_sitter::Parser::new();
-    if parser
-        .set_language(&tree_sitter_javascript::LANGUAGE.into())
-        .is_err()
-    {
-        return false;
-    }
-    let Some(tree) = parser.parse(source, None) else {
-        return false;
-    };
-    let mut nodes = vec![tree.root_node()];
-    while let Some(node) = nodes.pop() {
-        if node.kind() == "call_expression"
+    script_has(source, |node| {
+        node.kind() == "call_expression"
             && node
                 .child_by_field_name("function")
                 .is_some_and(|function| {
@@ -280,13 +252,35 @@ fn calls_store_true(source: &str) -> bool {
                         .named_children(&mut cursor)
                         .any(|argument| &source[argument.byte_range()] == "true")
                 })
-        {
+    })
+}
+
+fn javascript_parser() -> std::result::Result<tree_sitter::Parser, tree_sitter::LanguageError> {
+    let mut parser = tree_sitter::Parser::new();
+    parser.set_language(&tree_sitter_javascript::LANGUAGE.into())?;
+    Ok(parser)
+}
+
+fn walk(node: Node<'_>, mut visit: impl FnMut(Node<'_>) -> bool) -> bool {
+    let mut nodes = vec![node];
+    while let Some(node) = nodes.pop() {
+        if visit(node) {
             return true;
         }
         let mut cursor = node.walk();
         nodes.extend(node.children(&mut cursor));
     }
     false
+}
+
+fn script_has(source: &str, hit: impl FnMut(Node<'_>) -> bool) -> bool {
+    let Ok(mut parser) = javascript_parser() else {
+        return false;
+    };
+    let Some(tree) = parser.parse(source, None) else {
+        return false;
+    };
+    walk(tree.root_node(), hit)
 }
 
 fn contributions(value: &Value, declared: &mut Vec<String>) {
@@ -312,26 +306,24 @@ fn contributions(value: &Value, declared: &mut Vec<String>) {
 }
 
 fn exports(source: &str) -> Result<BTreeSet<String>> {
-    let mut parser = tree_sitter::Parser::new();
-    parser
-        .set_language(&tree_sitter_javascript::LANGUAGE.into())
-        .map_err(|error| OpError::Failed(error.to_string()))?;
+    let mut parser = javascript_parser().map_err(|error| OpError::Failed(error.to_string()))?;
     let tree = parser
         .parse(source, None)
         .ok_or_else(|| OpError::Invalid("cannot parse plugin entry".into()))?;
     if tree.root_node().has_error() {
-        let mut nodes = vec![tree.root_node()];
-        while let Some(node) = nodes.pop() {
+        let mut line = None;
+        walk(tree.root_node(), |node| {
             if node.is_error() || node.is_missing() {
-                return Err(OpError::Invalid(format!(
-                    "invalid JavaScript at line {}",
-                    node.start_position().row + 1
-                )));
+                line = Some(node.start_position().row + 1);
+                true
+            } else {
+                false
             }
-            let mut cursor = node.walk();
-            nodes.extend(node.children(&mut cursor));
-        }
-        return Err(OpError::Invalid("invalid JavaScript".into()));
+        });
+        return Err(match line {
+            Some(line) => OpError::Invalid(format!("invalid JavaScript at line {line}")),
+            None => OpError::Invalid("invalid JavaScript".into()),
+        });
     }
     let mut exports = BTreeSet::new();
     let mut cursor = tree.root_node().walk();

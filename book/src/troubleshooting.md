@@ -1,5 +1,7 @@
 # Troubleshooting
 
+Start here when the window or `kg` does not do what you expected.
+
 ## `kg` is not found
 
 The macOS download does not put `kg` on your `PATH`. [Add the command link](start.md#download), or install with Homebrew.

@@ -1,0 +1,10 @@
+<script>
+    (function () {
+        try {
+            var saved = localStorage.getItem("mdbook-theme");
+            if (saved && saved !== "light" && saved !== "coal") {
+                localStorage.setItem("mdbook-theme", "coal");
+            }
+        } catch (e) {}
+    })();
+</script>

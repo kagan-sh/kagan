@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::io;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::thread::JoinHandle;
@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use portable_pty::{Child, CommandBuilder, MasterPty, native_pty_system};
 
-use crate::screen::{Edit, SNAPSHOT_MAX, Screen, SelectMode};
+use crate::screen::{Edit, Screen, SelectMode};
 
 mod ending;
 mod exit;
@@ -24,7 +24,7 @@ use ending::Ending;
 pub use exit::Exit;
 pub use finished::Finished;
 pub use lines::{Kept, KeptLine, Lines};
-use shared::{Frame, Shared, lock, try_lock};
+use shared::{Shared, lock, try_lock};
 use stream::{Outgoing, io_error, is_unsafe_control, paste_text, pty_size};
 #[cfg(unix)]
 use stream::{dup_fd, set_nonblocking};
@@ -96,30 +96,7 @@ impl Terminal {
         let process_id = child
             .process_id()
             .ok_or_else(|| io::Error::other("program has no process id"))?;
-        let screen = Arc::new(Mutex::new(Screen::new(cols, rows)));
-        let frame = Arc::new(Mutex::new(Frame {
-            version: 1,
-            grid: Arc::new(lock(&screen).grid()),
-        }));
-        let shared = Shared {
-            screen,
-            frame,
-            title: Arc::default(),
-            versions: Arc::new(AtomicU64::new(1)),
-            wanted: Arc::new(AtomicBool::new(false)),
-            edits: Arc::new(Mutex::new(Vec::new())),
-            changed: Arc::new(AtomicBool::new(false)),
-            settled: Arc::new(AtomicBool::new(false)),
-            snapshot_bound: Arc::new(AtomicUsize::new(SNAPSHOT_MAX)),
-            #[cfg(test)]
-            builds: Arc::default(),
-            #[cfg(test)]
-            eof_gate: Arc::default(),
-            #[cfg(test)]
-            publish_gate: Arc::default(),
-            #[cfg(test)]
-            poll_gate: Arc::default(),
-        };
+        let shared = Shared::running(Screen::new(cols, rows));
         let ended = Arc::new(AtomicBool::new(false));
         let write_stop = Arc::new(AtomicBool::new(false));
         #[cfg(test)]
