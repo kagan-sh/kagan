@@ -3718,8 +3718,7 @@ dependencies = [
 [[package]]
 name = "gpui-fast-windows"
 version = "0.1.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a1a193343ef7faaa18eb9ccc0aadf8ec9571f2791c4419c2ca23aa17198f970"
+source = "git+https://github.com/kagan-sh/gpui-fast?rev=e5867126093ddeee3e55835b634112410acf0d4f#e5867126093ddeee3e55835b634112410acf0d4f"
 dependencies = [
  "accesskit",
  "accesskit_windows",

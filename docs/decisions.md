@@ -666,3 +666,7 @@ Rules out: a bundled browser engine, embedding WebKit in a Wayland surface kagan
 Why: an ARM Linux machine asks for `linux-aarch64` and finds nothing when the list has only `linux-x86_64`.
 Cost: one package job, and one CI build. WebKitGTK is linked on that machine, not cross-compiled.
 Rules out: an x86 binary offered to an ARM machine.
+
+**166. A lost Windows GPU device leaves the window up.** This amends 131. GPUI Fast rebuilds its Direct3D device when Windows reports it removed. That rebuild is delivered on the window procedure, which cannot unwind. A failed rebuild, or one that arrives while a frame still holds the renderer, is logged and skipped. The window stays, and the next frame tries again. The Browser page may be blank until the device is back. The process stays up.
+Why: on a Parallels Windows VM the display driver removes the device when the Browser's composition visual is created. The recovery panic aborted kagan.
+Rules out: turning DirectComposition off, and a child-window WebView2.
