@@ -24,9 +24,9 @@ async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
 dunce = "=1.0.5"
 futures = "=0.3.34"
-gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "520f2a7734caab9643c5b807e976f9ad291d2c3a", features = ["tree-sitter-diff"] }
-gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "520f2a7734caab9643c5b807e976f9ad291d2c3a", default-features = false, features = ["quickjs", "components"] }
-gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "520f2a7734caab9643c5b807e976f9ad291d2c3a", default-features = false, features = ["gpui-fast"] }
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "586e01956a344bd1e55e5ad6e987b65ce6a13170", features = ["tree-sitter-diff"] }
+gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "586e01956a344bd1e55e5ad6e987b65ce6a13170", default-features = false, features = ["quickjs", "components"] }
+gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "586e01956a344bd1e55e5ad6e987b65ce6a13170", default-features = false, features = ["gpui-fast"] }
 interprocess = "=2.4.4"
 keyring-core = "=1.0.1"
 libc = "=0.2.191"
@@ -75,7 +75,7 @@ cargo-nextest = { version = "=0.9.148", locked = true }
 # A lost DirectX device is logged and the window stays (decision 166).
 [patch.crates-io]
 lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "43d44d3f286a8ffd8eaf587517ed677fe6e2376f" }
-gpui-fast-windows = { git = "https://github.com/kagan-sh/gpui-fast", rev = "e5867126093ddeee3e55835b634112410acf0d4f" }
+gpui-fast-windows = { git = "https://github.com/kagan-sh/gpui-fast", rev = "f10a0bbe5ceae572b1b50856aecfecd3ae057802" }
 
 # Line tables keep panic locations. Full debug info dominates link time and the target directory.
 # unpacked skips dsymutil on macOS. Cargo ignores this value on MSVC, which only supports packed.
