@@ -118,6 +118,7 @@ impl Kagan {
     }
 
     fn started(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.start.branch_focus = Some(cx.focus_handle().tab_stop(true));
         self.load_settings(cx);
         self.activity
             .update_state(Updater::global(cx).read(cx).state());
@@ -244,6 +245,10 @@ fn listen(
             this.start(window, cx);
         }),
         cx.subscribe_in(picker, window, |this, _, _: &picker::Close, window, cx| {
+            if this.close_branch_menu(window, cx) {
+                cx.notify();
+                return;
+            }
             this.show_work(Shown::Nothing, window, cx);
             window.focus(&this.focus, cx);
             this.tell_host(window, cx);

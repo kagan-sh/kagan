@@ -201,7 +201,8 @@ fn the_folder_choices_are_named_and_show_which_one_a_start_uses(cx: &mut TestApp
     click(cx, window, &format!("project-new-{}", project.id.0));
     wait_until(cx, |cx| shows(cx, window, "folder-project"));
     assert_eq!(label(cx, window, "folder-project"), "Project folder");
-    assert!(label(cx, window, "folder-worktree").starts_with("New worktree from "));
+    assert_eq!(label(cx, window, "folder-worktree"), "New worktree");
+    assert!(label(cx, window, "branch-from").starts_with("Branch from: "));
     assert_eq!(selected_of(cx, window, "folder-worktree"), Some(true));
     assert_eq!(selected_of(cx, window, "folder-project"), Some(false));
     assert!(shows(cx, window, "worktree-hint"));

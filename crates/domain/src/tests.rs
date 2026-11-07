@@ -3,8 +3,9 @@ mod review;
 use crate::{
     AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
     EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,
-    PluginId, PluginOp, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp, TurnOutcome,
-    UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json, parse_notes,
+    PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp,
+    TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json,
+    parse_notes,
 };
 use serde_json::{Value, json};
 
@@ -75,6 +76,22 @@ fn environment_spec() {
     round_trip(
         &EnvironmentSpec::ProjectDefault,
         &json!({ "kind": "project-default" }),
+    );
+    round_trip(
+        &EnvironmentSpec::ProjectOn {
+            branch: ProjectBranch::Checkout {
+                name: "topic".into(),
+            },
+        },
+        &json!({ "kind": "project-on", "branch": { "kind": "checkout", "name": "topic" } }),
+    );
+    round_trip(
+        &EnvironmentSpec::ProjectOn {
+            branch: ProjectBranch::New {
+                base: "main".into(),
+            },
+        },
+        &json!({ "kind": "project-on", "branch": { "kind": "new", "base": "main" } }),
     );
 }
 

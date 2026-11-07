@@ -167,7 +167,7 @@ Every function is async unless marked sync. Arguments and results are plain data
 - Events: `events(id, { afterSeq?, limit?, order? })`, `waitEvent(id, { type, afterSeq?, timeoutMs })`, `wait(id, { timeoutMs })`. `wait` returns `waiting`, `exited` (the row is idle, including after Stop), `failed`, `not-busy`, or `timeout`.
 - Projects: `projects()`, `project(id)`. Environments: `environment(id)`, `restoreEnvironment(threadId)`.
 - The window's list: `sidebar()` sync → `{ projects, sections, threads }`, the threads the window lists (not hidden, not archived). Changes: `changes(id, scope)` → `{ files, added, removed, base, repository }` and `diff(id, scope, path)` → one file's hunks and, when it fits, its new side. `scope` is `uncommitted | branch | commit`. Both answer only for a thread in that list, and throw at the call otherwise.
-- `environment` for `spawn` is `{ kind: "project-default" } | { kind: "reuse", environmentId } | { kind: "worktree", baseBranch?, branch? } | { kind: "personal" }`. `branch` names the new worktree branch; omitted, it is taken from the thread title.
+- `environment` for `spawn` is `{ kind: "project-default" } | { kind: "project-on", branch: { kind: "checkout", name } | { kind: "new", base } } | { kind: "reuse", environmentId } | { kind: "worktree", baseBranch?, branch? } | { kind: "personal" }`. `branch` on a worktree names the new worktree branch; omitted, it is taken from the thread title. `project-on` with `new` creates a branch from that local branch and names it the same way. `checkout` switches the project folder to that local branch. A base that is not a local branch is refused.
 
 ### `database`
 

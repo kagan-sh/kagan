@@ -6,7 +6,7 @@ use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProgramList, ProgramOp};
 
 use super::list::custom_command;
-use super::{Close, Mode, Picker, Programs, Rows, Start};
+use super::{Mode, Picker, Programs, Rows, Start};
 
 impl Picker {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -29,16 +29,13 @@ impl Picker {
                     ListEvent::Cancel => {
                         // Escape makes the list drop its own selection. The row the person saw stays
                         // the one that starts, so the list is put back to the delegate's choice.
-                        let was_custom = this.mode == Mode::Custom;
+                        // CloseCustomCommand is the same key and emits Close, so this must not.
                         this.set_mode(Mode::Catalog, cx);
                         let selected = this.list.read(cx).delegate().selected;
                         this.list.update(cx, |list, cx| {
                             list.set_selected_index(selected.map(IndexPath::new), window, cx);
                         });
                         cx.notify();
-                        if !was_custom {
-                            cx.emit(Close);
-                        }
                     }
                     ListEvent::Select(_) => cx.notify(),
                 },
@@ -161,7 +158,6 @@ impl Picker {
         self.list.update(cx, |state, cx| {
             let rows = state.delegate_mut();
             rows.loading = false;
-            rows.row_height = None;
             rows.all = list.programs;
             rows.filter();
             if let Some(default) = &list.default

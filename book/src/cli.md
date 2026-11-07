@@ -398,7 +398,7 @@ Options:
           
 
       --environment <ENVIRONMENT>
-          project-default, personal, `worktree[:<base>[:<branch>]]` or `reuse:<environment-id>`
+          project-default, `project-on:checkout:<branch>`, `project-on:new:<base>`, personal, `worktree[:<base>[:<branch>]]`, or `reuse:<environment-id>`
           
           [default: worktree]
 

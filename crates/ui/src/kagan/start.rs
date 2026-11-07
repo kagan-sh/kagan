@@ -1,4 +1,8 @@
-use gpui_kit::{AnyWindowHandle, App, AppContext as _, AsyncApp, Task, WeakEntity};
+use gpui_kit::component::input::InputState;
+use gpui_kit::{
+    AnyWindowHandle, App, AppContext as _, AsyncApp, Entity, FocusHandle, Subscription, Task,
+    WeakEntity,
+};
 use kg_core::Workspace;
 use kg_domain::{BranchList, Op, ProjectId, ProjectKind, ThreadId, ThreadOp};
 use std::path::{Path, PathBuf};
@@ -14,6 +18,33 @@ const NO_AGENT: &str = "No agent is installed, so kagan cannot start a plugin th
 pub(super) enum StartFolder {
     Project,
     Worktree,
+}
+
+/// Which branch a new thread uses. `Current` is the checked-out branch, or HEAD when it is detached.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) enum BranchPick {
+    #[default]
+    Current,
+    /// A worktree's base, or the branch to check out in the project folder.
+    Named(String),
+    /// A new branch in the project folder, created from this one.
+    NewFrom(String),
+}
+
+/// Which list the project-folder menu is showing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum ProjectIntent {
+    #[default]
+    Current,
+    New,
+    Checkout,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Panel {
+    #[default]
+    Closed,
+    Open,
 }
 
 #[derive(Default)]
@@ -55,7 +86,16 @@ impl SetupSeen {
 pub(super) struct StartState {
     /// The folder the person picked; None means the default for the project
     folder: Option<StartFolder>,
+    pick: BranchPick,
+    intent: ProjectIntent,
+    panel: Panel,
+    pub(super) branch_focus: Option<FocusHandle>,
+    branch_query: Option<Entity<InputState>>,
+    branch_watch: Option<Subscription>,
     branches: Branches,
+    /// Bumps when the pinned commit should be read again, so an older read cannot replace it.
+    setup_epoch: u64,
+    setup_task: Option<Task<()>>,
     setup: Option<SetupSeen>,
     setup_open: bool,
     setup_failure: Option<String>,
@@ -75,7 +115,14 @@ impl StartState {
     /// Forgets the last project's pick. A start still preparing is kept, so a second one waits.
     pub(super) fn reset(&mut self) {
         self.folder = None;
+        self.pick = BranchPick::Current;
+        self.intent = ProjectIntent::Current;
+        self.panel = Panel::Closed;
+        self.branch_query = None;
+        self.branch_watch = None;
         self.branches = Branches::Loading;
+        self.setup_epoch = self.setup_epoch.wrapping_add(1);
+        self.setup_task = None;
         self.setup = None;
         self.setup_open = false;
         self.setup_failure = None;
@@ -257,6 +304,9 @@ async fn follow_plugin_prompt(
 
 mod branches;
 mod folder;
+mod menu;
 mod plugin;
 mod render;
 mod setup;
+
+pub(super) use menu::{BRANCH_CONTEXT, CloseBranchMenu};
