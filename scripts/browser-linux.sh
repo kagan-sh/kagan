@@ -11,6 +11,10 @@ if [ "$(uname -s)" != Linux ]; then
 fi
 
 if [ -z "${DISPLAY:-}" ]; then
+  # Xvfb has no DRI3 device. WebKitGTK's GPU process then never issues the request.
+  LIBGL_ALWAYS_SOFTWARE=1
+  WEBKIT_DISABLE_COMPOSITING_MODE=1
+  export LIBGL_ALWAYS_SOFTWARE WEBKIT_DISABLE_COMPOSITING_MODE
   exec xvfb-run -a -s "-screen 0 1280x800x24" sh "$0" "$@"
 fi
 
