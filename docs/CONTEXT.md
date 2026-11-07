@@ -131,11 +131,11 @@ What an agent remembers of a thread's program: what was said and done. Kagan giv
 _Avoid_: Session, chat
 
 **Browser**:
-A tab of the right sidebar that shows one web page on macOS and Windows. A thread's agent can drive it with `kg browser`. Plugins cannot use it.
+A tab of the right sidebar that shows one web page on macOS and Windows. A thread's agent can drive it with `kg browser`. A plugin can drive that same page when the Browser area is on its install card. The row has Back, Forward, Reload, and Open in external browser.
 _Avoid_: Web view, embedded browser
 
 **Browser session**:
-The page a thread drives through `kg browser`: one per window, owned by one thread, ending on Stop agent, `kg browser close`, its tab, or kagan quitting.
+The page a thread drives through `kg browser` or `kagan/browser`: one per window, owned by one thread, ending on Stop agent, `kg browser close`, its tab, or kagan quitting.
 _Avoid_: Automation, headless browser
 
 **Preview**:

@@ -67,6 +67,7 @@ pub(crate) fn modules(
             Gate::Area(Area::Database),
             crate::database::module(&data.join("database.sqlite3")),
         ),
+        (Gate::Area(Area::Browser), crate::browser::module()),
         (Gate::Read, files),
     ]
 }

@@ -14,6 +14,7 @@ mod keys;
 mod marks;
 mod paint;
 mod panels;
+mod plugin_browser;
 mod plugins;
 mod remove;
 mod review;

@@ -185,6 +185,10 @@ Granted when `powers.read` is not empty. Reads stay inside the plugin's read roo
 - `run(program, args[], { cwd?, stdin?, timeoutMs? })` → `{ exitCode, stdout, stderr }` for a `powers.run` program (default timeout 60 s).
 - kagan owns each process tree (Job Objects on Windows, process groups elsewhere), resolves `.cmd`/`.exe` by PATHEXT on Windows, and kills every tree on unload.
 
+### `browser`
+
+The window's Browser tab, on macOS and Windows. Granted by `powers.areas` including `browser`. The install card says "opens and drives the Browser tab for a thread it names". Every call names the thread. The verbs match `kg browser` (decisions 143, 147, and 161): `open(threadId, url)`, `status(threadId)`, `snapshot(threadId)`, `goto(threadId, url)`, `back(threadId)`, `forward(threadId)`, `reload(threadId)`, `click(threadId, ref)`, `fill(threadId, ref, text)`, `type(threadId, text)`, `press(threadId, key)`, `select(threadId, ref, option)`, `scroll(threadId, dy)`, `close(threadId)`. `open` and `status` return `{ threadId, thread, url, title, shown }`. `snapshot` returns `{ url, title, controls, text, truncated }`. A control's `ref` is a whole number from the latest snapshot. `fill` takes the text in the call and has no file argument. There is no `evaluate`, no CDP, and no arbitrary selector. One page per window, owned by one thread, under the same rules as `kg browser`. A plugin does not declare a panel to stand in for this tab. On Linux every call fails with "The browser works on macOS and Windows only for now."
+
 ## UI
 
 Plugins get what gpui-kit offers, in the Workbench look ([look.md](look.md)), plus a few things only kagan knows.
@@ -294,7 +298,7 @@ A `secret` setting (decision 104):
 ## Not in this API
 
 - HTTP routes, background services that stay running, cron expressions, provider and environment-provider contributions, AI services, and hooks. Add one when a plugin needs it. Timers are `schedules` (decision 146).
-- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131), and plugins cannot use it. A thread's agent can drive it with `kg browser`, and no power reaches that page (decisions 143 and 147). `openUrl` still opens the system browser. A plugin shows one page with `WebView` (121), from localhost or a `powers.fetch` host, or its own HTML as a web panel (133). Neither is a general browser.
+- Global (app not in front) hotkeys: after v1. kagan's own Browser tab shows a page on macOS and Windows (decisions 117 and 131). A plugin with the `browser` area drives that tab through `kagan/browser`, with the same verbs as `kg browser` and no second panel (decision 161). `openUrl` still opens the system browser. A plugin shows one page with `WebView` (121), from localhost or a `powers.fetch` host, or its own HTML as a web panel (133). Neither is a general browser, and neither is the Browser tab.
 
 ## Measured by the spike
 

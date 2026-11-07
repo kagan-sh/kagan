@@ -200,7 +200,7 @@ fn a_loopback_host_is_shown_without_its_scheme_and_port() {
 #[test]
 fn each_area_has_a_name_and_a_phrase() {
     let names = Area::ALL.iter().map(|area| area.name()).collect::<Vec<_>>();
-    assert_eq!(names, ["Threads", "Database", "Process"]);
+    assert_eq!(names, ["Threads", "Database", "Process", "Browser"]);
     for area in Area::ALL {
         assert!(!area.id().is_empty());
         assert!(!area.phrase().is_empty());
