@@ -74,7 +74,7 @@ icons = [
 resources = ["../../assets/THIRD-PARTY-NOTICES.txt"]
 
 [package.metadata.packager.deb]
-depends = ["libwebkit2gtk-4.1-0"]
+depends = ["libwebkit2gtk-4.1-0", "libxkbcommon-x11-0"]
 
 # Keep this last. Release signing appends its keys to this table.
 [package.metadata.packager.macos]
