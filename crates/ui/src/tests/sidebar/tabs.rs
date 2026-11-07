@@ -7,7 +7,7 @@ use crate::kagan::{CloseTerminal, Kagan, NewTerminal, NextTerminal, PreviousTerm
 use crate::tests::kagan::{
     click, focused_of, open, present, run_shell, selected_of, shows, wait_for_shell, wait_until,
 };
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use crate::tests::plugin::panels::disabled_of;
 
 fn with_sh(cx: &mut TestAppContext) {
@@ -164,6 +164,7 @@ fn the_browser_opens_from_the_plus_and_closes(cx: &mut TestAppContext) {
     assert_eq!(focused_of(cx, window, "right-tab-add"), Some(true));
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[gpui_kit::test]
 fn the_browser_tab_asks_for_an_address(cx: &mut TestAppContext) {
     let (_, window, _data) = open(cx);
@@ -173,11 +174,11 @@ fn the_browser_tab_asks_for_an_address(cx: &mut TestAppContext) {
         crate::tests::kagan::label(cx, window, "browser-hint"),
         "Type an address and press Enter."
     );
-    assert!(!present(cx, window, "browser-back"));
-    assert!(!present(cx, window, "browser-external"));
+    assert_eq!(disabled_of(cx, window, "browser-back"), Some(true));
+    assert_eq!(disabled_of(cx, window, "browser-external"), Some(true));
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[gpui_kit::test]
 fn the_browser_bar_goes_back_forward_reloads_and_opens_outside(cx: &mut TestAppContext) {
     let (_, window, _data) = open(cx);
