@@ -188,7 +188,7 @@ jobs:
       - name: Browser page
         run: |
           sudo apt-get install -y xvfb
-          sh scripts/browser-linux.sh
+          sh scripts/browser.sh
 
   linux-arm:
     needs: [scope, checks]
@@ -274,6 +274,9 @@ jobs:
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
           --partition hash:${{ matrix.shard }}/2
+      - name: Browser page
+        if: matrix.shard == 1
+        run: sh scripts/browser.sh
 
   windows-tests:
     needs: scope
@@ -314,6 +317,9 @@ jobs:
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
           --partition hash:${{ matrix.shard }}/2
+      - name: Browser page
+        if: matrix.shard == 1
+        run: sh scripts/browser.sh
 
   # The ruleset requires the checks linux, macos and windows. Each passes only when every job
   # for its OS passed; a skipped job would otherwise count as a pass.
