@@ -1,6 +1,6 @@
 # Review changes
 
-**Changes** in the right sidebar lists the files the thread changed. In a git folder, **Uncommitted** is the work not yet committed, and **Branch** is this branch against its base. Click a file, or **Open review**, to open the diff in the center. The review can also show **Last commit**. A folder that is not git says **Not a git folder.**
+Review is how you read what a thread changed and send comments back to its program. **Changes** in the right sidebar lists those files. In a git folder, **Uncommitted** is the work not yet committed, and **Branch** is this branch against its base. Click a file, or **Open review**, to open the diff in the center. The review can also show **Last commit**. A folder that is not git says **Not a git folder.**
 
 ## Send comments to the program
 

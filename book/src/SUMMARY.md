@@ -4,13 +4,13 @@
 
 [Get started](start.md)
 
-# Everyday use
+# Using kagan
 
 - [Threads](threads.md)
 - [Review changes](review.md)
 - [The window](window.md)
 
-# Extend
+# Extending kagan
 
 - [Plugins](plugins.md)
 - [Build a plugin](build-plugin.md)
