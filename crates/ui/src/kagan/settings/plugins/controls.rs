@@ -313,6 +313,8 @@ pub(super) fn select_control(
 ) -> AnyElement {
     let current = value.as_str().unwrap_or_default().to_owned();
     h_flex()
+        .w_full()
+        .min_w_0()
         .gap_1()
         .flex_wrap()
         .justify_end()
@@ -345,7 +347,7 @@ pub(super) fn select_control(
             } else {
                 button.outline()
             };
-            control(
+            div().flex_shrink_0().child(control(
                 option_id,
                 Facts {
                     role: Role::RadioButton,
@@ -353,7 +355,7 @@ pub(super) fn select_control(
                     ..Facts::button(option.clone())
                 },
                 button,
-            )
+            ))
         }))
         .into_any_element()
 }

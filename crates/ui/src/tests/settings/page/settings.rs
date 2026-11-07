@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use super::{
     aria_label, get_theme, install_plugins, plugin_config, run_op, settings_text, setup_only,
+    write_plugin,
 };
 use crate::tests::kagan::{
     add_project, click, label, open, open_with_plugins_then, present, selected_of, set_preference,
@@ -392,4 +393,61 @@ fn a_reload_that_toggles_multiline_swaps_the_row_widget_and_saves_both_ways(
     cx.simulate_keystrokes(window, "enter");
     cx.run_until_parked();
     assert_eq!(plugin_config(cx, "label"), json!("back to one line"));
+}
+
+#[gpui_kit::test]
+fn a_long_choice_keeps_its_title_wider_than_it_is_tall(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        write_plugin(
+            data,
+            "programs",
+            &json!({
+                "id": "dev.test.programs",
+                "name": "Kanban",
+                "version": "1.0.0",
+                "kagan": ">=0.1.0",
+                "entry": "main.js",
+                "instructions": "A test plugin with a long choice.",
+                "powers": {},
+                "settings": {
+                    "program": {
+                        "type": "select",
+                        "title": "Program for new threads",
+                        "options": [
+                            "claude-program",
+                            "codex-program",
+                            "cursor-agent-program",
+                            "opencode-program",
+                            "gemini-program",
+                            "kimi-program",
+                            "amp-program",
+                            "copilot-agent-program"
+                        ],
+                        "default": "claude-program"
+                    }
+                }
+            }),
+            "// @ts-check\nexport default class Plugin {}\n",
+        );
+    });
+    click(cx, window, "settings-gear");
+    let title = "setting-row-dev.test.programs/program-title";
+    assert!(present(cx, window, title));
+    let (width, height) = cx
+        .update_window(window, |_, window, _| {
+            crate::ui_registry::find(window, &ElementId::Name(title.into())).map_or(
+                (0., 0.),
+                |element| {
+                    (
+                        f32::from(element.bounds.size.width),
+                        f32::from(element.bounds.size.height),
+                    )
+                },
+            )
+        })
+        .unwrap();
+    assert!(
+        width > height,
+        "title is {width} by {height}, so the letters stacked"
+    );
 }
