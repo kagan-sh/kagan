@@ -22,7 +22,12 @@ use crate::ui_registry::Facts;
 
 impl Preview {
     pub(in crate::kagan) fn render(&self, cx: &mut Context<Kagan>) -> AnyElement {
-        let (directory, name) = super::super::files::directory_and_name(&self.path);
+        let (directory, name) = self
+            .path
+            .rsplit_once(['/', '\\'])
+            .map_or(("", self.path.as_str()), |(directory, name)| {
+                (directory, name)
+            });
         let size = self
             .file
             .as_ref()

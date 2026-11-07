@@ -4,9 +4,9 @@ use gpui_kit::{Context, Window};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult};
 
-// Either separator counts, so a Windows path splits the same way as a slash path.
+// Git paths use `/`. A `\` stays in the name.
 pub(super) fn directory_and_name(path: &str) -> (&str, &str) {
-    path.rsplit_once(['/', '\\'])
+    path.rsplit_once('/')
         .map_or(("", path), |(directory, name)| (directory, name))
 }
 
@@ -37,10 +37,11 @@ mod tests {
     use super::directory_and_name;
 
     #[test]
-    fn a_path_splits_on_slash_or_backslash() {
+    fn a_git_path_splits_on_slash() {
         assert_eq!(directory_and_name("src/main.rs"), ("src", "main.rs"));
         assert_eq!(directory_and_name("a/b/c"), ("a/b", "c"));
-        assert_eq!(directory_and_name(r"src\main.rs"), ("src", "main.rs"));
+        assert_eq!(directory_and_name(r"src\main.rs"), ("", r"src\main.rs"));
+        assert_eq!(directory_and_name(r"a/b\c"), ("a", r"b\c"));
         assert_eq!(directory_and_name("main.rs"), ("", "main.rs"));
     }
 }
