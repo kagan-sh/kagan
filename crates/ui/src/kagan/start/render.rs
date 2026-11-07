@@ -26,7 +26,7 @@ impl Kagan {
             .project(project)
             .map_or_else(String::new, |project| project.name.clone());
         let kind = project_kind(project, cx);
-        let ready = kind.is_some_and(|kind| self.start_environment(kind).is_some())
+        let ready = kind.is_some_and(|kind| self.start_environment(kind, cx).is_some())
             && self.setup_ready()
             && !self.start.starting
             && self.picker.read(cx).command(cx).is_ok();

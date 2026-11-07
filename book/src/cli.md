@@ -91,13 +91,13 @@ Options:
           Print compact JSON; failures print the error envelope
 
       --thread-id <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
       --project-id <PROJECT_ID>
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
       --environment-id <ENVIRONMENT_ID>
-          [env: KG_ENVIRONMENT_ID=]
+          [env: KG_ENVIRONMENT_ID=env_d4f244067f684e51a2e7b19220a3753a]
 
   -h, --help
           Print help
@@ -157,7 +157,7 @@ Options:
       --project-id <PROJECT_ID>
           Project whose skills to include
           
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
   -h, --help
           Print help
@@ -178,7 +178,7 @@ Options:
       --project-id <PROJECT_ID>
           Project whose skills to include
           
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
   -h, --help
           Print help
@@ -199,7 +199,7 @@ Options:
       --project-id <PROJECT_ID>
           Project whose skills to include
           
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
   -h, --help
           Print help
@@ -223,7 +223,7 @@ Options:
       --project-id <PROJECT_ID>
           Project whose skills to include
           
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
   -h, --help
           Print help
@@ -247,7 +247,7 @@ Options:
       --project-id <PROJECT_ID>
           Project whose skills to include
           
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
   -h, --help
           Print help
@@ -268,7 +268,7 @@ Options:
       --project-id <PROJECT_ID>
           Project whose skills to include
           
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
   -h, --help
           Print help
@@ -349,7 +349,7 @@ Usage: kg thread get <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -365,7 +365,7 @@ Usage: kg thread list [OPTIONS]
 
 Options:
       --project-id <PROJECT_ID>
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
       --archived <ARCHIVED>
           [possible values: true, false]
@@ -389,7 +389,7 @@ Usage: kg thread run [OPTIONS] --project-id <PROJECT_ID> --program <PROGRAM>
 
 Options:
       --project-id <PROJECT_ID>
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
       --program <PROGRAM>
           The program to run, such as `claude`, `codex`, or a command the person types. Words split on spaces; single or double quotes keep spaces together
@@ -398,7 +398,7 @@ Options:
           
 
       --environment <ENVIRONMENT>
-          project-default, personal, `worktree[:<base>[:<branch>]]` or `reuse:<environment-id>`
+          project-default, `project-on:checkout:<branch>`, `project-on:new:<base>`, personal, `worktree[:<base>[:<branch>]]`, or `reuse:<environment-id>`
           
           [default: worktree]
 
@@ -430,7 +430,7 @@ Usage: kg thread stop <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -446,7 +446,7 @@ Usage: kg thread input [OPTIONS] <ID> <TEXT>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <TEXT>
           
@@ -468,7 +468,7 @@ Usage: kg thread resize [OPTIONS] <ID> <COLS> <ROWS>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <COLS>
           
@@ -493,7 +493,7 @@ Usage: kg thread screen [OPTIONS] <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --terminal <TERMINAL>
@@ -518,7 +518,7 @@ Usage: kg thread scroll [OPTIONS] <ID> <LINES>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <LINES>
           Lines up into the history; negative moves back down
@@ -540,7 +540,7 @@ Usage: kg thread select [OPTIONS] <ID> <MODE> <COLUMN> <ROW>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <MODE>
           [possible values: simple, word, line, block, extend]
@@ -571,7 +571,7 @@ Usage: kg thread copy [OPTIONS] <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --terminal <TERMINAL>
@@ -590,7 +590,7 @@ Usage: kg thread report [OPTIONS] <ID> [BYTES]...
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   [BYTES]...
           Decimal byte values, 0 to 255, in order
@@ -612,7 +612,7 @@ Usage: kg thread paste [OPTIONS] <ID> [TEXT]
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   [TEXT]
           The text. Omit it when `--file` is set
@@ -637,7 +637,7 @@ Usage: kg thread send <ID> <TEXT>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <TEXT>
           
@@ -674,7 +674,7 @@ Usage: kg thread terminal new <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -690,7 +690,7 @@ Usage: kg thread terminal list <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -706,7 +706,7 @@ Usage: kg thread terminal close <ID> <NUMBER>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <NUMBER>
           
@@ -725,7 +725,7 @@ Usage: kg thread details <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -741,7 +741,7 @@ Usage: kg thread links <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -757,7 +757,7 @@ Usage: kg thread archive <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -773,7 +773,7 @@ Usage: kg thread unarchive <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -789,13 +789,13 @@ Usage: kg thread delete [OPTIONS] <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --approval-thread-id <APPROVAL_THREAD_ID>
           The thread where a person approves this delete
           
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -810,7 +810,7 @@ Usage: kg thread set-pinned <ID> <PINNED>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <PINNED>
           [possible values: true, false]
@@ -829,7 +829,7 @@ Usage: kg thread rename <ID> <TITLE>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <TITLE>
           
@@ -848,7 +848,7 @@ Usage: kg thread mark-read <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -864,7 +864,7 @@ Usage: kg thread metadata --plugin-id <PLUGIN_ID> <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --plugin-id <PLUGIN_ID>
@@ -883,7 +883,7 @@ Usage: kg thread set-metadata --plugin-id <PLUGIN_ID> --value <JSON> <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --plugin-id <PLUGIN_ID>
@@ -905,7 +905,7 @@ Usage: kg thread events [OPTIONS] <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --after-seq <AFTER_SEQ>
@@ -930,7 +930,7 @@ Usage: kg thread wait-event [OPTIONS] --kind <KIND> --timeout-ms <TIMEOUT_MS> <I
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --kind <KIND>
@@ -955,7 +955,7 @@ Usage: kg thread wait --timeout-ms <TIMEOUT_MS> <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --timeout-ms <TIMEOUT_MS>
@@ -974,7 +974,7 @@ Usage: kg thread ask [OPTIONS] <ID> <TITLE>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <TITLE>
           
@@ -998,7 +998,7 @@ Usage: kg thread start-again <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -1014,7 +1014,7 @@ Usage: kg thread tools <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -1030,7 +1030,7 @@ Usage: kg thread call-tool [OPTIONS] <ID> <NAME>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <NAME>
           
@@ -1052,7 +1052,7 @@ Usage: kg thread interactions <ID>
 
 Arguments:
   <ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -1125,7 +1125,7 @@ Usage: kg project get <ID>
 
 Arguments:
   <ID>
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
 Options:
   -h, --help
@@ -1246,7 +1246,7 @@ Usage: kg environment get <ID>
 
 Arguments:
   <ID>
-          [env: KG_ENVIRONMENT_ID=]
+          [env: KG_ENVIRONMENT_ID=env_d4f244067f684e51a2e7b19220a3753a]
 
 Options:
   -h, --help
@@ -1262,7 +1262,7 @@ Usage: kg environment restore <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -1278,7 +1278,7 @@ Usage: kg environment branches <PROJECT_ID>
 
 Arguments:
   <PROJECT_ID>
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
 Options:
   -h, --help
@@ -1294,7 +1294,7 @@ Usage: kg environment set-base <ID> <BASE>
 
 Arguments:
   <ID>
-          [env: KG_ENVIRONMENT_ID=]
+          [env: KG_ENVIRONMENT_ID=env_d4f244067f684e51a2e7b19220a3753a]
 
   <BASE>
           
@@ -1313,7 +1313,7 @@ Usage: kg environment remove <ID>
 
 Arguments:
   <ID>
-          [env: KG_ENVIRONMENT_ID=]
+          [env: KG_ENVIRONMENT_ID=env_d4f244067f684e51a2e7b19220a3753a]
 
 Options:
   -h, --help
@@ -1398,10 +1398,10 @@ Arguments:
 
 Options:
       --thread-id <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
       --project-id <PROJECT_ID>
-          [env: KG_PROJECT_ID=]
+          [env: KG_PROJECT_ID=prj_40a131cb65bd415b8b585d538e2ffb6d]
 
   -h, --help
           Print help
@@ -1471,7 +1471,7 @@ Arguments:
 
 Options:
       --thread-id <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1490,7 +1490,7 @@ Arguments:
 
 Options:
       --thread-id <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1558,7 +1558,7 @@ Options:
       --thread-id <THREAD_ID>
           The thread where a person approves this removal
           
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1582,7 +1582,7 @@ Options:
       --thread-id <THREAD_ID>
           The thread where a person approves the plugin's powers
           
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1603,7 +1603,7 @@ Options:
       --thread-id <THREAD_ID>
           The thread where a person approves new powers
           
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1740,7 +1740,7 @@ Options:
       --thread-id <THREAD_ID>
           The thread where a person approves a folder setting
           
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1815,7 +1815,7 @@ Options:
       --thread-id <THREAD_ID>
           The thread where a person approves the choice
           
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1871,7 +1871,7 @@ Arguments:
 
 Options:
       --thread-id <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -1921,7 +1921,7 @@ Usage: kg section file [OPTIONS] --thread-id <THREAD_ID>
 
 Options:
       --thread-id <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
       --section-id <SECTION_ID>
           
@@ -2763,7 +2763,7 @@ Arguments:
           
 
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2779,7 +2779,7 @@ Usage: kg browser status <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2795,7 +2795,7 @@ Usage: kg browser snapshot <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2814,7 +2814,7 @@ Arguments:
           
 
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2830,7 +2830,7 @@ Usage: kg browser back <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2846,7 +2846,7 @@ Usage: kg browser forward <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2862,7 +2862,7 @@ Usage: kg browser reload <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2881,7 +2881,7 @@ Arguments:
           
 
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2907,7 +2907,7 @@ Options:
           Read the text from this path, or `-` for stdin
 
       --thread-id <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help
@@ -2925,7 +2925,7 @@ Arguments:
           
 
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2944,7 +2944,7 @@ Arguments:
           
 
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2966,7 +2966,7 @@ Arguments:
           
 
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -2985,7 +2985,7 @@ Arguments:
           
 
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -3001,7 +3001,7 @@ Usage: kg browser close <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -3038,7 +3038,7 @@ Usage: kg diff list [OPTIONS] --scope <SCOPE> <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
       --scope <SCOPE>
@@ -3063,7 +3063,7 @@ Usage: kg diff show [OPTIONS] --scope <SCOPE> <THREAD_ID> <PATH>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   <PATH>
           
@@ -3091,7 +3091,7 @@ Usage: kg diff commits <THREAD_ID>
 
 Arguments:
   <THREAD_ID>
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
 Options:
   -h, --help
@@ -3132,7 +3132,7 @@ Options:
       --thread-id <THREAD_ID>
           Thread whose folder a relative path joins (defaults to `KG_THREAD_ID`)
           
-          [env: KG_THREAD_ID=]
+          [env: KG_THREAD_ID=thr_b03e4a46eabd4345a02da62fd52980d8]
 
   -h, --help
           Print help

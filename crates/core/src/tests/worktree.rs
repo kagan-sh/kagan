@@ -745,6 +745,328 @@ async fn a_failing_setup_that_mentions_removal_keeps_its_worktree(cx: &mut TestA
 
 #[cfg(unix)]
 #[gpui_kit::test]
+async fn checking_out_a_branch_moves_the_project_folder(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = clean_repo(&fixture);
+    git_in(&repo, &["checkout", "-q", "-b", "topic"]);
+    git_in(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.test",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "topic",
+        ],
+    );
+    let topic = rev(&repo);
+    git_in(&repo, &["checkout", "-q", "main"]);
+    op(
+        project_on(
+            &fixture,
+            Some("Notes"),
+            ProjectBranch::Checkout {
+                name: "topic".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(branch_name(&repo), "topic");
+    assert_eq!(rev(&repo), topic);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_dirty_checkout_refuses_a_new_branch_and_stays_for_the_current_one(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let repo = clean_repo(&fixture);
+    let stay = rev(&repo);
+    std::fs::write(repo.join("dirty.txt"), "changed\n").unwrap();
+    let error = op(
+        project_on(
+            &fixture,
+            Some("Notes"),
+            ProjectBranch::New {
+                base: "main".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("uncommitted changes in this checkout"),
+        "{error}"
+    );
+    assert_eq!(rev(&repo), stay);
+    op(
+        project_on(
+            &fixture,
+            None,
+            ProjectBranch::Checkout {
+                name: "main".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap();
+    op(fixture.run(super::program()), cx).await.unwrap();
+    assert_eq!(branch_name(&repo), "main");
+    assert_eq!(rev(&repo), stay);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_new_project_branch_takes_the_title_and_a_live_thread_blocks_the_next(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let repo = clean_repo(&fixture);
+    git_in(&repo, &["checkout", "-q", "-b", "topic"]);
+    git_in(&repo, &["checkout", "-q", "main"]);
+    op(
+        project_on(
+            &fixture,
+            Some("Ship the notes"),
+            ProjectBranch::New {
+                base: "main".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(branch_name(&repo), "ship-the-notes");
+    let error = op(
+        project_on(
+            &fixture,
+            Some("Elsewhere"),
+            ProjectBranch::Checkout {
+                name: "topic".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Another thread is using this folder"),
+        "{error}"
+    );
+    assert_eq!(branch_name(&repo), "ship-the-notes");
+    std::fs::write(repo.join("dirty.txt"), "changed\n").unwrap();
+    let error = op(
+        project_on(
+            &fixture,
+            Some("Elsewhere"),
+            ProjectBranch::Checkout {
+                name: "topic".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("uncommitted changes in this checkout"),
+        "{error}"
+    );
+    assert_eq!(branch_name(&repo), "ship-the-notes");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_new_project_branch_refuses_a_base_that_is_not_local(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = clean_repo(&fixture);
+    git_in(&repo, &["tag", "shipped"]);
+    let stay = rev(&repo);
+    for base in ["shipped", stay.as_str()] {
+        let error = op(
+            project_on(
+                &fixture,
+                Some("Notes"),
+                ProjectBranch::New {
+                    base: base.to_owned(),
+                },
+            ),
+            cx,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("branch {base} is not in this repository")),
+            "{error}"
+        );
+        assert_eq!(branch_name(&repo), "main");
+        assert_eq!(rev(&repo), stay);
+    }
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn checking_out_the_unborn_branch_does_not_move_head(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = repo_dir(&fixture);
+    git_in(&repo, &["init", "-b", "main"]);
+    op(
+        project_on(
+            &fixture,
+            None,
+            ProjectBranch::Checkout {
+                name: "main".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap();
+    assert_eq!(show_current(&repo), "main");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_branch_named_head_is_refused(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = clean_repo(&fixture);
+    let stay = rev(&repo);
+    let error = op(
+        project_on(
+            &fixture,
+            Some("HEAD"),
+            ProjectBranch::New {
+                base: "main".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("branch name head is not allowed"),
+        "{error}"
+    );
+    assert_eq!(branch_name(&repo), "main");
+    assert_eq!(rev(&repo), stay);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_new_project_branch_refuses_a_name_that_exists(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let repo = clean_repo(&fixture);
+    git_in(&repo, &["checkout", "-q", "-b", "ship-the-notes"]);
+    git_in(&repo, &["checkout", "-q", "main"]);
+    let error = op(
+        project_on(
+            &fixture,
+            Some("Ship the notes"),
+            ProjectBranch::New {
+                base: "main".into(),
+            },
+        ),
+        cx,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("branch ship-the-notes already exists"),
+        "{error}"
+    );
+    assert_eq!(branch_name(&repo), "main");
+}
+
+/// The fixture folder holds the database, so a git repo there ignores everything but the files a
+/// test means to commit. `dirty.txt` stays visible to `git status`.
+fn clean_repo(fixture: &Fixture) -> std::path::PathBuf {
+    let repo = repo_dir(fixture);
+    empty_repo(&repo);
+    git_in(&repo, &["branch", "-M", "main"]);
+    std::fs::write(repo.join(".gitignore"), "*\n!.gitignore\n!dirty.txt\n").unwrap();
+    git_in(&repo, &["add", "--", ".gitignore"]);
+    git_in(
+        &repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.test",
+            "commit",
+            "-qm",
+            "ignore",
+        ],
+    );
+    repo
+}
+
+fn project_on(fixture: &Fixture, title: Option<&str>, branch: ProjectBranch) -> Op {
+    Op::Thread(ThreadOp::Run(Run {
+        project_id: fixture.project.clone(),
+        program: super::program().into(),
+        title: title.map(str::to_owned),
+        environment: EnvironmentSpec::ProjectOn { branch },
+        visibility: None,
+        parent_thread_id: None,
+        lifecycle_owner_thread_id: None,
+        metadata: None,
+    }))
+}
+
+fn rev(repo: &std::path::Path) -> String {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+fn show_current(repo: &std::path::Path) -> String {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["branch", "--show-current"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+fn branch_name(repo: &std::path::Path) -> String {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
 async fn a_retry_after_the_setup_file_changes_drops_the_worktree(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let repo = repo_dir(&fixture);

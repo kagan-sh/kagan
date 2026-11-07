@@ -116,13 +116,12 @@ pub(crate) fn is_repository(cwd: &Path) -> bool {
 }
 
 pub(crate) fn current_branch(cwd: &Path) -> Option<String> {
-    let text = git(cwd, &["rev-parse", "--abbrev-ref", "HEAD"]).ok()?;
-    let name = text.trim();
-    if name.is_empty() || name == "HEAD" {
-        None
-    } else {
-        Some(name.to_owned())
-    }
+    // `rev-parse --abbrev-ref HEAD` is empty when a branch named `head` exists on a
+    // case-insensitive checkout, and it fails on an unborn branch. `branch --show-current`
+    // still prints the branch that is checked out.
+    let name = git(cwd, &["branch", "--show-current"]).ok()?;
+    let name = name.trim();
+    (!name.is_empty()).then(|| name.to_owned())
 }
 
 fn is_lock_suffix(name: &str) -> bool {
@@ -133,7 +132,7 @@ fn is_lock_suffix(name: &str) -> bool {
 pub(crate) fn valid_branch(name: &str) -> bool {
     let bytes = name.as_bytes();
     !name.is_empty()
-        && name != "HEAD"
+        && !name.eq_ignore_ascii_case("HEAD")
         && name != "@"
         && !name.starts_with('-')
         && !name.starts_with('/')
@@ -178,6 +177,7 @@ pub(crate) fn branch_list(path: &Path) -> Result<BranchList> {
             current: None,
             head: None,
             names: Vec::new(),
+            checkout_block: None,
         });
     }
     let current = current_branch(path);
@@ -201,7 +201,156 @@ pub(crate) fn branch_list(path: &Path) -> Result<BranchList> {
         current,
         head,
         names,
+        checkout_block: checkout_block(path),
     })
+}
+
+/// Why `path` cannot create or switch branches. None when it can, or when it is not a repository.
+pub(crate) fn checkout_block(path: &Path) -> Option<String> {
+    if !is_repository(path) {
+        return None;
+    }
+    if let Some(message) = operation_block(path) {
+        return Some(message);
+    }
+    if dirty(path) {
+        return Some(
+            "Commit or stash the uncommitted changes in this checkout to create or switch branches."
+                .into(),
+        );
+    }
+    if current_branch(path).is_none() {
+        let unborn = git(path, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_err();
+        return Some(if unborn {
+            "Create the first commit in this checkout to create or switch branches.".into()
+        } else {
+            "HEAD is detached. Check out a branch here before creating or switching branches."
+                .into()
+        });
+    }
+    None
+}
+
+fn dirty(path: &Path) -> bool {
+    git(path, &["status", "--porcelain"]).is_ok_and(|text| !text.trim().is_empty())
+}
+
+fn git_path_exists(path: &Path, name: &str) -> bool {
+    let Ok(text) = git(path, &["rev-parse", "--git-path", name]) else {
+        return false;
+    };
+    let rel = text.trim();
+    if rel.is_empty() {
+        return false;
+    }
+    let candidate = PathBuf::from(rel);
+    let full = if candidate.is_absolute() {
+        candidate
+    } else {
+        path.join(candidate)
+    };
+    full.exists()
+}
+
+fn operation_block(path: &Path) -> Option<String> {
+    if git_path_exists(path, "rebase-merge") || git_path_exists(path, "rebase-apply") {
+        return Some("Finish or abort the rebase before changing branches.".into());
+    }
+    if git_path_exists(path, "CHERRY_PICK_HEAD") {
+        return Some("Finish or abort the cherry-pick before changing branches.".into());
+    }
+    if git_path_exists(path, "REVERT_HEAD") {
+        return Some("Finish or abort the revert before changing branches.".into());
+    }
+    if git_path_exists(path, "MERGE_HEAD") {
+        let conflicts = git(path, &["diff", "--name-only", "--diff-filter=U"])
+            .is_ok_and(|text| !text.trim().is_empty());
+        return Some(if conflicts {
+            "Resolve the conflicts and finish or abort the merge before changing branches.".into()
+        } else {
+            "Finish or abort the merge before changing branches.".into()
+        });
+    }
+    None
+}
+
+/// Whether applying `branch` would move HEAD.
+pub(crate) fn branch_moves(path: &Path, branch: &kg_domain::ProjectBranch) -> bool {
+    match branch {
+        kg_domain::ProjectBranch::Checkout { name } => {
+            current_branch(path).as_deref() != Some(name.as_str())
+        }
+        kg_domain::ProjectBranch::New { .. } => true,
+    }
+}
+
+/// Checks out `branch` in `path`, or creates one from its base. A checkout of the current branch
+/// does nothing, including when the folder is dirty. `occupied` is reported only after the git
+/// reasons, and only when HEAD would move.
+pub(crate) fn place_project_branch(
+    path: &Path,
+    branch: &kg_domain::ProjectBranch,
+    new_name: Option<&str>,
+    occupied: bool,
+) -> Result<()> {
+    match branch {
+        kg_domain::ProjectBranch::Checkout { name } => {
+            if !valid_branch(name) {
+                return Err(refused_name(name));
+            }
+            if !branch_moves(path, branch) {
+                return Ok(());
+            }
+            if let Some(message) = checkout_block(path) {
+                return Err(OpError::Invalid(message));
+            }
+            if !local_branch(path, name) {
+                return Err(missing_branch(name));
+            }
+            if occupied {
+                return Err(OpError::Invalid(kg_domain::FOLDER_IN_USE.into()));
+            }
+            git(path, &["switch", name])?;
+        }
+        kg_domain::ProjectBranch::New { base } => {
+            let Some(name) = new_name else {
+                return Err(OpError::Invalid("branch name is empty".into()));
+            };
+            if !valid_branch(name) {
+                return Err(refused_name(name));
+            }
+            if !valid_branch(base) {
+                return Err(refused_name(base));
+            }
+            if let Some(message) = checkout_block(path) {
+                return Err(OpError::Invalid(message));
+            }
+            if local_branch(path, name) {
+                return Err(OpError::Invalid(format!("branch {name} already exists")));
+            }
+            if !local_branch(path, base) {
+                return Err(missing_branch(base));
+            }
+            if occupied {
+                return Err(OpError::Invalid(kg_domain::FOLDER_IN_USE.into()));
+            }
+            git(path, &["switch", "-c", name, base])?;
+        }
+    }
+    Ok(())
+}
+
+fn local_branch(path: &Path, name: &str) -> bool {
+    let spec = format!("refs/heads/{name}");
+    git(path, &["show-ref", "--verify", "--quiet", &spec]).is_ok()
+}
+
+fn refused_name(name: &str) -> OpError {
+    OpError::Invalid(format!("branch name {name} is not allowed"))
+}
+
+fn missing_branch(name: &str) -> OpError {
+    OpError::Invalid(format!("branch {name} is not in this repository"))
 }
 
 pub(crate) async fn set_base(
@@ -268,5 +417,7 @@ mod tests {
     fn a_branch_name_cannot_look_like_a_flag() {
         assert!(valid_branch("1936"));
         assert!(!valid_branch("-force"));
+        assert!(!valid_branch("head"));
+        assert!(!valid_branch("HEAD"));
     }
 }

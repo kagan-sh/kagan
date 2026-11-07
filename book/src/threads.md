@@ -22,10 +22,10 @@ A program line splits at spaces. Single or double quotes keep spaces together, f
 
 ## Folders
 
-On the New thread screen, a git project offers **New worktree from `<branch>`** and **Project folder**. New worktree is the default.
+On the New thread screen, a git project offers **New worktree** and **Project folder**. New worktree is the default. Both let you pick a local branch.
 
-- **New worktree**: a second checkout on a new branch. Your project folder does not change. It starts from the current branch. kagan does not fetch, and the new branch has no upstream.
-- **Project folder**: the folder you added.
+- **New worktree**: a second checkout on a new branch. Your project folder does not change. It starts from the branch you pick, which begins as the current branch. kagan does not fetch, and the new branch has no upstream.
+- **Project folder**: the folder you added. It stays on the current branch unless you check out a local branch or create one from a local branch. The new branch’s name is the thread title. Creating or switching waits until you commit or stash, the checkout is not in the middle of a merge, rebase, cherry-pick, or revert, HEAD is on a branch with a commit, and no other unarchived thread is using the folder.
 - **Personal folder**: a new folder in the data folder, for Personal only.
 
 A folder without a git commit always runs in the folder itself. The screen tells you.
@@ -35,7 +35,9 @@ A folder without a git commit always runs in the folder itself. The screen tells
 | Value | Folder |
 | --- | --- |
 | `worktree` (default) | New worktree. Add `:<base>`, or `:<base>:<branch>`, to set the start point and the branch name |
-| `project-default` | Project folder |
+| `project-default` | Project folder, on the current branch |
+| `project-on:checkout:<branch>` | Project folder, after checking out that local branch |
+| `project-on:new:<base>` | Project folder, on a new branch created from that local branch |
 | `personal` | Personal folder |
 | `reuse:<id>` | The folder of an environment that exists |
 

@@ -2,16 +2,17 @@ use crate::theme::TypeScale as _;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{Disableable as _, Sizable as _, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, IntoElement, ParentElement as _, Role, SharedString,
     Styled as _, div,
 };
 
-use super::{Branches, StartFolder, base_label};
+use super::{Branches, StartFolder};
 use crate::kagan::controls::{Selected, control, dispatch, note};
 use crate::kagan::{Kagan, RetryBranches, UseProjectFolder, UseWorktreeFolder};
 use crate::ui_registry::Facts;
-use kg_domain::{BranchList, ProjectKind};
+use kg_domain::ProjectKind;
 impl Kagan {
     pub(super) fn render_folder(&self, kind: ProjectKind, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
@@ -56,28 +57,25 @@ impl Kagan {
             );
         }
         let chosen = self.chosen_folder();
+        let worktree = chosen == Some(StartFolder::Worktree);
         v_flex()
             .gap_1()
             .items_start()
             .child(div().type_small(cx).text_color(muted).child("Runs in"))
-            .child(self.folder_toggles(branches, chosen, cx))
-            .child(note(
-                "worktree-hint",
-                "A worktree is a separate folder for this thread’s changes.",
-                muted,
-                cx,
-            ))
+            .child(self.folder_toggles(chosen, cx))
+            .child(self.branch_control(branches, cx))
+            .when(worktree, |rows| {
+                rows.child(note(
+                    "worktree-hint",
+                    "A worktree is a separate folder for this thread’s changes.",
+                    muted,
+                    cx,
+                ))
+            })
             .into_any_element()
     }
 
-    pub(super) fn folder_toggles(
-        &self,
-        branches: &BranchList,
-        chosen: Option<StartFolder>,
-        cx: &App,
-    ) -> AnyElement {
-        let worktree_name: SharedString =
-            format!("New worktree from {}", base_label(branches)).into();
+    pub(super) fn folder_toggles(&self, chosen: Option<StartFolder>, cx: &App) -> AnyElement {
         let starting = self.start.starting;
         let toggle = |id: &'static str,
                       button: &'static str,
@@ -112,7 +110,7 @@ impl Kagan {
             .child(toggle(
                 "folder-worktree",
                 "folder-worktree-button",
-                worktree_name,
+                "New worktree".into(),
                 StartFolder::Worktree,
                 Box::new(UseWorktreeFolder),
             ))
