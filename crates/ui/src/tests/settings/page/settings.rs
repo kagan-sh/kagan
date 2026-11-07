@@ -435,14 +435,15 @@ fn a_long_choice_keeps_its_title_wider_than_it_is_tall(cx: &mut TestAppContext) 
     assert!(present(cx, window, title));
     let (width, height) = cx
         .update_window(window, |_, window, _| {
-            crate::ui_registry::find(window, &ElementId::Name(title.into()))
-                .map(|element| {
+            crate::ui_registry::find(window, &ElementId::Name(title.into())).map_or(
+                (0., 0.),
+                |element| {
                     (
                         f32::from(element.bounds.size.width),
                         f32::from(element.bounds.size.height),
                     )
-                })
-                .unwrap_or((0., 0.))
+                },
+            )
         })
         .unwrap();
     assert!(

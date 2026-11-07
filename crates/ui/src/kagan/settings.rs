@@ -451,10 +451,11 @@ fn row_element(
     let note = row
         .note_content
         .unwrap_or_else(|| row.note.clone().into_any_element());
-    // The title keeps its own width. A long row of choices wraps in what is left,
-    // instead of squeezing the title down to one letter a line.
+    // A floor, not `min_w_0`. `min_w_0` let a long choice shrink the title to one
+    // letter a line. The choice wraps in the width that is left.
     let text = v_flex()
-        .flex_shrink_0()
+        .flex_1()
+        .min_w(px(160.))
         .gap_0p5()
         .when(show_text && !row.title.is_empty(), |text| {
             let title = div()
