@@ -76,6 +76,11 @@ resources = ["../../assets/THIRD-PARTY-NOTICES.txt"]
 [package.metadata.packager.deb]
 depends = ["libwebkit2gtk-4.1-0", "libxkbcommon-x11-0"]
 
+# ldd copies the whole closure from the build image, and the binary loads that
+# copy first. One glob leaves every shared library to the host (decision 169).
+[package.metadata.packager.appimage]
+excluded-libraries = ["lib*.so*"]
+
 # Keep this last. Release signing appends its keys to this table.
 [package.metadata.packager.macos]
 minimum-system-version = "11.0"
