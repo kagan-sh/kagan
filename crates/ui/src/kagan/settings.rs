@@ -451,12 +451,17 @@ fn row_element(
     let note = row
         .note_content
         .unwrap_or_else(|| row.note.clone().into_any_element());
+    // The title keeps its own width. A long row of choices wraps in what is left,
+    // instead of squeezing the title down to one letter a line.
     let text = v_flex()
-        .min_w_0()
-        .flex_1()
+        .flex_shrink_0()
         .gap_0p5()
         .when(show_text && !row.title.is_empty(), |text| {
-            let title = div().type_body(cx).child(row.title.clone());
+            let title = div()
+                .id(ElementId::Name(format!("{}-title", row.id).into()))
+                .ui_container()
+                .type_body(cx)
+                .child(row.title.clone());
             match alias {
                 Some(alias) => text.child(
                     div()
@@ -493,7 +498,16 @@ fn row_element(
             show_text && (!row.title.is_empty() || !row.note.is_empty()),
             |frame| frame.child(text),
         )
-        .child(row.control);
+        .child(if row.wide {
+            row.control
+        } else {
+            h_flex()
+                .flex_1()
+                .min_w_0()
+                .justify_end()
+                .child(row.control)
+                .into_any_element()
+        });
     let item = div()
         .id(row.id)
         .ui_container()
