@@ -1,14 +1,12 @@
 use std::io::Read as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use gpui_kit::{AppContext as _, AsyncApp};
 use kg_domain::{
     OpError, OpResult, PreviewCut, PreviewFile, PreviewImageFormat, PreviewKind, PreviewOp,
-    ThreadId,
 };
 
 use crate::host::database::{Database, Result};
-use crate::workspace::missing;
 
 mod csv;
 
@@ -24,31 +22,11 @@ const JPEG: [u8; 3] = [0xff, 0xd8, 0xff];
 pub(crate) async fn run(database: Database, op: PreviewOp, cx: &mut AsyncApp) -> Result<OpResult> {
     let PreviewOp::Show { thread_id, path } = op;
     let root = match &thread_id {
-        Some(id) => Some(root_of(&database, id).await?),
+        Some(id) => Some(crate::thread::ready_environment(&database, id).await?.path),
         None => None,
     };
     cx.background_spawn(async move { read(root.as_deref(), &path).map(OpResult::Preview) })
         .await
-}
-
-async fn root_of(database: &Database, id: &ThreadId) -> Result<PathBuf> {
-    let lookup = id.clone();
-    let thread = database
-        .call(move |store| store.thread(&lookup))
-        .await?
-        .ok_or_else(|| missing("thread", id))?;
-    let environment_id = thread
-        .environment_id
-        .ok_or_else(|| OpError::Invalid("thread has no environment".into()))?;
-    let lookup = environment_id.clone();
-    let environment = database
-        .call(move |store| store.environment(&lookup))
-        .await?
-        .ok_or_else(|| missing("environment", &environment_id))?;
-    if environment.status != kg_domain::EnvironmentStatus::Ready {
-        return Err(OpError::Failed("environment is not ready".into()));
-    }
-    Ok(environment.path)
 }
 
 fn read(root: Option<&Path>, named: &str) -> Result<PreviewFile> {

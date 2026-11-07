@@ -8,7 +8,6 @@ use kg_domain::{
 };
 
 use crate::host::database::{Database, Result};
-use crate::workspace::missing;
 
 mod git;
 mod patch;
@@ -64,22 +63,7 @@ async fn locate(database: Database, op: DiffOp) -> Result<(PathBuf, Option<Strin
         DiffOp::List { query } | DiffOp::Show { query, .. } => &query.thread_id,
         DiffOp::Commits { thread_id } => thread_id,
     };
-    let lookup = thread_id.clone();
-    let thread = database
-        .call(move |store| store.thread(&lookup))
-        .await?
-        .ok_or_else(|| missing("thread", thread_id))?;
-    let environment_id = thread
-        .environment_id
-        .ok_or_else(|| OpError::Invalid("thread has no environment".into()))?;
-    let lookup = environment_id.clone();
-    let environment = database
-        .call(move |store| store.environment(&lookup))
-        .await?
-        .ok_or_else(|| missing("environment", &environment_id))?;
-    if environment.status != kg_domain::EnvironmentStatus::Ready {
-        return Err(OpError::Failed("environment is not ready".into()));
-    }
+    let environment = crate::thread::ready_environment(&database, thread_id).await?;
     Ok((environment.path, environment.base_branch, op))
 }
 

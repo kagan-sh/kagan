@@ -1,6 +1,6 @@
 //! The fixed scripts that act on the page, and the text and key they carry.
 
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 use kg_domain::BrowserOp;
 
 /// A file input is refused before any event, because it would open the person's chooser.
@@ -54,7 +54,7 @@ fn quoted(text: &str) -> String {
     serde_json::Value::String(text.to_owned()).to_string()
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 pub(super) fn script(op: &BrowserOp) -> Result<String, String> {
     Ok(match op {
         BrowserOp::Click { ref_id, .. } => click(*ref_id),

@@ -1,40 +1,40 @@
 //! One opener for the Browser and for a plugin page.
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering::Relaxed},
 };
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use gpui_kit::{App, AppContext as _, Context, Entity, IntoElement, Render, Window};
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 struct LoadMark {
     armed: AtomicU64,
     started: AtomicU64,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 type LoadSignal = (async_channel::Sender<u64>, Arc<LoadMark>);
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 type LoadWait = (
     async_channel::Sender<u64>,
     async_channel::Receiver<u64>,
     u64,
 );
 
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 const RUNTIME: &str = "This page needs the Microsoft Edge WebView2 Runtime. Download it from https://developer.microsoft.com/microsoft-edge/webview2/.";
 
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 fn hresult(code: &str) -> String {
     // `0x` and the digits stay apart in source so view-colors.sh does not treat the HRESULT as a color.
     format!("0x{code}")
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 pub(crate) fn failure(error: &str) -> String {
     if error.contains(&hresult("80070002")) || error.contains(&hresult("80040154")) {
         RUNTIME.to_owned()
@@ -73,7 +73,7 @@ fn sweep_page_dirs(data: &std::path::Path) {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) struct WebPage {
     view: Entity<gpui_webview::WebView>,
     loads: async_channel::Sender<u64>,
@@ -81,7 +81,7 @@ pub(crate) struct WebPage {
     mark: Arc<LoadMark>,
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 impl WebPage {
     pub(crate) fn load_url(&self, url: &str, cx: &mut App) {
         self.view.update(cx, |view, _| view.load_url(url));
@@ -117,7 +117,6 @@ impl WebPage {
             .map_err(|error| error.to_string())
     }
 
-    /// The address the page reports, or an empty string when it has none.
     pub(crate) fn url(&self, cx: &App) -> String {
         self.view.read(cx).raw().url().unwrap_or_default()
     }
@@ -167,14 +166,14 @@ impl WebPage {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 impl Render for WebPage {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         self.view.clone()
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) fn open(
     window: &mut Window,
     cx: &mut App,
@@ -200,7 +199,7 @@ pub(crate) fn open(
 }
 
 // The native view alone, for a caller that drives the page itself, such as a plugin web panel.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) fn open_view(
     window: &mut Window,
     cx: &mut App,
@@ -209,7 +208,7 @@ pub(crate) fn open_view(
     open_view_with_loads(window, cx, configure, None)
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 fn open_view_with_loads(
     window: &mut Window,
     cx: &mut App,
@@ -231,7 +230,7 @@ fn open_view_with_loads(
 }
 
 /// Tells `loads` when the page finishes loading, once per navigation.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 fn with_loads(
     builder: wry::WebViewBuilder<'_>,
     loads: Option<LoadSignal>,
@@ -247,7 +246,7 @@ fn with_loads(
     })
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) fn private(builder: wry::WebViewBuilder<'_>) -> wry::WebViewBuilder<'_> {
     builder
         .with_incognito(true)
@@ -282,7 +281,7 @@ fn open_windows(
     Ok(cx.new(|_| view))
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 fn build_view(
     builder: wry::WebViewBuilder<'_>,
     window: &mut Window,
@@ -334,7 +333,7 @@ fn restrain(view: &gpui_webview::WebView, cx: &App) {
 }
 
 // A per-plugin `WKWebsiteDataStore` needs macOS 14 or later. Older versions keep the page private.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) const STORE_NEEDS_MACOS: &str = "Saving page data needs macOS 14 or later.";
 
 #[cfg(target_os = "macos")]
@@ -349,7 +348,7 @@ pub(crate) fn durable_store(store: Option<[u8; 16]>, major: u32) -> Option<[u8; 
 
 // Gives a page its own durable store. Run it after `page::private`: a durable store needs
 // incognito off, and the last call wins.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) fn with_store(
     builder: wry::WebViewBuilder<'_>,
     store: Option<[u8; 16]>,

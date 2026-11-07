@@ -397,9 +397,7 @@ impl Kagan {
         let selected = self.screen.review().map(|review| &review.path) == Some(&path);
         let kind = crate::kagan::changes::kind(file.status);
         let viewed = self.is_viewed(&file.path, cx);
-        let (base, folder) = name
-            .rsplit_once('/')
-            .map_or((name, ""), |(folder, base)| (base, folder));
+        let (folder, base) = super::super::super::files::directory_and_name(name);
         h_flex()
             .id(ElementId::Name(format!("review-file-{path}").into()))
             .ui_observe_as(Facts {

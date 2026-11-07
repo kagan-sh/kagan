@@ -1,5 +1,5 @@
 use crate::theme::TypeScale as _;
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use gpui_kit::FocusHandle;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::{InputEvent, InputState};
@@ -9,41 +9,40 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
     IntoElement, ParentElement as _, Role, Styled as _, Subscription, Window, div,
 };
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use kg_domain::ThreadId;
 
 use super::Kagan;
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use super::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use std::time::Instant;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use gpui_kit::component::Sizable as _;
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use gpui_kit::component::button::Button;
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use gpui_kit::component::h_flex;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use crate::web_page::WebPage;
 
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 pub(super) mod act;
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) mod agent;
 mod chrome;
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 pub(super) mod snapshot;
 
 /// A thread's hold on the Browser's one page, while it drives it.
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(super) struct Agent {
     pub(super) thread: ThreadId,
-    /// The last URL the page reported.
     pub(super) url: String,
     /// The last command that reached it, for the 30-minute rule.
     pub(super) used: Instant,
@@ -51,15 +50,15 @@ pub(super) struct Agent {
 
 pub(super) struct Browser {
     address: Entity<InputState>,
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     page: Option<Entity<WebPage>>,
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     pub(super) agent: Option<Agent>,
     /// Where the keys go while a thread drives the page, since the address field is hidden.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     driven_focus: FocusHandle,
     /// Bumped so a late load does not write over a newer address.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     follow: u64,
     note: Option<String>,
     _enter: Subscription,
@@ -76,20 +75,20 @@ impl Browser {
         });
         Self {
             address,
-            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+            #[cfg(desktop)]
             page: None,
-            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+            #[cfg(desktop)]
             agent: None,
-            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+            #[cfg(desktop)]
             driven_focus: cx.focus_handle().tab_stop(true),
-            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+            #[cfg(desktop)]
             follow: 0,
             note: None,
             _enter: enter,
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     fn open(&mut self, url: &url::Url, window: &mut Window, cx: &mut Context<Kagan>) {
         match self.page_for(url, window, cx) {
             Ok(page) => self.page = Some(page),
@@ -97,8 +96,7 @@ impl Browser {
         }
     }
 
-    /// Loads `url` in the person's page, or makes one when there is none.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     pub(super) fn page_for(
         &mut self,
         url: &url::Url,
@@ -119,23 +117,22 @@ impl Browser {
         })
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    #[cfg(not(desktop))]
     fn open(&mut self, _: &url::Url, _: &mut Window, _: &mut Context<Kagan>) {
         self.note = Some(UNSUPPORTED.into());
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     pub(super) fn driven(&self) -> bool {
         self.agent.is_some()
     }
 
-    /// The thread that drives the page, while one does.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     pub(super) fn owner(&self) -> Option<&ThreadId> {
         self.agent.as_ref().map(|agent| &agent.thread)
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     fn sync_page(&self, shown: bool, cx: &mut App) {
         let Some(page) = &self.page else { return };
         if page.read(cx).visible(cx) != shown {
@@ -149,10 +146,9 @@ impl Browser {
         }
     }
 
-    /// Drops the page and its address, so nothing on it keeps running once its tab is gone.
-    /// A thread's page goes with it: closing the tab ends the drive.
+    // Closing the tab ends the drive. The thread's page goes with it.
     pub(super) fn close(&mut self, window: &mut Window, cx: &mut App) {
-        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+        #[cfg(desktop)]
         {
             self.page = None;
             self.agent = None;
@@ -166,7 +162,7 @@ impl Browser {
 
     /// Showing another thread drops the person's page. A thread's page stays loaded and hidden.
     pub(super) fn leave_thread(&mut self, window: &mut Window, cx: &mut App) {
-        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+        #[cfg(desktop)]
         {
             self.follow = self.follow.wrapping_add(1);
             if self.agent.is_none() {
@@ -188,18 +184,18 @@ impl Browser {
         if self.address.focus_handle(cx).contains_focused(window, cx) {
             return true;
         }
-        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+        #[cfg(desktop)]
         {
             self.driven() && self.driven_focus.contains_focused(window, cx)
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        #[cfg(not(desktop))]
         {
             false
         }
     }
 
     pub(super) fn focus(&self, window: &mut Window, cx: &mut App) {
-        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+        #[cfg(desktop)]
         if self.driven() {
             window.focus(&self.driven_focus, cx);
             return;
@@ -229,27 +225,26 @@ pub(super) fn is_web(url: &str) -> bool {
     url::Url::parse(url).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(any(test, desktop))]
 pub(super) fn secure(typed: &str) -> bool {
     page_url(typed).is_some_and(|url| url.scheme() == "https")
 }
 
 impl Kagan {
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     pub(super) fn browser_drawn(&self, cx: &App) -> bool {
         self.right_drawn()
             && super::right::selected_tab(self, cx) == Some(super::right::Tab::Browser)
     }
 
-    /// Hides or shows the native page to match whether the Browser tab is on screen.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     pub(super) fn sync_browser(&self, cx: &mut App) {
         let shown = self.browser_drawn(cx);
         self.browser.sync_page(shown, cx);
     }
 
     /// Ends the drive from the tab: the page stays as the person's.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     pub(super) fn stop_agent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.end_agent(window, cx);
         self.sync_browser(cx);
@@ -258,7 +253,7 @@ impl Kagan {
     }
 
     pub(super) fn render_browser(&self, cx: &mut Context<Self>) -> AnyElement {
-        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+        #[cfg(desktop)]
         if self.browser.agent.is_some() {
             return self.render_driven(cx);
         }
@@ -273,9 +268,9 @@ impl Kagan {
                 .text_color(cx.theme().danger)
                 .child(note)
         });
-        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+        #[cfg(desktop)]
         let page = self.browser.page.clone();
-        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        #[cfg(not(desktop))]
         let page: Option<AnyElement> = None;
         let hint = if WEB {
             "Type an address and press Enter."
@@ -289,7 +284,7 @@ impl Kagan {
             .gap_2()
             .p_2()
             .when(WEB, |row| {
-                #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+                #[cfg(desktop)]
                 let row = row.child(self.address_row(cx));
                 row
             })
@@ -309,7 +304,7 @@ impl Kagan {
             .into_any_element()
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     fn render_driven(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(agent) = &self.browser.agent else {
             return div().into_any_element();
@@ -373,12 +368,12 @@ impl Kagan {
         match page_url(&typed) {
             Some(url) => {
                 self.browser.note = None;
-                #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+                #[cfg(desktop)]
                 if let Some(page) = self.browser.page.clone() {
                     page.read(cx).arm();
                 }
                 self.browser.open(&url, window, cx);
-                #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+                #[cfg(desktop)]
                 if self.browser.note.is_none()
                     && let Some(page) = self.browser.page.clone()
                 {
