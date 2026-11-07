@@ -25,7 +25,7 @@ For macOS 11 or later:
 2. Move `kagan.app` to `/Applications`.
 3. Add `kg` to your `PATH`. The `.dmg` does not add `kg`. [Instructions](book/src/start.md#download).
 
-The releases page also has a Windows installer, a `.deb`, and an AppImage. [Windows and Linux](book/src/start.md).
+The releases page also has a Windows installer, and a `.deb` and an AppImage for x86_64 and aarch64. [Windows and Linux](book/src/start.md).
 
 From Homebrew:
 

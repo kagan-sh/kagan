@@ -2,7 +2,7 @@
 
 ## Install
 
-On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, a `.deb`, and an AppImage. The Linux app needs WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`); the `.deb` asks for that package.
+On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, and a `.deb` and an AppImage for x86_64 and aarch64. The Linux app needs WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`); the `.deb` asks for that package.
 
 ### Download
 
