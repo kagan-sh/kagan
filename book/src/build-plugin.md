@@ -1,6 +1,8 @@
 # Build a plugin
 
-A plugin is a folder of JavaScript. kagan runs the files as they are. There is no build step.
+A plugin is how you extend the IDE yourself. It is a folder of JavaScript. kagan runs the files as they are. There is no build step.
+
+**New plugin…** on the rail starts a Personal thread with your first installed agent and the prompt `Build a kagan plugin that `. The agent can read the `kg-plugin-authoring` skill. You can also create the folder yourself.
 
 ## Make a starter plugin
 
@@ -18,8 +20,6 @@ kg plugin dev ./hello
 
 `kg plugin logs dev.kagan.hello --follow` shows errors and log lines. `kg plugin types ./hello` writes type files for your editor.
 
-**New plugin…** on the rail starts a Personal thread with your first installed agent and a prompt to make a plugin. The agent can read the `kg-plugin-authoring` skill.
-
 ## The manifest
 
 `kagan.json` describes the plugin and its powers. The starter has these keys:
@@ -36,10 +36,41 @@ kg plugin dev ./hello
 - `commands`: commands you can bind to a key. `"header": true` with `"when": "thread"` also draws the command on the thread title. `"menu": true` with `"when": "thread"` also lists it in the thread actions menu.
 - `ui.panels`: `"placement": "left"` is a tool below the threads. `"placement": "center"` is a page in the center. `"placement": "right"` is a tab in the right sidebar. A panel names `"view"` (a class the entry exports) or `"web"` (an HTML file in the plugin, such as `ui/index.html`). A web panel draws that file. The page calls `kagan.post` and the script answers with `kagan/panel`. See `examples/plugins/web-panel`.
 - `tools` and `skills`: agent tools and skills. The starter has none.
+- `ui.status`: one plain line in the [activity strip](window.md#activity-strip). See [Status line](#status-line).
 
 kagan refuses a manifest with an unknown key. `kg plugin check ./hello` reports those errors. [docs/plugin-api.md](https://github.com/kagan-sh/kagan/blob/main/docs/plugin-api.md) lists every key, power, and the JavaScript API.
 
 [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins) has a panel, a web panel, a sidebar, a review, an overlay, a header button, a `kg` command, a theme, and a schedule that runs every minute.
+
+## Status line
+
+A plugin can put one short line at the right of the activity strip. In `kagan.json`:
+
+```json
+"ui": { "status": { "title": "Usage" } }
+```
+
+The title is 1 to 40 characters. It is the label before the value. Then, from `kagan/host`:
+
+```js
+import { setStatus } from "kagan/host";
+
+setStatus("42% used", { tone: "busy" });
+```
+
+The text is one plain line of at most 120 characters. `tone` is `quiet`, `busy`, `needs`, or `failed`, and defaults to `quiet`. `setStatus(null)` hides the line. A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. It is text only: no button, click, or view. A command is how it gets an action. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
+
+## Call another plugin
+
+A plugin can run a function another plugin offers. The caller lists that plugin in `powers.calls`. The install screen says it asks that plugin to do work. The other plugin lists the function name in `exports`. The caller uses `call(plugin, name, input)` from `kagan/host` and gets JSON back. A call is refused when it is not approved, the other plugin is disabled, or the function is not exported. A call times out after 30 seconds.
+
+## Thread events
+
+List the events the plugin wants in `kagan.json`.
+
+`thread.turn.started` fires when a program's title shows a spinner as its first character. `thread.turn.ended` fires when that spinner ends, or the program stops or exits during it. The end says `completed`, `interrupted`, or `failed`. Quitting does not write `thread.turn.ended`. A working mark later in the title, such as an hourglass after a plain prefix, does not start a turn.
+
+`thread.tool.started` fires when kagan hands an agent tool call to a plugin. It carries the tool's name and kagan's own id. `thread.tool.ended` fires when that reply lands, with the same id and `ok` or `error`. Neither event holds the input, the reply, an error text, or a plugin id.
 
 ## Share it
 

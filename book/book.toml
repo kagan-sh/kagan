@@ -1,6 +1,6 @@
 [book]
 title = "kagan"
-description = "A desktop workspace where you and an agent do coding work together."
+description = "An extensible desktop IDE for AI assisted software development."
 language = "en"
 src = "src"
 
@@ -11,7 +11,7 @@ edition = "2024"
 create-missing = false
 
 [output.html]
-default-theme = "light"
+default-theme = "coal"
 preferred-dark-theme = "coal"
 additional-css = ["theme/kagan.css"]
 site-url = "/"
@@ -25,6 +25,11 @@ smart-punctuation = false
 "/window.html#review-changes" = "/review.html"
 "/window.html#keys" = "/keys.html"
 "/plugins.html#turn-on-turn-off-remove" = "/plugins.html#enable-disable-or-remove"
+"/plugins.html#replace-the-thread-list-or-the-review" = "/plugins.html#what-a-plugin-can-change"
+"/plugins.html#add-a-status-line" = "/build-plugin.html#status-line"
+"/plugins.html#call-another-plugin" = "/build-plugin.html#call-another-plugin"
+"/plugins.html#thread-events" = "/build-plugin.html#thread-events"
+"/skills.html#bb-skills-in-a-thread" = "/skills.html#skills-from-bb"
 "/plugins.html#keys" = "/keys.html#change-a-key"
 "/plugins.html#logs" = "/troubleshooting.html#a-plugin-fails"
 "/skills.html#commands" = "/skills.html#manage-skills"

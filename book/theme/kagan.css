@@ -1,115 +1,214 @@
-/* Neutral palette from docs/look.md. Light, and coal as the dark theme. */
-
-html {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-}
+/* Landing-page palette from kagan.sh.
+   coal is the default and uses the landing dark theme.
+   light uses the landing light theme. */
 
 :root {
-    --content-max-width: 720px;
-    --mono-font: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --content-max-width: 740px;
+    --mono-font: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sidebar-target-width: 288px;
 }
 
-.light,
+html {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+.coal,
 html:not(.js) {
-    --bg: #ffffff;
-    --fg: #1d1e23;
-    --sidebar-bg: #f6f6f7;
-    --sidebar-fg: #1d1e23;
-    --sidebar-non-existant: #62646e;
-    --sidebar-active: #3a55c8;
-    --sidebar-spacer: #e2e2e6;
-    --scrollbar: #62646e;
-    --icons: #62646e;
-    --icons-hover: #1d1e23;
-    --links: #3a55c8;
-    --inline-code-color: #1d1e23;
-    --theme-popup-bg: #ffffff;
-    --theme-popup-border: #e2e2e6;
-    --theme-hover: #f0f0f2;
-    --quote-bg: #f6f6f7;
-    --quote-border: #e2e2e6;
-    --table-border-color: #e2e2e6;
-    --table-header-bg: #ececee;
-    --table-alternate-bg: #f6f6f7;
-    --searchbar-border-color: #e2e2e6;
-    --searchbar-bg: #ffffff;
-    --searchbar-fg: #1d1e23;
-    --searchbar-shadow-color: #e2e2e6;
-    --searchresults-header-fg: #62646e;
-    --searchresults-border-color: #e2e2e6;
-    --searchresults-li-bg: #f6f6f7;
-    --search-mark-bg: #ececee;
-    --color-scheme: light;
-    --blockquote-important-color: #3a55c8;
-    --sidebar-header-border-color: #3a55c8;
-}
-
-.coal {
-    --bg: #1e1f24;
-    --fg: #e4e5e9;
-    --sidebar-bg: #191a1e;
-    --sidebar-fg: #e4e5e9;
-    --sidebar-non-existant: #9b9da7;
-    --sidebar-active: #8fa8ff;
-    --sidebar-spacer: #33343b;
-    --scrollbar: #9b9da7;
-    --icons: #9b9da7;
-    --icons-hover: #e4e5e9;
-    --links: #8fa8ff;
-    --inline-code-color: #e4e5e9;
-    --theme-popup-bg: #191a1e;
-    --theme-popup-border: #33343b;
-    --theme-hover: #25262c;
-    --quote-bg: #191a1e;
-    --quote-border: #33343b;
-    --table-border-color: #33343b;
-    --table-header-bg: #2b2c32;
-    --table-alternate-bg: #191a1e;
-    --searchbar-border-color: #33343b;
-    --searchbar-bg: #191a1e;
-    --searchbar-fg: #e4e5e9;
-    --searchbar-shadow-color: #33343b;
-    --searchresults-header-fg: #9b9da7;
-    --searchresults-border-color: #33343b;
-    --searchresults-li-bg: #191a1e;
-    --search-mark-bg: #2b2c32;
+    --bg: #12181d;
+    --fg: #ece9e1;
+    --line: #303a42;
+    --sidebar-bg: #0b1014;
+    --sidebar-fg: #ece9e1;
+    --sidebar-non-existant: #a3adb5;
+    --sidebar-active: #f0a078;
+    --sidebar-spacer: #303a42;
+    --scrollbar: #36434b;
+    --icons: #a3adb5;
+    --icons-hover: #ece9e1;
+    --links: #f0a078;
+    --inline-code-color: #ece9e1;
+    --theme-popup-bg: #182027;
+    --theme-popup-border: #303a42;
+    --theme-hover: #1b242b;
+    --quote-bg: #182027;
+    --quote-border: #303a42;
+    --warning-border: #ebc874;
+    --table-border-color: #303a42;
+    --table-header-bg: #1b242b;
+    --table-alternate-bg: #161d23;
+    --searchbar-border-color: #303a42;
+    --searchbar-bg: #182027;
+    --searchbar-fg: #ece9e1;
+    --searchbar-shadow-color: #0b1014;
+    --searchresults-header-fg: #a3adb5;
+    --searchresults-border-color: #303a42;
+    --searchresults-li-bg: #182027;
+    --search-mark-bg: #5c3d32;
     --color-scheme: dark;
-    --blockquote-important-color: #8fa8ff;
-    --sidebar-header-border-color: #8fa8ff;
+    --copy-button-filter: invert(78%);
+    --copy-button-filter-hover: invert(76%) sepia(28%) saturate(700%) hue-rotate(330deg) brightness(104%);
+    --footnote-highlight: #f0a078;
+    --overlay-bg: rgba(11, 16, 20, 0.55);
+    --blockquote-note-color: #8fc7d6;
+    --blockquote-tip-color: #a8c98e;
+    --blockquote-important-color: #f0a078;
+    --blockquote-warning-color: #ebc874;
+    --blockquote-caution-color: #ec959c;
+    --sidebar-header-border-color: #e58a60;
 }
 
-@media (prefers-color-scheme: dark) {
-    html:not(.js) {
-        --bg: #1e1f24;
-        --fg: #e4e5e9;
-        --sidebar-bg: #191a1e;
-        --sidebar-fg: #e4e5e9;
-        --sidebar-non-existant: #9b9da7;
-        --sidebar-active: #8fa8ff;
-        --sidebar-spacer: #33343b;
-        --scrollbar: #9b9da7;
-        --icons: #9b9da7;
-        --icons-hover: #e4e5e9;
-        --links: #8fa8ff;
-        --inline-code-color: #e4e5e9;
-        --theme-popup-bg: #191a1e;
-        --theme-popup-border: #33343b;
-        --theme-hover: #25262c;
-        --quote-bg: #191a1e;
-        --quote-border: #33343b;
-        --table-border-color: #33343b;
-        --table-header-bg: #2b2c32;
-        --table-alternate-bg: #191a1e;
-        --searchbar-border-color: #33343b;
-        --searchbar-bg: #191a1e;
-        --searchbar-fg: #e4e5e9;
-        --searchbar-shadow-color: #33343b;
-        --searchresults-header-fg: #9b9da7;
-        --searchresults-border-color: #33343b;
-        --searchresults-li-bg: #191a1e;
-        --search-mark-bg: #2b2c32;
-        --color-scheme: dark;
-        --blockquote-important-color: #8fa8ff;
-        --sidebar-header-border-color: #8fa8ff;
-    }
+.light {
+    --bg: #f4f1e8;
+    --fg: #191d23;
+    --line: #d7d1c4;
+    --sidebar-bg: #e9e4d8;
+    --sidebar-fg: #191d23;
+    --sidebar-non-existant: #59616b;
+    --sidebar-active: #8a3a0c;
+    --sidebar-spacer: #d7d1c4;
+    --scrollbar: #59616b;
+    --icons: #59616b;
+    --icons-hover: #191d23;
+    --links: #8a3a0c;
+    --inline-code-color: #191d23;
+    --theme-popup-bg: #faf7ef;
+    --theme-popup-border: #d7d1c4;
+    --theme-hover: #e9e4d8;
+    --quote-bg: #faf7ef;
+    --quote-border: #d7d1c4;
+    --warning-border: #80570a;
+    --table-border-color: #d7d1c4;
+    --table-header-bg: #e9e4d8;
+    --table-alternate-bg: #faf7ef;
+    --searchbar-border-color: #d7d1c4;
+    --searchbar-bg: #faf7ef;
+    --searchbar-fg: #191d23;
+    --searchbar-shadow-color: #d7d1c4;
+    --searchresults-header-fg: #59616b;
+    --searchresults-border-color: #d7d1c4;
+    --searchresults-li-bg: #faf7ef;
+    --search-mark-bg: #ffc4a6;
+    --color-scheme: light;
+    --copy-button-filter: invert(45.49%);
+    --copy-button-filter-hover: invert(28%) sepia(70%) saturate(1200%) hue-rotate(350deg) brightness(90%);
+    --footnote-highlight: #b4490d;
+    --overlay-bg: rgba(25, 29, 35, 0.35);
+    --blockquote-note-color: #285f73;
+    --blockquote-tip-color: #3c6a2c;
+    --blockquote-important-color: #8a3a0c;
+    --blockquote-warning-color: #80570a;
+    --blockquote-caution-color: #a62f3c;
+    --sidebar-header-border-color: #b4490d;
+}
+
+::selection {
+    background: #e58a60;
+    color: #191d23;
+}
+
+#mdbook-menu-bar {
+    border-block-end: 1px solid var(--line);
+}
+
+.menu-title {
+    font-weight: 600;
+    font-size: 2rem;
+    letter-spacing: -0.02em;
+}
+
+.chapter li.part-title {
+    margin-block-start: 1.6em;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.chapter li a.active {
+    font-weight: 600;
+}
+
+.content {
+    padding-top: 12px;
+}
+
+.content h1 {
+    font-size: 3.2rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+    margin-block-end: 0.45em;
+}
+
+.content h2,
+.content h3 {
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    margin-block-start: 1.5em;
+}
+
+.content h2 {
+    font-size: 2.2rem;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--line);
+}
+
+.content h3 {
+    font-size: 1.8rem;
+}
+
+.content p,
+.content ul,
+.content ol {
+    line-height: 1.65;
+}
+
+.content li + li {
+    margin-top: 0.35em;
+}
+
+.content a {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.16em;
+    text-decoration-color: color-mix(in srgb, var(--links) 50%, transparent);
+}
+
+.content a:hover {
+    text-decoration-color: var(--links);
+}
+
+.content table {
+    width: 100%;
+    margin: 1.2em 0 1.6em;
+}
+
+.content table td,
+.content table th {
+    padding: 8px 12px;
+    text-align: start;
+    vertical-align: top;
+}
+
+.coal .hljs,
+html:not(.js) .hljs {
+    background: #182027;
+    color: #ece9e1;
+}
+
+.light .hljs {
+    background: #faf7ef;
+    color: #191d23;
+}
+
+pre code.hljs {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+:not(pre) > .hljs {
+    border: 1px solid var(--line);
+    border-radius: 4px;
 }

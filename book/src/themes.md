@@ -1,6 +1,6 @@
 # Themes
 
-kagan has three themes: `fjord` (the default), `ember`, and `grey`. Each has a light mode and a dark mode. In System mode, kagan uses your computer's light or dark setting.
+The window ships with three themes: `fjord` (the default), `ember`, and `grey`. Each has a light mode and a dark mode. **System**, the default mode, follows your computer's light or dark setting. A plugin can add more themes, and you can write your own file.
 
 ## Change the theme
 

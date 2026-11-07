@@ -1,6 +1,8 @@
 # Plugins
 
-A plugin is a folder of JavaScript. It can add window parts, commands, agent tools, skills, or themes. kagan has none when you install it. Small ones you can install and read are in [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins).
+Plugins are how you extend the IDE. kagan ships with threads, a terminal, review, and the browser. A plugin can add a tool, a page, a command, an agent tool, a skill, or a theme. kagan has none when you install it.
+
+Nothing from a plugin runs until you approve it. An agent cannot approve a plugin. Small plugins you can install and read are in [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins). To write your own, see [Build a plugin](build-plugin.md).
 
 Each tool or page has an icon on the rail. [The window](window.md#rail) explains the icons.
 
@@ -11,7 +13,7 @@ kg plugin install git:<url>@<ref> --plugin <name>
 kg plugin install ./<folder>
 ```
 
-kagan reads `kagan.json` before any plugin code runs. Questions then shows an install card. Read the powers and click **Install**. Nothing runs before you approve. An agent cannot approve a plugin.
+kagan reads `kagan.json` before any plugin code runs. Questions then shows an install card. Read the powers and click **Install**.
 
 A plugin can ask to:
 
@@ -36,7 +38,7 @@ If the new version asks for more powers, kagan asks you again.
 
 ## Install from an index
 
-A team can publish plugin names and git addresses in `.kagan/index.json`. Add that index once, then install by name:
+A team can publish plugin names and git addresses in `.kagan/index.json`, then install by name instead of pasting an address.
 
 ```bash
 kg plugin index add git:<url>@<ref>
@@ -64,7 +66,9 @@ kg plugin remove <id>
 
 A plugin id looks like `dev.kagan.hello`.
 
-## Replace the thread list or the review
+## What a plugin can change
+
+A **tool** sits below the threads. A **page** replaces the center. A **right panel** is a tab in the right sidebar. Click the rail icon to open it, and click again, or **Close**, to return.
 
 A plugin can offer to draw the thread list, the review, or both. Nothing changes until you pick it in Settings → Appearance → Sidebar or Review.
 
@@ -76,34 +80,8 @@ kg plugin use threads kagan
 
 `kagan` is the built-in version. kagan always keeps the rail, New thread, Questions, and the review buttons. Only kagan sends your review comments to the agent.
 
+A plugin can put one short status line at the right of the [activity strip](window.md#activity-strip). You cannot click it. Turn **Plugin status** off in Settings → Appearance to hide every line, or turn that plugin off in Installed. [Build a plugin](build-plugin.md#status-line) shows the manifest.
+
+A plugin can also add a theme. [Themes](themes.md#themes-from-plugins).
+
 [Keyboard shortcuts](keys.md#change-a-key) explains plugin keys. [Troubleshooting](troubleshooting.md#a-plugin-fails) covers logs and recovery.
-
-## Add a status line
-
-A plugin can put one short line in the [activity strip](window.md#activity-strip). In `kagan.json`:
-
-```json
-"ui": { "status": { "title": "Usage" } }
-```
-
-The title is 1 to 40 characters. It is the label before the value. Then, from `kagan/host`:
-
-```js
-import { setStatus } from "kagan/host";
-
-setStatus("42% used", { tone: "busy" });
-```
-
-The text is one plain line of at most 120 characters. `tone` is `quiet`, `busy`, `needs`, or `failed`, and defaults to `quiet`. `setStatus(null)` hides the line. A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. It is text only: no button, click, or view. A command is how it gets an action. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
-
-## Call another plugin
-
-A plugin can run a function another plugin offers. The caller lists that plugin in `powers.calls`. The install screen says it asks that plugin to do work. The other plugin lists the function name in `exports`. The caller uses `call(plugin, name, input)` from `kagan/host` and gets JSON back. A call is refused when it is not approved, the other plugin is disabled, or the function is not exported. A call times out after 30 seconds. See decision 155.
-
-## Thread events
-
-A plugin lists the events it wants in `kagan.json`.
-
-`thread.turn.started` fires when a program's title shows a spinner as its first character. `thread.turn.ended` fires when that spinner ends, or the program stops or exits during it. The end says `completed`, `interrupted`, or `failed`. Quitting does not write `thread.turn.ended`. A working mark later in the title, such as an hourglass after a plain prefix, does not start a turn.
-
-`thread.tool.started` fires when kagan hands an agent tool call to a plugin. It carries the tool's name and kagan's own id. `thread.tool.ended` fires when that reply lands, with the same id and `ok` or `error`. Neither event holds the input, the reply, an error text, or a plugin id.

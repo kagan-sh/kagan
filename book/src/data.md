@@ -1,21 +1,27 @@
 # Your data and privacy
 
-kagan has no account and no telemetry. Your data stays on your computer. It checks for updates only when you ask, unless you turn the automatic check on.
+kagan has no account and no telemetry. Projects, threads, and plugin data stay on your computer. kagan checks for updates only when you ask, unless you turn the automatic check on.
+
+You choose the agents, programs, and plugins that may use the network. A program in a thread runs with your user account. A plugin runs only with the powers you approve.
 
 ## Where kagan writes
 
-- **Data folder**: `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to use another folder.
-- **Socket**: the connection between `kg` and the window.
-  - When `KG_DATA_DIR` is set and `KG_SOCKET` is not, the folder path is made absolute. On macOS and Linux the socket is `<data folder>/kg.sock`. If that path is too long for a local socket, it is `/tmp/kagan-<id>/kg.sock`. `<id>` is a SHA-256 of the absolute folder path, and that `/tmp` folder is private to you. On Windows the pipe is `kagan-<id>` from that same path.
-  - Otherwise, macOS and Linux use `$XDG_RUNTIME_DIR/kagan/kg.sock` when `XDG_RUNTIME_DIR` is set.
-  - Else on macOS: `~/Library/Application Support/kagan/kg.sock`.
-  - Else on Linux: `$XDG_DATA_HOME/kagan/kg.sock`, or `~/.local/share/kagan/kg.sock`.
-  - Otherwise on Windows: a named pipe, `kagan-<your user name>`. It is not a file.
-  - `KG_SOCKET` names a different socket. It wins over the data folder.
+The data folder is `~/.kagan`, or `%USERPROFILE%\.kagan` on Windows. Set `KG_DATA_DIR` to use another folder. `kg` finds the window through [the socket](#the-socket).
 
-The data folder holds your projects, threads, and history, the git worktrees and Personal folders, installed skills, your themes, and plugin data. A plugin script reads its own folder there as `process.dataDir`.
+That folder holds your projects, threads, and history, the git worktrees and Personal folders, installed skills, your themes, and plugin data. A plugin script reads its own folder there as `process.dataDir`.
 
 kagan saves each thread's last terminal text without encryption. A password or token you paste can stay on disk. Delete the thread to remove its text.
+
+## The socket
+
+The socket is the connection between `kg` and the window. You need this when `kg` cannot find the window, when you set `KG_DATA_DIR`, or when more than one copy is open.
+
+- When `KG_DATA_DIR` is set and `KG_SOCKET` is not, the folder path is made absolute. On macOS and Linux the socket is `<data folder>/kg.sock`. If that path is too long for a local socket, it is `/tmp/kagan-<id>/kg.sock`. `<id>` is a SHA-256 of the absolute folder path, and that `/tmp` folder is private to you. On Windows the pipe is `kagan-<id>` from that same path.
+- Otherwise, macOS and Linux use `$XDG_RUNTIME_DIR/kagan/kg.sock` when `XDG_RUNTIME_DIR` is set.
+- Else on macOS: `~/Library/Application Support/kagan/kg.sock`.
+- Else on Linux: `$XDG_DATA_HOME/kagan/kg.sock`, or `~/.local/share/kagan/kg.sock`.
+- Otherwise on Windows: a named pipe, `kagan-<your user name>`. It is not a file.
+- `KG_SOCKET` names a different socket. It wins over the data folder.
 
 ## Network
 
@@ -34,7 +40,7 @@ A program runs with your user access and your environment variables. Those varia
 
 The program also gets `kg`. With `kg` it can control threads and the window. It cannot answer an approval. Only you can approve a plugin install or more plugin powers. Only you can approve a request to delete a thread.
 
-For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Claude Code also gets the kagan skills. Codex, Kimi, OpenCode, Pi, and Cursor Agent get the composed skill folders in [Skills](skills.md#bb-skills-in-a-thread). Turn this off in Settings → Agents.
+For Claude Code and Codex, kagan adds its `kg` tools and a short note about kagan. Claude Code also gets the kagan skills. Codex, Kimi, OpenCode, Pi, and Cursor Agent get the composed skill folders in [Skills](skills.md#skills-from-bb). Turn this off in Settings → Agents.
 
 ## Plugins
 

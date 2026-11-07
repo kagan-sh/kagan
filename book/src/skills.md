@@ -1,6 +1,6 @@
 # Skills
 
-A skill is a folder of instructions an agent can load for one kind of task. The folder has a `SKILL.md`:
+A skill is a folder of instructions an agent can load for one kind of task. You use skills to teach an agent a job you repeat, such as writing release notes or building a plugin. The folder has a `SKILL.md`:
 
 ```markdown
 ---
@@ -13,42 +13,7 @@ Read the commits since the last tag. Group them by feature and fix.
 
 The lines between `---` are the `name` and the `description`. The name is lowercase letters and hyphens, and it matches the folder name. The rest is the instructions.
 
-## Where skills come from
-
-Four places. The same name in two places: the later place wins.
-
-1. Built into `kg`.
-2. An enabled plugin.
-3. Your skills: `<data folder>/skills`.
-4. The project: `<project>/.kagan/skills`.
-
-The same name twice in one place: kagan uses neither, and `kg skill list` shows the error. A user or project name cannot start with `kg-`. That prefix belongs to bundled and plugin skills.
-
-> [!CAUTION]
-> Before you start an agent in a repository you do not trust, read `.kagan/skills`. An agent can obey instructions that cause damage to your files.
-
 The agent sees each name and description, and loads the instructions only when it needs them.
-
-## BB skills in a thread
-
-With agent integration on, a new thread's program also sees skills from your BB folder and the project's `.bb` folder:
-
-- Your BB skills: `$BB_DATA_DIR/skills`, or `~/.bb/skills` when `BB_DATA_DIR` is unset.
-- The project's BB skills: `<thread folder>/.bb/skills`.
-
-kagan writes them into an immutable per-content catalog beside its resolved skills: built-in, plugin, your kagan skills, and project skills. A kagan skill wins a collision with a BB skill. A BB project skill wins a BB user skill. Each start resolves the catalog. A changed catalog gets a new hash, so a running thread keeps the folder it started with.
-
-Each program kagan recognizes for skill injection gets the catalog where it looks: Claude as a plugin, Cursor through its per-thread plugin folder, Codex under `.agents/skills`, OpenCode under `.opencode/skills`, Kimi with `--skills-dir`, and Pi with `--skill`.
-
-Kimi's `--skills-dir` replaces its own discovery, so kagan passes its usual user and project roots back as well. kagan adds a link only when the name is free, leaves your own folders alone, and removes only its own links. Each link gets its own `.git/info/exclude` line. Those lines stay until you put a real folder at that name. A stale line only hides a name kagan once linked. Your own folder at that name removes the line. kagan never writes a program's global config.
-
-Codex uses `.agents/skills`. Cursor, Gemini, Kimi, and OpenCode in that repository also read that folder. On Windows, if the account cannot create a symlink, Codex or OpenCode starts without the workspace links and the thread shows a warning.
-
-A Codex or OpenCode program opened in the same repository outside kagan also sees the links in `.agents/skills` or `.opencode/skills`. kagan has no per-run skills path for those programs that keeps their own skills. Two Codex or OpenCode threads in one folder share the links, so a later start repoints them. OpenCode may list a skill twice when a Codex thread linked it under `.agents/skills` and an OpenCode thread linked it under `.opencode/skills`. Kimi, Pi, Claude, and Cursor do not add a repository folder.
-
-A program kagan does not recognize, for example `gemini`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, or `droid`, gets no native skills from this path. kagan does not copy BB's built-in or plugin skills. They live in the BB installation and often depend on `bb`.
-
-Your skills in `<data folder>/skills` and `.kagan/skills` are in the same resolved tree, so the program sees them too. Claude and Codex can also load them with `skill_load`. The other programs do not get that tool.
 
 ## Manage skills
 
@@ -66,6 +31,20 @@ kg skill remove my-skill
 - `remove` deletes one of your skills or a project skill. It cannot remove a built-in skill or a plugin skill.
 - A name that starts with `kg-` is reserved. `new` and `add` refuse it.
 
+## Where skills come from
+
+Four places. The same name in two places: the later place wins.
+
+1. Built into `kg`.
+2. An enabled plugin.
+3. Your skills: `<data folder>/skills`.
+4. The project: `<project>/.kagan/skills`.
+
+The same name twice in one place: kagan uses neither, and `kg skill list` shows the error. A user or project name cannot start with `kg-`. That prefix belongs to bundled and plugin skills.
+
+> [!CAUTION]
+> Before you start an agent in a repository you do not trust, read `.kagan/skills`. An agent can obey instructions that cause damage to your files.
+
 ## Built-in skills
 
 - `kg-cli`: threads, projects, and folders.
@@ -74,3 +53,31 @@ kg skill remove my-skill
 - `kg-plugin-port`: port a bb plugin.
 - `kg-skill-creator`: write a skill.
 - `kg-ui`: operate the open window from `kg`.
+
+## Skills from BB
+
+With agent integration on, a new thread also sees skills from a BB install:
+
+- Your BB skills: `$BB_DATA_DIR/skills`, or `~/.bb/skills` when `BB_DATA_DIR` is unset.
+- The project's BB skills: `<thread folder>/.bb/skills`.
+
+kagan puts those next to its own skills: built-in, plugin, your kagan skills, and project skills. A kagan skill wins over a BB skill with the same name. A BB project skill wins over a BB user skill. kagan does not copy BB's built-in or plugin skills. Those stay in the BB installation and often depend on `bb`.
+
+Each start resolves that set. A change gets a new hash, so a running thread keeps the folder it started with. Your skills in `<data folder>/skills` and `.kagan/skills` are in that same set. Claude and Codex can also load them with `skill_load`. The other programs do not get that tool.
+
+Where each program looks:
+
+- Claude receives the set as a plugin.
+- Cursor receives it through its per-thread plugin folder.
+- Codex looks in `.agents/skills`.
+- OpenCode looks in `.opencode/skills`.
+- Kimi receives `--skills-dir`. That flag replaces Kimi's own discovery, so kagan also passes Kimi's usual user and project roots.
+- Pi receives `--skill`.
+
+kagan adds a link only when the name is free. It leaves your own folders alone and removes only its own links. It never writes a program's global config. Each link gets its own `.git/info/exclude` line. Those lines stay until you put a real folder at that name. A stale line only hides a name kagan once linked. Your own folder at that name removes the line.
+
+Codex uses `.agents/skills`. Cursor, Gemini, Kimi, and OpenCode in that repository also read that folder. On Windows, if the account cannot create a symlink, Codex or OpenCode starts without those links and the thread shows a warning.
+
+A Codex or OpenCode program opened in the same repository outside kagan also sees the links in `.agents/skills` or `.opencode/skills`. kagan has no per-run skills path for those programs that keeps their own skills separate. Two Codex or OpenCode threads in one folder share the links, so a later start repoints them. OpenCode may list a skill twice when a Codex thread linked it under `.agents/skills` and an OpenCode thread linked it under `.opencode/skills`. Kimi, Pi, Claude, and Cursor do not add a repository folder.
+
+A program kagan does not recognize, for example `gemini`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, or `droid`, gets no skills from this path.
