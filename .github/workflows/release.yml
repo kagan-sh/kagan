@@ -14,10 +14,15 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+
 jobs:
   tag:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
@@ -30,6 +35,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - id: next
         name: Check the version
         env:
@@ -41,6 +47,7 @@ jobs:
 
   package:
     needs: tag
+    timeout-minutes: 45
     permissions:
       contents: read
     strategy:
@@ -52,32 +59,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.tag.outputs.sha }}
-      - name: Stamp version
-        shell: bash
-        env:
-          VERSION: ${{ needs.tag.outputs.version }}
-        run: bash scripts/release-version.sh stamp "$VERSION"
+          persist-credentials: false
       - name: Linux libraries
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libfuse2 lld
-      - if: runner.os == 'Linux'
-        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-        with:
-          version: v0.18.0
-      - if: runner.os == 'Linux'
-        run: |
-          {
-            echo "CARGO_INCREMENTAL=0"
-            echo "RUSTC_WRAPPER=sccache"
-            echo "SCCACHE_GHA_ENABLED=true"
-            echo "CMAKE_C_COMPILER_LAUNCHER=sccache"
-            echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache"
-          } >> "$GITHUB_ENV"
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
         with:
           cache: false
+      # Keyed from the committed manifests. Stamping the version comes after,
+      # so this cache stays one entry per OS and kg still rebuilds for the stamp.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: release-${{ matrix.os }}
+      - name: Stamp version
+        shell: bash
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: bash scripts/release-version.sh stamp "$VERSION"
       - name: Prepare cargo-packager cache directory
         shell: bash
         run: mkdir -p "$RUNNER_TEMP/cargo-packager"
@@ -108,6 +108,7 @@ jobs:
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
           $secure = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
           $imported = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $secure
+          Remove-Item -LiteralPath $pfx -Force
           @"
 
           [package.metadata.packager.windows]
@@ -172,8 +173,6 @@ jobs:
           bin=target/release/kg
           if [ "$RUNNER_OS" = Windows ]; then bin=$bin.exe; fi
           echo "\`kg\` on $RUNNER_OS: $(wc -c < "$bin" | tr -d ' ') bytes" >> "$GITHUB_STEP_SUMMARY"
-      - if: runner.os == 'Linux'
-        run: ${SCCACHE_PATH:-sccache} --show-stats
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: installers-${{ matrix.os }}
@@ -186,6 +185,7 @@ jobs:
 
   mac-build:
     needs: tag
+    timeout-minutes: 45
     permissions:
       contents: read
     strategy:
@@ -197,34 +197,32 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.tag.outputs.sha }}
+          persist-credentials: false
+      - name: macOS linker
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_ANALYTICS: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
+        run: brew install lld
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+        with:
+          cache: false
+      - name: Add the target
+        env:
+          TARGET: ${{ matrix.target }}
+        run: rustup target add "$TARGET"
+      # Keyed from the committed manifests, before the version stamp.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: release-${{ matrix.target }}
       - name: Stamp version
         env:
           VERSION: ${{ needs.tag.outputs.version }}
         run: bash scripts/release-version.sh stamp "$VERSION"
-      - name: macOS linker
-        run: brew install lld
-      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-        with:
-          version: v0.18.0
-      - run: |
-          {
-            echo "CARGO_INCREMENTAL=0"
-            echo "RUSTC_WRAPPER=sccache"
-            echo "SCCACHE_GHA_ENABLED=true"
-            echo "CMAKE_C_COMPILER_LAUNCHER=sccache"
-            echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache"
-          } >> "$GITHUB_ENV"
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
-        with:
-          cache: false
       - name: Build
         env:
           TARGET: ${{ matrix.target }}
-        run: |
-          set -eu
-          rustup target add "$TARGET"
-          cargo build --release -p kg --target "$TARGET"
-      - run: ${SCCACHE_PATH:-sccache} --show-stats
+        run: cargo build --release -p kg --target "$TARGET"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: kg-${{ matrix.target }}
@@ -234,6 +232,7 @@ jobs:
 
   mac-package:
     needs: [tag, mac-build]
+    timeout-minutes: 45
     permissions:
       contents: read
     runs-on: macos-latest
@@ -241,6 +240,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.tag.outputs.sha }}
+          persist-credentials: false
       # cargo-packager reads the version for the dmg name and Info.plist.
       - name: Stamp version
         env:
@@ -400,8 +400,8 @@ jobs:
   publish:
     needs: [tag, package, mac-package]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
-      actions: read
       contents: write
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -454,6 +454,10 @@ jobs:
         with:
           path: ${{ runner.temp }}/cargo-packager
           key: cargo-packager-0.11.8-${{ runner.os }}-${{ runner.arch }}
+      - if: steps.packager.outputs.cache-hit != 'true'
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+        with:
+          cache: false
       - name: Install cargo-packager
         if: steps.packager.outputs.cache-hit != 'true'
         run: cargo install cargo-packager --version 0.11.8 --locked --root "$RUNNER_TEMP/cargo-packager"
@@ -491,14 +495,16 @@ jobs:
     needs: [tag, publish]
     if: needs.tag.outputs.prerelease != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kagan-sh/homebrew-tap
-          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          persist-credentials: false
       - name: Update the cask
+        id: cask
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -538,8 +544,33 @@ jobs:
           CASK
           if git diff --quiet; then
             echo "The cask is already at $VERSION"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git -c user.name="kagan release" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -qam "kagan $VERSION"
-          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Push the cask
+        if: steps.cask.outputs.changed == 'true'
+        env:
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          set -eu
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::HOMEBREW_TAP_DEPLOY_KEY is unset" >&2
+            exit 1
+          fi
+          known="$RUNNER_TEMP/github_known_hosts"
+          key="$RUNNER_TEMP/homebrew_deploy_key"
+          # GitHub's SSH host keys from api.github.com/meta. A mismatch fails the push.
+          sed 's/^[[:space:]]*//' > "$known" <<'EOF'
+          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+          github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
+          EOF
+          umask 077
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          GIT_SSH_COMMAND="ssh -i $(printf '%q' "$key") -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$(printf '%q' "$known")" \
+            git push git@github.com:kagan-sh/homebrew-tap.git HEAD:main

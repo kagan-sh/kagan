@@ -25,18 +25,21 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  # No debuginfo in test builds. Line tables are for local debugging.
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   scope:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       skip: ${{ steps.scope.outputs.skip }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - id: scope
         name: Classify the diff
         env:
@@ -58,10 +61,12 @@ jobs:
   checks:
     needs: scope
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
@@ -97,7 +102,9 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: sh .githooks/check-attribution
       - if: needs.scope.outputs.skip != 'true'
-        run: npx jscpd@5.4.0 --config .config/jscpd.json
+        env:
+          npm_config_ignore_scripts: "true"
+        run: npx --yes jscpd@5.4.0 --config .config/jscpd.json
       - if: needs.scope.outputs.skip != 'true'
         name: Size budget
         run: sh scripts/size-budget.sh
@@ -110,8 +117,11 @@ jobs:
     needs: scope
     if: needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: rustup toolchain install --profile minimal
       - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
         with:
@@ -127,13 +137,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      RUSTFLAGS: -C link-arg=-fuse-ld=lld
+      RUSTFLAGS: -C link-arg=-fuse-ld=mold
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Linux build packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev lld
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev mold
+          # gcc resolves -fuse-ld=mold to ld.mold. Some packages ship only mold.
+          command -v ld.mold >/dev/null || sudo ln -sf "$(command -v mold)" /usr/local/bin/ld.mold
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -146,16 +160,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      RUSTFLAGS: -C link-arg=-fuse-ld=lld
+      RUSTFLAGS: -C link-arg=-fuse-ld=mold
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Linux build packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev lld
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev mold
+          # gcc resolves -fuse-ld=mold to ld.mold. Some packages ship only mold.
+          command -v ld.mold >/dev/null || sudo ln -sf "$(command -v mold)" /usr/local/bin/ld.mold
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Workspace crates too, so the next run rebuilds only what changed.
+          # Only main saves; a pull request restores that and cannot replace it.
+          cache-all-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
@@ -172,8 +193,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install lld
         # .cargo/config.toml links macOS with ld64.lld. brew exits 1 when llvm's post-install fails, though lld is installed.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_ANALYTICS: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: brew install lld || command -v ld64.lld
       - run: rustup toolchain install --profile minimal
       - run: rustup target add x86_64-apple-darwin
@@ -195,13 +222,20 @@ jobs:
         shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install lld
         # .cargo/config.toml links macOS with ld64.lld. brew exits 1 when llvm's post-install fails, though lld is installed.
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_ANALYTICS: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
         run: brew install lld || command -v ld64.lld
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: macos
+          cache-all-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 1 }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
@@ -211,7 +245,7 @@ jobs:
       - name: Tests
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
-          --partition slice:${{ matrix.shard }}/2
+          --partition hash:${{ matrix.shard }}/2
 
   windows-tests:
     needs: scope
@@ -227,6 +261,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: rustup toolchain install --profile minimal
       - name: dlltool
         # getrandom's build fails with "dlltool.exe: program not found" when MinGW is missing.
@@ -239,6 +275,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: windows
+          cache-all-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' && matrix.shard == 1 }}
       - id: nextest
         run: echo "version=$(sed -n 's/^cargo-nextest = { version = "=\([^"]*\)".*/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
@@ -248,7 +285,7 @@ jobs:
       - name: Tests
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
-          --partition slice:${{ matrix.shard }}/2
+          --partition hash:${{ matrix.shard }}/2
 
   # The ruleset requires the checks linux, macos and windows. Each passes only when every job
   # for its OS passed; a skipped job would otherwise count as a pass.
@@ -257,6 +294,7 @@ jobs:
     if: always() && needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
@@ -267,6 +305,7 @@ jobs:
     if: always() && needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
@@ -277,6 +316,7 @@ jobs:
     if: always() && needs.scope.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions: {}
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
@@ -285,12 +325,14 @@ jobs:
   mutants-base:
     if: github.event_name == 'workflow_dispatch' && inputs.mutants
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       base: ${{ steps.base.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - id: base
         env:
           REF: ${{ inputs.mutants_base }}
@@ -315,16 +357,19 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     env:
-      RUSTFLAGS: -C link-arg=-fuse-ld=lld
+      RUSTFLAGS: -C link-arg=-fuse-ld=mold
       MUTANTS_SHARD: ${{ matrix.shard }}/16
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Linux build packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev lld
+          sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev mold
+          # gcc resolves -fuse-ld=mold to ld.mold. Some packages ship only mold.
+          command -v ld.mold >/dev/null || sudo ln -sf "$(command -v mold)" /usr/local/bin/ld.mold
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -337,7 +382,9 @@ jobs:
         with:
           tool: cargo-nextest@${{ steps.versions.outputs.nextest }},cargo-mutants@${{ steps.versions.outputs.mutants }}
       - name: Mutants on the changed lines
-        run: sh scripts/mutants-diff.sh "${{ needs.mutants-base.outputs.base }}"
+        env:
+          BASE: ${{ needs.mutants-base.outputs.base }}
+        run: sh scripts/mutants-diff.sh "$BASE"
       - name: Mark the shard as reported
         if: always()
         run: mkdir -p target/mutants && touch target/mutants/done
@@ -352,6 +399,7 @@ jobs:
     needs: mutants
     if: always() && github.event_name == 'workflow_dispatch' && inputs.mutants
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -359,7 +407,7 @@ jobs:
           path: mutants
       - name: Report the surviving mutants
         run: |
-          reported=$(find mutants -name done 2>/dev/null | wc -l)
+          reported=$(find mutants -name 'done' 2>/dev/null | wc -l)
           if [ "$reported" -ne 16 ]; then
             echo "$reported of 16 shards reported; the run is incomplete" >&2
             exit 1
