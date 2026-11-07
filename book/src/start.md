@@ -1,10 +1,18 @@
 # Get started
 
+Install kagan, open a project, and start a thread. The thread runs one program, such as Claude Code, Codex, or a shell, in one terminal. You review the files it changes in the same window.
+
 ## Install
 
-On a Mac with macOS 11 or later, Intel or Apple silicon, download the app or use Homebrew. Otherwise, build from source. [Releases](https://github.com/kagan-sh/kagan/releases) also have a Windows installer, and a `.deb` and an AppImage for x86_64 and aarch64. The Linux app needs WebKitGTK 4.1 and `libxkbcommon-x11.so.0` (`libwebkit2gtk-4.1-0` and `libxkbcommon-x11-0` on Debian and Ubuntu). The `.deb` asks for both. The AppImage uses those same libraries from the system.
+Download a build from [Releases](https://github.com/kagan-sh/kagan/releases), or install on a Mac with Homebrew. You can also [build from source](#build-from-source).
+
+- **macOS 11 or later**, Intel and Apple silicon: a signed `.dmg`. [Download](#download) or [Homebrew](#homebrew).
+- **Windows**: an `.exe` installer. [Windows](#windows).
+- **Linux**, x86_64 and aarch64: a `.deb` or an AppImage. [Linux](#linux).
 
 ### Download
+
+On macOS 11 or later, Intel or Apple silicon:
 
 1. Download the signed `.dmg` from [Releases](https://github.com/kagan-sh/kagan/releases).
 2. Open it and drag `kagan.app` to `/Applications`.
@@ -22,6 +30,19 @@ brew install --cask kagan-sh/tap/kagan
 ```
 
 That puts `kagan.app` in `/Applications` and `kg` on your `PATH`.
+
+### Windows
+
+1. Download `kagan_<version>_x64.exe` from [Releases](https://github.com/kagan-sh/kagan/releases).
+2. Run the installer.
+
+### Linux
+
+The app needs WebKitGTK 4.1 and `libxkbcommon-x11.so.0` (`libwebkit2gtk-4.1-0` and `libxkbcommon-x11-0` on Debian and Ubuntu). The `.deb` asks for both. The AppImage uses those same libraries from the system.
+
+1. Download the file for your architecture from [Releases](https://github.com/kagan-sh/kagan/releases). The names look like `kagan_<version>_amd64.deb`, `kagan_<version>_arm64.deb`, `kagan_<version>_x86_64.AppImage`, and `kagan_<version>_aarch64.AppImage`.
+2. For a `.deb`, install that file. The package name is `kagan`. For example: `sudo apt install ./kagan_<version>_amd64.deb`.
+3. For an AppImage, mark it executable and open it. For example: `chmod +x kagan_<version>_x86_64.AppImage`, then run that file.
 
 ### Build from source
 
@@ -65,6 +86,8 @@ Run `kg` to open kagan later. On first start, kagan makes `~/.kagan`.
 For a git repository, the thread gets its own git worktree by default. Your project folder does not change. [Threads](threads.md#folders) explains the other choices.
 
 [Review changes](review.md) shows how to send comments to the program. On a narrow window, press Cmd+Backslash to show the right sidebar.
+
+When the built-in window is not enough, [install a plugin](plugins.md) or [build one](build-plugin.md).
 
 ## Use `kg` from a terminal
 

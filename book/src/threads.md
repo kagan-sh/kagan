@@ -1,6 +1,6 @@
 # Threads
 
-A thread runs one program in one folder. The program can be an agent, a shell, or any command.
+A thread is one program in one folder, shown as a terminal in the center of the window. The program can be an agent, a shell, or any other command. In a git repository the default folder is a new worktree, so the project folder you added does not change.
 
 ## Start a thread
 
@@ -53,13 +53,14 @@ If setup fails, the program does not start. The screen shows the error and **Ret
 - **Stop** (Cmd+.) ends the program. `kg thread stop <id>` does the same.
 - **Start again** (Cmd+Shift+S) runs the same program in the same thread and folder. `kg thread start-again <id>` does the same.
 
-Claude Code picks up its conversation. If that conversation is gone, it starts a new one, and the thread's events say so.
+What **Start again** continues:
 
-Codex started as plain `codex` also picks up its conversation, when kagan can tell which one it was: the only conversation Codex started in that folder since the thread last started. If two Codex threads share a folder, or the line has other words after `codex`, Codex starts a new conversation, and the thread's events say so.
+- Claude Code continues its conversation. If that conversation is gone, it starts a new one, and the thread's events say so.
+- Codex, when the program line is plain `codex`, continues its conversation when kagan can tell which one it was: the only conversation Codex started in that folder since the thread last started.
+- If two Codex threads share a folder, or the line has other words after `codex`, Codex starts a new conversation, and the thread's events say so.
+- With agent integration off in Settings, the program starts fresh.
 
-With agent integration off in Settings, the program starts fresh.
-
-Only you can start a program again. A restart of kagan does not start it.
+Only you can start a program again. Restarting kagan does not start it.
 
 ## When a program ends
 
