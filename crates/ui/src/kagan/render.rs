@@ -69,7 +69,7 @@ impl Render for Kagan {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let main = self.center_body(window, cx);
         self.fit_to_window(window, cx);
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         self.sync_browser(cx);
         crate::components::sync_pages(&self.shown_plugin_views(cx), cx);
         web_panel::sync(self, cx);

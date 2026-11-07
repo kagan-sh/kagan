@@ -131,7 +131,7 @@ What an agent remembers of a thread's program: what was said and done. Kagan giv
 _Avoid_: Session, chat
 
 **Browser**:
-A tab of the right sidebar that shows one web page on macOS and Windows. A thread's agent can drive it with `kg browser`. A plugin can drive that same page when the Browser area is on its install card. The row has Back, Forward, Reload, and Open in external browser.
+A tab of the right sidebar that shows one web page. On Linux the page is WebKitGTK and needs an X11 window. A thread's agent can drive it with `kg browser`. A plugin can drive that same page when the Browser area is on its install card. The row has Back, Forward, Reload, and Open in external browser.
 _Avoid_: Web view, embedded browser
 
 **Browser session**:

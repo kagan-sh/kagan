@@ -10,6 +10,25 @@ type Request = (Op, kg_core::Requester, Sender<Result<OpResult, OpError>>);
 struct Opened;
 impl gpui_kit::Global for Opened {}
 
+// WebKitGTK embeds only in an X11 window. When `DISPLAY` is set, including XWayland, the
+// window uses X11 so the browser can sit in it. With no X11 display the window stays on
+// Wayland or headless, and opening a page says that it needs X11.
+#[cfg(target_os = "linux")]
+fn desktop() -> gpui_kit::Application {
+    let display = std::env::var_os("DISPLAY").is_some_and(|value| !value.is_empty());
+    let modes = if display {
+        gpui_kit::WindowingModes::X11 | gpui_kit::WindowingModes::HEADLESS
+    } else {
+        gpui_kit::WindowingModes::all()
+    };
+    gpui_kit::platform::linux(modes)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn desktop() -> gpui_kit::Application {
+    gpui_kit::application()
+}
+
 pub(crate) fn run() -> Result<()> {
     let location = socket::location()?;
     let Some(listener) = socket::open(&location).context("cannot open the kg socket")? else {
@@ -37,7 +56,7 @@ pub(crate) fn run() -> Result<()> {
     let cli = std::env::current_exe()?;
     kg_process::warm_user_path();
     let components = component_catalog()?;
-    let app = gpui_kit::application()
+    let app = desktop()
         .with_assets(kg_ui::Assets)
         .with_quit_mode(QuitMode::Explicit);
     app.on_reopen(|cx| {

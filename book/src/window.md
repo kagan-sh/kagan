@@ -71,7 +71,7 @@ When a program prints a local address, **Open localhost:3000** appears over the 
 
 ### Browser
 
-On macOS and Windows, click **+** and choose **Browser**. Type an address and press Enter. Only http and https pages open. A local address such as `localhost:3000` opens over http. Your logins end when the page closes. It cannot use your camera or microphone. Closing the tab closes the page. On Linux, the tab says the browser works on macOS and Windows only.
+Click **+** and choose **Browser**. Type an address and press Enter. Only http and https pages open. A local address such as `localhost:3000` opens over http. Your logins end when the page closes. It cannot use your camera or microphone. Closing the tab closes the page. On Linux the page is the system WebKit view. kagan uses an X11 window when `DISPLAY` is set, including XWayland. A Wayland desktop with no X11 display shows one sentence instead of the page.
 
 The address row has **Back**, **Forward**, **Reload**, and a button that opens the address in your usual browser. Back, Forward, and Reload stay off until a page is open. A lock marks an https address.
 

@@ -318,15 +318,28 @@ impl Kagan {
             url.as_str().clone_into(&mut agent.url);
             page
         } else {
-            // One tab, one page: a person's page gives way, and a fresh document drops old refs.
+            // Linux keeps this WebKitGTK view: replacing it destroys an X11 window GTK still owns. A failed open leaves the person's page where it was.
             self.browser.follow = self.browser.follow.wrapping_add(1);
-            self.browser.page = None;
-            let page = self
-                .browser
-                .page_for(url, window, cx)
-                .map_err(OpError::Failed)?;
+            #[cfg(target_os = "linux")]
+            if let Some(page) = &self.browser.page {
+                page.read(cx).arm();
+            }
+            #[cfg(not(target_os = "linux"))]
+            let previous = self.browser.page.take();
+            #[cfg(target_os = "linux")]
+            let previous = None;
+            let page = match self.browser.page_for(url, window, cx) {
+                Ok(page) => page,
+                Err(error) => {
+                    self.browser.page = previous;
+                    return Err(OpError::Failed(error));
+                }
+            };
             #[cfg(target_os = "windows")]
-            page.read(cx).quiet_dialogs(cx).map_err(OpError::Failed)?;
+            if let Err(error) = page.read(cx).quiet_dialogs(cx) {
+                self.browser.page = previous;
+                return Err(OpError::Failed(error));
+            }
             self.browser.page = Some(page.clone());
             self.browser.agent = Some(Agent {
                 thread: thread_id.clone(),

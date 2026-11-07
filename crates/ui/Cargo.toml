@@ -9,8 +9,11 @@ publish.workspace = true
 kg-core.workspace = true
 kg-domain.workspace = true
 kg-plugins.workspace = true
-gpui-kit.workspace = true
-gpui-shell.workspace = true
+# GPUI Fast draws menus and dialogs over the native page on every desktop (decision 161).
+gpui-kit = { workspace = true, features = ["gpui-fast"] }
+gpui-shell = { workspace = true, features = ["gpui-fast"] }
+gpui-webview.workspace = true
+wry.workspace = true
 async-channel.workspace = true
 serde_json.workspace = true
 serde.workspace = true
@@ -20,14 +23,10 @@ percent-encoding = "=2.3.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
+webkit2gtk = { version = "=2.0.1", features = ["v2_38"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 raw-window-handle.workspace = true
-# GPUI Fast draws menus over the native page.
-gpui-kit = { workspace = true, features = ["gpui-fast"] }
-gpui-shell = { workspace = true, features = ["gpui-fast"] }
-gpui-webview.workspace = true
-wry.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-foundation = { workspace = true, features = ["NSString", "NSProcessInfo"] }

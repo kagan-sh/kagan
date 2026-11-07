@@ -21,19 +21,8 @@ pub(crate) fn install(cx: &mut App) {
     });
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn browser(op: BrowserOp, cx: &mut App) -> Task<Result<OpResult, OpError>> {
     cx.spawn(async move |cx| crate::kagan::browser::agent::run(op, cx).await)
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn browser(op: BrowserOp, cx: &mut App) -> Task<Result<OpResult, OpError>> {
-    cx.spawn(async move |_| refuse(&op))
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn refuse(_: &BrowserOp) -> Result<OpResult, OpError> {
-    Err(OpError::Failed(crate::kagan::browser::UNSUPPORTED.into()))
 }
 
 fn closed() -> OpError {
@@ -548,41 +537,5 @@ mod windows {
             .save(path)
             .map_err(|error| OpError::Failed(error.to_string()))?;
         Ok(())
-    }
-}
-
-#[cfg(all(test, not(any(target_os = "macos", target_os = "windows"))))]
-mod tests {
-    use super::refuse;
-    use kg_domain::{BrowserOp, OpError, ThreadId};
-
-    #[test]
-    fn every_browser_verb_names_the_platform() {
-        let id = || ThreadId("thr_1".into());
-        #[rustfmt::skip]
-        let verbs = [
-            BrowserOp::Open { url: "https://example.com".into(), thread_id: id() },
-            BrowserOp::Status { thread_id: id() },
-            BrowserOp::Snapshot { thread_id: id() },
-            BrowserOp::Goto { url: "https://example.com".into(), thread_id: id() },
-            BrowserOp::Back { thread_id: id() },
-            BrowserOp::Forward { thread_id: id() },
-            BrowserOp::Reload { thread_id: id() },
-            BrowserOp::Click { ref_id: 1, thread_id: id() },
-            BrowserOp::Fill { ref_id: 1, text: Some("x".into()), file: None, thread_id: id() },
-            BrowserOp::Type { text: "x".into(), thread_id: id() },
-            BrowserOp::Press { key: "enter".into(), thread_id: id() },
-            BrowserOp::Select { ref_id: 1, option: "x".into(), thread_id: id() },
-            BrowserOp::Scroll { dy: 10.0, thread_id: id() },
-            BrowserOp::Close { thread_id: id() },
-        ];
-        for verb in verbs {
-            assert_eq!(
-                refuse(&verb),
-                Err(OpError::Failed(
-                    "The browser works on macOS and Windows only for now.".into()
-                ))
-            );
-        }
     }
 }
