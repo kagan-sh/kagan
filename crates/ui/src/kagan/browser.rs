@@ -4,6 +4,7 @@ use gpui_kit::FocusHandle;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::v_flex;
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
     IntoElement, ParentElement as _, Role, Styled as _, Subscription, Window, div,
@@ -224,7 +225,11 @@ pub(super) fn page_url(typed: &str) -> Option<url::Url> {
         .filter(|url| is_web(url.as_str()))
 }
 
-const WEB: bool = cfg!(any(target_os = "linux", target_os = "macos", target_os = "windows"));
+const WEB: bool = cfg!(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "windows"
+));
 pub(crate) const UNSUPPORTED: &str = "The browser works on macOS, Windows and Linux only for now.";
 
 pub(super) fn is_web(url: &str) -> bool {
