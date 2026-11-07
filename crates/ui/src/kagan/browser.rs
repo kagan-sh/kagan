@@ -112,11 +112,16 @@ impl Browser {
         // Links and redirects inside the page are held to the same rule as the address field.
         // Private: cookies and logins end with the page, and nothing lands outside kagan's data.
         let url = url.as_str().to_owned();
-        crate::web_page::open(window, cx, move |builder| {
+        #[cfg(target_os = "linux")]
+        let again = url.clone();
+        let page = crate::web_page::open(window, cx, move |builder| {
             builder
                 .with_url(&url)
                 .with_navigation_handler(|target| is_web(&target))
-        })
+        })?;
+        #[cfg(target_os = "linux")]
+        crate::web_page::load_again(page.clone(), again, window, cx);
+        Ok(page)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

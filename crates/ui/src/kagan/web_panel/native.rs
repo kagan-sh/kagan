@@ -367,6 +367,8 @@ fn build(
     // Windows deletes its profile when the page closes, and Linux has no durable store.
     #[cfg(not(target_os = "macos"))]
     let (store, store_note) = (None, None);
+    #[cfg(target_os = "linux")]
+    let again = url.clone();
     let view = crate::web_page::open_view(window, cx, move |builder| {
         crate::web_page::with_store(builder, store)
             .with_url(&url)
@@ -401,6 +403,8 @@ fn build(
                 http_response(served)
             })
     })?;
+    #[cfg(target_os = "linux")]
+    crate::web_page::load_view_again(view.clone(), again, window, cx);
     let drain = page_watch::watch(receiver, plugin, panel, generation, alive, cx);
     Ok(Built {
         view,

@@ -282,6 +282,9 @@ while :; do
     if grep -Fq 'could not open' "$snapshot" || grep -Fq 'needs an X11 window' "$snapshot"; then
       fail "the page did not load"
     fi
+    if ! grep -Fq 'right-tab-browser' "$snapshot"; then
+      fail "the Browser tab closed before the page loaded"
+    fi
   fi
   alive || fail "the app exited while the page was loading"
   [ "$i" -lt 30 ] || fail "the local page was never requested"

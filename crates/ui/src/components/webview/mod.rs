@@ -471,11 +471,16 @@ fn build(
 ) -> Result<Entity<crate::web_page::WebPage>, String> {
     let hosts = hosts.to_vec();
     let url = url.to_owned();
-    crate::web_page::open(window, cx, move |builder| {
+    #[cfg(target_os = "linux")]
+    let again = url.clone();
+    let page = crate::web_page::open(window, cx, move |builder| {
         crate::web_page::with_store(builder, store)
             .with_url(&url)
             .with_navigation_handler(move |target| allowed(&target, &hosts).is_ok())
-    })
+    })?;
+    #[cfg(target_os = "linux")]
+    crate::web_page::load_again(page.clone(), again, window, cx);
+    Ok(page)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
