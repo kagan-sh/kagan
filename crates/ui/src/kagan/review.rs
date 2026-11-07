@@ -113,12 +113,7 @@ fn change_position(review: &Review) -> String {
 }
 
 fn review_title(review: &Review, cx: &mut Context<Kagan>) -> AnyElement {
-    let (directory, name) = review
-        .path
-        .rsplit_once('/')
-        .map_or(("", review.path.as_str()), |(directory, name)| {
-            (directory, name)
-        });
+    let (directory, name) = super::files::directory_and_name(&review.path);
     h_flex()
         .id("review-title")
         .ui_observe_as(Facts::button(review.path.clone()))

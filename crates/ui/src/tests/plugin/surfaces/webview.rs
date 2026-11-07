@@ -107,12 +107,12 @@ pub(in crate::tests) fn placed(native: Option<bool>, note: &str) -> bool {
         || platform_note(note)
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(in crate::tests) const fn platform_note(_note: &str) -> bool {
     false
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(not(desktop))]
 pub(in crate::tests) fn platform_note(note: &str) -> bool {
     note == crate::components::UNAVAILABLE
 }

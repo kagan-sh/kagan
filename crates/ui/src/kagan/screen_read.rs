@@ -55,12 +55,12 @@ pub(crate) fn tab_grid(kagan: &Kagan, number: u32, cx: &App) -> Option<kg_core::
     Some(kagan.tabs.view(number)?.read(cx).grid().clone())
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) fn browser_drawn(kagan: &Kagan, cx: &App) -> bool {
     kagan.browser_drawn(cx)
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(crate) fn browser_address(kagan: &Kagan, cx: &App) -> String {
     kagan.browser.address(cx)
 }

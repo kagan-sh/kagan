@@ -100,7 +100,7 @@ pub(super) fn parse_snapshot(raw: &str) -> Result<BrowserSnapshot, OpError> {
     })
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(super) const INFO: &str = r#"(() => {
   try {
     return { ok: true, url: location.href, title: document.title || "", ready: document.readyState === "complete" };
@@ -109,7 +109,7 @@ pub(super) const INFO: &str = r#"(() => {
   }
 })()"#;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 pub(super) const SNAPSHOT: &str = r#"(() => {
   const LIMIT = { controls: 300, name: 120, value: 200, text: 8192, json: 24576 };
   const clip = (text, limit) => {

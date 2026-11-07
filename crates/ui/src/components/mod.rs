@@ -16,7 +16,7 @@ use gpui_shell::{
     MaterializeRequest, RegistryError, anyhow,
 };
 
-#[cfg(all(test, not(desktop)))]
+#[cfg(not(desktop))]
 pub(crate) use webview::UNAVAILABLE;
 #[cfg(test)]
 pub(crate) use webview::{REFUSED_HOST, native_shown};

@@ -3,20 +3,20 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use std::io::Write as _;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use gpui_kit::AppContext as _;
 use gpui_kit::TestAppContext;
 use kg_core::Workspace;
 use kg_domain::{Op, OpError, OpResult, Plugin, PluginId, ThreadOp};
 use serde_json::json;
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use crate::tests::kagan::selected_of;
 use crate::tests::kagan::{click, open_with_plugins_then, present, run_shell, shows};
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 use crate::tests::plugin::panels::disabled_of;
 
 const DRIVE: &str = "dev.test.drive";
@@ -88,7 +88,7 @@ export default class Plugin extends View {
         .unwrap();
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 fn browser_labels(cx: &mut TestAppContext, window: gpui_kit::AnyWindowHandle) -> Vec<String> {
     cx.update_window(window, |_, window, cx| {
         crate::ui_dispatch::render_frame(window, cx);
@@ -136,7 +136,7 @@ fn answer(cx: &mut TestAppContext, op: Op) -> Result<OpResult, OpError> {
     panic!("the browser call did not answer");
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[cfg(desktop)]
 fn serve_page() -> u16 {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -166,7 +166,7 @@ fn a_plugin_opens_the_built_in_browser_and_adds_no_panel(cx: &mut TestAppContext
     click(cx, window, &format!("thread-{}", id.0));
     click(cx, window, "right-tab-add");
     assert!(present(cx, window, "right-add-browser"));
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     {
         let labels = browser_labels(cx, window);
         assert_eq!(labels.len(), 1, "{labels:?}");
@@ -178,7 +178,7 @@ fn a_plugin_opens_the_built_in_browser_and_adds_no_panel(cx: &mut TestAppContext
     cx.dispatch_action(window, gpui_kit::base::actions::Cancel);
     cx.run_until_parked();
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    #[cfg(desktop)]
     {
         let port = serve_page();
         let url = format!("http://127.0.0.1:{port}/");
@@ -211,7 +211,7 @@ fn a_plugin_opens_the_built_in_browser_and_adds_no_panel(cx: &mut TestAppContext
         }
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    #[cfg(not(desktop))]
     {
         let OpResult::ToolReply { text, is_error } = answer(
             cx,

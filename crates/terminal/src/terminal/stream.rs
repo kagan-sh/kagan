@@ -201,11 +201,7 @@ pub(super) fn write_bytes(
                 Ok(n) => offset += n,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
-                    } else {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
+                    wait_until_writable(wait_fd);
                 }
                 Err(error) => return Err(error),
             }
@@ -218,15 +214,20 @@ pub(super) fn write_bytes(
                 Ok(()) => return Ok(()),
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    if let Some(fd) = wait_fd {
-                        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
-                    } else {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
+                    wait_until_writable(wait_fd);
                 }
                 Err(error) => return Err(error),
             }
         }
+    }
+}
+
+#[cfg(unix)]
+fn wait_until_writable(fd: Option<std::os::fd::RawFd>) {
+    if let Some(fd) = fd {
+        wait_ready(fd, libc::POLLOUT, WRITE_WAIT_MS);
+    } else {
+        std::thread::sleep(Duration::from_millis(1));
     }
 }
 

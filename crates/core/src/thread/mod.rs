@@ -192,6 +192,29 @@ pub(crate) fn thread(
         .ok_or_else(|| missing("thread", id))
 }
 
+pub(crate) async fn ready_environment(
+    database: &Database,
+    id: &ThreadId,
+) -> Result<kg_domain::Environment> {
+    let lookup = id.clone();
+    let record = database
+        .call(move |store| store.thread(&lookup))
+        .await?
+        .ok_or_else(|| missing("thread", id))?;
+    let environment_id = record
+        .environment_id
+        .ok_or_else(|| OpError::Invalid("thread has no environment".into()))?;
+    let lookup = environment_id.clone();
+    let environment = database
+        .call(move |store| store.environment(&lookup))
+        .await?
+        .ok_or_else(|| missing("environment", &environment_id))?;
+    if environment.status != kg_domain::EnvironmentStatus::Ready {
+        return Err(OpError::Failed("environment is not ready".into()));
+    }
+    Ok(environment)
+}
+
 pub(crate) fn child_notice(title: &str, error: Option<&str>, before_turn: bool) -> String {
     let because = error.map(|error| format!(": {error}")).unwrap_or_default();
     if before_turn {

@@ -40,10 +40,18 @@ pub(super) struct Shared {
 }
 
 impl Shared {
+    pub(super) fn running(screen: Screen) -> Self {
+        Self::parts(screen, None, false)
+    }
+
     pub(super) fn settled(mut screen: Screen) -> Self {
         let _ = screen.end_hold();
-        let grid = screen.grid();
         let title = screen.title().map(str::to_owned);
+        Self::parts(screen, title, true)
+    }
+
+    fn parts(screen: Screen, title: Option<String>, settled: bool) -> Self {
+        let grid = screen.grid();
         Self {
             screen: Arc::new(Mutex::new(screen)),
             frame: Arc::new(Mutex::new(Frame {
@@ -55,7 +63,7 @@ impl Shared {
             wanted: Arc::new(AtomicBool::new(false)),
             edits: Arc::new(Mutex::new(Vec::new())),
             changed: Arc::new(AtomicBool::new(false)),
-            settled: Arc::new(AtomicBool::new(true)),
+            settled: Arc::new(AtomicBool::new(settled)),
             snapshot_bound: Arc::new(AtomicUsize::new(SNAPSHOT_MAX)),
             #[cfg(test)]
             builds: Arc::default(),
