@@ -38,6 +38,9 @@ fn hresult(code: &str) -> String {
 pub(crate) fn failure(error: &str) -> String {
     if error.contains(&hresult("80070002")) || error.contains(&hresult("80040154")) {
         RUNTIME.to_owned()
+    } else if error.contains("requires an X11 window") {
+        "The browser needs an X11 window. On Wayland, start kagan where DISPLAY is set (XWayland)."
+            .to_owned()
     } else {
         format!("The page could not open: {error}")
     }
@@ -285,18 +288,7 @@ fn build_view(
     window: &mut Window,
     cx: &mut App,
 ) -> Result<gpui_webview::WebView, String> {
-    gpui_webview::WebView::build(builder, window, cx)
-        .map_err(|error| page_failure(&error.to_string()))
-}
-
-// WebKitGTK can embed only in an X11 window. Say that in one sentence.
-pub(crate) fn page_failure(error: &str) -> String {
-    if error.contains("requires an X11 window") {
-        "The browser needs an X11 window. On Wayland, start kagan where DISPLAY is set (XWayland)."
-            .to_owned()
-    } else {
-        failure(error)
-    }
+    gpui_webview::WebView::build(builder, window, cx).map_err(|error| failure(&error.to_string()))
 }
 
 // Linux pages cannot use the camera or microphone, and a script dialog cannot stall the window.
@@ -378,43 +370,5 @@ pub(crate) fn with_store(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_missing_runtime_names_the_download() {
-        let message = failure(&format!(
-            "creating the environment failed: {}",
-            hresult("80070002")
-        ));
-        assert!(message.contains("WebView2 Runtime"));
-        assert!(message.contains("https://developer.microsoft.com/microsoft-edge/webview2/"));
-        let other = failure("the window is gone");
-        assert!(other.contains("could not open"));
-        assert!(!other.contains("WebView2 Runtime"));
-        let x11 = page_failure("WebView on Linux requires an X11 window; start the application");
-        assert!(x11.contains("DISPLAY"));
-        assert!(!x11.contains("could not open"));
-    }
-
-    #[test]
-    fn webview_files_stay_inside_kagan_data() {
-        let data = tempfile::tempdir().expect("temp data");
-        let stale = data.path().join("page-stale");
-        std::fs::create_dir_all(&stale).expect("stale page dir");
-        std::fs::write(stale.join("lock"), b"x").expect("stale file");
-        SWEPT.store(false, std::sync::atomic::Ordering::SeqCst);
-        let path = page_dir(data.path()).expect("page dir");
-        assert!(path.starts_with(data.path()));
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
-        assert!(name.starts_with("page-"));
-        assert!(
-            !stale.exists(),
-            "abandoned page dirs are removed on restart"
-        );
-        let _ = std::fs::remove_dir_all(path);
-    }
-}
+#[path = "web_page_test.rs"]
+mod tests;

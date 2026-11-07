@@ -259,15 +259,13 @@ fn place(id: &str, url: &str, store: bool, window: &mut Window, cx: &mut App) ->
 }
 
 fn loose(
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))] id: &str,
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))] _id: &str,
+    #[cfg(desktop)] id: &str,
+    #[cfg(not(desktop))] _id: &str,
     url: &str,
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-    window: &mut Window,
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    _window: &mut Window,
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))] cx: &mut App,
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))] _cx: &mut App,
+    #[cfg(desktop)] window: &mut Window,
+    #[cfg(not(desktop))] _window: &mut Window,
+    #[cfg(desktop)] cx: &mut App,
+    #[cfg(not(desktop))] _cx: &mut App,
 ) -> Shown {
     match gate(url, &[]) {
         Gate::Empty => blank(),
@@ -293,16 +291,10 @@ fn owned(
     id: &str,
     url: &str,
     hosts: &[String],
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))] keep: Option<
-        Result<Option<[u8; 16]>, String>,
-    >,
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))] _keep: Option<
-        Result<Option<[u8; 16]>, String>,
-    >,
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-    window: &mut Window,
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-    _window: &mut Window,
+    #[cfg(desktop)] keep: Option<Result<Option<[u8; 16]>, String>>,
+    #[cfg(not(desktop))] _keep: Option<Result<Option<[u8; 16]>, String>>,
+    #[cfg(desktop)] window: &mut Window,
+    #[cfg(not(desktop))] _window: &mut Window,
     cx: &mut App,
 ) -> Shown {
     let index = find(cx, owner.entity_id(), id);

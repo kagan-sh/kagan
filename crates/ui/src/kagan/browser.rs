@@ -179,10 +179,7 @@ impl Browser {
         });
     }
 
-    #[cfg(all(
-        test,
-        any(target_os = "linux", target_os = "macos", target_os = "windows")
-    ))]
+    #[cfg(all(test, desktop))]
     pub(super) fn address(&self, cx: &App) -> String {
         self.address.read(cx).value().to_string()
     }
@@ -225,11 +222,7 @@ pub(super) fn page_url(typed: &str) -> Option<url::Url> {
         .filter(|url| is_web(url.as_str()))
 }
 
-const WEB: bool = cfg!(any(
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "windows"
-));
+const WEB: bool = cfg!(desktop);
 pub(crate) const UNSUPPORTED: &str = "The browser works on macOS, Windows and Linux only for now.";
 
 pub(super) fn is_web(url: &str) -> bool {
