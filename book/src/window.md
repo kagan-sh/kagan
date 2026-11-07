@@ -4,7 +4,7 @@ From left to right: the **rail** (icons), the **left sidebar** (projects and thr
 
 On a narrow window, the right sidebar hides first, then the left. The rail stays. Cmd+B shows the left sidebar. Cmd+Backslash shows the right. Escape closes the one that is open.
 
-## Do the work
+## Use the window
 
 1. Start or select a thread in the left sidebar. The center is that thread's terminal. Type to the program there.
 2. Open **Changes** in the right sidebar when you want the diff. [Review changes](review.md) sends comments back to the program.

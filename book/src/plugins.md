@@ -1,10 +1,10 @@
 # Plugins
 
-Plugins are how you extend the IDE. kagan ships with threads, a terminal, review, and the browser. A plugin can add a tool, a page, a command, an agent tool, a skill, or a theme. kagan has none when you install it.
+Plugins are how you extend the IDE. kagan ships with threads, a terminal, review, and the browser. It ships with no plugins.
 
-Nothing from a plugin runs until you approve it. An agent cannot approve a plugin. Small plugins you can install and read are in [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins). To write your own, see [Build a plugin](build-plugin.md).
+A plugin can add a tool, a page, a command, an agent tool, a skill, a theme, or one status line. Nothing from a plugin runs until you approve it. An agent cannot approve a plugin.
 
-Each tool or page has an icon on the rail. [The window](window.md#rail) explains the icons.
+Small plugins you can install and read are in [`examples/plugins`](https://github.com/kagan-sh/kagan/tree/main/examples/plugins). To write your own, see [Build a plugin](build-plugin.md). Each tool or page has an icon on the rail. [The window](window.md#rail) explains the icons.
 
 ## Install
 

@@ -4,6 +4,8 @@ kagan is a desktop IDE for AI assisted software development. You run an agent in
 
 The window already has threads, a terminal, and the changed files. A plugin adds more of the window: a tool, a page, a command, a skill, or a theme. Nothing from a plugin runs until you approve it.
 
+![The kagan window. Threads on the left, a terminal in the center, changed files on the right. A plugin tool sits on the rail.](window.svg)
+
 ## The window
 
 From left to right:
@@ -19,7 +21,7 @@ From left to right:
 
 1. [Install kagan and start a thread](start.md).
 2. [Review the changes](review.md) and send comments back to the program.
-3. Drive the same window from a terminal with [`kg`](cli.md), when you want to.
+3. Use the same window from a terminal with [`kg`](cli.md), when you want to.
 4. [Install a plugin](plugins.md), or [build one](build-plugin.md), when you want the IDE to do something it does not ship with.
 
 ## What you will use

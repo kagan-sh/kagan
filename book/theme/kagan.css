@@ -120,10 +120,11 @@ html:not(.js) {
 
 .chapter li.part-title {
     margin-block-start: 1.6em;
-    font-size: 1.1rem;
+    font-size: 1.4rem;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    color: var(--sidebar-non-existant);
 }
 
 .chapter li a.active {
@@ -208,7 +209,22 @@ pre code.hljs {
     border-radius: 6px;
 }
 
-:not(pre) > .hljs {
-    border: 1px solid var(--line);
+:not(pre) > code {
+    background: var(--quote-bg);
     border-radius: 4px;
+    padding: 0.05em 0.35em;
+}
+
+.content img {
+    display: block;
+    margin: 0.4em 0 1.4em;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+#mdbook-theme-list li:has(#mdbook-theme-default_theme),
+#mdbook-theme-list li:has(#mdbook-theme-rust),
+#mdbook-theme-list li:has(#mdbook-theme-navy),
+#mdbook-theme-list li:has(#mdbook-theme-ayu) {
+    display: none;
 }

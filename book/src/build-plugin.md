@@ -2,7 +2,7 @@
 
 A plugin is how you extend the IDE yourself. It is a folder of JavaScript. kagan runs the files as they are. There is no build step.
 
-**New plugin…** on the rail starts a Personal thread with your first installed agent and the prompt `Build a kagan plugin that `. The agent can read the `kg-plugin-authoring` skill. You can also create the folder yourself.
+**New plugin…** on the rail starts a Personal thread with your first installed agent. It pastes the start of a prompt, `Build a kagan plugin that`, and leaves it for you to finish. The agent can read the `kg-plugin-authoring` skill. You can also create the folder yourself.
 
 ## Make a starter plugin
 
@@ -58,19 +58,24 @@ import { setStatus } from "kagan/host";
 setStatus("42% used", { tone: "busy" });
 ```
 
-The text is one plain line of at most 120 characters. `tone` is `quiet`, `busy`, `needs`, or `failed`, and defaults to `quiet`. `setStatus(null)` hides the line. A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. It is text only: no button, click, or view. A command is how it gets an action. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
+The text is one plain line of at most 120 characters. `tone` is `quiet`, `busy`, `needs`, or `failed`, and defaults to `quiet`. `setStatus(null)` hides the line.
+
+A plugin that declares `ui.status` starts with kagan, so the line shows without opening a panel. It is text only: no button, click, or view. A command is how it gets an action. Turn **Plugin status** off in Settings → Appearance, or turn the plugin off in Installed, to hide the line.
 
 ## Call another plugin
 
-A plugin can run a function another plugin offers. The caller lists that plugin in `powers.calls`. The install screen says it asks that plugin to do work. The other plugin lists the function name in `exports`. The caller uses `call(plugin, name, input)` from `kagan/host` and gets JSON back. A call is refused when it is not approved, the other plugin is disabled, or the function is not exported. A call times out after 30 seconds.
+A plugin can ask another plugin to run a function and return JSON.
+
+The caller lists that plugin in `powers.calls`. The install screen says it asks that plugin to do work. The other plugin lists the function name in `exports`. The caller uses `call(plugin, name, input)` from `kagan/host`. A call is refused when it is not approved, the other plugin is disabled, or the function is not exported. A call times out after 30 seconds.
 
 ## Thread events
 
-List the events the plugin wants in `kagan.json`.
+A plugin can react when an agent turn or a tool call starts and ends. List the events it wants in `kagan.json`.
 
-`thread.turn.started` fires when a program's title shows a spinner as its first character. `thread.turn.ended` fires when that spinner ends, or the program stops or exits during it. The end says `completed`, `interrupted`, or `failed`. Quitting does not write `thread.turn.ended`. A working mark later in the title, such as an hourglass after a plain prefix, does not start a turn.
-
-`thread.tool.started` fires when kagan hands an agent tool call to a plugin. It carries the tool's name and kagan's own id. `thread.tool.ended` fires when that reply lands, with the same id and `ok` or `error`. Neither event holds the input, the reply, an error text, or a plugin id.
+- `thread.turn.started` fires when a program's title shows a spinner as its first character.
+- `thread.turn.ended` fires when that spinner ends, or the program stops or exits during it. The end says `completed`, `interrupted`, or `failed`. Quitting does not write `thread.turn.ended`. A working mark later in the title, such as an hourglass after a plain prefix, does not start a turn.
+- `thread.tool.started` fires when kagan hands an agent tool call to a plugin. It carries the tool's name and kagan's own id.
+- `thread.tool.ended` fires when that reply lands, with the same id and `ok` or `error`. Neither event holds the input, the reply, an error text, or a plugin id.
 
 ## Share it
 

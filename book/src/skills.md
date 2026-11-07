@@ -56,28 +56,36 @@ The same name twice in one place: kagan uses neither, and `kg skill list` shows 
 
 ## Skills from BB
 
-With agent integration on, a new thread also sees skills from a BB install:
+With agent integration on, a new thread also sees skills from a BB install. kagan does not copy BB's built-in or plugin skills. Those stay in the BB installation and often depend on `bb`.
 
 - Your BB skills: `$BB_DATA_DIR/skills`, or `~/.bb/skills` when `BB_DATA_DIR` is unset.
 - The project's BB skills: `<thread folder>/.bb/skills`.
 
-kagan puts those next to its own skills: built-in, plugin, your kagan skills, and project skills. A kagan skill wins over a BB skill with the same name. A BB project skill wins over a BB user skill. kagan does not copy BB's built-in or plugin skills. Those stay in the BB installation and often depend on `bb`.
+kagan puts those next to its own skills, in this order: built-in, plugin, your kagan skills, then project skills. A kagan skill wins over a BB skill with the same name. A BB project skill wins over a BB user skill.
 
 Each start resolves that set. A change gets a new hash, so a running thread keeps the folder it started with. Your skills in `<data folder>/skills` and `.kagan/skills` are in that same set. Claude and Codex can also load them with `skill_load`. The other programs do not get that tool.
 
-Where each program looks:
+### Where each program looks
 
-- Claude receives the set as a plugin.
-- Cursor receives it through its per-thread plugin folder.
-- Codex looks in `.agents/skills`.
-- OpenCode looks in `.opencode/skills`.
-- Kimi receives `--skills-dir`. That flag replaces Kimi's own discovery, so kagan also passes Kimi's usual user and project roots.
-- Pi receives `--skill`.
-
-kagan adds a link only when the name is free. It leaves your own folders alone and removes only its own links. It never writes a program's global config. Each link gets its own `.git/info/exclude` line. Those lines stay until you put a real folder at that name. A stale line only hides a name kagan once linked. Your own folder at that name removes the line.
-
-Codex uses `.agents/skills`. Cursor, Gemini, Kimi, and OpenCode in that repository also read that folder. On Windows, if the account cannot create a symlink, Codex or OpenCode starts without those links and the thread shows a warning.
-
-A Codex or OpenCode program opened in the same repository outside kagan also sees the links in `.agents/skills` or `.opencode/skills`. kagan has no per-run skills path for those programs that keeps their own skills separate. Two Codex or OpenCode threads in one folder share the links, so a later start repoints them. OpenCode may list a skill twice when a Codex thread linked it under `.agents/skills` and an OpenCode thread linked it under `.opencode/skills`. Kimi, Pi, Claude, and Cursor do not add a repository folder.
+- **Claude** receives the set as a plugin.
+- **Cursor** receives it through its per-thread plugin folder.
+- **Codex** looks in `.agents/skills`.
+- **OpenCode** looks in `.opencode/skills`.
+- **Kimi** receives `--skills-dir`. That flag replaces Kimi's own discovery, so kagan also passes Kimi's usual user and project roots.
+- **Pi** receives `--skill`.
 
 A program kagan does not recognize, for example `gemini`, `amp`, `aider`, `goose`, `qwen`, `copilot`, `grok`, or `droid`, gets no skills from this path.
+
+### Links kagan adds
+
+kagan adds a link only when the name is free. It leaves your own folders alone and removes only its own links. It never writes a program's global config.
+
+Each link gets its own `.git/info/exclude` line. Those lines stay until you put a real folder at that name. A stale line only hides a name kagan once linked. Your own folder at that name removes the line.
+
+On Windows, if the account cannot create a symlink, Codex or OpenCode starts without those links and the thread shows a warning.
+
+### Folders other programs also read
+
+Codex uses `.agents/skills`. Cursor, Gemini, Kimi, and OpenCode in that repository also read that folder.
+
+A Codex or OpenCode program opened in the same repository outside kagan also sees the links in `.agents/skills` or `.opencode/skills`. kagan has no per-run skills path for those programs that keeps their own skills separate. Two Codex or OpenCode threads in one folder share the links, so a later start repoints them. OpenCode may list a skill twice when a Codex thread linked it under `.agents/skills` and an OpenCode thread linked it under `.opencode/skills`. Kimi, Pi, Claude, and Cursor do not add a repository folder.

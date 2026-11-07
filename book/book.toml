@@ -14,6 +14,7 @@ create-missing = false
 default-theme = "coal"
 preferred-dark-theme = "coal"
 additional-css = ["theme/kagan.css"]
+additional-js = ["theme/kagan.js"]
 site-url = "/"
 git-repository-url = "https://github.com/kagan-sh/kagan"
 no-section-label = true
