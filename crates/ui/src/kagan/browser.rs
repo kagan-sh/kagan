@@ -39,11 +39,9 @@ mod chrome;
 #[cfg(any(test, target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(super) mod snapshot;
 
-/// A thread's hold on the Browser's one page, while it drives it.
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 pub(super) struct Agent {
     pub(super) thread: ThreadId,
-    /// The last URL the page reported.
     pub(super) url: String,
     /// The last command that reached it, for the 30-minute rule.
     pub(super) used: Instant,
@@ -97,7 +95,6 @@ impl Browser {
         }
     }
 
-    /// Loads `url` in the person's page, or makes one when there is none.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     pub(super) fn page_for(
         &mut self,
@@ -109,8 +106,6 @@ impl Browser {
             page.update(cx, |page, cx| page.load_url(url.as_str(), cx));
             return Ok(page.clone());
         }
-        // Links and redirects inside the page are held to the same rule as the address field.
-        // Private: cookies and logins end with the page, and nothing lands outside kagan's data.
         let url = url.as_str().to_owned();
         #[cfg(target_os = "linux")]
         let again = url.clone();
@@ -120,8 +115,21 @@ impl Browser {
                 .with_navigation_handler(|target| is_web(&target))
         })?;
         #[cfg(target_os = "linux")]
-        crate::web_page::load_again(page.clone(), again, window, cx);
+        load_sized(page.clone(), again, window, cx);
         Ok(page)
+    }
+    // The view is built at empty bounds. WebKitGTK drops a navigation that starts there.
+    #[cfg(target_os = "linux")]
+    fn load_sized(page: Entity<WebPage>, url: String, window: &mut Window, cx: &mut App) {
+        window
+            .spawn(cx, async move |cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(80))
+                    .await;
+                cx.update(|_, cx| page.update(cx, |page, cx| page.load_url(&url, cx)))
+                    .ok();
+            })
+            .detach();
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -134,7 +142,6 @@ impl Browser {
         self.agent.is_some()
     }
 
-    /// The thread that drives the page, while one does.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     pub(super) fn owner(&self) -> Option<&ThreadId> {
         self.agent.as_ref().map(|agent| &agent.thread)
@@ -154,8 +161,6 @@ impl Browser {
         }
     }
 
-    /// Drops the page and its address, so nothing on it keeps running once its tab is gone.
-    /// A thread's page goes with it: closing the tab ends the drive.
     pub(super) fn close(&mut self, window: &mut Window, cx: &mut App) {
         #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         {
@@ -169,7 +174,6 @@ impl Browser {
         });
     }
 
-    /// Showing another thread drops the person's page. A thread's page stays loaded and hidden.
     pub(super) fn leave_thread(&mut self, window: &mut Window, cx: &mut App) {
         #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
         {
@@ -246,14 +250,12 @@ impl Kagan {
             && super::right::selected_tab(self, cx) == Some(super::right::Tab::Browser)
     }
 
-    /// Hides or shows the native page to match whether the Browser tab is on screen.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     pub(super) fn sync_browser(&self, cx: &mut App) {
         let shown = self.browser_drawn(cx);
         self.browser.sync_page(shown, cx);
     }
 
-    /// Ends the drive from the tab: the page stays as the person's.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
     pub(super) fn stop_agent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.end_agent(window, cx);

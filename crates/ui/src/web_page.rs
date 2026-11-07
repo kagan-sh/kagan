@@ -191,67 +191,12 @@ pub(crate) fn open(
         configure,
         Some((loads.clone(), Arc::clone(&mark))),
     )?;
-    let page = cx.new(|_| WebPage {
+    Ok(cx.new(|_| WebPage {
         view,
         loads,
         finished,
         mark,
-    });
-    Ok(page)
-}
-
-// WebKitGTK drops a navigation that starts while the view is still 0×0, and the
-// view is built at empty bounds. Ask again once a frame has had time to size it,
-// and once more if that navigation never left about:blank.
-#[cfg(target_os = "linux")]
-pub(crate) fn load_again(page: Entity<WebPage>, url: String, window: &mut Window, cx: &mut App) {
-    retry_load(window, cx, move |cx| {
-        page.update(cx, |page, cx| {
-            let current = page.url(cx);
-            let blank = current.is_empty() || current.starts_with("about:");
-            if blank {
-                page.load_url(&url, cx);
-            }
-            blank
-        })
-    });
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn load_view_again(
-    view: Entity<gpui_webview::WebView>,
-    url: String,
-    window: &mut Window,
-    cx: &mut App,
-) {
-    retry_load(window, cx, move |cx| {
-        view.update(cx, |view, _| {
-            let current = view.raw().url().unwrap_or_default();
-            let blank = current.is_empty() || current.starts_with("about:");
-            if blank {
-                view.load_url(&url);
-            }
-            blank
-        })
-    });
-}
-
-#[cfg(target_os = "linux")]
-fn retry_load(window: &mut Window, cx: &mut App, mut load: impl FnMut(&mut App) -> bool + 'static) {
-    window
-        .spawn(cx, async move |cx| {
-            for wait in [
-                std::time::Duration::from_millis(50),
-                std::time::Duration::from_millis(200),
-            ] {
-                cx.background_executor().timer(wait).await;
-                let again = cx.update(|_, cx| load(cx)).unwrap_or(false);
-                if !again {
-                    break;
-                }
-            }
-        })
-        .detach();
+    }))
 }
 
 // The native view alone, for a caller that drives the page itself, such as a plugin web panel.
