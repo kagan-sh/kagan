@@ -14,6 +14,8 @@ use crate::dispatch::forward;
 
 use super::thread;
 
+const ARM: Duration = Duration::from_secs(2);
+
 pub(crate) fn wait_event(
     workspace: &Entity<Workspace>,
     id: ThreadId,
@@ -133,7 +135,7 @@ pub(crate) fn wait(
         let deadline = cx
             .background_executor()
             .timer(Duration::from_millis(timeout_ms));
-        let arm = cx.background_executor().timer(super::terminal::ARM);
+        let arm = cx.background_executor().timer(ARM);
         futures::pin_mut!(deadline, arm);
         loop {
             let hit = if arming {

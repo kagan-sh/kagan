@@ -15,7 +15,7 @@ impl Workspace {
     pub fn set_ui_driver(&mut self, dispatch: crate::dispatch::ui::UiDispatch) {
         self.ui = Some(dispatch);
     }
-    pub fn end_programs(&mut self) {
+    pub(crate) fn end_programs(&mut self) {
         for run in self.runs.values_mut() {
             run.extras = crate::thread::Extras::default();
             run.shown = None;

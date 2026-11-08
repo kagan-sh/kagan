@@ -8,9 +8,11 @@ use kg_domain::{
 
 use crate::Workspace;
 use crate::host::database::Result;
-use crate::workspace::{GRACE, closed, missing, time};
+use crate::workspace::{closed, missing, time};
 
 use super::{git, personal, script};
+
+const GRACE: i64 = 10_000;
 
 pub(crate) struct Retirement {
     pub(crate) environment: Environment,

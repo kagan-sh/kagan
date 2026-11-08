@@ -41,8 +41,12 @@ impl Cache {
     }
 }
 
-pub(crate) async fn run(database: Database, op: DiffOp, cx: &mut AsyncApp) -> Result<OpResult> {
-    let cache = cx.update(|cx| crate::Workspace::global(cx).read(cx).diffs.clone());
+pub(crate) async fn run(
+    database: Database,
+    cache: Arc<Cache>,
+    op: DiffOp,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
     let (root, hint, op) = locate(database, op).await?;
     cx.background_spawn(async move {
         match op {

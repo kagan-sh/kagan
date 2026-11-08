@@ -33,7 +33,6 @@ pub(super) const ROWS: u16 = 24;
 const TICK: Duration = Duration::from_millis(33);
 // A program can drop its spinner for a frame in the middle of a reply. Waiting counts only after this quiet.
 const QUIET: Duration = Duration::from_secs(1);
-pub(crate) const ARM: Duration = Duration::from_secs(2);
 
 pub(crate) async fn start(
     this: &WeakEntity<Workspace>,

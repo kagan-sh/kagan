@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::host::database::Result;
 
-use super::{Known, cursor_rule, note_with, toml};
+use super::{Known, cursor_rule, note_with};
 
 const CURSOR_RULE: &str = ".cursor/rules/kagan.mdc";
 
@@ -528,3 +528,12 @@ fn codex_overrides(id: &str, cli: &Path, socket: Option<&OsStr>) -> Vec<OsString
 #[cfg(test)]
 #[path = "files_test.rs"]
 mod tests;
+
+// A literal string takes backslashes and spaces as they are, so Windows paths need no escaping.
+pub(super) fn toml(text: &str) -> String {
+    if text.contains('\'') {
+        format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+    } else {
+        format!("'{text}'")
+    }
+}

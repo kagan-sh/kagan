@@ -85,7 +85,12 @@ pub(crate) async fn execute(
         Op::Ui(op) => crate::dispatch::ui::drive(this, crate::UiJob::Op(op), cx).await,
         Op::Browser(op) => crate::dispatch::ui::drive(this, crate::UiJob::Browser(op), cx).await,
         Op::Surface(op) => crate::dispatch::ui::drive(this, crate::UiJob::Surface(op), cx).await,
-        Op::Diff(op) => crate::diff::run(database, op, cx).await,
+        Op::Diff(op) => {
+            let cache = this
+                .update(cx, |workspace, _| workspace.diffs.clone())
+                .map_err(closed)?;
+            crate::diff::run(database, cache, op, cx).await
+        }
         Op::Preview(op) => crate::preview::run(database, op, cx).await,
         Op::Diagnostics(op) => crate::dispatch::diagnostics::export(this, op, cx).await,
         Op::Update(op) => crate::update::run(&database, op, cx).await,

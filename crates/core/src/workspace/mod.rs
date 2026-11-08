@@ -56,7 +56,6 @@ pub(crate) fn hold(_: &WeakEntity<Workspace>, _: Hold, _: &mut AsyncApp) -> std:
     std::future::ready(())
 }
 
-pub(crate) const GRACE: i64 = 10_000;
 const QUIT_DEADLINE: Duration = Duration::from_secs(3);
 pub(crate) enum Request {
     Op(Op),

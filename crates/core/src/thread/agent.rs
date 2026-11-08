@@ -566,14 +566,5 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
     })
     .await;
 }
-// A literal string takes backslashes and spaces as they are, so Windows paths need no escaping.
-fn toml(text: &str) -> String {
-    if text.contains('\'') {
-        format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
-    } else {
-        format!("'{text}'")
-    }
-}
-
 #[cfg(test)]
 mod tests;
