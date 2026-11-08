@@ -279,6 +279,7 @@ impl Kagan {
                 .active(&review.thread, scope, &review.path);
             review.shown.clear();
             review.rows.clear();
+            review.clear_syntax();
             review.loading = false;
             review.generation = review.generation.wrapping_add(1);
         }
