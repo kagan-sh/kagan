@@ -44,10 +44,14 @@ impl Workspace {
                             })
                         })
                         .map_err(closed);
-                    if let Ok(submitted) = submitted {
-                        let _ = submitted.await;
+                    if let Ok(submitted) = submitted
+                        && let Err(error) = submitted.await
+                    {
+                        eprintln!("kg: could not record a folder removal: {error}");
                     }
-                    let _ = Self::refresh(&this, cx).await;
+                    if let Err(error) = Self::refresh(&this, cx).await {
+                        eprintln!("kg: could not refresh after a folder removal: {error}");
+                    }
                 })
                 .detach();
             })

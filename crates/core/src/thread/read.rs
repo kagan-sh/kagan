@@ -39,6 +39,7 @@ pub(crate) fn wait_event(
         if let crate::WorkspaceEvent::Event { event, .. } = event
             && event.thread_id == watched
         {
+            // The waiter is gone or stopped listening.
             let _ = sent.try_send(event.clone());
         }
     });
@@ -102,6 +103,7 @@ pub(crate) fn wait(
         if let crate::WorkspaceEvent::Event { event, .. } = event
             && event.thread_id == watched
         {
+            // The waiter is gone or stopped listening.
             let _ = events_tx.try_send(event.kind.clone());
         }
     });
@@ -114,10 +116,12 @@ pub(crate) fn wait(
         if let Some(reason) = ended(thread.record.status) {
             if !saw_end {
                 saw_end = true;
+                // The waiter is gone or stopped listening.
                 let _ = wake_tx.try_send(Wake::Ended(reason));
             }
         } else if thread.busy && !saw_busy {
             saw_busy = true;
+            // The waiter is gone or stopped listening.
             let _ = wake_tx.try_send(Wake::Busy);
         }
     });

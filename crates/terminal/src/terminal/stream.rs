@@ -40,6 +40,7 @@ pub(super) fn thread_read(
                     // The reply is sent after the lock is gone, so a client asking for a frame never waits on the pty.
                     let reply = shared.feed(&buf[..n]);
                     if !reply.is_empty() {
+                        // The writer is gone, so the program no longer hears replies.
                         let _ = replies.send(Outgoing::Bytes(reply));
                     }
                 }
@@ -154,6 +155,7 @@ pub(super) fn thread_write(
                 }
             };
             if let Some(done) = done {
+                // The caller stopped waiting for the write.
                 let _ = done.send(match &result {
                     Ok(()) => Ok(()),
                     Err(error) => Err(io::Error::new(error.kind(), error.to_string())),
@@ -164,6 +166,7 @@ pub(super) fn thread_write(
                 // dropping the channel and leaving the caller with Disconnected.
                 while let Ok(leftover) = queued.try_recv() {
                     if let Outgoing::Checked { done, .. } = leftover {
+                        // The caller stopped waiting for the write.
                         let _ = done.send(Err(io::Error::other("terminal is closed")));
                     }
                 }

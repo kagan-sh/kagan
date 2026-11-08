@@ -34,12 +34,14 @@ pub(super) async fn persist(
         };
         match database.call(move |store| store.put_screen(&row)).await {
             Ok(true) => {
+                // A closed workspace has nothing to remember it in.
                 let _ = this.update(cx, |workspace, cx| {
                     remember(workspace, &id, seq, loss, cx);
                     mark_saved(workspace, &id, seq);
                 });
             }
             Ok(false) => {
+                // A closed workspace has nothing to mark.
                 let _ = this.update(cx, |workspace, _| mark_saved(workspace, &id, seq));
             }
             Err(error) => eprintln!("kg: could not keep the screen: {error}"),

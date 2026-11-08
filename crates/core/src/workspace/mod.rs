@@ -47,6 +47,7 @@ pub(crate) enum Hold {
 #[cfg(any(test, feature = "test"))]
 pub(crate) async fn hold(this: &WeakEntity<Workspace>, which: Hold, cx: &mut AsyncApp) {
     if let Ok(Some(held)) = this.update(cx, |workspace, _| workspace.holds.get(&which).cloned()) {
+        // A dropped sender also releases the hold.
         let _ = held.recv().await;
     }
 }
@@ -206,6 +207,7 @@ impl Workspace {
                     let requests_task = cx.spawn(async move |this, cx| {
                         while let Ok((request, reply)) = incoming.recv().await {
                             let result = Self::handle(&this, request, cx).await;
+                            // The caller dropped its task, so nobody reads the reply.
                             let _ = reply.send(result).await;
                         }
                     });
@@ -217,6 +219,7 @@ impl Workspace {
                             };
                             let task = workspace.update(cx, |workspace, _| {
                                 let (reply, receive) = async_channel::bounded(1);
+                                // A full queue already holds a sweep; a closed one means the workspace is going.
                                 let _ = workspace.requests.try_send((Request::Sweep, reply));
                                 receive
                             });
@@ -473,6 +476,7 @@ fn detached(
 ) -> Task<Result<OpResult>> {
     let (reply, receive) = async_channel::bounded(1);
     cx.spawn(async move |cx| {
+        // The caller stopped waiting, but the work itself was meant to finish.
         let _ = reply.send(work(cx).await).await;
     })
     .detach();

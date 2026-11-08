@@ -273,7 +273,9 @@ impl Terminal {
         }
         if let Some(ending) = self.ending() {
             // Teardown joins the IO threads, so it runs off the caller's thread.
-            let _ = std::thread::Builder::new().spawn(move || ending.finish());
+            if let Err(error) = std::thread::Builder::new().spawn(move || ending.finish()) {
+                eprintln!("kg: could not end the program's pty: {error}");
+            }
         }
         Finished { view }
     }
@@ -304,6 +306,8 @@ impl Drop for Terminal {
         };
         #[cfg(unix)]
         crate::tree::kill_tree(self.process_id);
-        let _ = std::thread::Builder::new().spawn(move || ending.finish());
+        if let Err(error) = std::thread::Builder::new().spawn(move || ending.finish()) {
+            eprintln!("kg: could not end the program's pty: {error}");
+        }
     }
 }

@@ -268,6 +268,7 @@ struct TempIndex(PathBuf);
 
 impl Drop for TempIndex {
     fn drop(&mut self) {
+        // A temp file left behind is harmless.
         let _ = std::fs::remove_file(&self.0);
         let mut lock = self.0.clone().into_os_string();
         lock.push(".lock");

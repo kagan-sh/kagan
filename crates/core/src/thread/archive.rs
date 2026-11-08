@@ -155,7 +155,7 @@ pub(crate) fn forget_deleted(
     cx: &mut gpui_kit::Context<Workspace>,
 ) {
     for (event, project_id) in deleted {
-        let _ = take_thread_replies(workspace, &event.thread_id);
+        take_thread_replies(workspace, &event.thread_id);
         super::terminal::kill(workspace, &event.thread_id);
         workspace.threads.remove(&event.thread_id);
         workspace.tasks.remove(&event.thread_id);

@@ -57,6 +57,7 @@ impl Finished {
             return None;
         }
         let mut screen = crate::screen::Screen::new(cols, rows);
+        // Replies to a program that has ended go nowhere.
         let _ = screen.feed(replay);
         Some(Self {
             view: View {

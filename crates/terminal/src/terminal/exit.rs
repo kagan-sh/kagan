@@ -70,6 +70,7 @@ impl super::Terminal {
                 job.terminate();
             }
             if let Some(child) = lock(&self.child).as_mut() {
+                // The program may already have exited.
                 let _ = child.kill();
             }
         }

@@ -47,6 +47,7 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
     let screens = store.screens()?;
     let plugins = store.plugins()?;
     let mut out = String::new();
+    // Writing to a String cannot fail.
     let _ = std::fmt::Write::write_fmt(
         &mut out,
         format_args!(
@@ -66,6 +67,7 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
         out.push_str("none\n");
     }
     for thread in &threads {
+        // Writing to a String cannot fail.
         let _ = std::fmt::Write::write_fmt(
             &mut out,
             format_args!(
@@ -95,6 +97,7 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
     for plugin in &plugins {
         let kind = source_kind(&plugin.source);
         let version = commit_version(plugin.commit.as_deref());
+        // Writing to a String cannot fail.
         let _ = std::fmt::Write::write_fmt(
             &mut out,
             format_args!(
@@ -259,6 +262,7 @@ fn write_new(path: &Path, text: &str) -> std::result::Result<(), OpError> {
     };
     if let Err(error) = file.write_all(text.as_bytes()) {
         drop(file);
+        // The write error below is the one to report; the half-written file is only removed.
         let _ = std::fs::remove_file(path);
         return Err(OpError::Failed(format!("{}: {error}", path.display())));
     }

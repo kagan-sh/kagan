@@ -90,6 +90,7 @@ impl Workspace {
         cx.spawn(async move |cx| {
             let Some(answer) = Requester::unless_gone(requester.as_ref(), answered.recv()).await
             else {
+                // The workspace is gone, so there is nothing left to withdraw from.
                 let _ = workspace.update(cx, |workspace, cx| {
                     workspace.pending.remove(&id);
                     cx.emit(WorkspaceEvent::Changed);

@@ -40,6 +40,7 @@ impl Database {
                     | kg_store::Error::Foreign { .. }
                     | kg_store::Error::Io(_)) => OpError::Failed(error.to_string()),
                 });
+                // The caller dropped its receiver, so nobody wants the result.
                 let _ = send.try_send(result);
             }))
             .await

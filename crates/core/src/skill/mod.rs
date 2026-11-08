@@ -121,6 +121,7 @@ pub(crate) async fn mirror(
             Ok(stable.join("skills"))
         })();
         if result.is_err() {
+            // The failure below is the one to report; the temp folder is only tidied.
             let _ = std::fs::remove_dir_all(&temp);
         }
         let root = result?;

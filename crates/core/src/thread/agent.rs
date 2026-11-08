@@ -272,6 +272,7 @@ pub(crate) async fn integrate(
     let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
     let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
     else {
+        // A closed workspace has no thread to clear.
         let _ = this.update(cx, |workspace, cx| {
             if let Some(thread) = workspace.threads.get(&record.id) {
                 thread.update(cx, |thread, _| thread.instruct = None);
@@ -516,6 +517,7 @@ async fn collect_instruct(
         _ => String::new(),
     };
     let instruct = (!text.is_empty()).then(|| text.clone());
+    // A closed workspace has no thread to record it on.
     let _ = this.update(cx, |workspace, cx| {
         if let Some(thread) = workspace.threads.get(&record.id) {
             thread.update(cx, |thread, _| {

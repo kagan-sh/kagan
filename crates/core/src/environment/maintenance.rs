@@ -296,7 +296,9 @@ async fn tell_removal(
             text,
         })
         .collect();
-    let _ = Workspace::events(this, thread, kinds, cx).await;
+    if let Err(error) = Workspace::events(this, thread, kinds, cx).await {
+        eprintln!("kg: could not record the removal notice: {error}");
+    }
 }
 
 pub(crate) async fn finish_removal(

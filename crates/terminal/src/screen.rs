@@ -91,6 +91,7 @@ struct Events(Sender<Event>);
 
 impl EventListener for Events {
     fn send_event(&self, event: Event) {
+        // The listener is gone, so nobody wants the event.
         let _ = self.0.send(event);
     }
 }
@@ -284,6 +285,7 @@ impl Screen {
             } else {
                 'l'
             };
+            // Writing to a String cannot fail.
             let _ = write!(out, "\x1b[?{code}{set}");
         }
         out.push_str(if self.term.mode().contains(TermMode::APP_KEYPAD) {
