@@ -24,7 +24,7 @@ pub(crate) mod entity;
 mod lifecycle;
 mod plugins;
 mod questions;
-mod recovery;
+pub(crate) mod recovery;
 mod screens;
 mod state;
 

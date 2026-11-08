@@ -48,7 +48,7 @@ impl Workspace {
             let work = async {
                 if !resume.is_empty() {
                     database
-                        .call(move |store| store.remember_resume(&resume))
+                        .call(move |store| super::recovery::remember_resume(store, &resume))
                         .await?;
                 }
                 let stops: Vec<_> = cx.update(|cx| {
