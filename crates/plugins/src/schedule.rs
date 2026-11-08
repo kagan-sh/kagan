@@ -64,5 +64,9 @@ fn report(
     message: &str,
     cx: &mut AsyncApp,
 ) -> Option<()> {
-    host.update(cx, |host, _| host.report(plugin, message)).ok()
+    host.update(cx, |host, cx| {
+        host.secrets
+            .note_later(plugin, crate::Level::Warn, message, cx);
+    })
+    .ok()
 }

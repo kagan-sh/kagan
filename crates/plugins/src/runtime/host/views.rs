@@ -1,4 +1,4 @@
-use gpui_kit::{AppContext as _, Context, Entity};
+use gpui_kit::{Context, Entity};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, PluginId};
 
@@ -158,12 +158,6 @@ impl PluginHost {
             .and_then(|active| active.loaded.as_ref())
             .map_or(0, |loaded| loaded.jobs.pending_page_bytes())
     }
-
-    /// Writes a line to the plugin's log: something kagan did with the plugin's request, such as
-    /// refusing a key the window already uses.
-    pub fn report(&self, plugin: &PluginId, message: &str) {
-        let _ = self.secrets.log(plugin, crate::Level::Warn, message);
-    }
 }
 impl PluginHost {
     /// Mounts a declared export beside the default view.
@@ -294,21 +288,9 @@ impl PluginHost {
         if let Some(active) = self.active.get_mut(id) {
             active.fault = Some(error.to_owned());
         }
-        let secrets = self.secrets.clone();
-        let plugin = id.clone();
-        let message = error.to_owned();
         self.unload(id, cx);
-        cx.spawn(async move |_, cx| {
-            if let Err(error) = cx
-                .background_spawn(async move {
-                    secrets.log(&plugin, crate::log::Level::Error, &message)
-                })
-                .await
-            {
-                eprintln!("kg: plugin log: {error}");
-            }
-        })
-        .detach();
+        self.secrets
+            .note_later(id, crate::log::Level::Error, error, cx);
         cx.notify();
     }
 }

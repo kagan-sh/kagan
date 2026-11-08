@@ -299,10 +299,10 @@ pub(in crate::runtime::ops) async fn reload(
         ));
     }
     let result = keep(host, fetched, record.source, grant, &plugins, false, cx).await?;
-    let secrets = host.read_with(cx, |host, _| host.secrets.clone());
-    let id = record.id;
-    cx.background_spawn(async move { secrets.log(&id, crate::Level::Info, "reloaded") })
-        .await?;
+    host.update(cx, |host, cx| {
+        host.secrets
+            .note_later(&record.id, crate::Level::Info, "reloaded", cx);
+    });
     Ok(result)
 }
 

@@ -63,7 +63,7 @@ pub(crate) fn module(
     let id = id.clone();
     let secrets = secrets.clone();
     let held = Arc::new(open_roots(roots, |error| {
-        let _ = secrets.log(&id, crate::log::Level::Error, &error.to_string());
+        secrets.note(&id, crate::log::Level::Error, &error.to_string());
     }));
     let list_roots = Arc::clone(&held);
     module

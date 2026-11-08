@@ -146,6 +146,27 @@ impl Store {
         crate::log(&self.data_dir, id, level, &self.redact(id, message))
     }
 
+    /// Writes a line kagan has to say about the plugin. A line that cannot be written goes to
+    /// stderr, since nothing else can tell the person.
+    pub(crate) fn note(&self, id: &PluginId, level: crate::Level, message: &str) {
+        if let Err(error) = self.log(id, level, message) {
+            eprintln!("kg: plugin log: {error}");
+        }
+    }
+
+    pub(crate) fn note_later(
+        &self,
+        id: &PluginId,
+        level: crate::Level,
+        message: &str,
+        cx: &mut gpui_kit::App,
+    ) {
+        let (store, id, message) = (self.clone(), id.clone(), message.to_owned());
+        cx.background_executor()
+            .spawn(async move { store.note(&id, level, &message) })
+            .detach();
+    }
+
     /// Reads the declared secrets into memory and forgets any kept key the manifest no longer
     /// declares. Returns what could not be read or forgotten.
     pub(crate) fn load(&self, id: &PluginId, declared: &[String]) -> Vec<String> {

@@ -80,18 +80,8 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
                 cx.background_executor()
                     .timer(Duration::from_millis(500))
                     .await;
-                let Ok(marks) = host.update(cx, PluginHost::sample) else {
+                if host.update(cx, PluginHost::sample).is_err() {
                     break;
-                };
-                for (secrets, id, message) in marks {
-                    if let Err(error) = cx
-                        .background_spawn(async move {
-                            secrets.log(&id, crate::log::Level::Warn, &message)
-                        })
-                        .await
-                    {
-                        eprintln!("kg: plugin log: {error}");
-                    }
                 }
             }
         }),
@@ -179,7 +169,10 @@ pub(crate) fn load_status(host: &Entity<PluginHost>, id: &PluginId, cx: &mut Asy
     }
     if let Err(error) = host.update(cx, |host, cx| host.load(id, cx)) {
         let message = error.to_string();
-        host.update(cx, |host, _| host.report(id, &message));
+        host.update(cx, |host, cx| {
+            host.secrets
+                .note_later(id, crate::Level::Warn, &message, cx);
+        });
     }
 }
 
@@ -428,11 +421,8 @@ impl PluginHost {
     }
 }
 impl PluginHost {
-    pub(crate) fn sample(
-        &mut self,
-        cx: &mut Context<Self>,
-    ) -> Vec<(secret::Store, PluginId, String)> {
-        let mut marks = Vec::new();
+    pub(crate) fn sample(&mut self, cx: &mut Context<Self>) {
+        let mut marked = false;
         let mut crashed = Vec::new();
         for (id, active) in &mut self.active {
             let Some(loaded) = &mut active.loaded else {
@@ -449,13 +439,15 @@ impl PluginHost {
                 .watchdog
                 .sample(loaded.runtime.read_metrics(), failed.as_deref())
             {
-                marks.push((self.secrets.clone(), id.clone(), message));
+                self.secrets
+                    .note_later(id, crate::log::Level::Warn, &message, cx);
+                marked = true;
             }
             if loaded.watchdog.error.is_some() {
                 crashed.push(id.clone());
             }
         }
-        if !marks.is_empty() {
+        if marked {
             cx.notify();
         }
         if !crashed.is_empty()
@@ -467,7 +459,6 @@ impl PluginHost {
                 }
             });
         }
-        marks
     }
 
     fn deliver_event(

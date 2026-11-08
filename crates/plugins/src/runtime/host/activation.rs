@@ -268,7 +268,7 @@ async fn load_secrets(
     let id = id.clone();
     cx.background_spawn(async move {
         for problem in store.load(&id, &declared) {
-            let _ = store.log(&id, Level::Warn, &problem);
+            store.note(&id, Level::Warn, &problem);
         }
     })
     .await;
@@ -463,7 +463,8 @@ impl PluginHost {
                 Err(error) => {
                     processes.update(cx, |processes, _| processes.close());
                     let _ = window.update(cx, |_, window, _| window.remove_window());
-                    let _ = self.secrets.log(id, Level::Error, &error.to_string());
+                    self.secrets
+                        .note_later(id, Level::Error, &error.to_string(), cx);
                     if let Some(strip) = crate::PluginStrip::global(cx) {
                         strip.update(cx, |strip, cx| strip.clear(id, cx));
                     }
