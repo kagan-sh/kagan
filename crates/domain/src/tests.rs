@@ -5,7 +5,6 @@ use crate::{
     EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,
     PluginId, PluginOp, ProjectBranch, Thread, ThreadId, ThreadOp, ThreadStatus, Timestamp,
     TurnOutcome, UpdateState, Visibility, WaitOutcome, branch_slug, format_notes, invalid_json,
-    parse_notes,
 };
 use serde_json::{Value, json};
 
@@ -16,6 +15,36 @@ where
     assert_eq!(&serde_json::to_value(value).unwrap(), wire);
     assert_eq!(&serde_json::from_value::<T>(wire.clone()).unwrap(), value);
 }
+
+// Every `type` tag an old log may hold.
+const TYPES: [&str; 26] = [
+    "created",
+    "started",
+    "exited",
+    "stopped",
+    "idle",
+    "waiting",
+    "failed",
+    "archived",
+    "unarchived",
+    "deleted",
+    "turn.started",
+    "turn.ended",
+    "message",
+    "tool",
+    "tool.started",
+    "tool.ended",
+    "restore.failed",
+    "snapshot.failed",
+    "notice",
+    "answered",
+    "file.changed",
+    "file.read",
+    "file.predicted",
+    "opened",
+    "rewound",
+    "reconnecting",
+];
 
 #[test]
 fn run_op() {
@@ -828,19 +857,19 @@ fn event_type_names_match_the_wire_tag() {
             text: String::new(),
         },
     ];
-    for (kind, name) in kinds.iter().zip(EventKind::TYPES) {
+    for (kind, name) in kinds.iter().zip(TYPES) {
         assert_eq!(kind.type_name(), name);
         assert_eq!(serde_json::to_value(kind).unwrap()["type"], name);
     }
-    assert_eq!(kinds.len(), EventKind::TYPES.len());
+    assert_eq!(kinds.len(), TYPES.len());
 }
 
 #[test]
 fn live_event_types_are_all_known_types() {
     for live in EventKind::LIVE_TYPES {
-        assert!(EventKind::TYPES.contains(&live), "{live}");
+        assert!(TYPES.contains(&live), "{live}");
     }
-    assert!(EventKind::LIVE_TYPES.len() < EventKind::TYPES.len());
+    assert!(EventKind::LIVE_TYPES.len() < TYPES.len());
 }
 
 #[test]
@@ -1301,7 +1330,7 @@ fn update_state_fields_are_camel_case_on_the_wire() {
 }
 
 #[test]
-fn notes_round_trip() {
+fn notes_format_as_one_message() {
     let notes = vec![
         DiffNote {
             scope: DiffScope::Commit,
@@ -1331,7 +1360,13 @@ fn notes_round_trip() {
             text: "On the branch.".into(),
         },
     ];
-    assert_eq!(parse_notes(&format_notes(&notes)).as_ref(), Some(&notes));
+    assert_eq!(
+        format_notes(&notes),
+        "Review notes\n\nscope: commit abc123\nfile: src/a.rs\nside: new\nlines: 12-14\n  \
+         Please rename this.\n  It is the public name.\n\nscope: uncommitted\nfile: src/b.rs\n\
+         side: new\nlines: 3\n  Why?\n\nscope: branch\nfile: src/c.rs\nside: old\nlines: 1-2\n  \
+         On the branch.\n"
+    );
 }
 
 #[test]

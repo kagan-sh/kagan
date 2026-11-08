@@ -80,13 +80,6 @@ pub enum SplitProgramError {
     Empty,
 }
 
-/// Keeps the message for callers that collect program errors as strings.
-impl From<SplitProgramError> for String {
-    fn from(error: SplitProgramError) -> Self {
-        error.to_string()
-    }
-}
-
 /// The program named by `line`: words split on spaces, where single or double quotes keep spaces
 /// together. A backslash is an ordinary character, so Windows paths work unquoted.
 ///
@@ -167,14 +160,5 @@ mod tests {
             prop_assert_eq!(name, words[0].clone());
             prop_assert_eq!(args, words[1..].to_vec());
         }
-    }
-
-    #[test]
-    fn the_refusal_keeps_the_message_callers_print() {
-        assert_eq!(
-            String::from(SplitProgramError::UnfinishedQuote),
-            "program has an unfinished quote"
-        );
-        assert_eq!(String::from(SplitProgramError::Empty), "program is empty");
     }
 }
