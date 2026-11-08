@@ -1,8 +1,8 @@
 use gpui_kit::{App, Context, Window};
 use kg_domain::{SurfaceItem, SurfaceOp};
 
-use super::mount::{body_id, matching_slot, painted};
-use super::{ClosePage, panels};
+use super::mount::{matching_slot, painted};
+use super::{ClosePage, body_id, panels};
 use crate::kagan::Kagan;
 
 impl Kagan {

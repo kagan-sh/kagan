@@ -324,11 +324,9 @@ pub(super) fn footer(
         )
 }
 
-// The same test as the Archived list, so the footer icon never opens an empty list.
+// Same test as the Archived list, so the footer never opens an empty list.
 pub(in crate::kagan) fn archived_footer(records: &[Thread]) -> ArchivedFooter {
-    let any = records.iter().any(|thread| {
-        thread.visibility == kg_domain::Visibility::Visible && thread.archived_at.is_some()
-    });
+    let any = records.iter().any(crate::kagan::archived::in_archived_list);
     if any {
         ArchivedFooter::Shown
     } else {

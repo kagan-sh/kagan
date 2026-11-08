@@ -269,13 +269,14 @@ fn window_context(kagan: &Kagan, cx: &App) -> String {
         CONTEXT.to_owned()
     };
     if kagan.shown_thread(cx).is_some() {
-        context.push_str(" thread=true");
+        context = format!("{context} {}=true", crate::plugins::THREAD);
     }
     if kagan.shown_project(cx).is_some() {
-        context.push_str(" project=true");
+        context = format!("{context} {}=true", crate::plugins::PROJECT);
     }
     if kagan.screen.drawn(screen::Side::Right) {
-        context.push_str(" RightOverlay");
+        context.push(' ');
+        context.push_str(layout::RIGHT_OVERLAY);
     }
     context
 }

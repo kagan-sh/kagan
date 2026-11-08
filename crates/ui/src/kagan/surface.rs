@@ -190,6 +190,10 @@ fn find_declared(plugin: &PluginId, id: &str, cx: &App) -> Option<Declared> {
         .find(|item| item.plugin == *plugin && item.id == id)
 }
 
+pub(super) fn body_id(id: &str) -> String {
+    format!("{id}-body")
+}
+
 mod commit;
 mod focus;
 mod mount;

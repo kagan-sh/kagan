@@ -82,6 +82,10 @@ pub(super) fn form_card(
     body(Question::thread(asked), form, kagan, window, cx)
 }
 
+pub(super) fn answer_focus(question: &str, option: &str) -> String {
+    format!("answer-focus-{question}-{option}")
+}
+
 fn body(
     question: Question,
     form: Option<AnyElement>,
@@ -94,7 +98,7 @@ fn body(
         let focus = super::tab_stop(
             window,
             cx,
-            ElementId::Name(format!("answer-focus-{}-{}", question.id.0, option.id).into()),
+            ElementId::Name(answer_focus(&question.id.0, &option.id).into()),
         );
         let answer_now: Rc<dyn Fn(&mut App)> =
             match (question.asked.clone(), question.thread.clone()) {

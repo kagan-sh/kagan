@@ -16,6 +16,10 @@ pub(super) use tab::Tab;
 pub(super) const WIDTH: f32 = 320.;
 pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
 
+pub(super) fn header_focus(id: &str) -> String {
+    format!("{id}-header-focus")
+}
+
 #[derive(Clone, PartialEq, Eq, Action)]
 #[action(namespace = right, no_json)]
 pub(super) struct ToggleDetails {

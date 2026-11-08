@@ -136,7 +136,7 @@ impl Bindings {
             let binding = match crate::kagan::bind(
                 key,
                 RunCommand::new(plugin.clone(), command.clone()),
-                binding_context(*when),
+                &binding_context(*when),
                 cx,
             ) {
                 Ok(binding) => binding,
@@ -173,10 +173,13 @@ impl Bindings {
     }
 }
 
-fn binding_context(when: CommandWhen) -> &'static str {
+pub(crate) const THREAD: &str = "thread";
+pub(crate) const PROJECT: &str = "project";
+
+fn binding_context(when: CommandWhen) -> String {
     match when {
-        CommandWhen::Always => CONTEXT,
-        CommandWhen::Thread => "Kagan && thread == true",
-        CommandWhen::Project => "Kagan && project == true",
+        CommandWhen::Always => CONTEXT.to_owned(),
+        CommandWhen::Thread => format!("{CONTEXT} && {THREAD} == true"),
+        CommandWhen::Project => format!("{CONTEXT} && {PROJECT} == true"),
     }
 }

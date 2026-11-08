@@ -172,8 +172,12 @@ impl Kagan {
             Some("archived".to_owned())
         } else {
             self.shown_thread(cx)
-                .map(|id| format!("thread-{id}"))
-                .or_else(|| sidebar.chosen().map(|project| format!("project-{project}")))
+                .map(|id| format!("{}{id}", super::sidebar::THREAD_ROW))
+                .or_else(|| {
+                    sidebar
+                        .chosen()
+                        .map(|project| format!("{}{project}", super::sidebar::PROJECT_ROW))
+                })
         };
         sidebar.row_or_first(candidate)
     }

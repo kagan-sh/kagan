@@ -162,7 +162,10 @@ fn scroll_port(
 }
 
 pub(super) fn thread_scroll_index(row_order: &[String], id: &str) -> Option<usize> {
-    if !(id.starts_with("thread-") || id.starts_with("project-") || id == "archived") {
+    if !(id.starts_with(super::THREAD_ROW)
+        || id.starts_with(super::PROJECT_ROW)
+        || id == "archived")
+    {
         return None;
     }
     row_order.iter().position(|row| row == id)

@@ -23,6 +23,10 @@ use crate::ui_registry::Facts;
 
 actions!(archived, [OpenArchivedRow]);
 
+pub(in crate::kagan) fn in_archived_list(thread: &Thread) -> bool {
+    thread.visibility == Visibility::Visible && thread.archived_at.is_some()
+}
+
 pub(super) enum List {
     Loading,
     Listed(Vec<Thread>),
@@ -69,9 +73,7 @@ impl Kagan {
             let Ok(OpResult::Threads(mut threads)) = listed.await else {
                 return;
             };
-            threads.retain(|thread| {
-                thread.visibility == Visibility::Visible && thread.archived_at.is_some()
-            });
+            threads.retain(in_archived_list);
             threads.sort_by(newest_first);
             _ = this.update(cx, |this, cx| {
                 if !this.shows_archived() {

@@ -16,7 +16,7 @@ use super::tabs::{self, CloseTab};
 use super::{ActivatePanelHeader, BUILT_IN, Fill, Tab, ToggleFill, plugin_body};
 use crate::components::fills_panel;
 use crate::kagan::controls::{control, menu_popup};
-use crate::kagan::surface::Slot;
+use crate::kagan::surface::{Slot, body_id};
 use crate::kagan::{Kagan, tab_stop};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -42,7 +42,7 @@ pub(super) fn tab_body(
     if let Some(body) = body {
         return Some(
             div()
-                .id(ElementId::Name(format!("{id}-body").into()))
+                .id(ElementId::Name(body_id(&id).into()))
                 .ui_container()
                 .p(px(space(SpaceStep::Md, cx)))
                 .child(body)
@@ -53,7 +53,7 @@ pub(super) fn tab_body(
     let page = slot.web.is_some() || slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
     Some(
         div()
-            .id(ElementId::Name(format!("{}-body", slot.id).into()))
+            .id(ElementId::Name(body_id(&slot.id).into()))
             .ui_container()
             .size_full()
             .when(!page, gpui_kit::Styled::p_3)
@@ -138,11 +138,7 @@ fn built_in_tab(
     cx: &mut Context<Kagan>,
 ) -> AnyElement {
     let id = tab.id().into_owned();
-    let focus = tab_stop(
-        window,
-        cx,
-        ElementId::Name(format!("{id}-header-focus").into()),
-    );
+    let focus = tab_stop(window, cx, ElementId::Name(super::header_focus(&id).into()));
     let active = selected == Some(tab);
     let header = format!("{id}-header");
     let take = focus.clone();

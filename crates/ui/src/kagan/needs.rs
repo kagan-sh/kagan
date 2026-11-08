@@ -157,13 +157,13 @@ impl Kagan {
         self.waiting(cx)
             .filter(|(id, _)| !self.holds(id))
             .find_map(|(id, options)| {
-                opening_option(options).map(|option| format!("answer-focus-{}-{}", id.0, option.id))
+                opening_option(options).map(|option| question::answer_focus(&id.0, &option.id))
             })
             .unwrap_or_else(|| {
                 if self.waiting_count(cx) == 0 && self.thread_visible(cx) {
-                    "changes-header-focus".into()
+                    super::right::header_focus("changes")
                 } else {
-                    "needs-you-header-focus".into()
+                    super::right::header_focus("needs-you")
                 }
             })
     }

@@ -10,7 +10,7 @@ use kg_plugins::{MountError, PluginHost};
 use serde_json::Value;
 
 use super::right::plugin_body;
-use super::{ClosePage, Declared, Expect, Focus, Slot};
+use super::{ClosePage, Declared, Expect, Focus, Slot, body_id};
 use crate::kagan::Kagan;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::{Facts, Located, locate};
@@ -93,10 +93,6 @@ pub(super) fn focus_for(placement: SurfacePlacement, open: bool) -> Focus {
         (SurfacePlacement::Left, _) => Focus::Tool,
         (SurfacePlacement::Right, _) => Focus::Right,
     }
-}
-
-pub(super) fn body_id(id: &str) -> String {
-    format!("{id}-body")
 }
 
 pub(super) fn expect_of(

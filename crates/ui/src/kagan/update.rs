@@ -201,12 +201,13 @@ fn ask(window: &mut Window, cx: &mut App) {
         _ => return,
     };
     let running = Workspace::global(cx).read(cx).running_programs(cx);
-    let description = match running {
-        0 => "kagan quits, installs it and opens again.".to_owned(),
-        1 => "kagan quits, installs it and opens again. 1 running program will stop and resume when kagan opens again.".to_owned(),
-        _ => format!(
-            "kagan quits, installs it and opens again. {running} running programs will stop and resume when kagan opens again."
-        ),
+    let description = if running == 0 {
+        "kagan quits, installs it and opens again.".to_owned()
+    } else {
+        format!(
+            "kagan quits, installs it and opens again. {}",
+            super::quit::consequence(running)
+        )
     };
     window.open_alert_dialog(cx, move |dialog, _, _| {
         dialog
