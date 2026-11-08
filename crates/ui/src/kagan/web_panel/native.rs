@@ -78,7 +78,7 @@ pub(super) fn panel_body(
     }
 }
 
-pub(super) fn deliver(
+pub(crate) fn deliver(
     plugin: &PluginId,
     panel: &str,
     message: &str,
@@ -115,13 +115,13 @@ pub(super) fn deliver(
     })
 }
 
-pub(super) fn clear(cx: &mut App) {
+pub(crate) fn clear(cx: &mut App) {
     if cx.has_global::<Pages>() {
         cx.default_global::<Pages>().pages.clear();
     }
 }
 
-pub(super) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
+pub(crate) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
     if !cx.has_global::<Pages>() {
         return;
     }
@@ -139,7 +139,7 @@ pub(super) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
     }
 }
 
-pub(super) fn forget(slot: &str, cx: &mut App) {
+pub(crate) fn forget(slot: &str, cx: &mut App) {
     if let Some(index) = find(cx, slot) {
         let page = cx.default_global::<Pages>().pages.remove(index);
         page.ipc.close();
@@ -148,7 +148,7 @@ pub(super) fn forget(slot: &str, cx: &mut App) {
     }
 }
 
-pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
+pub(crate) fn sync(kagan: &Kagan, cx: &mut App) {
     if !cx.has_global::<Pages>() {
         return;
     }
@@ -215,7 +215,7 @@ pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
 }
 
 // Pushes the live Workbench theme to every open page, even when the window is not drawing.
-pub(super) fn repaint(cx: &mut App) {
+pub(crate) fn repaint(cx: &mut App) {
     if cx.has_global::<Pages>() {
         let css = web::theme_css(cx);
         let views: Vec<_> = cx

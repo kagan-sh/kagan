@@ -7,7 +7,6 @@ use crate::kagan::{CloseTerminal, Kagan, NewTerminal, NextTerminal, PreviousTerm
 use crate::tests::kagan::{
     click, focused_of, open, present, run_shell, selected_of, shows, wait_for_shell, wait_until,
 };
-#[cfg(desktop)]
 use crate::tests::plugin::panels::disabled_of;
 
 fn with_sh(cx: &mut TestAppContext) {
@@ -164,7 +163,6 @@ fn the_browser_opens_from_the_plus_and_closes(cx: &mut TestAppContext) {
     assert_eq!(focused_of(cx, window, "right-tab-add"), Some(true));
 }
 
-#[cfg(desktop)]
 #[gpui_kit::test]
 fn the_browser_tab_asks_for_an_address(cx: &mut TestAppContext) {
     let (_, window, _data) = open(cx);
@@ -178,7 +176,6 @@ fn the_browser_tab_asks_for_an_address(cx: &mut TestAppContext) {
     assert_eq!(disabled_of(cx, window, "browser-external"), Some(true));
 }
 
-#[cfg(desktop)]
 #[gpui_kit::test]
 fn the_browser_bar_goes_back_forward_reloads_and_opens_outside(cx: &mut TestAppContext) {
     let (_, window, _data) = open(cx);

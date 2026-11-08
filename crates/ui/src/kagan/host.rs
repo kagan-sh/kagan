@@ -162,7 +162,7 @@ impl Kagan {
                 message,
                 reply,
             } => {
-                let _ = reply.try_send(web_panel::post(plugin, panel, message, cx));
+                let _ = reply.try_send(web_panel::deliver(plugin, panel, message, cx));
             }
         }
     }

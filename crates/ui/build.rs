@@ -3,12 +3,6 @@ use std::process::Command;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=build.rs");
-    // One name, so a cfg of these three systems stays on one line.
-    println!("cargo:rustc-check-cfg=cfg(desktop)");
-    let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if matches!(os.as_str(), "linux" | "macos" | "windows") {
-        println!("cargo:rustc-cfg=desktop");
-    }
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     let root = manifest.join("../..");
     // A source tarball unpacked inside another repository must not take that repository's commit.

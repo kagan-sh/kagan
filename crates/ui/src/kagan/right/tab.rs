@@ -49,9 +49,7 @@ impl Tab {
         cx: &mut Context<Kagan>,
     ) {
         let focus = match self {
-            Self::Browser if cfg!(desktop) => {
-                return kagan.browser.focus(window, cx);
-            }
+            Self::Browser => return kagan.browser.focus(window, cx),
             Self::Terminal(number) => kagan.tabs.view(*number).map(|view| view.focus_handle(cx)),
             Self::Preview => kagan
                 .tabs
@@ -63,7 +61,7 @@ impl Tab {
                 .iter()
                 .find(|slot| slot.id == *id)
                 .map(|slot| slot.focus.clone()),
-            Self::Questions | Self::Changes | Self::Details | Self::Browser => None,
+            Self::Questions | Self::Changes | Self::Details => None,
         };
         window.focus(&focus.unwrap_or_else(|| kagan.right_add_focus.clone()), cx);
     }

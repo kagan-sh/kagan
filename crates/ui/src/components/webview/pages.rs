@@ -1,10 +1,7 @@
 use gpui_kit::App;
-#[cfg(desktop)]
 use gpui_kit::{Entity, WeakEntity};
-#[cfg(desktop)]
 use gpui_shell::ScriptView;
 
-#[cfg(desktop)]
 use super::Held;
 use super::Pages;
 
@@ -14,7 +11,6 @@ pub(super) fn write(cx: &mut App, index: usize, url: &str, note: Option<String>)
     slot.note = note;
 }
 
-#[cfg(desktop)]
 pub(super) fn write_page(
     cx: &mut App,
     index: usize,
@@ -27,7 +23,6 @@ pub(super) fn write_page(
     slot.page = Some(page);
 }
 
-#[cfg(desktop)]
 pub(super) fn held(
     owner: WeakEntity<ScriptView>,
     id: &str,
@@ -48,7 +43,6 @@ pub(super) fn held(
     }
 }
 
-#[cfg(desktop)]
 pub(super) fn save(cx: &mut App, index: Option<usize>, slot: Held) {
     let pages = &mut cx.default_global::<Pages>().pages;
     if let Some(index) = index {
@@ -95,7 +89,6 @@ pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
             })
             .collect()
     };
-    #[cfg(desktop)]
     {
         let views: Vec<_> = {
             let pages = &cx.default_global::<Pages>().pages;
@@ -130,7 +123,6 @@ pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
 
 #[cfg(test)]
 pub(crate) fn native_shown(cx: &App, id: &str) -> Option<bool> {
-    #[cfg(desktop)]
     {
         cx.try_global::<Pages>().and_then(|pages| {
             pages
@@ -139,10 +131,5 @@ pub(crate) fn native_shown(cx: &App, id: &str) -> Option<bool> {
                 .find(|page| page.id == id)
                 .and_then(|page| page.page.as_ref().map(|view| view.read(cx).visible(cx)))
         })
-    }
-    #[cfg(not(desktop))]
-    {
-        let _ = (cx, id);
-        None
     }
 }

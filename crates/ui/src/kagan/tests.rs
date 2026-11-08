@@ -13,7 +13,9 @@ pub(crate) use super::tabs::{
 };
 pub(crate) use super::threads::description;
 #[cfg(target_os = "macos")]
-pub(crate) use super::web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
+pub(crate) use super::web_panel::{
+    deliver as post, forget, inject, mark_stale, queue_page, testing_page,
+};
 pub(crate) use super::window::{open, window_options};
 
 impl Kagan {
