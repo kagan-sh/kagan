@@ -298,10 +298,13 @@ pub(crate) async fn tools(
     });
     let catalog = catalog(this, Some(project_id), cx).await?;
     let instruct = thread.read_with(cx, |thread, _| thread.instruct.clone());
-    let note = match instruct.as_deref() {
-        Some(extra) if !extra.is_empty() => crate::thread::note_with(&id.0, extra),
-        _ => crate::thread::note(&id.0),
-    };
+    let data_dir = this
+        .update(cx, |workspace, _| workspace.data_dir.clone())
+        .map_err(closed)?;
+    let instructions = cx
+        .background_spawn(async move { crate::thread::read_instructions(&data_dir) })
+        .await;
+    let note = crate::thread::note_with(&id.0, &instructions, instruct.as_deref().unwrap_or(""));
     let result =
         crate::dispatch::forward(this, crate::PluginRequest::Tools { thread_id: id }, cx).await?;
     let OpResult::Tools {

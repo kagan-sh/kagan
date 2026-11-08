@@ -367,6 +367,17 @@ if [ "$pixels" != skip ]; then
   paint present
 fi
 
+# A host that does not exist never commits, so the page has no URL. Reading it
+# used to panic while drawing the address and abort the app.
+if ! KG_THREAD_ID=$thread "$binary" browser goto 'https://kagan-missing.invalid/' \
+  >"$tmp/missing.out" 2>"$tmp/missing.err"; then
+  alive || fail "a missing website crashed kagan"
+  fail "a missing website was not opened: $(cat "$tmp/missing.err" 2>/dev/null || true)"
+fi
+alive || fail "a missing website crashed kagan"
+"$binary" ui snapshot --json >"$snapshot" || fail "the window did not answer after a missing website"
+grep -Fq 'right-tab-browser' "$snapshot" || fail "a missing website closed the Browser"
+
 "$binary" ui click right-tab-close-browser >/dev/null || fail "could not close the Browser"
 alive || fail "the app exited when the Browser closed"
 

@@ -1,6 +1,6 @@
 ---
 name: kg-threads
-description: "Create or operate a kagan thread: when work stays here, how to start one, and how to paste, wait, stop, ask, and read it."
+description: "Create or operate a kagan thread. Use this when you would spawn a subagent, use Task or Agent, or delegate work. Says when work stays here, and how to start, paste, wait, stop, ask, and read a thread."
 ---
 
 # Threads
@@ -9,7 +9,7 @@ description: "Create or operate a kagan thread: when work stays here, how to sta
 
 Read `kg guide threads` for the flag list and for what `waiting`, `idle`, and `busy` mean. Read `kg thread <command> --help` for the live flags. This skill says when a job is another thread, and the commands that do it. Pass `--json` when the output decides the next command. A nonzero exit is a failure.
 
-Stay in this thread unless the person asked for another one.
+A helper, reviewer, or parallel worker is a kagan thread. Task, Agent, and this program's subagent tool are the wrong tool. One task stays in this thread.
 
 ## When the job stays here
 
@@ -19,7 +19,7 @@ Keep the work here when it is one task, the person is talking to you, or you are
 
 ## When it becomes another thread
 
-Start another thread when the person asked for one. A thread is one program in one folder. The child does not inherit this conversation. Give it a prompt that names the outcome, the constraints, what to check, and what to report back.
+Start another thread when the work is a separate helper, reviewer, or parallel worker, or when the person asked for one. A thread is one program in one folder. The child does not inherit this conversation. Give it a prompt that names the outcome, the constraints, what to check, and what to report back.
 
 A success does not notify the parent. A failed or interrupted child appends a notice on its parent. A stop the person asked for stays quiet.
 
@@ -55,7 +55,7 @@ kg thread paste <id> --file <path>
 
 ## Parent and lifetime
 
-`--parent-thread-id <id>` nests the new thread under that thread in the sidebar. It changes nothing about how long the child lives. From this thread, pass this thread's id when the person wants the child nested here. The parent has to be unarchived and in the same project.
+`--parent-thread-id <id>` nests the new thread under that thread in the sidebar. It changes nothing about how long the child lives. From this thread, pass `KG_THREAD_ID`. The parent has to be unarchived and in the same project.
 
 `--lifecycle-owner-thread-id <id>` is the thread the new one lives and dies with. Archiving or deleting the owner does the same to the child. Set it only when you create the thread. Stop does not follow the owner. Archive keeps history. Delete removes the thread and its history, and waits for the person. The owner has the same limits as a parent: unarchived, and in this project. The parent and the owner can be different threads.
 

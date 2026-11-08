@@ -100,7 +100,7 @@ fn general(agent: bool, notify: bool) -> Group {
             row(
                 "agent-integration",
                 "Agent integration",
-                "Off drops kagan’s tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, and --session-id or --resume, so Start again does not resume the conversation), codex (-c mcp_servers.kagan.*, and resume <id>), and cursor-agent and agent (--plugin-dir, and --new-session-id or --resume). Every program still gets the KG_ variables and PATH with kg’s folder first.",
+                "Off drops kagan’s tools from claude (--mcp-config, --plugin-dir, --append-system-prompt-file, --disallowed-tools, and --session-id or --resume, so Start again does not resume the conversation), codex (--disable multi_agent, --disable multi_agent_v2, -c mcp_servers.kagan.*, and resume <id>), cursor-agent and agent (--plugin-dir, the workspace rule, and --new-session-id or --resume), and pi (--skill and --append-system-prompt). Every program still gets the KG_ variables and PATH with kg’s folder first.",
                 switch(
                     "agent-integration",
                     "Agent integration",

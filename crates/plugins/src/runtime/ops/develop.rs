@@ -25,9 +25,10 @@ pub(in crate::runtime::ops) async fn develop(
                 .await
         }
         PluginOp::Check { path } => {
-            let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
+            let (data_dir, components) =
+                host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
             cx.background_spawn(async move {
-                let warnings = crate::development::check(&path, &data_dir)?;
+                let warnings = crate::development::check(&path, &data_dir, &components)?;
                 Ok(if warnings.is_empty() {
                     OpResult::Done
                 } else {
@@ -37,8 +38,9 @@ pub(in crate::runtime::ops) async fn develop(
             .await
         }
         PluginOp::Share { path } => {
-            let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-            cx.background_spawn(async move { crate::share::share(&path, &data_dir) })
+            let (data_dir, components) =
+                host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
+            cx.background_spawn(async move { crate::share::share(&path, &data_dir, &components) })
                 .await
         }
         PluginOp::Types { path } => {

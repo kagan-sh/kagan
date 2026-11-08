@@ -170,7 +170,12 @@ mod tests {
         assert_eq!(examples.len(), 10);
         for example in &examples {
             let data = tempfile::tempdir().unwrap();
-            crate::development::check(&example.root, data.path()).unwrap();
+            crate::development::check(
+                &example.root,
+                data.path(),
+                &gpui_shell::components::components().unwrap(),
+            )
+            .unwrap();
             assert!(!example.kinds.is_empty(), "{}", example.name);
         }
         let ids: Vec<_> = super::capabilities()

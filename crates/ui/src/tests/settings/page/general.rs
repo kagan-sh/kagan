@@ -70,6 +70,12 @@ fn general_describes_what_integration_still_sets(cx: &mut TestAppContext) {
     );
     assert!(note.contains("Off drops kagan’s tools"), "{note}");
     assert!(
+        note.contains("--disallowed-tools")
+            && note.contains("--disable multi_agent")
+            && note.contains("--append-system-prompt"),
+        "{note}"
+    );
+    assert!(
         note.contains("KG_ variables") && note.contains("PATH"),
         "{note}"
     );

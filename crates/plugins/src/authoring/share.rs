@@ -8,8 +8,12 @@ use crate::{Result, discover};
 
 /// Checks a plugin that is committed and pushed, and returns its index entry and the line a
 /// teammate runs. The entry pins the commit that was checked.
-pub(crate) fn share(path: &Path, data_dir: &Path) -> Result<OpResult> {
-    crate::development::check(path, data_dir)?;
+pub(crate) fn share(
+    path: &Path,
+    data_dir: &Path,
+    components: &gpui_shell::FrozenComponentRegistry,
+) -> Result<OpResult> {
+    crate::development::check(path, data_dir, components)?;
     let manifest = discover(path, data_dir)?.manifest;
     let (_keep, never) = async_channel::bounded::<()>(1);
     let run = |args: &[&str]| git(Some(path), args.iter().map(OsStr::new), &never);

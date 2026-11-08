@@ -6,13 +6,17 @@ use serde_json::json;
 
 use crate::host::database::Result;
 
-use super::{Known, introduction, note_with, toml};
+use super::{Known, cursor_rule, note_with, toml};
+
+const CURSOR_RULE: &str = ".cursor/rules/kagan.mdc";
 
 pub(super) struct AgentFiles<'a> {
     pub(super) agent: &'a Path,
     pub(super) id: &'a str,
+    pub(super) folder: &'a Path,
     pub(super) cli: &'a Path,
     pub(super) socket: Option<&'a OsStr>,
+    pub(super) instructions: &'a str,
     pub(super) extra: &'a str,
     pub(super) skills_root: &'a Path,
 }
@@ -25,22 +29,37 @@ pub(super) async fn write_agent_files(
     let AgentFiles {
         agent,
         id,
+        folder,
         cli,
         socket,
+        instructions,
         extra,
         skills_root,
     } = files;
     match known {
-        Known::Claude => write_files(claude_files(agent, id, cli, socket, extra), cx).await,
+        Known::Claude => {
+            write_files(
+                claude_files(agent, id, cli, socket, instructions, extra),
+                cx,
+            )
+            .await
+        }
         Known::Cursor => {
             let dir = cursor_dir(agent, id);
-            write_files(cursor_files(&dir, extra), cx).await?;
+            let rule = cursor_rule(instructions, extra);
+            write_files(cursor_files(&dir, &rule), cx).await?;
             let skills = skills_root.to_owned();
-            cx.background_spawn(async move { link_cursor_skills(&dir, &skills) })
-                .await?;
+            let folder = folder.to_owned();
+            cx.background_spawn(async move {
+                write_workspace_rule(&folder, &rule)?;
+                exclude_cursor_rule(&folder)?;
+                link_cursor_skills(&dir, &skills)
+            })
+            .await?;
             Ok(())
         }
-        Known::Codex | Known::Kimi | Known::OpenCode | Known::Pi => Ok(()),
+        Known::Pi => write_files(pi_files(agent, id, instructions, extra), cx).await,
+        Known::Codex | Known::Kimi | Known::OpenCode => Ok(()),
     }
 }
 
@@ -67,18 +86,31 @@ pub(super) fn flags(
                 OsString::from("--plugin-dir"),
                 plugin.to_path_buf().into_os_string(),
                 OsString::from("--append-system-prompt-file"),
-                thread.join("note.txt").into_os_string(),
+                note_path(agent, id).into_os_string(),
+                OsString::from("--disallowed-tools"),
+                OsString::from("Task,Agent"),
             ]
         }
         Known::Cursor => vec![
             OsString::from("--plugin-dir"),
             cursor_dir(agent, id).into_os_string(),
         ],
-        Known::Codex => codex_overrides(id, cli, socket),
+        Known::Codex => {
+            let mut flags = vec![
+                OsString::from("--disable"),
+                OsString::from("multi_agent"),
+                OsString::from("--disable"),
+                OsString::from("multi_agent_v2"),
+            ];
+            flags.extend(codex_overrides(id, cli, socket));
+            flags
+        }
         Known::Kimi => kimi_skills(skills_root, folder),
         Known::Pi => vec![
             OsString::from("--skill"),
             skills_root.to_owned().into_os_string(),
+            OsString::from("--append-system-prompt"),
+            note_path(agent, id).into_os_string(),
         ],
         Known::OpenCode => Vec::new(),
     }
@@ -143,23 +175,54 @@ pub(super) fn environment(
     }
     env
 }
-fn cursor_files(dir: &Path, extra: &str) -> Vec<(PathBuf, String)> {
-    let mut body = format!(
-        "---\ndescription: This thread runs inside kagan\nalwaysApply: true\n---\n\n{}\n\nThis thread's id is the environment variable KG_THREAD_ID.\n",
-        introduction()
-    );
-    if !extra.is_empty() {
-        body.push('\n');
-        body.push_str(extra);
-        body.push('\n');
-    }
+fn cursor_files(dir: &Path, rule: &str) -> Vec<(PathBuf, String)> {
     vec![
         (
             dir.join(".cursor-plugin").join("plugin.json"),
             "{\"name\": \"kagan\"}\n".into(),
         ),
-        (dir.join("rules").join("kagan.mdc"), body),
+        (dir.join("rules").join("kagan.mdc"), rule.to_owned()),
     ]
+}
+
+fn write_workspace_rule(folder: &Path, rule: &str) -> std::io::Result<()> {
+    let path = folder.join(CURSOR_RULE);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, rule)
+}
+
+fn exclude_cursor_rule(folder: &Path) -> std::io::Result<()> {
+    let _turn = LINKS
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(exclude) = git_exclude(folder) else {
+        return Ok(());
+    };
+    if let Some(parent) = exclude.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let text = match std::fs::read_to_string(&exclude) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error),
+    };
+    if text.lines().any(|line| line.trim() == CURSOR_RULE) {
+        return Ok(());
+    }
+    let mut next = text;
+    if !next.is_empty() && !next.ends_with('\n') {
+        next.push('\n');
+    }
+    next.push_str(CURSOR_RULE);
+    next.push('\n');
+    std::fs::write(exclude, next)
+}
+
+fn note_path(agent: &Path, id: &str) -> PathBuf {
+    agent.join("threads").join(id).join("note.txt")
 }
 
 fn link_cursor_skills(dir: &Path, skills: &Path) -> std::io::Result<()> {
@@ -410,13 +473,20 @@ fn claude_files(
     id: &str,
     cli: &Path,
     socket: Option<&OsStr>,
+    instructions: &str,
     extra: &str,
 ) -> Vec<(PathBuf, String)> {
-    let thread = agent.join("threads").join(id);
     vec![
-        (thread.join("mcp.json"), mcp_config(id, cli, socket)),
-        (thread.join("note.txt"), note_with(id, extra)),
+        (
+            agent.join("threads").join(id).join("mcp.json"),
+            mcp_config(id, cli, socket),
+        ),
+        (note_path(agent, id), note_with(id, instructions, extra)),
     ]
+}
+
+fn pi_files(agent: &Path, id: &str, instructions: &str, extra: &str) -> Vec<(PathBuf, String)> {
+    vec![(note_path(agent, id), note_with(id, instructions, extra))]
 }
 
 async fn write_files(files: Vec<(PathBuf, String)>, cx: &mut AsyncApp) -> Result<()> {
@@ -464,291 +534,5 @@ fn codex_overrides(id: &str, cli: &Path, socket: Option<&OsStr>) -> Vec<OsString
 }
 
 #[cfg(test)]
-mod tests {
-    use std::path::{Path, PathBuf};
-
-    use super::{git_exclude, hide_from_git, link_root};
-
-    fn skill(dir: &Path, name: &str) -> PathBuf {
-        let path = dir.join(name);
-        std::fs::create_dir_all(&path).unwrap();
-        dunce::canonicalize(path).unwrap()
-    }
-
-    fn folder(dir: &Path, name: &str) -> PathBuf {
-        let path = dir.join(name);
-        std::fs::create_dir_all(path.join(".git/info")).unwrap();
-        path
-    }
-
-    fn names(names: &[&str]) -> Vec<String> {
-        names.iter().map(|name| (*name).to_owned()).collect()
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn link_root_links_the_skill_and_hides_only_that_link_from_git() {
-        let dir = tempfile::tempdir().unwrap();
-        let _source = skill(dir.path(), "source");
-        let work = folder(dir.path(), "work");
-        let root = ".agents/skills";
-
-        let owned =
-            link_root(&work, dir.path(), dir.path(), &names(&["kg-threads"]), root).unwrap();
-        hide_from_git(&work, root, &owned).unwrap();
-        assert_eq!(
-            std::fs::read_link(work.join(".agents/skills/kg-threads")).unwrap(),
-            dir.path().join("kg-threads")
-        );
-        let exclude = work.join(".git/info/exclude");
-        assert_eq!(
-            std::fs::read_to_string(&exclude).unwrap(),
-            ".agents/skills/kg-threads\n"
-        );
-
-        let owned =
-            link_root(&work, dir.path(), dir.path(), &names(&["kg-threads"]), root).unwrap();
-        hide_from_git(&work, root, &owned).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(&exclude)
-                .unwrap()
-                .matches(".agents/skills/kg-threads")
-                .count(),
-            1
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn link_root_leaves_a_person_s_folder_or_unrelated_link_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let _source = skill(dir.path(), "source");
-        let root = ".agents/skills";
-
-        let folder_path = dir.path().join("folder");
-        std::fs::create_dir_all(folder_path.join(".agents/skills/kg-threads")).unwrap();
-        let owned = link_root(
-            &folder_path,
-            dir.path(),
-            dir.path(),
-            &names(&["kg-threads"]),
-            root,
-        )
-        .unwrap();
-        assert!(owned.is_empty());
-        assert!(!folder_path.join(".agents/skills/kg-threads").is_symlink());
-
-        let other_dir = tempfile::tempdir().unwrap();
-        let other = skill(other_dir.path(), "other");
-        let linked = dir.path().join("linked");
-        std::fs::create_dir_all(linked.join(".agents/skills")).unwrap();
-        std::os::unix::fs::symlink(&other, linked.join(".agents/skills/kg-threads")).unwrap();
-        let owned = link_root(
-            &linked,
-            dir.path(),
-            dir.path(),
-            &names(&["kg-threads"]),
-            root,
-        )
-        .unwrap();
-        assert!(owned.is_empty());
-        assert_eq!(
-            std::fs::read_link(linked.join(".agents/skills/kg-threads")).unwrap(),
-            other
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn link_root_removes_a_kagan_link_the_catalog_dropped() {
-        let dir = tempfile::tempdir().unwrap();
-        let _source = skill(dir.path(), "source");
-        let work = folder(dir.path(), "work");
-        std::fs::create_dir_all(work.join(".agents/skills")).unwrap();
-        std::os::unix::fs::symlink(dir.path().join("gone"), work.join(".agents/skills/gone"))
-            .unwrap();
-
-        let owned = link_root(
-            &work,
-            dir.path(),
-            dir.path(),
-            &names(&["kept"]),
-            ".agents/skills",
-        )
-        .unwrap();
-        hide_from_git(&work, ".agents/skills", &owned).unwrap();
-        assert!(!work.join(".agents/skills/gone").exists());
-        assert!(work.join(".agents/skills/kept").is_symlink());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn hide_from_git_keeps_absent_lines_and_drops_a_real_folder_line() {
-        let dir = tempfile::tempdir().unwrap();
-        let work = folder(dir.path(), "work");
-        let exclude = work.join(".git/info/exclude");
-        std::fs::create_dir_all(work.join(".agents/skills/mine")).unwrap();
-        std::fs::write(
-            &exclude,
-            "target\n.agents/skills/gone\n.agents/skills/mine\n.agents/skills/future\n",
-        )
-        .unwrap();
-
-        hide_from_git(&work, ".agents/skills", &names(&["kept"])).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(&exclude).unwrap(),
-            "target\n.agents/skills/gone\n.agents/skills/future\n.agents/skills/kept\n"
-        );
-    }
-
-    #[test]
-    fn hide_from_git_does_nothing_without_a_git_folder() {
-        let dir = tempfile::tempdir().unwrap();
-        hide_from_git(dir.path(), ".agents/skills", &names(&["one"])).unwrap();
-        assert!(!dir.path().join(".git/info/exclude").exists());
-    }
-
-    #[test]
-    fn hide_from_git_refuses_an_exclude_it_cannot_read() {
-        let dir = tempfile::tempdir().unwrap();
-        let work = folder(dir.path(), "work");
-        let exclude = work.join(".git/info/exclude");
-        std::fs::remove_file(&exclude).ok();
-        std::fs::create_dir(&exclude).unwrap();
-        assert!(hide_from_git(&work, ".agents/skills", &names(&["one"])).is_err());
-    }
-
-    #[test]
-    fn kimi_re_adds_its_user_roots() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".agents/skills/probe")).unwrap();
-        std::fs::create_dir_all(dir.path().join(".kimi-code/skills/probe")).unwrap();
-        let home_var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
-        let previous_home = std::env::var_os(home_var);
-        let previous_kimi = std::env::var_os("KIMI_CODE_HOME");
-        // SAFETY: nextest runs each test in its own process, so this test owns these
-        // process-global variables; the unsafe block below puts them back.
-        unsafe {
-            std::env::set_var(home_var, dir.path());
-            std::env::remove_var("KIMI_CODE_HOME");
-        }
-        let args = super::kimi_skills(&dir.path().join("catalog"), dir.path());
-        // SAFETY: see above.
-        unsafe {
-            match previous_home {
-                Some(value) => std::env::set_var(home_var, value),
-                None => std::env::remove_var(home_var),
-            }
-            match previous_kimi {
-                Some(value) => std::env::set_var("KIMI_CODE_HOME", value),
-                None => std::env::remove_var("KIMI_CODE_HOME"),
-            }
-        }
-        let dirs = args
-            .chunks(2)
-            .map(|pair| pair[1].clone())
-            .collect::<Vec<_>>();
-        assert!(
-            dirs.iter()
-                .any(|arg| arg == &dir.path().join(".agents/skills").into_os_string())
-        );
-        assert!(
-            dirs.iter()
-                .any(|arg| arg == &dir.path().join(".kimi-code/skills").into_os_string())
-        );
-    }
-
-    #[test]
-    fn a_linked_worktree_uses_the_common_exclude() {
-        let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        let git = |cwd: &Path, args: &[&str]| {
-            let status = std::process::Command::new("git")
-                .args(args)
-                .current_dir(cwd)
-                .status()
-                .unwrap();
-            assert!(status.success(), "git {args:?}");
-        };
-        git(&repo, &["init"]);
-        std::fs::write(repo.join("README.md"), "test\n").unwrap();
-        git(&repo, &["add", "README.md"]);
-        git(
-            &repo,
-            &[
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.test",
-                "commit",
-                "-m",
-                "initial",
-            ],
-        );
-        let worktree = dir.path().join("worktree");
-        git(
-            &repo,
-            &["worktree", "add", worktree.to_str().unwrap(), "-b", "test"],
-        );
-
-        let exclude = dunce::canonicalize(git_exclude(&worktree).unwrap()).unwrap();
-        assert_eq!(
-            exclude,
-            dunce::canonicalize(repo.join(".git/info/exclude")).unwrap()
-        );
-        std::fs::create_dir_all(worktree.join(".agents/skills")).unwrap();
-        let second = dir.path().join("worktree2");
-        git(
-            &repo,
-            &["worktree", "add", second.to_str().unwrap(), "-b", "test2"],
-        );
-        std::fs::create_dir_all(second.join(".agents/skills")).unwrap();
-        std::fs::write(second.join(".agents/skills/foo"), "foo\n").unwrap();
-        std::fs::write(&exclude, ".agents/skills/one\n.agents/skills/foo\n").unwrap();
-
-        // A start in the first worktree adds its own line and leaves the second
-        // worktree's line alone, so its link stays hidden.
-        hide_from_git(&worktree, ".agents/skills", &names(&["bar"])).unwrap();
-        assert!(
-            std::fs::read_to_string(&exclude)
-                .unwrap()
-                .contains(".agents/skills/foo")
-        );
-        let status = std::process::Command::new("git")
-            .args(["status", "--porcelain"])
-            .current_dir(&worktree)
-            .output()
-            .unwrap();
-        assert!(
-            status.stdout.is_empty(),
-            "{}",
-            String::from_utf8_lossy(&status.stdout)
-        );
-        let status = std::process::Command::new("git")
-            .args(["status", "--porcelain"])
-            .current_dir(&second)
-            .output()
-            .unwrap();
-        assert!(
-            status.stdout.is_empty(),
-            "{}",
-            String::from_utf8_lossy(&status.stdout)
-        );
-    }
-
-    #[test]
-    fn git_exclude_follows_a_gitdir_file_and_skips_a_folder_without_git() {
-        let dir = tempfile::tempdir().unwrap();
-        let real = dir.path().join("real");
-        std::fs::create_dir_all(real.join("info")).unwrap();
-        let tree = dir.path().join("tree");
-        std::fs::create_dir_all(&tree).unwrap();
-        std::fs::write(tree.join(".git"), format!("gitdir: {}\n", real.display())).unwrap();
-        assert_eq!(git_exclude(&tree), Some(real.join("info/exclude")));
-
-        let plain = dir.path().join("plain");
-        std::fs::create_dir_all(&plain).unwrap();
-        assert_eq!(git_exclude(&plain), None);
-    }
-}
+#[path = "files_test.rs"]
+mod tests;
