@@ -26,9 +26,21 @@ scope=$(printf '%s\n' | sh "$root/scripts/ci-changes.sh")
 scope=$(printf '%s\n' 'foo.md.bak' | sh "$root/scripts/ci-changes.sh")
 [ -z "$scope" ] || fail "a non-markdown file should run the rust jobs: $scope"
 
-for path in Cargo.toml clippy.toml .cargo/config.toml rust-toolchain.toml crates/domain/src/lib.rs crates/store/src/lib.rs; do
+for path in Cargo.toml Cargo.lock clippy.toml .cargo/config.toml .config/nextest.toml rust-toolchain.toml \
+  crates/domain/src/lib.rs crates/store/src/lib.rs crates/core/skills/kg-cli.md assets/fonts/Inter-Regular.ttf \
+  examples/plugins/overlay/kagan.json .github/workflows/ci.yml scripts/browser.sh docs/behaviour.md book/src/cli.md; do
   scope=$(printf '%s\n' "$path" | sh "$root/scripts/ci-changes.sh")
   [ -z "$scope" ] || fail "$path should run the rust jobs: $scope"
+done
+
+scope=$(printf '%s\n' docs/decisions.md book/src/threads.md LICENSE .github/dependabot.yml \
+  .github/workflows/release.yml .githooks/pre-push | sh "$root/scripts/ci-changes.sh")
+printf '%s\n' "$scope" | grep -qx skip || fail "a diff with no rust input should skip"
+
+for path in $(git -C "$root" grep -ohE '(docs|book)/[A-Za-z0-9_./-]+\.(md|json)' -- 'crates/**/*.rs' | sort -u); do
+  [ -f "$root/$path" ] || continue
+  scope=$(printf '%s\n' "$path" | sh "$root/scripts/ci-changes.sh")
+  [ -z "$scope" ] || fail "the rust code reads $path, so scripts/ci-changes.sh must run the rust jobs for it"
 done
 
 bindir=$tmp/bin

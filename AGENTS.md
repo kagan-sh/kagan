@@ -79,7 +79,7 @@ Push with the hooks on, so `.githooks/pre-push` runs. Mutation testing (`scripts
 
 ## Enforced
 
-- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear and crate boundaries; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff of only docs, the book and markdown skips the Rust jobs.
+- `.github/workflows/ci.yml` runs on every pull request and every push to `main` (`docs/decisions.md` 30): the hook checks, typos, the glossary, jscpd, the size budget, `cargo fmt --check`, cargo-deny, cargo-shear and crate boundaries; `cargo clippy --workspace --all-targets -- -D warnings` on Linux and macOS; and the tests on Linux, macOS and Windows. A diff with no Rust input skips the Rust jobs; `scripts/ci-changes.sh` lists the paths that skip, and any other path runs them.
 - Merges into `main` are squashed, and the squash commit takes the PR title, so `.github/workflows/pr-title.yml` fails any title that is not a Conventional Commit (`type(scope)?: summary`).
 - Workspace lints in the root `Cargo.toml` (`[workspace.lints]`) deny `unwrap_used`, `expect_used` (tests excepted), `dbg_macro`, `todo`, `print_stdout` outside `kg`, and warn on `clippy::pedantic`.
 - Every pull request into `main` is reviewed against this file, and anything that breaks it is sent back.
