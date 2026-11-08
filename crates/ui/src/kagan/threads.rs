@@ -15,7 +15,6 @@ use kg_domain::{
 };
 
 impl Kagan {
-    /// Threads on the sidebar, newest first.
     pub(super) fn listed<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = &'a Thread> {
         self.sidebar
             .read(cx)
@@ -25,7 +24,6 @@ impl Kagan {
             .filter(|thread| thread.archived_at.is_none())
     }
 
-    /// The thread on screen. The settings page covers the terminal, so none is shown then.
     pub(crate) fn shown_thread(&self, cx: &App) -> Option<ThreadId> {
         match self.screen.shown() {
             Shown::Thread(view) if !self.in_settings() => Some(view.read(cx).thread().clone()),
@@ -33,8 +31,6 @@ impl Kagan {
         }
     }
 
-    /// The project on screen: the shown thread's, or the project a new thread would start in. The
-    /// settings page covers the window, so no project is on screen then.
     pub(crate) fn shown_project(&self, cx: &App) -> Option<ProjectId> {
         if self.in_settings() {
             return None;
@@ -144,7 +140,6 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Runs a thread operation; a thread it returns is shown, a failure is said.
     pub(super) fn run(op: ThreadOp, action: &'static str, window: &Window, cx: &mut Context<Self>) {
         let task = Workspace::dispatch(Op::Thread(op), cx);
         let window = window.window_handle();

@@ -19,7 +19,6 @@ const IMAGE_LIMIT: u64 = 8 * 1024 * 1024;
 const PIXEL_LIMIT: u64 = 40_000_000;
 
 pub(super) struct Preview {
-    /// The thread the request named, or `None` for a path the person picked.
     thread: Option<ThreadId>,
     path: String,
     file: Option<PreviewFile>,

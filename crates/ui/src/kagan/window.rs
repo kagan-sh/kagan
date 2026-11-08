@@ -27,8 +27,6 @@ pub(crate) fn open(cx: &mut App) -> gpui_kit::Result<Entity<Kagan>> {
     Ok(kagan)
 }
 
-/// Brings the app and its window to the front. A window that is already open comes forward; a
-/// new one opens only when there is none.
 pub(crate) fn show(cx: &mut App) -> gpui_kit::Result<()> {
     cx.activate(true);
     if let Some(open) = cx.try_global::<OpenWindow>().map(|open| open.handle)
@@ -55,7 +53,6 @@ pub(crate) fn shows(id: &ThreadId, cx: &App) -> bool {
         .is_some_and(|kagan| kagan.read(cx).shown_thread(cx).as_ref() == Some(id))
 }
 
-/// Shows the settings page in the window, opening the window first when none is open.
 pub(crate) fn front(cx: &App) -> Option<(AnyWindowHandle, Entity<Kagan>)> {
     let open = cx.try_global::<OpenWindow>()?;
     Some((open.handle, open.kagan.upgrade()?))
@@ -85,7 +82,6 @@ pub(crate) fn show_plugin_settings(cx: &mut App) -> gpui_kit::Result<()> {
     Ok(())
 }
 
-/// Opens the thread a notice points at. Does nothing when no window is open.
 pub(crate) fn open_thread(id: &ThreadId, cx: &mut App) {
     let Some((handle, kagan)) = front(cx) else {
         return;
@@ -95,8 +91,6 @@ pub(crate) fn open_thread(id: &ThreadId, cx: &mut App) {
     });
 }
 
-/// Shows one file in the Preview tab, selecting the named thread first. Does nothing when no
-/// window is open.
 pub(crate) fn show_preview(thread: Option<ThreadId>, path: String, cx: &mut App) {
     let Some((handle, kagan)) = front(cx) else {
         return;

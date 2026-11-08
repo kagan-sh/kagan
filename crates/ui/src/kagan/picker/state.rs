@@ -65,7 +65,6 @@ impl Picker {
         }
     }
 
-    /// Reads the programs. A read replaces one still running, so only the latest answer shows.
     pub(crate) fn load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.state = Programs::Loading;
         self.list
@@ -110,7 +109,6 @@ impl Picker {
         }));
     }
 
-    /// Starts the chosen program. A chosen program is the one to start, so the custom command closes.
     fn confirm(&mut self, cx: &mut Context<Self>) {
         self.set_mode(Mode::Catalog, cx);
         if self.command(cx).is_ok() {
@@ -129,7 +127,6 @@ impl Picker {
         });
     }
 
-    /// Moves the list's selection by `step` rows, within the rows that match the search.
     pub(super) fn move_selection(
         &mut self,
         step: isize,
@@ -151,8 +148,6 @@ impl Picker {
         });
     }
 
-    /// Shows the programs under the search that is still in the box, and selects the default when
-    /// the search leaves it. The list itself gets the selection, so arrow keys move from it.
     fn show(&mut self, list: ProgramList, window: &mut Window, cx: &mut Context<Self>) {
         self.state = Programs::Loaded;
         self.list.update(cx, |state, cx| {
@@ -170,7 +165,6 @@ impl Picker {
         });
     }
 
-    /// Opens the custom command with `program` and `arguments` in its fields.
     #[cfg(test)]
     pub(crate) fn use_custom(
         &mut self,
@@ -188,8 +182,6 @@ impl Picker {
         cx.notify();
     }
 
-    /// Opens or closes the custom command. Opening it puts the cursor in its Program field, and
-    /// closing it returns focus to the list.
     pub(crate) fn toggle_custom(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.mode {
             Mode::Custom => self.close_custom(window, cx),
@@ -201,7 +193,6 @@ impl Picker {
         }
     }
 
-    /// Closes the custom command, if it is open, and returns focus to the list.
     pub(super) fn close_custom(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.mode == Mode::Catalog {
             return;
@@ -233,7 +224,6 @@ impl Picker {
         self.list.update(cx, |list, cx| list.focus(window, cx));
     }
 
-    /// The command a thread starts with: the selected program, or the custom command.
     pub(crate) fn command(&self, cx: &App) -> Result<String, String> {
         if self.mode == Mode::Custom {
             let program = self.program.read(cx).value().trim().to_owned();

@@ -10,8 +10,6 @@ use super::{
 };
 use crate::terminal;
 
-/// The keys the terminal does not take: the window's focus keys stay out of the program. Copy,
-/// paste and page scroll are the window's; the program never sees them.
 fn terminal_bindings() -> Vec<KeyBinding> {
     let (copy, paste) = if cfg!(target_os = "macos") {
         ("cmd-c", "cmd-v")
@@ -48,7 +46,6 @@ pub(crate) fn chord_for(action: &str, keymap: &Keymap, platform: KeyPlatform) ->
     kg_domain::default_chord(action, platform).unwrap_or_default()
 }
 
-/// The window's shortcuts, each on the chord `chord_for` gives it.
 fn chord_bindings(keymap: &Keymap, cx: &App) -> Vec<KeyBinding> {
     SHORTCUTS
         .iter()
@@ -132,14 +129,12 @@ fn tree_bindings() -> Vec<KeyBinding> {
     ]
 }
 
-/// Keeps the saved watch alive for the app's lifetime.
+// Keeps the saved watch alive for the app's lifetime.
 struct ChordWatch {
     _watch: Subscription,
 }
 impl Global for ChordWatch {}
 
-/// Installs the window's keys, then rebinds the window's chords whenever the workspace changes, so
-/// a saved shortcut takes effect at once. Call after `Workspace::open`.
 pub(crate) fn install_keys(cx: &mut App) {
     super::menus::bind(cx);
     super::update::bind(cx);
@@ -234,8 +229,8 @@ pub(crate) fn install_keys(cx: &mut App) {
     cx.set_global(ChordWatch { _watch: watch });
 }
 
-/// A binding for a key known only at run time, read the way this host spells it. GPUI's
-/// `KeyBinding::new` panics on a key it cannot parse, such as `secondary-` without a host.
+// A binding for a key known only at run time, read the way this host spells it. GPUI's
+// `KeyBinding::new` panics on a key it cannot parse, such as `secondary-` without a host.
 pub(crate) fn bind(
     key: &str,
     action: impl Action,

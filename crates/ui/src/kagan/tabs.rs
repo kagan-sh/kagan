@@ -54,8 +54,6 @@ pub(super) fn perform(op: WindowOp, cx: &mut App) {
     });
 }
 
-/// The extra terminals of the thread on screen, whether its Browser tab is open, and the newest
-/// local link its terminals printed.
 #[derive(Default)]
 pub(super) struct Tabs {
     thread: Option<ThreadId>,
@@ -93,8 +91,6 @@ impl Kagan {
         }
     }
 
-    /// Follows the host's list of extra terminals. When a closed one had the keyboard, the right
-    /// sidebar takes it.
     pub(super) fn sync_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let thread = self.tabbed_thread(cx);
         if self.tabs.thread != thread {
@@ -155,8 +151,6 @@ impl Kagan {
         }
     }
 
-    /// Selects a tab of the right sidebar, opens the sidebar if it is not drawn, and gives the
-    /// tab the keyboard.
     pub(super) fn show_right_tab(&mut self, tab: Tab, window: &mut Window, cx: &mut Context<Self>) {
         self.select_right_tab(tab, cx);
         if !self.right_drawn() {
@@ -165,7 +159,6 @@ impl Kagan {
         self.focus_right_tab(window, cx);
     }
 
-    /// Steps the keyboard through the program's terminal and the extra terminals.
     fn step_tab(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
         let order: Vec<Option<u32>> = std::iter::once(None)
             .chain(self.tabs.numbers().map(Some))
@@ -234,7 +227,6 @@ impl Kagan {
         }
     }
 
-    /// The keyboard is in the right sidebar, which a hidden sidebar would strand.
     pub(super) fn right_holds_focus(&self, window: &Window, cx: &App) -> bool {
         self.right.add_focus.is_focused(window)
             || self.browser.holds_focus(window, cx)
@@ -304,7 +296,6 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Browser, Preview, and each extra terminal, for the right sidebar's tab row.
     pub(super) fn right_tabs(
         &self,
         selected: Option<&Tab>,
@@ -368,7 +359,6 @@ impl Kagan {
             .collect()
     }
 
-    /// The row over the program's terminal, drawn only while it offers a local link.
     pub(super) fn render_strip(&self, cx: &App) -> Option<AnyElement> {
         let chip = self.local_link_chip(cx)?;
         Some(
@@ -412,7 +402,6 @@ impl Kagan {
         }));
     }
 
-    /// "Open localhost:3000" at the end of the tab row, for the newest local link the thread printed.
     fn local_link_chip(&self, cx: &App) -> Option<AnyElement> {
         let host = local_host(self.tabs.local.as_deref()?)?;
         let label = format!("Open {host}");
@@ -432,7 +421,6 @@ impl Kagan {
     }
 }
 
-/// The host and port of a link to this machine, such as `localhost:3000`.
 pub(super) fn local_host(link: &str) -> Option<&str> {
     let (_, rest) = link.split_once("://")?;
     let host = rest.split(['/', '?', '#']).next()?;

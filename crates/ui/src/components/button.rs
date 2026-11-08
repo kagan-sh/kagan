@@ -1,9 +1,3 @@
-//! `KgButton`: the command button a script builds, observed by `kg ui`.
-//!
-//! The shell's `Button` is built from behaviour this crate cannot reach, so it stays as the shell
-//! draws it. `KgButton` takes the same calls and draws the same gpui-kit button, inside an element
-//! that states its role, name, state and focus.
-
 use std::sync::Arc;
 
 use crate::ui_observe::UiObserveExt as _;
@@ -165,8 +159,8 @@ fn plain_method(
     .with_documentation(documentation)
 }
 
-/// A call the shell records itself on every component. The declaration lets a script make the
-/// call; the materializer reads the shell's record, not this payload.
+// A call the shell records itself on every component. The declaration lets a script make the
+// call; the materializer reads the shell's record, not this payload.
 fn shell_call(
     name: &'static str,
     schema: ArgumentSchema,

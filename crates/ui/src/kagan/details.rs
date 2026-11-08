@@ -14,7 +14,6 @@ use super::controls::control;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-/// The shown thread's details, read through `ThreadOp::Details`.
 pub(super) struct Details {
     thread: Option<ThreadId>,
     read: Option<Result<ThreadDetails, String>>,

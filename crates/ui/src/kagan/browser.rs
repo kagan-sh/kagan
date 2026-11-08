@@ -31,7 +31,6 @@ pub(super) mod snapshot;
 pub(super) struct Agent {
     pub(super) thread: ThreadId,
     pub(super) url: String,
-    /// The last command that reached it, for the 30-minute rule.
     pub(super) used: Instant,
 }
 
@@ -39,9 +38,7 @@ pub(super) struct Browser {
     address: Entity<InputState>,
     page: Option<Entity<WebPage>>,
     pub(super) agent: Option<Agent>,
-    /// Where the keys go while a thread drives the page, since the address field is hidden.
     driven_focus: FocusHandle,
-    /// Bumped so a late load does not write over a newer address.
     follow: u64,
     note: Option<String>,
     _enter: Subscription,
@@ -213,7 +210,6 @@ impl Kagan {
         self.browser.sync_page(shown, cx);
     }
 
-    /// Ends the drive from the tab: the page stays as the person's.
     pub(super) fn stop_agent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.end_agent(window, cx);
         self.sync_browser(cx);

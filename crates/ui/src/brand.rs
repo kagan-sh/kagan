@@ -50,8 +50,6 @@ const BRAND: &[(&str, &[u8])] = &[
     ),
 ];
 
-/// Bundled kagan marks, falling back to the full GPUI Kit icon catalog,
-/// which plugins draw from.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Assets;
 
@@ -83,11 +81,9 @@ fn brand_bytes(path: &str) -> Option<&'static [u8]> {
         .map(|(_, bytes)| *bytes)
 }
 
-/// Fills in the Linux window id and icon on options that do not set them.
-///
-/// GPUI writes `icon` as `_NET_WM_ICON` on X11 only. Wayland sets `app_id`
-/// and has no window-icon call. A `.desktop` file would supply that icon,
-/// and a packaged `.app` or `.desktop` entry is a follow-up.
+// GPUI writes `icon` as `_NET_WM_ICON` on X11 only. Wayland sets `app_id`
+// and has no window-icon call. A `.desktop` file would supply that icon,
+// and a packaged `.app` or `.desktop` entry is a follow-up.
 #[must_use]
 pub fn prepare_window(options: gpui_kit::WindowOptions) -> gpui_kit::WindowOptions {
     #[cfg(target_os = "linux")]

@@ -1,8 +1,3 @@
-//! A plugin panel whose body is an HTML file in the plugin folder.
-//!
-//! The page is shown only while that panel is on screen, and dropped when the panel closes.
-//! The page is the system web view on macOS, Windows and Linux.
-
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{

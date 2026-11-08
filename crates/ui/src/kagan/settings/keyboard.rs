@@ -1,6 +1,3 @@
-//! The Keyboard section: the built-in shortcuts by where they apply, then each enabled plugin's
-//! commands under its name. A row shows its key, or Not set, and binds through `kg keymap`.
-
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -117,7 +114,6 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     out
 }
 
-/// How many groups the Keyboard section has, so the page can scroll past it.
 pub(super) fn count(cx: &App) -> usize {
     4 + plugin_commands(cx).len()
 }

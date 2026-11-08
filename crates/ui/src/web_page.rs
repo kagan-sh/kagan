@@ -1,5 +1,3 @@
-//! One opener for the Browser and for a plugin page.
-
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering::Relaxed},
@@ -92,7 +90,6 @@ impl WebPage {
         epoch
     }
 
-    /// Runs one host script in the page. Its reply arrives later, as JSON text.
     pub(crate) fn eval(
         &self,
         script: &str,
@@ -112,7 +109,7 @@ impl WebPage {
         self.view.read(cx).raw().url().unwrap_or_default()
     }
 
-    /// Stops a page's `alert`, `confirm` and `prompt` from blocking the agent's command.
+    // Stops a page's `alert`, `confirm` and `prompt` from blocking the agent's command.
     #[cfg(target_os = "windows")]
     pub(crate) fn quiet_dialogs(&self, cx: &App) -> Result<(), String> {
         use wry::WebViewExtWindows as _;
@@ -216,7 +213,6 @@ fn open_view_with_loads(
     }
 }
 
-/// Tells `loads` when the page finishes loading, once per navigation.
 fn with_loads(
     builder: wry::WebViewBuilder<'_>,
     loads: Option<LoadSignal>,

@@ -80,12 +80,10 @@ fn publish(
     let _ = sender.try_send(result);
 }
 
-/// Draws a fresh frame, then captures it.
-///
-/// A covered, minimized, or sleeping window stops its display link, so
-/// `on_next_frame` never runs. Capture the last presented buffer instead of
-/// waiting for a frame that will not come. If a visible window still does not
-/// present, capture that buffer rather than failing the screenshot.
+// A covered, minimized, or sleeping window stops its display link, so
+// `on_next_frame` never runs. Capture the last presented buffer instead of
+// waiting for a frame that will not come. If a visible window still does not
+// present, capture that buffer rather than failing the screenshot.
 async fn capture_after_present(
     index: u32,
     path: PathBuf,
@@ -292,9 +290,6 @@ mod macos {
         run(OsStr::new("screencapture"), number, path)
     }
 
-    /// Captures window `number` with `program` into a new file beside `path`, then moves it over
-    /// `path`. A destination that already holds an image is only replaced by a capture that wrote
-    /// one in this run.
     fn run(program: &OsStr, number: isize, path: &Path) -> Result<(), OpError> {
         let folder = match path.parent() {
             Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -331,7 +326,6 @@ mod macos {
         std::fs::rename(staged, path).map_err(OpError::from)
     }
 
-    /// The reason `screencapture` gave in its own words, or its exit status when it gave none.
     fn failure(stderr: &[u8], status: ExitStatus) -> String {
         let reason = String::from_utf8_lossy(stderr);
         let reason = reason.trim();

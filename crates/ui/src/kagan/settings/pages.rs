@@ -1,6 +1,3 @@
-//! The groups of each settings page. A control reads its value from state the window already
-//! holds, and saves through the Op that `kg` runs, so a change from either one shows on the page.
-
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::ThemeMode;
@@ -64,7 +61,6 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     out
 }
 
-/// The enabled plugins that have a settings page: declared settings, or their own view.
 pub(super) fn plugin_entries(cx: &App) -> Vec<(PluginId, String)> {
     let Some(host) = PluginHost::try_global(cx) else {
         return Vec::new();
@@ -386,7 +382,6 @@ fn save_theme(theme: String, cx: &mut App) {
     save(Op::Theme(ThemeOp::Set { theme, mode }), cx);
 }
 
-/// One of a theme's colors. The line border keeps a swatch that matches its card visible.
 fn swatch(color: Hsla, line: Hsla) -> impl IntoElement {
     div()
         .size(rems(0.875))

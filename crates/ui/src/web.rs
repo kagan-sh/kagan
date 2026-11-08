@@ -1,8 +1,3 @@
-//! Web panel files, navigation rules and theme, kept apart so tests run without a native page.
-//! The page setup itself is in `web_page.rs`, the opener shared with the Browser and a plugin
-//! `WebView`. This module compiles wherever a page is drawn, and in tests, so the rules run on
-//! every system CI covers.
-
 use std::path::{Component, Path};
 
 use kg_plugins::{PageFileError, SCHEME};

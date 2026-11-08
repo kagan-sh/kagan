@@ -14,12 +14,10 @@ use super::changes::line;
 use super::screen::{Activation, Side};
 use super::{Kagan, question};
 
-/// How long the person must stop typing before held questions show. A design value, not a number
-/// from the research.
+// How long the person must stop typing before held questions show. A design value, not a number
+// from the research.
 pub(crate) const QUIET: Duration = Duration::from_millis(1500);
 
-/// Cancel is the safe choice, so it takes focus when the card offers it; otherwise the first
-/// option does.
 fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
     options
         .iter()
@@ -28,8 +26,6 @@ fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
 }
 
 impl Kagan {
-    /// Every question that waits for the person, across threads. While the person types, a
-    /// question that arrives is held until they pause; one already on screen stays up.
     pub(super) fn render_needs(
         &mut self,
         window: &mut Window,
@@ -112,7 +108,6 @@ impl Kagan {
             .into_any_element()
     }
 
-    /// Whether a question waits: the person is typing, and it was not on screen when they began.
     pub(super) fn holds(&self, id: &PendingInteractionId) -> bool {
         self.typing && !self.on_screen.contains(id)
     }
@@ -121,9 +116,6 @@ impl Kagan {
         self.waiting(cx).count()
     }
 
-    /// A person-only question that arrives while the right panels are not drawn opens them over
-    /// the center, with Questions shown. Focus does not move, so a person typing keeps the keyboard.
-    /// Questions already seen do not open them again, and the overlay closes once nothing waits.
     pub(super) fn announce_questions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let person: BTreeSet<PendingInteractionId> = {
             let workspace = Workspace::global(cx).read(cx);
@@ -189,8 +181,6 @@ impl Kagan {
         self.waiting(cx).map(|(id, _)| id.clone()).collect()
     }
 
-    /// Starts the pause after a key. Each key restarts it. The first key of a run of typing
-    /// records what is on screen, so that only later questions are held.
     pub(super) fn typed(&mut self, cx: &mut Context<Self>) {
         self.cancel_plugin_start();
         if !self.typing {

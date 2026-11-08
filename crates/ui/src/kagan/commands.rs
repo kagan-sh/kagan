@@ -1,5 +1,3 @@
-//! The command list: every window command, with its live key, and thread search.
-
 use std::rc::Rc;
 
 use crate::theme::TypeScale as _;

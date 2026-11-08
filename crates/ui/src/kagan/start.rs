@@ -20,18 +20,14 @@ pub(super) enum StartFolder {
     Worktree,
 }
 
-/// Which branch a new thread uses. `Current` is the checked-out branch, or HEAD when it is detached.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) enum BranchPick {
     #[default]
     Current,
-    /// A worktree's base, or the branch to check out in the project folder.
     Named(String),
-    /// A new branch in the project folder, created from this one.
     NewFrom(String),
 }
 
-/// Which list the project-folder menu is showing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum ProjectIntent {
     #[default]
@@ -84,7 +80,6 @@ impl SetupSeen {
 
 #[derive(Default)]
 pub(super) struct StartState {
-    /// The folder the person picked; None means the default for the project
     folder: Option<StartFolder>,
     pick: BranchPick,
     intent: ProjectIntent,
@@ -93,26 +88,20 @@ pub(super) struct StartState {
     branch_query: Option<Entity<InputState>>,
     branch_watch: Option<Subscription>,
     branches: Branches,
-    /// Bumps when the pinned commit should be read again, so an older read cannot replace it.
     setup_epoch: u64,
     setup_task: Option<Task<()>>,
     setup: Option<SetupSeen>,
     setup_open: bool,
     setup_failure: Option<String>,
-    /// A thread is being prepared, so a second start must wait for it
     starting: bool,
-    /// The branch read for the shown project. Replacing it cancels a read for an earlier one.
     load: Option<Task<()>>,
-    /// The start's result handler. Core keeps preparing the thread even if this is dropped.
     run: Option<Task<()>>,
-    /// A plugin thread is being created. Set until it exists, so a second click waits.
     pub(super) plugin_opening: bool,
     pub(super) plugin_start: Option<Task<()>>,
     pub(super) plugin_thread: Option<kg_domain::ThreadId>,
 }
 
 impl StartState {
-    /// Forgets the last project's pick. A start still preparing is kept, so a second one waits.
     pub(super) fn reset(&mut self) {
         self.folder = None;
         self.pick = BranchPick::Current;
@@ -247,8 +236,8 @@ fn project_kind(project: &ProjectId, cx: &App) -> Option<ProjectKind> {
         .map(|project| project.read(cx).record().kind)
 }
 
-/// Waits for the new plugin thread to show its prompt, then pastes the prompt once the screen
-/// settles. After 15 seconds, the window offers the prompt to copy instead.
+// Waits for the new plugin thread to show its prompt, then pastes the prompt once the screen
+// settles. After 15 seconds, the window offers the prompt to copy instead.
 async fn follow_plugin_prompt(
     this: WeakEntity<Kagan>,
     window: AnyWindowHandle,

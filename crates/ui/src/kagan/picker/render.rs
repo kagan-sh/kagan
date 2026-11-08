@@ -125,7 +125,6 @@ impl RenderOnce for ProgramRow {
     }
 }
 
-/// The programs could not be listed: why, and a Retry.
 fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
     // The message sits above the button: a long path in it must not push the Retry out of view.
     v_flex()
@@ -151,7 +150,6 @@ fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
 }
 
 impl Picker {
-    /// Five rows, or fewer when the search leaves fewer. A theme row until one is measured.
     fn program_list_height(&self, cx: &App) -> gpui_kit::Pixels {
         let rows = self.list.read(cx).delegate();
         let count = if rows.loading {

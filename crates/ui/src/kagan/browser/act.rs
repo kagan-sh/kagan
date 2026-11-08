@@ -1,8 +1,6 @@
-//! The fixed scripts that act on the page, and the text and key they carry.
-
 use kg_domain::BrowserOp;
 
-/// A file input is refused before any event, because it would open the person's chooser.
+// A file input is refused before any event, because it would open the person's chooser.
 pub(super) const FILE_REFUSAL: &str = "a page cannot choose a file; the person uploads it";
 
 const KEYS: &str = "press enter, escape, tab, space, backspace, delete, up, down, left, right, home, end, pageup, pagedown, or one printable character";
@@ -33,7 +31,7 @@ const TAIL: &str = r#"
   }
 })()"#;
 
-/// A text action never relays the page's exception, which may quote the value it was given.
+// A text action never relays the page's exception, which may quote the value it was given.
 const TEXT_TAIL: &str = r#"
   } catch (error) {
     return { ok: false, code: "failed", message: "the page refused the text" };
@@ -48,7 +46,7 @@ fn finish_text(body: &str) -> String {
     format!("{HEAD}{body}{TEXT_TAIL}")
 }
 
-/// Embeds the text in the script as a JSON string, so a quote or newline cannot end it.
+// Embeds the text in the script as a JSON string, so a quote or newline cannot end it.
 fn quoted(text: &str) -> String {
     serde_json::Value::String(text.to_owned()).to_string()
 }

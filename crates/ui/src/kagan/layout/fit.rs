@@ -209,9 +209,9 @@ impl Kagan {
         width + px(0.5) >= self.layout.left_width || self.side_fits(self.layout.left_width)
     }
 
-    /// Whether the window has hidden a sidebar the layout shows. Widths are not saved while it
-    /// has: the sidebar beside a hidden one takes its room, and that is not a width the person
-    /// chose.
+    // Whether the window has hidden a sidebar the layout shows. Widths are not saved while it
+    // has: the sidebar beside a hidden one takes its room, and that is not a width the person
+    // chose.
     pub(in crate::kagan) fn hidden_by_width(&self) -> bool {
         self.room_panes(self.layout.left_open, self.layout.right_open)
             != Panes {

@@ -55,7 +55,6 @@ pub(super) struct ToggleDetails {
 
 actions!(right, [ActivatePanelHeader, ToggleFill]);
 
-/// Enter and Space on a focused tab, or on the `+`, act on it.
 pub(crate) fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("enter", ActivatePanelHeader, Some("PanelHeader")),

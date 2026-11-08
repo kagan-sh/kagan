@@ -25,7 +25,6 @@ actions!(
     [Paste, CopySelection, ScrollPageUp, ScrollPageDown]
 );
 
-/// The person sent keys to the program. The window holds questions while this keeps coming.
 pub(crate) struct Typed;
 
 pub(crate) const CONTEXT: &str = "Terminal";
@@ -35,21 +34,16 @@ const LINE_HEIGHT: f32 = 1.3;
 const MIN_FIT_COLS: u16 = 20;
 const MIN_FIT_ROWS: u16 = 5;
 
-/// Whether a window of this size may resize the program. Sizes past the host's limits are clamped.
 fn fits_program(cols: u16, rows: u16) -> bool {
     cols >= MIN_FIT_COLS && rows >= MIN_FIT_ROWS
 }
 
-/// Whether a window of this size should resize the program now: it fits, and it is not the size
-/// already sent.
 fn is_new_fit(sent: Option<(u16, u16)>, cols: u16, rows: u16) -> bool {
     fits_program(cols, rows) && sent != Some((cols, rows))
 }
 
-/// One running thread's screen. It draws the host's grid and sends keys, pointer and size back.
 pub(crate) struct TerminalView {
     thread: ThreadId,
-    /// An extra terminal's number; `None` is the program's terminal.
     terminal: Option<u32>,
     grid: Rc<Grid>,
     size: Option<(u16, u16)>,
@@ -57,9 +51,7 @@ pub(crate) struct TerminalView {
     focus: FocusHandle,
     pointer: Pointer,
     _screens: Subscription,
-    /// Why the last input or paste was not sent, until one is sent.
     notice: Option<String>,
-    /// A paste held for the next fit, and where to say whether it was sent.
     held: Option<(String, async_channel::Sender<bool>)>,
     #[cfg(test)]
     reads: usize,
@@ -122,7 +114,6 @@ impl TerminalView {
         self.focus.is_focused(window)
     }
 
-    /// The size this view last asked the program to take.
     #[cfg(test)]
     pub(crate) fn fitted(&self) -> Option<(u16, u16)> {
         self.size
@@ -133,7 +124,6 @@ impl TerminalView {
         &self.grid
     }
 
-    /// How many times this view has read the host's grid.
     #[cfg(test)]
     pub(crate) fn reads(&self) -> usize {
         self.reads
@@ -179,7 +169,6 @@ impl TerminalView {
         }
     }
 
-    /// Pastes once the view has its shown size, so the program wraps the text where it is seen.
     pub(crate) fn paste_after_fit(&mut self, text: String, cx: &mut Context<Self>) -> Task<bool> {
         let (sent, received) = async_channel::bounded(1);
         self.held = Some((text, sent));
@@ -412,7 +401,6 @@ impl Render for TerminalView {
     }
 }
 
-/// Sends a thread's operation without waiting for it: the window shows what the host reports.
 pub(super) fn dispatch(op: ThreadOp, cx: &mut App) {
     Workspace::dispatch(Op::Thread(op), cx).detach();
 }
@@ -426,7 +414,7 @@ fn cell_size(font: &Font, font_size: Pixels, window: &Window) -> gpui_kit::Size<
     cell_size_from(advance, font_size)
 }
 
-/// A cell is one measured `m` wide. A font that measures nothing gets 0.6 em.
+// A cell is one measured `m` wide. A font that measures nothing gets 0.6 em.
 fn cell_size_from(advance: Option<Pixels>, font_size: Pixels) -> gpui_kit::Size<Pixels> {
     let width = advance
         .filter(|width| *width > px(0.))
@@ -472,7 +460,6 @@ impl Style {
     }
 }
 
-/// A line's text with its styles, as byte lengths.
 fn runs(line: &[Cell]) -> (String, Vec<(usize, Style)>) {
     let mut text = String::new();
     let mut runs: Vec<(usize, Style)> = Vec::new();
@@ -490,7 +477,6 @@ fn runs(line: &[Cell]) -> (String, Vec<(usize, Style)>) {
     (text, runs)
 }
 
-/// Columns whose background is not the window's: (first column, columns, color).
 fn backgrounds(line: &[Cell]) -> Vec<(usize, usize, Color)> {
     let mut spans: Vec<(usize, usize, Color)> = Vec::new();
     for (column, cell) in line.iter().enumerate() {

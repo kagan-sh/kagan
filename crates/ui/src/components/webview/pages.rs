@@ -72,7 +72,6 @@ pub(crate) fn drop_stores(stores: &[[u8; 16]], cx: &mut App) {
     let _ = (stores, cx);
 }
 
-/// Hides a page whose panel is off screen, and drops one whose view is gone.
 pub(crate) fn sync_pages(shown: &[gpui_kit::EntityId], cx: &mut App) {
     if !cx.has_global::<Pages>() {
         return;

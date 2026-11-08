@@ -1,5 +1,3 @@
-//! Back, forward, reload, and open-in-the-system-browser for the Browser tab.
-
 use super::Kagan;
 use {
     crate::kagan::controls::control,

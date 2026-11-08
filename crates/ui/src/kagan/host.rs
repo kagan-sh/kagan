@@ -10,7 +10,6 @@ use kg_domain::{PluginId, SurfaceOp};
 use kg_plugins::{Follows, HostUi, HostUiEvent, PluginHost, RunCommand};
 
 impl Kagan {
-    /// Watches the plugin host, so a plugin turned off or updated changes its panel at once.
     pub(super) fn watch_plugins(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // The plugin host starts after the UI's own setup, so the key bindings for its commands are
         // installed here, once the host exists. Installing them again does nothing.
@@ -48,8 +47,6 @@ impl Kagan {
         }
     }
 
-    /// Tells the plugin host which thread and project the window shows. Plugin panels that follow
-    /// the thread read it from there.
     pub(super) fn tell_host(&self, window: &Window, cx: &mut App) {
         let Some(host) = HostUi::global(cx) else {
             return;
@@ -74,8 +71,6 @@ impl Kagan {
             host.set_context(handle, thread, project, focused, &follows, cx);
         });
     }
-    /// A plugin asked the window for something: a thread, a panel, or a toast. Each request gets
-    /// one reply, so the plugin's call returns the result instead of waiting on a dropped sender.
     pub(super) fn host_ui(
         &mut self,
         event: &HostUiEvent,
@@ -177,7 +172,6 @@ impl Kagan {
         }
     }
 
-    /// A plugin command bound to a key or a toast. It runs in the thread and project on screen.
     pub(super) fn run_command(
         &mut self,
         action: &RunCommand,

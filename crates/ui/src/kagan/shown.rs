@@ -53,8 +53,6 @@ impl Kagan {
         thread.archived_at.is_none().then_some(thread)
     }
 
-    /// Opens the shown thread's actions menu with focus in it. The button and the shortcut both
-    /// come here. An archived thread, or no visibly shown thread, has no menu.
     pub(super) fn open_thread_actions(
         &mut self,
         _: &ThreadActions,
@@ -123,7 +121,6 @@ impl Kagan {
             .update(cx, |sidebar, _| sidebar.close_row_menu());
     }
 
-    /// Closes the actions menu and gives focus back to the thread's terminal.
     pub(super) fn close_thread_actions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.actions_menu = None;
         self.focus_work(window, cx);

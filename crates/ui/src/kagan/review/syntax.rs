@@ -14,7 +14,6 @@ const PARSE_BUDGET: Duration = Duration::from_millis(200);
 
 type Captures = Vec<(Range<usize>, String)>;
 
-/// Capture names for the lines of one review, keyed by side and line number.
 #[derive(Default)]
 pub(super) struct Syntax {
     lines: BTreeMap<(u8, u32), Captures>,

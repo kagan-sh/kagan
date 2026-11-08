@@ -85,8 +85,6 @@ impl Kagan {
             .into_any_element()
     }
 
-    /// Adds the folder the person picked. On success its start screen opens, so the first thread
-    /// is one step away.
     pub(crate) fn add_picked_project(path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let added = Workspace::dispatch(Op::Project(ProjectOp::Add { path }), cx);
         let window = window.window_handle();

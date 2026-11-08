@@ -235,8 +235,8 @@ impl Kagan {
         self.empty(Slot::Review, window, cx);
     }
 
-    /// The plugin's body for `slot`, clipped to its frame. After a rebuild, a deferred check puts
-    /// the built-in back when the view threw or drew a floating component.
+    // After a rebuild, a deferred check puts
+    // the built-in back when the view threw or drew a floating component.
     pub(super) fn replaced_body(
         &self,
         slot: Slot,
@@ -279,7 +279,6 @@ impl Kagan {
         }
     }
 
-    /// Tells the review plugin which thread, scope and file the review on screen shows.
     pub(super) fn deliver_review(&mut self, cx: &mut App) {
         let (Some(plugin), Some(review)) = (
             self.replaced.chosen.get(&Slot::Review),
@@ -303,7 +302,6 @@ impl Kagan {
         }
     }
 
-    /// A sidebar plugin reads the list again when the threads change.
     pub(super) fn wake_threads_plugin(&self, cx: &mut App) {
         if let (Some(plugin), Some(host)) =
             (self.replaced.chosen.get(&Slot::Threads), HostUi::global(cx))
@@ -313,9 +311,6 @@ impl Kagan {
         }
     }
 
-    /// A note from the plugin that draws the review in the front window, the one whose context
-    /// the plugin reads. Other windows leave the request alone, so it is answered once. The note
-    /// joins the host's own, so the host's footer counts, discards and sends it.
     pub(super) fn plugin_comment(
         &mut self,
         plugin: &PluginId,

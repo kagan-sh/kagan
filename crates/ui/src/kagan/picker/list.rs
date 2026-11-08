@@ -18,7 +18,6 @@ pub(super) enum Field {
     Arguments,
 }
 
-/// `program` and `arguments` as one command line: the program quoted when it has a space.
 pub(super) fn custom_command(program: &str, arguments: &str) -> Result<String, (Field, String)> {
     if program.is_empty() {
         return Err((Field::Program, "Enter a program to start.".into()));
@@ -89,8 +88,6 @@ impl ListDelegate for Rows {
         })
     }
 
-    /// Escape makes the list clear its selection. A list with programs keeps one: the program
-    /// that starts stays the one the person saw.
     fn set_selected_index(
         &mut self,
         ix: Option<IndexPath>,
@@ -122,7 +119,6 @@ pub(crate) struct ProgramRow {
     pub(super) program: Program,
     pub(super) selected: bool,
     pub(super) mode: Mode,
-    /// The first row sets the list's height. Rows can differ, so the others do not.
     pub(super) first: bool,
     pub(super) list: WeakEntity<ListState<Rows>>,
 }
@@ -138,8 +134,6 @@ impl Selectable for ProgramRow {
     }
 }
 
-/// A custom command field: its name and input, and what the input says under it. Clicking
-/// anywhere in the field focuses the input, and kg ui finds the field by its id.
 pub(super) fn custom_field(
     id: &'static str,
     title: &'static str,
@@ -174,7 +168,6 @@ pub(super) fn custom_field(
         )
 }
 
-/// What a row says after the name: the first line of the version, or that the program is missing.
 pub(super) fn status_line(program: &Program) -> String {
     if program.installed() {
         // Only the first line of a version: a row must stay one line tall.

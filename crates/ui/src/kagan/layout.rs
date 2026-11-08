@@ -22,8 +22,6 @@ const WINDOW: &str = "main";
 const LEFT_DEFAULT: f32 = 256.;
 pub(super) const LEFT_RANGE: (f32, f32) = (200., 420.);
 
-/// The narrowest the center may get. When the open sidebars would squeeze it below this, the
-/// right sidebar is hidden first, then the left one. The window cannot be made narrower.
 pub(super) const CENTER_MIN: f32 = 480.;
 pub(super) const RAIL_WIDTH: f32 = 48.;
 
@@ -67,7 +65,6 @@ pub(super) struct Panes {
     pub(super) right: bool,
 }
 
-/// The index of the right sidebar in the columns group. The left sidebar, when open, comes first.
 pub(super) fn right_index(left_open: bool) -> usize {
     if left_open { 2 } else { 1 }
 }

@@ -1,6 +1,3 @@
-//! The activity strip at the bottom of the window: what the workspace is doing, in one line, and
-//! a short log when opened (decision 148).
-
 use std::collections::VecDeque;
 
 use gpui_kit::component::ActiveTheme as _;
@@ -100,7 +97,6 @@ impl Strip {
         self.say(line);
     }
 
-    /// Tracks the one plugin install the host allows at a time.
     pub(super) fn installing(&mut self, running: Option<&str>) {
         let line = running.map(|name| format!("Installing {name}"));
         if self.install.as_deref() == line.as_deref() {
@@ -153,7 +149,6 @@ impl Kagan {
         self.activity.turn(event, &title);
     }
 
-    /// Leaves out the shown thread, as the summary's needs count does.
     pub(super) fn saw_needs(&mut self, id: &ThreadId, cx: &App) {
         if self.shown_thread(cx).as_ref() == Some(id) {
             return;
@@ -180,7 +175,7 @@ impl Kagan {
         cx.notify();
     }
 
-    /// Enter and Space arrive as the click GPUI makes on a focused element.
+    // Enter and Space arrive as the click GPUI makes on a focused element.
     fn strip_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         if event.keystroke.key == "escape" && self.activity.open() {
             self.activity.close();
@@ -297,7 +292,6 @@ impl Kagan {
             .children(plugins.into_iter().map(|item| plugin_item(item, cx)))
     }
 
-    /// Takes height only: the sidebars' width preferences do not account for it.
     pub(super) fn activity_strip(
         &mut self,
         window: &mut Window,

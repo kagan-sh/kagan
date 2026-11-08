@@ -1,8 +1,6 @@
-//! `WebView`: one local page a plugin panel can place as its body.
-//!
-//! The page is kept on a global, not in element state. Element state is dropped when the panel
-//! leaves the tree, and that would reload the page. A native view also keeps its last place, so a
-//! panel that is off screen hides the page instead of leaving it where it was.
+// The page is kept on a global, not in element state. Element state is dropped when the panel
+// leaves the tree, and that would reload the page. A native view also keeps its last place, so a
+// panel that is off screen hides the page instead of leaving it where it was.
 
 use std::sync::Arc;
 
@@ -27,7 +25,7 @@ pub(crate) const REFUSED_SCHEME: &str = "WebView only opens an http or https pag
 pub(crate) const REFUSED_HOST: &str =
     "WebView only opens 127.0.0.1, localhost, or a host this plugin may fetch.";
 
-/// The script's root is a `WebView`, so the panel can sit edge to edge.
+// The script's root is a `WebView`, so the panel can sit edge to edge.
 pub(crate) fn fills_panel(view: &Entity<ScriptView>, cx: &App) -> bool {
     view.read(cx)
         .snapshot()

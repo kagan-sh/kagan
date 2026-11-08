@@ -1,5 +1,3 @@
-//! The scripts that read the page, and the parser that turns their reply into a snapshot.
-
 use kg_domain::{BrowserControl, BrowserSnapshot, OpError};
 use serde::Deserialize;
 
@@ -35,7 +33,6 @@ struct WireControl {
     name: String,
     #[serde(default)]
     value: Option<String>,
-    /// Set by the script for an `input` whose `type` is `password`.
     #[serde(default)]
     secret: bool,
     #[serde(default)]

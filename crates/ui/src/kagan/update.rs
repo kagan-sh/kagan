@@ -1,5 +1,3 @@
-//! The update notice, the install question, and Check for updates (decisions 113 to 115).
-
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, WindowExt as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -20,7 +18,6 @@ actions!(kagan, [CheckForUpdates]);
 
 pub(super) const BREW: &str = "brew upgrade --cask kagan";
 
-/// The version the person put off with Not now, until the next Check for updates.
 struct Hidden(String);
 impl Global for Hidden {}
 
@@ -52,7 +49,6 @@ fn say(message: String, cx: &mut App) {
     }
 }
 
-/// The sentence for an update that is arriving in the background, wherever it is shown.
 pub(super) fn progress_sentence(state: &UpdateState) -> Option<String> {
     match state {
         UpdateState::Downloading { version } => Some(format!("Downloading kagan {version}…")),
@@ -70,7 +66,6 @@ pub(super) fn hidden(cx: &App) -> Option<String> {
     cx.try_global::<Hidden>().map(|hidden| hidden.0.clone())
 }
 
-/// The quiet line over the center while a newer kagan waits.
 pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
     let hidden = hidden(cx);
     let updater = Updater::global(cx);
@@ -113,7 +108,6 @@ pub(super) fn notice(cx: &mut Context<Kagan>) -> Option<AnyElement> {
     )
 }
 
-/// What the person can do with the update the last check found.
 fn actions(cx: &App) -> AnyElement {
     let updater = Updater::global(cx).read(cx);
     let notes = match updater.state() {
