@@ -7,7 +7,7 @@ use super::{
 use kg_domain::ProjectOp;
 
 use gpui_kit::{App, Context, Window};
-use kg_domain::{Op, ProjectId, SurfaceOp};
+use kg_domain::{Op, ProjectId, SurfaceOp, ThreadId};
 
 impl Kagan {
     pub(super) fn sidebar_event(
@@ -62,19 +62,31 @@ impl Kagan {
             Event::ManagePlugins => self.manage_plugins(window, cx),
             Event::NewPlugin => self.add_plugin(window, cx),
             Event::Settings => self.toggle_settings(&OpenSettings, window, cx),
-            Event::RowPin(id)
-            | Event::RowArchive(id)
-            | Event::RowRename(id)
-            | Event::RowSaveDiagnostics(id)
-                if self.shown_thread(cx).as_ref() != Some(id) => {}
-            Event::RowPin(_) => self.toggle_pinned(&TogglePinned, window, cx),
-            Event::RowArchive(_) => self.archive(&ArchiveThread, window, cx),
-            Event::RowRename(_) => self.begin_rename(&RenameThread, window, cx),
-            Event::RowSaveDiagnostics(_) => {
+            Event::RowPin(id) => {
+                self.show_row(id, window, cx);
+                self.toggle_pinned(&TogglePinned, window, cx);
+            }
+            Event::RowArchive(id) => {
+                self.show_row(id, window, cx);
+                self.archive(&ArchiveThread, window, cx);
+            }
+            Event::RowRename(id) => {
+                self.show_row(id, window, cx);
+                self.begin_rename(&RenameThread, window, cx);
+            }
+            Event::RowSaveDiagnostics(id) => {
+                self.show_row(id, window, cx);
                 Kagan::save_diagnostics(self, &SaveDiagnostics, window, cx);
             }
             Event::RowMenuClosed => self.close_thread_actions(window, cx),
             Event::Archived => self.show_archived(window, cx),
+        }
+    }
+
+    // A sidebar row's menu acts on its own thread, so the thread must be the one on screen first.
+    fn show_row(&mut self, id: &ThreadId, window: &mut Window, cx: &mut Context<Self>) {
+        if self.shown_thread(cx).as_ref() != Some(id) {
+            self.select(id.clone(), window, cx);
         }
     }
 
