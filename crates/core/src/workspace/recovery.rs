@@ -4,6 +4,7 @@ use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{EventKind, OpResult, ThreadId, ThreadStatus};
 
 use crate::host::database::Result;
+use crate::thread::clear_pending;
 use crate::workspace::clock::{closed, now};
 use kg_store::Store;
 
@@ -106,10 +107,8 @@ pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut Async
                         .threads
                         .get(id)
                         .map(|thread| thread.read(cx).record.status);
-                    let live = workspace
-                        .terminals
-                        .get(id)
-                        .is_some_and(|shown| matches!(shown, crate::thread::Shown::Running(_)));
+                    let live =
+                        matches!(workspace.shown(id), Some(crate::thread::Shown::Running(_)));
                     !live
                         && matches!(
                             status,
@@ -199,7 +198,7 @@ async fn note_unresumed(
         if let Some(end) = crate::end::End::from_newest(&[EventKind::Failed {
             error: Some(error.to_owned()),
         }]) {
-            workspace.ends.insert(id.clone(), end);
+            workspace.run_mut(id).end = Some(end);
         }
         cx.emit(crate::WorkspaceEvent::Changed);
         cx.notify();
@@ -236,13 +235,6 @@ fn close_left_turn(
         }
         ThreadStatus::Pending | ThreadStatus::Idle | ThreadStatus::Error => Ok(()),
     }
-}
-
-fn clear_pending(store: &Store, id: &ThreadId) -> kg_store::Result<()> {
-    for interaction in store.pending_interactions(id)? {
-        store.delete_pending_interaction(&interaction.id)?;
-    }
-    Ok(())
 }
 
 fn close_left_environments(store: &mut Store) -> kg_store::Result<()> {

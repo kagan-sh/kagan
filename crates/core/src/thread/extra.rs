@@ -11,7 +11,7 @@ use crate::{Workspace, WorkspaceEvent};
 /// The shells a person opened beside one thread's program. `last` only grows, so a number is never reused.
 #[derive(Default)]
 pub(crate) struct Extras {
-    open: Vec<(u32, Terminal)>,
+    pub(super) open: Vec<(u32, Terminal)>,
     last: u32,
 }
 
@@ -34,9 +34,10 @@ pub(super) async fn run(
         TerminalOp::Close { id, number } => this
             .update(cx, |workspace, cx| {
                 let open = &mut workspace
-                    .extras
+                    .runs
                     .get_mut(&id)
                     .ok_or_else(|| missing("terminal", &number))?
+                    .extras
                     .open;
                 let index = open
                     .iter()
@@ -67,7 +68,7 @@ async fn open(this: &WeakEntity<Workspace>, id: ThreadId, cx: &mut AsyncApp) -> 
                 .map(|environment| environment.read(cx).record.clone())
                 .filter(|environment| environment.status == EnvironmentStatus::Ready)
                 .map(|environment| environment.path);
-            (folder, workspace.sizes.get(&id).copied())
+            (folder, workspace.runs.get(&id).and_then(|run| run.size))
         })
         .map_err(closed)?;
     let folder = folder.ok_or_else(|| OpError::Invalid("its folder is not ready".into()))?;
@@ -99,7 +100,7 @@ async fn open(this: &WeakEntity<Workspace>, id: ThreadId, cx: &mut AsyncApp) -> 
     )
     .map_err(|error| OpError::Failed(error.to_string()))?;
     this.update(cx, |workspace, cx| {
-        let extras = workspace.extras.entry(id).or_default();
+        let extras = &mut workspace.run_mut(&id).extras;
         extras.last += 1;
         let number = extras.last;
         extras.open.push((number, terminal));
@@ -117,10 +118,10 @@ impl Workspace {
     /// The thread's extra terminals, oldest first.
     #[must_use]
     pub fn extras(&self, id: &ThreadId) -> Vec<ExtraTerminal> {
-        self.extras
+        self.runs
             .get(id)
             .into_iter()
-            .flat_map(|extras| &extras.open)
+            .flat_map(|run| &run.extras.open)
             .map(|(number, terminal)| ExtraTerminal {
                 number: *number,
                 title: terminal.title(),
@@ -135,8 +136,9 @@ pub(super) fn find<'a>(
     number: u32,
 ) -> Option<&'a Terminal> {
     workspace
-        .extras
+        .runs
         .get(id)?
+        .extras
         .open
         .iter()
         .find_map(|(n, terminal)| (*n == number).then_some(terminal))
@@ -153,12 +155,9 @@ pub(super) async fn links(
             if !workspace.threads.contains_key(&id) {
                 return Err(missing("thread", &id));
             }
-            let program = workspace
-                .terminals
-                .get(&id)
-                .map(|shown| shown.view().clone());
-            let extras = workspace.extras.get(&id).into_iter().flat_map(|extras| {
-                extras
+            let program = workspace.shown(&id).map(|shown| shown.view().clone());
+            let extras = workspace.runs.get(&id).into_iter().flat_map(|run| {
+                run.extras
                     .open
                     .iter()
                     .map(|(_, terminal)| terminal.view().clone())
@@ -192,20 +191,11 @@ pub(super) async fn links(
     Ok(OpResult::Links(found))
 }
 
-/// Ends every extra terminal of a thread and keeps its numbers so they are never reused.
-/// Dropping a terminal ends its program. Returns whether the thread had any.
-pub(crate) fn end(workspace: &mut Workspace, id: &ThreadId) -> bool {
-    workspace
-        .extras
-        .get_mut(id)
-        .is_some_and(|extras| !std::mem::take(&mut extras.open).is_empty())
-}
-
 /// Sends their screen changes and closes the ones whose shell exited. Returns whether any are open.
 pub(super) fn poll(workspace: &mut Workspace, cx: &mut Context<Workspace>) -> bool {
     let mut closed = false;
-    for (id, extras) in &mut workspace.extras {
-        extras.open.retain(|(number, terminal)| {
+    for (id, run) in &mut workspace.runs {
+        run.extras.open.retain(|(number, terminal)| {
             if terminal.view().take_changed() {
                 cx.emit(WorkspaceEvent::Screen(id.clone(), Some(*number)));
             }
@@ -218,7 +208,7 @@ pub(super) fn poll(workspace: &mut Workspace, cx: &mut Context<Workspace>) -> bo
         cx.emit(WorkspaceEvent::Changed);
     }
     workspace
-        .extras
+        .runs
         .values()
-        .any(|extras| !extras.open.is_empty())
+        .any(|run| !run.extras.open.is_empty())
 }

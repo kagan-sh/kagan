@@ -10,8 +10,10 @@ use crate::workspace::{closed, missing};
 use crate::{Thread, Workspace, WorkspaceEvent};
 
 use super::agent::{self, Start};
+use super::extra::Extras;
 use super::halt::status;
 use super::resolve_program;
+use crate::end::{End, Loss};
 
 mod exit;
 mod screen;
@@ -52,9 +54,9 @@ pub(crate) async fn start(
     let size = this
         .update(cx, |workspace, _| {
             workspace
-                .sizes
+                .runs
                 .get(&record.id)
-                .copied()
+                .and_then(|run| run.size)
                 .unwrap_or((COLS, ROWS))
         })
         .map_err(closed)?;
@@ -67,9 +69,7 @@ pub(crate) async fn start(
     match spawned {
         Ok(terminal) => {
             this.update(cx, |workspace, cx| {
-                workspace
-                    .terminals
-                    .insert(record.id.clone(), Shown::Running(terminal));
+                workspace.run_mut(&record.id).shown = Some(Shown::Running(terminal));
                 follow_terminals(workspace, cx);
             })
             .map_err(closed)?;
@@ -193,7 +193,7 @@ pub(crate) async fn submit(
         )));
     }
     let (typed, written) = this
-        .update(cx, |workspace, _| match workspace.terminals.get(id) {
+        .update(cx, |workspace, _| match workspace.shown(id) {
             Some(Shown::Running(terminal)) => terminal
                 .submit(text)
                 .map_err(|error| OpError::Invalid(error.to_string())),
@@ -259,7 +259,7 @@ pub(crate) fn run(
         if number.is_none()
             && let ThreadOp::Resize { cols, rows, .. } = &op
         {
-            workspace.sizes.insert(id.clone(), (*cols, *rows));
+            workspace.run_mut(&id).size = Some((*cols, *rows));
         }
         let result = if let Some(number) = number {
             super::extra::find(workspace, &id, number)
@@ -267,8 +267,7 @@ pub(crate) fn run(
                 .map(|terminal| act(Some(terminal), terminal.view(), op))
         } else {
             workspace
-                .terminals
-                .get(&id)
+                .shown(&id)
                 .ok_or_else(|| missing("terminal", &id))
                 .map(|shown| act(shown.running(), shown.view(), op))
         }?
@@ -279,6 +278,50 @@ pub(crate) fn run(
         result
     })
     .map_err(closed)?
+}
+
+/// Everything the workspace keeps for one thread's program. Forgetting the thread is one `remove`.
+#[derive(Default)]
+pub(crate) struct Run {
+    pub(crate) shown: Option<Shown>,
+    pub(crate) extras: Extras,
+    pub(crate) size: Option<(u16, u16)>,
+    pub(crate) started_seq: Option<u64>,
+    /// Whether the run's settled screen was already offered to the store.
+    pub(crate) saved: bool,
+    pub(crate) end: Option<End>,
+    pub(crate) loss: Option<Loss>,
+    /// The program was asked to stop, and why. Quit skips `turn.ended` only.
+    pub(crate) stopping: Option<StopReason>,
+    /// Its exit is queued for the request loop, so the watcher reports each once.
+    pub(crate) exiting: bool,
+}
+
+impl Run {
+    pub(crate) fn begin(&mut self, seq: u64) {
+        self.started_seq = Some(seq);
+        self.saved = false;
+        self.loss = None;
+        self.end = None;
+    }
+
+    pub(crate) fn unsaved(&self) -> Option<u64> {
+        if matches!(self.shown, Some(Shown::Ended(_))) && !self.saved {
+            self.started_seq
+        } else {
+            None
+        }
+    }
+
+    /// Past the archive grace: drops the screen an ended program left and ends the extra terminals,
+    /// keeping their numbers so none is reused. Returns whether any extra terminal ended.
+    pub(crate) fn release(&mut self) -> bool {
+        if matches!(self.shown, Some(Shown::Ended(_))) {
+            self.shown = None;
+            self.loss = None;
+        }
+        !std::mem::take(&mut self.extras.open).is_empty()
+    }
 }
 
 /// A thread's terminal: the program while it runs, or the screen it left when it ended.
@@ -392,32 +435,26 @@ fn terminal_mode(mode: SelectMode) -> kg_terminal::SelectMode {
 }
 
 impl Workspace {
+    pub(crate) fn run_mut(&mut self, id: &ThreadId) -> &mut Run {
+        self.runs.entry(id.clone()).or_default()
+    }
+
+    pub(crate) fn shown(&self, id: &ThreadId) -> Option<&Shown> {
+        self.runs.get(id)?.shown.as_ref()
+    }
+
     /// A terminal's screen as cells, for a window in this process: the program's, or an extra one by number.
     #[must_use]
     pub fn grid(&self, id: &ThreadId, terminal: Option<u32>) -> Option<kg_terminal::Grid> {
         if let Some(number) = terminal {
             return super::extra::find(self, id, number).map(|terminal| terminal.view().grid());
         }
-        self.terminals.get(id).map(|shown| shown.view().grid())
+        self.shown(id).map(|shown| shown.view().grid())
     }
 }
 
 pub(crate) fn kill(workspace: &mut Workspace, id: &ThreadId) {
-    super::extra::end(workspace, id);
-    workspace.terminals.remove(id);
-    workspace.sizes.remove(id);
     workspace.runs.remove(id);
-    workspace.ends.remove(id);
-    workspace.losses.remove(id);
-    workspace.saved.retain(|(thread, _)| thread != id);
-}
-
-/// Drops the screen an ended program left, once its thread is past the archive grace.
-pub(crate) fn release_ended(workspace: &mut Workspace, id: &ThreadId) {
-    if matches!(workspace.terminals.get(id), Some(Shown::Ended(_))) {
-        workspace.terminals.remove(id);
-        workspace.losses.remove(id);
-    }
 }
 
 #[cfg(test)]

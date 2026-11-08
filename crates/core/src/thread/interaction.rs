@@ -1,9 +1,8 @@
-use async_channel::Sender;
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{OpError, OpResult, PendingInteractionId, ThreadId, Timestamp};
 
 use crate::host::database::Result;
-use crate::workspace::{closed, id, missing, time};
+use crate::workspace::{Waiting, closed, id, missing, time};
 use crate::{Thread, Workspace};
 
 use super::thread;
@@ -21,7 +20,7 @@ pub(crate) async fn raise(
     title: String,
     options: Vec<kg_domain::InteractionOption>,
     fields: Option<Vec<kg_domain::AskField>>,
-    keep: impl FnOnce(&mut Workspace, &ThreadId, PendingInteractionId),
+    mut waiting: Waiting,
     cx: &mut AsyncApp,
 ) -> Result<Raised> {
     let interaction = kg_domain::PendingInteraction {
@@ -54,7 +53,8 @@ pub(crate) async fn raise(
         attention_before,
     };
     this.update(cx, |workspace, cx| {
-        keep(workspace, &thread_id, interaction_id);
+        waiting.thread = Some(thread_id);
+        workspace.pending.insert(interaction_id, waiting);
         thread.update(cx, |thread, cx| {
             thread.record.latest_attention_at = created_at;
             cx.notify();
@@ -107,30 +107,25 @@ pub(crate) async fn ask(
     }
     let open = this
         .update(cx, |workspace, _| {
-            workspace.asks.get(&id).map(|open| open.0.clone())
+            workspace
+                .pending
+                .iter()
+                .find(|(_, waiting)| waiting.thread.as_ref() == Some(&id) && waiting.ask.is_some())
+                .map(|(open, _)| open.clone())
         })
         .map_err(closed)?;
     if let Some(open) = open {
         return Ok(OpResult::Text(open.to_string()));
     }
-    let (sender, receiver) = async_channel::bounded(1);
-    // The receiver stays in the workspace so the person's answer still has a live channel.
-    let interaction = raise(
-        this,
-        &thread,
-        title,
-        options,
-        fields,
-        |workspace, thread_id, interaction| {
-            workspace.for_a_person.insert(interaction.clone());
-            insert_reply(workspace, thread_id.clone(), interaction.clone(), sender);
-            workspace
-                .asks
-                .insert(thread_id.clone(), (interaction, receiver));
-        },
-        cx,
-    )
-    .await?;
+    let (answer, receiver) = async_channel::bounded(1);
+    let waiting = Waiting {
+        thread: None,
+        answer,
+        for_a_person: true,
+        approval: None,
+        ask: Some(receiver),
+    };
+    let interaction = raise(this, &thread, title, options, fields, waiting, cx).await?;
     Ok(OpResult::Text(interaction.id.to_string()))
 }
 
@@ -286,37 +281,24 @@ fn capped_answer(text: String) -> Result<String> {
     Ok(text)
 }
 
-pub(crate) fn insert_reply(
-    workspace: &mut Workspace,
-    thread_id: ThreadId,
-    id: PendingInteractionId,
-    answer: Sender<String>,
-) {
-    workspace.interaction_thread.insert(id.clone(), thread_id);
-    workspace.replies.insert(id, answer);
-}
-
-fn take_reply(workspace: &mut Workspace, id: &PendingInteractionId) -> Option<Sender<String>> {
-    let answer = workspace.replies.remove(id)?;
-    workspace.interaction_thread.remove(id);
-    workspace.for_a_person.remove(id);
-    Some(answer)
+fn take_reply(workspace: &mut Workspace, id: &PendingInteractionId) -> Option<Waiting> {
+    workspace.pending.remove(id)
 }
 
 pub(crate) fn take_thread_replies(
     workspace: &mut Workspace,
     thread_id: &ThreadId,
 ) -> Vec<PendingInteractionId> {
-    workspace.asks.remove(thread_id);
     let ids: Vec<_> = workspace
-        .interaction_thread
+        .pending
         .iter()
-        .filter(|(_, owner)| *owner == thread_id)
+        .filter(|(_, waiting)| waiting.thread.as_ref() == Some(thread_id))
         .map(|(id, _)| id.clone())
         .collect();
-    ids.into_iter()
-        .filter(|id| take_reply(workspace, id).is_some())
-        .collect()
+    for id in &ids {
+        workspace.pending.remove(id);
+    }
+    ids
 }
 
 /// Drops a question whose requester went away, so no answer can reach it, and the attention it
@@ -375,14 +357,14 @@ pub(crate) async fn clear_interactions(
 ) -> Result<()> {
     let id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     let database = crate::workspace::database(this, cx)?;
-    database
-        .call(move |store| {
-            for interaction in store.pending_interactions(&id)? {
-                store.delete_pending_interaction(&interaction.id)?;
-            }
-            Ok(())
-        })
-        .await
+    database.call(move |store| clear_pending(store, &id)).await
+}
+
+pub(crate) fn clear_pending(store: &kg_store::Store, id: &ThreadId) -> kg_store::Result<()> {
+    for interaction in store.pending_interactions(id)? {
+        store.delete_pending_interaction(&interaction.id)?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn answer(
@@ -420,15 +402,13 @@ pub(crate) async fn answer(
     let title = interaction.title.clone();
     let chosen = option_id.clone();
     this.update(cx, |workspace, _| {
-        let sent = if let Some(answer) = take_reply(workspace, &interaction_id) {
-            answer.try_send(option_id).map_err(closed)
+        if let Some(waiting) = take_reply(workspace, &interaction_id) {
+            waiting.answer.try_send(option_id).map_err(closed)
         } else {
             Err(OpError::Invalid(
                 "nothing is waiting for this answer any more".into(),
             ))
-        };
-        workspace.asks.retain(|_, open| open.0 != interaction_id);
-        sent
+        }
     })
     .map_err(closed)??;
     database

@@ -1,5 +1,5 @@
 use gpui_kit::{AsyncApp, WeakEntity};
-use kg_domain::{InteractionOption, OpError, OpResult, ThreadId};
+use kg_domain::{OpError, OpResult, ThreadId};
 
 use crate::environment;
 use crate::host::database::{Database, Result};
@@ -125,7 +125,7 @@ pub(super) async fn delete(
             "Delete “{title}” and permanently delete {described}? Its files cannot be recovered."
         )
     };
-    approve(approval_thread_id, requester, question, "Delete", cx).await?;
+    crate::workspace::approve(approval_thread_id, requester, question, "Delete", cx).await?;
     #[cfg(test)]
     {
         let hold = this
@@ -170,33 +170,4 @@ pub(crate) fn forget_deleted(
         cx.emit(crate::WorkspaceEvent::Event { event, project_id });
     }
     cx.notify();
-}
-
-pub(crate) async fn approve(
-    thread_id: Option<ThreadId>,
-    requester: Option<Requester>,
-    question: String,
-    verb: &str,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    let options = vec![
-        InteractionOption {
-            id: InteractionOption::DECLINE.into(),
-            label: "Cancel".into(),
-        },
-        InteractionOption {
-            id: InteractionOption::APPROVE.into(),
-            label: verb.into(),
-        },
-    ];
-    let answer = cx
-        .update(|cx| {
-            Workspace::ask_for_person(thread_id.as_ref(), requester, question.clone(), options, cx)
-        })
-        .await?;
-    if answer == InteractionOption::APPROVE {
-        Ok(())
-    } else {
-        Err(OpError::Invalid(format!("declined: {question}")))
-    }
 }

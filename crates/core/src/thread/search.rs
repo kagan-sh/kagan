@@ -39,8 +39,7 @@ pub(crate) fn search(
                     .chain(retired)
                     .map(|thread| {
                         let lines = workspace
-                            .terminals
-                            .get(&thread.id)
+                            .shown(&thread.id)
                             .map(|shown| shown.view().clone());
                         (thread, lines)
                     })

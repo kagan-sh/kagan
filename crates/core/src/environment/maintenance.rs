@@ -43,8 +43,11 @@ pub(crate) async fn sweep(
         {
             let thread = this
                 .update(cx, |workspace, cx| {
-                    crate::thread::release_ended(workspace, &record.id);
-                    if crate::thread::end_extras(workspace, &record.id) {
+                    if workspace
+                        .runs
+                        .get_mut(&record.id)
+                        .is_some_and(crate::thread::Run::release)
+                    {
                         cx.emit(crate::WorkspaceEvent::Changed);
                     }
                     drop_screens.push(record.id.clone());

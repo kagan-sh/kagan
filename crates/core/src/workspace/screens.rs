@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use gpui_kit::{App, AppContext as _, Task};
 use kg_domain::ThreadId;
 
@@ -9,17 +7,20 @@ use crate::workspace::clock::missing;
 use super::Workspace;
 
 impl Workspace {
+    fn end(&self, id: &ThreadId) -> Option<&crate::end::End> {
+        self.runs.get(id)?.end.as_ref()
+    }
     #[must_use]
     pub fn end_line(&self, id: &ThreadId) -> Option<String> {
-        self.ends.get(id).map(crate::end::End::line)
+        self.end(id).map(crate::end::End::line)
     }
     #[must_use]
     pub fn screen_note(&self, id: &ThreadId) -> Option<&'static str> {
-        self.losses.get(id).copied().map(crate::end::Loss::note)
+        self.runs.get(id)?.loss.map(crate::end::Loss::note)
     }
     #[cfg(any(test, feature = "test"))]
     pub fn set_snapshot_bound(&mut self, id: &ThreadId, bound: usize) -> bool {
-        let Some(crate::thread::Shown::Running(terminal)) = self.terminals.get(id) else {
+        let Some(crate::thread::Shown::Running(terminal)) = self.shown(id) else {
             return false;
         };
         terminal.set_snapshot_bound(bound);
@@ -30,8 +31,7 @@ impl Workspace {
     pub fn thread_output(id: &ThreadId, cap: usize, cx: &mut App) -> Task<Result<String>> {
         let lines = Self::global(cx)
             .read(cx)
-            .terminals
-            .get(id)
+            .shown(id)
             .map(|shown| shown.view().clone());
         match lines {
             None => Task::ready(Err(missing("terminal", id))),
@@ -42,38 +42,28 @@ impl Workspace {
     /// not count.
     #[must_use]
     pub fn program_ended(&self, id: &ThreadId) -> bool {
-        self.ends.get(id).is_some_and(crate::end::End::shows_mark)
+        self.end(id).is_some_and(crate::end::End::shows_mark)
     }
     /// A non-zero exit, a signal, a quit, a failure, an interrupted start, or a screen that was
     /// not kept in full.
     #[must_use]
     pub fn recovery(&self, id: &ThreadId) -> bool {
         self.screen_note(id).is_some()
-            || self.ends.get(id).is_some_and(|end| {
+            || self.end(id).is_some_and(|end| {
                 !matches!(end, crate::end::End::Stopped | crate::end::End::Exited(0))
             })
     }
 }
-pub(super) fn remember(
-    workspace: &mut Workspace,
-    screens: Vec<kg_store::ScreenRow>,
-) -> BTreeMap<ThreadId, crate::end::Loss> {
-    let mut losses = BTreeMap::new();
+pub(super) fn remember(workspace: &mut Workspace, screens: Vec<kg_store::ScreenRow>) {
     for screen in screens {
         let id = screen.thread_id.clone();
-        workspace.runs.insert(id.clone(), screen.started_seq);
-        workspace.saved.insert((id.clone(), screen.started_seq));
-        if let Some(loss) = crate::end::Loss::from_kept(screen.screen_kept, screen.history_dropped)
-        {
-            losses.insert(id.clone(), loss);
-        }
-        if screen.screen_kept && !workspace.terminals.contains_key(&id) {
+        let run = workspace.run_mut(&id);
+        run.started_seq = Some(screen.started_seq);
+        run.saved = true;
+        run.loss = crate::end::Loss::from_kept(screen.screen_kept, screen.history_dropped);
+        if screen.screen_kept && run.shown.is_none() {
             match kg_terminal::Finished::restore(screen.cols, screen.rows, &screen.replay) {
-                Some(finished) => {
-                    workspace
-                        .terminals
-                        .insert(id, crate::thread::Shown::Ended(finished));
-                }
+                Some(finished) => run.shown = Some(crate::thread::Shown::Ended(finished)),
                 None => {
                     eprintln!(
                         "kg: saved screen for {id} was outside the bound and was not restored"
@@ -82,5 +72,4 @@ pub(super) fn remember(
             }
         }
     }
-    losses
 }

@@ -39,16 +39,22 @@ pub(super) async fn persist(
             Ok(true) => {
                 let _ = this.update(cx, |workspace, cx| {
                     remember(workspace, &id, seq, loss, cx);
-                    workspace.saved.insert((id.clone(), seq));
+                    mark_saved(workspace, &id, seq);
                 });
             }
             Ok(false) => {
-                let _ = this.update(cx, |workspace, _| {
-                    workspace.saved.insert((id, seq));
-                });
+                let _ = this.update(cx, |workspace, _| mark_saved(workspace, &id, seq));
             }
             Err(error) => eprintln!("kg: could not keep the screen: {error}"),
         }
+    }
+}
+
+fn mark_saved(workspace: &mut Workspace, id: &ThreadId, seq: u64) {
+    if let Some(run) = workspace.runs.get_mut(id)
+        && run.started_seq == Some(seq)
+    {
+        run.saved = true;
     }
 }
 
@@ -59,17 +65,13 @@ pub(crate) fn remember(
     loss: Option<crate::end::Loss>,
     cx: &mut Context<Workspace>,
 ) {
-    if workspace.runs.get(id) != Some(&seq) {
+    let Some(run) = workspace.runs.get_mut(id) else {
+        return;
+    };
+    if run.started_seq != Some(seq) {
         return;
     }
-    match loss {
-        Some(loss) => {
-            workspace.losses.insert(id.clone(), loss);
-        }
-        None => {
-            workspace.losses.remove(id);
-        }
-    }
+    run.loss = loss;
     cx.emit(WorkspaceEvent::Changed);
 }
 fn watch(cx: &mut Context<Workspace>) {
@@ -83,7 +85,10 @@ fn watch(cx: &mut Context<Workspace>) {
                 let mut keep = Vec::new();
                 let mut following = false;
                 let now = cx.background_executor().now();
-                for (id, shown) in &workspace.terminals {
+                for (id, run) in &workspace.runs {
+                    let Some(shown) = &run.shown else {
+                        continue;
+                    };
                     let terminal = match shown {
                         Shown::Running(terminal) => terminal,
                         Shown::Ended(finished) => {
@@ -94,8 +99,7 @@ fn watch(cx: &mut Context<Workspace>) {
                             following |= follows;
                             // `settled` is set only after the reader is joined and the last hold released.
                             if finished.settled()
-                                && let Some(&seq) = workspace.runs.get(id)
-                                && !workspace.saved.contains(&(id.clone(), seq))
+                                && let Some(seq) = run.unsaved()
                             {
                                 following = true;
                                 keep.push((id.clone(), seq, finished.clone()));
@@ -119,13 +123,13 @@ fn watch(cx: &mut Context<Workspace>) {
                         }
                     }
                     if let Some(exit) = terminal.exit()
-                        && !workspace.exiting.contains(id)
+                        && !run.exiting
                     {
                         ended.push((id.clone(), exit));
                     }
                 }
                 for (id, _) in &ended {
-                    workspace.exiting.insert(id.clone());
+                    workspace.run_mut(id).exiting = true;
                 }
                 following |= crate::thread::extra::poll(workspace, cx);
                 workspace.watching = following;
@@ -164,10 +168,9 @@ fn watch(cx: &mut Context<Workspace>) {
     .detach();
 }
 pub(super) fn keep_screen(workspace: &mut Workspace, id: &ThreadId, cx: &mut Context<Workspace>) {
-    if let Some(Shown::Running(terminal)) = workspace.terminals.remove(id) {
-        workspace
-            .terminals
-            .insert(id.clone(), Shown::Ended(terminal.finish()));
+    let run = workspace.run_mut(id);
+    if let Some(Shown::Running(terminal)) = run.shown.take() {
+        run.shown = Some(Shown::Ended(terminal.finish()));
     }
     cx.emit(WorkspaceEvent::Screen(id.clone(), None));
     follow_terminals(workspace, cx);

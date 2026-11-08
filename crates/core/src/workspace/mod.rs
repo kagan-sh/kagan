@@ -31,6 +31,7 @@ mod state;
 pub(crate) use clock::{closed, database, id, missing, now, time};
 pub(crate) use data::open_data;
 pub use plugins::Permit;
+pub(crate) use questions::{Waiting, approve};
 
 use recovery::interrupted;
 
@@ -98,12 +99,7 @@ pub enum PluginRequest {
 pub type PluginDispatch = Rc<dyn Fn(PluginRequest, &mut App) -> Task<Result<OpResult>>>;
 
 pub struct Workspace {
-    pub(crate) approvals: BTreeMap<PendingInteractionId, crate::workspace::approval::Waiting>,
-    pub(crate) replies: BTreeMap<PendingInteractionId, Sender<String>>,
-    pub(crate) for_a_person: BTreeSet<PendingInteractionId>,
-    pub(crate) asks: BTreeMap<ThreadId, (PendingInteractionId, async_channel::Receiver<String>)>,
-    /// Which thread owns each reply. Taking one thread drops only its waits.
-    pub(crate) interaction_thread: BTreeMap<PendingInteractionId, ThreadId>,
+    pub(crate) pending: BTreeMap<PendingInteractionId, Waiting>,
     pub(crate) database: Database,
     pub(crate) data_dir: PathBuf,
     pub(crate) cli: PathBuf,
@@ -113,25 +109,11 @@ pub struct Workspace {
     pub(crate) environments: BTreeMap<EnvironmentId, Entity<Environment>>,
     pub(crate) threads: BTreeMap<ThreadId, Entity<Thread>>,
     pub(crate) tasks: BTreeMap<ThreadId, Task<()>>,
-    pub(crate) terminals: BTreeMap<ThreadId, crate::thread::Shown>,
-    pub(crate) extras: BTreeMap<ThreadId, crate::thread::Extras>,
-    /// The size the window last gave each thread's program. A program started again takes it.
-    pub(crate) sizes: BTreeMap<ThreadId, (u16, u16)>,
+    pub(crate) runs: BTreeMap<ThreadId, crate::thread::Run>,
     /// Whether the task that watches `terminals` is running.
     pub(crate) watching: bool,
     /// Environments whose folder removal is running outside the operation loop.
     pub(crate) removing: BTreeSet<EnvironmentId>,
-    /// Programs whose exit is queued for the request loop, so the watcher reports each once.
-    pub(crate) exiting: BTreeSet<ThreadId>,
-    /// Threads whose program was asked to stop, and why. Quit skips `turn.ended` only.
-    pub(crate) stopping: BTreeMap<ThreadId, crate::thread::StopReason>,
-    /// The `Started` seq of the run now in progress, or the run a saved screen belongs to.
-    pub(crate) runs: BTreeMap<ThreadId, u64>,
-    pub(crate) ends: BTreeMap<ThreadId, crate::end::End>,
-    /// Loaded with the saved screen, so a reopen shows the same note.
-    pub(crate) losses: BTreeMap<ThreadId, crate::end::Loss>,
-    /// Runs whose settled screen was already offered to the store.
-    pub(crate) saved: BTreeSet<(ThreadId, u64)>,
     pub(crate) diffs: std::sync::Arc<crate::diff::Cache>,
     keymap: kg_domain::Keymap,
     pub(crate) plugins: Option<PluginDispatch>,
@@ -238,11 +220,7 @@ impl Workspace {
                         }
                     });
                     Self {
-                        approvals: BTreeMap::new(),
-                        replies: BTreeMap::new(),
-                        for_a_person: BTreeSet::new(),
-                        asks: BTreeMap::new(),
-                        interaction_thread: BTreeMap::new(),
+                        pending: BTreeMap::new(),
                         database,
                         data_dir,
                         cli,
@@ -253,17 +231,9 @@ impl Workspace {
                         environments: BTreeMap::new(),
                         threads: BTreeMap::new(),
                         tasks: BTreeMap::new(),
-                        terminals: BTreeMap::new(),
-                        extras: BTreeMap::new(),
-                        sizes: BTreeMap::new(),
+                        runs: BTreeMap::new(),
                         watching: false,
                         removing: BTreeSet::new(),
-                        exiting: BTreeSet::new(),
-                        stopping: BTreeMap::new(),
-                        runs: BTreeMap::new(),
-                        ends: BTreeMap::new(),
-                        losses: BTreeMap::new(),
-                        saved: BTreeSet::new(),
                         diffs: crate::diff::Cache::new(),
                         keymap: kg_domain::Keymap::default(),
                         plugins: None,

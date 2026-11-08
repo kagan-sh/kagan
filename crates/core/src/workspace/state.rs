@@ -117,13 +117,16 @@ impl Workspace {
                         .insert(record.id.clone(), cx.new(|_| Thread::new(record)));
                 }
             }
-            workspace.ends.clear();
+            for run in workspace.runs.values_mut() {
+                run.end = None;
+                run.loss = None;
+            }
             for (id, kinds) in endings {
                 if let Some(end) = crate::end::End::from_newest(&kinds) {
-                    workspace.ends.insert(id, end);
+                    workspace.run_mut(&id).end = Some(end);
                 }
             }
-            workspace.losses = remember(workspace, screens);
+            remember(workspace, screens);
             cx.emit(WorkspaceEvent::Changed);
             cx.notify();
         })
@@ -186,13 +189,10 @@ impl Workspace {
             }
             newest.reverse();
             if let Some(seq) = run {
-                workspace.runs.insert(thread_id.clone(), seq);
-                workspace.saved.retain(|(thread, _)| thread != &thread_id);
-                workspace.losses.remove(&thread_id);
-                workspace.ends.remove(&thread_id);
+                workspace.run_mut(&thread_id).begin(seq);
             }
             if let Some(end) = crate::end::End::from_newest(&newest) {
-                workspace.ends.insert(thread_id, end);
+                workspace.run_mut(&thread_id).end = Some(end);
             }
             for event in events {
                 cx.emit(WorkspaceEvent::Event {

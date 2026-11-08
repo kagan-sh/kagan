@@ -119,7 +119,7 @@ pub(crate) async fn remove(
         count => format!("Remove “{}” and its {count} threads", project.name),
     };
     let question = format!("{subject} from kagan? The folder stays on disk.");
-    crate::thread::archive::approve(None, requester, question, "Remove", cx).await?;
+    crate::workspace::approve(None, requester, question, "Remove", cx).await?;
     let threads = threads.into_iter().map(|thread| thread.id).collect();
     let submitted = this
         .update(cx, |workspace, _| {

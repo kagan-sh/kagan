@@ -11,9 +11,10 @@ mod search;
 mod terminal;
 
 pub(crate) use agent::{note_with, read_instructions};
-pub(crate) use extra::{Extras, end as end_extras};
+
+pub(crate) use extra::Extras;
 pub(crate) use halt::{retire, stop};
-pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
+pub(crate) use interaction::{answer, clear_pending, raise, withdraw};
 pub(crate) use read::{wait, wait_event};
 pub(crate) use run::resolve_program;
 pub(crate) use run::{PreparedRun, commit as commit_run, prepare as prepare_run};
@@ -24,7 +25,7 @@ pub(crate) use terminal::exited;
 pub(crate) use terminal::remember;
 pub(crate) use terminal::start as start_terminal;
 pub(crate) use terminal::start_again;
-pub(crate) use terminal::{Shown, release_ended};
+pub(crate) use terminal::{Run, Shown};
 
 use gpui_kit::{AsyncApp, Entity, WeakEntity};
 use kg_domain::{OpError, OpResult, ThreadId, ThreadOp};
