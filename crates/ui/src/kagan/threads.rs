@@ -140,13 +140,25 @@ impl Kagan {
         cx.notify();
     }
 
-    pub(super) fn run(op: ThreadOp, action: &'static str, window: &Window, cx: &mut Context<Self>) {
-        let task = Workspace::dispatch(Op::Thread(op), cx);
-        let window = window.window_handle();
+    pub(super) fn run(&self, op: Op, action: &'static str, cx: &mut Context<Self>) {
+        self.run_then(op, cx, move |this, result, window, cx| {
+            this.finish(result, action, window, cx);
+        });
+    }
+
+    pub(super) fn run_then(
+        &self,
+        op: Op,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, Result<OpResult, OpError>, &mut Window, &mut Context<Self>)
+        + 'static,
+    ) {
+        let task = Workspace::dispatch(op, cx);
+        let window = self.window;
         cx.spawn(async move |this, cx| {
             let result = task.await;
             _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| this.finish(result, action, window, cx));
+                _ = this.update(cx, |this, cx| then(this, result, window, cx));
             });
         })
         .detach();
@@ -200,25 +212,22 @@ impl Kagan {
         }
     }
 
-    pub(super) fn stop(&mut self, _: &StopThread, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn stop(&mut self, _: &StopThread, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.shown_thread(cx) {
-            Self::run(ThreadOp::Stop { id }, "stop the thread", window, cx);
+            self.run(Op::Thread(ThreadOp::Stop { id }), "stop the thread", cx);
         }
     }
 
     pub(super) fn save_diagnostics(
-        _: &mut Self,
+        &mut self,
         _: &SaveDiagnostics,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let task = Workspace::dispatch(
+        self.run_then(
             kg_domain::Op::Diagnostics(kg_domain::DiagnosticsOp::Export { path: None }),
             cx,
-        );
-        cx.spawn_in(window, async move |this, cx| {
-            let result = task.await;
-            _ = this.update(cx, |this, cx| {
+            |this, result, _, cx| {
                 match result {
                     Ok(kg_domain::OpResult::Diagnostics { path }) => {
                         this.note = None;
@@ -237,22 +246,15 @@ impl Kagan {
                     Ok(_) => {}
                 }
                 cx.notify();
-            });
-        })
-        .detach();
+            },
+        );
     }
 
-    pub(super) fn start_again(
-        &mut self,
-        _: &StartAgain,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn start_again(&mut self, _: &StartAgain, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.shown_thread(cx) {
-            Self::run(
-                ThreadOp::StartAgain { id },
+            self.run(
+                Op::Thread(ThreadOp::StartAgain { id }),
                 "start the thread again",
-                window,
                 cx,
             );
         }
@@ -261,7 +263,7 @@ impl Kagan {
     pub(super) fn toggle_pinned(
         &mut self,
         _: &TogglePinned,
-        window: &mut Window,
+        _: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Some(thread) = self
@@ -274,12 +276,16 @@ impl Kagan {
             id: thread.id,
             pinned: !thread.pinned,
         };
-        Self::run(pin, "change the pin", window, cx);
+        self.run(Op::Thread(pin), "change the pin", cx);
     }
 
-    pub(crate) fn restore(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn restore(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         if let Some(id) = self.shown_thread(cx) {
-            Self::run(ThreadOp::Unarchive { id }, "restore the thread", window, cx);
+            self.run(
+                Op::Thread(ThreadOp::Unarchive { id }),
+                "restore the thread",
+                cx,
+            );
         }
     }
 
@@ -357,7 +363,11 @@ impl Kagan {
             },
             cx,
         );
-        Self::run(ThreadOp::Archive { id }, "archive the thread", window, cx);
+        self.run(
+            Op::Thread(ThreadOp::Archive { id }),
+            "archive the thread",
+            cx,
+        );
     }
 
     pub(super) fn undo_archive(
@@ -371,7 +381,11 @@ impl Kagan {
             self.select(id.clone(), window, cx);
         }
         for id in ids {
-            Self::run(ThreadOp::Unarchive { id }, "restore the thread", window, cx);
+            self.run(
+                Op::Thread(ThreadOp::Unarchive { id }),
+                "restore the thread",
+                cx,
+            );
         }
     }
 

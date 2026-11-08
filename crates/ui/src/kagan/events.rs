@@ -6,8 +6,7 @@ use super::{
 };
 use kg_domain::ProjectOp;
 
-use gpui_kit::{App, AppContext as _, Context, Window};
-use kg_core::Workspace;
+use gpui_kit::{App, Context, Window};
 use kg_domain::{Op, ProjectId, SurfaceOp};
 
 impl Kagan {
@@ -80,23 +79,18 @@ impl Kagan {
     }
 
     fn remove_project(&mut self, project: ProjectId, cx: &mut Context<Self>) {
-        let task = Workspace::dispatch(Op::Project(ProjectOp::Remove { id: project }), cx);
-        let window = self.window;
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| match result {
-                    Ok(kg_domain::OpResult::Warnings(warnings)) => {
-                        this.refresh(window, cx);
-                        this.note =
-                            Some(format!("Project removed. {}", warnings.join("; ")).into());
-                        cx.notify();
-                    }
-                    result => this.finish(result, "remove project", window, cx),
-                });
-            });
-        })
-        .detach();
+        self.run_then(
+            Op::Project(ProjectOp::Remove { id: project }),
+            cx,
+            |this, result, window, cx| match result {
+                Ok(kg_domain::OpResult::Warnings(warnings)) => {
+                    this.refresh(window, cx);
+                    this.note = Some(format!("Project removed. {}", warnings.join("; ")).into());
+                    cx.notify();
+                }
+                result => this.finish(result, "remove project", window, cx),
+            },
+        );
     }
 
     fn reorder_project(
@@ -105,17 +99,11 @@ impl Kagan {
         before: Option<ProjectId>,
         cx: &mut Context<Self>,
     ) {
-        let task = Workspace::dispatch(Op::Project(ProjectOp::Reorder { id, before }), cx);
-        let window = self.window;
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| {
-                    this.finish(result, "move project", window, cx);
-                });
-            });
-        })
-        .detach();
+        self.run(
+            Op::Project(ProjectOp::Reorder { id, before }),
+            "move project",
+            cx,
+        );
     }
 
     pub(super) fn shows(&self, cx: &App) -> Shows {

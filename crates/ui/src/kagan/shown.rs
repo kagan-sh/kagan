@@ -177,21 +177,17 @@ impl Kagan {
             _ = this.update(cx, |this, _| this.title_watch = None);
         })
         .detach();
-        let task = Workspace::dispatch(Op::Thread(ThreadOp::Rename { id, title }), cx);
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            _ = cx.update_window(window, |_, _, cx| {
-                _ = this.update(cx, |this, cx| {
-                    this.note = match result {
-                        Ok(_) => None,
-                        Err(error) => Some(format!("Could not rename the thread: {error}").into()),
-                    };
-                    cx.notify();
-                });
-            });
-        })
-        .detach();
+        self.run_then(
+            Op::Thread(ThreadOp::Rename { id, title }),
+            cx,
+            |this, result, _, cx| {
+                this.note = match result {
+                    Ok(_) => None,
+                    Err(error) => Some(format!("Could not rename the thread: {error}").into()),
+                };
+                cx.notify();
+            },
+        );
     }
 
     pub(super) fn close_rename(&mut self) {

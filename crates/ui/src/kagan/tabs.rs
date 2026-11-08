@@ -180,40 +180,28 @@ impl Kagan {
         }
     }
 
-    pub(super) fn new_terminal(
-        &mut self,
-        _: &NewTerminal,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn new_terminal(&mut self, _: &NewTerminal, _: &mut Window, cx: &mut Context<Self>) {
         let Some(thread) = self.shown_open_thread(cx) else {
             return;
         };
-        let opened = Workspace::dispatch(
+        self.run_then(
             Op::Thread(ThreadOp::Terminal(TerminalOp::New { id: thread.id })),
             cx,
+            |this, result, window, cx| match result {
+                Ok(OpResult::Terminals(opened)) => {
+                    this.note = None;
+                    this.sync_tabs(window, cx);
+                    if let Some(extra) = opened.first() {
+                        this.show_right_tab(Tab::Terminal(extra.number), window, cx);
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    this.note = Some(format!("Could not open a terminal: {error}").into());
+                    cx.notify();
+                }
+            },
         );
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            let opened = opened.await;
-            _ = cx.update_window(window, |_, window, cx| {
-                _ = this.update(cx, |this, cx| match opened {
-                    Ok(OpResult::Terminals(opened)) => {
-                        this.note = None;
-                        this.sync_tabs(window, cx);
-                        if let Some(extra) = opened.first() {
-                            this.show_right_tab(Tab::Terminal(extra.number), window, cx);
-                        }
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        this.note = Some(format!("Could not open a terminal: {error}").into());
-                        cx.notify();
-                    }
-                });
-            });
-        })
-        .detach();
     }
 
     pub(super) fn close_terminal(
@@ -251,26 +239,20 @@ impl Kagan {
             .map(|(number, ..)| *number)
     }
 
-    fn close_right_terminal(&mut self, number: u32, window: &mut Window, cx: &mut Context<Self>) {
+    fn close_right_terminal(&mut self, number: u32, _: &mut Window, cx: &mut Context<Self>) {
         let Some(id) = self.shown_thread(cx) else {
             return;
         };
-        let closed = Workspace::dispatch(
+        self.run_then(
             Op::Thread(ThreadOp::Terminal(TerminalOp::Close { id, number })),
             cx,
+            |this, result, window, cx| {
+                if result.is_ok() {
+                    this.sync_tabs(window, cx);
+                    this.focus_right_tab(window, cx);
+                }
+            },
         );
-        let window = window.window_handle();
-        cx.spawn(async move |this, cx| {
-            if closed.await.is_ok() {
-                _ = cx.update_window(window, |_, window, cx| {
-                    _ = this.update(cx, |this, cx| {
-                        this.sync_tabs(window, cx);
-                        this.focus_right_tab(window, cx);
-                    });
-                });
-            }
-        })
-        .detach();
     }
 
     pub(super) fn can_open_browser(&self, cx: &App) -> bool {
