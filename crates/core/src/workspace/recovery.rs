@@ -163,26 +163,11 @@ async fn note_unresumed(
     let thread = crate::thread::thread(this, id, cx)?;
     let mut record = thread.read_with(cx, |thread, _| thread.record.clone());
     let at = crate::workspace::time(this, cx)?;
-    let (error, before_turn) = if starting {
-        (crate::end::STARTING, true)
-    } else {
-        (crate::end::QUIT, false)
-    };
-    record.status = ThreadStatus::Error;
-    record.latest_attention_at = at;
-    record.updated_at = at;
     let database = crate::workspace::database(this, cx)?;
-    let saved = record.clone();
-    let text = error.to_owned();
-    database
+    let (record, end) = database
         .call(move |store| {
-            let notice = parent_notice(store, &saved, &text, before_turn)?;
-            store.recover_thread(
-                &saved,
-                at,
-                [EventKind::Failed { error: Some(text) }],
-                notice,
-            )
+            let end = fail_left(store, &mut record, at, starting)?;
+            Ok((record, end))
         })
         .await?;
     thread.update(cx, |thread, cx| {
@@ -190,11 +175,7 @@ async fn note_unresumed(
         cx.notify();
     });
     this.update(cx, |workspace, cx| {
-        if let Some(end) = crate::end::End::from_newest(&[EventKind::Failed {
-            error: Some(error.to_owned()),
-        }]) {
-            workspace.run_mut(id).end = Some(end);
-        }
+        workspace.run_mut(id).end = Some(end);
         cx.emit(crate::WorkspaceEvent::Changed);
         cx.notify();
     })
@@ -214,22 +195,34 @@ fn close_left_turn(
     }
     match record.status {
         ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping => {
-            let (error, before_turn) = if record.status == ThreadStatus::Starting {
-                (crate::end::STARTING, true)
-            } else {
-                (crate::end::QUIT, false)
-            };
-            let own = vec![EventKind::Failed {
-                error: Some(error.into()),
-            }];
-            record.status = ThreadStatus::Error;
-            record.latest_attention_at = at;
-            record.updated_at = at;
-            let notice = parent_notice(store, record, error, before_turn)?;
-            store.recover_thread(record, at, own, notice)
+            let starting = record.status == ThreadStatus::Starting;
+            fail_left(store, record, at, starting).map(|_| ())
         }
         ThreadStatus::Pending | ThreadStatus::Idle | ThreadStatus::Error => Ok(()),
     }
+}
+
+/// Marks a thread kagan left running as failed, and says so to its parent.
+fn fail_left(
+    store: &mut Store,
+    record: &mut kg_domain::Thread,
+    at: kg_domain::Timestamp,
+    starting: bool,
+) -> kg_store::Result<crate::end::End> {
+    let (error, end) = if starting {
+        (crate::end::STARTING, crate::end::End::Starting)
+    } else {
+        (crate::end::QUIT, crate::end::End::Quit)
+    };
+    record.status = ThreadStatus::Error;
+    record.latest_attention_at = at;
+    record.updated_at = at;
+    let notice = parent_notice(store, record, error, starting)?;
+    let own = [EventKind::Failed {
+        error: Some(error.into()),
+    }];
+    store.recover_thread(record, at, own, notice)?;
+    Ok(end)
 }
 
 fn close_left_environments(store: &mut Store) -> kg_store::Result<()> {

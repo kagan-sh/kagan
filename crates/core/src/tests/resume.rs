@@ -961,3 +961,49 @@ async fn a_lost_codex_file_is_replaced_by_the_run_that_follows(cx: &mut TestAppC
     tick(cx);
     assert_eq!(remembered(&fixture, &id), Some(replacement));
 }
+
+fn left_to_resume(fixture: &Fixture) -> std::collections::BTreeSet<ThreadId> {
+    kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3"))
+        .unwrap()
+        .resume_threads()
+        .unwrap()
+}
+
+#[gpui_kit::test]
+async fn a_remembered_thread_that_cannot_resume_is_forgotten_at_open(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let gone = ThreadId("thr_gone".into());
+    let fixture = fixture
+        .restart(cx, |store| {
+            store
+                .set_resume_threads(&std::collections::BTreeSet::from([gone.clone()]))
+                .unwrap();
+        })
+        .await;
+    cx.run_until_parked();
+    assert!(left_to_resume(&fixture).is_empty());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn an_idle_thread_whose_folder_is_gone_stays_idle_when_it_cannot_resume(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, "/bin/sh", cx).await;
+    stop(&id, cx).await;
+    let environment = super::thread(&id, cx).await.environment_id.unwrap();
+    let fixture = fixture
+        .restart(cx, |store| {
+            store
+                .set_resume_threads(&std::collections::BTreeSet::from([id.clone()]))
+                .unwrap();
+            let mut folder = store.environment(&environment).unwrap().unwrap();
+            folder.status = EnvironmentStatus::Error;
+            store.put_environment(&folder).unwrap();
+        })
+        .await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Idle);
+    assert!(left_to_resume(&fixture).is_empty());
+}
