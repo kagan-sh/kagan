@@ -214,10 +214,12 @@ fn ask_op() {
                 InteractionOption {
                     id: "yes".into(),
                     label: "Yes".into(),
+                    role: None,
                 },
                 InteractionOption {
                     id: "no".into(),
                     label: "No".into(),
+                    role: None,
                 },
             ],
             fields: None,
@@ -404,6 +406,7 @@ fn interactions_result() {
             options: vec![InteractionOption {
                 id: "allow-once".into(),
                 label: "Allow once".into(),
+                role: None,
             }],
             fields: None,
             created_at: Timestamp(5),

@@ -86,6 +86,7 @@ fn next_needing_you_opens_the_oldest_question_in_a_collapsed_project(cx: &mut Te
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let first = cx.update(|cx| Workspace::ask(&oldest, "First?".into(), options.clone(), cx));
     cx.run_until_parked();
@@ -157,6 +158,7 @@ fn needing_you_from_settings_keeps_the_covered_thread(cx: &mut TestAppContext) {
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let question = cx.update(|cx| Workspace::ask(&asked, "Ready?".into(), options, cx));
     cx.run_until_parked();
@@ -205,6 +207,7 @@ fn next_needing_you_reveals_a_folded_child(cx: &mut TestAppContext) {
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let _asked = cx.update(|cx| Workspace::ask(&child, "Waiting?".into(), options, cx));
     cx.run_until_parked();

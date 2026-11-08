@@ -30,10 +30,12 @@ async fn a_natural_exit_cancels_the_questions_and_clears_busy(cx: &mut TestAppCo
         InteractionOption {
             id: "approve".into(),
             label: "Approve".into(),
+            role: None,
         },
         InteractionOption {
             id: "decline".into(),
             label: "Decline".into(),
+            role: None,
         },
     ];
     let asking = cx.update(|cx| {
@@ -546,6 +548,7 @@ async fn ask_with_a_blank_title_or_one_option_stores_nothing(cx: &mut TestAppCon
             vec![InteractionOption {
                 id: "yes".into(),
                 label: "Yes".into(),
+                role: None,
             }],
         ),
         cx,

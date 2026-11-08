@@ -2,7 +2,7 @@ use async_channel::{Receiver, Sender};
 use gpui_kit::{App, AsyncApp, Task};
 
 use crate::host::database::Result;
-use kg_domain::{InteractionOption, OpError, OpResult, PendingInteractionId, ThreadId};
+use kg_domain::{InteractionOption, OpError, OpResult, OptionRole, PendingInteractionId, ThreadId};
 
 use crate::Requester;
 
@@ -147,10 +147,12 @@ pub(crate) async fn approve(
         InteractionOption {
             id: InteractionOption::DECLINE.into(),
             label: "Cancel".into(),
+            role: Some(OptionRole::Safe),
         },
         InteractionOption {
             id: InteractionOption::APPROVE.into(),
             label: verb.into(),
+            role: Some(OptionRole::Destructive),
         },
     ];
     let answer = cx

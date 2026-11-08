@@ -145,7 +145,7 @@ pub(in crate::runtime::ops) async fn remove(
         requester,
         question.clone(),
         &question,
-        options("Remove"),
+        options("Remove", true),
         cx,
     )
     .await?;

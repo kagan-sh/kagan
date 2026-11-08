@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use gpui_kit::AsyncApp;
 use kg_core::{Requester, Workspace};
-use kg_domain::{InteractionOption, OpError, ThreadId};
+use kg_domain::{InteractionOption, OpError, OptionRole, ThreadId};
 use serde_json::Value;
 
 use crate::Result;
@@ -30,19 +30,29 @@ pub(in crate::runtime::ops) async fn approve(
         let lines: Vec<String> = lines.iter().map(|line| format!("- {line}")).collect();
         format!("{head}\nIt:\n{}", lines.join("\n"))
     };
-    choose(thread_id, requester, title, &question, options(verb), cx).await
+    choose(
+        thread_id,
+        requester,
+        title,
+        &question,
+        options(verb, false),
+        cx,
+    )
+    .await
 }
 
 /// Cancel, and the one thing a person can agree to.
-pub(in crate::runtime::ops) fn options(verb: &str) -> Vec<InteractionOption> {
+pub(in crate::runtime::ops) fn options(verb: &str, destructive: bool) -> Vec<InteractionOption> {
     vec![
         InteractionOption {
             id: InteractionOption::DECLINE.into(),
             label: "Cancel".into(),
+            role: Some(OptionRole::Safe),
         },
         InteractionOption {
             id: InteractionOption::APPROVE.into(),
             label: verb.into(),
+            role: destructive.then_some(OptionRole::Destructive),
         },
     ]
 }

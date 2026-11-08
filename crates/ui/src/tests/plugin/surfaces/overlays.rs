@@ -246,6 +246,7 @@ pub(in crate::tests) fn ask(cx: &mut TestAppContext, id: &ThreadId) {
                     .map(|option| kg_domain::InteractionOption {
                         id: option.into(),
                         label: option.into(),
+                        role: None,
                     })
                     .into(),
                 fields: None,

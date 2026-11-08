@@ -37,6 +37,7 @@ fn synthetic_input_cannot_answer_an_approval(cx: &mut TestAppContext) {
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let asked = cx.update(|cx| {
         Workspace::ask_for_person(None, None, "Delete the plugin?".into(), options, cx)
@@ -76,6 +77,7 @@ fn unrelated_input_succeeds_once_while_an_approval_waits(cx: &mut TestAppContext
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let _asked = cx.update(|cx| {
         Workspace::ask_for_person(None, None, "Delete the plugin?".into(), options, cx)
@@ -129,6 +131,7 @@ fn an_answer_attempt_fails_and_leaves_the_approval_waiting(cx: &mut TestAppConte
     let options = vec![InteractionOption {
         id: "yes".into(),
         label: "Yes".into(),
+        role: None,
     }];
     let asked = cx.update(|cx| {
         Workspace::ask_for_person(None, None, "Delete the plugin?".into(), options, cx)
@@ -206,10 +209,12 @@ fn an_approval_can_be_answered(cx: &mut TestAppContext) {
         InteractionOption {
             id: "yes".into(),
             label: "Yes".into(),
+            role: None,
         },
         InteractionOption {
             id: "no".into(),
             label: "No".into(),
+            role: None,
         },
     ];
     let asked = cx.update(|cx| {

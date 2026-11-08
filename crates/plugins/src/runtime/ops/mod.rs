@@ -147,7 +147,7 @@ async fn use_slot(
                 requester,
                 question.clone(),
                 &question,
-                options("Approve"),
+                options("Approve", false),
                 cx,
             )
             .await?;

@@ -83,6 +83,7 @@ pub(crate) async fn ask(
         .map(|option| kg_domain::InteractionOption {
             id: option.id.trim().to_owned(),
             label: option.label.trim().to_owned(),
+            role: option.role,
         })
         .collect();
     if options.len() < 2
@@ -179,6 +180,7 @@ fn validate_fields(fields: Vec<kg_domain::AskField>) -> Result<Vec<kg_domain::As
                         Ok(kg_domain::InteractionOption {
                             id: trim_id(&choice.id, "choice")?,
                             label: trim_label(&choice.label, "choice")?,
+                            role: None,
                         })
                     })
                     .collect::<Result<_>>()?;

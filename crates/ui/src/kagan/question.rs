@@ -10,7 +10,9 @@ use gpui_kit::{
     SharedString, Styled as _, WeakEntity, Window, div, px,
 };
 use kg_core::{Approval, Workspace};
-use kg_domain::{InteractionOption, PendingInteraction, PendingInteractionId, ThreadId};
+use kg_domain::{
+    InteractionOption, OptionRole, PendingInteraction, PendingInteractionId, ThreadId,
+};
 
 use super::Kagan;
 use super::ask_form::{self, Draft};
@@ -144,7 +146,7 @@ fn body(
                         .small()
                         .tab_stop(false)
                         .label(option.label.clone());
-                    button = if matches!(option.label.as_str(), "Delete" | "Remove") {
+                    button = if option.role == Some(OptionRole::Destructive) {
                         button.danger()
                     } else {
                         button.outline()
