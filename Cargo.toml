@@ -74,7 +74,7 @@ cargo-nextest = { version = "=0.9.148", locked = true }
 # The Browser's web view. Camera and microphone are refused, and Windows hosts the page in a composition visual (decision 131).
 # A lost DirectX device is logged and the window stays, and a panic in the window procedure does not abort the process (decisions 166 and 168).
 [patch.crates-io]
-lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "43d44d3f286a8ffd8eaf587517ed677fe6e2376f" }
+lb-wry = { git = "https://github.com/kagan-sh/wry", rev = "c13dc021f4d5f80f7425c5580fa2f6d1346cb308" }
 gpui-fast-windows = { git = "https://github.com/kagan-sh/gpui-fast", rev = "f4688adc671add4ffa274d92cdb9b7cdfddeec71" }
 
 # Line tables keep panic locations. Full debug info dominates link time and the target directory.

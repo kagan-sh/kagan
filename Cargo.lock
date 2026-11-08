@@ -5566,7 +5566,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 [[package]]
 name = "lb-wry"
 version = "0.53.3"
-source = "git+https://github.com/kagan-sh/wry?rev=43d44d3f286a8ffd8eaf587517ed677fe6e2376f#43d44d3f286a8ffd8eaf587517ed677fe6e2376f"
+source = "git+https://github.com/kagan-sh/wry?rev=c13dc021f4d5f80f7425c5580fa2f6d1346cb308#c13dc021f4d5f80f7425c5580fa2f6d1346cb308"
 dependencies = [
  "base64 0.22.1",
  "block2 0.6.2",
