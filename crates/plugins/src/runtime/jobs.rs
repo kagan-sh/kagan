@@ -11,9 +11,10 @@ use gpui_shell::{HostError, HostModule, HostValue};
 use serde_json::{Map, Value};
 
 use crate::area::{from_host, to_host};
+use crate::ask::Job;
 use crate::page::MESSAGE_CAP;
 
-type Job = Map<String, Value>;
+type Fields = Map<String, Value>;
 pub(crate) type Reply = Result<Value, String>;
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -60,7 +61,7 @@ impl PageBounds {
 }
 
 struct PageTicket {
-    job: Job,
+    job: Fields,
     alive: Weak<()>,
     // True until the ticket gives its page cap and bytes back.
     pending: Arc<AtomicBool>,
@@ -77,7 +78,7 @@ impl PageTicket {
 }
 
 enum Queued {
-    Job(Job),
+    Job(Fields),
     // The body waits in [`Jobs::page_waiting`]; the channel carries only the id.
     Page(String),
 }
@@ -115,8 +116,9 @@ impl Jobs {
 
     /// Queues `job` and returns its id and where its reply arrives. The reply channel
     /// closes without a value when the plugin unloads.
-    pub(crate) fn send(&self, mut job: Job) -> Option<(String, Receiver<Reply>)> {
+    pub(crate) fn send(&self, job: &Job<'_>) -> Option<(String, Receiver<Reply>)> {
         let id = self.next_id();
+        let mut job = job.fields();
         job.insert("id".into(), id.clone().into());
         let (reply, replied) = async_channel::bounded(1);
         self.open.borrow_mut().insert(id.clone(), reply);
@@ -130,7 +132,7 @@ impl Jobs {
     // Queues a page job, dropped once `alive` is gone. None when the page cap is full.
     pub(crate) fn send_page(
         &self,
-        mut job: Job,
+        job: &Job<'_>,
         alive: Weak<()>,
         bytes: usize,
     ) -> Option<(String, Receiver<Reply>)> {
@@ -139,6 +141,7 @@ impl Jobs {
             return None;
         }
         let id = self.next_id();
+        let mut job = job.fields();
         job.insert("id".into(), id.clone().into());
         let pending = Arc::new(AtomicBool::new(true));
         let (reply, replied) = async_channel::bounded(1);

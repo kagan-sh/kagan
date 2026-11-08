@@ -6,8 +6,9 @@ use kg_domain::{
     Op, OpError, OpResult, Plugin, PluginId, PluginOp, PreferenceOp, ProjectId, ProjectOp, Slot,
     SlotChoice, ThreadId, ThreadOp,
 };
-use serde_json::{Map, Value};
+use serde_json::Value;
 
+use crate::ask::{Job, ask};
 use crate::host::activate;
 use crate::manifest::Grant;
 use crate::{Discovered, PluginHost, Result};
@@ -210,17 +211,18 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
                 .map(|project| project.id)
         }
     };
-    let job = Map::from_iter([
-        ("kind".to_owned(), "cli".into()),
-        ("command".to_owned(), command.clone().into()),
-        ("argv".to_owned(), argv.into()),
-        ("cwd".to_owned(), cwd.display().to_string().into()),
-        ("threadId".to_owned(), thread_id.map(|id| id.0).into()),
-        ("projectId".to_owned(), project_id.map(|id| id.0).into()),
-    ]);
-    let reply = crate::host::call(host, &plugin, &command, job, crate::TOOL_TIMEOUT, cx).await?;
+    let job = Job::Cli {
+        command: &command,
+        argv: &argv,
+        cwd: cwd.display().to_string(),
+        thread_id: &thread_id,
+        project_id: &project_id,
+    };
+    let value = ask(host, &plugin, &job, cx)
+        .await
+        .map_err(OpError::from)?
+        .map_err(OpError::Failed)?;
     let secrets = host.read_with(cx, |host, _| host.secrets.clone());
-    let value = reply.map_err(|error| OpError::Failed(secrets.redact(&plugin, &error)))?;
     let exit_code = value["exitCode"]
         .as_i64()
         .and_then(|code| i32::try_from(code).ok())

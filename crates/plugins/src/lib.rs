@@ -13,15 +13,14 @@ pub(crate) use runtime::log;
 pub(crate) use runtime::log::{Level, log};
 pub use runtime::strip::{PluginStrip, StatusItem, StatusTone};
 pub(crate) use runtime::{
-    area, browser, clipboard, commands, database, files, host, jobs, ops, page, process, secret,
-    strip, threads, ui_host, watchdog, web_store,
+    area, ask, browser, clipboard, commands, database, files, host, jobs, ops, page, process,
+    secret, strip, threads, ui_host, watchdog, web_store,
 };
 
 #[cfg(test)]
 mod tests;
 
 use std::rc::Rc;
-use std::time::Duration;
 
 use gpui_kit::App;
 use gpui_shell::HttpRequestGrant;
@@ -59,8 +58,6 @@ fn http_grants(
     fetch.iter().map(Fetch::http_grant).collect()
 }
 
-const TOOL_TIMEOUT: Duration = Duration::from_mins(2);
-const INSTRUCT_TIMEOUT: Duration = Duration::from_secs(2);
 const INSTRUCT_CAP: usize = 4096;
 const INSTRUCT_TOTAL: usize = 16 * 1024;
 /// What every reader but the plugin sees for a secret setting that holds a value.

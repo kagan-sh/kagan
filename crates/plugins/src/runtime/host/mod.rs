@@ -16,6 +16,7 @@ use kg_core::{PluginRequest, Workspace};
 use kg_domain::{Event, OpResult, PluginId, ThemeFile, ThreadId};
 use serde_json::{Map, Value};
 
+use crate::ask::{Job, post};
 use crate::jobs::Jobs;
 use crate::manifest::{self, AgentChoice, Grant, Manifest};
 use crate::secret;
@@ -30,7 +31,7 @@ mod tools;
 mod views;
 
 pub(crate) use activation::{activate, discover};
-pub(crate) use tools::{call, instruct};
+pub(crate) use tools::instruct;
 
 use tools::{call_tool, tools};
 
@@ -446,25 +447,15 @@ impl PluginHost {
             return;
         }
         let data = event_data(&event.kind);
+        let thread_id = &event.thread_id;
+        let job = Job::Event {
+            type_name: event.kind.type_name(),
+            thread_id,
+            project_id,
+            data: &data,
+        };
         for plugin in plugins {
-            let Ok(jobs) = self.load(&plugin, cx) else {
-                continue;
-            };
-            let mut job = Map::new();
-            job.insert("kind".into(), "event".into());
-            job.insert("type".into(), event.kind.type_name().into());
-            job.insert("threadId".into(), event.thread_id.0.clone().into());
-            job.insert("projectId".into(), project_id.0.clone().into());
-            job.insert("data".into(), data.clone());
-            // The caller gets nothing back. The slot stays so the plugin can still settle the job.
-            let Some((id, replied)) = jobs.send(job) else {
-                continue;
-            };
-            cx.spawn(async move |_, cx| {
-                let timer = cx.background_executor().timer(Duration::from_secs(10));
-                let _ = jobs.settled(&id, &replied, timer).await;
-            })
-            .detach();
+            post(self, &plugin, &job, cx);
         }
     }
 }

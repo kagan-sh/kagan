@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
 
 use gpui_kit::{App, AsyncApp, Entity, Task};
 use kg_core::Workspace;
@@ -7,6 +6,7 @@ use kg_domain::{KeymapAction, KeymapOp, OpResult, PluginId, ProjectId, ThreadId}
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+use crate::ask::{Job, ask};
 use crate::{PluginHost, Result};
 
 #[derive(Clone, PartialEq, gpui_kit::Action)]
@@ -33,9 +33,6 @@ impl RunCommand {
 }
 
 pub(crate) const BINDINGS: &str = "$hotkeys";
-
-/// docs/plugin-api.md gives a command 10 s; tools and CLI calls get `TOOL_TIMEOUT`.
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -162,18 +159,14 @@ impl PluginHost {
                     )))
                 }
             })?;
-            let job = json!({
-                "kind": "command",
-                "command": command,
-                "threadId": thread_id,
-                "projectId": project_id,
-            })
-            .as_object()
-            .cloned()
-            .unwrap_or_default();
-            let reply =
-                crate::host::call(&host, &plugin, &command, job, COMMAND_TIMEOUT, cx).await?;
-            reply
+            let job = Job::Command {
+                command: &command,
+                thread_id: &thread_id,
+                project_id: &project_id,
+            };
+            ask(&host, &plugin, &job, cx)
+                .await
+                .map_err(kg_domain::OpError::from)?
                 .map_err(kg_domain::OpError::Failed)
                 .map(|_| OpResult::Done)
         })

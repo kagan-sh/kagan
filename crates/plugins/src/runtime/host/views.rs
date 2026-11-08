@@ -1,10 +1,9 @@
-use std::time::Duration;
-
 use gpui_kit::{AppContext as _, Context, Entity};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, PluginId};
 
 use crate::Result;
+use crate::ask::{Job, forget_later};
 
 use super::{MountError, PluginHost};
 
@@ -138,17 +137,16 @@ impl PluginHost {
             .and_then(|active| active.loaded.as_ref())
             .map(|loaded| loaded.jobs.clone())
             .ok_or_else(|| OpError::Invalid(format!("plugin {id} is not loaded")))?;
-        let Some((job, replied)) = crate::page::enqueue(&jobs, panel, message, alive, raw.len())
-        else {
+        let job = Job::Page {
+            panel_id: panel,
+            message: &message,
+        };
+        let Some(queued) = jobs.send_page(&job, alive, raw.len()) else {
             return Err(OpError::Invalid(format!(
                 "plugin {id} cannot take another page message"
             )));
         };
-        cx.spawn(async move |_, cx| {
-            let timer = cx.background_executor().timer(Duration::from_secs(10));
-            let _ = jobs.settled(&job, &replied, timer).await;
-        })
-        .detach();
+        forget_later(jobs, queued, job.timeout(), cx);
         Ok(())
     }
 
