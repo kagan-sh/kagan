@@ -184,7 +184,8 @@ pub(super) fn unquote(literal: &str) -> Option<&str> {
     }
 }
 
-pub(super) fn shown(root: &std::path::Path, script: &std::path::Path) -> String {
+/// Plugin paths use `/` on every platform, as in the manifest.
+pub(crate) fn shown(root: &std::path::Path, script: &std::path::Path) -> String {
     script
         .strip_prefix(root)
         .unwrap_or(script)

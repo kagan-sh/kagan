@@ -66,11 +66,9 @@ const SET: &str = "set";
 /// # Errors
 /// When the plugin host has not been initialized.
 pub fn contributions(cx: &App) -> Result<Vec<(PluginId, Contributions)>> {
-    let host = cx
-        .try_global::<PluginHostGlobal>()
+    let host = PluginHost::try_global(cx)
         .ok_or_else(|| OpError::Failed("the plugin host is unavailable".into()))?;
     Ok(host
-        .0
         .read(cx)
         .active
         .iter()

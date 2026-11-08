@@ -12,9 +12,10 @@ use tree_sitter::Node;
 
 use crate::Result;
 
+pub(crate) use shape::shown;
 use shape::{
     args_problem, argument_nodes, child_kind, constructor_call, entity_kind, expects, hint,
-    is_optional, literal_clash, peel, shown, text, type_only, unquote,
+    is_optional, literal_clash, peel, text, type_only, unquote,
 };
 
 mod shape;

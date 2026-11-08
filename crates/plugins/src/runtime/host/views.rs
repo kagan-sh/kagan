@@ -30,21 +30,12 @@ impl PluginHost {
         window: &mut gpui_kit::Window,
         cx: &mut Context<Self>,
     ) -> std::result::Result<Entity<ScriptView>, MountError> {
-        let found = self.active.get(id).and_then(|active| {
-            active
-                .manifest
-                .ui
-                .panels
-                .iter()
-                .find(|item| item.id == panel)
-                .map(|item| item.view.clone())
-        });
-        let Some(export) = found else {
+        let Some(found) = self.panel(id, panel) else {
             return Err(MountError::Missing(format!(
                 "plugin {id} has no panel {panel}"
             )));
         };
-        let Some(export) = export else {
+        let Some(export) = found.view.clone() else {
             return Err(MountError::Missing(format!("panel {panel} is a web panel")));
         };
         self.mount_named_view(id, &export, window, cx)
@@ -68,33 +59,23 @@ impl PluginHost {
     /// The HTML file panel `panel` shows, when that panel is a web panel.
     #[must_use]
     pub fn web_file(&self, id: &PluginId, panel: &str) -> Option<String> {
-        self.active.get(id).and_then(|active| {
-            active
-                .manifest
-                .ui
-                .panels
-                .iter()
-                .find(|item| item.id == panel)
-                .and_then(|item| item.web.clone())
-        })
+        self.panel(id, panel).and_then(|item| item.web.clone())
+    }
+
+    fn panel(&self, id: &PluginId, panel: &str) -> Option<&crate::PanelContribution> {
+        self.active
+            .get(id)?
+            .manifest
+            .ui
+            .panels
+            .iter()
+            .find(|item| item.id == panel)
     }
 
     /// Whether the panel keeps cookies and storage. Needs its `store` flag and an approved grant.
     #[must_use]
     pub fn web_store(&self, id: &PluginId, panel: &str) -> bool {
-        self.active
-            .get(id)
-            .filter(|active| active.grant.page_store)
-            .and_then(|active| {
-                active
-                    .manifest
-                    .ui
-                    .panels
-                    .iter()
-                    .find(|item| item.id == panel)
-                    .map(|item| item.store)
-            })
-            .unwrap_or(false)
+        self.allows_page_store(id) && self.panel(id, panel).is_some_and(|item| item.store)
     }
 
     /// Whether the approved grant lets this plugin keep page data.
