@@ -286,7 +286,7 @@ async fn an_exit_during_a_spinner_ends_the_turn_as_failed(cx: &mut TestAppContex
     let program = script(
         fixture.dir.path(),
         "spin-fail",
-        "printf '\\033]0;\\342\\240\\213 working\\007'\nexit 7\n",
+        "printf '\\033]0;\\342\\240\\213 working\\007'\nsleep 1\nexit 7\n",
     );
     let (id, _reap) = started(&fixture, &program, cx).await;
     wait_for_status(&id, ThreadStatus::Error, cx).await;
