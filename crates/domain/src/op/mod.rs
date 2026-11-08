@@ -54,7 +54,9 @@ pub use section::SectionOp;
 pub use settings::SettingsOp;
 pub use skill::{Skill, SkillOp, SkillSource};
 pub use surface::{Slot, SlotChoice, SlotChoiceError, SurfaceItem, SurfaceOp, SurfacePlacement};
-pub use terminal::{ExtraTerminal, SelectMode, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp};
+pub use terminal::{
+    ExtraTerminal, SCREEN_MAX_BYTES, SelectMode, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp,
+};
 pub use theme::{Appearance, ThemeOp, ThemeSettings, valid_theme_choice, valid_theme_id};
 pub use thread::{
     Metadata, Order, Run, SEARCH_DEFAULT, SEARCH_LIMIT, SEARCH_TEXT_MAX, ThreadOp, WaitOutcome,

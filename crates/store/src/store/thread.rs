@@ -200,7 +200,8 @@ impl super::Store {
         since: Timestamp,
     ) -> Result<bool> {
         let changed = self.conn.execute(
-            "UPDATE threads SET conversation = ?1
+            &format!(
+                "UPDATE threads SET conversation = ?1
              WHERE id = ?2
                AND status IN (?5, ?6)
                AND ((?3 IS NULL AND conversation IS NULL) OR conversation = ?3)
@@ -208,12 +209,9 @@ impl super::Store {
                  SELECT 1 FROM threads AS other
                  WHERE other.conversation = ?1 AND other.id != ?2
                )
-               AND (
-                 SELECT at FROM events
-                 WHERE thread_id = ?2
-                   AND json_extract(kind, '$.type') = 'started'
-                 ORDER BY seq DESC LIMIT 1
-               ) = ?4",
+               AND (SELECT at FROM events WHERE thread_id = ?2 AND seq = {}) = ?4",
+                super::latest_start("?2")
+            ),
             params![
                 Text(conversation),
                 Text(id),

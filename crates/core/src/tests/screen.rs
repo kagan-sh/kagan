@@ -14,7 +14,7 @@ fn the_saved_screen_uses_the_same_limits_as_a_resize() {
     assert_eq!(kg_terminal::MAX_COLS, *TERMINAL_COLS.end());
     assert_eq!(1, *TERMINAL_ROWS.start());
     assert_eq!(kg_terminal::MAX_ROWS, *TERMINAL_ROWS.end());
-    assert_eq!(kg_terminal::SNAPSHOT_MAX, 4 * 1024 * 1024);
+    assert_eq!(kg_terminal::SNAPSHOT_MAX, SCREEN_MAX_BYTES);
 }
 
 #[gpui_kit::test]

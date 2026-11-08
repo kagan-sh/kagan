@@ -232,6 +232,14 @@ fn upsert(table: &str, columns: &str) -> String {
     )
 }
 
+/// The `seq` of the latest `started` event of the thread named by the SQL expression `thread`.
+fn latest_start(thread: &str) -> String {
+    format!(
+        "(SELECT MAX(seq) FROM events AS start WHERE start.thread_id = {thread} \
+         AND json_extract(start.kind, '$.type') = 'started')"
+    )
+}
+
 fn found(changed: usize, what: &'static str, id: &impl Display) -> Result<()> {
     if changed == 0 {
         Err(not_found(what, id))
