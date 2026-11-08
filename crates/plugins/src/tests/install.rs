@@ -1000,7 +1000,9 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
         "remove_data_store waits for the native release after drop"
     );
     assert!(
-        crate::store_dir(&data, "board").join("store.id").is_file(),
+        crate::web_store::store_dir(&data, "board")
+            .join("store.id")
+            .is_file(),
         "store.id stays until WebKit accepts the delete"
     );
     cx.executor().advance_clock(
@@ -1014,7 +1016,9 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
     cx.run_until_parked();
     assert_eq!(attempts.get(), 1, "first attempt after the release wait");
     assert!(
-        crate::store_dir(&data, "board").join("store.id").is_file(),
+        crate::web_store::store_dir(&data, "board")
+            .join("store.id")
+            .is_file(),
         "InUse keeps store.id for a retry"
     );
     cx.executor().advance_clock(Duration::from_secs(3));
@@ -1025,7 +1029,9 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
     );
     assert_eq!(attempts.get(), 3, "retries InUse until Removed");
     assert!(
-        !crate::store_dir(&data, "board").join("store.id").is_file(),
+        !crate::web_store::store_dir(&data, "board")
+            .join("store.id")
+            .is_file(),
         "store.id clears only after WebKit accepts the delete"
     );
 }

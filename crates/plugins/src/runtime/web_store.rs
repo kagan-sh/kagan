@@ -7,7 +7,7 @@ use gpui_kit::AsyncApp;
 use kg_domain::{OpError, PluginId};
 
 #[must_use]
-pub fn store_dir(data: &Path, page: &str) -> PathBuf {
+pub(crate) fn store_dir(data: &Path, page: &str) -> PathBuf {
     data.join("pages").join(store_name(page))
 }
 
@@ -21,11 +21,7 @@ pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], OpError> {
     std::fs::create_dir_all(&dir)
         .map_err(|error| OpError::Failed(format!("{}: {error}", dir.display())))?;
     let path = dir.join("store.id");
-    if let Ok(bytes) = std::fs::read(&path)
-        && bytes.len() == 16
-    {
-        let mut id = [0u8; 16];
-        id.copy_from_slice(&bytes);
+    if let Some(id) = read_id(&path) {
         return Ok(id);
     }
     let id = *uuid::Uuid::new_v4().as_bytes();
@@ -36,28 +32,25 @@ pub fn keep_store(data: &Path, page: &str) -> Result<[u8; 16], OpError> {
 
 /// Skips folders without a valid 16-byte `store.id`.
 #[must_use]
-pub fn read_store_ids(data: &Path) -> Vec<[u8; 16]> {
+pub(crate) fn read_store_ids(data: &Path) -> Vec<[u8; 16]> {
     let pages = data.join("pages");
     let Ok(entries) = std::fs::read_dir(&pages) else {
         return Vec::new();
     };
     let mut ids = Vec::new();
     for entry in entries.flatten() {
-        let path = entry.path().join("store.id");
-        if let Ok(bytes) = std::fs::read(&path)
-            && bytes.len() == 16
-        {
-            let mut id = [0u8; 16];
-            id.copy_from_slice(&bytes);
-            ids.push(id);
-        }
+        ids.extend(read_id(&entry.path().join("store.id")));
     }
     ids
 }
 
+fn read_id(path: &Path) -> Option<[u8; 16]> {
+    std::fs::read(path).ok()?.try_into().ok()
+}
+
 /// Deletes `pages/<page>/` only when its `store.id` is in `removed`. Other folders stay, so a later
 /// start can ask `WebKit` again.
-pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
+pub(crate) fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
     if removed.is_empty() {
         return;
     }
@@ -67,16 +60,7 @@ pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        let id_path = path.join("store.id");
-        let Ok(bytes) = std::fs::read(&id_path) else {
-            continue;
-        };
-        if bytes.len() != 16 {
-            continue;
-        }
-        let mut id = [0u8; 16];
-        id.copy_from_slice(&bytes);
-        if removed.contains(&id) {
+        if read_id(&path.join("store.id")).is_some_and(|id| removed.contains(&id)) {
             let _ = std::fs::remove_dir_all(&path);
         }
     }
@@ -85,9 +69,9 @@ pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
     }
 }
 
-pub struct StoreRemoval {
-    pub removed: Vec<[u8; 16]>,
-    pub warnings: Vec<String>,
+pub(crate) struct StoreRemoval {
+    pub(crate) removed: Vec<[u8; 16]>,
+    pub(crate) warnings: Vec<String>,
 }
 
 // Wait before a store delete so GPUI drops the native `WebView` and its frame mouse listener.
