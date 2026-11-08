@@ -5514,7 +5514,7 @@ dependencies = [
  "tree-sitter",
  "url",
  "webkit2gtk",
- "windows 0.61.3",
+ "windows 0.62.2",
 ]
 
 [[package]]
