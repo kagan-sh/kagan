@@ -403,10 +403,15 @@ impl Client {
         Stream::connect(name).map(|stream| Self(BufReader::new(stream)))
     }
 
+    /// Connects to the app listening at `location`, after checking a fallback folder there.
+    pub(crate) fn open(location: &std::ffi::OsStr) -> io::Result<Self> {
+        before_connect(location)?;
+        Self::connect(name(location)?)
+    }
+
     pub(crate) fn connect_or_start() -> io::Result<Self> {
         let location = location()?;
-        before_connect(&location)?;
-        if let Ok(client) = Self::connect(name(&location)?) {
+        if let Ok(client) = Self::open(&location) {
             return Ok(client);
         }
         if non_empty("KG_NO_START").is_some() {
@@ -440,8 +445,7 @@ impl Client {
 pub(crate) fn wait_for_socket(location: &std::ffi::OsStr, timeout: Duration) -> io::Result<Client> {
     let deadline = Instant::now() + timeout;
     loop {
-        before_connect(location)?;
-        match Client::connect(name(location)?) {
+        match Client::open(location) {
             Ok(client) => return Ok(client),
             Err(error) if Instant::now() > deadline => return Err(error),
             Err(_) => thread::sleep(Duration::from_millis(50)),
