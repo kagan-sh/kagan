@@ -23,8 +23,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Reads the version and the CI checks on the commit. Writes nothing.
     permissions:
-      contents: read
+      checks: read  # CI results on the commit
+      contents: read  # check out the commit
     outputs:
       tag: ${{ steps.next.outputs.tag }}
       version: ${{ steps.next.outputs.version }}
@@ -44,10 +46,28 @@ jobs:
           set -eu
           bash scripts/release-version.sh check "$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Require green CI on the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ steps.next.outputs.sha }}
+        run: |
+          set -eu
+          # The three checks main requires. A skipped one is a docs-only change, which the ruleset also passes.
+          results=$(gh api --paginate "repos/$GH_REPO/commits/$SHA/check-runs" \
+            --jq '.check_runs[] | select(.name == "linux" or .name == "macos" or .name == "windows") | "\(.name) \(.conclusion)"')
+          for name in linux macos windows; do
+            states=$(printf '%s\n' "$results" | awk -v n="$name" '$1 == n { print $2 }')
+            if [ -z "$states" ] || printf '%s\n' "$states" | grep -qvxE 'success|skipped'; then
+              echo "::error::The $name check on $SHA is not green. Release from a commit whose CI passed."
+              exit 1
+            fi
+          done
+          echo "CI is green on $SHA"
 
   package:
     needs: tag
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -65,14 +85,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1 libasound2-dev libwebkit2gtk-4.1-dev libgtk-3-dev libfuse2 lld
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           cache: false
-      # Keyed from the committed manifests. Stamping the version comes after,
-      # so this cache stays one entry per OS and kg still rebuilds for the stamp.
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: release-${{ matrix.os }}
       - name: Stamp version
         shell: bash
         env:
@@ -185,7 +200,7 @@ jobs:
 
   mac-build:
     needs: tag
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     strategy:
@@ -204,17 +219,13 @@ jobs:
           HOMEBREW_NO_ANALYTICS: "1"
           HOMEBREW_NO_ENV_HINTS: "1"
         run: brew install lld
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           cache: false
       - name: Add the target
         env:
           TARGET: ${{ matrix.target }}
         run: rustup target add "$TARGET"
-      # Keyed from the committed manifests, before the version stamp.
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: release-${{ matrix.target }}
       - name: Stamp version
         env:
           VERSION: ${{ needs.tag.outputs.version }}
@@ -246,7 +257,7 @@ jobs:
         env:
           VERSION: ${{ needs.tag.outputs.version }}
         run: bash scripts/release-version.sh stamp "$VERSION"
-      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           cache: false
       - name: Prepare cargo-packager cache directory
@@ -401,8 +412,9 @@ jobs:
     needs: [tag, package, mac-package]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Creates the GitHub release and uploads its files. Nothing else writes.
     permissions:
-      contents: write
+      contents: write  # create the release and upload its files
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -456,7 +468,7 @@ jobs:
           path: ${{ runner.temp }}/cargo-packager
           key: cargo-packager-0.11.8-${{ runner.os }}-${{ runner.arch }}
       - if: steps.packager.outputs.cache-hit != 'true'
-        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           cache: false
       - name: Install cargo-packager

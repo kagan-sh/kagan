@@ -174,7 +174,6 @@ jobs:
       - run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          # Workspace crates too, so the next run rebuilds only what changed.
           # Only main saves; a pull request restores that and cannot replace it.
           cache-all-crates: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -271,9 +270,11 @@ jobs:
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
       - name: Tests
+        env:
+          SHARD: ${{ matrix.shard }}
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
-          --partition hash:${{ matrix.shard }}/2
+          --partition "hash:$SHARD/2"
       - name: Browser page
         if: matrix.shard == 1
         run: sh scripts/browser.sh
@@ -287,6 +288,9 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2]
+    env:
+      # The runner image ships LLVM. lld-link links the test binaries faster than link.exe.
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: lld-link
     defaults:
       run:
         shell: bash
@@ -314,9 +318,11 @@ jobs:
         with:
           tool: cargo-nextest@${{ steps.nextest.outputs.version }}
       - name: Tests
+        env:
+          SHARD: ${{ matrix.shard }}
         run: >-
           cargo nextest run --workspace --all-targets --locked --profile ci --failure-output=immediate --status-level=all
-          --partition hash:${{ matrix.shard }}/2
+          --partition "hash:$SHARD/2"
       - name: Window procedure
         if: matrix.shard == 1
         run: |
@@ -364,6 +370,31 @@ jobs:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: for result in $RESULTS; do echo "$result"; [ "$result" = success ] || exit 1; done
+
+  # GitHub caps a repo at 10 GB of caches and evicts the least recently used. A main push with a
+  # new lockfile saves a new generation of every job's cache. Two generations filled the cap, and
+  # the linux-tests cache was evicted. Keep the newest cache per job on main and delete the rest.
+  cache-prune:
+    needs: [linux, macos, windows]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Deletes caches. Nothing else in this job writes.
+    permissions:
+      actions: write  # deletes superseded caches
+    steps:
+      - name: Delete superseded caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          # The last part of a key is the hash that changes with the lockfile. Keys that match before it are one job.
+          gh cache list --ref refs/heads/main --limit 100 --json id,key,createdAt \
+            --jq '[.[] | select(.key | startswith("v0-rust-"))] | group_by(.key | sub("-[^-]+$"; "")) | .[] | sort_by(.createdAt) | reverse | .[1:][] | .id' \
+            | while read -r id; do
+              gh cache delete "$id"
+            done
 
   mutants-base:
     if: github.event_name == 'workflow_dispatch' && inputs.mutants

@@ -39,8 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      pages: write
-      id-token: write
+      pages: write  # publishes the Pages site
+      id-token: write  # OIDC token for the deploy
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
