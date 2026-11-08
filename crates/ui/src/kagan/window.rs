@@ -4,10 +4,11 @@ use super::{Kagan, MIN_HEIGHT, TITLE, attention, layout, notify, web_panel};
 
 use gpui_kit::component::TitleBar;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, Entity, Global, WeakEntity, WindowBounds, WindowOptions,
-    px, size,
+    Action, AnyWindowHandle, App, AppContext as _, Context, Entity, Global, WeakEntity, Window,
+    WindowBounds, WindowOptions, px, size,
 };
-use kg_domain::ThreadId;
+use kg_core::Workspace;
+use kg_domain::{Op, ThreadId, WindowOp};
 use kg_plugins::HostUi;
 
 struct OpenWindow {
@@ -60,62 +61,56 @@ pub(crate) fn front(cx: &App) -> Option<(AnyWindowHandle, Entity<Kagan>)> {
 
 pub(crate) fn show_settings(cx: &mut App) -> gpui_kit::Result<()> {
     show(cx)?;
-    let Some(open) = cx.try_global::<OpenWindow>() else {
-        return Ok(());
-    };
-    let (handle, kagan) = (open.handle, open.kagan.clone());
-    if let Some(kagan) = kagan.upgrade() {
-        _ = cx.update_window(handle, |_, window, cx| {
-            kagan.update(cx, |kagan, cx| kagan.open_settings(window, cx));
-        });
-    }
+    with_front(cx, Kagan::open_settings);
     Ok(())
 }
 
 pub(crate) fn show_plugin_settings(cx: &mut App) -> gpui_kit::Result<()> {
     show(cx)?;
-    if let Some((handle, kagan)) = front(cx) {
-        _ = cx.update_window(handle, |_, window, cx| {
-            kagan.update(cx, |kagan, cx| kagan.manage_plugins(window, cx));
-        });
-    }
+    with_front(cx, Kagan::manage_plugins);
     Ok(())
 }
 
 pub(crate) fn open_thread(id: &ThreadId, cx: &mut App) {
-    let Some((handle, kagan)) = front(cx) else {
-        return;
-    };
-    _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |kagan, cx| kagan.open_thread(id, window, cx));
-    });
+    with_front(cx, |kagan, window, cx| kagan.open_thread(id, window, cx));
 }
 
 pub(crate) fn show_preview(thread: Option<ThreadId>, path: String, cx: &mut App) {
-    let Some((handle, kagan)) = front(cx) else {
-        return;
-    };
     cx.activate(true);
-    _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |kagan, cx| {
-            if let Some(id) = thread.as_ref()
-                && kagan.shown_thread(cx).as_ref() != Some(id)
-            {
-                kagan.select(id.clone(), window, cx);
-            }
-            kagan.show_preview(thread, path, window, cx);
-        });
+    with_front(cx, |kagan, window, cx| {
+        if let Some(id) = thread.as_ref()
+            && kagan.shown_thread(cx).as_ref() != Some(id)
+        {
+            kagan.select(id.clone(), window, cx);
+        }
+        kagan.show_preview(thread, path, window, cx);
     });
 }
 
 pub(crate) fn start_plugin(cx: &mut App) -> gpui_kit::Result<()> {
     show(cx)?;
-    if let Some((handle, kagan)) = front(cx) {
-        _ = cx.update_window(handle, |_, window, cx| {
-            kagan.update(cx, |kagan, cx| kagan.add_plugin(window, cx));
-        });
-    }
+    with_front(cx, Kagan::add_plugin);
     Ok(())
+}
+
+pub(crate) fn with_front(
+    cx: &mut App,
+    act: impl FnOnce(&mut Kagan, &mut Window, &mut Context<Kagan>),
+) {
+    let Some((handle, kagan)) = front(cx) else {
+        return;
+    };
+    _ = cx.update_window(handle, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| act(kagan, window, cx));
+    });
+}
+
+pub(super) fn dispatch(op: WindowOp, cx: &mut App) {
+    Workspace::dispatch(Op::Window(op), cx).detach();
+}
+
+pub(super) fn bind<A: Action>(cx: &mut App, op: WindowOp) {
+    cx.on_action(move |_: &A, cx| dispatch(op, cx));
 }
 
 pub(super) fn release_window(this: &mut Kagan, cx: &mut App) {

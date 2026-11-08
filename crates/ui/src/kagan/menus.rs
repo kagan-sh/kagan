@@ -1,8 +1,9 @@
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
-use gpui_kit::{App, AppContext as _, KeyBinding, Menu, MenuItem, OsAction, Window, actions};
+use gpui_kit::{App, KeyBinding, Menu, MenuItem, OsAction, Window, actions};
 use kg_core::{Workspace, WorkspaceEvent};
-use kg_domain::{Op, WindowOp};
+use kg_domain::WindowOp;
 
+use super::window;
 use super::{
     ActualSize, AddProject, ArchiveThread, Bigger, NewThread, OpenSettings, RenameThread, Smaller,
     StartAgain, StopThread, ToggleRightSidebar, ToggleSidebar,
@@ -26,15 +27,15 @@ pub(crate) fn bind(cx: &mut App) {
         KeyBinding::new("cmd-w", Close, None),
     ]);
     cx.bind_keys(crate::about::bindings());
-    cx.on_action(|_: &About, cx| dispatch(WindowOp::About, cx));
-    cx.on_action(|_: &Hide, cx| dispatch(WindowOp::Hide, cx));
-    cx.on_action(|_: &HideOthers, cx| dispatch(WindowOp::HideOthers, cx));
-    cx.on_action(|_: &ShowAll, cx| dispatch(WindowOp::ShowAll, cx));
+    window::bind::<About>(cx, WindowOp::About);
+    window::bind::<Hide>(cx, WindowOp::Hide);
+    window::bind::<HideOthers>(cx, WindowOp::HideOthers);
+    window::bind::<ShowAll>(cx, WindowOp::ShowAll);
     cx.on_action(|_: &Quit, cx| super::quit::ask(cx));
     super::quit::prepare(cx);
-    cx.on_action(|_: &Minimize, cx| dispatch(WindowOp::Minimize, cx));
-    cx.on_action(|_: &Zoom, cx| dispatch(WindowOp::Zoom, cx));
-    cx.on_action(|_: &Close, cx| dispatch(WindowOp::Close, cx));
+    window::bind::<Minimize>(cx, WindowOp::Minimize);
+    window::bind::<Zoom>(cx, WindowOp::Zoom);
+    window::bind::<Close>(cx, WindowOp::Close);
     let workspace = Workspace::global(cx);
     cx.subscribe(&workspace, |_, event, cx| {
         if let WorkspaceEvent::Window(op) = event {
@@ -46,10 +47,6 @@ pub(crate) fn bind(cx: &mut App) {
 
 pub(crate) fn refresh(cx: &mut App) {
     cx.set_menus(menus());
-}
-
-fn dispatch(op: WindowOp, cx: &mut App) {
-    Workspace::dispatch(Op::Window(op), cx).detach();
 }
 
 fn perform(op: WindowOp, cx: &mut App) {
@@ -70,29 +67,22 @@ fn perform(op: WindowOp, cx: &mut App) {
         WindowOp::Minimize => on_window(cx, |window| window.minimize_window()),
         WindowOp::Zoom => on_window(cx, |window| window.zoom_window()),
         WindowOp::Close => on_window(cx, Window::remove_window),
-        WindowOp::ToggleReviewWrap => {
-            if let Some((_, kagan)) = super::front(cx) {
-                kagan.update(cx, |this, cx| {
-                    if this.screen.review().is_some() {
-                        this.layout.review_wrap = !this.layout.review_wrap;
-                        super::layout::save(
-                            &super::layout::key("review-wrap"),
-                            this.layout.review_wrap,
-                            cx,
-                        );
-                        cx.notify();
-                    }
-                });
+        WindowOp::ToggleReviewWrap => window::with_front(cx, |this, _, cx| {
+            if this.screen.review().is_some() {
+                this.layout.review_wrap = !this.layout.review_wrap;
+                super::layout::save(
+                    &super::layout::key("review-wrap"),
+                    this.layout.review_wrap,
+                    cx,
+                );
+                cx.notify();
             }
-        }
+        }),
     }
 }
 
 fn on_window(cx: &mut App, f: impl FnOnce(&mut Window)) {
-    let Some((handle, _)) = super::front(cx) else {
-        return;
-    };
-    let _ = cx.update_window(handle, |_, window, _| f(window));
+    window::with_front(cx, |_, window, _| f(window));
 }
 
 fn menus() -> Vec<Menu> {

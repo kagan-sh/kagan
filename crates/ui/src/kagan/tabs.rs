@@ -13,7 +13,7 @@ use kg_domain::{Op, OpResult, TerminalOp, ThreadId, ThreadOp, WindowOp};
 
 use super::controls::{control, dispatch, tip};
 use super::right::{ActivatePanelHeader, Tab};
-use super::{Kagan, Shown};
+use super::{Kagan, Shown, window};
 use crate::terminal::{TerminalView, Typed};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -30,27 +30,16 @@ actions!(
 );
 
 pub(super) fn bind(cx: &mut App) {
-    cx.on_action(|_: &NextTerminal, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::NextTerminal), cx).detach();
-    });
-    cx.on_action(|_: &PreviousTerminal, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::PreviousTerminal), cx).detach();
-    });
-    cx.on_action(|_: &OpenLocalLink, cx| {
-        Workspace::dispatch(Op::Window(WindowOp::OpenLocalLink), cx).detach();
-    });
+    window::bind::<NextTerminal>(cx, WindowOp::NextTerminal);
+    window::bind::<PreviousTerminal>(cx, WindowOp::PreviousTerminal);
+    window::bind::<OpenLocalLink>(cx, WindowOp::OpenLocalLink);
 }
 
 pub(super) fn perform(op: WindowOp, cx: &mut App) {
-    let Some((handle, kagan)) = super::front(cx) else {
-        return;
-    };
-    let _ = cx.update_window(handle, |_, window, cx| {
-        kagan.update(cx, |this, cx| match (op, this.tabs.local.clone()) {
-            (WindowOp::OpenLocalLink, Some(link)) => cx.open_url(&link),
-            (WindowOp::OpenLocalLink, None) => window.play_system_bell(),
-            _ => this.step_tab(op == WindowOp::NextTerminal, window, cx),
-        });
+    window::with_front(cx, |this, window, cx| match (op, this.tabs.local.clone()) {
+        (WindowOp::OpenLocalLink, Some(link)) => cx.open_url(&link),
+        (WindowOp::OpenLocalLink, None) => window.play_system_bell(),
+        _ => this.step_tab(op == WindowOp::NextTerminal, window, cx),
     });
 }
 
