@@ -4,7 +4,7 @@ use kg_domain::{OpError, PluginId};
 use serde_json::Value;
 use std::future::Future;
 
-use crate::area::{from_host, to_host};
+use crate::area::{awaited, from_host, to_host, with_app};
 use crate::ask::{Job, ask};
 use crate::{PluginHost, PluginHostGlobal};
 
@@ -18,24 +18,12 @@ pub(crate) fn call(
     let name = arguments.string(1)?.to_owned();
     let input = from_host(arguments.value(2).unwrap_or(&HostValue::Null));
     let caller = caller.clone();
-    let receive = gpui_shell::with_current_app(|cx| {
-        let (sender, receive) = async_channel::bounded(1);
+    let task = with_app(|cx| {
         let host = cx.global::<PluginHostGlobal>().0.clone();
-        cx.spawn(async move |cx| {
-            let reply = run(&host, &caller, &target, &name, input, cx).await;
-            let _ = sender.send(reply).await;
-        })
-        .detach();
-        receive
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))?;
-    Ok(async move {
-        let value = receive
-            .recv()
-            .await
-            .map_err(|error| HostError::new(error.to_string()))?;
-        value.map(to_host).map_err(HostError::new)
-    })
+        let task = cx.spawn(async move |cx| run(&host, &caller, &target, &name, input, cx).await);
+        awaited(task, cx)
+    })?;
+    Ok(async move { task.await?.map(to_host).map_err(HostError::new) })
 }
 
 async fn run(

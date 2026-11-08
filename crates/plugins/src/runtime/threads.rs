@@ -2,13 +2,13 @@ use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
 use kg_core::Workspace;
 use kg_domain::{
     AskField, DiffOp, DiffQuery, DiffScope, EnvironmentId, EnvironmentOp, EnvironmentSpec,
-    InteractionOption, Metadata, Op, OpError, OpResult, PluginId, Project, ProjectId, ProjectOp,
-    Run, Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
+    InteractionOption, Metadata, Op, OpResult, PluginId, Project, ProjectId, ProjectOp, Run,
+    Section, SectionId, ThreadId, ThreadOp, ThreadStatus, Timestamp, Visibility,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::area::{from_host, to_host};
+use crate::area::{argument, awaited, dispatch, error, from_host, to_host, with_app};
 
 /// Must match the 256 KiB ceiling published for `threads.output`.
 pub(crate) const OUTPUT_CAP: usize = 256 * 1024;
@@ -40,14 +40,13 @@ pub(crate) fn module(plugin: &PluginId) -> HostModule {
     module = module
         .declarations(include_str!("threads.d.ts"))
         .function("sidebar", |_| {
-            gpui_shell::with_current_app(|cx| {
+            with_app(|cx| {
                 serde_json::to_value(PluginSidebar::from(
                     &Workspace::global(cx).read(cx).sidebar(cx),
                 ))
                 .map(to_host)
                 .map_err(error)
-            })
-            .ok_or_else(|| HostError::new("no kagan app context"))?
+            })?
         });
     let owner = plugin.clone();
     module = module.async_function("spawn", move |args| dispatch(spawn_thread(args, &owner)?));
@@ -103,18 +102,9 @@ fn read_output(
     args: &HostArguments,
 ) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
     let id = ThreadId(args.string(0)?.to_owned());
-    let receive = gpui_shell::with_current_app(|cx| {
-        let (sender, receive) = async_channel::bounded(1);
-        let task = Workspace::thread_output(&id, OUTPUT_CAP, cx);
-        cx.spawn(async move |_| {
-            let _ = sender.send(task.await).await;
-        })
-        .detach();
-        receive
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))?;
+    let output = with_app(|cx| awaited(Workspace::thread_output(&id, OUTPUT_CAP, cx), cx))?;
     Ok(async move {
-        let text = receive.recv().await.map_err(error)?.map_err(error)?;
+        let text = output.await?.map_err(error)?;
         Ok(to_host(json!({ "output": text })))
     })
 }
@@ -161,7 +151,7 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
 fn shown_diff(args: &HostArguments, path: Option<String>) -> Result<Op, HostError> {
     let thread_id = ThreadId(args.string(0)?.to_owned());
     let scope: DiffScope = argument(args, 1)?;
-    let listed = gpui_shell::with_current_app(|cx| {
+    let listed = with_app(|cx| {
         Workspace::global(cx)
             .read(cx)
             .thread(&thread_id)
@@ -169,8 +159,7 @@ fn shown_diff(args: &HostArguments, path: Option<String>) -> Result<Op, HostErro
                 let record = thread.read(cx).record();
                 record.visibility == Visibility::Visible && record.archived_at.is_none()
             })
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))?;
+    })?;
     if !listed {
         return Err(HostError::new(format!(
             "thread {thread_id} is not in kagan's thread list"
@@ -270,55 +259,11 @@ fn restore_environment(args: &HostArguments) -> Result<Op, HostError> {
     }))
 }
 
-pub(crate) fn argument<T: for<'de> Deserialize<'de>>(
-    args: &HostArguments,
-    ix: usize,
-) -> Result<T, HostError> {
-    serde_json::from_value(from_host(args.value(ix)?)).map_err(error)
-}
-
 fn optional(args: &HostArguments, ix: usize) -> Value {
     args.get(ix).map_or_else(|| json!({}), from_host)
 }
 
-pub(crate) fn error(error: impl std::fmt::Display) -> HostError {
-    HostError::new(error.to_string())
-}
-
-pub(crate) fn dispatch(
-    op: Op,
-) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send, HostError> {
-    let receive = gpui_shell::with_current_app(|cx| {
-        let task = match op {
-            Op::Thread(ThreadOp::Rename { id, title }) => Workspace::rename_once(id, title, cx),
-            op => Workspace::dispatch(op, cx),
-        };
-        watch(task, cx)
-    })
-    .ok_or_else(|| HostError::new("no kagan app context"))?;
-    Ok(finish(receive))
-}
-
-fn watch(
-    task: impl Future<Output = Result<OpResult, OpError>> + 'static,
-    cx: &mut gpui_kit::App,
-) -> async_channel::Receiver<Result<OpResult, OpError>> {
-    let (sender, receive) = async_channel::bounded(1);
-    cx.spawn(async move |_| {
-        let _ = sender.send(task.await).await;
-    })
-    .detach();
-    receive
-}
-
-async fn finish(
-    receive: async_channel::Receiver<Result<OpResult, OpError>>,
-) -> Result<HostValue, HostError> {
-    let result = receive.recv().await.map_err(error)?.map_err(error)?;
-    shown(result).map(to_host).map_err(error)
-}
-
-fn shown(result: OpResult) -> serde_json::Result<Value> {
+pub(crate) fn shown(result: OpResult) -> serde_json::Result<Value> {
     match &result {
         OpResult::Thread(thread) => serde_json::to_value(PluginThread::from(thread)),
         OpResult::Threads(threads) => {

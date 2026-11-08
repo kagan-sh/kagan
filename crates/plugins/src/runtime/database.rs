@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use crate::area::to_host;
-use crate::threads::{argument, error};
+use crate::area::{argument, error};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

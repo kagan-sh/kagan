@@ -1,10 +1,13 @@
 use std::cell::RefCell;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gpui_kit::{App, Entity};
 use gpui_shell::{HostArguments, HostError, HostModule, HostValue};
-use kg_domain::{OpError, PluginId};
+use kg_core::Workspace;
+use kg_domain::{Op, OpError, PluginId, ThreadOp};
+use serde::Deserialize;
 use serde_json::{Map, Number, Value};
 
 use crate::manifest::{Area, Grant};
@@ -34,6 +37,53 @@ pub(crate) enum Gate {
 /// holds the app, so it must reach the app through here and never through an `AsyncApp`.
 pub(crate) fn with_app<R>(f: impl FnOnce(&mut App) -> R) -> Result<R, HostError> {
     gpui_shell::with_current_app(f).ok_or_else(|| HostError::new("no kagan app context"))
+}
+
+/// Runs `task` on the app's executor and gives back its result, or says the plugin unloaded
+/// before it finished.
+pub(crate) fn awaited<T: Send + 'static, F: Future<Output = T> + 'static>(
+    task: F,
+    cx: &mut App,
+) -> impl Future<Output = Result<T, HostError>> + Send + use<T, F> {
+    let (sender, receive) = async_channel::bounded(1);
+    cx.spawn(async move |_| {
+        // The plugin may have unloaded, so nobody may be waiting for the result.
+        let _ = sender.send(task.await).await;
+    })
+    .detach();
+    async move {
+        receive
+            .recv()
+            .await
+            .map_err(|_| HostError::new("the plugin was unloaded"))
+    }
+}
+
+pub(crate) fn dispatch(
+    op: Op,
+) -> Result<impl Future<Output = Result<HostValue, HostError>> + Send + use<>, HostError> {
+    let result = with_app(|cx| {
+        let task = match op {
+            Op::Thread(ThreadOp::Rename { id, title }) => Workspace::rename_once(id, title, cx),
+            op => Workspace::dispatch(op, cx),
+        };
+        awaited(task, cx)
+    })?;
+    Ok(async move {
+        let result = result.await?.map_err(error)?;
+        crate::threads::shown(result).map(to_host).map_err(error)
+    })
+}
+
+pub(crate) fn argument<T: for<'de> Deserialize<'de>>(
+    args: &HostArguments,
+    ix: usize,
+) -> Result<T, HostError> {
+    serde_json::from_value(from_host(args.value(ix)?)).map_err(error)
+}
+
+pub(crate) fn error(error: impl std::fmt::Display) -> HostError {
+    HostError::new(error.to_string())
 }
 
 pub(crate) fn modules(

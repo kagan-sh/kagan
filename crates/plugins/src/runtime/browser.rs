@@ -3,8 +3,7 @@
 use gpui_shell::{HostArguments, HostError, HostModule};
 use kg_domain::{BrowserOp, Op, ThreadId};
 
-use crate::area::from_host;
-use crate::threads::{argument, dispatch, error};
+use crate::area::{argument, dispatch, error, from_host};
 
 const CALLS: [&str; 14] = [
     "open", "status", "snapshot", "goto", "back", "forward", "reload", "click", "fill", "type",
