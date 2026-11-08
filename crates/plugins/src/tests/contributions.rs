@@ -169,7 +169,7 @@ fn a_manifest_for_a_spot_kagan_does_not_draw_is_refused() {
     declared["ui"]["panels"] =
         json!([{ "id": "notes", "title": "Notes", "view": "Notes", "placement": "right" }]);
     write_plugin(plugin.path(), &declared);
-    let error = crate::development::check(plugin.path(), spare_data())
+    let error = crate::development::check(plugin.path(), spare_data(), &super::catalog())
         .unwrap_err()
         .to_string();
     assert_eq!(error, "declared view Notes is not exported by main.js");

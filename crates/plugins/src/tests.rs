@@ -9,6 +9,7 @@ mod manifest;
 mod page;
 mod runtime;
 mod schedule;
+mod script;
 mod secret;
 mod settings;
 mod status;
@@ -376,7 +377,7 @@ fn catalog() -> gpui_shell::FrozenComponentRegistry {
 }
 
 fn check_plugin(root: &Path) -> crate::Result<Vec<String>> {
-    crate::development::check(root, spare_data())
+    crate::development::check(root, spare_data(), &catalog())
 }
 
 fn unique(label: &str) -> String {
