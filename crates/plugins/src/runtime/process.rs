@@ -252,6 +252,7 @@ fn run(module: HostModule, owner: &Entity<Processes>, grant: &Grant, root: &Path
             let finished = id.clone();
             let owner = run_owner.downgrade();
             let task = cx.spawn(async move |cx| {
+                // The caller may have stopped waiting, and the owner is gone once the plugin unloads.
                 let _ = done.send(task.await).await;
                 let _ = owner.update(cx, |owner, _| {
                     owner.running.remove(&finished);

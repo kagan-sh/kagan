@@ -61,10 +61,12 @@ pub(crate) fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
     for entry in entries.flatten() {
         let path = entry.path();
         if read_id(&path.join("store.id")).is_some_and(|id| removed.contains(&id)) {
+            // A folder that stays keeps its `store.id`, so the next start tries again.
             let _ = std::fs::remove_dir_all(&path);
         }
     }
     if std::fs::read_dir(&pages).is_ok_and(|mut entries| entries.next().is_none()) {
+        // Only an empty folder goes; one that is not empty is left as it is.
         let _ = std::fs::remove_dir(&pages);
     }
 }
@@ -175,6 +177,7 @@ async fn remove_one_native(id: [u8; 16], cx: &mut AsyncApp) -> StoreAttempt {
     let (send, receive) = futures::channel::oneshot::channel();
     cx.update(|_| {
         wry::WebView::remove_data_store(&id, move |result| {
+            // The task waiting for the result may have been dropped.
             let _ = send.send(result);
         });
     });
@@ -305,6 +308,7 @@ fn store_name(page: &str) -> String {
         let mut name = String::with_capacity(page.len() * 2);
         for byte in page.as_bytes() {
             use std::fmt::Write as _;
+            // Writing to a String cannot fail.
             let _ = write!(name, "{byte:02x}");
         }
         name

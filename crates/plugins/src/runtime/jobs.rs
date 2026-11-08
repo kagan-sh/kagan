@@ -205,6 +205,7 @@ impl Jobs {
             .borrow_mut()
             .remove(id)
             .ok_or_else(|| HostError::new(format!("no open job {id}")))?;
+        // The waiter may have timed out and dropped its end.
         let _ = sender.try_send(reply);
         Ok(HostValue::Null)
     }

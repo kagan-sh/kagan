@@ -507,6 +507,7 @@ impl PluginHost {
         let event = event.clone();
         let project_id = project_id.clone();
         cx.spawn(async move |host, cx| {
+            // The host is gone when kagan is closing.
             let _ = host.update(cx, |host, cx| host.deliver_event(&event, &project_id, cx));
         })
         .detach();
@@ -528,6 +529,7 @@ impl PluginHost {
             .collect();
         async move {
             futures::future::join_all(finished.into_iter().map(|finished| async move {
+                // The channel closes when the program ends; a value is never sent.
                 let _ = finished.recv().await;
             }))
             .await;
@@ -550,6 +552,7 @@ impl PluginHost {
             loaded
                 .processes
                 .update(cx, |processes, _| processes.close());
+            // The window may already be closed.
             let _ = loaded
                 .window
                 .update(cx, |_, window, _| window.remove_window());

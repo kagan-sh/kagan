@@ -178,6 +178,7 @@ pub(crate) fn forget_later(
 ) {
     cx.spawn(async move |_, cx| {
         let timer = cx.background_executor().timer(timeout);
+        // Nobody reads the reply; waiting only frees the job when it settles or times out.
         let _ = jobs.settled(&id, &replied, timer).await;
     })
     .detach();

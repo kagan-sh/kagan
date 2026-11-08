@@ -220,6 +220,7 @@ impl HostUi {
         if let Some(waiters) = self.waiting.remove(plugin) {
             let context = self.context_for(plugin);
             for waiting in waiters {
+                // A waiter that went away has nothing to wake.
                 let _ = waiting.try_send(context.clone());
             }
         }
@@ -260,6 +261,7 @@ impl HostUi {
         for (plugin, waiters) in waiting {
             let context = self.context_for(&plugin);
             for waiting in waiters {
+                // A waiter that went away has nothing to wake.
                 let _ = waiting.try_send(context.clone());
             }
         }

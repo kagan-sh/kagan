@@ -440,6 +440,7 @@ impl PluginHost {
                 Ok(mounted) => mounted,
                 Err(error) => {
                     processes.update(cx, |processes, _| processes.close());
+                    // The window may already be closed.
                     let _ = window.update(cx, |_, window, _| window.remove_window());
                     self.secrets
                         .note_later(id, Level::Error, &error.to_string(), cx);
