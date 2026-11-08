@@ -48,7 +48,7 @@ The same name twice in one place: kagan uses neither, and `kg skill list` shows 
 ## Built-in skills
 
 - `kg-cli`: threads, projects, and folders.
-- `kg-threads`: create and operate a thread. A new thread's program receives this skill.
+- `kg-threads`: create and operate a thread. The note names it before a child thread. A new thread's program receives this skill.
 - `kg-plugin-authoring`: make a plugin.
 - `kg-plugin-port`: port a bb plugin.
 - `kg-skill-creator`: write a skill.
