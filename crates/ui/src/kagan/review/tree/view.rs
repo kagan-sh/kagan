@@ -212,7 +212,7 @@ impl Kagan {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         div()
-            .key_context("ReviewNav")
+            .key_context(crate::kagan::keys::NAV_CONTEXT)
             .flex_1()
             .min_h_0()
             .child(

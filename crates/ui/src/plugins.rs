@@ -126,7 +126,7 @@ impl Bindings {
             };
             let binding = match crate::kagan::bind(
                 key,
-                RunCommand::new(plugin.clone(), command.clone()),
+                Box::new(RunCommand::new(plugin.clone(), command.clone())),
                 &binding_context(*when),
                 cx,
             ) {

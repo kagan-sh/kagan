@@ -10,17 +10,24 @@ use super::{
 };
 use crate::terminal;
 
+const COPY: &str = if cfg!(target_os = "macos") {
+    "cmd-c"
+} else {
+    "ctrl-shift-c"
+};
+pub(crate) const NAV_CONTEXT: &str = "ReviewNav";
+
 fn terminal_bindings() -> Vec<KeyBinding> {
-    let (copy, paste) = if cfg!(target_os = "macos") {
-        ("cmd-c", "cmd-v")
+    let paste = if cfg!(target_os = "macos") {
+        "cmd-v"
     } else {
-        ("ctrl-shift-c", "ctrl-shift-v")
+        "ctrl-shift-v"
     };
     vec![
         KeyBinding::new("tab", NoAction, Some(terminal::CONTEXT)),
         KeyBinding::new("shift-tab", NoAction, Some(terminal::CONTEXT)),
         KeyBinding::new("ctrl-c", NoAction, Some(terminal::CONTEXT)),
-        KeyBinding::new(copy, terminal::CopySelection, Some(terminal::CONTEXT)),
+        KeyBinding::new(COPY, terminal::CopySelection, Some(terminal::CONTEXT)),
         KeyBinding::new(paste, terminal::Paste, Some(terminal::CONTEXT)),
         KeyBinding::new(
             "shift-pageup",
@@ -53,25 +60,14 @@ fn chord_bindings(keymap: &Keymap, cx: &App) -> Vec<KeyBinding> {
             let contexts: &[&str] = match shortcut.scope {
                 ShortcutScope::Window => &[CONTEXT],
                 ShortcutScope::Review => &[super::review::CONTEXT],
-                ShortcutScope::ReviewSend => &["ReviewNav", "Review > Input"],
+                ShortcutScope::ReviewSend => &[NAV_CONTEXT, "Review > Input"],
             };
             contexts.iter().filter_map(move |context| {
-                let result = (|| {
-                    let action = cx
-                        .build_action(shortcut.action, None)
-                        .map_err(|error| error.to_string())?;
-                    let context = KeyBindingContextPredicate::parse(context)
-                        .map_err(|error| error.to_string())?;
-                    KeyBinding::load(
-                        &chord_for(shortcut.name, keymap, KeyPlatform::host()),
-                        action,
-                        Some(context.into()),
-                        false,
-                        None,
-                        cx,
-                    )
+                let chord = chord_for(shortcut.name, keymap, KeyPlatform::host());
+                let result = cx
+                    .build_action(shortcut.action, None)
                     .map_err(|error| error.to_string())
-                })();
+                    .and_then(|action| bind(&chord, action, context, cx));
                 match result {
                     Ok(binding) => Some(binding),
                     Err(error) => {
@@ -177,22 +173,14 @@ pub(crate) fn install_keys(cx: &mut App) {
                 "ctrl-a"
             },
             gpui_kit::component::input::SelectAll,
-            Some("ReviewNav"),
+            Some(NAV_CONTEXT),
         ),
-        KeyBinding::new(
-            if cfg!(target_os = "macos") {
-                "cmd-c"
-            } else {
-                "ctrl-shift-c"
-            },
-            gpui_kit::component::input::Copy,
-            Some("ReviewNav"),
-        ),
-        KeyBinding::new("j", super::review::NextFile, Some("ReviewNav")),
-        KeyBinding::new("k", super::review::PrevFile, Some("ReviewNav")),
-        KeyBinding::new("n", super::review::NextChange, Some("ReviewNav")),
-        KeyBinding::new("p", super::review::PrevChange, Some("ReviewNav")),
-        KeyBinding::new("v", super::review::ToggleViewed, Some("ReviewNav")),
+        KeyBinding::new(COPY, gpui_kit::component::input::Copy, Some(NAV_CONTEXT)),
+        KeyBinding::new("j", super::review::NextFile, Some(NAV_CONTEXT)),
+        KeyBinding::new("k", super::review::PrevFile, Some(NAV_CONTEXT)),
+        KeyBinding::new("n", super::review::NextChange, Some(NAV_CONTEXT)),
+        KeyBinding::new("p", super::review::PrevChange, Some(NAV_CONTEXT)),
+        KeyBinding::new("v", super::review::ToggleViewed, Some(NAV_CONTEXT)),
         KeyBinding::new(
             "escape",
             super::review::CloseReview,
@@ -233,12 +221,12 @@ pub(crate) fn install_keys(cx: &mut App) {
 // `KeyBinding::new` panics on a key it cannot parse, such as `secondary-` without a host.
 pub(crate) fn bind(
     key: &str,
-    action: impl Action,
+    action: Box<dyn Action>,
     context: &str,
     cx: &App,
 ) -> Result<KeyBinding, String> {
     let context = KeyBindingContextPredicate::parse(context).map_err(|error| error.to_string())?;
-    KeyBinding::load(key, Box::new(action), Some(context.into()), false, None, cx)
+    KeyBinding::load(key, action, Some(context.into()), false, None, cx)
         .map_err(|error| error.to_string())
 }
 

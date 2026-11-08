@@ -89,7 +89,11 @@ impl Kagan {
             .on_action(cx.listener(|this, _: &PrevMatch, _, cx| {
                 this.search_match(false, cx);
             }))
-            .child(div().key_context("ReviewNav").track_focus(&review.focus))
+            .child(
+                div()
+                    .key_context(crate::kagan::keys::NAV_CONTEXT)
+                    .track_focus(&review.focus),
+            )
             .child(self.review_summary(cx))
             .child(match replaced {
                 Some(body) => h_flex().flex_1().min_h_0().child(body),
