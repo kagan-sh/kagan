@@ -59,7 +59,7 @@ Short, and each points at `kg guide` chapters and the generated `.d.ts` files in
 ## Plugin dev loop
 
 - `kg plugin new <name> [--dir <path>]`: scaffolds `kagan.json`, `main.js` with the job loop, `jsconfig.json`, `kagan.d.ts` and `gpui-kit.d.ts`.
-- `kg plugin check [path]`: checks the manifest (unknown keys, schemas, declared views exported) without loading it.
+- `kg plugin check [path]`: checks the manifest (unknown keys, schemas, declared views exported) and refuses a script that imports a missing host export or builds a field the component schema rejects, without loading it.
 - `kg plugin install <path>`: a local path is linked, not copied, so edits take effect on reload.
 - `kg plugin reload <id>`, and `kg plugin dev [path]`: watches the folder and reloads on every change. There is no build step.
 - `kg plugin logs <id> [--follow]`: `host.log` output, crashes, slow marks.

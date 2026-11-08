@@ -167,11 +167,11 @@ The command button a plugin script builds. It takes the calls of the shell's `Bu
 _Avoid_: Button (in plugin scripts), observed button
 
 **KgInput**:
-The single-line text field a plugin script builds. `aria_label` is its accessible name. `kg ui` can find it, click it, type into it, and read its name, value and focus. The shell's `Input` cannot be observed.
+The single-line text field a plugin script builds from `gpui-component`. `new KgInput(state)` takes an `InputState` created with `InputState.new(placeholder?, initial?)`, two optional strings. `aria_label` is its accessible name. `kg ui` can find it, click it, type into it, and read its name, value and focus. The shell's `Input`, and gpui-base's `InputState`, are not this field.
 _Avoid_: Input (when `kg ui` must see the field)
 
 **KgTextarea**:
-The multi-line text field a plugin script builds. Same contract as `KgInput`, on a `TextareaState`.
+The multi-line text field a plugin script builds from `gpui-component`. `new KgTextarea(state)` takes a `TextareaState` created with `TextareaState.new(initial?)`, one optional string. Same contract as `KgInput`. gpui-base's `TextareaState` is a different value.
 _Avoid_: Textarea (when `kg ui` must see the field)
 
 **WebView**:

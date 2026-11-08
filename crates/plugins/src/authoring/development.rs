@@ -105,7 +105,11 @@ pub(crate) fn types(
 }
 
 /// Checks a plugin's declarations and returns the problems that do not stop it from loading.
-pub(crate) fn check(root: &Path, data_dir: &Path) -> Result<Vec<String>> {
+pub(crate) fn check(
+    root: &Path,
+    data_dir: &Path,
+    components: &gpui_shell::FrozenComponentRegistry,
+) -> Result<Vec<String>> {
     let discovered = discover(root, data_dir)?;
     let manifest: Value = serde_json::from_str(&std::fs::read_to_string(root.join("kagan.json"))?)?;
     let source = std::fs::read_to_string(root.join(&discovered.manifest.entry))?;
@@ -130,6 +134,7 @@ pub(crate) fn check(root: &Path, data_dir: &Path) -> Result<Vec<String>> {
             )));
         }
     }
+    super::script::check(root, components)?;
     plain_buttons(root)
 }
 
@@ -156,7 +161,7 @@ fn plain_buttons(root: &Path) -> Result<Vec<String>> {
 }
 
 /// Every `.js` file under the plugin folder, sorted. Hidden folders and `node_modules` are skipped.
-fn plugin_scripts(root: &Path) -> Result<Vec<PathBuf>> {
+pub(crate) fn plugin_scripts(root: &Path) -> Result<Vec<PathBuf>> {
     let mut scripts = Vec::new();
     let mut folders = vec![root.to_path_buf()];
     while let Some(folder) = folders.pop() {
@@ -255,7 +260,8 @@ fn calls_store_true(source: &str) -> bool {
     })
 }
 
-fn javascript_parser() -> std::result::Result<tree_sitter::Parser, tree_sitter::LanguageError> {
+pub(crate) fn javascript_parser()
+-> std::result::Result<tree_sitter::Parser, tree_sitter::LanguageError> {
     let mut parser = tree_sitter::Parser::new();
     parser.set_language(&tree_sitter_javascript::LANGUAGE.into())?;
     Ok(parser)
