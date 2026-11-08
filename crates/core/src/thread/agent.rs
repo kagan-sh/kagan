@@ -355,6 +355,7 @@ async fn configure(
     } = input;
     let id = record.id.0.as_str();
     let extra = collect_instruct(this, record, cx).await;
+    let instructions = note::read_instructions(data_dir);
     let agent = data_dir.join("agent");
     let (skills_root, skills, skill_errors) = skill::mirror(
         this,
@@ -369,8 +370,10 @@ async fn configure(
         files::AgentFiles {
             agent: &agent,
             id,
+            folder,
             cli,
             socket,
+            instructions: &instructions,
             extra: &extra,
             skills_root: &skills_root,
         },
@@ -537,6 +540,9 @@ async fn collect_instruct(
 }
 
 mod files;
+mod note;
+
+pub(crate) use note::{cursor_rule, note_with, read_instructions};
 
 use files::{environment, flags, write_agent_files};
 
@@ -556,30 +562,6 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
     })
     .await;
 }
-fn introduction() -> &'static str {
-    "You are working inside kagan, a workspace for programs in threads. `kg` is on PATH. Run `kg status --json` for this thread, its project, and its environment. Run `kg guide` for the map.\n\
-     \n\
-     Follow the skill kg-threads before you create a thread, or paste into, wait on, stop, or read another one. Stay in this thread unless the person asked for another.\n\
-     \n\
-     Plugin powers and a delete are approved by the person in the app. `kg ui` cannot approve them. `kg thread ask` raises a question, and the answer arrives as `answered`. The program may set the title once with `kg thread rename`. A later one says the title was kept, and a name set in the window stays."
-}
-
-pub(crate) fn note(id: &str) -> String {
-    note_with(id, "")
-}
-
-pub(crate) fn note_with(id: &str, extra: &str) -> String {
-    let mut text = format!(
-        "{}\n\nYou are running inside kagan thread {id}.",
-        introduction()
-    );
-    if !extra.is_empty() {
-        text.push_str("\n\n");
-        text.push_str(extra);
-    }
-    text
-}
-
 // A literal string takes backslashes and spaces as they are, so Windows paths need no escaping.
 fn toml(text: &str) -> String {
     if text.contains('\'') {

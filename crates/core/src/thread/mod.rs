@@ -10,7 +10,7 @@ mod run;
 mod search;
 mod terminal;
 
-pub(crate) use agent::{note, note_with};
+pub(crate) use agent::{note_with, read_instructions};
 pub(crate) use extra::{Extras, end as end_extras};
 pub(crate) use halt::{retire, stop};
 pub(crate) use interaction::{answer, insert_reply, raise, withdraw};
