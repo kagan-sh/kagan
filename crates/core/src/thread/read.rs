@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use gpui_kit::{App, AsyncApp, Entity, Task, WeakEntity};
 use kg_domain::{
-    EventKind, OpError, OpResult, Order, ThreadId, ThreadOp, ThreadStatus, ToolOutcome, WaitOutcome,
+    EventKind, OpError, OpResult, Order, ThreadId, ThreadStatus, ToolOutcome, WaitOutcome,
 };
 
 use crate::host::database::{Database, Result};
@@ -277,101 +277,7 @@ fn settle(kind: &EventKind) -> Option<WaitOutcome> {
     }
 }
 
-pub(super) async fn read_thread(
-    this: &WeakEntity<Workspace>,
-    database: Database,
-    op: ThreadOp,
-    cx: &mut AsyncApp,
-) -> Result<OpResult> {
-    match op {
-        ThreadOp::Get { id } => Ok(OpResult::Thread(
-            thread(this, &id, cx)?.read_with(cx, |thread, _| thread.record.clone()),
-        )),
-        ThreadOp::List {
-            project_id,
-            archived,
-            limit,
-            before,
-        } => {
-            database
-                .call(move |store| {
-                    Ok(OpResult::Threads(store.threads(
-                        project_id.as_ref(),
-                        archived,
-                        limit,
-                        before,
-                    )?))
-                })
-                .await
-        }
-        ThreadOp::Metadata { id, plugin_id } => {
-            thread(this, &id, cx)?;
-            database
-                .call(move |store| {
-                    Ok(OpResult::Metadata(
-                        store.thread_metadata(&id, &plugin_id)?.unwrap_or_default(),
-                    ))
-                })
-                .await
-        }
-        ThreadOp::Events {
-            id,
-            after_seq,
-            limit,
-            order,
-        } => {
-            thread(this, &id, cx)?;
-            let order = order.unwrap_or(Order::Asc);
-            let events = database
-                .call(move |store| store.events_after(&id, after_seq, limit, order))
-                .await?;
-            Ok(OpResult::Events(events))
-        }
-        ThreadOp::Tools { id } => {
-            let entity = thread(this, &id, cx)?;
-            crate::skill::tools(this, &entity, cx).await
-        }
-        ThreadOp::CallTool { id, name, input } => call_tool(this, id, name, input, cx).await,
-        ThreadOp::Interactions { id } => {
-            thread(this, &id, cx)?;
-            database
-                .call(move |store| Ok(OpResult::Interactions(store.pending_interactions(&id)?)))
-                .await
-        }
-        ThreadOp::WaitEvent { .. } => Err(OpError::Invalid(
-            "wait events must use Workspace::dispatch".into(),
-        )),
-        ThreadOp::Wait { .. } => Err(OpError::Invalid("wait must use Workspace::dispatch".into())),
-        ThreadOp::Search { .. } => Err(OpError::Invalid(
-            "search must use Workspace::dispatch".into(),
-        )),
-        ThreadOp::Run(_)
-        | ThreadOp::Stop { .. }
-        | ThreadOp::Input { .. }
-        | ThreadOp::Resize { .. }
-        | ThreadOp::Screen { .. }
-        | ThreadOp::Scroll { .. }
-        | ThreadOp::Select { .. }
-        | ThreadOp::Copy { .. }
-        | ThreadOp::Paste { .. }
-        | ThreadOp::Send { .. }
-        | ThreadOp::Report { .. }
-        | ThreadOp::Terminal(_)
-        | ThreadOp::Details { .. }
-        | ThreadOp::Links { .. }
-        | ThreadOp::Archive { .. }
-        | ThreadOp::Unarchive { .. }
-        | ThreadOp::Delete { .. }
-        | ThreadOp::SetPinned { .. }
-        | ThreadOp::Rename { .. }
-        | ThreadOp::Ask { .. }
-        | ThreadOp::MarkRead { .. }
-        | ThreadOp::SetMetadata { .. }
-        | ThreadOp::StartAgain { .. } => Err(OpError::Invalid("operation changes a thread".into())),
-    }
-}
-
-async fn call_tool(
+pub(super) async fn call_tool(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
     name: String,
@@ -418,4 +324,79 @@ async fn record(this: &WeakEntity<Workspace>, id: &ThreadId, kind: EventKind, cx
     if let Err(error) = Workspace::events(this, id.clone(), vec![kind], cx).await {
         eprintln!("kg: could not record a tool event: {error}");
     }
+}
+
+pub(super) fn get(
+    this: &WeakEntity<Workspace>,
+    id: &ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    Ok(OpResult::Thread(
+        thread(this, id, cx)?.read_with(cx, |thread, _| thread.record.clone()),
+    ))
+}
+
+pub(super) async fn list(
+    database: Database,
+    project_id: Option<kg_domain::ProjectId>,
+    archived: Option<bool>,
+    limit: Option<u32>,
+    before: Option<kg_domain::Timestamp>,
+) -> Result<OpResult> {
+    database
+        .call(move |store| {
+            Ok(OpResult::Threads(store.threads(
+                project_id.as_ref(),
+                archived,
+                limit,
+                before,
+            )?))
+        })
+        .await
+}
+
+pub(super) async fn metadata(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    plugin_id: kg_domain::PluginId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    thread(this, &id, cx)?;
+    database
+        .call(move |store| {
+            Ok(OpResult::Metadata(
+                store.thread_metadata(&id, &plugin_id)?.unwrap_or_default(),
+            ))
+        })
+        .await
+}
+
+pub(super) async fn events(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    after_seq: Option<u64>,
+    limit: Option<u32>,
+    order: Option<Order>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    thread(this, &id, cx)?;
+    let order = order.unwrap_or(Order::Asc);
+    let events = database
+        .call(move |store| store.events_after(&id, after_seq, limit, order))
+        .await?;
+    Ok(OpResult::Events(events))
+}
+
+pub(super) async fn interactions(
+    this: &WeakEntity<Workspace>,
+    database: Database,
+    id: ThreadId,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    thread(this, &id, cx)?;
+    database
+        .call(move |store| Ok(OpResult::Interactions(store.pending_interactions(&id)?)))
+        .await
 }

@@ -221,6 +221,28 @@ pub(crate) async fn submit(
     Ok(typed)
 }
 
+pub(crate) async fn send(
+    this: &WeakEntity<Workspace>,
+    id: ThreadId,
+    text: &str,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let typed = submit(this, &id, text, cx).await?;
+    Workspace::events(
+        this,
+        id,
+        vec![EventKind::Message {
+            role: kg_domain::Role::User,
+            text: typed,
+            message_id: None,
+            attachments: Vec::new(),
+        }],
+        cx,
+    )
+    .await?;
+    Ok(OpResult::Done)
+}
+
 pub(crate) fn run(
     this: &WeakEntity<Workspace>,
     op: ThreadOp,
