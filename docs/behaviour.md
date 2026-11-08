@@ -494,7 +494,7 @@ One file, read-only, in the Preview tab of the right sidebar [docs:look] [decisi
 - **Allowed when**: this thread owns the browser session [decision 143].
 - **Changes**: focuses the control with that ref, then writes the text through the prototype's `value` setter and dispatches `input` and `change`; a `contenteditable` uses `insertText` [decision 147]. `--file -` reads the text from stdin, and `--file PATH` reads it from a file of at most 1 MiB; a password never appears in a result, an error or the snapshot. A password field may be filled. A page that throws during the write is reported as `the page refused the text`, without its message. A `file` input is refused before any event.
 - **Shows**: done.
-- **Refused when**: text and `--file` together — `pass the text or --file, not both` — `invalid`. Text over 1 MiB or not UTF-8 — `invalid`. A dead ref — `not-found`. A `file` input — `invalid`. No browser session, another thread's browser session, or no window — as `Status`.
+- **Refused when**: text and `--file` together — `pass the text or --file, not both` — `invalid`. A path sent over the socket in place of text — `send the text, not a path` — `invalid`. Text over 1 MiB or not UTF-8 — `invalid`. A dead ref — `not-found`. A `file` input — `invalid`. No browser session, another thread's browser session, or no window — as `Status`.
 
 ### `Type`
 
