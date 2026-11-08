@@ -23,10 +23,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Reads the version and the CI checks on the commit. Writes nothing.
     permissions:
-      checks: read  # CI results on the commit
-      contents: read  # check out the commit
+      checks: read
+      contents: read
     outputs:
       tag: ${{ steps.next.outputs.tag }}
       version: ${{ steps.next.outputs.version }}
@@ -412,9 +411,8 @@ jobs:
     needs: [tag, package, mac-package]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Creates the GitHub release and uploads its files. Nothing else writes.
     permissions:
-      contents: write  # create the release and upload its files
+      contents: write
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
