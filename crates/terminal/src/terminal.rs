@@ -9,26 +9,27 @@ use std::time::Instant;
 
 use portable_pty::{Child, CommandBuilder, MasterPty, native_pty_system};
 
-use crate::screen::{Edit, Screen, SelectMode};
+use crate::screen::{Edit, Screen};
+use shared::Shared;
 
 mod ending;
 mod exit;
 mod finished;
-mod lines;
 mod shared;
 mod stream;
 #[cfg(test)]
 mod tests;
+mod view;
 
 use ending::Ending;
 pub use exit::Exit;
 pub use finished::Finished;
-pub use lines::{Kept, KeptLine, Lines};
-use shared::{Shared, lock, try_lock};
+use shared::lock;
 use stream::{Outgoing, io_error, is_unsafe_control, paste_text, pty_size};
 #[cfg(unix)]
 use stream::{dup_fd, set_nonblocking};
 use stream::{thread_read, thread_write};
+pub use view::{Kept, KeptLine, View};
 
 pub struct Launch {
     pub program: OsString,
@@ -43,7 +44,7 @@ pub struct Terminal {
     child: Mutex<Option<Box<dyn Child + Send + Sync>>>,
     reader: Option<JoinHandle<()>>,
     writer: Option<JoinHandle<()>>,
-    shared: Shared,
+    view: View,
     ended: Arc<AtomicBool>,
     /// Finish sets this so a non-blocking write waiting on a full pty can exit.
     write_stop: Arc<AtomicBool>,
@@ -121,9 +122,12 @@ impl Terminal {
                 #[cfg(test)]
                 Arc::clone(&fail_write),
             )),
+            view: View {
+                shared,
+                replies: Some(input.clone()),
+            },
             input,
             child: Mutex::new(Some(child)),
-            shared,
             ended,
             write_stop,
             process_id,
@@ -147,7 +151,10 @@ impl Terminal {
     }
 
     pub fn set_snapshot_bound(&self, bound: usize) {
-        self.shared.snapshot_bound.store(bound, Ordering::Relaxed);
+        self.view
+            .shared
+            .snapshot_bound
+            .store(bound, Ordering::Relaxed);
     }
 
     /// Typing goes to the program and brings the view back to the bottom.
@@ -159,7 +166,7 @@ impl Terminal {
         if bytes.is_empty() {
             return Ok(());
         }
-        self.edit(Edit::Bottom);
+        self.view.edit(Edit::Bottom);
         self.send(bytes)
     }
 
@@ -191,7 +198,7 @@ impl Terminal {
             .as_ref()
             .ok_or_else(|| io::Error::other("terminal is closed"))?;
         master.resize(size).map_err(io_error)?;
-        self.edit(Edit::Resize(cols, rows));
+        self.view.edit(Edit::Resize(cols, rows));
         Ok(())
     }
 
@@ -201,7 +208,7 @@ impl Terminal {
     ///
     /// The program has already been reaped.
     pub fn paste(&self, text: &str) -> io::Result<()> {
-        let bracketed = lock(&self.shared.screen).bracketed_paste();
+        let bracketed = lock(&self.view.shared.screen).bracketed_paste();
         self.write(paste_text(text, bracketed).into_bytes())
     }
 
@@ -221,10 +228,10 @@ impl Terminal {
         if !typed.chars().any(|c| !c.is_control()) {
             return Err(io::Error::other("send needs text"));
         }
-        let bracketed = lock(&self.shared.screen).bracketed_paste();
+        let bracketed = lock(&self.view.shared.screen).bracketed_paste();
         let mut bytes = paste_text(&typed, bracketed).into_bytes();
         bytes.push(b'\r');
-        self.edit(Edit::Bottom);
+        self.view.edit(Edit::Bottom);
         let (done, written) = mpsc::channel();
         self.input
             .send(Outgoing::Checked { bytes, done })
@@ -237,85 +244,26 @@ impl Terminal {
         self.fail_write.store(true, Ordering::Release);
     }
 
-    /// Moves the view back into history by `lines`, or forward when negative.
-    pub fn scroll(&self, lines: i32) {
-        self.edit(Edit::Scroll(lines));
-    }
-
-    /// Starts a selection at a view cell, or moves the end of the one there is. `right` is the right
-    /// half of the cell.
-    pub fn select(&self, mode: SelectMode, column: u16, row: u16, right: bool) {
-        self.edit(Edit::Select {
-            mode,
-            column,
-            row,
-            right,
-        });
-    }
-
-    /// The selected text, if any.
-    #[must_use]
-    pub fn selection(&self) -> Option<String> {
-        self.shared.drained(Screen::selection_text)
-    }
-
-    /// Every line the program printed that is still kept, as plain text.
-    #[must_use]
-    pub fn transcript(&self) -> String {
-        self.shared.drained(Screen::transcript)
-    }
-
-    /// An ANSI redraw of the screen as it is now.
-    #[must_use]
-    pub fn screen(&self) -> String {
-        lock(&self.shared.screen).draw()
-    }
-
     /// The title the program set, if any. A program that never sets one has none.
     #[must_use]
     pub fn title(&self) -> Option<String> {
-        lock(&self.shared.title).clone()
+        lock(&self.view.shared.title).clone()
     }
 
+    /// The screen, its text and its view, readable and movable from any thread.
     #[must_use]
-    pub fn grid(&self) -> crate::Grid {
-        self.shared.grid()
-    }
-
-    /// Whether the screen changed since the last call. A hold on the screen that ran out ends here.
-    #[must_use]
-    pub fn take_changed(&self) -> bool {
-        self.settle();
-        self.shared.changed.swap(false, Ordering::AcqRel)
-    }
-
-    /// Queues a change to the screen and applies it now if the reader lets go. It never waits for the
-    /// reader: if the reader holds the screen, the change waits for the reader's next chunk or the
-    /// next call here.
-    fn edit(&self, edit: Edit) {
-        lock(&self.shared.edits).push(edit);
-        self.settle();
-    }
-
-    /// Applies queued changes and ends a finished hold. It never waits for the reader.
-    fn settle(&self) {
-        let Some(mut screen) = try_lock(&self.shared.screen) else {
-            return;
-        };
-        self.shared.drain(&mut screen);
-        let Some(replies) = screen.expire_hold() else {
-            return;
-        };
-        self.shared.publish(&screen);
-        if !replies.is_empty() {
-            let _ = self.input.send(Outgoing::Bytes(replies));
-        }
+    pub fn view(&self) -> &View {
+        &self.view
     }
 
     /// Ends the program's IO and keeps its screen. Call once `exit` has returned `Some`.
     #[must_use]
     pub fn finish(mut self) -> Finished {
-        let shared = self.shared.clone();
+        let view = View {
+            replies: None,
+            ..self.view.clone()
+        };
+        let shared = &view.shared;
         {
             // A synchronized update the program never closed would hide its last text.
             let mut screen = lock(&shared.screen);
@@ -325,9 +273,11 @@ impl Terminal {
         }
         if let Some(ending) = self.ending() {
             // Teardown joins the IO threads, so it runs off the caller's thread.
-            let _ = std::thread::Builder::new().spawn(move || ending.finish());
+            if let Err(error) = std::thread::Builder::new().spawn(move || ending.finish()) {
+                eprintln!("kg: could not end the program's pty: {error}");
+            }
         }
-        Finished { shared }
+        Finished { view }
     }
 
     fn ending(&mut self) -> Option<Ending> {
@@ -341,7 +291,7 @@ impl Terminal {
             input: self.input.clone(),
             writer: self.writer.take(),
             reader: self.reader.take(),
-            shared: self.shared.clone(),
+            shared: self.view.shared.clone(),
             write_stop: Arc::clone(&self.write_stop),
         })
     }
@@ -356,6 +306,8 @@ impl Drop for Terminal {
         };
         #[cfg(unix)]
         crate::tree::kill_tree(self.process_id);
-        let _ = std::thread::Builder::new().spawn(move || ending.finish());
+        if let Err(error) = std::thread::Builder::new().spawn(move || ending.finish()) {
+            eprintln!("kg: could not end the program's pty: {error}");
+        }
     }
 }

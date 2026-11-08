@@ -11,7 +11,7 @@ use super::{claude_line, fake_agent, ran};
 fn claude_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let config = fixture.dir.path().join("claude");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.claude_config = Some(config.clone());
+        workspace.homes.insert("CLAUDE_CONFIG_DIR", config.clone());
     });
     config
 }
@@ -314,6 +314,9 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
                 );
             }
             assert!(args.ends_with(&person(rest)), "{rest}: {args:?}");
+            if agent == "opencode" {
+                assert_eq!(args, &person(rest), "{rest}: {args:?}");
+            }
             if agent == "cursor-agent" || agent == "agent" {
                 if rest == "login" {
                     assert_eq!(args, &person(rest), "{rest}: {args:?}");
@@ -354,7 +357,7 @@ fn person(rest: &str) -> Vec<String> {
 fn cursor_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let config = fixture.dir.path().join("cursor");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.cursor_config = Some(config.clone());
+        workspace.homes.insert("CURSOR_CONFIG_DIR", config.clone());
     });
     config
 }
@@ -375,7 +378,7 @@ fn wrote(config: &Path, folder: &Path, conversation: &str) {
 fn codex_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let home = fixture.dir.path().join("codex-home");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.codex_home = Some(home.clone());
+        workspace.homes.insert("CODEX_HOME", home.clone());
     });
     home
 }
@@ -630,7 +633,7 @@ async fn start_again_on_codex_starts_a_new_conversation_when_none_or_two_match(
 fn kimi_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let home = fixture.dir.path().join("kimi-home");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.kimi_home = Some(home.clone());
+        workspace.homes.insert("KIMI_CODE_HOME", home.clone());
     });
     home
 }
@@ -705,6 +708,7 @@ async fn start_again_resumes_the_one_kimi_conversation_in_its_folder(cx: &mut Te
         "{again:?}"
     );
     assert!(notices(&id, cx).await.is_empty());
+    assert_eq!(remembered(&fixture, &id), Some(conversation.clone()));
 
     std::fs::remove_file(run.join("out").join("env")).unwrap();
     let _home = EnvVar::set("KIMI_CODE_HOME", &home);
@@ -960,4 +964,120 @@ async fn a_lost_codex_file_is_replaced_by_the_run_that_follows(cx: &mut TestAppC
     began(&home, fixture.dir.path(), later());
     tick(cx);
     assert_eq!(remembered(&fixture, &id), Some(replacement));
+}
+
+fn left_to_resume(fixture: &Fixture) -> std::collections::BTreeSet<ThreadId> {
+    kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3"))
+        .unwrap()
+        .resume_threads()
+        .unwrap()
+}
+
+#[gpui_kit::test]
+async fn a_remembered_thread_that_cannot_resume_is_forgotten_at_open(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let gone = ThreadId("thr_gone".into());
+    let fixture = fixture
+        .restart(cx, |store| {
+            store
+                .set_resume_threads(&std::collections::BTreeSet::from([gone.clone()]))
+                .unwrap();
+        })
+        .await;
+    cx.run_until_parked();
+    assert!(left_to_resume(&fixture).is_empty());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn an_idle_thread_whose_folder_is_gone_stays_idle_when_it_cannot_resume(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let (id, _reap) = started(&fixture, "/bin/sh", cx).await;
+    stop(&id, cx).await;
+    let environment = super::thread(&id, cx).await.environment_id.unwrap();
+    let fixture = fixture
+        .restart(cx, |store| {
+            store
+                .set_resume_threads(&std::collections::BTreeSet::from([id.clone()]))
+                .unwrap();
+            let mut folder = store.environment(&environment).unwrap().unwrap();
+            folder.status = EnvironmentStatus::Error;
+            store.put_environment(&folder).unwrap();
+        })
+        .await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Idle);
+    assert!(left_to_resume(&fixture).is_empty());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_codex_line_that_picks_its_conversation_keeps_no_file_of_kagan(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = codex_home(&fixture, cx);
+    let run = fixture.dir.path().join("codex-picked");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(
+        &fixture,
+        &format!("{} resume --last", program.display()),
+        cx,
+    )
+    .await;
+    ran(&run);
+    began(&home, fixture.dir.path(), later());
+    tick(cx);
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert!(store.conversation(&id).unwrap().is_none());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_kimi_line_that_picks_its_conversation_keeps_no_file_of_kagan(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-picked");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(
+        &fixture,
+        &format!("{} --session abc", program.display()),
+        cx,
+    )
+    .await;
+    ran(&run);
+    kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert!(store.conversation(&id).unwrap().is_none());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_on_kimi_ignores_a_conversation_begun_in_another_folder(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-elsewhere");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let elsewhere = fixture.dir.path().join("elsewhere");
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    kimi_session(&home, &elsewhere);
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(after(&again, "--session").is_none(), "{again:?}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_first_start_of_opencode_says_nothing_about_a_conversation(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("opencode-first");
+    let program = fake_agent(&run, "opencode");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    assert!(notices(&id, cx).await.is_empty());
 }

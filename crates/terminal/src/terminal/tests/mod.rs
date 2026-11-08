@@ -49,7 +49,7 @@ fn sh(script: &str) -> Launch {
 fn wait_for(terminal: &Terminal, needle: &str) -> String {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let frame = terminal.screen();
+        let frame = terminal.view().screen();
         if frame.contains(needle) || Instant::now() > deadline {
             return frame;
         }
@@ -144,7 +144,7 @@ impl Terminal {
         gate: std::sync::mpsc::Receiver<()>,
         clock: Arc<AtomicU64>,
     ) -> Self {
-        *lock(&self.shared.eof_gate) = Some(gate);
+        *lock(&self.view.shared.eof_gate) = Some(gate);
         self.clock = Some(clock);
         self
     }
@@ -152,7 +152,7 @@ impl Terminal {
     /// Makes the teardown wait before it publishes; the sender lets it go.
     pub(crate) fn gate_publication(&self) -> std::sync::mpsc::Sender<()> {
         let (release, gate) = std::sync::mpsc::channel();
-        *lock(&self.shared.publish_gate) = Some(gate);
+        *lock(&self.view.shared.publish_gate) = Some(gate);
         release
     }
 }

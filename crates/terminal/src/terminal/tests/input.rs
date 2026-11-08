@@ -103,9 +103,9 @@ fn a_report_queues_no_scroll_reset_and_typing_queues_one() {
     let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
     let reap = Reap(terminal.process_id());
     // With the screen held, nothing applies: what is queued is what the calls asked for.
-    let screen = Arc::clone(&terminal.shared.screen);
+    let screen = Arc::clone(&terminal.view.shared.screen);
     let held = lock(&screen);
-    terminal.scroll(10);
+    terminal.view().scroll(10);
     terminal
         .report(vec![0x1b, b'[', b'M', 0x20, 0x21, 0x21])
         .unwrap();
@@ -120,7 +120,7 @@ fn a_report_queues_no_scroll_reset_and_typing_queues_one() {
 }
 
 fn queued(terminal: &Terminal) -> Vec<Edit> {
-    lock(&terminal.shared.edits).clone()
+    lock(&terminal.view.shared.edits).clone()
 }
 
 #[cfg(unix)]
@@ -157,12 +157,12 @@ fn a_report_leaves_a_scrolled_view_where_it_is() {
     let terminal = Terminal::spawn(sh("seq 1 40; sleep 5"), 20, 4).unwrap();
     let reap = Reap(terminal.process_id());
     wait_for(&terminal, "40");
-    terminal.scroll(10);
-    assert!(terminal.take_changed());
+    terminal.view().scroll(10);
+    assert!(terminal.view().take_changed());
     assert_eq!(row_text(&terminal, 0), "28");
     terminal.report(b"\x1b[<35;1;1M".to_vec()).unwrap();
     wait_for(&terminal, "35;1;1M");
-    let _ = terminal.take_changed();
+    let _ = terminal.view().take_changed();
     assert_eq!(row_text(&terminal, 0), "28");
     drop(reap);
 }

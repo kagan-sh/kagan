@@ -8,9 +8,11 @@ use kg_domain::{
 
 use crate::Workspace;
 use crate::host::database::Result;
-use crate::workspace::{GRACE, closed, missing, time};
+use crate::workspace::{closed, missing, time};
 
 use super::{git, personal, script};
+
+const GRACE: i64 = 10_000;
 
 pub(crate) struct Retirement {
     pub(crate) environment: Environment,
@@ -43,8 +45,11 @@ pub(crate) async fn sweep(
         {
             let thread = this
                 .update(cx, |workspace, cx| {
-                    crate::thread::release_ended(workspace, &record.id);
-                    if crate::thread::end_extras(workspace, &record.id) {
+                    if workspace
+                        .runs
+                        .get_mut(&record.id)
+                        .is_some_and(crate::thread::Run::release)
+                    {
                         cx.emit(crate::WorkspaceEvent::Changed);
                     }
                     drop_screens.push(record.id.clone());
@@ -291,7 +296,9 @@ async fn tell_removal(
             text,
         })
         .collect();
-    let _ = Workspace::events(this, thread, kinds, cx).await;
+    if let Err(error) = Workspace::events(this, thread, kinds, cx).await {
+        eprintln!("kg: could not record the removal notice: {error}");
+    }
 }
 
 pub(crate) async fn finish_removal(

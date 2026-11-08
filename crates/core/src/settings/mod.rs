@@ -40,11 +40,7 @@ pub(crate) async fn theme(
             database
                 .call(move |store| store.set_setting("theme", &value))
                 .await?;
-            this.update(cx, |_, cx| {
-                cx.emit(crate::WorkspaceEvent::Changed);
-                cx.notify();
-            })
-            .map_err(closed)?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Theme(settings))
         }
         ThemeOp::New { id, from } => {
@@ -178,11 +174,7 @@ pub(crate) async fn preference(
             database
                 .call(move |store| store.set_setting(&key, &saved))
                 .await?;
-            this.update(cx, |_, cx| {
-                cx.emit(crate::WorkspaceEvent::Changed);
-                cx.notify();
-            })
-            .map_err(closed)?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Setting(value))
         }
     }
@@ -194,8 +186,8 @@ fn preference_value(key: &str, value: &serde_json::Value) -> Result<()> {
         .accepts(key, value)
 }
 
-/// The sidebar layout of one window. The layout is saved per window, as `<window>.<name>`, so
-/// two windows keep their own sidebars. Returns the name, such as `left-width`.
+// The sidebar layout of one window. The layout is saved per window, as `<window>.<name>`, so
+// two windows keep their own sidebars. Returns the name, such as `left-width`.
 fn window_layout(key: &str) -> Option<&str> {
     let (window, name) = key.split_once('.')?;
     let window_ok = !window.is_empty()

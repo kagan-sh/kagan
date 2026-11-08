@@ -57,7 +57,9 @@ pub(super) async fn waiting(
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let reason = this
-        .update(cx, |workspace, _| workspace.stopping.get(&id).copied())
+        .update(cx, |workspace, _| {
+            workspace.runs.get(&id).and_then(|run| run.stopping)
+        })
         .map_err(closed)?;
     let thread = crate::thread::thread(this, &id, cx)?;
     done(this, &thread, cx).await?;

@@ -5,7 +5,7 @@ use crate::host::database::Result;
 use crate::workspace::{closed, time};
 use crate::{Thread, Workspace};
 
-use super::interaction::{clear_interactions, remove_interactions, take_thread_replies};
+use super::interaction::{clear_interactions, take_thread_replies};
 
 pub(crate) async fn status(
     this: &WeakEntity<Workspace>,
@@ -32,19 +32,7 @@ pub(crate) async fn status(
     database
         .call(move |store| store.set_thread_status(&record.id, record.status, record.updated_at))
         .await?;
-    this.update(cx, |_, cx| {
-        cx.emit(crate::WorkspaceEvent::Changed);
-        cx.notify();
-    })
-    .map_err(closed)
-}
-
-pub(crate) async fn stop(
-    this: &WeakEntity<Workspace>,
-    thread: &Entity<Thread>,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    halt(this, thread, cx).await
+    crate::workspace::changed(this, cx)
 }
 
 /// Stop and a natural exit both run it, and each then records its own event.
@@ -55,23 +43,15 @@ pub(super) async fn settle(
 ) -> Result<()> {
     let thread_id = thread.read_with(cx, |thread, _| thread.record.id.clone());
     thread.update(cx, |thread, _| thread.busy = false);
-    let approvals = this
-        .update(cx, |workspace, _| {
-            take_thread_replies(workspace, &thread_id)
-        })
-        .map_err(closed)?;
-    if !approvals.is_empty() {
-        remove_interactions(this, approvals, cx).await?;
-    }
-    clear_interactions(this, thread, cx).await?;
-    this.update(cx, |_, cx| {
-        cx.emit(crate::WorkspaceEvent::Changed);
-        cx.notify();
+    this.update(cx, |workspace, _| {
+        take_thread_replies(workspace, &thread_id)
     })
-    .map_err(closed)
+    .map_err(closed)?;
+    clear_interactions(this, thread, cx).await?;
+    crate::workspace::changed(this, cx)
 }
 
-pub(super) async fn halt(
+pub(crate) async fn stop(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,
@@ -128,7 +108,7 @@ async fn close_open_turn(
     }
     let quit = this
         .update(cx, |workspace, _| {
-            workspace.stopping.get(id) == Some(&super::StopReason::Quit)
+            workspace.runs.get(id).and_then(|run| run.stopping) == Some(super::StopReason::Quit)
         })
         .map_err(closed)?;
     thread.update(cx, |thread, _| thread.turn_open = false);

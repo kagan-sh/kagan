@@ -4,6 +4,7 @@ use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{EventKind, OpResult, ThreadId, ThreadStatus};
 
 use crate::host::database::Result;
+use crate::thread::clear_pending;
 use crate::workspace::clock::{closed, now};
 use kg_store::Store;
 
@@ -32,13 +33,8 @@ impl Workspace {
             let environment = retirement.environment.clone();
             this.update(cx, |workspace, cx| {
                 workspace.removing.insert(environment.id.clone());
-                #[cfg(test)]
-                let hold = workspace.removal_hold.clone();
                 cx.spawn(async move |this, cx| {
-                    #[cfg(test)]
-                    if let Some(hold) = hold {
-                        let _ = hold.recv().await;
-                    }
+                    crate::workspace::hold(&this, crate::workspace::Hold::Removal, cx).await;
                     let outcome = crate::environment::remove_folder(&this, retirement, cx).await;
                     let submitted = this
                         .update(cx, |workspace, _| {
@@ -48,10 +44,14 @@ impl Workspace {
                             })
                         })
                         .map_err(closed);
-                    if let Ok(submitted) = submitted {
-                        let _ = submitted.await;
+                    if let Ok(submitted) = submitted
+                        && let Err(error) = submitted.await
+                    {
+                        eprintln!("kg: could not record a folder removal: {error}");
                     }
-                    let _ = Self::refresh(&this, cx).await;
+                    if let Err(error) = Self::refresh(&this, cx).await {
+                        eprintln!("kg: could not refresh after a folder removal: {error}");
+                    }
                 })
                 .detach();
             })
@@ -106,10 +106,8 @@ pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut Async
                         .threads
                         .get(id)
                         .map(|thread| thread.read(cx).record.status);
-                    let live = workspace
-                        .terminals
-                        .get(id)
-                        .is_some_and(|shown| matches!(shown, crate::thread::Shown::Running(_)));
+                    let live =
+                        matches!(workspace.shown(id), Some(crate::thread::Shown::Running(_)));
                     !live
                         && matches!(
                             status,
@@ -169,26 +167,11 @@ async fn note_unresumed(
     let thread = crate::thread::thread(this, id, cx)?;
     let mut record = thread.read_with(cx, |thread, _| thread.record.clone());
     let at = crate::workspace::time(this, cx)?;
-    let (error, before_turn) = if starting {
-        (crate::end::STARTING, true)
-    } else {
-        (crate::end::QUIT, false)
-    };
-    record.status = ThreadStatus::Error;
-    record.latest_attention_at = at;
-    record.updated_at = at;
     let database = crate::workspace::database(this, cx)?;
-    let saved = record.clone();
-    let text = error.to_owned();
-    database
+    let (record, end) = database
         .call(move |store| {
-            let notice = parent_notice(store, &saved, &text, before_turn)?;
-            store.recover_thread(
-                &saved,
-                at,
-                [EventKind::Failed { error: Some(text) }],
-                notice,
-            )
+            let end = fail_left(store, &mut record, at, starting)?;
+            Ok((record, end))
         })
         .await?;
     thread.update(cx, |thread, cx| {
@@ -196,11 +179,7 @@ async fn note_unresumed(
         cx.notify();
     });
     this.update(cx, |workspace, cx| {
-        if let Some(end) = crate::end::End::from_newest(&[EventKind::Failed {
-            error: Some(error.to_owned()),
-        }]) {
-            workspace.ends.insert(id.clone(), end);
-        }
+        workspace.run_mut(id).end = Some(end);
         cx.emit(crate::WorkspaceEvent::Changed);
         cx.notify();
     })
@@ -220,29 +199,33 @@ fn close_left_turn(
     }
     match record.status {
         ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping => {
-            let (error, before_turn) = if record.status == ThreadStatus::Starting {
-                (crate::end::STARTING, true)
-            } else {
-                (crate::end::QUIT, false)
-            };
-            let own = vec![EventKind::Failed {
-                error: Some(error.into()),
-            }];
-            record.status = ThreadStatus::Error;
-            record.latest_attention_at = at;
-            record.updated_at = at;
-            let notice = parent_notice(store, record, error, before_turn)?;
-            store.recover_thread(record, at, own, notice)
+            let starting = record.status == ThreadStatus::Starting;
+            fail_left(store, record, at, starting).map(|_| ())
         }
         ThreadStatus::Pending | ThreadStatus::Idle | ThreadStatus::Error => Ok(()),
     }
 }
 
-fn clear_pending(store: &Store, id: &ThreadId) -> kg_store::Result<()> {
-    for interaction in store.pending_interactions(id)? {
-        store.delete_pending_interaction(&interaction.id)?;
-    }
-    Ok(())
+fn fail_left(
+    store: &mut Store,
+    record: &mut kg_domain::Thread,
+    at: kg_domain::Timestamp,
+    starting: bool,
+) -> kg_store::Result<crate::end::End> {
+    let (error, end) = if starting {
+        (crate::end::STARTING, crate::end::End::Starting)
+    } else {
+        (crate::end::QUIT, crate::end::End::Quit)
+    };
+    record.status = ThreadStatus::Error;
+    record.latest_attention_at = at;
+    record.updated_at = at;
+    let notice = parent_notice(store, record, error, starting)?;
+    let own = [EventKind::Failed {
+        error: Some(error.into()),
+    }];
+    store.recover_thread(record, at, own, notice)?;
+    Ok(end)
 }
 
 fn close_left_environments(store: &mut Store) -> kg_store::Result<()> {
@@ -268,7 +251,7 @@ fn close_left_environments(store: &mut Store) -> kg_store::Result<()> {
     Ok(())
 }
 
-/// The notice a parent gets when a child fails at startup, if it has a live parent.
+// The notice a parent gets when a child fails at startup, if it has a live parent.
 fn parent_notice(
     store: &Store,
     child: &kg_domain::Thread,

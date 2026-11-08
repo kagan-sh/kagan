@@ -37,19 +37,13 @@ pub(crate) fn become_ready(mut environment: Environment) -> SetupEnd {
             return SetupEnd::Failed(Box::new((environment, error)));
         }
     };
-    match dunce::canonicalize(&environment.path) {
-        Ok(path) => environment.path = path,
-        Err(error) => {
-            environment.status = EnvironmentStatus::Error;
-            return SetupEnd::Failed(Box::new((
-                environment,
-                OpError::Failed(format!("{SETUP} could not finish: {error}")),
-            )));
-        }
+    if let Err(error) = super::make_ready(&mut environment) {
+        environment.status = EnvironmentStatus::Error;
+        return SetupEnd::Failed(Box::new((
+            environment,
+            OpError::Failed(format!("{SETUP} could not finish: {error}")),
+        )));
     }
-    environment.status = EnvironmentStatus::Ready;
-    environment.retire_at = None;
-    environment.error = None;
     SetupEnd::Ready(Provisioned {
         environment,
         notices,
@@ -103,9 +97,7 @@ fn confirmed(environment: &Environment) -> std::result::Result<Vec<String>, Chec
     }
     match expected {
         None => Ok(Vec::new()),
-        Some(object) if object.mode == "120000" => {
-            Ok(vec![format!("{SETUP} is a link, so kagan did not run it.")])
-        }
+        Some(object) if object.mode == "120000" => Ok(link_notice(SETUP)),
         Some(_) => {
             run_script(root, &root.join(SETUP), SETUP, SCRIPT_LIMIT)?;
             Ok(Vec::new())
@@ -193,6 +185,7 @@ fn hash_bytes(bytes: &[u8]) -> Result<String> {
     std::fs::write(&path, bytes)?;
     let dir = std::env::temp_dir();
     let hashed = crate::host::git::git(&dir, &["hash-object", "--", &path.display().to_string()]);
+    // The hash below is the result; the temp file is only tidied.
     let _ = std::fs::remove_file(&path);
     Ok(hashed?.trim().to_owned())
 }
@@ -231,7 +224,7 @@ fn file_mode(meta: &std::fs::Metadata) -> &'static str {
 fn apply(root: &Path, name: &str) -> Result<Vec<String>> {
     match repo_file(root, name)? {
         RepoFile::Absent => Ok(Vec::new()),
-        RepoFile::Link => Ok(vec![format!("{name} is a link, so kagan did not run it.")]),
+        RepoFile::Link => Ok(link_notice(name)),
         RepoFile::File(path) => {
             run_script(root, &path, name, SCRIPT_LIMIT)?;
             Ok(Vec::new())
@@ -250,6 +243,10 @@ fn repo_file(root: &Path, name: &str) -> Result<RepoFile> {
         Ok(meta) if meta.is_file() => Ok(RepoFile::File(path)),
         Ok(_) => Ok(RepoFile::Absent),
     }
+}
+
+fn link_notice(name: &str) -> Vec<String> {
+    vec![format!("{name} is a link, so kagan did not run it.")]
 }
 
 pub(crate) fn shell_from(path: Option<&std::ffi::OsStr>, name: &str) -> Result<PathBuf> {
@@ -357,6 +354,7 @@ impl StderrFile {
 
 impl Drop for StderrFile {
     fn drop(&mut self) {
+        // A temp file left behind is harmless.
         let _ = std::fs::remove_file(&self.path);
     }
 }

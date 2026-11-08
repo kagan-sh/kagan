@@ -1211,7 +1211,7 @@ async fn a_new_run_forgets_the_saved_screen_of_the_last_one(cx: &mut TestAppCont
     let fixture = Fixture::new(cx).await;
     let (id, _reap) = started(&fixture, program(), cx).await;
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.saved.insert((id.clone(), 1));
+        workspace.run_mut(&id).saved = true;
     });
     op(Op::Thread(ThreadOp::Stop { id: id.clone() }), cx)
         .await
@@ -1223,6 +1223,6 @@ async fn a_new_run_forgets_the_saved_screen_of_the_last_one(cx: &mut TestAppCont
 
     let saved = fixture
         .workspace
-        .read_with(cx, |workspace, _| workspace.saved.clone());
-    assert!(!saved.iter().any(|(thread, _)| thread == &id));
+        .read_with(cx, |workspace, _| workspace.runs[&id].saved);
+    assert!(!saved);
 }

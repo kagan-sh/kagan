@@ -33,6 +33,7 @@ pub(crate) fn exit(raw: u32) -> Option<Exit> {
 // Kills the leader without reaping it, so its exit can still be read from the same pid.
 pub(crate) fn kill_leader(raw: u32) {
     if let Some(pid) = pid_of(raw) {
+        // The process may already be gone.
         let _ = kill_process(pid, Signal::KILL);
     }
 }
@@ -51,6 +52,7 @@ pub(crate) fn kill_tree(leader: u32) {
         .filter(|pid| sid_of(*pid) == Some(leader))
         .for_each(|pid| {
             if sid_of(pid) == Some(leader) {
+                // The process may already be gone.
                 let _ = kill_process(pid, Signal::KILL);
             }
         });

@@ -305,8 +305,7 @@ async fn an_omission_is_announced_when_the_screen_settles(cx: &mut TestAppContex
     loop {
         let set = cx.update(|cx| {
             Workspace::global(cx).update(cx, |workspace, _| {
-                let Some(crate::thread::Shown::Running(terminal)) = workspace.terminals.get(&id)
-                else {
+                let Some(crate::thread::Shown::Running(terminal)) = workspace.shown(&id) else {
                     return false;
                 };
                 terminal.set_snapshot_bound(1);
@@ -342,7 +341,7 @@ async fn an_omission_is_announced_when_the_screen_settles(cx: &mut TestAppContex
     );
     cx.update(|cx| {
         Workspace::global(cx).update(cx, |workspace, cx| {
-            let seq = workspace.runs.get(&id).copied().expect("current run");
+            let seq = workspace.runs[&id].started_seq.expect("current run");
             crate::thread::remember(
                 workspace,
                 &id,

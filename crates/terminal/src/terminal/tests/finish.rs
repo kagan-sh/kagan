@@ -43,7 +43,7 @@ fn a_finished_program_keeps_its_last_lines_within_the_scrollback() {
         thread::sleep(Duration::from_millis(20));
     }
     let finished = terminal.finish();
-    let transcript = finished.transcript();
+    let transcript = finished.view().transcript();
     assert!(transcript.contains("line 11999"), "{}", transcript.len());
     assert!(
         transcript.lines().count() <= 10_000 + 24,
@@ -74,8 +74,8 @@ fn a_program_that_exits_inside_an_unfinished_update_keeps_its_text() {
     let reap = Reap(terminal.process_id());
     wait_for_exit(&terminal);
     let finished = terminal.finish();
-    assert!(finished.transcript().contains("HELD"));
-    assert!(finished.screen().contains("HELD"));
+    assert!(finished.view().transcript().contains("HELD"));
+    assert!(finished.view().screen().contains("HELD"));
     drop(reap);
 }
 
@@ -93,7 +93,7 @@ fn the_exit_is_reported_after_the_output_it_has_not_yet_read() {
     let reap = Reap(terminal.process_id());
     wait_for_exit(&terminal);
     let finished = terminal.finish();
-    assert!(finished.transcript().contains("LAST"));
+    assert!(finished.view().transcript().contains("LAST"));
     drop(reap);
 }
 
@@ -108,7 +108,7 @@ fn the_drain_cap_is_read_from_a_clock_the_test_controls() {
         .controlled(gate, Arc::clone(&clock));
     let reap = Reap(terminal.process_id());
     let deadline = Instant::now() + Duration::from_secs(10);
-    while !terminal.transcript().contains("MARK") {
+    while !terminal.view().transcript().contains("MARK") {
         assert!(Instant::now() < deadline, "the program never printed");
         thread::sleep(Duration::from_millis(10));
     }
@@ -124,7 +124,7 @@ fn the_drain_cap_is_read_from_a_clock_the_test_controls() {
     clock.store(cap, Ordering::Release);
     assert_eq!(terminal.exit(), Some(Exit::Code(0)));
     // Output the program wrote before its end is on the screen when the exit is reported.
-    assert!(terminal.transcript().contains("MARK"));
+    assert!(terminal.view().transcript().contains("MARK"));
     release.send(()).unwrap();
     let finished = terminal.finish();
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -144,9 +144,9 @@ fn a_poll_that_sees_the_settle_also_sees_the_final_frame() {
     let reap = Reap(terminal.process_id());
     wait_for_exit(&terminal);
     let release = terminal.gate_publication();
-    let _ = terminal.take_changed();
+    let _ = terminal.view().take_changed();
     let finished = terminal.finish();
-    let _ = finished.take_changed();
+    let _ = finished.view().take_changed();
     let deadline = Instant::now() + Duration::from_secs(10);
     let (changed, following) = finished.poll_between(|| {
         release.send(()).unwrap();
@@ -190,9 +190,9 @@ fn a_snapshot_follows_the_drained_pty() {
     let snap = finished.snapshot();
     let restored = Finished::restore(snap.cols, snap.rows, &snap.replay).expect("in bound");
     assert!(
-        restored.transcript().contains("SNAP-LAST"),
+        restored.view().transcript().contains("SNAP-LAST"),
         "{}",
-        restored.transcript()
+        restored.view().transcript()
     );
     drop(reap);
 }
@@ -203,8 +203,8 @@ fn a_finished_screen_does_not_keep_its_programs_mouse_reporting() {
     let terminal = Terminal::spawn(sh("printf '\\033[?1000h'; exit 0"), 80, 24).unwrap();
     let reap = Reap(terminal.process_id());
     wait_for_exit(&terminal);
-    assert!(terminal.grid().mouse.is_some());
+    assert!(terminal.view().grid().mouse.is_some());
     let finished = terminal.finish();
-    assert!(finished.grid().mouse.is_none());
+    assert!(finished.view().grid().mouse.is_none());
     drop(reap);
 }

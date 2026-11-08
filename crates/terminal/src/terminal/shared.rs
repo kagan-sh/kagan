@@ -45,6 +45,7 @@ impl Shared {
     }
 
     pub(super) fn settled(mut screen: Screen) -> Self {
+        // Replies to a program that has ended go nowhere.
         let _ = screen.end_hold();
         let title = screen.title().map(str::to_owned);
         Self::parts(screen, title, true)

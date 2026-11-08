@@ -83,7 +83,7 @@ impl Fixture {
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.bb_data_dir = Some(dir.path().join("bb"));
+                workspace.homes.insert("BB_DATA_DIR", dir.path().join("bb"));
             });
         });
         Self {
@@ -116,7 +116,7 @@ impl Fixture {
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.bb_data_dir = Some(dir.path().join("bb"));
+                workspace.homes.insert("BB_DATA_DIR", dir.path().join("bb"));
             });
         });
         Self {
@@ -400,9 +400,11 @@ fn dispatch_delete(id: &ThreadId, cx: &mut TestAppContext) -> gpui_kit::Task<Res
 fn hold_removal(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
-        fixture
-            .workspace
-            .update(cx, |workspace, _| workspace.removal_hold = Some(hold));
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace
+                .holds
+                .insert(crate::workspace::Hold::Removal, hold)
+        });
     });
     release
 }
@@ -410,9 +412,9 @@ fn hold_removal(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Se
 fn hold_delete(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
-        fixture
-            .workspace
-            .update(cx, |workspace, _| workspace.delete_hold = Some(hold));
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace.holds.insert(crate::workspace::Hold::Delete, hold)
+        });
     });
     release
 }
@@ -420,9 +422,9 @@ fn hold_delete(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sen
 fn hold_run(fixture: &Fixture, cx: &mut TestAppContext) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
-        fixture
-            .workspace
-            .update(cx, |workspace, _| workspace.run_hold = Some(hold));
+        fixture.workspace.update(cx, |workspace, _| {
+            workspace.holds.insert(crate::workspace::Hold::Run, hold)
+        });
     });
     release
 }

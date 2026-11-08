@@ -26,15 +26,15 @@ fn a_hold_that_is_never_released_does_not_freeze_the_screen_or_its_queries() {
     .unwrap();
     let reap = Reap(terminal.process_id());
     let deadline = Instant::now() + Duration::from_secs(8);
-    while !terminal.screen().contains(":end") {
-        assert!(Instant::now() < deadline, "{:?}", terminal.screen());
-        let _ = terminal.take_changed();
+    while !terminal.view().screen().contains(":end") {
+        assert!(Instant::now() < deadline, "{:?}", terminal.view().screen());
+        let _ = terminal.view().take_changed();
         thread::sleep(Duration::from_millis(33));
     }
     assert!(
-        terminal.screen().contains("got:033[1;5R:end"),
+        terminal.view().screen().contains("got:033[1;5R:end"),
         "{:?}",
-        terminal.screen()
+        terminal.view().screen()
     );
     quit_within(terminal, Duration::from_secs(3));
     drop(reap);
@@ -44,10 +44,13 @@ fn a_hold_that_is_never_released_does_not_freeze_the_screen_or_its_queries() {
 fn a_grid_is_read_while_the_reader_holds_the_screen() {
     let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
     let reap = Reap(terminal.process_id());
-    let screen = Arc::clone(&terminal.shared.screen);
+    let screen = Arc::clone(&terminal.view.shared.screen);
     let held = lock(&screen);
     let observed = within(Duration::from_secs(2), move || {
-        (terminal.take_changed(), terminal.grid().lines.len())
+        (
+            terminal.view().take_changed(),
+            terminal.view().grid().lines.len(),
+        )
     });
     drop(held);
     assert_eq!(
@@ -62,7 +65,7 @@ fn a_grid_is_read_while_the_reader_holds_the_screen() {
 fn a_resize_under_a_busy_reader_returns_at_once_and_lands_later() {
     let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
     let reap = Reap(terminal.process_id());
-    let screen = Arc::clone(&terminal.shared.screen);
+    let screen = Arc::clone(&terminal.view.shared.screen);
     let held = lock(&screen);
     let (returned_tx, returned) = mpsc::channel();
     let (go_tx, go) = mpsc::channel::<()>();
@@ -74,8 +77,8 @@ fn a_resize_under_a_busy_reader_returns_at_once_and_lands_later() {
         // A call that finds the reader still holding the screen applies nothing, so keep asking.
         let deadline = Instant::now() + Duration::from_secs(1);
         let size = loop {
-            let _ = terminal.take_changed();
-            let grid = terminal.grid();
+            let _ = terminal.view().take_changed();
+            let grid = terminal.view().grid();
             let size = (grid.lines.len(), grid.lines[0].len());
             if size == (30, 100) || Instant::now() > deadline {
                 break size;
@@ -118,10 +121,10 @@ fn reads_build_no_grid_until_one_is_asked_for_and_then_it_shows_the_latest_scree
     let reap = Reap(terminal.process_id());
     let screen = wait_for(&terminal, "LAST-LINE");
     assert!(screen.contains("LAST-LINE"), "{screen}");
-    let reads = terminal.shared.versions.load(Ordering::Relaxed);
+    let reads = terminal.view.shared.versions.load(Ordering::Relaxed);
     assert!(reads > 10, "only {reads} reads");
-    assert_eq!(terminal.shared.builds.load(Ordering::Relaxed), 0);
-    let grid = terminal.grid();
+    assert_eq!(terminal.view.shared.builds.load(Ordering::Relaxed), 0);
+    let grid = terminal.view().grid();
     let text: Vec<String> = grid
         .lines
         .iter()
@@ -131,8 +134,8 @@ fn reads_build_no_grid_until_one_is_asked_for_and_then_it_shows_the_latest_scree
         text.iter().any(|line| line.starts_with("LAST-LINE")),
         "{text:?}"
     );
-    assert_eq!(terminal.grid(), grid);
-    assert_eq!(terminal.shared.builds.load(Ordering::Relaxed), 1);
+    assert_eq!(terminal.view().grid(), grid);
+    assert_eq!(terminal.view.shared.builds.load(Ordering::Relaxed), 1);
     quit_within(terminal, Duration::from_secs(3));
     drop(reap);
 }
@@ -148,8 +151,8 @@ fn a_grid_asked_for_while_the_reader_is_busy_is_built_by_the_reader() {
     .unwrap();
     let reap = Reap(terminal.process_id());
     wait_for(&terminal, "ready");
-    let held = lock(&terminal.shared.screen);
-    let stale = terminal.grid();
+    let held = lock(&terminal.view.shared.screen);
+    let stale = terminal.view().grid();
     drop(held);
     // A report queues no edit, so only the reader's next chunk can build the grid asked for.
     terminal.report(b"go\n".to_vec()).unwrap();
@@ -163,7 +166,7 @@ fn a_grid_asked_for_while_the_reader_is_busy_is_built_by_the_reader() {
     };
     assert!(!built(&stale));
     let deadline = Instant::now() + Duration::from_secs(5);
-    while !built(&lock(&terminal.shared.frame).grid) {
+    while !built(&lock(&terminal.view.shared.frame).grid) {
         assert!(Instant::now() < deadline, "the reader never built the grid");
         thread::sleep(Duration::from_millis(5));
     }
@@ -178,8 +181,8 @@ fn a_resize_shows_in_the_grid_at_once() {
     terminal.resize(100, 30).unwrap();
     let deadline = Instant::now() + Duration::from_secs(3);
     let grid = loop {
-        let _ = terminal.take_changed();
-        let grid = terminal.grid();
+        let _ = terminal.view().take_changed();
+        let grid = terminal.view().grid();
         if (grid.lines.len(), grid.lines[0].len()) == (30, 100) || Instant::now() > deadline {
             break grid;
         }
@@ -209,7 +212,7 @@ fn the_title_the_program_sets_is_kept() {
 
 #[cfg(unix)]
 pub(super) fn row_text(terminal: &Terminal, row: usize) -> String {
-    let grid = terminal.grid();
+    let grid = terminal.view().grid();
     grid.lines[row]
         .iter()
         .map(|cell| cell.c)
@@ -225,19 +228,19 @@ fn a_scroll_waits_for_a_held_screen_then_shows_and_typing_goes_back_to_the_botto
     let reap = Reap(terminal.process_id());
     wait_for(&terminal, "40");
     assert_eq!(row_text(&terminal, 0), "38");
-    let screen = Arc::clone(&terminal.shared.screen);
+    let screen = Arc::clone(&terminal.view.shared.screen);
     let held = lock(&screen);
     let asked = Instant::now();
-    terminal.scroll(10);
+    terminal.view().scroll(10);
     assert!(
         asked.elapsed() < Duration::from_millis(500),
         "the scroll waited for the reader"
     );
     drop(held);
-    assert!(terminal.take_changed());
+    assert!(terminal.view().take_changed());
     assert_eq!(row_text(&terminal, 0), "28");
     terminal.write(b"x".to_vec()).unwrap();
-    assert!(terminal.take_changed());
+    assert!(terminal.view().take_changed());
     assert_eq!(row_text(&terminal, 0), "38");
     drop(reap);
 }
@@ -248,11 +251,11 @@ fn a_selection_and_its_copy_go_through_the_queue_in_order() {
     let terminal = Terminal::spawn(sh("echo 'hello world'; sleep 5"), 40, 6).unwrap();
     let reap = Reap(terminal.process_id());
     wait_for(&terminal, "hello world");
-    terminal.select(SelectMode::Word, 1, 0, false);
-    terminal.select(SelectMode::Extend, 4, 0, true);
-    assert_eq!(terminal.selection().as_deref(), Some("hello"));
-    assert!(terminal.take_changed());
-    assert_eq!(terminal.grid().selection, [(0, 0..5)]);
+    terminal.view().select(SelectMode::Word, 1, 0, false);
+    terminal.view().select(SelectMode::Extend, 4, 0, true);
+    assert_eq!(terminal.view().selection().as_deref(), Some("hello"));
+    assert!(terminal.view().take_changed());
+    assert_eq!(terminal.view().grid().selection, [(0, 0..5)]);
     drop(reap);
 }
 
@@ -262,7 +265,7 @@ fn a_transcript_keeps_what_scrolled_off_the_screen() {
     let terminal = Terminal::spawn(sh("seq 1 40; sleep 5"), 20, 4).unwrap();
     let reap = Reap(terminal.process_id());
     wait_for(&terminal, "40");
-    let text = terminal.transcript();
+    let text = terminal.view().transcript();
     assert!(text.starts_with("1\n2\n3\n"), "{text:?}");
     drop(reap);
 }

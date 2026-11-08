@@ -20,6 +20,7 @@ pub(super) struct Ending {
 
 impl Ending {
     pub(super) fn finish(mut self) {
+        // The program may already have exited.
         let _ = self.child.kill();
         let _ = self.child.wait();
         // Before Windows build 26100, ClosePseudoConsole waits until the host
@@ -28,16 +29,20 @@ impl Ending {
         // the child is dead. The reader thread is still running here, so it
         // can drain the final frame while the console closes.
         #[cfg(windows)]
+        // The writer may already be gone.
         let _ = self.input.send(Outgoing::Bytes(b"\x1b[1;1R".to_vec()));
         // A checked write waiting on a full pty must stop before we join. The
         // writer polls write_stop between non-blocking writes on Unix.
         self.write_stop.store(true, Ordering::Release);
+        // An empty write wakes the writer so it sees `write_stop`; it may already be gone.
         let _ = self.input.send(Outgoing::Bytes(Vec::new()));
         if let Some(writer) = self.writer.take() {
+            // A panicked writer has nothing more to say; the screen is read below anyway.
             let _ = writer.join();
         }
         self.master.take();
         if let Some(reader) = self.reader.take() {
+            // A panicked reader has nothing more to say; the screen is read below anyway.
             let _ = reader.join();
         }
         // The reader has read to the end, so nothing else will arrive: the text is final.
