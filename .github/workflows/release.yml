@@ -388,8 +388,8 @@ jobs:
           echo "signed $archive"
       - name: Size budget
         env:
-          # 160 MiB for the universal kg, both CPUs: about 152 MB with thin LTO (decision 119).
-          BUDGET: 167772160
+          # 256 MiB for the universal kg, both CPUs: 232 MB with thin LTO and the review's grammars (decision 181).
+          BUDGET: 268435456
         run: |
           set -eu
           size=$(wc -c < target/universal-apple-darwin/release/kg | tr -d ' ')
