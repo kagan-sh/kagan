@@ -41,6 +41,10 @@ impl RenderOnce for ProgramRow {
                     return;
                 };
                 let height = row.size.height;
+                // A collapsed pass reports no height. Keeping it would lock the list shut.
+                if height.as_f32() <= 1. {
+                    return;
+                }
                 let changed = list
                     .update(cx, |state, cx| {
                         let rows = state.delegate_mut();
@@ -146,21 +150,33 @@ fn programs_failed(message: &str, muted: Hsla, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
+impl Picker {
+    /// Five rows, or fewer when the search leaves fewer. A theme row until one is measured.
+    fn program_list_height(&self, cx: &App) -> gpui_kit::Pixels {
+        let rows = self.list.read(cx).delegate();
+        let count = if rows.loading {
+            usize::from(LIST_ROWS)
+        } else {
+            rows.matches.len().clamp(1, usize::from(LIST_ROWS))
+        };
+        let row = rows
+            .row_height
+            .filter(|height| height.as_f32() > 1.)
+            .unwrap_or_else(|| gpui_kit::px(crate::theme::row_height(cx)));
+        row * f32::from(u16::try_from(count).unwrap_or(LIST_ROWS))
+    }
+}
+
 impl Render for Picker {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let body: AnyElement = if let Programs::Failed(message) = &self.state {
             programs_failed(message, muted, cx)
         } else {
-            // Capped at LIST_ROWS rows once the first row is measured. Until then, all rows show.
-            let cap = self
-                .list
-                .read(cx)
-                .delegate()
-                .row_height
-                .map(|row| row * f32::from(LIST_ROWS));
+            let height = self.program_list_height(cx);
             List::new(&self.list)
-                .when_some(cap, gpui_kit::Styled::max_h)
+                .h(height)
+                .max_h(height)
                 .into_any_element()
         };
         // Off while the custom command is open: its field shows the same reason beside it.

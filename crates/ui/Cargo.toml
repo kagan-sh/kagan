@@ -20,6 +20,7 @@ serde.workspace = true
 thiserror.workspace = true
 url.workspace = true
 percent-encoding = "=2.3.2"
+dunce.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
@@ -40,7 +41,6 @@ windows = { version = "=0.61.3", features = ["Win32_Foundation", "Win32_Graphics
 gpui-webview = { workspace = true, features = ["windows-composition"] }
 
 [dev-dependencies]
-dunce.workspace = true
 kg-core = { workspace = true, features = ["test"] }
 kg-store.workspace = true
 tempfile.workspace = true

@@ -10,6 +10,7 @@ use crate::Workspace;
 use crate::host::database::{Database, Result};
 use crate::workspace::{closed, id, missing};
 
+mod checkout;
 mod maintenance;
 mod personal;
 mod restore;
@@ -76,12 +77,12 @@ pub(crate) async fn prepare(
     let (provider, base) = match spec {
         EnvironmentSpec::Reuse { environment_id } => return Ok(Prepared::Reuse(environment_id)),
         EnvironmentSpec::ProjectDefault => {
-            let path = project.path.clone();
             return Ok(Prepared::Checkout(
-                cx.background_executor()
-                    .spawn(async move { dunce::canonicalize(path) })
-                    .await?,
+                canonical(project.path.clone(), cx).await?,
             ));
+        }
+        EnvironmentSpec::ProjectOn { branch: requested } => {
+            return checkout::project_on(this, project, &requested, branch, cx).await;
         }
         EnvironmentSpec::Personal if project.kind == ProjectKind::Personal => {
             (Provider::Personal, None)
@@ -190,6 +191,13 @@ async fn reserve_path(database: &Database, mut environment: Environment) -> Resu
             Ok(environment)
         })
         .await
+}
+
+async fn canonical(path: PathBuf, cx: &mut AsyncApp) -> Result<PathBuf> {
+    Ok(cx
+        .background_executor()
+        .spawn(async move { dunce::canonicalize(path) })
+        .await?)
 }
 
 fn slug(value: &str, fallback: &str) -> String {

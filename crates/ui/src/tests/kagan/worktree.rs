@@ -220,6 +220,148 @@ fn the_folder_actions_pick_the_folder_from_the_keyboard(cx: &mut TestAppContext)
     );
 }
 
+#[gpui_kit::test]
+fn a_worktree_can_start_from_another_local_branch(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (repo, project) = committed_repo(cx, data.path());
+    let (base, base_commit, topic) = other_branch(&repo);
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "branch-from"));
+    assert_eq!(
+        label(cx, window, "branch-from"),
+        format!("Branch from: {base}")
+    );
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "branch-pick-topic"));
+    assert!(shows(cx, window, "folder-worktree"));
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
+    click(cx, window, "branch-pick-topic");
+    wait_until(cx, |cx| {
+        label(cx, window, "branch-from") == "Branch from: topic"
+    });
+    set_program(cx, window, &kagan, shell());
+    wait_until(cx, |cx| {
+        super::setup::disabled(cx, window, "start") == Some(false)
+    });
+    click(cx, window, "start");
+    wait_until(cx, |cx| shown(cx, &kagan).is_some());
+    let started = shown(cx, &kagan).unwrap();
+    let environment = environment_of(cx, &started);
+    assert_eq!(environment.provider, EnvironmentProvider::Worktree);
+    assert_eq!(environment.base_branch.as_deref(), Some(topic.as_str()));
+    assert_eq!(head_commit(&environment.path), topic);
+    assert_eq!(current_branch(&repo), base);
+    assert_eq!(head_commit(&repo), base_commit);
+}
+
+#[gpui_kit::test]
+fn the_project_folder_can_check_out_another_local_branch(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (repo, project) = committed_repo(cx, data.path());
+    let (_base, _base_commit, topic) = other_branch(&repo);
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "folder-project"));
+    click(cx, window, "folder-project");
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-checkout"));
+    click(cx, window, "branch-checkout");
+    wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
+    click(cx, window, "branch-pick-topic");
+    wait_until(cx, |cx| {
+        label(cx, window, "branch-from") == "Checkout: topic"
+    });
+    set_program(cx, window, &kagan, shell());
+    click(cx, window, "start");
+    wait_until(cx, |cx| shown(cx, &kagan).is_some());
+    let started = shown(cx, &kagan).unwrap();
+    let environment = environment_of(cx, &started);
+    assert_eq!(environment.provider, EnvironmentProvider::Project);
+    assert_eq!(environment.path, dunce::canonicalize(&repo).unwrap());
+    assert_eq!(current_branch(&repo), "topic");
+    assert_eq!(head_commit(&repo), topic);
+}
+
+#[gpui_kit::test]
+fn a_dirty_project_folder_stays_on_its_branch(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (repo, project) = committed_repo(cx, data.path());
+    let base = current_branch(&repo);
+    let base_commit = head_commit(&repo);
+    std::fs::write(repo.join("dirty.txt"), "changed\n").unwrap();
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "folder-project"));
+    click(cx, window, "folder-project");
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-block"));
+    assert_eq!(
+        label(cx, window, "branch-block"),
+        "Commit or stash the uncommitted changes in this checkout to create or switch branches."
+    );
+    assert_eq!(super::setup::disabled(cx, window, "branch-new"), Some(true));
+    assert_eq!(
+        super::setup::disabled(cx, window, "branch-checkout"),
+        Some(true)
+    );
+    assert_eq!(
+        super::setup::disabled(cx, window, "branch-current"),
+        Some(false)
+    );
+    set_program(cx, window, &kagan, shell());
+    click(cx, window, "start");
+    wait_until(cx, |cx| shown(cx, &kagan).is_some());
+    assert_eq!(current_branch(&repo), base);
+    assert_eq!(head_commit(&repo), base_commit);
+}
+
+fn other_branch(repo: &Path) -> (String, String, String) {
+    let base = current_branch(repo);
+    let base_commit = head_commit(repo);
+    git(repo, &["checkout", "-q", "-b", "topic"]);
+    git(repo, &["commit", "--allow-empty", "-qm", "topic"]);
+    let topic = head_commit(repo);
+    git(repo, &["checkout", "-q", &base]);
+    (base, base_commit, topic)
+}
+
+#[gpui_kit::test]
+fn escape_closes_the_branch_menu_before_the_start_screen(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let (repo, project) = committed_repo(cx, data.path());
+    let _ = other_branch(&repo);
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "branch-from"));
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "branch-pick-topic"));
+    assert!(shows(cx, window, "folder-worktree"));
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "folder-worktree"));
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "branch-from"));
+    click(cx, window, "folder-project");
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-current"));
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "branch-current"));
+    assert!(shows(cx, window, "folder-project"));
+    click(cx, window, "folder-worktree");
+    click(cx, window, "branch-from");
+    wait_until(cx, |cx| shows(cx, window, "branch-pick-topic"));
+    click(cx, window, "program-search");
+    cx.simulate_keystrokes(window, "escape");
+    cx.run_until_parked();
+    assert!(!shows(cx, window, "branch-pick-topic"));
+    assert!(shows(cx, window, "folder-worktree"));
+}
+
 pub(in crate::tests) fn current_branch(repo: &Path) -> String {
     let output = std::process::Command::new("git")
         .arg("-C")

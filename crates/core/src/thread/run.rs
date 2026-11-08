@@ -51,11 +51,15 @@ pub(crate) fn worktree_branch(
     title: &str,
     thread_id: &ThreadId,
 ) -> Result<Option<String>> {
-    let kg_domain::EnvironmentSpec::Worktree { branch, .. } = environment else {
-        return Ok(None);
+    let requested = match environment {
+        kg_domain::EnvironmentSpec::Worktree { branch, .. } => branch.as_deref(),
+        kg_domain::EnvironmentSpec::ProjectOn {
+            branch: kg_domain::ProjectBranch::New { .. },
+        } => None,
+        _ => return Ok(None),
     };
-    let name = if let Some(name) = branch {
-        name.clone()
+    let name = if let Some(name) = requested {
+        name.to_owned()
     } else {
         let slug = kg_domain::branch_slug(title);
         if slug.is_empty() {

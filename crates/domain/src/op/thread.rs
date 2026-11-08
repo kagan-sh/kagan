@@ -311,7 +311,7 @@ pub struct Run {
     pub program: String,
     #[arg(long)]
     pub title: Option<String>,
-    /// project-default, personal, `worktree[:<base>[:<branch>]]` or `reuse:<environment-id>`
+    /// project-default, `project-on:checkout:<branch>`, `project-on:new:<base>`, personal, `worktree[:<base>[:<branch>]]`, or `reuse:<environment-id>`
     #[arg(long, value_parser = environment_spec, default_value = "worktree")]
     pub environment: EnvironmentSpec,
     #[arg(long, value_enum)]
