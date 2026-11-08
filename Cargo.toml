@@ -64,21 +64,22 @@ gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c
 ] }
 gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", default-features = false, features = ["quickjs", "components"] }
 gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", default-features = false, features = ["gpui-fast"] }
-interprocess = "=2.4.4"
+hex = "=0.4.3"
+interprocess = "=2.4.7"
 keyring-core = "=1.0.1"
 libc = "=0.2.191"
-objc2 = "=0.6.4"
+objc2 = "=0.6.5"
 objc2-app-kit = { version = "=0.3.2", default-features = false }
 objc2-foundation = { version = "=0.3.2", default-features = false }
-rustix = { version = "=1.1.5", features = ["process"] }
+rustix = { version = "=1.1.6", features = ["process"] }
 semver = "=1.0.28"
-sha2 = "=0.10.9"
+sha2 = "=0.11.1"
 tempfile = "=3.27.0"
 url = "=2.5.8"
-uuid = { version = "=1.26.1", features = ["v4"] }
+uuid = { version = "=1.29.0", features = ["v4"] }
 rusqlite = { version = "=0.40.2", features = ["bundled", "fallible_uint"] }
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.151"
+serde_json = "=1.0.154"
 thiserror = "=2.0.21"
 widestring = "=1.2.1"
 wry = { version = "=0.53.3", package = "lb-wry" }

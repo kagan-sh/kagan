@@ -32,5 +32,5 @@ fn third_party_notices_match_the_lock_and_the_packager() {
 
 fn lock_hash(path: &Path) -> String {
     use sha2::{Digest as _, Sha256};
-    format!("{:x}", Sha256::digest(std::fs::read(path).unwrap()))
+    hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
 }
