@@ -31,11 +31,19 @@ tree-sitter-javascript = "=0.25.0"
 url.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"] }
 wry.workspace = true
 objc2-foundation = { workspace = true, features = ["NSProcessInfo"] }
 
 [target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = { version = "=1.1.0", default-features = false }
 windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["rt-async-io-crypto-rust"] }
+
+[features]
+test = []
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }

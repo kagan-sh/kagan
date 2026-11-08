@@ -44,6 +44,9 @@ impl Global for PluginHostGlobal {}
 /// # Errors
 /// When the installed plugin records cannot be read.
 pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Task<Result<()>> {
+    // Tests keep secrets in files, so they never touch the person's keychain.
+    #[cfg(not(any(test, feature = "test")))]
+    crate::runtime::keychain::use_keychain();
     HostUi::init(cx);
     crate::PluginStrip::init(cx);
     gpui_shell::init(cx);

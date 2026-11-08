@@ -7,6 +7,8 @@ pub(crate) mod database;
 pub(crate) mod files;
 pub(crate) mod host;
 pub(crate) mod jobs;
+#[cfg(not(any(test, feature = "test")))]
+pub(crate) mod keychain;
 pub mod keys;
 pub(crate) mod log;
 pub(crate) mod ops;
