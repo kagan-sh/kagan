@@ -640,10 +640,13 @@ async fn a_saved_thread_opens_after_a_restart(cx: &mut TestAppContext) {
             .iter()
             .any(|event| { matches!(event.kind, EventKind::Rewound { .. }) })
     );
-    assert!(events(&child.id, cx).await.iter().any(|event| {
-        matches!(&event.kind, EventKind::Failed { error: Some(text) } if text == "kagan quit while the program was running")
-    }));
-    assert_eq!(thread(&child.id, cx).await.status, ThreadStatus::Error);
+    assert!(
+        !events(&child.id, cx).await.iter().any(|event| {
+            matches!(&event.kind, EventKind::Failed { error: Some(text) } if text == "kagan quit while the program was running")
+        }),
+        "a running thread was marked failed instead of resumed"
+    );
+    assert_eq!(thread(&child.id, cx).await.status, ThreadStatus::Active);
     let OpResult::Interactions(pending) = op(
         Op::Thread(ThreadOp::Interactions {
             id: child.id.clone(),
@@ -655,9 +658,12 @@ async fn a_saved_thread_opens_after_a_restart(cx: &mut TestAppContext) {
         panic!("interactions")
     };
     assert!(pending.is_empty());
-    assert!(events(&parent.id, cx).await.iter().any(|event| {
-        matches!(&event.kind, EventKind::Notice { text, .. } if text.contains("child") && text.contains("kagan quit while the program was running"))
-    }));
+    assert!(
+        !events(&parent.id, cx).await.iter().any(|event| {
+            matches!(&event.kind, EventKind::Notice { text, .. } if text.contains("kagan quit while the program was running"))
+        }),
+        "a resumed child was reported as failed"
+    );
 }
 
 #[gpui_kit::test]
@@ -816,23 +822,26 @@ async fn a_new_worktree_survives_cleanup_of_a_retired_folder(cx: &mut TestAppCon
 }
 
 #[gpui_kit::test]
-async fn a_restart_while_a_program_runs_marks_the_thread_failed(cx: &mut TestAppContext) {
+async fn a_restart_resumes_a_program_that_was_running(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let (id, _reap) = started(&fixture, program(), cx).await;
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.executor()
         .advance_clock(std::time::Duration::from_secs(1));
     cx.run_until_parked();
-    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
-    assert!(kinds_of(&id, cx).await.iter().any(|kind| matches!(
-        kind,
-        EventKind::Failed { error: Some(text) } if text == "kagan quit while the program was running"
-    )));
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(pid_of(&id, cx).is_some());
+    assert!(
+        !kinds_of(&id, cx).await.iter().any(|kind| matches!(
+            kind,
+            EventKind::Failed { error: Some(text) } if text == "kagan quit while the program was running"
+        ))
+    );
     drop(fixture);
 }
 
 #[gpui_kit::test]
-async fn a_read_running_thread_is_unread_after_a_restart(cx: &mut TestAppContext) {
+async fn a_read_running_thread_stays_read_when_a_restart_resumes_it(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let (id, _reap) = started(&fixture, program(), cx).await;
     op(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx)
@@ -840,13 +849,15 @@ async fn a_read_running_thread_is_unread_after_a_restart(cx: &mut TestAppContext
         .unwrap();
     let read = thread(&id, cx).await;
     let read_at = read.last_read_at.expect("read");
-    std::thread::sleep(std::time::Duration::from_millis(10));
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.run_until_parked();
     let recovered = thread(&id, cx).await;
-    assert_eq!(recovered.status, ThreadStatus::Error);
-    assert!(recovered.latest_attention_at.0 > read_at.0, "{recovered:?}");
-    assert!(recovered.updated_at.0 > read.updated_at.0, "{recovered:?}");
+    assert_eq!(recovered.status, ThreadStatus::Active);
+    assert!(!recovered.unread(), "{recovered:?}");
+    assert!(
+        recovered.latest_attention_at.0 <= read_at.0,
+        "{recovered:?}"
+    );
     drop(fixture);
 }
 
@@ -976,6 +987,10 @@ async fn an_interrupted_recovery_rolls_back_and_the_next_start_retries(cx: &mut 
     drop(workspace);
     cx.run_until_parked();
     let db = dir.path().join("kagan.sqlite3");
+    kg_store::Store::open(&db)
+        .unwrap()
+        .set_thread_status(&id, ThreadStatus::Stopping, Timestamp(1))
+        .unwrap();
     rusqlite::Connection::open(&db)
         .unwrap()
         .execute_batch(
@@ -996,7 +1011,7 @@ async fn an_interrupted_recovery_rolls_back_and_the_next_start_retries(cx: &mut 
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(status, "active");
+    assert_eq!(status, "stopping");
     let failed: i64 = check
         .query_row(
             "SELECT COUNT(*) FROM events WHERE thread_id = ?1
@@ -1073,19 +1088,12 @@ async fn start_again_refuses_a_running_or_archived_thread(cx: &mut TestAppContex
 
 #[cfg(unix)]
 #[gpui_kit::test]
-async fn a_restart_does_not_resume_a_program_but_start_again_does_on_request(
-    cx: &mut TestAppContext,
-) {
+async fn a_restart_resumes_a_running_program_without_start_again(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let (id, _reap) = started(&fixture, program(), cx).await;
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.run_until_parked();
-    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
-    assert!(pid_of(&id, cx).is_none());
-    op(Op::Thread(ThreadOp::StartAgain { id: id.clone() }), cx)
-        .await
-        .unwrap();
-    wait_for_status(&id, ThreadStatus::Active, cx).await;
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
     assert!(pid_of(&id, cx).is_some());
     drop(fixture);
 }

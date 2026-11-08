@@ -1,10 +1,40 @@
+use std::collections::BTreeSet;
+
+use kg_domain::ThreadId;
 use rusqlite::{OptionalExtension as _, params};
 use serde_json::Value;
 
 use crate::Result;
 use crate::column::Json;
 
+const RESUME_THREADS: &str = "resume-threads";
+
 impl super::Store {
+    /// Threads a quit left running, so the next open starts them again. Not a preference.
+    pub fn resume_threads(&self) -> Result<BTreeSet<ThreadId>> {
+        let Some(value) = self.setting(RESUME_THREADS)? else {
+            return Ok(BTreeSet::new());
+        };
+        let Some(ids) = value.as_array() else {
+            return Ok(BTreeSet::new());
+        };
+        Ok(ids
+            .iter()
+            .filter_map(|id| id.as_str().map(|id| ThreadId(id.to_owned())))
+            .collect())
+    }
+
+    pub fn set_resume_threads(&self, ids: &BTreeSet<ThreadId>) -> Result<()> {
+        let value = Value::Array(ids.iter().map(|id| Value::String(id.0.clone())).collect());
+        self.set_setting(RESUME_THREADS, &value)
+    }
+
+    pub fn remember_resume(&mut self, ids: &[ThreadId]) -> Result<()> {
+        let mut remembered = self.resume_threads()?;
+        remembered.extend(ids.iter().cloned());
+        self.set_resume_threads(&remembered)
+    }
+
     pub fn setting(&self, key: &str) -> Result<Option<Value>> {
         Ok(self
             .conn

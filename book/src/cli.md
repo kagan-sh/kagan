@@ -325,7 +325,7 @@ Commands:
   wait-event    Wait for an event
   wait          Wait until a reply ends, the program ends, or the time is up
   ask           Raise a question for the person. The answer arrives as `answered`
-  start-again   Run a stopped or recovered thread's program again, in its folder. Only a request does this
+  start-again   Run a stopped or recovered thread's program again, in its folder. Opening kagan does this for a thread that was still running
   tools         Agent tools offered to the thread, with plugin instructions
   call-tool     Call an agent tool as the thread
   interactions  Pending interactions waiting for an answer
@@ -990,7 +990,7 @@ Options:
 ## `kg thread start-again`
 
 ```text
-Run a stopped or recovered thread's program again, in its folder. Only a request does this.
+Run a stopped or recovered thread's program again, in its folder. Opening kagan does this for a thread that was still running.
 
 A claude, cursor-agent, or agent thread, and a plain codex thread, resume their conversation; when kagan cannot find it, the agent starts a new one and the thread says so.
 

@@ -172,9 +172,9 @@ fn running(cx: &App) -> usize {
 
 fn consequence(running: usize) -> String {
     if running == 1 {
-        "1 running program will end.".to_string()
+        "1 running program will stop and resume when kagan opens again.".to_string()
     } else {
-        format!("{running} running programs will end.")
+        format!("{running} running programs will stop and resume when kagan opens again.")
     }
 }
 
