@@ -18,7 +18,9 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use kg_core::Workspace;
-use kg_domain::{DiffLineKind, DiffOp, DiffScope, Op, OpResult, ReviewRow};
+use kg_domain::{DiffLineKind, DiffOp, DiffScope, Op, OpResult};
+
+use super::rows::ReviewRow;
 
 impl Kagan {
     pub(super) fn review_summary(&self, cx: &mut Context<Self>) -> AnyElement {

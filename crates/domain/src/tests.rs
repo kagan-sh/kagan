@@ -1,5 +1,3 @@
-mod review;
-
 use crate::{
     AgentTool, Attachment, ConfigOp, DiffNote, DiffScope, DiffSide, EnvironmentSpec, Event,
     EventKind, InteractionOption, Op, OpError, OpResult, PendingInteraction, PendingInteractionId,

@@ -4,6 +4,7 @@ use crate::theme::TypeScale as _;
 mod actions;
 mod comment;
 mod page;
+mod rows;
 mod search;
 mod syntax;
 mod text;
@@ -11,6 +12,7 @@ pub(super) mod tree;
 
 pub(super) use comment::Drafts;
 
+use rows::ReviewRow;
 use text::renamed_from;
 
 use std::collections::BTreeSet;
@@ -23,7 +25,7 @@ use gpui_kit::{
     IntoElement, ParentElement as _, ScrollHandle, StatefulInteractiveElement as _, Styled as _,
     Subscription, Task, actions, div,
 };
-use kg_domain::{DiffScope, ReviewRow, ThreadId};
+use kg_domain::{DiffScope, ThreadId};
 
 use super::Kagan;
 use crate::ui_observe::UiObserveExt as _;

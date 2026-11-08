@@ -1,10 +1,10 @@
 use std::ops::Range;
 
-use crate::{DiffFileView, DiffLine, DiffLineKind};
+use kg_domain::{DiffFileView, DiffLine, DiffLineKind};
 
 /// A patch row or a run of unchanged lines between hunks.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ReviewRow {
+pub(in crate::kagan) enum ReviewRow {
     Line {
         line: DiffLine,
         changed: Option<Range<usize>>,
@@ -16,7 +16,7 @@ pub enum ReviewRow {
 
 /// Builds review rows from a patch and the new side of the file.
 #[must_use]
-pub fn review_rows(view: &DiffFileView) -> Vec<ReviewRow> {
+pub(super) fn review_rows(view: &DiffFileView) -> Vec<ReviewRow> {
     let file: Vec<&str> = view.file.as_deref().unwrap_or("").lines().collect();
     let mut rows = Vec::new();
     let mut next_new = 1u32;

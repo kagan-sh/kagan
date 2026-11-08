@@ -7,7 +7,6 @@ mod op;
 mod preview;
 mod program;
 mod record;
-mod review;
 #[cfg(test)]
 mod tests;
 mod theme;
@@ -48,7 +47,6 @@ pub use record::{
     ProjectKind, Section, Sidebar, Snippet, Thread, ThreadMark, ThreadStatus, Visibility,
     archive_span, newest_first, order_sidebar_projects, owned_thread_ids,
 };
-pub use review::{ReviewRow, review_rows};
 pub use theme::{
     Color, Highlight, Look, MAX_THEME_BYTES, Palette, Radius, Space, TerminalColors, ThemeFile,
     ThemeFileError, TypeSizes,
