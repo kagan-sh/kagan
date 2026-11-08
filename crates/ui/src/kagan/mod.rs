@@ -157,7 +157,6 @@ pub(crate) struct Kagan {
     review_drafts: review::Drafts,
     replaced: replace::Replaced,
     plugins: Plugins,
-    panels: Vec<right::Panel>,
     right_slots: Vec<surface::Slot>,
     right_tab: Option<right::Tab>,
     right_menu: Option<(Entity<PopupMenu>, Subscription)>,

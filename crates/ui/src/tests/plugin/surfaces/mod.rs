@@ -17,7 +17,7 @@ pub(in crate::tests) use install::{
 };
 pub(in crate::tests) use layout::{
     BLANK, FILL, focus_page_input, install_blank, install_fill, replied, saved, show_thread,
-    tab_to, terminal_focused, titles,
+    tab_to, terminal_focused,
 };
 pub(in crate::tests) use narrow::narrow;
 pub(in crate::tests) use open_close::{assert_replaced, emit_open, screen, set_mode};

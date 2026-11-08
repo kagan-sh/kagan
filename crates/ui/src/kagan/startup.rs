@@ -57,7 +57,6 @@ impl Kagan {
             review_drafts: review::Drafts::default(),
             replaced: replace::Replaced::default(),
             plugins: Plugins::new(window, cx),
-            panels: right::built_in(),
             right_slots: Vec::new(),
             right_tab: None,
             right_menu: None,

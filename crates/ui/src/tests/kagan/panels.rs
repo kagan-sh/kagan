@@ -160,7 +160,7 @@ fn an_open_diff_follows_the_disk_without_a_click(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn disabling_a_plugin_takes_its_panel_away(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open_with_plugins(cx, true);
+    let (_kagan, window, _data) = open_with_plugins(cx, true);
     cx.simulate_window_resize(window, size(px(1400.), px(900.)));
     cx.run_until_parked();
     open_surface(cx, &PluginId(PAGE.into()), "page");
@@ -176,10 +176,6 @@ fn disabling_a_plugin_takes_its_panel_away(cx: &mut TestAppContext) {
     });
     cx.foreground_executor().block_test(off).unwrap();
     wait_until(cx, |cx| !shows(cx, window, "page-button"));
-    assert_eq!(
-        cx.update(|cx| kagan.read(cx).panel_titles()),
-        ["Questions", "Changes", "Details"]
-    );
 }
 
 #[gpui_kit::test]
@@ -362,27 +358,6 @@ fn tab_reaches_a_changed_file_and_enter_or_space_opens_it(cx: &mut TestAppContex
             .any(|line| line.contains("four")),
         "Space did not open the file"
     );
-}
-
-#[gpui_kit::test]
-fn the_right_sidebar_draws_from_its_registry(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open(cx);
-    let id = run_shell(cx);
-    click(cx, window, &format!("thread-{}", id.0));
-    let _asked =
-        cx.update(|cx| Workspace::ask_for_person(None, None, "Waiting?".into(), vec![], cx));
-    cx.run_until_parked();
-    cx.run_until_parked();
-    assert!(shows(cx, window, "changes"));
-    cx.update(|cx| {
-        kagan.update(cx, |kagan, cx| kagan.drop_panel_for_test("changes", cx));
-    });
-    cx.run_until_parked();
-    assert!(
-        !shows(cx, window, "changes"),
-        "a panel dropped from the registry is still drawn"
-    );
-    assert!(shows(cx, window, "needs-you"));
 }
 
 #[gpui_kit::test]

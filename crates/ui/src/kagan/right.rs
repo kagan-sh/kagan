@@ -38,25 +38,11 @@ pub(super) enum Fill {
     Window,
 }
 
-#[derive(Clone)]
-pub(super) struct Panel {
-    pub(super) tab: Tab,
-    pub(super) title: String,
-}
-
-pub(super) fn built_in() -> Vec<Panel> {
-    [
-        (Tab::Questions, "Questions"),
-        (Tab::Changes, "Changes"),
-        (Tab::Details, "Details"),
-    ]
-    .into_iter()
-    .map(|(tab, title)| Panel {
-        tab,
-        title: title.into(),
-    })
-    .collect()
-}
+pub(super) const BUILT_IN: [(Tab, &str); 3] = [
+    (Tab::Questions, "Questions"),
+    (Tab::Changes, "Changes"),
+    (Tab::Details, "Details"),
+];
 
 pub(super) fn plugin_panel_id(plugin: &PluginId, panel: &str) -> String {
     format!("panel-{}-{panel}", plugin.0)

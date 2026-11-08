@@ -1,5 +1,5 @@
 use super::{Kagan, layout, picker, settings};
-use gpui_kit::{App, Context, Entity, Window};
+use gpui_kit::{App, Entity, Window};
 
 pub(crate) use super::keys::{chord_for, is_chord};
 pub(crate) use super::layout::read as layout_read;
@@ -36,12 +36,6 @@ impl Kagan {
         self.layout.left_open
     }
 
-    /// Drops one panel from the registry, so a test can show that the sidebar draws from it.
-    pub(crate) fn drop_panel_for_test(&mut self, id: &str, cx: &mut Context<Self>) {
-        self.panels.retain(|panel| panel.tab.id() != id);
-        cx.notify();
-    }
-
     /// The text a plugin's text setting shows on its page, for the tests.
     pub(crate) fn settings_text(cx: &App, plugin: &kg_domain::PluginId, key: &str) -> String {
         settings::text_for_test(plugin, key, cx)
@@ -60,14 +54,6 @@ impl Kagan {
 
     pub(crate) fn agent_integration(&self, cx: &App) -> bool {
         self.prefs.read(cx).agent_integration
-    }
-
-    /// Every registered right-sidebar panel's title, in order.
-    pub(crate) fn panel_titles(&self) -> Vec<String> {
-        self.panels
-            .iter()
-            .map(|panel| panel.title.clone())
-            .collect()
     }
 
     /// The width of the right panel as the group holds it now.
