@@ -24,7 +24,44 @@ async-channel = "=2.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
 dunce = "=1.0.5"
 futures = "=0.3.34"
-gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", features = ["tree-sitter-diff"] }
+# SQL is left out: tree-sitter-sequel requires cc 1.2, and this build already
+# uses cc 1.10. Cargo will not keep both (decision 173).
+gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", features = [
+    "tree-sitter-astro",
+    "tree-sitter-bash",
+    "tree-sitter-c",
+    "tree-sitter-cmake",
+    "tree-sitter-cpp",
+    "tree-sitter-csharp",
+    "tree-sitter-css",
+    "tree-sitter-diff",
+    "tree-sitter-ejs",
+    "tree-sitter-elixir",
+    "tree-sitter-erb",
+    "tree-sitter-go",
+    "tree-sitter-graphql",
+    "tree-sitter-html",
+    "tree-sitter-java",
+    "tree-sitter-javascript",
+    "tree-sitter-jsdoc",
+    "tree-sitter-kotlin",
+    "tree-sitter-lua",
+    "tree-sitter-make",
+    "tree-sitter-markdown",
+    "tree-sitter-php",
+    "tree-sitter-proto",
+    "tree-sitter-python",
+    "tree-sitter-ruby",
+    "tree-sitter-rust",
+    "tree-sitter-scala",
+    "tree-sitter-svelte",
+    "tree-sitter-swift",
+    "tree-sitter-toml",
+    "tree-sitter-tsx",
+    "tree-sitter-typescript",
+    "tree-sitter-yaml",
+    "tree-sitter-zig",
+] }
 gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", default-features = false, features = ["quickjs", "components"] }
 gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", default-features = false, features = ["gpui-fast"] }
 interprocess = "=2.4.4"

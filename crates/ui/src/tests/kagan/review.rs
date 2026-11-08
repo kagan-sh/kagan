@@ -17,6 +17,21 @@ use super::{
 use crate::theme::follow_system;
 
 #[gpui_kit::test]
+fn a_rust_change_colors_a_keyword(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (_thread, repo) = repo_thread(cx, window, data.path());
+    std::fs::write(repo.join("main.rs"), "fn main() {}\n").unwrap();
+    cx.executor().advance_clock(POLL);
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "change-main.rs"));
+    click(cx, window, "change-main.rs");
+    wait_until(cx, |cx| {
+        cx.update(|cx| review_read::review_token(kagan.read(cx), kg_domain::DiffSide::New, 1, 0))
+            == Some("keyword".to_owned())
+    });
+}
+
+#[gpui_kit::test]
 fn a_changed_file_opens_as_a_review_page_with_its_change_and_position(cx: &mut TestAppContext) {
     let (kagan, window, data) = open(cx);
     let (_thread, _repo) = repo_thread(cx, window, data.path());

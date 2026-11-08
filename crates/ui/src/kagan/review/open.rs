@@ -67,6 +67,8 @@ impl Kagan {
                 load: Task::ready(()),
                 generation: 0,
                 rows: Vec::new(),
+                syntax: super::syntax::Syntax::default(),
+                syntax_revision: String::new(),
                 expanded: BTreeSet::new(),
                 filter,
                 _filter_watch: filter_watch,
@@ -142,11 +144,13 @@ impl Kagan {
             cx,
         );
         let window = review.window;
+        let renamed = review.renamed_from.clone();
         review.load = cx.spawn(async move |this, cx| {
             let shown = shown.await;
+            let syntax = fresh_syntax(&this, cx, &expect, &shown, renamed).await;
             _ = cx.update_window(window, |_, window, cx| {
                 _ = this.update(cx, |this, cx| {
-                    this.apply_review(&expect, shown, window, cx);
+                    this.apply_review(&expect, shown, syntax, window, cx);
                 });
             });
         });
@@ -156,6 +160,7 @@ impl Kagan {
         &mut self,
         expect: &ReadExpect,
         shown: Result<OpResult, OpError>,
+        syntax: Option<super::syntax::Syntax>,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -176,6 +181,10 @@ impl Kagan {
                 }
                 review.revision.clone_from(&view.revision);
                 review.rows = review_rows(&view);
+                if let Some(syntax) = syntax {
+                    review.syntax = syntax;
+                    review.syntax_revision.clone_from(&view.revision);
+                }
                 review.notice = notice(&view);
                 let (text, _) = layout(&view);
                 review.hunks = view
@@ -204,4 +213,37 @@ impl Kagan {
         self.invalidate_viewed(cx);
         cx.notify();
     }
+}
+
+async fn fresh_syntax(
+    this: &gpui_kit::WeakEntity<Kagan>,
+    cx: &mut gpui_kit::AsyncApp,
+    expect: &ReadExpect,
+    shown: &Result<OpResult, OpError>,
+    renamed: Option<String>,
+) -> Option<super::syntax::Syntax> {
+    let Ok(OpResult::DiffFile(view)) = shown else {
+        return None;
+    };
+    if view.path != expect.path || view.binary || view.truncated || view.too_large {
+        return None;
+    }
+    let kept = this
+        .read_with(cx, |kagan, _| {
+            kagan.screen.review().is_some_and(|review| {
+                review.path == expect.path && review.syntax_revision == view.revision
+            })
+        })
+        .unwrap_or(false);
+    if kept {
+        return None;
+    }
+    let view = view.clone();
+    let path = view.path.clone();
+    Some(
+        cx.background_spawn(
+            async move { super::syntax::captures(&view, &path, renamed.as_deref()) },
+        )
+        .await,
+    )
 }
