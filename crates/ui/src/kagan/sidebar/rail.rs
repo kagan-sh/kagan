@@ -277,14 +277,11 @@ pub(super) fn footer(
                 .ghost()
                 .icon(gpui_kit::assets::IconName::FolderPlus)
                 .accessibility_label("Add project")
-                .tooltip({
-                    let keys = crate::kagan::controls::bound_keys(&crate::kagan::AddProject, cx);
-                    if keys.is_empty() {
-                        "Add project".to_owned()
-                    } else {
-                        format!("Add project ({keys})")
-                    }
-                })
+                .tooltip(crate::kagan::controls::tip(
+                    "Add project",
+                    &crate::kagan::AddProject,
+                    cx,
+                ))
                 .tab_stop(false)
                 .on_click(|_, window, cx| {
                     window.dispatch_action(Box::new(crate::kagan::AddProject), cx);
