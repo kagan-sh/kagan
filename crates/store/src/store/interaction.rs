@@ -34,14 +34,14 @@ impl super::Store {
         let interactions = statement
             .query_map([Text(thread_id)], |row| {
                 Ok(PendingInteraction {
-                    id: row.get::<_, Text<_>>(0)?.0,
-                    thread_id: row.get::<_, Text<_>>(1)?.0,
-                    title: row.get(2)?,
-                    options: row.get::<_, Json<_>>(3)?.0,
+                    id: row.get::<_, Text<_>>("id")?.0,
+                    thread_id: row.get::<_, Text<_>>("thread_id")?.0,
+                    title: row.get("title")?,
+                    options: row.get::<_, Json<_>>("options")?.0,
                     fields: row
-                        .get::<_, Option<Json<Vec<kg_domain::AskField>>>>(4)?
+                        .get::<_, Option<Json<Vec<kg_domain::AskField>>>>("fields")?
                         .map(|json| json.0),
-                    created_at: Timestamp(row.get(5)?),
+                    created_at: Timestamp(row.get("created_at")?),
                 })
             })?
             .collect::<Result<_, _>>()?;

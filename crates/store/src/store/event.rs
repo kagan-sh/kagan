@@ -147,9 +147,9 @@ pub(super) fn append_events(
 
 fn event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Event> {
     Ok(Event {
-        thread_id: row.get::<_, Text<_>>(0)?.0,
-        seq: row.get(1)?,
-        at: Timestamp(row.get(2)?),
-        kind: row.get::<_, Json<_>>(3)?.0,
+        thread_id: row.get::<_, Text<_>>("thread_id")?.0,
+        seq: row.get("seq")?,
+        at: Timestamp(row.get("at")?),
+        kind: row.get::<_, Json<_>>("kind")?.0,
     })
 }

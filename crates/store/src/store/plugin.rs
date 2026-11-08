@@ -74,12 +74,12 @@ impl super::Store {
         let plugins = statement
             .query_map([], |row| {
                 Ok(Plugin {
-                    id: row.get::<_, Text<_>>(0)?.0,
-                    root: row.get::<_, Text<_>>(1)?.0,
-                    source: row.get(2)?,
-                    commit: row.get(3)?,
-                    enabled: row.get(4)?,
-                    approved: row.get::<_, Json<_>>(5)?.0,
+                    id: row.get::<_, Text<_>>("id")?.0,
+                    root: row.get::<_, Text<_>>("root")?.0,
+                    source: row.get("source")?,
+                    commit: row.get("commit_id")?,
+                    enabled: row.get("enabled")?,
+                    approved: row.get::<_, Json<_>>("approved")?.0,
                     error: None,
                 })
             })?

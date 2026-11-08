@@ -212,6 +212,26 @@ impl Store {
     }
 }
 
+/// An insert of `columns` into `table` with `:column` placeholders that replaces the row with the
+/// same `id`.
+fn upsert(table: &str, columns: &str) -> String {
+    let names: Vec<&str> = columns.split(", ").collect();
+    let values = names
+        .iter()
+        .map(|name| format!(":{name}"))
+        .collect::<Vec<_>>();
+    let updates = names
+        .iter()
+        .filter(|name| **name != "id")
+        .map(|name| format!("{name} = excluded.{name}"))
+        .collect::<Vec<_>>();
+    format!(
+        "INSERT INTO {table} ({columns}) VALUES ({}) ON CONFLICT(id) DO UPDATE SET {}",
+        values.join(", "),
+        updates.join(", ")
+    )
+}
+
 fn found(changed: usize, what: &'static str, id: &impl Display) -> Result<()> {
     if changed == 0 {
         Err(not_found(what, id))

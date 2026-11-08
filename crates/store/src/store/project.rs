@@ -1,26 +1,24 @@
 use kg_domain::{Event, Project, ProjectId, ProjectKind, ThreadId, Timestamp};
-use rusqlite::{OptionalExtension as _, Row, params};
+use rusqlite::{OptionalExtension as _, Row, named_params, params};
 
 use super::{event::append_deleted, not_found};
 use crate::column::Text;
 use crate::{Error, Result};
 
+const PROJECT_COLUMNS: &str = "id, kind, name, path, git_remote_url, sort";
+
 impl super::Store {
     pub fn put_project(&self, project: &Project) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO projects (id, kind, name, path, git_remote_url, sort)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, name = excluded.name,
-                path = excluded.path, git_remote_url = excluded.git_remote_url,
-                sort = excluded.sort",
-            params![
-                Text(&project.id),
-                Text(project.kind),
-                project.name,
-                Text(&project.path),
-                project.git_remote_url,
-                project.sort,
-            ],
+            &super::upsert("projects", PROJECT_COLUMNS),
+            named_params! {
+                ":id": Text(&project.id),
+                ":kind": Text(project.kind),
+                ":name": project.name,
+                ":path": Text(&project.path),
+                ":git_remote_url": project.git_remote_url,
+                ":sort": project.sort,
+            },
         )?;
         Ok(())
     }
@@ -29,7 +27,7 @@ impl super::Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT id, kind, name, path, git_remote_url, sort FROM projects WHERE id = ?1",
+                &format!("SELECT {PROJECT_COLUMNS} FROM projects WHERE id = ?1"),
                 [Text(id)],
                 project_row,
             )
@@ -51,10 +49,9 @@ impl super::Store {
     }
 
     pub fn projects(&self) -> Result<Vec<Project>> {
-        let mut statement = self.conn.prepare(
-            "SELECT id, kind, name, path, git_remote_url, sort FROM projects
-             ORDER BY sort, name, id",
-        )?;
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT {PROJECT_COLUMNS} FROM projects ORDER BY sort, name, id"
+        ))?;
         let projects = statement
             .query_map([], project_row)?
             .collect::<Result<_, _>>()?;
@@ -101,11 +98,11 @@ impl super::Store {
 
 fn project_row(row: &Row) -> rusqlite::Result<Project> {
     Ok(Project {
-        id: row.get::<_, Text<_>>(0)?.0,
-        kind: row.get::<_, Text<_>>(1)?.0,
-        name: row.get(2)?,
-        path: row.get::<_, Text<_>>(3)?.0,
-        git_remote_url: row.get(4)?,
-        sort: row.get(5)?,
+        id: row.get::<_, Text<_>>("id")?.0,
+        kind: row.get::<_, Text<_>>("kind")?.0,
+        name: row.get("name")?,
+        path: row.get::<_, Text<_>>("path")?.0,
+        git_remote_url: row.get("git_remote_url")?,
+        sort: row.get("sort")?,
     })
 }

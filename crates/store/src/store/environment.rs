@@ -3,11 +3,14 @@ use std::path::Path;
 use kg_domain::{
     Environment, EnvironmentId, EnvironmentProvider, EnvironmentStatus, ProjectId, ThreadId,
 };
-use rusqlite::{Connection, OptionalExtension as _, Row, params};
+use rusqlite::{Connection, OptionalExtension as _, Row, named_params};
 
 use super::thread::owned_threads;
 use crate::Result;
 use crate::column::Text;
+
+const ENVIRONMENT_COLUMNS: &str =
+    "id, project_id, path, status, provider, branch, base_branch, retire_at, error";
 
 impl super::Store {
     pub fn delete_environment(&self, id: &EnvironmentId) -> Result<()> {
@@ -18,25 +21,18 @@ impl super::Store {
 
     pub fn put_environment(&self, environment: &Environment) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO environments
-                (id, project_id, path, status, provider, branch, base_branch, retire_at, error)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id,
-                path = excluded.path, status = excluded.status,
-                provider = excluded.provider, branch = excluded.branch,
-                base_branch = excluded.base_branch, retire_at = excluded.retire_at,
-                error = excluded.error",
-            params![
-                Text(&environment.id),
-                Text(&environment.project_id),
-                Text(&environment.path),
-                Text(environment.status),
-                Text(environment.provider),
-                environment.branch,
-                environment.base_branch,
-                environment.retire_at.map(|at| at.0),
-                environment.error,
-            ],
+            &super::upsert("environments", ENVIRONMENT_COLUMNS),
+            named_params! {
+                ":id": Text(&environment.id),
+                ":project_id": Text(&environment.project_id),
+                ":path": Text(&environment.path),
+                ":status": Text(environment.status),
+                ":provider": Text(environment.provider),
+                ":branch": environment.branch,
+                ":base_branch": environment.base_branch,
+                ":retire_at": environment.retire_at.map(|at| at.0),
+                ":error": environment.error,
+            },
         )?;
         Ok(())
     }
@@ -45,8 +41,7 @@ impl super::Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT id, project_id, path, status, provider, branch, base_branch, retire_at, error
-                 FROM environments WHERE id = ?1",
+                &format!("SELECT {ENVIRONMENT_COLUMNS} FROM environments WHERE id = ?1"),
                 [Text(id)],
                 environment_row,
             )
@@ -54,10 +49,9 @@ impl super::Store {
     }
 
     pub fn environments(&self, project_id: &ProjectId) -> Result<Vec<Environment>> {
-        let mut statement = self.conn.prepare(
-            "SELECT id, project_id, path, status, provider, branch, base_branch, retire_at, error
-             FROM environments WHERE project_id = ?1 ORDER BY id",
-        )?;
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT {ENVIRONMENT_COLUMNS} FROM environments WHERE project_id = ?1 ORDER BY id"
+        ))?;
         let environments = statement
             .query_map([Text(project_id)], environment_row)?
             .collect::<Result<_, _>>()?;
@@ -85,10 +79,7 @@ pub(super) fn removal_pending(conn: &Connection, path: &Path) -> Result<bool> {
 }
 
 fn all_environments(conn: &Connection) -> Result<Vec<Environment>> {
-    let mut statement = conn.prepare(
-        "SELECT id, project_id, path, status, provider, branch, base_branch, retire_at, error
-         FROM environments",
-    )?;
+    let mut statement = conn.prepare(&format!("SELECT {ENVIRONMENT_COLUMNS} FROM environments"))?;
     let environments = statement
         .query_map([], environment_row)?
         .collect::<Result<_, _>>()?;
@@ -146,14 +137,16 @@ pub(super) fn personal_folders(conn: &Connection, id: &ThreadId) -> Result<Vec<E
 
 fn environment_row(row: &Row) -> rusqlite::Result<Environment> {
     Ok(Environment {
-        id: row.get::<_, Text<_>>(0)?.0,
-        project_id: row.get::<_, Text<_>>(1)?.0,
-        path: row.get::<_, Text<_>>(2)?.0,
-        status: row.get::<_, Text<_>>(3)?.0,
-        provider: row.get::<_, Text<_>>(4)?.0,
-        branch: row.get(5)?,
-        base_branch: row.get(6)?,
-        retire_at: row.get::<_, Option<i64>>(7)?.map(kg_domain::Timestamp),
-        error: row.get(8)?,
+        id: row.get::<_, Text<_>>("id")?.0,
+        project_id: row.get::<_, Text<_>>("project_id")?.0,
+        path: row.get::<_, Text<_>>("path")?.0,
+        status: row.get::<_, Text<_>>("status")?.0,
+        provider: row.get::<_, Text<_>>("provider")?.0,
+        branch: row.get("branch")?,
+        base_branch: row.get("base_branch")?,
+        retire_at: row
+            .get::<_, Option<i64>>("retire_at")?
+            .map(kg_domain::Timestamp),
+        error: row.get("error")?,
     })
 }
