@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(crate) mod read;
+pub(crate) mod tests;
 use crate::theme::TypeScale as _;
 mod actions;
 mod comment;

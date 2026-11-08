@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(crate) mod read;
+pub(crate) mod tests;
 use std::future::Future;
 
 use gpui_kit::component::ActiveTheme as _;

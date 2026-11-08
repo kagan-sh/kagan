@@ -1,3 +1,5 @@
+#[cfg(test)]
+pub(crate) mod tests;
 use gpui_kit::{App, Context, WeakFocusHandle, Window};
 
 use super::{Kagan, Shown, archived, changes::Changes, layout::Panes, review, surface};

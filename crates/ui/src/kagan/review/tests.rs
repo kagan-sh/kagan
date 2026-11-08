@@ -1,6 +1,6 @@
 use kg_domain::{DiffSide, ReviewRow};
 
-use super::Kagan;
+use crate::kagan::Kagan;
 
 pub(crate) fn review_note_count(kagan: &Kagan) -> usize {
     kagan
