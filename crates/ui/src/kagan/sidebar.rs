@@ -52,7 +52,6 @@ pub(super) enum ArchivedFooter {
     Shown,
 }
 
-// What the person chose in the sidebar. Kagan acts on it.
 pub(super) enum Event {
     Thread(ThreadId),
     Project(ProjectId),
@@ -85,7 +84,6 @@ pub(super) struct Shows {
     pub(super) tool: Option<PluginId>,
     pub(super) archived: bool,
     pub(super) in_settings: bool,
-    // What waits for the person, shown on the rail while a plugin draws the thread rows.
     pub(super) waiting: Option<usize>,
 }
 
@@ -97,7 +95,6 @@ pub(super) fn surface_event(page: bool, selected: bool, open: &OpenSurface) -> E
     }
 }
 
-// The sidebar's listing and what it shows of it: folds, the chosen project, row focus and scroll.
 pub(super) struct Sidebar {
     pub(super) listing: kg_domain::Sidebar,
     archived_footer: ArchivedFooter,

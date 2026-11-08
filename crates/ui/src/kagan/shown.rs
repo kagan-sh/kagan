@@ -114,7 +114,6 @@ impl Kagan {
         cx.notify();
     }
 
-    // Closes both thread menus: the title's and a sidebar row's.
     pub(super) fn dismiss_thread_menus(&mut self, cx: &mut Context<Self>) {
         self.actions_menu = None;
         self.sidebar
