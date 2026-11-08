@@ -4,7 +4,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use kg_domain::{Environment, EnvironmentStatus, OpError};
+use kg_domain::{Environment, EnvironmentStatus, OpError, PinnedSetup};
 
 use super::Provisioned;
 use crate::host::database::Result;
@@ -12,6 +12,66 @@ use crate::host::database::Result;
 pub(crate) const SCRIPT_LIMIT: Duration = Duration::from_mins(10);
 
 const SETUP: &str = ".kagan/setup";
+
+const SHOWN_LINES: usize = 40;
+const SHOWN_CHARS: usize = 2_000;
+const SHOWN_LINE: usize = 200;
+
+pub(crate) fn pinned_setup(root: &Path, rev: &str) -> Option<PinnedSetup> {
+    let object = format!("{rev}^{{commit}}");
+    let commit = crate::host::git::git(root, &["rev-parse", "--verify", "--quiet", &object])
+        .ok()?
+        .trim()
+        .to_owned();
+    if commit.is_empty() {
+        return None;
+    }
+    let file = listed(root, &commit, SETUP).ok().flatten();
+    let (mode, text, truncated) = match file {
+        Some(file) if matches!(file.mode.as_str(), "100644" | "100755") => {
+            let raw =
+                crate::host::git::git(root, &["cat-file", "blob", &file.blob]).unwrap_or_default();
+            let (text, truncated) = shown_text(&raw);
+            (Some(file.mode), text, truncated)
+        }
+        Some(file) => (Some(file.mode), String::new(), false),
+        None => (None, String::new(), false),
+    };
+    Some(PinnedSetup {
+        commit,
+        mode,
+        text,
+        truncated,
+    })
+}
+
+fn shown_text(raw: &str) -> (String, bool) {
+    let mut out = String::new();
+    let mut truncated = false;
+    for (index, line) in raw.lines().enumerate() {
+        if index == SHOWN_LINES {
+            truncated = true;
+            break;
+        }
+        let short: String = line.chars().take(SHOWN_LINE).collect();
+        if short.chars().count() < line.chars().count() {
+            truncated = true;
+        }
+        let gap = usize::from(!out.is_empty());
+        if out.len() + gap + short.len() > SHOWN_CHARS {
+            truncated = true;
+            break;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&short);
+    }
+    if !truncated && raw.lines().nth(out.lines().count()).is_some() {
+        truncated = true;
+    }
+    (out, truncated)
+}
 const TEARDOWN: &str = ".kagan/teardown";
 
 static LOGS: AtomicU64 = AtomicU64::new(0);

@@ -21,6 +21,7 @@ pub(crate) use maintenance::{
 };
 pub(crate) use personal::{describe, personal_folders};
 pub(crate) use restore::restore;
+pub(crate) use script::pinned_setup;
 #[cfg(all(test, unix))]
 pub(crate) use script::run_script;
 #[cfg(test)]

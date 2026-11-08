@@ -175,6 +175,25 @@ pub(crate) async fn branches(
     Ok(OpResult::Branches(list))
 }
 
+pub(crate) async fn setup(
+    database: &Database,
+    id: ProjectId,
+    rev: String,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let lookup = id.clone();
+    let project = database
+        .call(move |store| store.project(&lookup))
+        .await?
+        .ok_or_else(|| missing("project", &id))?;
+    let path = project.path;
+    let setup = cx
+        .background_executor()
+        .spawn(async move { crate::environment::pinned_setup(&path, &rev) })
+        .await;
+    Ok(OpResult::Setup(setup))
+}
+
 pub(crate) fn branch_list(path: &Path) -> Result<BranchList> {
     if !path.exists() {
         return Err(OpError::Failed(format!("{} is gone", path.display())));

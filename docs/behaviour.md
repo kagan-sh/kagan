@@ -203,11 +203,11 @@ A project is a named body of work, usually one repository, with one folder on th
 
 An environment is the folder a thread works in, plus a status (`creating`, `provisioning`, `ready`, `error`, `destroyed`) [CONTEXT]. The providers are project, worktree, and personal [decision 2] [CONTEXT]. A project checkout is unmanaged and is never removed [CONTEXT] [decision 27]. A worktree is managed: kagan removes it a short grace after the last unarchived thread using it is archived, and it can still be reused while it is retiring [CONTEXT] [decision 26]. A personal environment is kept through archive and restart; only Delete removes it, after a person approves [decision 27].
 
-### `Get`, `Branches`
+### `Get`, `Branches`, `Setup`
 
-- **Allowed when**: the id is known [book:cli]. `Branches` takes a project [book:cli]. `Get` takes an environment [book:cli].
-- **Shows**: `Get` the environment, including the removal reason when git refused to delete the worktree [book:cli] [decision 28]. `Branches` the local branch names, which one is current, and why the project folder cannot change branches [book:cli] [decision 170]. `changes`, `pull-request` and `open` were removed as unused (decision 36).
-- **Refused when**: a missing id — `not-found` [op/].
+- **Allowed when**: the id is known [book:cli]. `Branches` and `Setup` take a project [book:cli]. `Get` takes an environment [book:cli].
+- **Shows**: `Get` the environment, including the removal reason when git refused to delete the worktree [book:cli] [decision 28]. `Branches` the local branch names, which one is current, and why the project folder cannot change branches [book:cli] [decision 170]. `Setup` the commit a revision names, and the setup script at it: its file mode, or none when the commit has no setup file, its text cut to 40 lines and 2,000 characters, and whether it was cut. None overall when the revision does not name a commit (decision 184). `changes`, `pull-request` and `open` were removed as unused (decision 36).
+- **Refused when**: a missing id — `not-found` [op/]. A revision that starts with `-` — `invalid` [op/].
 
 ### `Restore`
 
