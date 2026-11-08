@@ -14,7 +14,7 @@ kg plugin dev ./hello
 ```
 
 1. `new` makes the `hello` folder, with a manifest and a starter view.
-2. `check` reads the manifest and the entry file. It does not run the plugin.
+2. `check` reads the manifest and the scripts. It refuses an import the host does not export, and a field constructor the component schema rejects. It does not run the plugin.
 3. `install` links the folder. Click **Install** on the card.
 4. `dev` loads the plugin again after each save. Use a second terminal for other commands. A **Hello** tool shows below the threads.
 

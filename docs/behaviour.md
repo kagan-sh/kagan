@@ -263,8 +263,8 @@ Not in `kg plugin` [book:cli]. It runs a command the plugin declares under `cli`
 
 ### `Check`
 
-- **Changes**: nothing. It checks the manifest (unknown keys, schemas, declared views exported) and does not run the plugin [docs:self-extend].
-- **Refused when**: an invalid manifest — `invalid` [op/]. An unknown `powers.areas` entry, including `audio` and `downloads` — `invalid` [decision 42] [decision 65] [op/]. A `downloads` key or `powers.spawn` is refused [decision 65].
+- **Changes**: nothing. It checks the manifest (unknown keys, schemas, declared views exported) and the scripts (a host import the module does not export, a `gpui-component` state constructor the schema rejects, a component given the `gpui-base` state of the same name). It does not run the plugin [docs:self-extend] [docs:plugin-api].
+- **Refused when**: an invalid manifest — `invalid` [op/]. An unknown `powers.areas` entry, including `audio` and `downloads` — `invalid` [decision 42] [decision 65] [op/]. A `downloads` key or `powers.spawn` is refused [decision 65]. A script the host would throw on at load or when a panel opens — `invalid` [decision 173] [docs:plugin-api].
 
 ### `Reload`
 
