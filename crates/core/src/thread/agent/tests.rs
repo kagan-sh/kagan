@@ -85,3 +85,17 @@ fn a_word_after_a_double_dash_is_the_subcommand_word() {
     assert!(subcommand(&Known::Cursor, &line(&["--", "login"])));
     assert!(!subcommand(&Known::Cursor, &line(&["--", "fix the bug"])));
 }
+
+#[test]
+fn every_program_kagan_treats_by_name_is_in_the_picker_list() {
+    for name in ["claude", "codex", "cursor-agent", "kimi", "opencode", "pi"] {
+        assert!(known(Path::new(name)).is_some(), "{name} has no agent kind");
+        assert!(
+            kg_domain::KNOWN_PROGRAMS
+                .iter()
+                .any(|(command, _)| *command == name),
+            "{name} is missing from KNOWN_PROGRAMS"
+        );
+    }
+    assert!(known(Path::new("agent")).is_some());
+}
