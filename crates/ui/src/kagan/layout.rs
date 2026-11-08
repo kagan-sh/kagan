@@ -72,7 +72,7 @@ pub(super) fn right_index(left_open: bool) -> usize {
     if left_open { 2 } else { 1 }
 }
 
-fn key(name: &str) -> String {
+pub(super) fn key(name: &str) -> String {
     format!("{WINDOW}.{name}")
 }
 
