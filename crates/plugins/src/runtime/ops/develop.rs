@@ -188,7 +188,6 @@ pub(in crate::runtime::ops) async fn remove(
         host.active.remove(&id);
         host.records.remove(&id);
         host.warnings.remove(&id);
-        host.skipped.remove(&id);
         host.identities.remove(&id);
         cx.notify();
     });

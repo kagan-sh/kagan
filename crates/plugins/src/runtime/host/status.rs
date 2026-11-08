@@ -119,11 +119,7 @@ impl PluginHost {
                     enabled: record.enabled,
                     slow: watchdog.is_some_and(|watchdog| watchdog.slow),
                     error: self.failure(id),
-                    note: self
-                        .skipped
-                        .get(id)
-                        .cloned()
-                        .or_else(|| tool_notes.get(id).cloned()),
+                    note: tool_notes.get(id).cloned(),
                 }
             })
             .collect()

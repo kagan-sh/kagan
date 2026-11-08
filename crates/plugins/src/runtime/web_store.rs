@@ -55,11 +55,6 @@ pub fn read_store_ids(data: &Path) -> Vec<[u8; 16]> {
     ids
 }
 
-/// Removes every page store folder. Errors are ignored.
-pub fn clear_stores(data: &Path) {
-    let _ = std::fs::remove_dir_all(data.join("pages"));
-}
-
 /// Deletes `pages/<page>/` only when its `store.id` is in `removed`. Other folders stay, so a later
 /// start can ask `WebKit` again.
 pub fn clear_removed_stores(data: &Path, removed: &[[u8; 16]]) {
@@ -343,8 +338,6 @@ mod store_tests {
         let second = keep_store(data.path(), "board").expect("second");
         assert_eq!(first, second);
         assert!(store_dir(data.path(), "board").join("store.id").is_file());
-        clear_stores(data.path());
-        assert!(!data.path().join("pages").exists());
     }
 
     #[test]

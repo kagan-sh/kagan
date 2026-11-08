@@ -29,7 +29,7 @@ use serde_json::Value;
 
 use crate::manifest::Fetch;
 pub use contributions::{Contributions, Follows, PanelContribution, Placement, StatusContribution};
-pub(crate) use host::{Agents, Discovered, PluginHostGlobal, discover};
+pub(crate) use host::{Discovered, PluginHostGlobal, discover};
 pub use host::{MountError, PluginHost, PluginHostEvent, init};
 pub use index::shown;
 pub use manifest::{AgentChoice, Setting};
@@ -38,9 +38,7 @@ pub use ui_host::{HostContext, HostUi, HostUiEvent, ReviewComment, ToastAction};
 pub use watchdog::PluginStatus;
 #[cfg(target_os = "macos")]
 pub use web_store::macos_major;
-pub use web_store::{
-    StoreRemoval, clear_removed_stores, clear_stores, keep_store, read_store_ids, store_dir,
-};
+pub use web_store::{StoreRemoval, clear_removed_stores, keep_store, read_store_ids, store_dir};
 
 type Result<T> = std::result::Result<T, OpError>;
 type DropPages = Rc<dyn Fn(&PluginId, &[[u8; 16]], &mut App)>;

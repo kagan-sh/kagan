@@ -81,7 +81,6 @@ pub(crate) fn types(
             secrets: crate::secret::Store::new(None, root.to_path_buf()),
             status: None,
         },
-        &std::rc::Rc::default(),
         &jobs,
         None,
         root,

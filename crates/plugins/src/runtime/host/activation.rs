@@ -127,7 +127,6 @@ pub(crate) async fn activate(
             .map_or(0, |active| active.generation);
         let activation = host.begin_activation(&record.id);
         host.warnings.remove(&record.id);
-        host.skipped.remove(&record.id);
         let manifest = &discovered.manifest;
         let identity = (manifest.name.clone(), manifest.version.clone());
         host.identities.insert(record.id.clone(), identity);
@@ -392,7 +391,6 @@ impl Active {
                     .as_ref()
                     .map(|status| status.title.clone()),
             },
-            &self.agents,
             jobs,
             Some(&bound),
             data,

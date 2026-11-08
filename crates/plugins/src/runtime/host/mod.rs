@@ -66,7 +66,6 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
         install_stop: Rc::default(),
         identities: BTreeMap::new(),
         warnings: BTreeMap::new(),
-        skipped: BTreeMap::new(),
         records: BTreeMap::new(),
         started: false,
         active: BTreeMap::new(),
@@ -200,7 +199,6 @@ pub struct PluginHost {
     /// Each installed plugin's name and version from its manifest, kept whether or not it runs.
     pub(crate) identities: BTreeMap<PluginId, (String, String)>,
     pub(crate) warnings: BTreeMap<PluginId, String>,
-    pub(crate) skipped: BTreeMap<PluginId, String>,
     pub(crate) records: BTreeMap<PluginId, kg_domain::Plugin>,
     // Set once every enabled plugin found at launch has had its start.
     pub(crate) started: bool,
@@ -292,7 +290,6 @@ fn dispatch(request: PluginRequest, cx: &mut App) -> Task<Result<OpResult>> {
                 .keys()
                 .filter_map(|id| {
                     host.failure(id)
-                        .or_else(|| host.skipped.get(id).cloned())
                         .or_else(|| tool_notes.get(id).cloned())
                         .map(|error| format!("plugin {id}: {error}"))
                 })

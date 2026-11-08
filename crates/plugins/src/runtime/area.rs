@@ -39,7 +39,6 @@ pub(crate) fn with_app<R>(f: impl FnOnce(&mut App) -> R) -> Result<R, HostError>
 pub(crate) fn modules(
     id: &PluginId,
     values: Values,
-    agents: &crate::Agents,
     jobs: &Rc<crate::jobs::Jobs>,
     bound: Option<&Bound<'_>>,
     data: &Path,
@@ -59,10 +58,7 @@ pub(crate) fn modules(
             crate::ui_host::extend(host(id, values), id, status.as_deref(), &secrets),
         ),
         (Gate::Area(Area::Process), process),
-        (
-            Gate::Area(Area::Threads),
-            crate::threads::module(id, agents),
-        ),
+        (Gate::Area(Area::Threads), crate::threads::module(id)),
         (
             Gate::Area(Area::Database),
             crate::database::module(&data.join("database.sqlite3")),
