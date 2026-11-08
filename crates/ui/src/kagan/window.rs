@@ -85,6 +85,16 @@ pub(crate) fn show_plugin_settings(cx: &mut App) -> gpui_kit::Result<()> {
     Ok(())
 }
 
+/// Opens the thread a notice points at. Does nothing when no window is open.
+pub(crate) fn open_thread(id: &ThreadId, cx: &mut App) {
+    let Some((handle, kagan)) = front(cx) else {
+        return;
+    };
+    _ = cx.update_window(handle, |_, window, cx| {
+        kagan.update(cx, |kagan, cx| kagan.open_thread(id, window, cx));
+    });
+}
+
 /// Shows one file in the Preview tab, selecting the named thread first. Does nothing when no
 /// window is open.
 pub(crate) fn show_preview(thread: Option<ThreadId>, path: String, cx: &mut App) {

@@ -20,21 +20,32 @@ pub(in crate::tests) fn host_then(
     cx: &mut TestAppContext,
     install: impl FnOnce(&Path),
 ) -> tempfile::TempDir {
+    let data = app_then(cx, install);
+    let started = cx.update(|cx| {
+        let mut catalog = gpui_shell::components::registry().unwrap();
+        crate::register_components(&mut catalog).unwrap();
+        kg_plugins::init(cx, catalog.freeze().unwrap())
+    });
+    cx.foreground_executor().block_test(started).unwrap();
+    data
+}
+
+/// The workspace and app, as `host_then` builds them, but with no plugin host.
+pub(in crate::tests) fn app_then(
+    cx: &mut TestAppContext,
+    install: impl FnOnce(&Path),
+) -> tempfile::TempDir {
     let data = tempfile::tempdir().unwrap();
     seed(data.path());
     install(data.path());
     let opened =
         cx.update(|cx| Workspace::open(data.path().into(), std::env::current_exe().unwrap(), cx));
     cx.foreground_executor().block_test(opened).unwrap();
-    let started = cx.update(|cx| {
+    cx.update(|cx| {
         gpui_kit::init(cx);
         gpui_shell::init(cx);
         crate::init(cx);
-        let mut catalog = gpui_shell::components::registry().unwrap();
-        crate::register_components(&mut catalog).unwrap();
-        kg_plugins::init(cx, catalog.freeze().unwrap())
     });
-    cx.foreground_executor().block_test(started).unwrap();
     data
 }
 

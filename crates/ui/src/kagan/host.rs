@@ -7,7 +7,7 @@ use super::{surface, web_panel};
 use gpui_kit::{App, Context, Window};
 use kg_core::Workspace;
 use kg_domain::{PluginId, SurfaceOp};
-use kg_plugins::{Follows, HostUi, HostUiEvent, PluginHost, PluginHostEvent, RunCommand};
+use kg_plugins::{Follows, HostUi, HostUiEvent, PluginHost, RunCommand};
 
 impl Kagan {
     /// Watches the plugin host, so a plugin turned off or updated changes its panel at once.
@@ -46,13 +46,6 @@ impl Kagan {
                 |this, _, event: &HostUiEvent, window, cx| this.host_ui(event, window, cx),
             ));
         }
-        self.host_events.push(cx.subscribe_in(
-            &host,
-            window,
-            |this, _, event: &PluginHostEvent, window, cx| {
-                this.plugin_host_event(event, window, cx);
-            },
-        ));
     }
 
     /// Tells the plugin host which thread and project the window shows. Plugin panels that follow
@@ -167,26 +160,21 @@ impl Kagan {
         }
     }
 
-    /// A plugin's own notification opens its thread. File views are not shown in this window, so
-    /// a request for one gets an answer rather than a wait.
-    pub(super) fn plugin_host_event(
+    /// Selects a thread a notice points at, when it is still listed.
+    pub(super) fn open_thread(
         &mut self,
-        event: &PluginHostEvent,
+        id: &kg_domain::ThreadId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        match event {
-            PluginHostEvent::OpenThread(id) => {
-                let visible = Workspace::global(cx)
-                    .read(cx)
-                    .thread(id)
-                    .is_some_and(|thread| {
-                        thread.read(cx).record().visibility == kg_domain::Visibility::Visible
-                    });
-                if visible {
-                    self.select(id.clone(), window, cx);
-                }
-            }
+        let listed = Workspace::global(cx)
+            .read(cx)
+            .thread(id)
+            .is_some_and(|thread| {
+                thread.read(cx).record().visibility == kg_domain::Visibility::Visible
+            });
+        if listed {
+            self.select(id.clone(), window, cx);
         }
     }
 
