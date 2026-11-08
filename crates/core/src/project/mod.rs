@@ -219,15 +219,7 @@ async fn remove_worktrees(
 ) -> Result<Vec<String>> {
     let mut failures = Vec::new();
     for environment in worktrees {
-        #[cfg(test)]
-        {
-            let hold = this
-                .update(cx, |workspace, _| workspace.removal_hold.clone())
-                .map_err(closed)?;
-            if let Some(hold) = hold {
-                let _ = hold.recv().await;
-            }
-        }
+        crate::workspace::hold(this, crate::workspace::Hold::Removal, cx).await;
         let path = environment.path.clone();
         let retirement = crate::environment::Retirement {
             environment: environment.clone(),

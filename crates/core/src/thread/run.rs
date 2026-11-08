@@ -167,15 +167,7 @@ pub(crate) async fn commit(
     }
     let (environment, notices) =
         crate::environment::commit(&database, &project, environment).await?;
-    #[cfg(test)]
-    {
-        let hold = this
-            .update(cx, |workspace, _| workspace.run_hold.clone())
-            .map_err(crate::workspace::closed)?;
-        if let Some(hold) = hold {
-            let _ = hold.recv().await;
-        }
-    }
+    crate::workspace::hold(this, crate::workspace::Hold::Run, cx).await;
     let at = time(this, cx)?;
     let record = kg_domain::Thread {
         id: thread_id,

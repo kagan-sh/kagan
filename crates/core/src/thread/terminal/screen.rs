@@ -14,10 +14,7 @@ pub(super) async fn persist(
     cx: &mut AsyncApp,
 ) {
     for (id, seq, finished) in keep {
-        #[cfg(any(test, feature = "test"))]
-        if let Ok(Some(hold)) = this.update(cx, |workspace, _| workspace.screen_hold.clone()) {
-            let _ = hold.recv().await;
-        }
+        crate::workspace::hold(this, crate::workspace::Hold::Screen, cx).await;
         let snapshot = cx
             .background_executor()
             .spawn(async move { finished.snapshot() })

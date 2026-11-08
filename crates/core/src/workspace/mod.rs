@@ -35,6 +35,27 @@ pub(crate) use questions::{Waiting, approve};
 
 use recovery::interrupted;
 
+/// A step that waits in tests until a value is sent; outside tests `hold` returns at once.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Hold {
+    Removal,
+    Run,
+    Delete,
+    Screen,
+}
+
+#[cfg(any(test, feature = "test"))]
+pub(crate) async fn hold(this: &WeakEntity<Workspace>, which: Hold, cx: &mut AsyncApp) {
+    if let Ok(Some(held)) = this.update(cx, |workspace, _| workspace.holds.get(&which).cloned()) {
+        let _ = held.recv().await;
+    }
+}
+
+#[cfg(not(any(test, feature = "test")))]
+pub(crate) fn hold(_: &WeakEntity<Workspace>, _: Hold, _: &mut AsyncApp) -> std::future::Ready<()> {
+    std::future::ready(())
+}
+
 pub(crate) const GRACE: i64 = 10_000;
 const QUIT_DEADLINE: Duration = Duration::from_secs(3);
 pub(crate) enum Request {
@@ -134,15 +155,8 @@ pub struct Workspace {
     requests: Sender<Envelope>,
     // Wall time at open plus executor time, so grace deadlines follow GPUI's test clock.
     clock: (kg_domain::Timestamp, Instant),
-    /// When set, folder removal waits until a value is received (tests only).
-    #[cfg(test)]
-    pub(crate) removal_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) run_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) delete_hold: Option<async_channel::Receiver<()>>,
     #[cfg(any(test, feature = "test"))]
-    pub(crate) screen_hold: Option<async_channel::Receiver<()>>,
+    pub(crate) holds: BTreeMap<Hold, async_channel::Receiver<()>>,
     _database_task: Task<()>,
     _requests_task: Task<()>,
     _retire_task: Task<()>,
@@ -246,14 +260,8 @@ impl Workspace {
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),
-                        #[cfg(test)]
-                        removal_hold: None,
-                        #[cfg(test)]
-                        run_hold: None,
-                        #[cfg(test)]
-                        delete_hold: None,
                         #[cfg(any(test, feature = "test"))]
-                        screen_hold: None,
+                        holds: BTreeMap::new(),
                         _database_task: database_task,
                         _requests_task: requests_task,
                         _retire_task: retire_task,

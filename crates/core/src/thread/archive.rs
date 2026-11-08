@@ -126,15 +126,7 @@ pub(super) async fn delete(
         )
     };
     crate::workspace::approve(approval_thread_id, requester, question, "Delete", cx).await?;
-    #[cfg(test)]
-    {
-        let hold = this
-            .update(cx, |workspace, _| workspace.delete_hold.clone())
-            .map_err(closed)?;
-        if let Some(hold) = hold {
-            let _ = hold.recv().await;
-        }
-    }
+    crate::workspace::hold(this, crate::workspace::Hold::Delete, cx).await;
     thread(this, &id, cx)?;
     let expected = folders
         .iter()

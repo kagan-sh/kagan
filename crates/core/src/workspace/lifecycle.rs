@@ -105,7 +105,7 @@ impl Workspace {
     }
     #[cfg(any(test, feature = "test"))]
     pub fn hold_screen_save(&mut self, hold: async_channel::Receiver<()>) {
-        self.screen_hold = Some(hold);
+        self.holds.insert(crate::workspace::Hold::Screen, hold);
     }
     #[must_use]
     pub fn running_programs(&self, cx: &App) -> usize {

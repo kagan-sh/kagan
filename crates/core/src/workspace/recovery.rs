@@ -33,13 +33,8 @@ impl Workspace {
             let environment = retirement.environment.clone();
             this.update(cx, |workspace, cx| {
                 workspace.removing.insert(environment.id.clone());
-                #[cfg(test)]
-                let hold = workspace.removal_hold.clone();
                 cx.spawn(async move |this, cx| {
-                    #[cfg(test)]
-                    if let Some(hold) = hold {
-                        let _ = hold.recv().await;
-                    }
+                    crate::workspace::hold(&this, crate::workspace::Hold::Removal, cx).await;
                     let outcome = crate::environment::remove_folder(&this, retirement, cx).await;
                     let submitted = this
                         .update(cx, |workspace, _| {
