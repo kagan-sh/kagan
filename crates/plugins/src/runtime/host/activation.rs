@@ -14,7 +14,7 @@ use crate::jobs::Jobs;
 use crate::manifest::{self, AgentChoice, Grant, Setting, Tool};
 use crate::{Level, Result, area, commands, http_grants, process, schedule, secret, watchdog};
 
-use super::{Active, Discovered, Loaded, PluginHost, Schema};
+use super::{Active, Discovered, Hold, Loaded, PluginHost, Schema, hold};
 
 pub(crate) fn discover(root: &Path, data_dir: &Path) -> Result<Discovered> {
     let manifest = manifest::read(root, data_dir)?;
@@ -150,30 +150,8 @@ pub(crate) async fn activate(
         cx.notify();
     });
     paused.commit();
-    pause_for_activation(host, cx).await;
+    hold(host, Hold::Activation, cx).await;
     Ok(())
-}
-
-async fn pause_for_activation(host: &Entity<PluginHost>, cx: &mut AsyncApp) {
-    if let Some(hold) = activation_hold(host, cx) {
-        let _ = hold.recv().await;
-    }
-}
-
-#[cfg(test)]
-fn activation_hold(
-    host: &Entity<PluginHost>,
-    cx: &mut AsyncApp,
-) -> Option<async_channel::Receiver<()>> {
-    host.update(cx, |host, _| host.activation_hold.take())
-}
-
-#[cfg(not(test))]
-fn activation_hold(
-    _host: &Entity<PluginHost>,
-    _cx: &mut AsyncApp,
-) -> Option<async_channel::Receiver<()>> {
-    None
 }
 
 async fn stored_grant(

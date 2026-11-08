@@ -10,6 +10,7 @@ use crate::{PluginHost, Result};
 
 use super::approve::approve_folder;
 use super::{approved, record};
+use crate::host::{Hold, hold};
 
 pub(in crate::runtime::ops) async fn config(
     host: &Entity<PluginHost>,
@@ -101,15 +102,9 @@ pub(in crate::runtime::ops) async fn write_setting(
     if host.read_with(cx, |host, _| host.activation(id)) != Some(activation) {
         return Err(PluginHost::changed_while_saving(id));
     }
-    #[cfg(test)]
-    if let Some(hold) = host.update(cx, |host, _| host.commit_hold.take()) {
-        let _ = hold.recv().await;
-    }
+    hold(host, Hold::Commit, cx).await;
     let workspace = cx.update(|cx| Workspace::global(cx));
-    #[cfg(test)]
-    if let Some(hold) = host.update(cx, |host, _| host.write_hold.take()) {
-        let _ = hold.recv().await;
-    }
+    hold(host, Hold::Write, cx).await;
     workspace
         .read_with(cx, |workspace, _| {
             workspace.commit_plugin_config(

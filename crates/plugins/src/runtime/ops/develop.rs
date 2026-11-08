@@ -11,6 +11,7 @@ use crate::{PluginHost, Result};
 use super::approve::{approve, choose, options};
 use super::install::keep;
 use super::{approved, record, start};
+use crate::host::{Hold, hold};
 
 pub(in crate::runtime::ops) async fn new(
     host: &Entity<PluginHost>,
@@ -116,21 +117,15 @@ pub(in crate::runtime::ops) async fn disable(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     record(host, &id, cx)?;
-    host.update(cx, |host, cx| {
+    let stop = |host: &mut PluginHost, cx: &mut gpui_kit::Context<PluginHost>| {
         host.disable_loaded(&id, cx);
         if let Some(record) = host.records.get_mut(&id) {
             record.enabled = false;
         }
-    });
-    #[cfg(test)]
-    if let Some(hold) = host.update(cx, |host, _| host.lifecycle_hold.take()) {
-        let _ = hold.recv().await;
-        host.update(cx, |host, cx| {
-            host.disable_loaded(&id, cx);
-            if let Some(record) = host.records.get_mut(&id) {
-                record.enabled = false;
-            }
-        });
+    };
+    host.update(cx, stop);
+    if hold(host, Hold::Lifecycle, cx).await {
+        host.update(cx, stop);
     }
     set_enabled(&id, false, cx).await?;
     Ok(OpResult::Done)

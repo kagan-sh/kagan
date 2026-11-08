@@ -87,15 +87,7 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
         }),
         _quit: cx.on_app_quit(PluginHost::stop_programs),
         #[cfg(test)]
-        keep_hold: None,
-        #[cfg(test)]
-        commit_hold: None,
-        #[cfg(test)]
-        write_hold: None,
-        #[cfg(test)]
-        activation_hold: None,
-        #[cfg(test)]
-        lifecycle_hold: None,
+        holds: BTreeMap::new(),
     });
     cx.set_global(PluginHostGlobal(host.clone()));
     workspace.update(cx, |workspace, _| {
@@ -200,15 +192,32 @@ pub struct PluginHost {
     pub(crate) _watchdog: Task<()>,
     pub(crate) _quit: Subscription,
     #[cfg(test)]
-    pub(crate) keep_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) commit_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) write_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) activation_hold: Option<async_channel::Receiver<()>>,
-    #[cfg(test)]
-    pub(crate) lifecycle_hold: Option<async_channel::Receiver<()>>,
+    pub(crate) holds: BTreeMap<Hold, async_channel::Receiver<()>>,
+}
+
+/// A point where a test can stop an operation until it chooses to let it go on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Hold {
+    Keep,
+    Commit,
+    Write,
+    Activation,
+    Lifecycle,
+}
+
+/// Waits at `which` when a test set a hold there. Says whether it waited.
+#[cfg(test)]
+pub(crate) async fn hold(host: &Entity<PluginHost>, which: Hold, cx: &mut AsyncApp) -> bool {
+    let Some(hold) = host.update(cx, |host, _| host.holds.remove(&which)) else {
+        return false;
+    };
+    let _ = hold.recv().await;
+    true
+}
+
+#[cfg(not(test))]
+pub(crate) async fn hold(_host: &Entity<PluginHost>, _which: Hold, _cx: &mut AsyncApp) -> bool {
+    false
 }
 
 pub(crate) struct Active {

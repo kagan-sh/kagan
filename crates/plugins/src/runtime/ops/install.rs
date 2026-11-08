@@ -12,6 +12,7 @@ use crate::{PluginHost, Result};
 
 use super::approve::approve;
 use super::{approved, record, start};
+use crate::host::{Hold, hold};
 
 /// Holds the install slot. Dropping it frees the slot, even when the install is cancelled, and
 /// tells the windows, which read the slot from the host.
@@ -222,10 +223,7 @@ pub(in crate::runtime::ops) async fn keep(
         .await?;
     let id = discovered.manifest.id.clone();
     let paused = host.update(cx, |host, _| host.pause_activation(&id));
-    #[cfg(test)]
-    if let Some(hold) = host.read_with(cx, |host, _| host.keep_hold.clone()) {
-        let _ = hold.recv().await;
-    }
+    hold(host, Hold::Keep, cx).await;
     let approved = serde_json::to_value(&grant)?;
     let workspace = cx.update(|cx| Workspace::global(cx));
     let kept = workspace

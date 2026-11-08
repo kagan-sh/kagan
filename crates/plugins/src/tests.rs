@@ -321,38 +321,11 @@ fn activation_of(cx: &mut TestAppContext) -> Option<u64> {
     })
 }
 
-fn hold_commits(cx: &mut TestAppContext) -> async_channel::Sender<()> {
+fn hold_at(cx: &mut TestAppContext, which: crate::host::Hold) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
         let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.commit_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_writes(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.write_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_activation(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.activation_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_lifecycle(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.lifecycle_hold = Some(hold));
+        host.update(cx, |host, _| host.holds.insert(which, hold));
     });
     release
 }
@@ -549,7 +522,7 @@ fn queue_folder(
     tempfile::TempDir,
 ) {
     let notes = tempfile::tempdir().unwrap();
-    let release = hold_writes(cx);
+    let release = hold_at(cx, crate::host::Hold::Write);
     let setting = plugin_op(
         cx,
         PluginOp::Config {
