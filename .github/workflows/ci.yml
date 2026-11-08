@@ -289,7 +289,7 @@ jobs:
       matrix:
         shard: [1, 2]
     env:
-      # The runner image ships LLVM. lld-link links the test binaries faster than link.exe.
+      # The runner image ships LLVM, which provides lld-link. Only these test builds use it.
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: lld-link
     defaults:
       run:
