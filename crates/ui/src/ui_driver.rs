@@ -16,7 +16,8 @@ pub(crate) fn install(cx: &mut App) {
             UiJob::Op(UiOp::Screenshot { window, path }) => {
                 cx.spawn(async move |cx| capture_after_present(window, path, cx).await)
             }
-            job => cx.spawn(async move |cx| drive(job, cx)),
+            UiJob::Op(op) => cx.spawn(async move |cx| drive(op, cx)),
+            UiJob::Surface(op) => cx.spawn(async move |cx| drive_surface(op, cx)),
         }));
     });
 }
@@ -29,18 +30,15 @@ fn closed() -> OpError {
     OpError::Failed("window closed".into())
 }
 
-fn drive(job: UiJob, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
-    if let UiJob::Surface(op) = job {
-        return drive_surface(op, cx);
-    }
+fn drive(op: UiOp, cx: &mut gpui_kit::AsyncApp) -> Result<OpResult, OpError> {
     let _armed = crate::synthetic::arm();
-    let index = window_index(&job);
+    let index = window_index(&op);
     let handle = cx
         .update(|cx| window_at(cx, index))
         .ok_or_else(|| OpError::NotFound(format!("window {index}")))?;
     let result = cx
         .update_window(handle, |_, window, cx| {
-            crate::synthetic::with_active(|| run_job(job, window, cx))
+            crate::synthetic::with_active(|| run_op(op, window, cx))
         })
         .map_err(|_| closed())?;
     if crate::synthetic::take_person_blocked() {
@@ -155,10 +153,7 @@ fn captured(window: &gpui_kit::Window, path: &Path, current: bool) -> Result<OpR
     })
 }
 
-fn window_index(job: &UiJob) -> u32 {
-    let UiJob::Op(op) = job else {
-        return 0;
-    };
+fn window_index(op: &UiOp) -> u32 {
     match op {
         UiOp::Snapshot { window }
         | UiOp::Click { window, .. }
@@ -177,11 +172,8 @@ fn window_at(cx: &App, index: u32) -> Option<AnyWindowHandle> {
     handles.get(index as usize).copied()
 }
 
-fn run_job(job: UiJob, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpResult, OpError> {
+fn run_op(op: UiOp, window: &mut gpui_kit::Window, cx: &mut App) -> Result<OpResult, OpError> {
     crate::ui_dispatch::render_frame(window, cx);
-    let UiJob::Op(op) = job else {
-        return Err(OpError::Failed(UI_UNAVAILABLE.into()));
-    };
     match op {
         UiOp::Snapshot { window: index } => {
             Ok(OpResult::Ui(crate::ui_dispatch::snapshot(window, index)))
