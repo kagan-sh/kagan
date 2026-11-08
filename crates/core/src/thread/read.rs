@@ -390,7 +390,7 @@ async fn call_tool(
         cx,
     )
     .await;
-    let result = if name == "skill_load" {
+    let result = if name == crate::skill::SKILL_LOAD {
         crate::skill::load(this, &entity, &input, cx).await
     } else {
         forward(

@@ -66,8 +66,12 @@ pub(super) async fn write_agent_files(
     }
 }
 
+pub(super) fn thread_dir(agent: &Path, id: &str) -> PathBuf {
+    agent.join("threads").join(id)
+}
+
 fn cursor_dir(agent: &Path, id: &str) -> PathBuf {
-    agent.join("threads").join(id).join("cursor")
+    thread_dir(agent, id).join("cursor")
 }
 
 pub(super) fn flags(known: &Known, files: &AgentFiles) -> Vec<OsString> {
@@ -83,7 +87,7 @@ pub(super) fn flags(known: &Known, files: &AgentFiles) -> Vec<OsString> {
     } = *files;
     match known {
         Known::Claude => {
-            let thread = agent.join("threads").join(id);
+            let thread = thread_dir(agent, id);
             let plugin = skills_root.parent().unwrap_or(agent);
             vec![
                 OsString::from("--mcp-config"),
@@ -211,7 +215,7 @@ fn exclude_cursor_rule(folder: &Path) -> std::io::Result<()> {
 }
 
 fn note_path(agent: &Path, id: &str) -> PathBuf {
-    agent.join("threads").join(id).join("note.txt")
+    thread_dir(agent, id).join("note.txt")
 }
 
 fn link_cursor_skills(dir: &Path, skills: &Path) -> std::io::Result<()> {
@@ -471,7 +475,7 @@ fn claude_files(
 ) -> Vec<(PathBuf, String)> {
     vec![
         (
-            agent.join("threads").join(id).join("mcp.json"),
+            thread_dir(agent, id).join("mcp.json"),
             mcp_config(id, cli, socket),
         ),
         (note_path(agent, id), note_with(id, instructions, extra)),

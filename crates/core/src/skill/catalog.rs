@@ -23,6 +23,7 @@ impl Loaded {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct Catalog {
     pub(super) skills: BTreeMap<String, Loaded>,
     pub(super) errors: Vec<String>,
@@ -53,10 +54,7 @@ impl Catalog {
     }
 }
 pub(super) fn shared(plugins: Vec<kg_domain::Plugin>) -> Result<Catalog> {
-    let mut catalog = Catalog {
-        skills: BTreeMap::new(),
-        errors: Vec::new(),
-    };
+    let mut catalog = Catalog::default();
     for &(name, text) in BUNDLED {
         let (skill, body) = Skill::parse(name, text, SkillSource::Bundled, None)?;
         catalog.skills.insert(
@@ -171,7 +169,7 @@ impl Catalog {
                 .push(format!("duplicate {source:?} skill {name}; both dropped"));
         }
         for (name, loaded) in tier {
-            if matches!(source, SkillSource::User | SkillSource::Project) && name.starts_with("kg-")
+            if matches!(source, SkillSource::User | SkillSource::Project) && super::reserved(&name)
             {
                 self.errors.push(format!(
                     "{source:?} skill {name} uses the reserved kg- prefix; dropped"

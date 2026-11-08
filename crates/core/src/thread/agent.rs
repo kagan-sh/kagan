@@ -541,7 +541,7 @@ pub(crate) async fn forget(this: &WeakEntity<Workspace>, ids: Vec<ThreadId>, cx:
     };
     cx.background_spawn(async move {
         for id in ids {
-            let folder = data_dir.join("agent").join("threads").join(&id.0);
+            let folder = files::thread_dir(&data_dir.join("agent"), &id.0);
             if let Err(error) = std::fs::remove_dir_all(&folder)
                 && error.kind() != std::io::ErrorKind::NotFound
             {

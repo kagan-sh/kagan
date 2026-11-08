@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -67,6 +66,14 @@ pub(crate) async fn catalog(
     })
     .await
 }
+/// The tool core serves itself, so a thread can read a skill without the plugin host.
+pub(crate) const SKILL_LOAD: &str = "skill_load";
+
+/// Skills named `kg-…` are kagan's own; a person's or a project's skill cannot take the name.
+pub(crate) fn reserved(name: &str) -> bool {
+    name.starts_with("kg-")
+}
+
 static MIRROR: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(crate) async fn mirror(
@@ -81,17 +88,14 @@ pub(crate) async fn mirror(
         .update(cx, |workspace, _| workspace.home("BB_DATA_DIR", ".bb"))
         .map_err(closed)?;
     cx.background_spawn(async move {
-        let mut external = Catalog {
-            skills: BTreeMap::new(),
-            errors: Vec::new(),
-        };
+        let mut external = Catalog::default();
         if let Some(bb) = bb {
             external.folder(&bb.join("skills"), SkillSource::External);
         }
         external.folder(&folder.join(".bb/skills"), SkillSource::External);
         resolved.errors.extend(external.errors);
         for (name, loaded) in external.skills {
-            if name.starts_with("kg-") {
+            if reserved(&name) {
                 continue;
             }
             resolved.skills.entry(name).or_insert(loaded);
@@ -191,7 +195,7 @@ pub(crate) async fn run(
         }
         SkillOp::Files { name, .. } => Ok(OpResult::Files(catalog.get(&name)?.paths())),
         SkillOp::New { name, project, .. } => {
-            if !valid_name(&name) || name.starts_with("kg-") {
+            if !valid_name(&name) || reserved(&name) {
                 return Err(OpError::Invalid(
                     "skill name must be lowercase and hyphenated, and must not start with kg-"
                         .into(),
@@ -209,7 +213,7 @@ pub(crate) async fn run(
             let target = destination(this, project, project_id.as_ref(), cx)?;
             cx.background_spawn(async move {
                 let loaded = read(&path, SkillSource::User)?;
-                if loaded.skill.name.starts_with("kg-") {
+                if reserved(&loaded.skill.name) {
                     return Err(OpError::Invalid(
                         "a skill name must not start with kg-".into(),
                     ));
@@ -305,8 +309,8 @@ pub(crate) async fn tools(
     else {
         return Err(OpError::Failed("plugin host returned no tools".into()));
     };
-    tools.retain(|tool| tool.name != "skill_load");
-    tools.push(kg_domain::AgentTool { name: "skill_load".into(), description: "Load a skill's instructions and file list".into(), input_schema: serde_json::json!({ "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"], "additionalProperties": false }) });
+    tools.retain(|tool| tool.name != SKILL_LOAD);
+    tools.push(kg_domain::AgentTool { name: SKILL_LOAD.into(), description: "Load a skill's instructions and file list".into(), input_schema: serde_json::json!({ "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"], "additionalProperties": false }) });
     Ok(OpResult::Tools {
         instructions: Some([instructions.unwrap_or_default(), note, catalog.prompt()].join("\n\n")),
         tools,

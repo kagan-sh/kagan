@@ -461,11 +461,11 @@ impl Workspace {
         let (reply, receive) = async_channel::bounded(1);
         let sent = self.requests.try_send((request, reply));
         async move {
-            sent.map_err(|_| OpError::Failed("workspace closed".into()))?;
+            sent.map_err(|_| closed("workspace closed"))?;
             receive
                 .recv()
                 .await
-                .map_err(|_| OpError::Failed("workspace closed".into()))?
+                .map_err(|_| closed("workspace closed"))?
         }
     }
 }
@@ -484,6 +484,6 @@ fn detached(
         receive
             .recv()
             .await
-            .map_err(|_| OpError::Failed("workspace closed".into()))?
+            .map_err(|_| closed("workspace closed"))?
     })
 }
