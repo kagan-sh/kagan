@@ -79,7 +79,7 @@ Pinned in the workspace `Cargo.toml`, and upgraded on purpose:
 
 `Workspace::project`, `thread` and `environment` return retained entities by domain id. Each entity exposes its domain `record()`. Observe the workspace for changed snapshots, or subscribe to `WorkspaceEvent::Event` for persisted thread events and `Changed` for other changes. `Open` asks the application to open a native window. The application subscribes before it starts plugins, and retains that subscription even when it has no window.
 
-A method that exists only for tests is behind `cfg(any(test, feature = "test-support"))`; every other public `Workspace` method is the contract.
+A method that exists only for tests is behind `cfg(any(test, feature = "test"))`; every other public `Workspace` method is the contract.
 
 SQLite has one background worker on GPUI's executor. Opening the app starts again a thread that was still running (decision 175). `kg-terminal` reports how a program ended (`Exit`: its code or signal), read without reaping the child; core records it as `exited`, and `stopped` for an explicit Stop. A thread left active or starting is started again. A thread left stopping is marked failed with "kagan quit while the program was running". A settled screen is kept across that restart; a screen from a program that was still running is not. Saved events still load. A data directory from a newer kagan, or from a pre-release build, is refused before any write (decision 106). `kg diagnostics export` writes a local file and does not include terminal contents. It lists each thread's id, status, and structured cause, whether a screen was kept, and each plugin's id, kind, version, and warn and error counts. Titles, end text, plugin sources, and plugin log messages are omitted.
 

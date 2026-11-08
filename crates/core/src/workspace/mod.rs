@@ -326,7 +326,7 @@ impl Workspace {
             }
         }
     }
-    /// Picks up what the previous process left: interrupted removals, then programs it left running.
+    // Picks up what the previous process left: interrupted removals, then programs it left running.
     async fn resume(this: &WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
         Self::refresh(this, cx).await?;
         crate::settings::remember_keymap(this, cx).await?;
@@ -469,7 +469,7 @@ impl Workspace {
         }
     }
 }
-/// Runs work that the caller's task cannot cancel by being dropped.
+// Runs work that the caller's task cannot cancel by being dropped.
 fn detached(
     cx: &mut App,
     work: impl AsyncFnOnce(&mut AsyncApp) -> Result<OpResult> + 'static,

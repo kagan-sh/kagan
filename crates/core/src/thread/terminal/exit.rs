@@ -180,7 +180,7 @@ pub(crate) async fn exited(
     }
     Ok(OpResult::Done)
 }
-/// A recovered thread has the status of a running program and no terminal in this process.
+// A recovered thread has the status of a running program and no terminal in this process.
 fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> bool {
     let shown = workspace.shown(id);
     if matches!(shown, Some(Shown::Running(_))) {

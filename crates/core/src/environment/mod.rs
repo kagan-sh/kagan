@@ -154,7 +154,7 @@ pub(crate) async fn prepare(
     }
 }
 
-/// Saves an environment whose setup failed, so the person can retry it, and reports why.
+// Saves an environment whose setup failed, so the person can retry it, and reports why.
 async fn keep_failed(
     this: &WeakEntity<Workspace>,
     database: &Database,
@@ -169,7 +169,7 @@ async fn keep_failed(
     Err(error)
 }
 
-/// Drops an environment whose setup cannot be retried, and reports why.
+// Drops an environment whose setup cannot be retried, and reports why.
 async fn discard_failed(
     this: &WeakEntity<Workspace>,
     database: &Database,
@@ -470,7 +470,7 @@ fn provision(
     })
 }
 
-/// Points the environment at its canonical folder and marks it ready; on failure it is unchanged.
+// Points the environment at its canonical folder and marks it ready; on failure it is unchanged.
 fn make_ready(environment: &mut Environment) -> std::io::Result<()> {
     environment.path = dunce::canonicalize(&environment.path)?;
     environment.status = EnvironmentStatus::Ready;

@@ -206,7 +206,6 @@ fn close_left_turn(
     }
 }
 
-/// Marks a thread kagan left running as failed, and says so to its parent.
 fn fail_left(
     store: &mut Store,
     record: &mut kg_domain::Thread,
@@ -252,7 +251,7 @@ fn close_left_environments(store: &mut Store) -> kg_store::Result<()> {
     Ok(())
 }
 
-/// The notice a parent gets when a child fails at startup, if it has a live parent.
+// The notice a parent gets when a child fails at startup, if it has a live parent.
 fn parent_notice(
     store: &Store,
     child: &kg_domain::Thread,

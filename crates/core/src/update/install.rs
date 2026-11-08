@@ -184,7 +184,7 @@ impl Target {
     }
 }
 
-/// A shell that waits for this process to end, then runs `then` with the arguments added later.
+// A shell that waits for this process to end, then runs `then` with the arguments added later.
 fn waiting(then: &str) -> Command {
     let mut command = Command::new("/bin/sh");
     command

@@ -17,7 +17,7 @@ pub const MAX_ROWS: u16 = 500;
 /// The whole saved replay: history, the newlines that push it into scrollback, and the visible
 /// redraw. History is dropped first. A visible redraw that does not fit is not stored.
 pub const SNAPSHOT_MAX: usize = 4 * 1024 * 1024;
-/// Lines kept above the screen, per program.
+// Lines kept above the screen, per program.
 const SCROLLBACK: usize = 10_000;
 
 /// `replay` is bytes `Screen::feed` already accepts.

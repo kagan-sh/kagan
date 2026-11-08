@@ -186,8 +186,8 @@ fn preference_value(key: &str, value: &serde_json::Value) -> Result<()> {
         .accepts(key, value)
 }
 
-/// The sidebar layout of one window. The layout is saved per window, as `<window>.<name>`, so
-/// two windows keep their own sidebars. Returns the name, such as `left-width`.
+// The sidebar layout of one window. The layout is saved per window, as `<window>.<name>`, so
+// two windows keep their own sidebars. Returns the name, such as `left-width`.
 fn window_layout(key: &str) -> Option<&str> {
     let (window, name) = key.split_once('.')?;
     let window_ok = !window.is_empty()

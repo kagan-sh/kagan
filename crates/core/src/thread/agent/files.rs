@@ -409,7 +409,7 @@ fn hide_from_git(folder: &Path, root: &str, owned: &[String]) -> std::io::Result
     })
 }
 
-/// Rewrites the folder's git exclude file when `edit` returns new text. A folder with no git does nothing.
+// Rewrites the folder's git exclude file when `edit` returns new text. A folder with no git does nothing.
 fn edit_exclude(folder: &Path, edit: impl FnOnce(&str) -> Option<String>) -> std::io::Result<()> {
     let Some(exclude) = git_exclude(folder) else {
         return Ok(());
