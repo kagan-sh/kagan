@@ -160,7 +160,6 @@ impl Kagan {
         }
     }
 
-    /// Selects a thread a notice points at, when it is still listed.
     pub(super) fn open_thread(
         &mut self,
         id: &kg_domain::ThreadId,
