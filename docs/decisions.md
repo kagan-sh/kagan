@@ -722,3 +722,5 @@ Rules out: resuming a thread the person stopped, resuming an archived thread, an
 Why: a restart should continue the conversation those agents already have, the same way herdr does, without writing into their config.
 Cost: the product-line ceiling rises to 70092.
 Rules out: installing an agent hook, and `--continue`, which would take another thread's newest conversation in the same folder.
+
+**177. A window or view that has closed is not an error.** `entity.update`, `window.update` and `cx.update_window` on a weak handle fail only when that entity or window is gone, and then nothing is left to change. The window ignores that result with `_ =` and no comment. Any other ignored result says why on its line, or is logged as a `kg:` line.
