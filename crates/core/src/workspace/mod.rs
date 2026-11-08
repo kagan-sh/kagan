@@ -396,6 +396,12 @@ impl Workspace {
                     "{key} is set in Settings, or with kg plugin use, which asks a person"
                 ))))
             }
+            Op::Thread(kg_domain::ThreadOp::Rename { id, title }) if requester.is_some() => {
+                Self::rename_once(id, title, cx)
+            }
+            Op::Preview(preview @ kg_domain::PreviewOp::Show { .. }) if requester.is_some() => {
+                shown_preview(&this, preview, requester, cx)
+            }
             Op::Thread(kg_domain::ThreadOp::WaitEvent {
                 id,
                 kind,
@@ -474,6 +480,31 @@ impl Workspace {
         }
     }
 }
+// A socket preview also asks the window to show its tab, once the read has succeeded.
+fn shown_preview(
+    this: &WeakEntity<Workspace>,
+    preview: kg_domain::PreviewOp,
+    requester: Option<Requester>,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let this = this.clone();
+    detached(cx, async move |cx| {
+        let kg_domain::PreviewOp::Show { thread_id, path } = preview.clone();
+        let result = crate::dispatch::execute(&this, Op::Preview(preview), requester, cx).await?;
+        // Without a window there is no tab to show; the read itself still succeeded.
+        let _ = crate::dispatch::ui::drive(
+            &this,
+            crate::UiJob::Preview {
+                thread: thread_id,
+                path,
+            },
+            cx,
+        )
+        .await;
+        Ok(result)
+    })
+}
+
 // Runs work that the caller's task cannot cancel by being dropped.
 fn detached(
     cx: &mut App,

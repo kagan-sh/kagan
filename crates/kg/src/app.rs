@@ -105,15 +105,8 @@ pub(crate) fn run() -> Result<()> {
             }
             cx.update(kg_ui::plugins_ready);
             while let Ok((op, requester, reply)) = incoming.recv().await {
-                let task = cx.update(|cx| match op {
-                    Op::Thread(kg_domain::ThreadOp::Rename { id, title }) => {
-                        kg_core::Workspace::rename_once(id, title, cx)
-                    }
-                    Op::Preview(op @ kg_domain::PreviewOp::Show { .. }) => {
-                        preview(op, requester, cx)
-                    }
-                    op => kg_core::Workspace::dispatch_for(op, Some(requester), cx),
-                });
+                let task =
+                    cx.update(|cx| kg_core::Workspace::dispatch_for(op, Some(requester), cx));
                 cx.spawn(async move |_| reply.send(task.await).await)
                     .detach();
             }
@@ -121,24 +114,6 @@ pub(crate) fn run() -> Result<()> {
         .detach();
     });
     Ok(())
-}
-
-fn preview(
-    op: kg_domain::PreviewOp,
-    requester: kg_core::Requester,
-    cx: &mut gpui_kit::App,
-) -> gpui_kit::Task<Result<OpResult, OpError>> {
-    let shown = op.clone();
-    let read = kg_core::Workspace::dispatch_for(Op::Preview(op), Some(requester), cx);
-    cx.spawn(async move |cx| {
-        let result = read.await;
-        if result.is_ok()
-            && let kg_domain::PreviewOp::Show { thread_id, path } = shown
-        {
-            cx.update(|cx| kg_ui::show_preview(thread_id, path, cx));
-        }
-        result
-    })
 }
 
 /// Plugin secrets go to the system keychain, opened on first use: a Linux D-Bus can take
