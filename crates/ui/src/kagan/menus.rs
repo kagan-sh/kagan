@@ -75,7 +75,11 @@ fn perform(op: WindowOp, cx: &mut App) {
                 kagan.update(cx, |this, cx| {
                     if this.screen.review().is_some() {
                         this.layout.review_wrap = !this.layout.review_wrap;
-                        super::layout::save("main.review-wrap", this.layout.review_wrap, cx);
+                        super::layout::save(
+                            &super::layout::key("review-wrap"),
+                            this.layout.review_wrap,
+                            cx,
+                        );
                         cx.notify();
                     }
                 });

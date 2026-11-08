@@ -107,12 +107,14 @@ pub(crate) fn load_fonts(cx: &mut App) {
     let semibold = include_bytes!("../../../../assets/fonts/Inter-SemiBold.ttf");
     let mono = include_bytes!("../../../../assets/fonts/JetBrainsMono-Regular.ttf");
     let mono_bold = include_bytes!("../../../../assets/fonts/JetBrainsMono-Bold.ttf");
-    let _ = cx.text_system().add_fonts(vec![
+    if let Err(error) = cx.text_system().add_fonts(vec![
         Cow::Borrowed(regular.as_slice()),
         Cow::Borrowed(semibold.as_slice()),
         Cow::Borrowed(mono.as_slice()),
         Cow::Borrowed(mono_bold.as_slice()),
-    ]);
+    ]) {
+        eprintln!("kg: the bundled fonts could not load: {error}");
+    }
 }
 
 pub(crate) fn token_color(color: Color) -> Hsla {

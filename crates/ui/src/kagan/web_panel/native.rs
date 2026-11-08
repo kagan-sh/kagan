@@ -78,7 +78,7 @@ pub(super) fn panel_body(
     }
 }
 
-pub(super) fn deliver(
+pub(crate) fn deliver(
     plugin: &PluginId,
     panel: &str,
     message: &str,
@@ -115,13 +115,13 @@ pub(super) fn deliver(
     })
 }
 
-pub(super) fn clear(cx: &mut App) {
+pub(crate) fn clear(cx: &mut App) {
     if cx.has_global::<Pages>() {
         cx.default_global::<Pages>().pages.clear();
     }
 }
 
-pub(super) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
+pub(crate) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
     if !cx.has_global::<Pages>() {
         return;
     }
@@ -139,7 +139,7 @@ pub(super) fn drop_plugin(plugin: &PluginId, cx: &mut App) {
     }
 }
 
-pub(super) fn forget(slot: &str, cx: &mut App) {
+pub(crate) fn forget(slot: &str, cx: &mut App) {
     if let Some(index) = find(cx, slot) {
         let page = cx.default_global::<Pages>().pages.remove(index);
         page.ipc.close();
@@ -148,7 +148,7 @@ pub(super) fn forget(slot: &str, cx: &mut App) {
     }
 }
 
-pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
+pub(crate) fn sync(kagan: &Kagan, cx: &mut App) {
     if !cx.has_global::<Pages>() {
         return;
     }
@@ -215,7 +215,7 @@ pub(super) fn sync(kagan: &Kagan, cx: &mut App) {
 }
 
 // Pushes the live Workbench theme to every open page, even when the window is not drawing.
-pub(super) fn repaint(cx: &mut App) {
+pub(crate) fn repaint(cx: &mut App) {
     if cx.has_global::<Pages>() {
         let css = web::theme_css(cx);
         let views: Vec<_> = cx
@@ -444,10 +444,10 @@ fn http_response(
 
 fn listed(kagan: &Kagan, cx: &App) -> Vec<(String, bool)> {
     let mut open = Vec::new();
-    let full = kagan.right_fill == right::Fill::Window && kagan.panes.right;
+    let full = kagan.right.fill == right::Fill::Window && kagan.panes.right;
     let tab = right::selected_tab(kagan, cx);
     let right_on = kagan.right_drawn();
-    for slot in &kagan.right_slots {
+    for slot in &kagan.right.slots {
         if slot.web.is_some() {
             open.push((
                 slot.id.clone(),
@@ -489,8 +489,12 @@ fn paint_theme(view: &Entity<gpui_webview::WebView>, cx: &mut App) {
     };
     let script = web::theme_refresh(cx);
     view.update(cx, |view, _| {
-        let _ = view.set_theme(native);
-        let _ = view.evaluate_script(&script);
+        if let Err(error) = view.set_theme(native) {
+            eprintln!("kg: a web panel could not take the theme: {error}");
+        }
+        if let Err(error) = view.evaluate_script(&script) {
+            eprintln!("kg: a web panel could not refresh its colors: {error}");
+        }
     });
 }
 

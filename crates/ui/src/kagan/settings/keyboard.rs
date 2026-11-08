@@ -329,7 +329,9 @@ fn keycaps(id: &str, strokes: &[Keystroke]) -> AnyElement {
     div()
         .id(ElementId::Name(format!("shortcut-{id}").into()))
         .ui_container()
-        .aria_label(SharedString::from(keys_text(strokes)))
+        .aria_label(SharedString::from(crate::kagan::controls::keys_text(
+            strokes,
+        )))
         .child(
             h_flex()
                 .gap_1()
@@ -361,15 +363,10 @@ fn for_window(key: &Keystroke) -> bool {
 }
 
 fn taken(key: &str, by: &str) -> String {
-    format!("{} is already used by {by}.", keys_text(&parse(key)))
-}
-
-fn keys_text(strokes: &[Keystroke]) -> String {
-    strokes
-        .iter()
-        .map(Kbd::format)
-        .collect::<Vec<_>>()
-        .join(" ")
+    format!(
+        "{} is already used by {by}.",
+        crate::kagan::controls::keys_text(&parse(key))
+    )
 }
 
 impl Kagan {

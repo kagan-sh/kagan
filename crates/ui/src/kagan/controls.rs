@@ -6,7 +6,7 @@ use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, Anchor, AnyElement, App, ClickEvent, Context, ElementId, Entity, FocusHandle, Hsla,
-    InteractiveElement, IntoElement, ParentElement as _, Role, SharedString,
+    InteractiveElement, IntoElement, Keystroke, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, anchored, deferred, div, px,
 };
 use kg_domain::PluginId;
@@ -26,11 +26,6 @@ pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoEleme
         },
         label,
     )
-}
-
-/// A container `kg ui` can find by id. It has no role or state of its own.
-pub(super) fn container(id: &'static str, child: impl IntoElement) -> impl IntoElement {
-    div().id(id).ui_container().child(child)
 }
 
 /// A control `kg ui` can find by id. Its facts are required: see `Facts`.
@@ -135,16 +130,24 @@ pub(super) fn bound_keys(action: &dyn Action, cx: &App) -> String {
     cx.key_bindings()
         .borrow()
         .bindings()
-        .find(|binding| binding.action().name() == action.name())
+        .find(|binding| binding.action().partial_eq(action))
         .map(|binding| {
-            binding
-                .keystrokes()
-                .iter()
-                .map(|key| Kbd::format(key.inner()))
-                .collect::<Vec<_>>()
-                .join(" ")
+            keys_text(
+                binding
+                    .keystrokes()
+                    .iter()
+                    .map(gpui_kit::KeybindingKeystroke::inner),
+            )
         })
         .unwrap_or_default()
+}
+
+pub(super) fn keys_text<'a>(strokes: impl IntoIterator<Item = &'a Keystroke>) -> String {
+    strokes
+        .into_iter()
+        .map(Kbd::format)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// A tooltip with the action's live key, so the label always matches the keymap.

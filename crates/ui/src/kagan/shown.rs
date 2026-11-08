@@ -319,12 +319,7 @@ impl Kagan {
             .gap_2()
             .children(super::header::buttons(cx))
             .when(live, |header| {
-                let keys = bound_keys(&StopThread, cx);
-                let tip = if keys.is_empty() {
-                    "Stop".to_owned()
-                } else {
-                    format!("Stop ({keys})")
-                };
+                let tip = super::controls::tip("Stop", &StopThread, cx);
                 header.child(control(
                     "stop",
                     Facts::button("Stop"),

@@ -1,8 +1,6 @@
 //! Back, forward, reload, and open-in-the-system-browser for the Browser tab.
 
-#[cfg(desktop)]
 use super::Kagan;
-#[cfg(desktop)]
 use {
     crate::kagan::controls::control,
     crate::ui_observe::UiObserveExt as _,
@@ -19,7 +17,6 @@ use {
     std::time::Duration,
 };
 
-#[cfg(desktop)]
 #[derive(Clone, Copy)]
 enum Nav {
     Back,
@@ -27,7 +24,6 @@ enum Nav {
     Reload,
 }
 
-#[cfg(desktop)]
 impl Kagan {
     pub(super) fn address_row(&self, cx: &mut Context<Self>) -> AnyElement {
         let typed = self.browser.address.read(cx).value().to_string();
@@ -229,7 +225,6 @@ impl Kagan {
     }
 }
 
-#[cfg(desktop)]
 pub(super) async fn evaluate(
     page: &Entity<WebPage>,
     script: &str,

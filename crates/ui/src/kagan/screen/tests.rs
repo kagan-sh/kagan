@@ -1,7 +1,7 @@
 use gpui_kit::{App, Entity, Window};
 use kg_domain::ProjectId;
 
-use super::{Kagan, Shown, right};
+use crate::kagan::{Kagan, Shown, right};
 use crate::terminal::TerminalView;
 
 pub(crate) fn start_project(kagan: &Kagan) -> Option<ProjectId> {
@@ -55,12 +55,10 @@ pub(crate) fn tab_grid(kagan: &Kagan, number: u32, cx: &App) -> Option<kg_core::
     Some(kagan.tabs.view(number)?.read(cx).grid().clone())
 }
 
-#[cfg(desktop)]
 pub(crate) fn browser_drawn(kagan: &Kagan, cx: &App) -> bool {
     kagan.browser_drawn(cx)
 }
 
-#[cfg(desktop)]
 pub(crate) fn browser_address(kagan: &Kagan, cx: &App) -> String {
     kagan.browser.address(cx)
 }

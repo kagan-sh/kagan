@@ -123,8 +123,8 @@ impl Kagan {
 
     pub(super) fn close_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.preview = None;
-        if self.right_tab.as_ref() == Some(&super::right::Tab::Preview) {
-            self.right_tab = self.default_right_tab(cx);
+        if self.right.tab.as_ref() == Some(&super::right::Tab::Preview) {
+            self.right.tab = self.default_right_tab(cx);
         }
         self.focus_right_tab(window, cx);
         cx.notify();

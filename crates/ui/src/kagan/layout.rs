@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(crate) mod read;
+pub(crate) mod tests;
 use std::future::Future;
 
 use gpui_kit::component::ActiveTheme as _;
@@ -72,7 +72,7 @@ pub(super) fn right_index(left_open: bool) -> usize {
     if left_open { 2 } else { 1 }
 }
 
-fn key(name: &str) -> String {
+pub(super) fn key(name: &str) -> String {
     format!("{WINDOW}.{name}")
 }
 

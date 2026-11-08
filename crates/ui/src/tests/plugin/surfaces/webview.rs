@@ -107,14 +107,8 @@ pub(in crate::tests) fn placed(native: Option<bool>, note: &str) -> bool {
         || platform_note(note)
 }
 
-#[cfg(desktop)]
 pub(in crate::tests) const fn platform_note(_note: &str) -> bool {
     false
-}
-
-#[cfg(not(desktop))]
-pub(in crate::tests) fn platform_note(note: &str) -> bool {
-    note == crate::components::UNAVAILABLE
 }
 
 pub(in crate::tests) fn page_place(

@@ -162,16 +162,13 @@ impl Kagan {
         self.activity.needs(&title);
     }
 
-    /// The threads `NextThreadNeedingYou` reaches. The Dock badge is wider, because it counts the
-    /// shown thread too.
+    // The threads `NextThreadNeedingYou` reaches. The Dock badge is wider, because it counts the
+    // shown thread too.
     fn needs_you(&self, cx: &App) -> usize {
         let shown = self.shown_thread(cx);
-        let questions = self.questions.read(cx).questions.clone();
         self.listed(cx)
             .filter(|thread| Some(&thread.id) != shown.as_ref())
-            .filter(|thread| {
-                thread.unread() || questions.iter().any(|asked| asked.thread_id == thread.id)
-            })
+            .filter(|thread| self.questions.read(cx).needs_you(thread))
             .count()
     }
 
@@ -446,53 +443,4 @@ fn strip_log(rows: Vec<(u64, SharedString)>, cx: &App) -> impl IntoElement + use
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn strip(cx: &mut gpui_kit::TestAppContext) -> Strip {
-        Strip::new(cx.update(|cx| cx.focus_handle()))
-    }
-
-    #[gpui_kit::test]
-    fn the_log_keeps_the_last_hundred_lines(cx: &mut gpui_kit::TestAppContext) {
-        let mut strip = strip(cx);
-        for line in 0..120 {
-            strip.say(line.to_string());
-        }
-        assert_eq!(strip.kept(), KEEP);
-        assert_eq!(
-            strip.lines.front().map(|(_, line)| line.as_ref()),
-            Some("20")
-        );
-    }
-
-    #[gpui_kit::test]
-    fn the_log_shows_the_last_seven_oldest_first(cx: &mut gpui_kit::TestAppContext) {
-        let mut strip = strip(cx);
-        for line in 1..=10 {
-            strip.say(line.to_string());
-        }
-        let lines: Vec<String> = strip
-            .tail()
-            .into_iter()
-            .map(|(_, line)| line.to_string())
-            .collect();
-        assert_eq!(lines, ["4", "5", "6", "7", "8", "9", "10"]);
-    }
-
-    #[gpui_kit::test]
-    fn a_repeated_update_or_install_line_is_written_once(cx: &mut gpui_kit::TestAppContext) {
-        let mut strip = strip(cx);
-        let ready = UpdateState::Ready {
-            version: "2.0.0".into(),
-            notes: String::new(),
-            at_quit: false,
-        };
-        strip.update_state(&ready);
-        strip.update_state(&ready);
-        strip.installing(Some("demo"));
-        strip.installing(Some("demo"));
-        strip.installing(None);
-        assert_eq!(strip.kept(), 2);
-    }
-}
+mod tests;

@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub(crate) mod read;
+pub(crate) mod tests;
 use crate::theme::TypeScale as _;
 mod actions;
 mod comment;
@@ -66,7 +66,7 @@ pub(super) struct Review {
     searching: Option<()>,
     selecting: Option<()>,
     focus: FocusHandle,
-    renamed_from: Option<String>,
+    pub(super) renamed_from: Option<String>,
     notice: Option<String>,
     hunks: Vec<u32>,
     at: Option<usize>,
@@ -106,6 +106,25 @@ impl Review {
     pub(super) fn clear_syntax(&mut self) {
         self.syntax.clear();
         self.syntax_revision.clear();
+    }
+
+    pub(super) fn retarget(
+        &mut self,
+        scope: DiffScope,
+        path: String,
+        renamed_from: Option<String>,
+        draft: Option<usize>,
+    ) {
+        self.scope = scope;
+        self.path = path;
+        self.renamed_from = renamed_from;
+        self.draft = draft;
+        self.shown.clear();
+        self.rows.clear();
+        self.clear_syntax();
+        self.expanded.clear();
+        self.loading = false;
+        self.generation = self.generation.wrapping_add(1);
     }
 }
 

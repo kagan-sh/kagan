@@ -8,12 +8,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity, EventEmitter, Global,
-    Subscription, Task, WeakEntity,
+    AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity, Global, Subscription, Task,
+    WeakEntity,
 };
 use gpui_shell::{LoadedApplication, ScriptView, ShellRuntime};
 use kg_core::{PluginRequest, Workspace};
-use kg_domain::{Event, OpError, OpResult, PluginId, ThemeFile, ThreadId};
+use kg_domain::{Event, OpError, OpResult, PluginId, ThemeFile};
 use serde_json::{Map, Value};
 
 use crate::ask::{Job, post};
@@ -34,13 +34,6 @@ pub(crate) use activation::{activate, discover};
 pub(crate) use tools::instruct;
 
 use tools::{call_tool, tools};
-
-#[derive(Clone, Debug)]
-pub enum PluginHostEvent {
-    OpenThread(ThreadId),
-}
-
-impl EventEmitter<PluginHostEvent> for PluginHost {}
 
 pub(crate) struct PluginHostGlobal(pub(crate) Entity<PluginHost>);
 impl Global for PluginHostGlobal {}

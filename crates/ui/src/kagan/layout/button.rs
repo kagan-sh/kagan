@@ -66,7 +66,7 @@ impl Kagan {
             value: Some(value),
             disabled: self.in_settings() || nothing,
             selected: None,
-            focus: Some(self.right_toggle_focus.clone()),
+            focus: Some(self.right.toggle_focus.clone()),
         };
         let row = h_flex()
             .id("right-sidebar-toggle")

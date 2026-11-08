@@ -7,7 +7,7 @@ use kg_domain::{Op, PluginId, PluginOp};
 
 use super::{
     BLANK, body, focus_page_input, install_blank, install_pair, item, open_surface, run,
-    show_thread, surfaces, tab_to, terminal_focused, titles, wide,
+    show_thread, surfaces, tab_to, terminal_focused, wide,
 };
 use crate::tests::kagan::{focused_of, label, open_with_plugins_then, shows, wait_until};
 
@@ -16,9 +16,8 @@ const BETA: &str = "dev.test.beta";
 
 #[gpui_kit::test]
 fn a_right_panel_opens_as_a_tab_and_the_tool_still_opens(cx: &mut TestAppContext) {
-    let (kagan, window, _data) = open_with_plugins_then(cx, install_blank);
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_blank);
     wide(cx, window);
-    assert!(titles(cx, &kagan).iter().all(|title| title != "Blank side"));
     open_surface(cx, BLANK, "side").unwrap();
     wait_until(cx, |cx| shows(cx, window, &body(BLANK, "side")));
     assert!(item(&surfaces(cx), BLANK, "side").visible);

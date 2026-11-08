@@ -15,8 +15,6 @@ mod dock;
 pub(crate) mod header;
 mod keys;
 mod layout;
-#[cfg(test)]
-pub(crate) use layout::read as layout_read;
 pub(crate) mod menus;
 mod navigation;
 mod needs;
@@ -28,15 +26,9 @@ mod preview;
 mod question;
 pub(crate) mod quit;
 mod replace;
-#[cfg(test)]
-pub(crate) use replace::read as replace_read;
 mod review;
-#[cfg(test)]
-pub(crate) use review::read as review_read;
 mod right;
 mod screen;
-#[cfg(test)]
-pub(crate) mod screen_read;
 mod settings;
 mod shown;
 mod sidebar;
@@ -46,8 +38,6 @@ mod tabs;
 mod update;
 mod web_panel;
 pub(crate) use web_panel::drop_plugin as drop_web_panel;
-#[cfg(all(test, target_os = "macos"))]
-pub(crate) use web_panel::{forget, inject, mark_stale, post, queue_page, testing_page};
 
 mod events;
 mod files;
@@ -56,32 +46,20 @@ mod host;
 mod render;
 mod startup;
 #[cfg(test)]
-mod test_support;
+mod tests;
 mod threads;
+#[cfg(test)]
+pub(crate) use tests::*;
 mod toast;
 use toast::Toast;
 
 pub(crate) use keys::bind;
-#[cfg(test)]
-pub(crate) use keys::chord_for;
 pub(crate) use keys::install_keys;
-#[cfg(test)]
-pub(crate) use keys::is_chord;
-#[cfg(test)]
-pub(crate) use needs::QUIET;
 pub(crate) use surface::Commit as SurfaceCommit;
 pub(crate) use surface::paint_then_settle;
-#[cfg(test)]
-pub(crate) use tabs::{CloseTerminal, NewTerminal, NextTerminal, OpenLocalLink, PreviousTerminal};
 mod window;
 
-#[cfg(test)]
-pub(crate) use threads::description;
-#[cfg(test)]
-pub(crate) use window::open;
 pub(crate) use window::shows;
-#[cfg(test)]
-pub(crate) use window::window_options;
 pub(crate) use window::{
     front, show, show_plugin_settings, show_preview, show_settings, start_plugin, watch_waiting,
 };
@@ -179,13 +157,7 @@ pub(crate) struct Kagan {
     review_drafts: review::Drafts,
     replaced: replace::Replaced,
     plugins: Plugins,
-    panels: Vec<right::Panel>,
-    right_slots: Vec<surface::Slot>,
-    right_tab: Option<right::Tab>,
-    right_menu: Option<(Entity<PopupMenu>, Subscription)>,
-    right_add_focus: FocusHandle,
-    right_fill: right::Fill,
-    right_panels: Vec<surface::Declared>,
+    right: right::Sidebar,
     tool: Option<surface::Slot>,
     surface_check: Option<surface::Check>,
     surface_epoch: u64,
@@ -194,7 +166,6 @@ pub(crate) struct Kagan {
     prefs: Entity<settings::Prefs>,
     _settings_watch: [Subscription; 3],
     panes: layout::Panes,
-    right_toggle_focus: FocusHandle,
     left_overlay_focus: FocusHandle,
     /// Enter on a project is waiting for the picker to load its program.
     start_on_load: Option<ProjectId>,

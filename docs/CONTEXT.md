@@ -224,7 +224,7 @@ Session	*	--session	OpenCode, Pi, and Kimi Code's own flag name
 Session	*	--new-session-id	Cursor Agent's own flag name
 Session	docs/behaviour.md	browser session	browser session is the CONTEXT term for the page a thread drives
 Session	book/src/window.md	browser session	browser session is the CONTEXT term for the page a thread drives
-Session	crates/ui/src/kagan/browser/agent.rs	browser session	browser session is the CONTEXT term for the page a thread drives
+Session	crates/ui/src/kagan/browser/agent	browser session	browser session is the CONTEXT term for the page a thread drives
 Session	thread/agent.rs	--session	another program's own flag name
 Session	thread/agent.rs	"session"	another program's own subcommand name
 Session	book/src/skills.md	session opened	another program's own session

@@ -163,9 +163,7 @@ pub(super) fn poll_open_changes(cx: &mut Context<Kagan>) -> Task<()> {
             let open = this.update(cx, |this, cx| {
                 if this.right_mounted() || this.thread_visible(cx) {
                     this.load_changes(cx);
-                    if this.details_open() {
-                        this.load_details(cx);
-                    }
+                    this.load_details(cx);
                     this.load_local_link(cx);
                 }
             });
@@ -273,15 +271,12 @@ impl Kagan {
         self.changes.files.clear();
         self.changes.selected = None;
         if let Some(review) = self.screen.review_mut() {
-            review.scope = scope;
-            review.draft = self
+            let draft = self
                 .review_drafts
                 .active(&review.thread, scope, &review.path);
-            review.shown.clear();
-            review.rows.clear();
-            review.clear_syntax();
-            review.loading = false;
-            review.generation = review.generation.wrapping_add(1);
+            let path = review.path.clone();
+            let renamed_from = review.renamed_from.clone();
+            review.retarget(scope, path, renamed_from, draft);
         }
         self.load_changes(cx);
     }

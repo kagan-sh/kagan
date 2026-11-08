@@ -15,7 +15,7 @@ use kg_domain::ProgramSource;
 use super::list::{ProgramRow, status_line};
 use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
-use crate::kagan::controls::{container, control, dispatch, note};
+use crate::kagan::controls::{control, dispatch, note};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
@@ -209,7 +209,7 @@ impl Render for Picker {
                     .text_size(gpui_kit::px(crate::theme::type_body(cx)))
                     .small(),
             ))
-            .child(container("program-list", body))
+            .child(div().id("program-list").ui_container().child(body))
             .when_some(reason, |this, reason| {
                 this.child(note("program-reason", reason, muted, cx))
             })

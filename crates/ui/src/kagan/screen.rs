@@ -1,3 +1,5 @@
+#[cfg(test)]
+pub(crate) mod tests;
 use gpui_kit::{App, Context, WeakFocusHandle, Window};
 
 use super::{Kagan, Shown, archived, changes::Changes, layout::Panes, review, surface};
@@ -213,7 +215,7 @@ impl Kagan {
                         FocusReturn::Center | FocusReturn::LeftOverlay => {
                             this.focus_work(window, cx);
                         }
-                        FocusReturn::RightOverlay => window.focus(&this.right_toggle_focus, cx),
+                        FocusReturn::RightOverlay => window.focus(&this.right.toggle_focus, cx),
                     }
                 }
             });

@@ -272,8 +272,8 @@ pub(super) fn icon_button(
 
 pub(super) fn row_identity(kind: &Kind) -> String {
     match kind {
-        Kind::Project { id, .. } => format!("project-{id}"),
-        Kind::Thread { id, .. } => format!("thread-{id}"),
+        Kind::Project { id, .. } => format!("{}{id}", super::PROJECT_ROW),
+        Kind::Thread { id, .. } => format!("{}{id}", super::THREAD_ROW),
     }
 }
 

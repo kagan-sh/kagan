@@ -267,7 +267,7 @@ fn command_item(entry: Entry, keys: Vec<gpui_kit::Keystroke>) -> CommandItem {
         plugin,
         ..
     } = entry;
-    let text: String = keys.iter().map(Kbd::format).collect::<Vec<_>>().join(" ");
+    let text = crate::kagan::controls::keys_text(&keys);
     CommandItem::new()
         .label(label.clone())
         .keywords(plugin)

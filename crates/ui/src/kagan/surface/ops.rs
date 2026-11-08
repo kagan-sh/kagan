@@ -1,8 +1,8 @@
 use gpui_kit::{App, Context, Window};
 use kg_domain::{SurfaceItem, SurfaceOp};
 
-use super::mount::{body_id, matching_slot, painted};
-use super::{ClosePage, destinations};
+use super::mount::{matching_slot, painted};
+use super::{ClosePage, body_id, panels};
 use crate::kagan::Kagan;
 
 impl Kagan {
@@ -15,21 +15,21 @@ impl Kagan {
     }
 
     pub(super) fn surface_list(&self, window: &Window, cx: &App) -> Vec<SurfaceItem> {
-        destinations(cx)
+        panels(cx)
             .into_iter()
             .map(|declared| {
                 let placement = declared.placement;
                 let current = matching_slot(
                     self.tool.as_ref(),
                     self.screen.page(),
-                    &self.right_slots,
+                    &self.right.slots,
                     &declared,
                 );
                 let committed = self.surface_check.as_ref().map_or(current, |check| {
                     matching_slot(
                         check.hold.tool.as_ref(),
                         self.screen.committed_page(),
-                        &check.hold.right_slots,
+                        &check.hold.slots,
                         &declared,
                     )
                 });

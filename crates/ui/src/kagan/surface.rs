@@ -1,4 +1,4 @@
-use gpui_kit::{Action, App, Context, Entity, FocusHandle, KeyBinding, Window, actions};
+use gpui_kit::{App, Context, Entity, FocusHandle, KeyBinding, Window, actions};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, OpResult, PluginId, SurfacePlacement};
 use kg_plugins::{Placement, PluginHost};
@@ -9,10 +9,9 @@ use super::right::{self};
 
 actions!(surface, [ClosePage]);
 
-#[derive(Clone, PartialEq, Eq, Action)]
-#[action(namespace = surface, no_json)]
+#[derive(Clone)]
 pub(super) struct OpenSurface {
-    pub plugin: String,
+    pub plugin: PluginId,
     pub id: String,
 }
 
@@ -33,8 +32,8 @@ pub(super) struct Slot {
 
 struct Hold {
     tool: Option<Slot>,
-    right_slots: Vec<Slot>,
-    right_tab: Option<right::Tab>,
+    slots: Vec<Slot>,
+    tab: Option<right::Tab>,
     layout: super::layout::Layout,
 }
 
@@ -135,7 +134,7 @@ pub(super) fn row_id(plugin: &PluginId, id: &str) -> String {
 }
 
 pub(super) fn nav_items(cx: &App) -> Vec<NavItem> {
-    destinations(cx)
+    panels(cx)
         .into_iter()
         .filter_map(|item| {
             let placement = item.placement;
@@ -168,10 +167,6 @@ fn panels(cx: &App) -> Vec<Declared> {
         .collect()
 }
 
-fn destinations(cx: &App) -> Vec<Declared> {
-    panels(cx)
-}
-
 fn drawn(placement: Placement) -> Option<SurfacePlacement> {
     match placement {
         Placement::Left => Some(SurfacePlacement::Left),
@@ -193,6 +188,10 @@ fn find_declared(plugin: &PluginId, id: &str, cx: &App) -> Option<Declared> {
     panels(cx)
         .into_iter()
         .find(|item| item.plugin == *plugin && item.id == id)
+}
+
+pub(super) fn body_id(id: &str) -> String {
+    format!("{id}-body")
 }
 
 mod commit;

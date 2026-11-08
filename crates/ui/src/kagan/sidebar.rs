@@ -17,6 +17,9 @@ use order::Place;
 
 use crate::theme::Tone;
 
+pub(in crate::kagan) const THREAD_ROW: &str = "thread-";
+pub(in crate::kagan) const PROJECT_ROW: &str = "project-";
+
 actions!(
     sidebar,
     [
@@ -375,7 +378,7 @@ impl Sidebar {
         let Kind::Thread { id, .. } = &rows[index].kind else {
             return;
         };
-        let id = format!("thread-{id}");
+        let id = format!("{THREAD_ROW}{id}");
         if self.scroll_thread.as_deref() == Some(id.as_str()) {
             return;
         }

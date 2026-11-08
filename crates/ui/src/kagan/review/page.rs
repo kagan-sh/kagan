@@ -257,18 +257,11 @@ impl Kagan {
             cx.notify();
             return;
         }
-        review.draft = self
+        let draft = self
             .review_drafts
             .active(&review.thread, review.scope, &file.path);
         review.pane = super::Pane::File;
-        review.path.clone_from(&file.path);
-        review.renamed_from = renamed_from(file);
-        review.shown.clear();
-        review.rows.clear();
-        review.clear_syntax();
-        review.expanded.clear();
-        review.loading = false;
-        review.generation = review.generation.wrapping_add(1);
+        review.retarget(review.scope, file.path.clone(), renamed_from(file), draft);
         self.changes.selected = Some(file.path.clone());
         self.refresh_review(cx);
         cx.notify();

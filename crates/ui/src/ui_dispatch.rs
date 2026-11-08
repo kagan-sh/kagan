@@ -1,3 +1,4 @@
+use crate::ui_registry::snapshots;
 use gpui_kit::{
     App, ElementId, InputEvent, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent, Window,
@@ -236,10 +237,6 @@ fn observed_elements(window: &Window) -> Vec<kg_domain::UiElement> {
             }
         })
         .collect()
-}
-
-fn snapshots(window: &gpui_kit::Window) -> Vec<crate::ui_registry::ElementSnapshot> {
-    crate::ui_registry::snapshots(window)
 }
 
 fn locate(

@@ -170,7 +170,7 @@ fn running(cx: &App) -> usize {
     kg_core::Workspace::global(cx).read(cx).running_programs(cx)
 }
 
-fn consequence(running: usize) -> String {
+pub(super) fn consequence(running: usize) -> String {
     if running == 1 {
         "1 running program will stop and resume when kagan opens again.".to_string()
     } else {

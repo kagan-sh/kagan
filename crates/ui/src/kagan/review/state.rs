@@ -48,16 +48,16 @@ impl Kagan {
         if let Some(file) = next {
             if let Some(review) = self.screen.review_mut() {
                 if review.path != file.path || review.scope != self.changes.scope {
-                    review.draft =
+                    let draft =
                         self.review_drafts
                             .active(&review.thread, self.changes.scope, &file.path);
-                    review.path.clone_from(&file.path);
-                    review.shown.clear();
-                    review.expanded.clear();
-                    review.loading = false;
-                    review.generation = review.generation.wrapping_add(1);
+                    review.retarget(
+                        self.changes.scope,
+                        file.path.clone(),
+                        renamed_from(file),
+                        draft,
+                    );
                 }
-                review.scope = self.changes.scope;
                 review.renamed_from = renamed_from(file);
                 self.changes.selected = Some(file.path.clone());
             }

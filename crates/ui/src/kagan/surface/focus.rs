@@ -1,15 +1,16 @@
 use gpui_kit::{Context, Focusable as _, Window};
 use kg_domain::SurfacePlacement;
 
-use super::{Declared, destinations, row_id};
+use super::{Declared, panels, row_id};
 use crate::kagan::Kagan;
 use crate::kagan::Shown;
 
 impl Kagan {
     pub(in crate::kagan) fn closed_right_panels(&self) -> impl Iterator<Item = &Declared> {
-        self.right_panels.iter().filter(|item| {
+        self.right.panels.iter().filter(|item| {
             !self
-                .right_slots
+                .right
+                .slots
                 .iter()
                 .any(|slot| slot.plugin == item.plugin && slot.contribution == item.id)
         })
@@ -82,7 +83,7 @@ impl Kagan {
             .filter(|id| sidebar.row_focus(id).is_some())
             .or(closed.filter(|id| sidebar.row_focus(id).is_some()))
             .or_else(|| {
-                destinations(cx).into_iter().find_map(|item| {
+                panels(cx).into_iter().find_map(|item| {
                     (item.placement == SurfacePlacement::Left)
                         .then(|| row_id(&item.plugin, &item.id))
                 })

@@ -7,7 +7,6 @@ use std::path::{Component, Path};
 
 use kg_plugins::{PageFileError, SCHEME};
 
-#[cfg(desktop)]
 use crate::theme::ThemeState;
 
 const THEME_FILE: &str = "__kagan/theme.css";
@@ -94,7 +93,6 @@ pub(crate) fn mime(path: &str) -> &'static str {
     }
 }
 
-#[cfg(desktop)]
 pub(crate) fn theme_css(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
@@ -110,7 +108,6 @@ fn stylesheet(tokens: &[(&'static str, String)], scheme: &str) -> String {
     format!(":root{{{declarations};color-scheme:{scheme}}}\n")
 }
 
-#[cfg(desktop)]
 fn scheme(mode: gpui_kit::component::ThemeMode) -> &'static str {
     match mode {
         gpui_kit::component::ThemeMode::Light => "light",
@@ -118,7 +115,6 @@ fn scheme(mode: gpui_kit::component::ThemeMode) -> &'static str {
     }
 }
 
-#[cfg(desktop)]
 fn tokens(palette: &kg_domain::Palette, look: &kg_domain::Look) -> Vec<(&'static str, String)> {
     let hover = palette.hover.unwrap_or(palette.raised);
     let px = |value: u16| format!("{value}px");
@@ -275,11 +271,9 @@ pub(crate) fn page_event(message: &str) -> Option<String> {
     ))
 }
 
-#[cfg(desktop)]
 pub(crate) const BRIDGE: &str = r#"(function(){function post(message){var text;try{text=JSON.stringify(message);}catch(e){return;}if(typeof text!=="string")return;window.ipc.postMessage(text);}window.kagan=Object.freeze({post:post});var link=document.getElementById("kagan-theme");if(!link){link=document.createElement("link");link.id="kagan-theme";link.rel="stylesheet";link.href=new URL("/__kagan/theme.css",window.location.href).href;(document.head||document.documentElement).appendChild(link);}})();"#;
 
 // Sets the theme tokens, then changes the stylesheet's `?v=` so the view fetches it again.
-#[cfg(desktop)]
 pub(crate) fn theme_refresh(cx: &gpui_kit::App) -> String {
     let state = ThemeState::global(cx);
     let state = state.read(cx);
@@ -324,7 +318,6 @@ mod tests;
 // The stylesheet text the web view's protocol callback reads.
 //
 // That callback is not a GPUI context, so the text cannot live in an entity.
-#[cfg(desktop)]
 mod theme_cell {
     #![expect(
         clippy::disallowed_types,
@@ -357,5 +350,4 @@ mod theme_cell {
     }
 }
 
-#[cfg(desktop)]
 pub(crate) use theme_cell::ThemeCss;

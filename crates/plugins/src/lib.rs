@@ -30,7 +30,7 @@ use serde_json::Value;
 use crate::manifest::Fetch;
 pub use contributions::{Contributions, Follows, PanelContribution, Placement, StatusContribution};
 pub(crate) use host::{Discovered, PluginHostGlobal, discover};
-pub use host::{MountError, PluginHost, PluginHostEvent, init};
+pub use host::{MountError, PluginHost, init};
 pub use index::shown;
 pub use manifest::{AgentChoice, Setting};
 pub use page::{MESSAGE_CAP, PageFileError, SCHEME, parse_message, read_plugin_file};
