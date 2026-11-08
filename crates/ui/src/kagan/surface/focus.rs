@@ -7,13 +7,10 @@ use crate::kagan::Shown;
 
 impl Kagan {
     pub(in crate::kagan) fn closed_right_panels(&self) -> impl Iterator<Item = &Declared> {
-        self.right.panels.iter().filter(|item| {
-            !self
-                .right
-                .slots
-                .iter()
-                .any(|slot| slot.plugin == item.plugin && slot.contribution == item.id)
-        })
+        self.right
+            .panels
+            .iter()
+            .filter(|item| !self.right.slots.iter().any(|slot| slot.is(item)))
     }
 
     pub(in crate::kagan) fn show_right(&mut self, window: &mut Window, cx: &mut Context<Self>) {

@@ -186,9 +186,7 @@ impl Kagan {
             match declared.placement {
                 SurfacePlacement::Right => {
                     let surface = declared.surface_id();
-                    self.right.slots.retain(|slot| {
-                        !(slot.plugin == declared.plugin && slot.contribution == declared.id)
-                    });
+                    self.right.slots.retain(|slot| !slot.is(&declared));
                     if self.right.tab.as_ref() == Some(&super::right::Tab::Plugin(surface)) {
                         self.right.tab = self.default_right_tab(cx);
                     }
@@ -245,9 +243,7 @@ impl Kagan {
                 }
             }
             SurfacePlacement::Right => {
-                if let Some(ix) = self.right.slots.iter().position(|slot| {
-                    slot.plugin == declared.plugin && slot.contribution == declared.id
-                }) {
+                if let Some(ix) = self.right.slots.iter().position(|slot| slot.is(&declared)) {
                     if !reuse(&self.right.slots[ix], &declared, cx) {
                         let details = self.right.slots[ix].details;
                         self.right.slots[ix] = mount(&declared, details, window, cx);
