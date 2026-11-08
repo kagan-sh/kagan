@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::path::{Component, Path};
 
 use kg_domain::Slot;
 use serde::Deserialize;
@@ -232,21 +231,7 @@ fn check_body(panel: &PanelContribution) -> Result<(), Error> {
 }
 
 fn check_web(web: &str) -> Result<(), Error> {
-    let path = Path::new(web);
-    if path
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("html"))
-        && !web.starts_with('/')
-        && !web.contains('\\')
-        && !web.contains('\0')
-        && !path.is_absolute()
-        && path
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
-        && !web
-            .split('/')
-            .any(|part| part.is_empty() || part.eq_ignore_ascii_case("__kagan"))
-    {
+    if crate::page::is_page_path(web) {
         Ok(())
     } else {
         Err(Error::WebShape(web.to_owned()))

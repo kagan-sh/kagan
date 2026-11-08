@@ -32,10 +32,6 @@ pub enum PageFileError {
 /// Why a declared `web` file cannot be the panel's page.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
-    #[error("web {0:?} must be an .html file inside the plugin")]
-    Shape(String),
-    #[error("web {0:?} leaves the plugin folder")]
-    Leaves(String),
     #[error("web {relative:?} cannot be the panel page: {source}")]
     File {
         relative: String,
@@ -73,7 +69,6 @@ pub fn read_plugin_file(root: &Path, relative: &str) -> Result<Vec<u8>, PageFile
 
 // Checks the declared `web` file when the manifest is read.
 pub(crate) fn require_html(root: &Path, relative: &str) -> Result<(), Error> {
-    shape(relative)?;
     read_plugin_file(root, relative).map_err(|source| Error::File {
         relative: relative.to_owned(),
         source,
@@ -124,28 +119,6 @@ pub(crate) fn module(plugin: &PluginId) -> HostModule {
             })?;
             Ok(ui_host::accepted(replied))
         })
-}
-
-fn shape(relative: &str) -> Result<(), Error> {
-    if !is_html(relative)
-        || relative.starts_with('/')
-        || relative.contains('\\')
-        || relative.contains('\0')
-        || relative
-            .split('/')
-            .any(|part| part.is_empty() || part.eq_ignore_ascii_case(RESERVED))
-    {
-        return Err(Error::Shape(relative.to_owned()));
-    }
-    let path = Path::new(relative);
-    if path.is_absolute()
-        || !path
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
-    {
-        return Err(Error::Leaves(relative.to_owned()));
-    }
-    Ok(())
 }
 
 fn relative_file(relative: &str) -> Result<PathBuf, PageFileError> {
@@ -206,6 +179,10 @@ fn read_in(dir: &Dir, relative: &Path) -> Result<Vec<u8>, PageFileError> {
         return Err(PageFileError::TooBig);
     }
     Ok(bytes)
+}
+
+pub(crate) fn is_page_path(relative: &str) -> bool {
+    is_html(relative) && relative_file(relative).is_ok()
 }
 
 fn is_html(path: &str) -> bool {
