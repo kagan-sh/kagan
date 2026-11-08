@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use gpui_kit::{AppContext as _, AsyncApp, Entity};
 use kg_core::{Requester, Workspace};
-use kg_domain::{OpError, OpResult, Plugin, PluginId, PluginOp, ThreadId};
+use kg_domain::{OpError, OpResult, Plugin, PluginId, ThreadId};
 
 use crate::manifest::Grant;
 use crate::source::{Source, fetch};
@@ -12,88 +12,82 @@ use super::approve::{approve, choose, removal_options};
 use super::install::keep;
 use super::{approved, record, start};
 
-pub(in crate::runtime::ops) async fn develop(
+pub(in crate::runtime::ops) async fn new(
     host: &Entity<PluginHost>,
-    op: PluginOp,
+    name: String,
+    dir: Option<PathBuf>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let components = host.read_with(cx, |host, _| host.components());
+    cx.background_spawn(async move { crate::development::new(&name, dir, &components) })
+        .await
+}
+
+pub(in crate::runtime::ops) async fn check(
+    host: &Entity<PluginHost>,
+    path: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let (data_dir, components) =
+        host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
+    cx.background_spawn(async move {
+        let warnings = crate::development::check(&path, &data_dir, &components)?;
+        Ok(if warnings.is_empty() {
+            OpResult::Done
+        } else {
+            OpResult::Warnings(warnings)
+        })
+    })
+    .await
+}
+
+pub(in crate::runtime::ops) async fn share(
+    host: &Entity<PluginHost>,
+    path: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let (data_dir, components) =
+        host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
+    cx.background_spawn(async move { crate::share::share(&path, &data_dir, &components) })
+        .await
+}
+
+pub(in crate::runtime::ops) async fn types(
+    host: &Entity<PluginHost>,
+    path: PathBuf,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    let components = host.read_with(cx, |host, _| host.components());
+    cx.background_spawn(async move {
+        crate::development::types(&path, &components).map(OpResult::Files)
+    })
+    .await
+}
+
+pub(in crate::runtime::ops) async fn reload_enabled(
+    host: &Entity<PluginHost>,
+    id: PluginId,
+    thread_id: Option<ThreadId>,
     requester: Option<Requester>,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    match op {
-        PluginOp::New { name, dir } => {
-            let components = host.read_with(cx, |host, _| host.components());
-            cx.background_spawn(async move { crate::development::new(&name, dir, &components) })
-                .await
-        }
-        PluginOp::Check { path } => {
-            let (data_dir, components) =
-                host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
-            cx.background_spawn(async move {
-                let warnings = crate::development::check(&path, &data_dir, &components)?;
-                Ok(if warnings.is_empty() {
-                    OpResult::Done
-                } else {
-                    OpResult::Warnings(warnings)
-                })
-            })
-            .await
-        }
-        PluginOp::Share { path } => {
-            let (data_dir, components) =
-                host.read_with(cx, |host, _| (host.data_dir.clone(), host.components()));
-            cx.background_spawn(async move { crate::share::share(&path, &data_dir, &components) })
-                .await
-        }
-        PluginOp::Types { path } => {
-            let components = host.read_with(cx, |host, _| host.components());
-            cx.background_spawn(async move {
-                crate::development::types(&path, &components).map(OpResult::Files)
-            })
-            .await
-        }
-        PluginOp::List => Ok(OpResult::Plugins(host.read_with(cx, |host, _| {
-            host.records
-                .values()
-                .map(|record| Plugin {
-                    error: host.failure(&record.id),
-                    source: crate::index::shown(&record.source),
-                    ..record.clone()
-                })
-                .collect()
-        }))),
-        PluginOp::Remove { id, thread_id } => remove(host, id, thread_id, requester, cx).await,
-        PluginOp::CancelInstall => {
-            if host.read_with(cx, |host, _| host.stop_install()) {
-                Ok(OpResult::Done)
-            } else {
-                Err(OpError::Invalid("no git install is running".into()))
-            }
-        }
-        PluginOp::Reload { id, thread_id } => {
-            let record = record(host, &id, cx)?;
-            if !record.enabled {
-                return Err(OpError::Invalid(format!("plugin {id} is disabled")));
-            }
-            reload(host, record, thread_id, requester, cx).await
-        }
-        PluginOp::Dev { path, thread_id } => dev(host, path, thread_id, requester, cx).await,
-        PluginOp::Logs { id, after, .. } => {
-            record(host, &id, cx)?;
-            let path = host.read_with(cx, |host, _| kg_core::plugin_log_file(&host.data_dir, &id));
-            cx.background_spawn(async move { crate::development::logs(&path, after.unwrap_or(0)) })
-                .await
-        }
-        PluginOp::Start
-        | PluginOp::Cli { .. }
-        | PluginOp::Command { .. }
-        | PluginOp::Install { .. }
-        | PluginOp::Update { .. }
-        | PluginOp::Index { .. }
-        | PluginOp::Search { .. }
-        | PluginOp::Enable { .. }
-        | PluginOp::Disable { .. }
-        | PluginOp::Config { .. }
-        | PluginOp::Use { .. } => Err(OpError::Failed("not a development operation".into())),
+    let record = record(host, &id, cx)?;
+    if !record.enabled {
+        return Err(OpError::Invalid(format!("plugin {id} is disabled")));
     }
+    reload(host, record, thread_id, requester, cx).await
+}
+
+pub(in crate::runtime::ops) async fn logs(
+    host: &Entity<PluginHost>,
+    id: PluginId,
+    after: Option<u64>,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    record(host, &id, cx)?;
+    let path = host.read_with(cx, |host, _| kg_core::plugin_log_file(&host.data_dir, &id));
+    cx.background_spawn(async move { crate::development::logs(&path, after.unwrap_or(0)) })
+        .await
 }
 
 pub(in crate::runtime::ops) async fn enable(

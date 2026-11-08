@@ -15,7 +15,7 @@ use crate::{Discovered, PluginHost, Result};
 
 use approve::{choose, permission_options};
 use config::config;
-use develop::{develop, disable, enable};
+use develop::{check, dev, disable, enable, logs, new, reload_enabled, remove, share, types};
 use install::{install, update};
 
 mod approve;
@@ -42,16 +42,33 @@ pub(crate) async fn run(
         PluginOp::Start => Err(OpError::Failed(
             "starting a plugin thread needs a window".into(),
         )),
-        PluginOp::New { .. }
-        | PluginOp::Check { .. }
-        | PluginOp::Share { .. }
-        | PluginOp::Types { .. }
-        | PluginOp::List
-        | PluginOp::Remove { .. }
-        | PluginOp::Reload { .. }
-        | PluginOp::Dev { .. }
-        | PluginOp::CancelInstall
-        | PluginOp::Logs { .. } => develop(host, op, requester, cx).await,
+        PluginOp::New { name, dir } => new(host, name, dir, cx).await,
+        PluginOp::Check { path } => check(host, path, cx).await,
+        PluginOp::Share { path } => share(host, path, cx).await,
+        PluginOp::Types { path } => types(host, path, cx).await,
+        PluginOp::List => Ok(OpResult::Plugins(host.read_with(cx, |host, _| {
+            host.records
+                .values()
+                .map(|record| Plugin {
+                    error: host.failure(&record.id),
+                    source: crate::index::shown(&record.source),
+                    ..record.clone()
+                })
+                .collect()
+        }))),
+        PluginOp::Remove { id, thread_id } => remove(host, id, thread_id, requester, cx).await,
+        PluginOp::Reload { id, thread_id } => {
+            reload_enabled(host, id, thread_id, requester, cx).await
+        }
+        PluginOp::Dev { path, thread_id } => dev(host, path, thread_id, requester, cx).await,
+        PluginOp::CancelInstall => {
+            if host.read_with(cx, |host, _| host.stop_install()) {
+                Ok(OpResult::Done)
+            } else {
+                Err(OpError::Invalid("no git install is running".into()))
+            }
+        }
+        PluginOp::Logs { id, after, .. } => logs(host, id, after, cx).await,
         PluginOp::Cli {
             name,
             command,
