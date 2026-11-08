@@ -197,8 +197,14 @@ fn open_kept(cx: &mut TestAppContext, data: &Path, keep: TempDir, plugins: &[Plu
         store.insert_plugin(plugin).unwrap();
     }
     drop(store);
-    let opened =
-        cx.update(|cx| Workspace::open(data.to_path_buf(), std::env::current_exe().unwrap(), cx));
+    let opened = cx.update(|cx| {
+        Workspace::open(
+            data.to_path_buf(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
     cx.foreground_executor().block_test(opened).unwrap();
     let started = cx.update(|cx| {
         gpui_kit::init(cx);

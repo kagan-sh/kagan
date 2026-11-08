@@ -25,6 +25,4 @@ pub use update::{Target, Updater};
 pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 
-pub use workspace::{
-    Permit, PluginDispatch, PluginRequest, SocketLocation, Workspace, WorkspaceEvent,
-};
+pub use workspace::{Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent};

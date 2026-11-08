@@ -78,7 +78,14 @@ impl Fixture {
             .unwrap();
         drop(store);
         let workspace = cx
-            .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+            .update(|cx| {
+                Workspace::open(
+                    dir.path().into(),
+                    std::env::current_exe().unwrap(),
+                    Some("/tmp/kagan-test.sock".into()),
+                    cx,
+                )
+            })
             .await
             .unwrap();
         cx.update(|cx| {
@@ -111,7 +118,14 @@ impl Fixture {
         plant(&mut store);
         drop(store);
         let workspace = cx
-            .update(|cx| Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx))
+            .update(|cx| {
+                Workspace::open(
+                    dir.path().into(),
+                    std::env::current_exe().unwrap(),
+                    Some("/tmp/kagan-test.sock".into()),
+                    cx,
+                )
+            })
             .await
             .unwrap();
         cx.update(|cx| {

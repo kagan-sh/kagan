@@ -71,8 +71,7 @@ pub(crate) fn run() -> Result<()> {
     app.run(move |cx| {
         #[cfg(target_os = "macos")]
         crate::icon::install();
-        cx.set_global(kg_core::SocketLocation(location));
-        let open = kg_core::Workspace::open(data_dir, cli, cx);
+        let open = kg_core::Workspace::open(data_dir, cli, Some(location), cx);
         cx.spawn(async move |cx| {
             if let Err(error) = open.await {
                 eprintln!("kg: {error}");

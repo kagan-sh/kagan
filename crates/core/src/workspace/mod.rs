@@ -124,6 +124,8 @@ pub struct Workspace {
     pub(crate) database: Database,
     pub(crate) data_dir: PathBuf,
     pub(crate) cli: PathBuf,
+    /// Where this app listens for `kg`; every process it starts gets it as `KG_SOCKET`.
+    pub(crate) socket: Option<std::ffi::OsString>,
     pub(crate) projects: BTreeMap<ProjectId, Entity<Project>>,
     pub(crate) preparing_projects: BTreeMap<ProjectId, usize>,
     removing_projects: BTreeSet<ProjectId>,
@@ -174,9 +176,6 @@ pub enum WorkspaceEvent {
 }
 impl EventEmitter<WorkspaceEvent> for Workspace {}
 
-/// Where this app listens for `kg`; every process it starts gets it as `KG_SOCKET`.
-pub struct SocketLocation(pub std::ffi::OsString);
-impl Global for SocketLocation {}
 pub(crate) struct WorkspaceGlobal(Entity<Workspace>);
 impl Global for WorkspaceGlobal {}
 impl Workspace {
@@ -192,7 +191,12 @@ impl Workspace {
     ///
     /// # Errors
     /// Returns an error if the data folder or database cannot be opened.
-    pub fn open(data_dir: PathBuf, cli: PathBuf, cx: &mut App) -> Task<Result<Entity<Self>>> {
+    pub fn open(
+        data_dir: PathBuf,
+        cli: PathBuf,
+        socket: Option<std::ffi::OsString>,
+        cx: &mut App,
+    ) -> Task<Result<Entity<Self>>> {
         let executor = cx.background_executor().clone();
         let opened = executor.spawn(async move { open_data(&data_dir) });
         cx.spawn(async move |cx| {
@@ -233,6 +237,7 @@ impl Workspace {
                         database,
                         data_dir,
                         cli,
+                        socket,
                         sections: Vec::new(),
                         projects: BTreeMap::new(),
                         preparing_projects: BTreeMap::new(),

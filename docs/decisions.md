@@ -724,3 +724,5 @@ Cost: the product-line ceiling rises to 70092.
 Rules out: installing an agent hook, and `--continue`, which would take another thread's newest conversation in the same folder.
 
 **177. A window or view that has closed is not an error.** `entity.update`, `window.update` and `cx.update_window` on a weak handle fail only when that entity or window is gone, and then nothing is left to change. The window ignores that result with `_ =` and no comment. Any other ignored result says why on its line, or is logged as a `kg:` line.
+
+**178. The socket is a parameter of `Workspace::open`.** `kg` passes the location it listens on, and `Workspace` keeps it for the programs it starts (`KG_SOCKET`). It was a GPUI global that `kg` set and core read, so the link between them was invisible. Tests that run no socket pass none. Why: the value is an input of the app, like `cli_path`, and a caller can see it. Rules out: a global that another crate reads without a name.

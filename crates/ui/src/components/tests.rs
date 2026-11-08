@@ -106,6 +106,7 @@ fn mount_dir(
         kg_core::Workspace::open(
             directory.path().into(),
             std::env::current_exe().unwrap(),
+            None,
             cx,
         )
     });

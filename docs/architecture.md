@@ -75,7 +75,7 @@ Pinned in the workspace `Cargo.toml`, and upgraded on purpose:
 
 ## Core interface
 
-`kg` uses `<home>/.kagan` when `KG_DATA_DIR` is unset. `Workspace::open(data_dir, cli_path, cx)` returns a GPUI task that opens the database, restores the entity snapshots, recovers interrupted runs and installs the global. `cli_path` is the running `kg` executable. `Workspace::global(cx)` returns its entity. `Workspace::dispatch(op, cx)` returns `Task<Result<OpResult, OpError>>`; dropping a caller's task does not cancel an accepted operation.
+`kg` uses `<home>/.kagan` when `KG_DATA_DIR` is unset. `Workspace::open(data_dir, cli_path, socket, cx)` returns a GPUI task that opens the database, restores the entity snapshots, recovers interrupted runs and installs the global. `cli_path` is the running `kg` executable. `socket` is where this app listens for `kg` (`KG_SOCKET`), or none. `Workspace::global(cx)` returns its entity. `Workspace::dispatch(op, cx)` returns `Task<Result<OpResult, OpError>>`; dropping a caller's task does not cancel an accepted operation.
 
 `Workspace::project`, `thread` and `environment` return retained entities by domain id. Each entity exposes its domain `record()`. Observe the workspace for changed snapshots, or subscribe to `WorkspaceEvent::Event` for persisted thread events and `Changed` for other changes. `Open` asks the application to open a native window. The application subscribes before it starts plugins, and retains that subscription even when it has no window.
 

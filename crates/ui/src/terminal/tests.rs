@@ -138,7 +138,12 @@ fn style(weight: Weight, italic: bool, decorated: bool) -> Style {
 fn init_theme(cx: &mut TestAppContext) -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let workspace = cx.update(|cx| {
-        kg_core::Workspace::open(dir.path().into(), std::env::current_exe().unwrap(), cx)
+        kg_core::Workspace::open(
+            dir.path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
     });
     cx.foreground_executor().block_test(workspace).unwrap();
     cx.update(|cx| {

@@ -391,8 +391,14 @@ fn an_archived_program_stays_the_recent_default(cx: &mut TestAppContext) {
     // Without the archived thread the default would be the first installed agent, codex.
     assert_eq!(default_program(cx), Some(gemini.clone()));
     // A restart reopens the same data folder, and the recent program is still the default.
-    let reopened = cx
-        .update(|cx| Workspace::open(data.as_path().into(), std::env::current_exe().unwrap(), cx));
+    let reopened = cx.update(|cx| {
+        Workspace::open(
+            data.as_path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
     cx.foreground_executor().block_test(reopened).unwrap();
     cx.run_until_parked();
     assert_eq!(default_program(cx), Some(gemini));
@@ -695,8 +701,14 @@ fn a_second_workspace_does_not_inherit_the_first_discovery(cx: &mut TestAppConte
     );
     // A second workspace, in its own folder, reads its own PATH and shell.
     let other = tempfile::tempdir().unwrap();
-    let opened =
-        cx.update(|cx| Workspace::open(other.path().into(), std::env::current_exe().unwrap(), cx));
+    let opened = cx.update(|cx| {
+        Workspace::open(
+            other.path().into(),
+            std::env::current_exe().unwrap(),
+            None,
+            cx,
+        )
+    });
     cx.foreground_executor().block_test(opened).unwrap();
     cx.run_until_parked();
     assert!(
