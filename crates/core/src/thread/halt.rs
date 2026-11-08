@@ -35,14 +35,6 @@ pub(crate) async fn status(
     crate::workspace::changed(this, cx)
 }
 
-pub(crate) async fn stop(
-    this: &WeakEntity<Workspace>,
-    thread: &Entity<Thread>,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    halt(this, thread, cx).await
-}
-
 /// Stop and a natural exit both run it, and each then records its own event.
 pub(super) async fn settle(
     this: &WeakEntity<Workspace>,
@@ -59,7 +51,7 @@ pub(super) async fn settle(
     crate::workspace::changed(this, cx)
 }
 
-pub(super) async fn halt(
+pub(crate) async fn stop(
     this: &WeakEntity<Workspace>,
     thread: &Entity<Thread>,
     cx: &mut AsyncApp,

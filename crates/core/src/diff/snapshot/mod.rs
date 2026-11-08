@@ -25,14 +25,6 @@ pub(super) struct Skipped {
     pub(super) object: String,
 }
 
-pub(super) fn trees(
-    root: &Path,
-    hint: Option<&str>,
-    query: &DiffQuery,
-) -> Result<(Snapshot, Snapshot, Option<String>)> {
-    ends(root, hint, query)
-}
-
 pub(super) fn snapshot_key(snapshot: &Snapshot) -> String {
     format!(
         "{}:{}",

@@ -17,14 +17,6 @@ pub enum UiJob {
 
 pub type UiDispatch = Rc<dyn Fn(UiJob, &mut App) -> Task<std::result::Result<OpResult, OpError>>>;
 
-pub(crate) async fn run(
-    this: &WeakEntity<Workspace>,
-    op: UiOp,
-    cx: &mut AsyncApp,
-) -> Result<OpResult> {
-    drive(this, UiJob::Op(op), cx).await
-}
-
 pub(crate) async fn drive(
     this: &WeakEntity<Workspace>,
     job: UiJob,

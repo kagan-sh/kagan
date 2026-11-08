@@ -280,7 +280,7 @@ pub(super) async fn retire_legacy(
         for entry in entries {
             let entry = entry?;
             if own_link(&entry.path(), &legacy) {
-                remove_link(&entry.path())?;
+                std::fs::remove_file(entry.path())?;
             }
         }
         Ok(())
@@ -308,7 +308,7 @@ fn link_root(
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if !names.contains(&name) && own_link(&entry.path(), owned_root) {
-            remove_link(&entry.path())?;
+            std::fs::remove_file(entry.path())?;
         }
     }
     let mut owned = Vec::new();
@@ -322,7 +322,7 @@ fn link_root(
                     continue;
                 }
                 if own_link(&link, owned_root) {
-                    remove_link(&link)?;
+                    std::fs::remove_file(&link)?;
                 } else {
                     continue;
                 }
@@ -352,10 +352,6 @@ fn own_link(link: &Path, owned_root: &Path) -> bool {
         };
         target.starts_with(owned_root)
     })
-}
-
-fn remove_link(link: &Path) -> std::io::Result<()> {
-    std::fs::remove_file(link)
 }
 
 fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {

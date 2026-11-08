@@ -1,12 +1,12 @@
-use gpui_kit::{AsyncApp, Entity, WeakEntity};
+use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
     EnvironmentStatus, EventKind, OpError, OpResult, ThreadId, ThreadStatus, TurnOutcome,
 };
 use kg_terminal::Exit;
 
+use crate::Workspace;
 use crate::host::database::Result;
 use crate::workspace::closed;
-use crate::{Thread, Workspace};
 
 use super::agent::Start;
 use super::screen::keep_screen;
@@ -34,14 +34,6 @@ pub(crate) fn request_stop(workspace: &mut Workspace, id: &ThreadId) -> bool {
     run.stopping.get_or_insert(StopReason::Stop);
     true
 }
-async fn status_idle(
-    this: &WeakEntity<Workspace>,
-    thread: &Entity<Thread>,
-    cx: &mut AsyncApp,
-) -> Result<()> {
-    status(this, thread, ThreadStatus::Idle, cx).await
-}
-
 /// Runs a stopped or recovered thread's program again, in the folder it had.
 /// Opening the app calls this for a thread the last process left running.
 pub(crate) async fn start_again(
@@ -125,7 +117,7 @@ pub(crate) async fn exited(
             cx,
         )
         .await?;
-        status_idle(this, &thread, cx).await?;
+        status(this, &thread, ThreadStatus::Idle, cx).await?;
         return Ok(OpResult::Done);
     }
     let (events, next) = match exit {
