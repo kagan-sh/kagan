@@ -2,7 +2,7 @@ use std::ffi::OsString;
 
 use gpui_kit::{AppContext as _, AsyncApp, Context, WeakEntity};
 use kg_domain::{EnvironmentStatus, ExtraTerminal, OpError, OpResult, TerminalOp, ThreadId};
-use kg_terminal::{Launch, Lines, Terminal};
+use kg_terminal::{Launch, Terminal, View};
 
 use crate::host::database::Result;
 use crate::workspace::{closed, missing};
@@ -153,22 +153,23 @@ pub(super) async fn links(
             if !workspace.threads.contains_key(&id) {
                 return Err(missing("thread", &id));
             }
-            let program = workspace.terminals.get(&id).map(|shown| match shown {
-                super::Shown::Running(terminal) => terminal.lines(),
-                super::Shown::Ended(finished) => finished.lines(),
-            });
-            let extras = workspace
-                .extras
+            let program = workspace
+                .terminals
                 .get(&id)
-                .into_iter()
-                .flat_map(|extras| extras.open.iter().map(|(_, terminal)| terminal.lines()));
-            Ok(program.into_iter().chain(extras).collect::<Vec<Lines>>())
+                .map(|shown| shown.view().clone());
+            let extras = workspace.extras.get(&id).into_iter().flat_map(|extras| {
+                extras
+                    .open
+                    .iter()
+                    .map(|(_, terminal)| terminal.view().clone())
+            });
+            Ok(program.into_iter().chain(extras).collect::<Vec<View>>())
         })
         .map_err(closed)??;
     let found = cx
         .background_spawn(async move {
             let mut all: Vec<String> = Vec::new();
-            for kept in terminals.iter().map(Lines::kept) {
+            for kept in terminals.iter().map(View::kept) {
                 for line in &kept.lines {
                     all.extend(
                         kg_terminal::links(&line.text)
@@ -205,7 +206,7 @@ pub(super) fn poll(workspace: &mut Workspace, cx: &mut Context<Workspace>) -> bo
     let mut closed = false;
     for (id, extras) in &mut workspace.extras {
         extras.open.retain(|(number, terminal)| {
-            if terminal.take_changed() {
+            if terminal.view().take_changed() {
                 cx.emit(WorkspaceEvent::Screen(id.clone(), Some(*number)));
             }
             let open = terminal.exit().is_none();

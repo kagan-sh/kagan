@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use gpui_kit::{AppContext, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EventKind, OpError, OpResult, SelectMode, ThreadId, ThreadOp, ThreadStatus};
-use kg_terminal::{Finished, Launch, Terminal};
+use kg_terminal::{Finished, Launch, Terminal, View};
 
 use crate::host::database::Result;
 use crate::workspace::{closed, missing};
@@ -264,13 +264,13 @@ pub(crate) fn run(
         let result = if let Some(number) = number {
             super::extra::find(workspace, &id, number)
                 .ok_or_else(|| missing("terminal", &number))
-                .map(|terminal| act_running(terminal, op))
+                .map(|terminal| act(Some(terminal), terminal.view(), op))
         } else {
             workspace
                 .terminals
                 .get(&id)
                 .ok_or_else(|| missing("terminal", &id))
-                .map(|shown| act(shown, op))
+                .map(|shown| act(shown.running(), shown.view(), op))
         }?
         .map_err(|error| OpError::Invalid(error.to_string()));
         if moves_view {
@@ -287,78 +287,65 @@ pub(crate) enum Shown {
     Ended(Finished),
 }
 
-fn act(shown: &Shown, op: ThreadOp) -> std::io::Result<OpResult> {
-    match shown {
-        Shown::Running(terminal) => act_running(terminal, op),
-        Shown::Ended(finished) => act_ended(finished, &op),
+impl Shown {
+    pub(crate) fn view(&self) -> &View {
+        match self {
+            Self::Running(terminal) => terminal.view(),
+            Self::Ended(finished) => finished.view(),
+        }
+    }
+
+    fn running(&self) -> Option<&Terminal> {
+        match self {
+            Self::Running(terminal) => Some(terminal),
+            Self::Ended(_) => None,
+        }
     }
 }
 
 // An ended program has no pty: input is refused, and the view and the text still work.
-fn act_ended(finished: &Finished, op: &ThreadOp) -> std::io::Result<OpResult> {
-    match op {
-        ThreadOp::Input { .. } | ThreadOp::Paste { .. } => {
-            Err(std::io::Error::other("the program has ended"))
+fn act(running: Option<&Terminal>, view: &View, op: ThreadOp) -> std::io::Result<OpResult> {
+    match (op, running) {
+        (ThreadOp::Input { text, .. }, Some(terminal)) => {
+            terminal.write(text.into_bytes()).map(|()| OpResult::Done)
         }
-        ThreadOp::Resize { .. } | ThreadOp::Report { .. } => Ok(OpResult::Done),
-        ThreadOp::Scroll { lines, .. } => {
-            finished.scroll(*lines);
-            Ok(OpResult::Done)
-        }
-        ThreadOp::Select {
-            mode,
-            column,
-            row,
-            right,
-            ..
-        } => {
-            finished.select(terminal_mode(*mode), *column, *row, *right);
-            Ok(OpResult::Done)
-        }
-        ThreadOp::Copy { .. } => Ok(finished.selection().map_or(OpResult::Done, OpResult::Text)),
-        ThreadOp::Screen {
-            scrollback, lines, ..
-        } => screen_result(
-            *scrollback,
-            *lines,
-            || finished.transcript(),
-            || finished.screen(),
-        ),
-        _ => Err(std::io::Error::other("not a terminal operation")),
-    }
-}
-
-fn act_running(terminal: &Terminal, op: ThreadOp) -> std::io::Result<OpResult> {
-    match op {
-        ThreadOp::Input { text, .. } => terminal.write(text.into_bytes()).map(|()| OpResult::Done),
-        ThreadOp::Resize { cols, rows, .. } => terminal.resize(cols, rows).map(|()| OpResult::Done),
-        ThreadOp::Paste { text, .. } => terminal
+        (ThreadOp::Paste { text, .. }, Some(terminal)) => terminal
             .paste(text.as_deref().unwrap_or(""))
             .map(|()| OpResult::Done),
-        ThreadOp::Report { bytes, .. } => terminal.report(bytes).map(|()| OpResult::Done),
-        ThreadOp::Scroll { lines, .. } => {
-            terminal.scroll(lines);
+        (ThreadOp::Input { .. } | ThreadOp::Paste { .. }, None) => {
+            Err(std::io::Error::other("the program has ended"))
+        }
+        (ThreadOp::Resize { cols, rows, .. }, Some(terminal)) => {
+            terminal.resize(cols, rows).map(|()| OpResult::Done)
+        }
+        (ThreadOp::Report { bytes, .. }, Some(terminal)) => {
+            terminal.report(bytes).map(|()| OpResult::Done)
+        }
+        (ThreadOp::Resize { .. } | ThreadOp::Report { .. }, None) => Ok(OpResult::Done),
+        (ThreadOp::Scroll { lines, .. }, _) => {
+            view.scroll(lines);
             Ok(OpResult::Done)
         }
-        ThreadOp::Select {
-            mode,
-            column,
-            row,
-            right,
-            ..
-        } => {
-            terminal.select(terminal_mode(mode), column, row, right);
+        (
+            ThreadOp::Select {
+                mode,
+                column,
+                row,
+                right,
+                ..
+            },
+            _,
+        ) => {
+            view.select(terminal_mode(mode), column, row, right);
             Ok(OpResult::Done)
         }
-        ThreadOp::Copy { .. } => Ok(terminal.selection().map_or(OpResult::Done, OpResult::Text)),
-        ThreadOp::Screen {
-            scrollback, lines, ..
-        } => screen_result(
-            scrollback,
-            lines,
-            || terminal.transcript(),
-            || terminal.screen(),
-        ),
+        (ThreadOp::Copy { .. }, _) => Ok(view.selection().map_or(OpResult::Done, OpResult::Text)),
+        (
+            ThreadOp::Screen {
+                scrollback, lines, ..
+            },
+            _,
+        ) => screen_result(scrollback, lines, || view.transcript(), || view.screen()),
         _ => Err(std::io::Error::other("not a terminal operation")),
     }
 }
@@ -409,12 +396,9 @@ impl Workspace {
     #[must_use]
     pub fn grid(&self, id: &ThreadId, terminal: Option<u32>) -> Option<kg_terminal::Grid> {
         if let Some(number) = terminal {
-            return super::extra::find(self, id, number).map(Terminal::grid);
+            return super::extra::find(self, id, number).map(|terminal| terminal.view().grid());
         }
-        self.terminals.get(id).map(|shown| match shown {
-            Shown::Running(terminal) => terminal.grid(),
-            Shown::Ended(finished) => finished.grid(),
-        })
+        self.terminals.get(id).map(|shown| shown.view().grid())
     }
 }
 

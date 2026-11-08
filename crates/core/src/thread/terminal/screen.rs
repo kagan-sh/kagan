@@ -104,7 +104,7 @@ fn watch(cx: &mut Context<Workspace>) {
                         }
                     };
                     following = true;
-                    if terminal.take_changed() {
+                    if terminal.view().take_changed() {
                         cx.emit(WorkspaceEvent::Screen(id.clone(), None));
                     }
                     if let Some(thread) = workspace.threads.get(id) {

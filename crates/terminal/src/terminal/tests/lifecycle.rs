@@ -23,9 +23,9 @@ fn the_screen_shows_what_the_shell_prints() {
     terminal.write(marker_command()).unwrap();
     let frame = wait_for(&terminal, "kagan-marker");
     assert!(frame.contains("kagan-marker"), "{frame:?}");
-    assert!(terminal.take_changed());
-    assert!(!terminal.take_changed());
-    let grid = terminal.grid();
+    assert!(terminal.view().take_changed());
+    assert!(!terminal.view().take_changed());
+    let grid = terminal.view().grid();
     assert_eq!((grid.lines.len(), grid.lines[0].len()), (24, 80));
     assert!(grid.lines.iter().any(|line| {
         line.iter()
@@ -192,8 +192,8 @@ fn a_resize_changes_the_screen_and_marks_it_changed() {
     let terminal = Terminal::spawn(shell_launch(), 80, 24).unwrap();
     let reap = Reap(terminal.process_id());
     terminal.resize(100, 40).unwrap();
-    assert!(terminal.take_changed());
-    assert!(terminal.screen().contains("\x1b[40;1H"));
+    assert!(terminal.view().take_changed());
+    assert!(terminal.view().screen().contains("\x1b[40;1H"));
     quit_within(terminal, Duration::from_secs(3));
     drop(reap);
 }
@@ -274,7 +274,7 @@ fn start_background_job(terminal: &Terminal) -> u32 {
     terminal.write(b"echo job:$! end\n".to_vec()).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
-        let screen = terminal.screen();
+        let screen = terminal.view().screen();
         let pid = screen.match_indices("job:").find_map(|(at, _)| {
             let digits: String = screen[at + 4..]
                 .chars()
