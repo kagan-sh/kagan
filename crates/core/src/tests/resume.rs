@@ -192,7 +192,7 @@ async fn a_restart_resumes_the_conversation_without_start_again(cx: &mut TestApp
     let conversation = after(&ran(&run).0, "--session-id").unwrap();
     said(&config, &conversation);
     std::fs::remove_file(run.join("out").join("env")).unwrap();
-    let _config_dir = ClaudeConfig::set(&config);
+    let _config_dir = EnvVar::set("CLAUDE_CONFIG_DIR", &config);
     let fixture = fixture.restart(cx, |_| {}).await;
     cx.run_until_parked();
     assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
@@ -201,30 +201,79 @@ async fn a_restart_resumes_the_conversation_without_start_again(cx: &mut TestApp
     drop(fixture);
 }
 
-struct ClaudeConfig {
+struct EnvVar {
+    name: &'static str,
     previous: Option<std::ffi::OsString>,
 }
 
-impl ClaudeConfig {
-    fn set(dir: &Path) -> Self {
-        let previous = std::env::var_os("CLAUDE_CONFIG_DIR");
+impl EnvVar {
+    fn set(name: &'static str, dir: &Path) -> Self {
+        let previous = std::env::var_os(name);
         // SAFETY: nextest runs each test in its own process, so this test owns the variable
         // while the guard is alive and restores it on drop.
-        unsafe { std::env::set_var("CLAUDE_CONFIG_DIR", dir) };
-        Self { previous }
+        unsafe { std::env::set_var(name, dir) };
+        Self { name, previous }
     }
 }
 
-impl Drop for ClaudeConfig {
+impl Drop for EnvVar {
     fn drop(&mut self) {
-        // SAFETY: see `ClaudeConfig::set`.
+        // SAFETY: see `EnvVar::set`.
         unsafe {
             match self.previous.take() {
-                Some(value) => std::env::set_var("CLAUDE_CONFIG_DIR", value),
-                None => std::env::remove_var("CLAUDE_CONFIG_DIR"),
+                Some(value) => std::env::set_var(self.name, value),
+                None => std::env::remove_var(self.name),
             }
         }
     }
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_restart_resumes_the_codex_conversation_without_start_again(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = fixture.dir.path().join("codex-home");
+    let run = fixture.dir.path().join("codex-run");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = began(&home, fixture.dir.path(), later());
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _home = EnvVar::set("CODEX_HOME", &home);
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(super::pid_of(&id, cx).is_some());
+    let args = ran(&run).0;
+    assert!(
+        args.ends_with(&["resume".to_owned(), conversation]),
+        "{args:?}"
+    );
+    drop(fixture);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_restart_resumes_the_cursor_conversation_without_start_again(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("cursor-run");
+    let program = fake_agent(&run, "cursor-agent");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    let conversation = after(&ran(&run).0, "--new-session-id").expect("a conversation id");
+    let config = fixture.dir.path().join("cursor");
+    wrote(
+        &config,
+        &dunce::canonicalize(fixture.dir.path()).unwrap(),
+        &conversation,
+    );
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _config = EnvVar::set("CURSOR_CONFIG_DIR", &config);
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(super::pid_of(&id, cx).is_some());
+    assert_eq!(after(&ran(&run).0, "--resume"), Some(conversation));
+    drop(fixture);
 }
 
 #[cfg(unix)]
