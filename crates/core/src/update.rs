@@ -17,8 +17,6 @@ use serde::Deserialize;
 use crate::host::database::{Database, Result};
 pub use install::Target;
 
-pub(crate) const PREFERENCE: &str = "update-check";
-
 // A test build can name its own key. Nothing at runtime can replace it.
 const KEY: &str = match option_env!("KG_UPDATE_KEY") {
     Some(key) => key,
@@ -330,7 +328,7 @@ pub(crate) async fn run(database: &Database, op: UpdateOp, cx: &mut AsyncApp) ->
 
 async fn automatic_on(database: &Database) -> bool {
     database
-        .call(|store| store.setting(PREFERENCE))
+        .call(|store| store.setting(kg_domain::prefs::UPDATE_CHECK))
         .await
         .ok()
         .flatten()

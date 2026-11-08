@@ -27,7 +27,7 @@ impl Kagan {
         let mut this = Self {
             start: start::StartState::default(),
             screen: screen::Screen::new(),
-            terminal_font_size: super::font::TERMINAL_FONT_DEFAULT,
+            terminal_font_size: kg_domain::prefs::TERMINAL_FONT_DEFAULT,
             terminal_font_epoch: 0,
             window_title: TITLE.to_owned(),
             sidebar,

@@ -78,10 +78,10 @@ impl Kagan {
             next.right_width = *width;
         }
         if next.left_width != self.layout.left_width {
-            save(&key("left-width"), next.left_width, cx);
+            save(&key(kg_domain::prefs::LEFT_WIDTH), next.left_width, cx);
         }
         if next.right_width != self.layout.right_width {
-            save(&key("right-width"), next.right_width, cx);
+            save(&key(kg_domain::prefs::RIGHT_WIDTH), next.right_width, cx);
         }
         self.layout = next;
         cx.notify();

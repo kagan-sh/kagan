@@ -311,7 +311,7 @@ impl Kagan {
         };
         let confirm = Workspace::dispatch(
             Op::Preference(PreferenceOp::Get {
-                key: "confirm-archive".into(),
+                key: kg_domain::prefs::CONFIRM_ARCHIVE.into(),
             }),
             cx,
         );

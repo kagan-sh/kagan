@@ -64,7 +64,7 @@ pub(super) fn group(kagan: &Kagan, cx: &App) -> Group {
                     |on, _, cx| {
                         save(
                             Op::Preference(PreferenceOp::Set {
-                                key: "update-check".into(),
+                                key: kg_domain::prefs::UPDATE_CHECK.into(),
                                 value: json!(on),
                             }),
                             cx,

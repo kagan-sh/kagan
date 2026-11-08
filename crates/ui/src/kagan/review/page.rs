@@ -146,7 +146,7 @@ impl Kagan {
             .is_some_and(|mark| mark != &review.revision)
         {
             self.changes.viewed.remove(&key);
-            super::super::layout::save("review-viewed", &self.changes.viewed, cx);
+            super::super::layout::save(kg_domain::prefs::REVIEW_VIEWED, &self.changes.viewed, cx);
         }
     }
 
@@ -199,7 +199,11 @@ impl Kagan {
                     }
                 }
                 if dirty {
-                    super::super::layout::save("review-viewed", &this.changes.viewed, cx);
+                    super::super::layout::save(
+                        kg_domain::prefs::REVIEW_VIEWED,
+                        &this.changes.viewed,
+                        cx,
+                    );
                     cx.notify();
                 }
             });
@@ -219,7 +223,7 @@ impl Kagan {
         if self.changes.viewed.remove(&key).is_none() {
             self.changes.viewed.insert(key, review.revision.clone());
         }
-        super::super::layout::save("review-viewed", &self.changes.viewed, cx);
+        super::super::layout::save(kg_domain::prefs::REVIEW_VIEWED, &self.changes.viewed, cx);
         cx.notify();
     }
 

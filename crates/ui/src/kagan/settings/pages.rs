@@ -108,7 +108,7 @@ fn general(agent: bool, notify: bool) -> Group {
                     |on, _, cx| {
                         save(
                             Op::Preference(PreferenceOp::Set {
-                                key: "agent-integration".into(),
+                                key: kg_domain::prefs::AGENT_INTEGRATION.into(),
                                 value: json!(on),
                             }),
                             cx,
@@ -123,7 +123,7 @@ fn general(agent: bool, notify: bool) -> Group {
                 switch("notify", "Notifications", notify, |on, _, cx| {
                     save(
                         Op::Preference(PreferenceOp::Set {
-                            key: "notify".into(),
+                            key: kg_domain::prefs::NOTIFY.into(),
                             value: json!(on),
                         }),
                         cx,
@@ -142,7 +142,7 @@ fn plugin_status_row(on: bool) -> Row {
         switch("plugin-status", "Plugin status", on, |on, _, cx| {
             save(
                 Op::Preference(PreferenceOp::Set {
-                    key: "plugin-status".into(),
+                    key: kg_domain::prefs::PLUGIN_STATUS.into(),
                     value: json!(on),
                 }),
                 cx,
@@ -158,7 +158,7 @@ fn terminal_size(kagan: &Kagan) -> Row {
         .child(control(
             "terminal-size-smaller",
             Facts {
-                disabled: size <= 9,
+                disabled: size <= kg_domain::prefs::TERMINAL_FONT_MIN,
                 ..Facts::button("Smaller terminal text")
             },
             Button::new("button-terminal-size-smaller")
@@ -166,14 +166,14 @@ fn terminal_size(kagan: &Kagan) -> Row {
                 .outline()
                 .label("−")
                 .accessibility_label("Smaller terminal text")
-                .disabled(size <= 9)
+                .disabled(size <= kg_domain::prefs::TERMINAL_FONT_MIN)
                 .on_click(super::super::controls::dispatch(super::super::Smaller)),
         ))
         .child(div().child(format!("{size} pt")))
         .child(control(
             "terminal-size-bigger",
             Facts {
-                disabled: size >= 24,
+                disabled: size >= kg_domain::prefs::TERMINAL_FONT_MAX,
                 ..Facts::button("Bigger terminal text")
             },
             Button::new("button-terminal-size-bigger")
@@ -181,7 +181,7 @@ fn terminal_size(kagan: &Kagan) -> Row {
                 .outline()
                 .label("+")
                 .accessibility_label("Bigger terminal text")
-                .disabled(size >= 24)
+                .disabled(size >= kg_domain::prefs::TERMINAL_FONT_MAX)
                 .on_click(super::super::controls::dispatch(super::super::Bigger)),
         ));
     row(
