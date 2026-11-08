@@ -42,7 +42,8 @@ async fn status_idle(
     status(this, thread, ThreadStatus::Idle, cx).await
 }
 
-/// Runs a stopped or recovered thread's program again, in the folder it had. Nothing else calls this.
+/// Runs a stopped or recovered thread's program again, in the folder it had.
+/// Opening the app calls this for a thread the last process left running.
 pub(crate) async fn start_again(
     this: &WeakEntity<Workspace>,
     id: ThreadId,
@@ -55,7 +56,10 @@ pub(crate) async fn start_again(
             "restore the thread before starting it again".into(),
         ));
     }
-    if thread.read_with(cx, |thread, _| thread.running()) {
+    let blocked = this
+        .update(cx, |workspace, cx| program_is_live(workspace, &id, cx))
+        .map_err(closed)?;
+    if blocked {
         return Err(OpError::Invalid("the program is still running".into()));
     }
     let database = crate::workspace::database(this, cx)?;
@@ -182,6 +186,22 @@ pub(crate) async fn exited(
     }
     Ok(OpResult::Done)
 }
+/// A recovered thread has the status of a running program and no terminal in this process.
+fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> bool {
+    let shown = workspace.terminals.get(id);
+    if matches!(shown, Some(Shown::Running(_))) {
+        return true;
+    }
+    let status = workspace
+        .threads
+        .get(id)
+        .map(|thread| thread.read(cx).record.status);
+    matches!(
+        status,
+        Some(ThreadStatus::Active | ThreadStatus::Starting | ThreadStatus::Stopping)
+    ) && shown.is_some()
+}
+
 fn close_turn(
     open: bool,
     outcome: TurnOutcome,

@@ -13,6 +13,8 @@ use crate::workspace::closed;
 
 use super::agent::{Known, Start};
 
+mod written;
+
 // Flags with which the person already picks the conversation, so kagan adds none of its own.
 const CLAUDE_FLAGS: &[&str] = &[
     "-c",
@@ -31,6 +33,24 @@ const CLAUDE_FLAGS: &[&str] = &[
 const CODEX_SUBCOMMANDS: &[&str] = &["resume", "fork"];
 
 const CURSOR_FLAGS: &[&str] = &["--continue", "--new-session-id", "--resume"];
+
+const OPENCODE_FLAGS: &[&str] = &["--session", "-s", "--continue", "-c"];
+
+const PI_FLAGS: &[&str] = &[
+    "--session",
+    "--session-id",
+    "--continue",
+    "-c",
+    "--resume",
+    "-r",
+    "--fork",
+    "--no-session",
+];
+
+const KIMI_FLAGS: &[&str] = &["--session", "-S", "--continue", "-c"];
+
+const KIMI_FRESH: &str =
+    "kagan could not tell which Kimi conversation was this thread's, so Kimi starts a new one.";
 
 const CODEX_FRESH: &str =
     "kagan could not tell which Codex conversation was this thread's, so Codex starts a new one.";
@@ -80,12 +100,27 @@ pub(super) async fn args(
     match known {
         Known::Claude if picks_claude(args) => Ok((Vec::new(), None)),
         Known::Claude => claude(this, record, start, cx).await,
-        Known::Codex if picks_codex(args) || start == Start::First => Ok((Vec::new(), None)),
+        Known::Codex if picks_codex(args) || start == Start::First => {
+            if start == Start::First && !picks_codex(args) {
+                written::note_when_written(this, record, folder, false, cx);
+            }
+            Ok((Vec::new(), None))
+        }
         Known::Codex if !args.is_empty() => Ok((Vec::new(), Some(CODEX_FRESH))),
         Known::Codex => codex(this, record, folder, cx).await,
         Known::Cursor if picks_cursor(args) => Ok((Vec::new(), None)),
         Known::Cursor => cursor(this, record, folder, start, cx).await,
-        Known::Kimi | Known::OpenCode | Known::Pi => Ok((Vec::new(), None)),
+        Known::OpenCode if picks(args, OPENCODE_FLAGS) => Ok((Vec::new(), None)),
+        Known::OpenCode => named(this, record, "--session", start, cx).await,
+        Known::Pi if picks(args, PI_FLAGS) => Ok((Vec::new(), None)),
+        Known::Pi => named(this, record, "--session-id", start, cx).await,
+        Known::Kimi if picks(args, KIMI_FLAGS) || start == Start::First => {
+            if start == Start::First && !picks(args, KIMI_FLAGS) {
+                written::note_when_written(this, record, folder, true, cx);
+            }
+            Ok((Vec::new(), None))
+        }
+        Known::Kimi => kimi(this, record, folder, cx).await,
     }
 }
 
@@ -135,6 +170,7 @@ async fn codex(
         .call(move |store| Ok((store.conversation(&id)?, store.last_started(&id)?)))
         .await?;
     let folder = folder.to_owned();
+    let scan = folder.clone();
     let found = cx
         .background_spawn(async move {
             let sessions = codex_home
@@ -142,10 +178,11 @@ async fn codex(
                 .join("sessions");
             stored
                 .filter(|conversation| codex_kept(&sessions, *conversation))
-                .or_else(|| codex_started(&sessions, &folder, since?))
+                .or_else(|| codex_started(&sessions, &scan, since?))
         })
         .await;
     let Some(conversation) = found else {
+        written::note_when_written(this, record, &folder, false, cx);
         return Ok((Vec::new(), Some(CODEX_FRESH)));
     };
     if stored != Some(conversation) {
@@ -213,8 +250,81 @@ async fn remember(
     ))
 }
 
+async fn named(
+    this: &WeakEntity<Workspace>,
+    record: &kg_domain::Thread,
+    flag: &str,
+    start: Start,
+    cx: &mut AsyncApp,
+) -> Result<(Vec<OsString>, Option<&'static str>)> {
+    let database = crate::workspace::database(this, cx)?;
+    let id = record.id.clone();
+    let stored = database.call(move |store| store.conversation(&id)).await?;
+    let conversation = stored.unwrap_or_else(Conversation::fresh);
+    if stored.is_none() {
+        let id = record.id.clone();
+        database
+            .call(move |store| store.set_conversation(&id, conversation))
+            .await?;
+    }
+    Ok((
+        resume(flag, conversation),
+        (stored.is_none() && start == Start::Again).then_some(NO_CONVERSATION),
+    ))
+}
+
+async fn kimi(
+    this: &WeakEntity<Workspace>,
+    record: &kg_domain::Thread,
+    folder: &Path,
+    cx: &mut AsyncApp,
+) -> Result<(Vec<OsString>, Option<&'static str>)> {
+    let (database, home) = this
+        .update(cx, |workspace, _| {
+            (workspace.database.clone(), workspace.kimi_home.clone())
+        })
+        .map_err(closed)?;
+    let id = record.id.clone();
+    let (stored, since) = database
+        .call(move |store| Ok((store.conversation(&id)?, store.last_started(&id)?)))
+        .await?;
+    let folder = folder.to_owned();
+    let scan = folder.clone();
+    let found = cx
+        .background_spawn(async move {
+            let root = kimi_root(home)?;
+            stored
+                .filter(|conversation| kimi_kept(&root, *conversation))
+                .or_else(|| kimi_started(&root, &scan, since?))
+        })
+        .await;
+    let Some(conversation) = found else {
+        let notice = if stored.is_some() {
+            LOST_CONVERSATION
+        } else {
+            KIMI_FRESH
+        };
+        written::note_when_written(this, record, &folder, true, cx);
+        return Ok((Vec::new(), Some(notice)));
+    };
+    if stored != Some(conversation) {
+        let id = record.id.clone();
+        database
+            .call(move |store| store.set_conversation(&id, conversation))
+            .await?;
+    }
+    Ok((kimi_resume(conversation), None))
+}
+
 fn resume(word: &str, conversation: Conversation) -> Vec<OsString> {
     vec![OsString::from(word), conversation.to_string().into()]
+}
+
+fn kimi_resume(conversation: Conversation) -> Vec<OsString> {
+    vec![
+        OsString::from("--session"),
+        format!("session_{conversation}").into(),
+    ]
 }
 
 fn picks(args: &[OsString], flags: &[&str]) -> bool {
@@ -255,6 +365,55 @@ fn cursor_root(set: Option<PathBuf>) -> Option<PathBuf> {
     home("CURSOR_CONFIG_DIR", ".cursor")
 }
 
+fn kimi_root(set: Option<PathBuf>) -> Option<PathBuf> {
+    set.or_else(|| home("KIMI_CODE_HOME", ".kimi-code"))
+}
+
+// Kimi Code writes `sessions/<workspace>/session_<uuid>/state.json`. `--session` resumes that id
+// and does not create one, so the id has to be read from the file. The layout is what Kimi Code
+// 2.4 writes, and what herdr resumes with `kimi --session <id>`.
+fn kimi_kept(root: &Path, conversation: Conversation) -> bool {
+    let name = format!("session_{conversation}");
+    entries(&root.join("sessions"))
+        .any(|workspace| workspace.join(&name).join("state.json").is_file())
+}
+
+fn kimi_started(root: &Path, folder: &Path, since: kg_domain::Timestamp) -> Option<Conversation> {
+    let found = kimi_matches(root, folder, since);
+    (found.len() == 1).then(|| found[0])
+}
+
+pub(super) fn kimi_matches(
+    root: &Path,
+    folder: &Path,
+    since: kg_domain::Timestamp,
+) -> Vec<Conversation> {
+    let folder = dunce::canonicalize(folder).ok();
+    entries(&root.join("sessions"))
+        .flat_map(|workspace| entries(&workspace))
+        .filter_map(|dir| kimi_state(&dir.join("state.json")))
+        .filter(move |(_, cwd, created_at)| {
+            *created_at >= since.0 && dunce::canonicalize(cwd).ok() == folder
+        })
+        .map(|(id, _, _)| id)
+        .collect()
+}
+
+#[derive(Deserialize)]
+struct KimiState {
+    id: String,
+    cwd: PathBuf,
+    #[serde(rename = "createdAt")]
+    created_at: i64,
+}
+
+fn kimi_state(file: &Path) -> Option<(Conversation, PathBuf, i64)> {
+    let text = std::fs::read_to_string(file).ok()?;
+    let state: KimiState = serde_json::from_str(&text).ok()?;
+    let id = state.id.strip_prefix("session_")?.parse().ok()?;
+    Some((id, state.cwd, state.created_at))
+}
+
 fn home(variable: &str, folder: &str) -> Option<PathBuf> {
     std::env::var_os(variable)
         .filter(|dir| !dir.is_empty())
@@ -289,18 +448,29 @@ fn codex_kept(sessions: &Path, conversation: Conversation) -> bool {
 // each file names its folder and its start in UTC; the folder names are local dates, so the day
 // before the start is read too. Two candidates, or none, find nothing.
 fn codex_started(sessions: &Path, folder: &Path, since: Timestamp) -> Option<Conversation> {
-    let folder = dunce::canonicalize(folder).ok()?;
-    let since = DateTime::<Utc>::from_timestamp_millis(since.0)?;
-    let mut found = days(sessions, since.date_naive().pred_opt()?)
+    let found = codex_matches(sessions, folder, since);
+    (found.len() == 1).then(|| found[0])
+}
+
+pub(super) fn codex_matches(sessions: &Path, folder: &Path, since: Timestamp) -> Vec<Conversation> {
+    let Some(folder) = dunce::canonicalize(folder).ok() else {
+        return Vec::new();
+    };
+    let Some(since) = DateTime::<Utc>::from_timestamp_millis(since.0) else {
+        return Vec::new();
+    };
+    let Some(first) = since.date_naive().pred_opt() else {
+        return Vec::new();
+    };
+    days(sessions, first)
         .flat_map(|day| entries(&day))
         .filter(|file| file.extension() == Some(OsStr::new("jsonl")))
         .filter_map(|file| codex_meta(&file))
         .filter(|(meta, started)| {
             *started >= since && dunce::canonicalize(&meta.cwd).is_ok_and(|cwd| cwd == folder)
         })
-        .map(|(meta, _)| meta.id);
-    let one = found.next()?;
-    found.next().is_none().then_some(one)
+        .map(|(meta, _)| meta.id)
+        .collect()
 }
 
 fn codex_meta(file: &Path) -> Option<(CodexMeta, DateTime<Utc>)> {

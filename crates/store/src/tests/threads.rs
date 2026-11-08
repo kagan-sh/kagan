@@ -236,6 +236,71 @@ fn set_title_stores_the_title() {
 }
 
 #[test]
+fn claim_conversation_waits_for_this_start_and_refuses_another_threads_id() {
+    let mut store = store();
+    let mut running = thread("thr_1", 1);
+    running.status = ThreadStatus::Active;
+    let mut other = thread("thr_2", 2);
+    other.status = ThreadStatus::Active;
+    store.put_thread(&running).unwrap();
+    store.put_thread(&other).unwrap();
+    store
+        .append_events(&running.id, Timestamp(10), [EventKind::Started])
+        .unwrap();
+    store
+        .append_events(&other.id, Timestamp(11), [EventKind::Started])
+        .unwrap();
+    let first = Conversation::fresh();
+    let second = Conversation::fresh();
+    assert!(
+        !store
+            .claim_conversation(&running.id, first, None, Timestamp(9))
+            .unwrap()
+    );
+    store
+        .set_thread_status(&running.id, ThreadStatus::Idle, Timestamp(12))
+        .unwrap();
+    assert!(
+        !store
+            .claim_conversation(&running.id, first, None, Timestamp(10))
+            .unwrap()
+    );
+    store
+        .set_thread_status(&running.id, ThreadStatus::Active, Timestamp(13))
+        .unwrap();
+    assert!(
+        store
+            .claim_conversation(&running.id, first, None, Timestamp(10))
+            .unwrap()
+    );
+    assert_eq!(store.conversation(&running.id).unwrap(), Some(first));
+    assert!(
+        !store
+            .claim_conversation(&running.id, second, None, Timestamp(10))
+            .unwrap()
+    );
+    assert!(
+        store
+            .claim_conversation(&running.id, second, Some(first), Timestamp(10))
+            .unwrap()
+    );
+    assert_eq!(store.conversation(&running.id).unwrap(), Some(second));
+    assert!(
+        !store
+            .claim_conversation(&other.id, second, None, Timestamp(11))
+            .unwrap()
+    );
+    assert_eq!(store.conversation(&other.id).unwrap(), None);
+    let third = Conversation::fresh();
+    assert!(
+        store
+            .claim_conversation(&other.id, third, None, Timestamp(11))
+            .unwrap()
+    );
+    assert_eq!(store.conversation_ids().unwrap().len(), 2);
+}
+
+#[test]
 fn a_thread_keeps_its_conversation() {
     let store = store();
     store.put_thread(&thread("thr_1", 1)).unwrap();

@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui_kit::{App, Task};
-use kg_domain::{Op, OpError};
+use kg_domain::{Op, OpError, ThreadStatus};
 
 use crate::host::database::Result;
 
@@ -21,6 +21,18 @@ impl Workspace {
     }
     pub fn stop_for_quit(cx: &mut App) -> Task<Result<()>> {
         let workspace = Self::global(cx);
+        let resume: Vec<_> = workspace
+            .read(cx)
+            .threads
+            .iter()
+            .filter(|(_, thread)| {
+                matches!(
+                    thread.read(cx).record.status,
+                    ThreadStatus::Active | ThreadStatus::Starting
+                )
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
         let ids: Vec<_> = workspace
             .read(cx)
             .threads
@@ -28,20 +40,32 @@ impl Workspace {
             .filter(|(_, thread)| thread.read(cx).running())
             .map(|(id, _)| id.clone())
             .collect();
-        workspace.update(cx, |workspace, _| {
-            for id in &ids {
-                workspace
-                    .stopping
-                    .insert(id.clone(), crate::thread::StopReason::Quit);
-            }
-        });
-        let stops: Vec<_> = ids
-            .iter()
-            .map(|id| Self::dispatch(Op::Thread(kg_domain::ThreadOp::Stop { id: id.clone() }), cx))
-            .collect();
+        let database = workspace.read(cx).database.clone();
         cx.spawn(async move |cx| {
             let deadline = cx.background_executor().timer(QUIT_DEADLINE);
             let work = async {
+                if !resume.is_empty() {
+                    database
+                        .call(move |store| store.remember_resume(&resume))
+                        .await?;
+                }
+                let stops: Vec<_> = cx.update(|cx| {
+                    workspace.update(cx, |workspace, _| {
+                        for id in &ids {
+                            workspace
+                                .stopping
+                                .insert(id.clone(), crate::thread::StopReason::Quit);
+                        }
+                    });
+                    ids.iter()
+                        .map(|id| {
+                            Self::dispatch(
+                                Op::Thread(kg_domain::ThreadOp::Stop { id: id.clone() }),
+                                cx,
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                });
                 let mut stopped = Ok(());
                 for stop in stops {
                     if let Err(error) = stop.await {

@@ -184,22 +184,96 @@ async fn agent_integration_off_adds_no_conversation_on_start_again(cx: &mut Test
 
 #[cfg(unix)]
 #[gpui_kit::test]
-async fn a_restart_waits_for_start_again_and_then_resumes(cx: &mut TestAppContext) {
+async fn a_restart_resumes_the_conversation_without_start_again(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let config = claude_config(&fixture, cx);
     let run = fixture.dir.path().join("claude-run");
     let (id, _reap) = started(&fixture, &claude_line(&run), cx).await;
     let conversation = after(&ran(&run).0, "--session-id").unwrap();
     said(&config, &conversation);
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _config_dir = EnvVar::set("CLAUDE_CONFIG_DIR", &config);
     let fixture = fixture.restart(cx, |_| {}).await;
-    claude_config(&fixture, cx);
     cx.run_until_parked();
-    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Error);
-    assert!(super::pid_of(&id, cx).is_none());
-    assert_eq!(
-        after(&start_again(&id, &run, cx).await, "--resume"),
-        Some(conversation)
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(super::pid_of(&id, cx).is_some());
+    assert_eq!(after(&ran(&run).0, "--resume"), Some(conversation));
+    drop(fixture);
+}
+
+struct EnvVar {
+    name: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl EnvVar {
+    fn set(name: &'static str, dir: &Path) -> Self {
+        let previous = std::env::var_os(name);
+        // SAFETY: nextest runs each test in its own process, so this test owns the variable
+        // while the guard is alive and restores it on drop.
+        unsafe { std::env::set_var(name, dir) };
+        Self { name, previous }
+    }
+}
+
+impl Drop for EnvVar {
+    fn drop(&mut self) {
+        // SAFETY: see `EnvVar::set`.
+        unsafe {
+            match self.previous.take() {
+                Some(value) => std::env::set_var(self.name, value),
+                None => std::env::remove_var(self.name),
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_restart_resumes_the_codex_conversation_without_start_again(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = fixture.dir.path().join("codex-home");
+    let run = fixture.dir.path().join("codex-run");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = began(&home, fixture.dir.path(), later());
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _home = EnvVar::set("CODEX_HOME", &home);
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(super::pid_of(&id, cx).is_some());
+    let args = ran(&run).0;
+    assert!(
+        args.ends_with(&["resume".to_owned(), conversation]),
+        "{args:?}"
     );
+    drop(fixture);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_restart_resumes_the_cursor_conversation_without_start_again(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let run = fixture.dir.path().join("cursor-run");
+    let program = fake_agent(&run, "cursor-agent");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    let conversation = after(&ran(&run).0, "--new-session-id").expect("a conversation id");
+    let config = fixture.dir.path().join("cursor");
+    wrote(
+        &config,
+        &dunce::canonicalize(fixture.dir.path()).unwrap(),
+        &conversation,
+    );
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _config = EnvVar::set("CURSOR_CONFIG_DIR", &config);
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(super::pid_of(&id, cx).is_some());
+    assert_eq!(after(&ran(&run).0, "--resume"), Some(conversation));
+    drop(fixture);
 }
 
 #[cfg(unix)]
@@ -220,6 +294,9 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
         ("cursor-agent", "--continue"),
         ("agent", "--new-session-id abc"),
         ("agent", "login"),
+        ("opencode", "--session abc"),
+        ("pi", "--continue"),
+        ("kimi", "--session abc"),
     ];
     for (number, (agent, rest)) in lines.into_iter().enumerate() {
         let run = fixture.dir.path().join(format!("run-{number}"));
@@ -548,4 +625,339 @@ async fn start_again_on_codex_starts_a_new_conversation_when_none_or_two_match(
         "{notices:?}"
     );
     assert_eq!(notices.len(), 2);
+}
+
+fn kimi_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    let home = fixture.dir.path().join("kimi-home");
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.kimi_home = Some(home.clone());
+    });
+    home
+}
+
+fn kimi_session(home: &Path, folder: &Path) -> String {
+    let conversation = Conversation::fresh().to_string();
+    let dir = home
+        .join("sessions")
+        .join("wd")
+        .join(format!("session_{conversation}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let state = json!({
+        "id": format!("session_{conversation}"),
+        "cwd": folder,
+        "createdAt": i64::try_from(now).unwrap() + 3_600_000,
+    });
+    std::fs::write(dir.join("state.json"), format!("{state}\n")).unwrap();
+    conversation
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_keeps_the_opencode_and_pi_session_it_named(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let open = fixture.dir.path().join("opencode-run");
+    let program = fake_agent(&open, "opencode");
+    let (open_id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    let open_session = after(&ran(&open).0, "--session").unwrap();
+    stop(&open_id, cx).await;
+    assert_eq!(
+        after(&start_again(&open_id, &open, cx).await, "--session"),
+        Some(open_session.clone())
+    );
+
+    let pi = fixture.dir.path().join("pi-run");
+    let program = fake_agent(&pi, "pi");
+    let (pi_id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    let pi_session = after(&ran(&pi).0, "--session-id").unwrap();
+    stop(&pi_id, cx).await;
+    assert_eq!(
+        after(&start_again(&pi_id, &pi, cx).await, "--session-id"),
+        Some(pi_session.clone())
+    );
+
+    std::fs::remove_file(open.join("out").join("env")).unwrap();
+    std::fs::remove_file(pi.join("out").join("env")).unwrap();
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(after(&ran(&open).0, "--session"), Some(open_session));
+    assert_eq!(after(&ran(&pi).0, "--session-id"), Some(pi_session));
+    drop(fixture);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_resumes_the_one_kimi_conversation_in_its_folder(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-run");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = kimi_session(&home, fixture.dir.path());
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(
+        again.ends_with(&["--session".to_owned(), format!("session_{conversation}")]),
+        "{again:?}"
+    );
+    assert!(notices(&id, cx).await.is_empty());
+
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _home = EnvVar::set("KIMI_CODE_HOME", &home);
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert_eq!(
+        after(&ran(&run).0, "--session"),
+        Some(format!("session_{conversation}"))
+    );
+    drop(fixture);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_on_kimi_starts_a_new_conversation_when_two_match(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-two");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    kimi_session(&home, fixture.dir.path());
+    kimi_session(&home, fixture.dir.path());
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(after(&again, "--session").is_none(), "{again:?}");
+    assert!(
+        notices(&id, cx)
+            .await
+            .iter()
+            .any(|text| text.contains("could not tell which Kimi conversation"))
+    );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_kimi_conversation_is_kept_once_its_file_appears(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-keep");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = kimi_session(&home, fixture.dir.path());
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.run_until_parked();
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert_eq!(
+        store.conversation(&id).unwrap().unwrap().to_string(),
+        conversation
+    );
+    let other = kimi_session(&home, fixture.dir.path());
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.run_until_parked();
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(
+        again.ends_with(&["--session".to_owned(), format!("session_{conversation}")]),
+        "{again:?}"
+    );
+    assert!(!again.iter().any(|arg| arg.contains(&other)));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_codex_conversation_is_kept_once_its_file_appears(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = codex_home(&fixture, cx);
+    let run = fixture.dir.path().join("codex-keep");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = began(&home, fixture.dir.path(), later());
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.run_until_parked();
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert_eq!(
+        store.conversation(&id).unwrap().unwrap().to_string(),
+        conversation
+    );
+    let other = began(&home, fixture.dir.path(), later());
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.run_until_parked();
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(
+        again.ends_with(&["resume".to_owned(), conversation]),
+        "{again:?}"
+    );
+    assert!(!again.iter().any(|arg| arg == &other));
+}
+
+fn tick(cx: &mut TestAppContext) {
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.run_until_parked();
+}
+
+fn remembered(fixture: &Fixture, id: &ThreadId) -> Option<String> {
+    kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3"))
+        .unwrap()
+        .conversation(id)
+        .unwrap()
+        .map(|conversation| conversation.to_string())
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_kimi_file_that_appears_after_an_empty_look_is_saved(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-later");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), None);
+    let conversation = kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), Some(conversation));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn two_kimi_files_before_the_first_look_stay_unsaved(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-both");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    kimi_session(&home, fixture.dir.path());
+    kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), None);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn two_kimi_threads_in_one_folder_keep_different_conversations(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let one = fixture.dir.path().join("kimi-a");
+    let two = fixture.dir.path().join("kimi-b");
+    let first_program = fake_agent(&one, "kimi");
+    let second_program = fake_agent(&two, "kimi");
+    let (first, _one) = started(&fixture, &first_program.display().to_string(), cx).await;
+    let (second, _two) = started(&fixture, &second_program.display().to_string(), cx).await;
+    ran(&one);
+    ran(&two);
+    let earlier = kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    let saved = [remembered(&fixture, &first), remembered(&fixture, &second)];
+    assert_eq!(
+        saved
+            .iter()
+            .filter(|id| id.as_deref() == Some(earlier.as_str()))
+            .count(),
+        1,
+        "{saved:?}"
+    );
+    let later = kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    let saved = [remembered(&fixture, &first), remembered(&fixture, &second)];
+    assert!(saved.contains(&Some(earlier)), "{saved:?}");
+    assert!(saved.contains(&Some(later)), "{saved:?}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_lost_kimi_file_is_replaced_by_the_run_that_follows(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-lost");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), Some(conversation.clone()));
+    stop(&id, cx).await;
+    std::fs::remove_dir_all(
+        home.join("sessions")
+            .join("wd")
+            .join(format!("session_{conversation}")),
+    )
+    .unwrap();
+    let again = start_again(&id, &run, cx).await;
+    assert!(after(&again, "--session").is_none(), "{again:?}");
+    let replacement = kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), Some(replacement.clone()));
+    kimi_session(&home, fixture.dir.path());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), Some(replacement));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn two_codex_threads_in_one_folder_keep_different_conversations(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = codex_home(&fixture, cx);
+    let one = fixture.dir.path().join("codex-a");
+    let two = fixture.dir.path().join("codex-b");
+    let first_program = fake_agent(&one, "codex");
+    let second_program = fake_agent(&two, "codex");
+    let (first, _one) = started(&fixture, &first_program.display().to_string(), cx).await;
+    let (second, _two) = started(&fixture, &second_program.display().to_string(), cx).await;
+    ran(&one);
+    ran(&two);
+    let earlier = began(&home, fixture.dir.path(), later());
+    tick(cx);
+    let saved = [remembered(&fixture, &first), remembered(&fixture, &second)];
+    assert_eq!(
+        saved
+            .iter()
+            .filter(|id| id.as_deref() == Some(earlier.as_str()))
+            .count(),
+        1,
+        "{saved:?}"
+    );
+    let later = began(&home, fixture.dir.path(), later());
+    tick(cx);
+    let saved = [remembered(&fixture, &first), remembered(&fixture, &second)];
+    assert!(saved.contains(&Some(earlier)), "{saved:?}");
+    assert!(saved.contains(&Some(later)), "{saved:?}");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_lost_codex_file_is_replaced_by_the_run_that_follows(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = codex_home(&fixture, cx);
+    let run = fixture.dir.path().join("codex-lost");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = began(&home, fixture.dir.path(), later());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), Some(conversation.clone()));
+    stop(&id, cx).await;
+    forget(&home, &conversation);
+    let again = start_again(&id, &run, cx).await;
+    assert!(!again.contains(&conversation), "{again:?}");
+    let replacement = began(&home, fixture.dir.path(), later());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), Some(replacement.clone()));
+    began(&home, fixture.dir.path(), later());
+    tick(cx);
+    assert_eq!(remembered(&fixture, &id), Some(replacement));
 }

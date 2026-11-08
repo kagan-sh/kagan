@@ -62,7 +62,7 @@ What **Start again** continues:
 - If two Codex threads share a folder, or the line has other words after `codex`, Codex starts a new conversation, and the thread's events say so.
 - With agent integration off in Settings, the program starts fresh.
 
-Only you can start a program again. Restarting kagan does not start it.
+Restarting kagan starts a program again when it was still running, and continues a Claude Code, Codex, Cursor Agent, OpenCode, Pi, or Kimi Code conversation the same way Start again does. A program you stopped stays stopped.
 
 ## When a program ends
 
@@ -70,7 +70,7 @@ The line under the terminal says why. The thread keeps the last screen and its s
 
 - Exit code 0: the thread is idle.
 - Another exit code, or a signal: the thread fails and shows that it needs you.
-- kagan quit or crashed: the thread fails, and kagan saves no screen for that run.
+- kagan quit or crashed while the program was still running: kagan starts it again. The screen from that run is not kept. A program you had already asked to stop stays stopped, and the thread says kagan quit while it was running.
 
 If a very large screen does not fit, the thread keeps less of it and tells you.
 
