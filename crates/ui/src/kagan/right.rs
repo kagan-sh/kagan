@@ -16,6 +16,33 @@ pub(super) use tab::Tab;
 pub(super) const WIDTH: f32 = 320.;
 pub(super) const WIDTH_RANGE: (f32, f32) = (240., 560.);
 
+pub(super) struct Sidebar {
+    pub(super) slots: Vec<super::surface::Slot>,
+    pub(super) tab: Option<Tab>,
+    pub(super) menu: Option<(
+        gpui_kit::Entity<gpui_kit::component::menu::PopupMenu>,
+        gpui_kit::Subscription,
+    )>,
+    pub(super) add_focus: gpui_kit::FocusHandle,
+    pub(super) fill: Fill,
+    pub(super) panels: Vec<super::surface::Declared>,
+    pub(super) toggle_focus: gpui_kit::FocusHandle,
+}
+
+impl Sidebar {
+    pub(super) fn new(cx: &mut gpui_kit::App) -> Self {
+        Self {
+            slots: Vec::new(),
+            tab: None,
+            menu: None,
+            add_focus: cx.focus_handle().tab_stop(true),
+            fill: Fill::Column,
+            panels: Vec::new(),
+            toggle_focus: cx.focus_handle().tab_stop(true),
+        }
+    }
+}
+
 pub(super) fn header_focus(id: &str) -> String {
     format!("{id}-header-focus")
 }
@@ -80,7 +107,8 @@ pub(super) fn render(
 
 pub(super) fn selected_tab(kagan: &Kagan, cx: &App) -> Option<Tab> {
     let want = kagan
-        .right_tab
+        .right
+        .tab
         .clone()
         .or_else(|| kagan.default_right_tab(cx))?;
     if want.available(kagan, cx) {

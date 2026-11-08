@@ -104,11 +104,12 @@ impl Kagan {
             };
             self.browser.leave_thread(window, cx);
             if self
-                .right_tab
+                .right
+                .tab
                 .as_ref()
                 .is_some_and(|tab| matches!(tab, Tab::Browser | Tab::Terminal(_) | Tab::Preview))
             {
-                self.right_tab = None;
+                self.right.tab = None;
             }
             // A thread's page outlives the switch; the tab comes back with the thread.
             if self
@@ -144,10 +145,10 @@ impl Kagan {
                 self.tabs.views.push((*number, view, typed));
             }
         }
-        if self.right_tab.as_ref().is_some_and(
+        if self.right.tab.as_ref().is_some_and(
             |shown| matches!(shown, Tab::Terminal(number) if !numbers.contains(number)),
         ) {
-            self.right_tab = self.default_right_tab(cx);
+            self.right.tab = self.default_right_tab(cx);
         }
         if held {
             self.focus_right_tab(window, cx);
@@ -235,7 +236,7 @@ impl Kagan {
 
     /// The keyboard is in the right sidebar, which a hidden sidebar would strand.
     pub(super) fn right_holds_focus(&self, window: &Window, cx: &App) -> bool {
-        self.right_add_focus.is_focused(window)
+        self.right.add_focus.is_focused(window)
             || self.browser.holds_focus(window, cx)
             || self
                 .tabs
@@ -244,7 +245,8 @@ impl Kagan {
                 .is_some_and(|preview| preview.holds_focus(window, cx))
             || self.focused_terminal(window, cx).is_some()
             || self
-                .right_slots
+                .right
+                .slots
                 .iter()
                 .any(|slot| slot.focus.contains_focused(window, cx))
     }
@@ -295,8 +297,8 @@ impl Kagan {
     fn close_browser(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.tabs.browser = false;
         self.browser.close(window, cx);
-        if self.right_tab == Some(Tab::Browser) {
-            self.right_tab = self.default_right_tab(cx);
+        if self.right.tab == Some(Tab::Browser) {
+            self.right.tab = self.default_right_tab(cx);
         }
         self.focus_right_tab(window, cx);
         cx.notify();

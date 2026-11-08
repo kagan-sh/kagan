@@ -215,7 +215,7 @@ impl Kagan {
                         FocusReturn::Center | FocusReturn::LeftOverlay => {
                             this.focus_work(window, cx);
                         }
-                        FocusReturn::RightOverlay => window.focus(&this.right_toggle_focus, cx),
+                        FocusReturn::RightOverlay => window.focus(&this.right.toggle_focus, cx),
                     }
                 }
             });

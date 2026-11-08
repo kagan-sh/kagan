@@ -126,7 +126,7 @@ impl Kagan {
             if self.right_holds_focus(window, cx) {
                 self.focus_work(window, cx);
             }
-            self.right_fill = right::Fill::Column;
+            self.right.fill = right::Fill::Column;
             self.dismiss_overlay(Side::Right, window, cx);
             save(&key("right-sidebar"), false, cx);
             return;
@@ -151,7 +151,7 @@ impl Kagan {
 
     /// The center column is drawn. Full screen on the right replaces it.
     pub(in crate::kagan) fn center_drawn(&self) -> bool {
-        !(self.right_fill == right::Fill::Window && self.panes.right)
+        !(self.right.fill == right::Fill::Window && self.panes.right)
     }
 
     /// The right sidebar is on screen, as a column or as an overlay.

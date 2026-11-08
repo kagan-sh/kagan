@@ -53,8 +53,8 @@ impl Kagan {
         self.viewport = window.viewport_size().width;
         let hold = Hold {
             tool: self.tool.clone(),
-            right_slots: self.right_slots.clone(),
-            right_tab: self.right_tab.clone(),
+            slots: self.right.slots.clone(),
+            tab: self.right.tab.clone(),
             layout: self.layout,
         };
         self.screen.begin();
@@ -129,8 +129,8 @@ impl Kagan {
                 .update(cx, |sidebar, _| sidebar.set_return_tool(None));
             self.screen.rollback();
             self.tool = hold.tool;
-            self.right_slots = hold.right_slots;
-            self.right_tab = hold.right_tab;
+            self.right.slots = hold.slots;
+            self.right.tab = hold.tab;
             if self.layout.left_open != hold.layout.left_open {
                 self.force_sidebar(true, hold.layout.left_open, window, cx);
             }
@@ -186,11 +186,11 @@ impl Kagan {
             match declared.placement {
                 SurfacePlacement::Right => {
                     let surface = declared.surface_id();
-                    self.right_slots.retain(|slot| {
+                    self.right.slots.retain(|slot| {
                         !(slot.plugin == declared.plugin && slot.contribution == declared.id)
                     });
-                    if self.right_tab.as_ref() == Some(&super::right::Tab::Plugin(surface)) {
-                        self.right_tab = self.default_right_tab(cx);
+                    if self.right.tab.as_ref() == Some(&super::right::Tab::Plugin(surface)) {
+                        self.right.tab = self.default_right_tab(cx);
                     }
                 }
                 SurfacePlacement::Left => {
@@ -211,7 +211,7 @@ impl Kagan {
             declared.placement,
             SurfacePlacement::Left | SurfacePlacement::Center
         ) {
-            self.right_fill = super::right::Fill::Column;
+            self.right.fill = super::right::Fill::Column;
         }
         if declared.placement == SurfacePlacement::Left {
             if self.in_settings() {
@@ -245,19 +245,19 @@ impl Kagan {
                 }
             }
             SurfacePlacement::Right => {
-                if let Some(ix) = self.right_slots.iter().position(|slot| {
+                if let Some(ix) = self.right.slots.iter().position(|slot| {
                     slot.plugin == declared.plugin && slot.contribution == declared.id
                 }) {
-                    if !reuse(&self.right_slots[ix], &declared, cx) {
-                        let details = self.right_slots[ix].details;
-                        self.right_slots[ix] = mount(&declared, details, window, cx);
+                    if !reuse(&self.right.slots[ix], &declared, cx) {
+                        let details = self.right.slots[ix].details;
+                        self.right.slots[ix] = mount(&declared, details, window, cx);
                     }
-                    self.right_tab =
-                        Some(super::right::Tab::Plugin(self.right_slots[ix].id.clone()));
+                    self.right.tab =
+                        Some(super::right::Tab::Plugin(self.right.slots[ix].id.clone()));
                 } else {
                     let slot = mount(&declared, false, window, cx);
-                    self.right_tab = Some(super::right::Tab::Plugin(slot.id.clone()));
-                    self.right_slots.push(slot);
+                    self.right.tab = Some(super::right::Tab::Plugin(slot.id.clone()));
+                    self.right.slots.push(slot);
                 }
             }
         }
@@ -279,7 +279,7 @@ impl Kagan {
         matching_slot(
             self.tool.as_ref(),
             self.screen.page(),
-            &self.right_slots,
+            &self.right.slots,
             declared,
         )
         .is_some()

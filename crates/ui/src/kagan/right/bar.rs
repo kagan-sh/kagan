@@ -49,7 +49,7 @@ pub(super) fn tab_body(
                 .into_any_element(),
         );
     }
-    let slot = kagan.right_slots.iter().find(|slot| slot.id == id)?;
+    let slot = kagan.right.slots.iter().find(|slot| slot.id == id)?;
     let page = slot.web.is_some() || slot.view.as_ref().is_some_and(|view| fills_panel(view, cx));
     Some(
         div()
@@ -76,7 +76,7 @@ pub(super) fn tab_bar(
             tabs.push(built_in_tab(&tab, title, selected, window, cx));
         }
     }
-    for slot in &kagan.right_slots {
+    for slot in &kagan.right.slots {
         tabs.push(plugin_tab(slot, selected, cx));
     }
     if kagan.thread_visible(cx) {
@@ -110,14 +110,14 @@ pub(super) fn tab_bar(
 }
 
 fn full_button(kagan: &Kagan) -> impl IntoElement {
-    let (icon, label) = match kagan.right_fill {
+    let (icon, label) = match kagan.right.fill {
         Fill::Column => (IconName::Maximize, "Full screen"),
         Fill::Window => (IconName::Minimize, "Exit full screen"),
     };
     control(
         "right-full",
         Facts {
-            selected: Some(kagan.right_fill == Fill::Window),
+            selected: Some(kagan.right.fill == Fill::Window),
             ..Facts::button(label)
         },
         Button::new("right-full-button")
@@ -191,12 +191,12 @@ fn plugin_tab(slot: &Slot, selected: Option<&Tab>, cx: &mut Context<Kagan>) -> A
 }
 
 fn plus_button(kagan: &Kagan, cx: &mut Context<Kagan>) -> AnyElement {
-    let menu = kagan.right_menu.as_ref().map(|(menu, _)| menu.clone());
+    let menu = kagan.right.menu.as_ref().map(|(menu, _)| menu.clone());
     let enabled = kagan.closed_right_panels().next().is_some()
         || kagan.can_open_browser(cx)
         || kagan.can_open_terminal(cx)
         || menu.is_some();
-    let focus = kagan.right_add_focus.clone();
+    let focus = kagan.right.add_focus.clone();
     div()
         .id("right-tab-plus")
         .relative()

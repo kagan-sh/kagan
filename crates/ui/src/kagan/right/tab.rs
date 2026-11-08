@@ -38,7 +38,7 @@ impl Tab {
             Self::Terminal(number) => {
                 kagan.tabs.view(*number).is_some() && kagan.thread_visible(cx)
             }
-            Self::Plugin(id) => kagan.right_slots.iter().any(|slot| slot.id == *id),
+            Self::Plugin(id) => kagan.right.slots.iter().any(|slot| slot.id == *id),
         }
     }
 
@@ -57,13 +57,14 @@ impl Tab {
                 .as_ref()
                 .map(crate::kagan::preview::Preview::focus_handle),
             Self::Plugin(id) => kagan
-                .right_slots
+                .right
+                .slots
                 .iter()
                 .find(|slot| slot.id == *id)
                 .map(|slot| slot.focus.clone()),
             Self::Questions | Self::Changes | Self::Details => None,
         };
-        window.focus(&focus.unwrap_or_else(|| kagan.right_add_focus.clone()), cx);
+        window.focus(&focus.unwrap_or_else(|| kagan.right.add_focus.clone()), cx);
     }
 }
 
@@ -74,7 +75,7 @@ impl Kagan {
         cx: &mut Context<Self>,
     ) {
         let Some(tab) = selected_tab(self, cx) else {
-            return window.focus(&self.right_add_focus, cx);
+            return window.focus(&self.right.add_focus, cx);
         };
         tab.focus(self, window, cx);
     }
@@ -86,16 +87,17 @@ impl Kagan {
         if self.thread_visible(cx) {
             return Some(Tab::Changes);
         }
-        self.right_slots
+        self.right
+            .slots
             .first()
             .map(|slot| Tab::Plugin(slot.id.clone()))
     }
 
     pub(in crate::kagan) fn select_right_tab(&mut self, tab: Tab, cx: &mut Context<Self>) {
-        if self.right_tab.as_ref() == Some(&tab) {
+        if self.right.tab.as_ref() == Some(&tab) {
             return;
         }
-        self.right_tab = Some(tab);
+        self.right.tab = Some(tab);
         self.supersede_surface();
         cx.notify();
     }

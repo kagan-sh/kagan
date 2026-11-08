@@ -7,9 +7,10 @@ use crate::kagan::Shown;
 
 impl Kagan {
     pub(in crate::kagan) fn closed_right_panels(&self) -> impl Iterator<Item = &Declared> {
-        self.right_panels.iter().filter(|item| {
+        self.right.panels.iter().filter(|item| {
             !self
-                .right_slots
+                .right
+                .slots
                 .iter()
                 .any(|slot| slot.plugin == item.plugin && slot.contribution == item.id)
         })

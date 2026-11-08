@@ -444,10 +444,10 @@ fn http_response(
 
 fn listed(kagan: &Kagan, cx: &App) -> Vec<(String, bool)> {
     let mut open = Vec::new();
-    let full = kagan.right_fill == right::Fill::Window && kagan.panes.right;
+    let full = kagan.right.fill == right::Fill::Window && kagan.panes.right;
     let tab = right::selected_tab(kagan, cx);
     let right_on = kagan.right_drawn();
-    for slot in &kagan.right_slots {
+    for slot in &kagan.right.slots {
         if slot.web.is_some() {
             open.push((
                 slot.id.clone(),

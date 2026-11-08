@@ -17,8 +17,8 @@ impl Kagan {
     pub(in crate::kagan) fn has_right_content(&self, cx: &App) -> bool {
         self.thread_visible(cx)
             || self.waiting_count(cx) > 0
-            || !self.right_slots.is_empty()
-            || !self.right_panels.is_empty()
+            || !self.right.slots.is_empty()
+            || !self.right.panels.is_empty()
     }
 
     pub(in crate::kagan) fn open_right_menu(
@@ -26,7 +26,7 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.right_menu.is_some() {
+        if self.right.menu.is_some() {
             return;
         }
         let items: Vec<_> = self
@@ -98,11 +98,11 @@ impl Kagan {
             })
         });
         let dismiss = cx.subscribe_in(&menu, window, |this, _, _: &DismissEvent, _, cx| {
-            this.right_menu = None;
+            this.right.menu = None;
             cx.notify();
         });
         menu.read(cx).focus_handle(cx).focus(window, cx);
-        self.right_menu = Some((menu, dismiss));
+        self.right.menu = Some((menu, dismiss));
         cx.notify();
     }
 }
@@ -114,7 +114,7 @@ impl Kagan {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.right_fill = match self.right_fill {
+        self.right.fill = match self.right.fill {
             Fill::Column => Fill::Window,
             Fill::Window => Fill::Column,
         };

@@ -22,11 +22,12 @@ impl Kagan {
     /// Plugin views that are in this frame, so a native page can hide with its panel.
     pub(super) fn shown_plugin_views(&self, cx: &App) -> Vec<gpui_kit::EntityId> {
         let mut ids = Vec::new();
-        let full = self.right_fill == right::Fill::Window && self.panes.right;
+        let full = self.right.fill == right::Fill::Window && self.panes.right;
         if self.right_drawn()
             && let Some(right::Tab::Plugin(tab)) = right::selected_tab(self, cx)
             && let Some(view) = self
-                .right_slots
+                .right
+                .slots
                 .iter()
                 .find(|slot| slot.id == tab)
                 .and_then(|slot| slot.view.as_ref())
@@ -72,7 +73,7 @@ impl Render for Kagan {
         self.sync_browser(cx);
         crate::components::sync_pages(&self.shown_plugin_views(cx), cx);
         web_panel::sync(self, cx);
-        let columns = if self.right_fill == right::Fill::Window && self.panes.right {
+        let columns = if self.right.fill == right::Fill::Window && self.panes.right {
             div()
                 .id("right-full-column")
                 .size_full()

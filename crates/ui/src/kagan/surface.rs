@@ -32,8 +32,8 @@ pub(super) struct Slot {
 
 struct Hold {
     tool: Option<Slot>,
-    right_slots: Vec<Slot>,
-    right_tab: Option<right::Tab>,
+    slots: Vec<Slot>,
+    tab: Option<right::Tab>,
     layout: super::layout::Layout,
 }
 

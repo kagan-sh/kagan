@@ -22,14 +22,14 @@ impl Kagan {
                 let current = matching_slot(
                     self.tool.as_ref(),
                     self.screen.page(),
-                    &self.right_slots,
+                    &self.right.slots,
                     &declared,
                 );
                 let committed = self.surface_check.as_ref().map_or(current, |check| {
                     matching_slot(
                         check.hold.tool.as_ref(),
                         self.screen.committed_page(),
-                        &check.hold.right_slots,
+                        &check.hold.slots,
                         &declared,
                     )
                 });
