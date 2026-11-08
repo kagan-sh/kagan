@@ -31,6 +31,8 @@ pub struct UiElement {
     pub disabled: Option<bool>,
     pub selected: Option<bool>,
     pub visible: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

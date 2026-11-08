@@ -388,7 +388,7 @@ fn format_ui_snapshot(snapshot: &UiSnapshot) -> String {
     for element in &snapshot.elements {
         let _ = writeln!(
             out,
-            "{} role={} label={:?} value={:?} bounds=({:.1},{:.1},{:.1},{:.1}) focused={} disabled={} selected={} visible={}",
+            "{} role={} label={:?} value={:?} bounds=({:.1},{:.1},{:.1},{:.1}) focused={} disabled={} selected={} visible={} hint={:?}",
             element.id,
             element.role.as_deref().unwrap_or("-"),
             element.label,
@@ -413,6 +413,7 @@ fn format_ui_snapshot(snapshot: &UiSnapshot) -> String {
                 .as_deref()
                 .unwrap_or("-"),
             element.visible,
+            element.hint,
         );
     }
     out

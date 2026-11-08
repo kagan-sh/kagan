@@ -307,6 +307,27 @@ fn a_web_panel_is_labeled_for_kg_ui(cx: &mut TestAppContext) {
     assert_eq!(label(cx, window, &center), "Web panel");
 }
 
+#[gpui_kit::test]
+fn a_web_panel_tells_kg_ui_it_cannot_drive_the_page(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, install_web_panel);
+    wide(cx, window);
+    open_surface(cx, WEB_PANEL, "board").unwrap();
+    let right = web_panel_id(WEB_PANEL, "board");
+    wait_until(cx, |cx| shows(cx, window, &right));
+    let hints = cx
+        .update_window(window, |_, window, cx| {
+            crate::ui_dispatch::render_frame(window, cx);
+            crate::ui_dispatch::snapshot(window, 0)
+                .elements
+                .into_iter()
+                .filter(|element| element.label.as_deref() == Some("Web panel"))
+                .map(|element| element.hint)
+                .collect::<Vec<_>>()
+        })
+        .unwrap();
+    assert_eq!(hints, vec![Some("kg ui cannot drive this page".to_owned())]);
+}
+
 #[cfg(target_os = "macos")]
 pub(in crate::tests) const LIFE: &str = "dev.test.web-life";
 #[cfg(target_os = "macos")]

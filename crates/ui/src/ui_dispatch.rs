@@ -234,6 +234,7 @@ fn observed_elements(window: &Window) -> Vec<kg_domain::UiElement> {
                 disabled: element.disabled,
                 selected: element.selected,
                 visible: element.visible,
+                hint: element.hint.as_deref().map(str::to_owned),
             }
         })
         .collect()

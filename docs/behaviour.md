@@ -424,7 +424,7 @@ One file, read-only, in the Preview tab of the right sidebar [docs:look] [decisi
 ### `Snapshot`
 
 - **Allowed when**: a window is open [docs:ui-driver].
-- **Shows**: the observed elements: stable ids, role, label, value, bounds, focused, disabled, and visible [docs:ui-driver] [book:cli].
+- **Shows**: the observed elements: stable ids, role, label, value, bounds, focused, disabled, visible, and hint [docs:ui-driver] [book:cli].
 - **Refused when**: no driver — "the ui driver needs a kagan window" [docs:ui-driver] — `failed` [op/].
 
 ### `Click`
