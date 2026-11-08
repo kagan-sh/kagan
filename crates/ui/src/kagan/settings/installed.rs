@@ -120,6 +120,7 @@ fn form_row(kagan: &Kagan, cx: &mut Context<Kagan>) -> Row {
     );
     Row {
         wide: true,
+        bare: true,
         ..row(
             "install-form",
             "Folder or git address",

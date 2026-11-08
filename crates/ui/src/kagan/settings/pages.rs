@@ -194,6 +194,7 @@ fn theme_group(window: &mut Window, cx: &mut App) -> Group {
         "Theme",
         vec![Row {
             wide: true,
+            alias: Some("theme"),
             ..row(
                 "theme",
                 "Theme",
@@ -424,12 +425,15 @@ fn mode_group(cx: &mut App) -> Group {
     group(
         "mode",
         "Mode",
-        vec![row(
-            "mode",
-            "Mode",
-            "Follows the system appearance.",
-            control.into_any_element(),
-        )],
+        vec![Row {
+            alias: Some("mode"),
+            ..row(
+                "mode",
+                "Mode",
+                "Follows the system appearance.",
+                control.into_any_element(),
+            )
+        }],
     )
 }
 

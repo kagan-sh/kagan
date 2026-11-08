@@ -13,6 +13,8 @@ pub(super) struct Row {
     pub(super) note_content: Option<AnyElement>,
     pub(super) control: AnyElement,
     pub(super) wide: bool,
+    pub(super) alias: Option<&'static str>,
+    pub(super) bare: bool,
 }
 
 pub(super) struct Group {
@@ -30,6 +32,8 @@ pub(super) fn row(id: &str, title: &str, note: &str, control: AnyElement) -> Row
         note_content: None,
         control,
         wide: false,
+        alias: None,
+        bare: false,
     }
 }
 

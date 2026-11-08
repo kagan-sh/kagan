@@ -427,15 +427,9 @@ fn row_element(
     shortcut: bool,
     cx: &App,
 ) -> AnyElement {
-    let show_text = row.id != "setting-row-install-form";
+    let show_text = !row.bare;
     let noted = !row.note.is_empty();
-    let alias = if row.id == "setting-row-theme" {
-        Some("theme")
-    } else if row.id == "setting-row-mode" {
-        Some("mode")
-    } else {
-        None
-    };
+    let alias = row.alias;
     let note = row
         .note_content
         .unwrap_or_else(|| row.note.clone().into_any_element());
