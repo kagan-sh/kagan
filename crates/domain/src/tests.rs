@@ -780,6 +780,7 @@ fn a_plugin_theme_is_named_by_its_plugin() {
         "a.b/c/d",
         "a.b/../c",
         "Dev.x/m",
+        "-a.b-/x",
     ] {
         assert!(!crate::valid_theme_choice(id), "{id}");
     }

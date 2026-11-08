@@ -50,11 +50,7 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
         Op::Surface(op) => match op {
             SurfaceOp::List | SurfaceOp::Threads => Ok(()),
             SurfaceOp::Open { id, .. } | SurfaceOp::Close { id, .. } => {
-                if id.is_empty() || id.chars().any(char::is_control) {
-                    Err("surface id must be a plain name")
-                } else {
-                    Ok(())
-                }
+                printable(id).ok_or("surface id must be a plain name")
             }
         },
         Op::Section(op) => match op {
@@ -67,19 +63,14 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
             DiffOp::Commits { thread_id } => plain(thread_id),
         },
         Op::Preview(op) => match op {
-            PreviewOp::Show { thread_id, path } => {
-                plain_opt(thread_id.as_ref()).and_then(|()| plain_path(path))
-            }
+            PreviewOp::Show { thread_id, path } => plain_opt(thread_id.as_ref())
+                .and_then(|()| printable(path).ok_or("preview path must be a plain path")),
         },
     }
 }
 
-fn plain_path(path: &str) -> Result<(), &'static str> {
-    if path.is_empty() || path.chars().any(char::is_control) {
-        Err("preview path must be a plain path")
-    } else {
-        Ok(())
-    }
+fn printable(text: &str) -> Option<()> {
+    (!text.is_empty() && !text.chars().any(char::is_control)).then_some(())
 }
 
 fn terminal_size(op: &ThreadOp) -> Result<(), &'static str> {
