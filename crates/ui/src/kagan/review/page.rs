@@ -14,8 +14,8 @@ const GUTTER_TINT: f32 = 0.09;
 pub(super) const GUTTER: gpui_kit::Pixels = gpui_kit::px(60.);
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, ElementId, HighlightStyle, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, StyledText, div, px,
+    AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, div, px,
 };
 use kg_core::Workspace;
 use kg_domain::{DiffLineKind, DiffOp, DiffScope, Op, OpResult, ReviewRow};
@@ -265,6 +265,7 @@ impl Kagan {
         review.renamed_from = renamed_from(file);
         review.shown.clear();
         review.rows.clear();
+        review.clear_syntax();
         review.expanded.clear();
         review.loading = false;
         review.generation = review.generation.wrapping_add(1);
@@ -419,33 +420,19 @@ impl Kagan {
             .when_some(background, gpui_kit::Styled::bg)
             .when(selected, |row| row.border_1().border_color(cx.theme().ring));
         row = row.child(Self::review_gutter(side, number, color, cx));
+        let spans = self.screen.review().map_or(Vec::new(), |review| {
+            review.syntax.spans(side, number).to_vec()
+        });
+        let code = painted_line(&line.text, &spans, changed, color, wrap, cx);
+        row = row.child(code);
         if wrap {
-            let code = wrap_text(
-                &line.text,
-                changed,
-                color.unwrap_or(cx.theme().muted_foreground),
-            );
             return v_flex()
                 .w_full()
                 .min_w_0()
-                .child(
-                    row.child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .pl_1()
-                            .whitespace_normal()
-                            .child(code),
-                    ),
-                )
+                .child(row)
                 .child(self.inline_comments(side, number, cx))
                 .into_any_element();
         }
-        let row = row.child(unwrapped_text(
-            &line.text,
-            changed,
-            color.unwrap_or(cx.theme().muted_foreground),
-        ));
         let fade = self.line_fade(width, cx);
         v_flex()
             .relative()
@@ -520,50 +507,27 @@ impl Kagan {
     }
 }
 
-fn wrap_text(
+fn painted_line(
     text: &str,
+    spans: &[(std::ops::Range<usize>, String)],
     changed: Option<&std::ops::Range<usize>>,
-    color: gpui_kit::Hsla,
-) -> StyledText {
-    let highlights = changed
-        .filter(|range| {
-            text.get((*range).clone())
-                .is_some_and(|text| !text.trim().is_empty())
-        })
-        .map(|range| {
-            (
-                range.clone(),
-                HighlightStyle {
-                    background_color: Some(color.opacity(0.30)),
-                    ..Default::default()
-                },
-            )
-        });
-    StyledText::new(text.to_owned()).with_highlights(highlights)
-}
-
-fn unwrapped_text(
-    text: &str,
-    changed: Option<&std::ops::Range<usize>>,
-    color: gpui_kit::Hsla,
+    tint: Option<gpui_kit::Hsla>,
+    wrap: bool,
+    cx: &Context<Kagan>,
 ) -> AnyElement {
-    let code = h_flex().flex_shrink_0().whitespace_nowrap().pl_1();
-    if let Some(range) = changed.filter(|range| {
-        text.get((*range).clone())
-            .is_some_and(|text| !text.trim().is_empty())
-    }) {
-        code.child(text[..range.start].to_owned())
-            .child(
-                div()
-                    .rounded_sm()
-                    .bg(color.opacity(0.30))
-                    .child(text[range.clone()].to_owned()),
-            )
-            .child(text[range.end..].to_owned())
-            .into_any_element()
-    } else {
-        code.child(text.to_owned()).into_any_element()
-    }
+    let theme = cx.theme().highlight_theme.clone();
+    div()
+        .pl_1()
+        .when(wrap, |line| line.flex_1().min_w_0().whitespace_normal())
+        .when(!wrap, |line| line.flex_shrink_0().whitespace_nowrap())
+        .child(super::syntax::line(
+            text,
+            spans,
+            changed,
+            tint,
+            theme.as_ref(),
+        ))
+        .into_any_element()
 }
 
 fn line_width(text: &str, cx: &Context<Kagan>) -> gpui_kit::Pixels {

@@ -1,4 +1,4 @@
-use kg_domain::ReviewRow;
+use kg_domain::{DiffSide, ReviewRow};
 
 use super::Kagan;
 
@@ -35,6 +35,21 @@ pub(crate) fn review_horizontal_offset(kagan: &Kagan) -> Option<f32> {
         .screen
         .review()
         .map(|review| review.scroll.offset().x.as_f32())
+}
+
+pub(crate) fn review_token(
+    kagan: &Kagan,
+    side: DiffSide,
+    line: u32,
+    byte: usize,
+) -> Option<String> {
+    let review = kagan.screen.review()?;
+    review
+        .syntax
+        .spans(side, line)
+        .iter()
+        .find(|(range, _)| range.contains(&byte))
+        .map(|(_, name)| name.clone())
 }
 
 pub(crate) fn open_diff_lines(kagan: &Kagan) -> Vec<String> {

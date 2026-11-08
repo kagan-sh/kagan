@@ -5,6 +5,7 @@ mod actions;
 mod comment;
 mod page;
 mod search;
+mod syntax;
 mod text;
 pub(super) mod tree;
 
@@ -76,6 +77,8 @@ pub(super) struct Review {
     load: Task<()>,
     pub(super) generation: u64,
     pub(super) rows: Vec<ReviewRow>,
+    syntax: syntax::Syntax,
+    syntax_revision: String,
     expanded: BTreeSet<u32>,
     filter: Entity<InputState>,
     _filter_watch: Subscription,
@@ -98,6 +101,11 @@ struct ReadExpect {
 impl Review {
     pub(super) fn is_for(&self, thread: &ThreadId) -> bool {
         &self.thread == thread
+    }
+
+    pub(super) fn clear_syntax(&mut self) {
+        self.syntax.clear();
+        self.syntax_revision.clear();
     }
 }
 
