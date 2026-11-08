@@ -83,12 +83,10 @@ impl Kagan {
             .on_action(
                 cx.listener(|this, _: &FindInDiff, window, cx| this.find_in_review(window, cx)),
             )
-            .on_action(cx.listener(|this, _: &NextMatch, window, cx| {
-                let _ = window;
+            .on_action(cx.listener(|this, _: &NextMatch, _, cx| {
                 this.search_match(true, cx);
             }))
-            .on_action(cx.listener(|this, _: &PrevMatch, window, cx| {
-                let _ = window;
+            .on_action(cx.listener(|this, _: &PrevMatch, _, cx| {
                 this.search_match(false, cx);
             }))
             .child(div().key_context("ReviewNav").track_focus(&review.focus))
