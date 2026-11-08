@@ -67,42 +67,6 @@ pub(crate) enum Error {
     ViewShape(String),
 }
 
-/// One thing a plugin can add. The ids are the `ui` keys on [`Contributions`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Capability {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub detail: &'static str,
-}
-
-impl Contributions {
-    #[must_use]
-    pub fn kinds() -> &'static [Capability] {
-        &[
-            Capability {
-                id: "panels",
-                name: "Panel",
-                detail: "adds a panel",
-            },
-            Capability {
-                id: "settings",
-                name: "Settings page",
-                detail: "adds a settings page",
-            },
-            Capability {
-                id: "overlay",
-                name: "Overlay",
-                detail: "draws over the terminal",
-            },
-            Capability {
-                id: "status",
-                name: "Status item",
-                detail: "adds a line to the activity strip",
-            },
-        ]
-    }
-}
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatusContribution {

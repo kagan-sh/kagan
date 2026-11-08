@@ -293,15 +293,6 @@ fn status_bar_points_to_the_status_item() {
     );
 }
 
-#[test]
-fn a_status_item_names_its_capability() {
-    let kinds = crate::capabilities_in(&json!({ "ui": { "status": { "title": "Usage" } } }));
-    assert_eq!(kinds.len(), 1);
-    assert_eq!(kinds[0].id, "status");
-    assert_eq!(kinds[0].name, "Status item");
-    assert_eq!(kinds[0].detail, "adds a line to the activity strip");
-}
-
 #[gpui_kit::test]
 fn check_names_the_invalid_javascript_file_and_line(cx: &mut TestAppContext) {
     let plugin = plugin_dir();

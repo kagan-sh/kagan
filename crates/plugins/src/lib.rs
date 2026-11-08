@@ -6,7 +6,7 @@ mod install;
 mod runtime;
 mod schedule;
 
-pub(crate) use authoring::{catalog, contributions, development, manifest, share};
+pub(crate) use authoring::{contributions, development, manifest, share};
 pub(crate) use install::{index, source};
 pub use runtime::keys;
 pub(crate) use runtime::log;
@@ -28,11 +28,8 @@ use gpui_shell::HttpRequestGrant;
 use kg_domain::{OpError, PluginId, ThemeFile};
 use serde_json::Value;
 
-use crate::manifest::{Fetch, Grant};
-pub use catalog::{Example, capabilities, capabilities_in, examples, kinds_in};
-pub use contributions::{
-    Capability, Contributions, Follows, PanelContribution, Placement, StatusContribution,
-};
+use crate::manifest::Fetch;
+pub use contributions::{Contributions, Follows, PanelContribution, Placement, StatusContribution};
 pub(crate) use host::{Agents, Discovered, PluginHostGlobal, discover};
 pub use host::{MountError, PluginHost, PluginHostEvent, init};
 pub use index::shown;
@@ -84,14 +81,6 @@ pub fn contributions(cx: &App) -> Result<Vec<(PluginId, Contributions)>> {
         .iter()
         .map(|(id, active)| (id.clone(), active.manifest.ui.clone()))
         .collect())
-}
-
-/// One plain line per power in an approved grant, as the install screen words them.
-///
-/// # Errors
-/// When `approved` is not a grant.
-pub fn power_lines(approved: &Value) -> Result<Vec<String>> {
-    Ok(serde_json::from_value::<Grant>(approved.clone())?.lines())
 }
 
 pub use commands::{CommandContribution, CommandWhen, KeySource, RunCommand};

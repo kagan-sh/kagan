@@ -212,38 +212,14 @@ pub(crate) enum Area {
 }
 
 impl Area {
-    pub(crate) const ALL: [Self; 4] = [Self::Threads, Self::Database, Self::Process, Self::Browser];
-
-    pub(crate) fn id(self) -> &'static str {
-        self.row().0
-    }
-
-    pub(crate) fn name(self) -> &'static str {
-        self.row().1
-    }
-
     pub(crate) fn phrase(self) -> &'static str {
-        self.row().2
-    }
-
-    fn row(self) -> (&'static str, &'static str, &'static str) {
         match self {
-            Self::Threads => (
-                "threads",
-                "Threads",
-                "reads, starts and changes your threads, can type into threads and press Enter, reads their screen text, and reads their changed files",
-            ),
-            Self::Database => ("database", "Database", "keeps its own database"),
-            Self::Process => (
-                "process",
-                "Process",
-                "starts and stops the programs listed here",
-            ),
-            Self::Browser => (
-                "browser",
-                "Browser",
-                "opens and drives the Browser tab for a thread it names",
-            ),
+            Self::Threads => {
+                "reads, starts and changes your threads, can type into threads and press Enter, reads their screen text, and reads their changed files"
+            }
+            Self::Database => "keeps its own database",
+            Self::Process => "starts and stops the programs listed here",
+            Self::Browser => "opens and drives the Browser tab for a thread it names",
         }
     }
 }

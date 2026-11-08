@@ -1084,6 +1084,32 @@ fn start_tree(
     (pids, receive)
 }
 
+fn example_roots() -> Vec<std::path::PathBuf> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins");
+    let mut roots: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.join(crate::manifest::FILE).is_file())
+        .collect();
+    roots.sort();
+    roots
+}
+
+#[test]
+fn bundled_examples_pass_check() {
+    let roots = example_roots();
+    assert_eq!(roots.len(), 10);
+    for root in &roots {
+        let data = tempfile::tempdir().unwrap();
+        crate::development::check(
+            root,
+            data.path(),
+            &gpui_shell::components::components().unwrap(),
+        )
+        .unwrap();
+    }
+}
+
 fn installed_example(root: &Path) -> Plugin {
     let root = dunce::canonicalize(root).unwrap();
     let manifest = read_manifest(&root).unwrap();
