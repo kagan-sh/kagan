@@ -739,3 +739,59 @@ async fn start_again_on_kimi_starts_a_new_conversation_when_two_match(cx: &mut T
             .any(|text| text.contains("could not tell which Kimi conversation"))
     );
 }
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_kimi_conversation_is_kept_once_its_file_appears(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-keep");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = kimi_session(&home, fixture.dir.path());
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.run_until_parked();
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert_eq!(
+        store.conversation(&id).unwrap().unwrap().to_string(),
+        conversation
+    );
+    let other = kimi_session(&home, fixture.dir.path());
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(
+        again.ends_with(&["--session".to_owned(), format!("session_{conversation}")]),
+        "{again:?}"
+    );
+    assert!(!again.iter().any(|arg| arg.contains(&other)));
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn a_codex_conversation_is_kept_once_its_file_appears(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = codex_home(&fixture, cx);
+    let run = fixture.dir.path().join("codex-keep");
+    let program = fake_agent(&run, "codex");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = began(&home, fixture.dir.path(), later());
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(1));
+    cx.run_until_parked();
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    assert_eq!(
+        store.conversation(&id).unwrap().unwrap().to_string(),
+        conversation
+    );
+    let other = began(&home, fixture.dir.path(), later());
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(
+        again.ends_with(&["resume".to_owned(), conversation]),
+        "{again:?}"
+    );
+    assert!(!again.iter().any(|arg| arg == &other));
+}

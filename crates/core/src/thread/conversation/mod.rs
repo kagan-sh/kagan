@@ -13,6 +13,8 @@ use crate::workspace::closed;
 
 use super::agent::{Known, Start};
 
+mod written;
+
 // Flags with which the person already picks the conversation, so kagan adds none of its own.
 const CLAUDE_FLAGS: &[&str] = &[
     "-c",
@@ -98,7 +100,12 @@ pub(super) async fn args(
     match known {
         Known::Claude if picks_claude(args) => Ok((Vec::new(), None)),
         Known::Claude => claude(this, record, start, cx).await,
-        Known::Codex if picks_codex(args) || start == Start::First => Ok((Vec::new(), None)),
+        Known::Codex if picks_codex(args) || start == Start::First => {
+            if start == Start::First && !picks_codex(args) {
+                written::note_when_written(this, record, folder, false, cx);
+            }
+            Ok((Vec::new(), None))
+        }
         Known::Codex if !args.is_empty() => Ok((Vec::new(), Some(CODEX_FRESH))),
         Known::Codex => codex(this, record, folder, cx).await,
         Known::Cursor if picks_cursor(args) => Ok((Vec::new(), None)),
@@ -107,7 +114,12 @@ pub(super) async fn args(
         Known::OpenCode => named(this, record, "--session", start, cx).await,
         Known::Pi if picks(args, PI_FLAGS) => Ok((Vec::new(), None)),
         Known::Pi => named(this, record, "--session-id", start, cx).await,
-        Known::Kimi if picks(args, KIMI_FLAGS) || start == Start::First => Ok((Vec::new(), None)),
+        Known::Kimi if picks(args, KIMI_FLAGS) || start == Start::First => {
+            if start == Start::First && !picks(args, KIMI_FLAGS) {
+                written::note_when_written(this, record, folder, true, cx);
+            }
+            Ok((Vec::new(), None))
+        }
         Known::Kimi => kimi(this, record, folder, cx).await,
     }
 }
@@ -158,6 +170,7 @@ async fn codex(
         .call(move |store| Ok((store.conversation(&id)?, store.last_started(&id)?)))
         .await?;
     let folder = folder.to_owned();
+    let scan = folder.clone();
     let found = cx
         .background_spawn(async move {
             let sessions = codex_home
@@ -165,10 +178,11 @@ async fn codex(
                 .join("sessions");
             stored
                 .filter(|conversation| codex_kept(&sessions, *conversation))
-                .or_else(|| codex_started(&sessions, &folder, since?))
+                .or_else(|| codex_started(&sessions, &scan, since?))
         })
         .await;
     let Some(conversation) = found else {
+        written::note_when_written(this, record, &folder, false, cx);
         return Ok((Vec::new(), Some(CODEX_FRESH)));
     };
     if stored != Some(conversation) {
@@ -275,12 +289,13 @@ async fn kimi(
         .call(move |store| Ok((store.conversation(&id)?, store.last_started(&id)?)))
         .await?;
     let folder = folder.to_owned();
+    let scan = folder.clone();
     let found = cx
         .background_spawn(async move {
             let root = kimi_root(home)?;
             stored
                 .filter(|conversation| kimi_kept(&root, *conversation))
-                .or_else(|| kimi_started(&root, &folder, since?))
+                .or_else(|| kimi_started(&root, &scan, since?))
         })
         .await;
     let Some(conversation) = found else {
@@ -289,6 +304,7 @@ async fn kimi(
         } else {
             KIMI_FRESH
         };
+        written::note_when_written(this, record, &folder, true, cx);
         return Ok((Vec::new(), Some(notice)));
     };
     if stored != Some(conversation) {
