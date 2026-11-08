@@ -146,32 +146,51 @@ pub(crate) async fn prepare(
         Ok(done) => Ok(Prepared::Managed(done)),
         Err(ProvisionMiss::Keep(kept)) => {
             let (environment, error) = *kept;
-            let saved = environment.clone();
-            database
-                .call(move |store| store.put_environment(&saved))
-                .await?;
-            Workspace::refresh(this, cx).await?;
-            Err(error)
+            keep_failed(this, &database, environment, error, cx).await
         }
         Err(ProvisionMiss::Discard(error)) => {
-            if environment.path.exists() {
-                // The folder could not be removed, so keep the row for the next sweep.
-                let mut leftover = environment;
-                leftover.status = EnvironmentStatus::Destroyed;
-                leftover.error = Some(error.to_string());
-                database
-                    .call(move |store| store.put_environment(&leftover))
-                    .await?;
-            } else {
-                let id = environment.id.clone();
-                database
-                    .call(move |store| store.delete_environment(&id))
-                    .await?;
-            }
-            Workspace::refresh(this, cx).await?;
-            Err(error)
+            discard_failed(this, &database, environment, error, cx).await
         }
     }
+}
+
+/// Saves an environment whose setup failed, so the person can retry it, and reports why.
+async fn keep_failed(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    environment: Environment,
+    error: OpError,
+    cx: &mut AsyncApp,
+) -> Result<Prepared> {
+    database
+        .call(move |store| store.put_environment(&environment))
+        .await?;
+    Workspace::refresh(this, cx).await?;
+    Err(error)
+}
+
+/// Drops an environment whose setup cannot be retried, and reports why.
+async fn discard_failed(
+    this: &WeakEntity<Workspace>,
+    database: &Database,
+    mut environment: Environment,
+    error: OpError,
+    cx: &mut AsyncApp,
+) -> Result<Prepared> {
+    if environment.path.exists() {
+        // The folder could not be removed, so keep the row for the next sweep.
+        environment.status = EnvironmentStatus::Destroyed;
+        environment.error = Some(error.to_string());
+        database
+            .call(move |store| store.put_environment(&environment))
+            .await?;
+    } else {
+        database
+            .call(move |store| store.delete_environment(&environment.id))
+            .await?;
+    }
+    Workspace::refresh(this, cx).await?;
+    Err(error)
 }
 
 async fn reserve_path(database: &Database, mut environment: Environment) -> Result<Environment> {
@@ -281,7 +300,6 @@ async fn retry_setup(
 ) -> Result<Prepared> {
     let path = existing.path.clone();
     let branch = existing.branch.clone().unwrap_or_default();
-    let id = existing.id.clone();
     let project_id = existing.project_id.clone();
     let leftover = existing.clone();
     match cx
@@ -292,38 +310,24 @@ async fn retry_setup(
         script::SetupEnd::Ready(done) => Ok(Prepared::Managed(done)),
         script::SetupEnd::Failed(kept) => {
             let (environment, error) = *kept;
-            let saved = environment.clone();
-            database
-                .call(move |store| store.put_environment(&saved))
-                .await?;
-            Workspace::refresh(this, cx).await?;
-            Err(error)
+            keep_failed(this, database, environment, error, cx).await
         }
         script::SetupEnd::Mismatch(error) => {
-            let lookup = project_id.clone();
-            if let Some(project) = database.call(move |store| store.project(&lookup)).await? {
-                abandon_worktree(&project.path, &path, &branch);
-            } else if path.exists()
-                && let Err(error) = std::fs::remove_dir_all(&path)
-            {
-                eprintln!("kg: could not remove {}: {error}", path.display());
-            }
-            if path.exists() {
-                // The folder could not be removed, so keep the row for the next sweep.
-                let mut leftover = leftover;
-                leftover.status = EnvironmentStatus::Destroyed;
-                leftover.error = Some(error.to_string());
-                database
-                    .call(move |store| store.put_environment(&leftover))
-                    .await?;
-            } else {
-                let deleting = id.clone();
-                database
-                    .call(move |store| store.delete_environment(&deleting))
-                    .await?;
-            }
-            Workspace::refresh(this, cx).await?;
-            Err(error)
+            let lookup = project_id;
+            let project = database.call(move |store| store.project(&lookup)).await?;
+            let doomed = path.clone();
+            cx.background_executor()
+                .spawn(async move {
+                    if let Some(project) = project {
+                        abandon_worktree(&project.path, &doomed, &branch);
+                    } else if doomed.exists()
+                        && let Err(error) = std::fs::remove_dir_all(&doomed)
+                    {
+                        eprintln!("kg: could not remove {}: {error}", doomed.display());
+                    }
+                })
+                .await;
+            discard_failed(this, database, leftover, error, cx).await
         }
     }
 }
@@ -459,13 +463,20 @@ fn provision(
             return settle_setup(project, environment);
         }
     }
-    environment.path = dunce::canonicalize(&environment.path)?;
-    environment.status = EnvironmentStatus::Ready;
-    environment.retire_at = None;
+    make_ready(&mut environment)?;
     Ok(Provisioned {
         environment,
         notices: Vec::new(),
     })
+}
+
+/// Points the environment at its canonical folder and marks it ready; on failure it is unchanged.
+fn make_ready(environment: &mut Environment) -> std::io::Result<()> {
+    environment.path = dunce::canonicalize(&environment.path)?;
+    environment.status = EnvironmentStatus::Ready;
+    environment.retire_at = None;
+    environment.error = None;
+    Ok(())
 }
 
 fn settle_setup(

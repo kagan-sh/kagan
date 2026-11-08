@@ -83,10 +83,7 @@ pub(crate) async fn restore(
                 }
             }
             let mut environment = environment;
-            environment.path = dunce::canonicalize(&environment.path)?;
-            environment.status = EnvironmentStatus::Ready;
-            environment.retire_at = None;
-            environment.error = None;
+            super::make_ready(&mut environment)?;
             Ok(environment)
         })
         .await?;
