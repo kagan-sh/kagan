@@ -33,6 +33,13 @@ ids!(
     PluginId
 );
 
+impl ProjectId {
+    #[must_use]
+    pub fn personal() -> Self {
+        Self("personal".into())
+    }
+}
+
 impl PluginId {
     /// Whether this is reverse-DNS, as `dev.example.name`: lowercase letters, digits and inner
     /// dashes in two or more labels. It names the plugin's folder, so nothing else is allowed.

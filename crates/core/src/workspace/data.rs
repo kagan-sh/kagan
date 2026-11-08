@@ -11,13 +11,13 @@ fn ensure_personal(data_dir: &Path, store: &Store) -> Result<()> {
     std::fs::create_dir_all(&personal)
         .map_err(|error| OpError::Failed(format!("{}: {error}", personal.display())))?;
     if store
-        .project(&kg_domain::ProjectId("personal".into()))
+        .project(&kg_domain::ProjectId::personal())
         .map_err(closed)?
         .is_none()
     {
         store
             .put_project(&kg_domain::Project {
-                id: kg_domain::ProjectId("personal".into()),
+                id: kg_domain::ProjectId::personal(),
                 kind: kg_domain::ProjectKind::Personal,
                 name: "Personal".into(),
                 path: dunce::canonicalize(&personal)
