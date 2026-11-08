@@ -12,8 +12,6 @@ use crate::{PluginRequest, SocketLocation, Workspace, skill};
 use super::conversation;
 use super::run::ResolvedProgram;
 
-const PREFERENCE: &str = "agent-integration";
-
 // https://code.claude.com/docs/en/cli-reference: the commands in its table, and the aliases plugins and kill.
 const CLAUDE_SUBCOMMANDS: &[&str] = &[
     "agents",
@@ -269,7 +267,10 @@ pub(crate) async fn integrate(
             )
         })
         .map_err(closed)?;
-    let on = database.call(|store| store.setting(PREFERENCE)).await? != Some(Value::Bool(false));
+    let on = database
+        .call(|store| store.setting(kg_domain::prefs::AGENT_INTEGRATION))
+        .await?
+        != Some(Value::Bool(false));
     let Some(known) = known(&program.path).filter(|known| on && !subcommand(known, &program.args))
     else {
         // A closed workspace has no thread to clear.

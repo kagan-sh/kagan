@@ -49,7 +49,7 @@ impl Kagan {
             let task = cx.update(|cx| {
                 Workspace::dispatch(
                     Op::Thread(ThreadOp::Run(Run {
-                        project_id: ProjectId("personal".into()),
+                        project_id: ProjectId::personal(),
                         program,
                         title: Some("New plugin".into()),
                         environment: EnvironmentSpec::Personal,
@@ -118,6 +118,6 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.show_start(ProjectId("personal".into()), window, cx);
+        self.show_start(ProjectId::personal(), window, cx);
     }
 }

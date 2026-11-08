@@ -76,7 +76,7 @@ fn perform(op: WindowOp, cx: &mut App) {
                     if this.screen.review().is_some() {
                         this.layout.review_wrap = !this.layout.review_wrap;
                         super::layout::save(
-                            &super::layout::key("review-wrap"),
+                            &super::layout::key(kg_domain::prefs::REVIEW_WRAP),
                             this.layout.review_wrap,
                             cx,
                         );

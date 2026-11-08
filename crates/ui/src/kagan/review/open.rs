@@ -86,7 +86,7 @@ impl Kagan {
         self.focus_review(window, cx);
         if self.changes.viewed_checking.is_none() {
             let loaded = crate::kagan::layout::read::<std::collections::BTreeMap<String, String>>(
-                "review-viewed",
+                kg_domain::prefs::REVIEW_VIEWED,
                 cx,
             );
             cx.spawn(async move |this, cx| {

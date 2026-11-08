@@ -79,10 +79,7 @@ impl ThemeState {
 
     fn new(dir: PathBuf, cx: &mut Context<Self>) -> Self {
         let file = fjord();
-        let settings = ThemeSettings {
-            theme: "fjord".into(),
-            mode: Appearance::System,
-        };
+        let settings = ThemeSettings::default();
         let system = ThemeMode::Dark;
         let mode = resolve(settings.mode, system);
         let palette = palette(&file, mode).clone();

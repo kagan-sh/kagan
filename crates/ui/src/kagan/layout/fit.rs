@@ -9,11 +9,11 @@ use super::{
 
 impl Kagan {
     pub(in crate::kagan) fn load_layout(cx: &mut Context<Self>) {
-        let left_open = read::<bool>(&key("left-sidebar"), cx);
-        let right_open = read::<bool>(&key("right-sidebar"), cx);
-        let left_width = read::<Pixels>(&key("left-width"), cx);
-        let right_width = read::<Pixels>(&key("right-width"), cx);
-        let review_wrap = read::<bool>(&key("review-wrap"), cx);
+        let left_open = read::<bool>(&key(kg_domain::prefs::LEFT_SIDEBAR), cx);
+        let right_open = read::<bool>(&key(kg_domain::prefs::RIGHT_SIDEBAR), cx);
+        let left_width = read::<Pixels>(&key(kg_domain::prefs::LEFT_WIDTH), cx);
+        let right_width = read::<Pixels>(&key(kg_domain::prefs::RIGHT_WIDTH), cx);
+        let review_wrap = read::<bool>(&key(kg_domain::prefs::REVIEW_WRAP), cx);
         cx.spawn(async move |this, cx| {
             let defaults = Layout::default();
             let next = Layout {
@@ -109,9 +109,9 @@ impl Kagan {
     ) {
         let (name, mut next) = (
             if left {
-                "left-sidebar"
+                kg_domain::prefs::LEFT_SIDEBAR
             } else {
-                "right-sidebar"
+                kg_domain::prefs::RIGHT_SIDEBAR
             },
             self.layout,
         );
@@ -134,10 +134,18 @@ impl Kagan {
     // Call only after the painted frame has kept these open flags.
     pub(in crate::kagan) fn save_open_change(&self, before: Layout, cx: &mut App) {
         if self.layout.left_open != before.left_open {
-            save(&key("left-sidebar"), self.layout.left_open, cx);
+            save(
+                &key(kg_domain::prefs::LEFT_SIDEBAR),
+                self.layout.left_open,
+                cx,
+            );
         }
         if self.layout.right_open != before.right_open {
-            save(&key("right-sidebar"), self.layout.right_open, cx);
+            save(
+                &key(kg_domain::prefs::RIGHT_SIDEBAR),
+                self.layout.right_open,
+                cx,
+            );
         }
     }
 

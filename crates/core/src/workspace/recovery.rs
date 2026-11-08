@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{EventKind, OpResult, ThreadId, ThreadStatus};
+use serde_json::Value;
 
 use crate::host::database::Result;
 use crate::thread::clear_pending;
@@ -60,9 +61,36 @@ impl Workspace {
         Ok(())
     }
 }
+const RESUME_THREADS: &str = "resume-threads";
+
+/// Threads a quit left running, so the next open starts them again. Not a preference.
+pub(crate) fn resume_threads(store: &Store) -> kg_store::Result<BTreeSet<ThreadId>> {
+    let Some(value) = store.setting(RESUME_THREADS)? else {
+        return Ok(BTreeSet::new());
+    };
+    let Some(ids) = value.as_array() else {
+        return Ok(BTreeSet::new());
+    };
+    Ok(ids
+        .iter()
+        .filter_map(|id| id.as_str().map(|id| ThreadId(id.to_owned())))
+        .collect())
+}
+
+pub(crate) fn set_resume_threads(store: &Store, ids: &BTreeSet<ThreadId>) -> kg_store::Result<()> {
+    let value = Value::Array(ids.iter().map(|id| Value::String(id.0.clone())).collect());
+    store.set_setting(RESUME_THREADS, &value)
+}
+
+pub(crate) fn remember_resume(store: &Store, ids: &[ThreadId]) -> kg_store::Result<()> {
+    let mut remembered = resume_threads(store)?;
+    remembered.extend(ids.iter().cloned());
+    set_resume_threads(store, &remembered)
+}
+
 pub(super) fn interrupted(store: &mut Store) -> kg_store::Result<()> {
     let at = now();
-    let resume = store.resume_threads()?;
+    let resume = resume_threads(store)?;
     for mut record in store.all_threads()? {
         close_left_turn(store, &mut record, at, &resume)?;
         clear_pending(store, &record.id)?;
@@ -73,7 +101,7 @@ pub(super) fn interrupted(store: &mut Store) -> kg_store::Result<()> {
 /// Starts again every thread the last process left running, in the order they were created.
 pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut AsyncApp) -> Result<()> {
     let database = crate::workspace::database(this, cx)?;
-    let remembered = database.call(|store| store.resume_threads()).await?;
+    let remembered = database.call(|store| resume_threads(store)).await?;
     let chosen = this
         .update(cx, |workspace, cx| {
             threads_to_resume(workspace, &remembered, cx)
@@ -82,7 +110,7 @@ pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut Async
     if chosen.is_empty() {
         if !remembered.is_empty() {
             database
-                .call(|store| store.set_resume_threads(&BTreeSet::new()))
+                .call(|store| set_resume_threads(store, &BTreeSet::new()))
                 .await?;
         }
         return Ok(());
@@ -91,7 +119,7 @@ pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut Async
     keep.extend(chosen.iter().map(|(id, _)| id.clone()));
     if keep != remembered {
         database
-            .call(move |store| store.set_resume_threads(&keep))
+            .call(move |store| set_resume_threads(store, &keep))
             .await?;
     }
     for (id, starting) in &chosen {
@@ -108,15 +136,7 @@ pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut Async
                         .map(|thread| thread.read(cx).record.status);
                     let live =
                         matches!(workspace.shown(id), Some(crate::thread::Shown::Running(_)));
-                    !live
-                        && matches!(
-                            status,
-                            Some(
-                                ThreadStatus::Active
-                                    | ThreadStatus::Starting
-                                    | ThreadStatus::Stopping
-                            )
-                        )
+                    !live && status.is_some_and(ThreadStatus::running)
                 })
                 .map_err(closed)?;
             if failed {
@@ -125,7 +145,7 @@ pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut Async
         }
     }
     database
-        .call(|store| store.set_resume_threads(&BTreeSet::new()))
+        .call(|store| set_resume_threads(store, &BTreeSet::new()))
         .await
 }
 
@@ -192,7 +212,7 @@ fn close_left_turn(
     at: kg_domain::Timestamp,
     resume: &BTreeSet<ThreadId>,
 ) -> kg_store::Result<()> {
-    let left_running = matches!(record.status, ThreadStatus::Starting | ThreadStatus::Active)
+    let left_running = record.status.live()
         || (record.status == ThreadStatus::Stopping && resume.contains(&record.id));
     if record.archived_at.is_none() && left_running {
         return Ok(());

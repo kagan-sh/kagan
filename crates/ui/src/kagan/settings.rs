@@ -223,10 +223,10 @@ impl Kagan {
 
     /// Reads the preferences the page shows, so a change from `kg` shows at once.
     pub(super) fn load_prefs(&self, cx: &mut Context<Self>) {
-        let agent = super::layout::read::<bool>("agent-integration", cx);
-        let notify = super::layout::read::<bool>("notify", cx);
-        let plugin_status = super::layout::read::<bool>("plugin-status", cx);
-        let update = super::layout::read::<bool>("update-check", cx);
+        let agent = super::layout::read::<bool>(kg_domain::prefs::AGENT_INTEGRATION, cx);
+        let notify = super::layout::read::<bool>(kg_domain::prefs::NOTIFY, cx);
+        let plugin_status = super::layout::read::<bool>(kg_domain::prefs::PLUGIN_STATUS, cx);
+        let update = super::layout::read::<bool>(kg_domain::prefs::UPDATE_CHECK, cx);
         let prefs = self.prefs.clone();
         cx.spawn(async move |_, cx| {
             let on = agent.await.ok().flatten().unwrap_or(true);

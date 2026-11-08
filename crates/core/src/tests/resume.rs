@@ -7,6 +7,7 @@ use serde_json::json;
 use super::{Fixture, events, op, started, wait_for_status};
 #[cfg(unix)]
 use super::{claude_line, fake_agent, ran};
+use crate::workspace::recovery::{remember_resume, resume_threads, set_resume_threads};
 
 fn claude_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let config = fixture.dir.path().join("claude");
@@ -967,10 +968,27 @@ async fn a_lost_codex_file_is_replaced_by_the_run_that_follows(cx: &mut TestAppC
 }
 
 fn left_to_resume(fixture: &Fixture) -> std::collections::BTreeSet<ThreadId> {
-    kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3"))
-        .unwrap()
-        .resume_threads()
-        .unwrap()
+    let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
+    resume_threads(&store).unwrap()
+}
+
+#[test]
+fn a_resume_list_reads_back_what_was_set_and_remembered() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = kg_store::Store::open(dir.path().join("kagan.sqlite3")).unwrap();
+    let a = ThreadId("thr_a".into());
+    let b = ThreadId("thr_b".into());
+    assert!(resume_threads(&store).unwrap().is_empty());
+    set_resume_threads(&store, &std::collections::BTreeSet::from([a.clone()])).unwrap();
+    assert_eq!(
+        resume_threads(&store).unwrap(),
+        std::collections::BTreeSet::from([a.clone()])
+    );
+    remember_resume(&store, std::slice::from_ref(&b)).unwrap();
+    assert_eq!(
+        resume_threads(&store).unwrap(),
+        std::collections::BTreeSet::from([a, b])
+    );
 }
 
 #[gpui_kit::test]
@@ -979,9 +997,7 @@ async fn a_remembered_thread_that_cannot_resume_is_forgotten_at_open(cx: &mut Te
     let gone = ThreadId("thr_gone".into());
     let fixture = fixture
         .restart(cx, |store| {
-            store
-                .set_resume_threads(&std::collections::BTreeSet::from([gone.clone()]))
-                .unwrap();
+            set_resume_threads(store, &std::collections::BTreeSet::from([gone.clone()])).unwrap();
         })
         .await;
     cx.run_until_parked();
@@ -999,9 +1015,7 @@ async fn an_idle_thread_whose_folder_is_gone_stays_idle_when_it_cannot_resume(
     let environment = super::thread(&id, cx).await.environment_id.unwrap();
     let fixture = fixture
         .restart(cx, |store| {
-            store
-                .set_resume_threads(&std::collections::BTreeSet::from([id.clone()]))
-                .unwrap();
+            set_resume_threads(store, &std::collections::BTreeSet::from([id.clone()])).unwrap();
             let mut folder = store.environment(&environment).unwrap().unwrap();
             folder.status = EnvironmentStatus::Error;
             store.put_environment(&folder).unwrap();

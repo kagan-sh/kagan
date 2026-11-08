@@ -2,7 +2,7 @@ pub(crate) mod keys;
 
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
 use kg_domain::{
-    KeymapAction, KeymapOp, OpError, OpResult, PreferenceOp, Slot, ThemeOp, ThemeSettings,
+    KeymapAction, KeymapOp, OpError, OpResult, PreferenceOp, Slot, ThemeOp, ThemeSettings, prefs,
 };
 
 use crate::host::database::{Database, Result};
@@ -18,14 +18,10 @@ pub(crate) async fn theme(
     match op {
         ThemeOp::Get => {
             let value = database.call(|store| store.setting("theme")).await?;
-            let settings =
-                value
-                    .map(serde_json::from_value)
-                    .transpose()?
-                    .unwrap_or(ThemeSettings {
-                        theme: "fjord".into(),
-                        mode: kg_domain::Appearance::System,
-                    });
+            let settings = value
+                .map(serde_json::from_value)
+                .transpose()?
+                .unwrap_or_default();
             Ok(OpResult::Theme(settings))
         }
         ThemeOp::Set { theme, mode } => {
@@ -62,91 +58,71 @@ pub(crate) async fn theme(
 const KEYMAP: &str = "keymap";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Preference {
-    ConfirmArchive,
-    AgentIntegration,
-    Notify,
-    PluginStatus,
-    UpdateCheck,
-    TerminalFontSize,
-    SlotThreads,
-    SlotReview,
-    ReviewViewed,
-    Sidebar,
-    Width,
+enum Kind {
+    Flag,
+    FontSize,
+    Slot,
+    Pixels,
+    Map,
 }
 
-const PREFERENCES: &[(&str, Preference)] = &[
-    ("confirm-archive", Preference::ConfirmArchive),
-    ("agent-integration", Preference::AgentIntegration),
-    ("notify", Preference::Notify),
-    ("plugin-status", Preference::PluginStatus),
-    ("update-check", Preference::UpdateCheck),
-    ("terminal-font-size", Preference::TerminalFontSize),
-    (Slot::Threads.preference(), Preference::SlotThreads),
-    (Slot::Review.preference(), Preference::SlotReview),
-    ("review-viewed", Preference::ReviewViewed),
+const PREFERENCES: &[(&str, Kind)] = &[
+    (prefs::CONFIRM_ARCHIVE, Kind::Flag),
+    (prefs::AGENT_INTEGRATION, Kind::Flag),
+    (prefs::NOTIFY, Kind::Flag),
+    (prefs::PLUGIN_STATUS, Kind::Flag),
+    (prefs::UPDATE_CHECK, Kind::Flag),
+    (prefs::TERMINAL_FONT_SIZE, Kind::FontSize),
+    (Slot::Threads.preference(), Kind::Slot),
+    (Slot::Review.preference(), Kind::Slot),
+    (prefs::REVIEW_VIEWED, Kind::Map),
 ];
-const LAYOUT: &[(&str, Preference)] = &[
-    ("left-sidebar", Preference::Sidebar),
-    ("left-width", Preference::Width),
-    ("right-sidebar", Preference::Sidebar),
-    ("right-width", Preference::Width),
-    ("review-wrap", Preference::Sidebar),
+const LAYOUT: &[(&str, Kind)] = &[
+    (prefs::LEFT_SIDEBAR, Kind::Flag),
+    (prefs::LEFT_WIDTH, Kind::Pixels),
+    (prefs::RIGHT_SIDEBAR, Kind::Flag),
+    (prefs::RIGHT_WIDTH, Kind::Pixels),
+    (prefs::REVIEW_WRAP, Kind::Flag),
 ];
 
-impl Preference {
-    fn parse(key: &str) -> Option<Self> {
-        if let Some((_, preference)) = PREFERENCES.iter().find(|(name, _)| *name == key) {
-            return Some(*preference);
-        }
-        let name = window_layout(key)?;
-        LAYOUT
-            .iter()
-            .find(|(candidate, _)| *candidate == name)
-            .map(|(_, preference)| *preference)
+fn kind(key: &str) -> Option<Kind> {
+    if let Some((_, kind)) = PREFERENCES.iter().find(|(name, _)| *name == key) {
+        return Some(*kind);
     }
+    let name = window_layout(key)?;
+    LAYOUT
+        .iter()
+        .find(|(candidate, _)| *candidate == name)
+        .map(|(_, kind)| *kind)
+}
 
-    fn accepts(self, key: &str, value: &serde_json::Value) -> Result<()> {
-        match self {
-            Self::TerminalFontSize => value
-                .as_u64()
-                .filter(|size| (9..=24).contains(size))
+fn accepts(kind: Kind, key: &str, value: &serde_json::Value) -> Result<()> {
+    match kind {
+        Kind::Flag => serde_json::from_value::<bool>(value.clone())
+            .map(|_| ())
+            .map_err(|_| OpError::Invalid(format!("{key} must be a boolean"))),
+        Kind::FontSize => value
+            .as_u64()
+            .and_then(|size| u8::try_from(size).ok())
+            .filter(|size| (prefs::TERMINAL_FONT_MIN..=prefs::TERMINAL_FONT_MAX).contains(size))
+            .map(|_| ())
+            .ok_or_else(|| {
+                OpError::Invalid(format!(
+                    "{key} must be an integer from {} to {}",
+                    prefs::TERMINAL_FONT_MIN,
+                    prefs::TERMINAL_FONT_MAX
+                ))
+            }),
+        Kind::Slot => serde_json::from_value::<kg_domain::SlotChoice>(value.clone())
+            .map(|_| ())
+            .map_err(|_| OpError::Invalid(format!("{key} must be a plugin id or kagan"))),
+        Kind::Pixels => serde_json::from_value::<f32>(value.clone())
+            .map(|_| ())
+            .map_err(|_| OpError::Invalid(format!("{key} must be a number of pixels"))),
+        Kind::Map => {
+            serde_json::from_value::<std::collections::BTreeMap<String, String>>(value.clone())
                 .map(|_| ())
-                .ok_or_else(|| {
-                    OpError::Invalid("terminal-font-size must be an integer from 9 to 24".into())
-                }),
-            Self::ConfirmArchive => serde_json::from_value::<bool>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid("confirm-archive must be a boolean".into())),
-            Self::Sidebar => serde_json::from_value::<bool>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid(format!("{key} must be a boolean"))),
-            Self::Width => serde_json::from_value::<f32>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid(format!("{key} must be a number of pixels"))),
-            Self::AgentIntegration => serde_json::from_value::<bool>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid("agent-integration must be a boolean".into())),
-            Self::SlotThreads | Self::SlotReview => {
-                serde_json::from_value::<kg_domain::SlotChoice>(value.clone())
-                    .map(|_| ())
-                    .map_err(|_| OpError::Invalid(format!("{key} must be a plugin id or kagan")))
-            }
-            Self::UpdateCheck => serde_json::from_value::<bool>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid("update-check must be a boolean".into())),
-            Self::Notify => serde_json::from_value::<bool>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid("notify must be a boolean".into())),
-            Self::PluginStatus => serde_json::from_value::<bool>(value.clone())
-                .map(|_| ())
-                .map_err(|_| OpError::Invalid("plugin-status must be a boolean".into())),
-            Self::ReviewViewed => {
-                serde_json::from_value::<std::collections::BTreeMap<String, String>>(value.clone())
-                    .map(|_| ())
-                    .map_err(|_| OpError::Invalid("review-viewed must be a map".into()))
-            }
+                .map_err(|_| OpError::Invalid(format!("{key} must be a map")))
         }
     }
 }
@@ -181,9 +157,8 @@ pub(crate) async fn preference(
 }
 
 fn preference_value(key: &str, value: &serde_json::Value) -> Result<()> {
-    Preference::parse(key)
-        .ok_or_else(|| OpError::Invalid(format!("unknown preference {key}")))?
-        .accepts(key, value)
+    let kind = kind(key).ok_or_else(|| OpError::Invalid(format!("unknown preference {key}")))?;
+    accepts(kind, key, value)
 }
 
 // The sidebar layout of one window. The layout is saved per window, as `<window>.<name>`, so
@@ -198,7 +173,7 @@ fn window_layout(key: &str) -> Option<&str> {
 }
 
 fn known_preference(key: &str) -> Result<()> {
-    Preference::parse(key)
+    kind(key)
         .map(|_| ())
         .ok_or_else(|| OpError::Invalid(format!("unknown preference {key}")))
 }

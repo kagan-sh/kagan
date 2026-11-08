@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use gpui_kit::{App, Task};
-use kg_domain::{Op, OpError, ThreadStatus};
+use kg_domain::{Op, OpError};
 
 use crate::host::database::Result;
 
@@ -27,12 +27,7 @@ impl Workspace {
             .read(cx)
             .threads
             .iter()
-            .filter(|(_, thread)| {
-                matches!(
-                    thread.read(cx).record.status,
-                    ThreadStatus::Active | ThreadStatus::Starting
-                )
-            })
+            .filter(|(_, thread)| thread.read(cx).record.status.live())
             .map(|(id, _)| id.clone())
             .collect();
         let ids: Vec<_> = workspace
@@ -48,7 +43,7 @@ impl Workspace {
             let work = async {
                 if !resume.is_empty() {
                     database
-                        .call(move |store| store.remember_resume(&resume))
+                        .call(move |store| super::recovery::remember_resume(store, &resume))
                         .await?;
                 }
                 let stops: Vec<_> = cx.update(|cx| {

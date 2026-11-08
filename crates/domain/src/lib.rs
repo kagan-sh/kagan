@@ -4,6 +4,7 @@ mod diff;
 mod event;
 mod id;
 mod op;
+pub mod prefs;
 mod preview;
 mod program;
 mod record;

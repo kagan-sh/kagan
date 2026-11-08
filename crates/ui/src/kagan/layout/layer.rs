@@ -24,9 +24,9 @@ impl Kagan {
             return;
         }
         if self.panes.left {
-            save(&key("left-sidebar"), false, cx);
+            save(&key(kg_domain::prefs::LEFT_SIDEBAR), false, cx);
         } else if self.room_panes(true, false).left {
-            save(&key("left-sidebar"), true, cx);
+            save(&key(kg_domain::prefs::LEFT_SIDEBAR), true, cx);
         } else if self.screen.drawn(Side::Left) {
             self.dismiss_overlay(Side::Left, window, cx);
         } else {
@@ -128,7 +128,7 @@ impl Kagan {
             }
             self.right.fill = right::Fill::Column;
             self.dismiss_overlay(Side::Right, window, cx);
-            save(&key("right-sidebar"), false, cx);
+            save(&key(kg_domain::prefs::RIGHT_SIDEBAR), false, cx);
             return;
         }
         if !self.screen.drawn(Side::Right) && self.waiting_count(cx) > 0 {
@@ -139,7 +139,7 @@ impl Kagan {
             && self.has_right_content(cx)
             && self.room_panes(self.layout.left_open, true).right
         {
-            save(&key("right-sidebar"), true, cx);
+            save(&key(kg_domain::prefs::RIGHT_SIDEBAR), true, cx);
             return;
         }
         if self.screen.drawn(Side::Right) {

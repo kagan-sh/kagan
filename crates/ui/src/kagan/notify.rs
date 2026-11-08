@@ -46,7 +46,7 @@ async fn post(id: ThreadId, title: String, cx: &mut gpui_kit::AsyncApp) {
     let task = cx.update(|cx| {
         Workspace::dispatch(
             Op::Preference(PreferenceOp::Get {
-                key: "notify".into(),
+                key: kg_domain::prefs::NOTIFY.into(),
             }),
             cx,
         )

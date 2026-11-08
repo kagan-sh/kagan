@@ -53,6 +53,18 @@ pub enum ThreadStatus {
     Error,
 }
 
+impl ThreadStatus {
+    #[must_use]
+    pub fn running(self) -> bool {
+        matches!(self, Self::Starting | Self::Active | Self::Stopping)
+    }
+
+    #[must_use]
+    pub fn live(self) -> bool {
+        matches!(self, Self::Starting | Self::Active)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum Visibility {

@@ -1,4 +1,4 @@
-use crate::screen::{MAX_COLS, MAX_ROWS, MIN_COLS, SNAPSHOT_MAX, Snapshot};
+use crate::screen::{MAX_COLS, MAX_ROWS, MIN_COLS, MIN_ROWS, SNAPSHOT_MAX, Snapshot};
 
 use std::sync::atomic::Ordering;
 
@@ -51,7 +51,7 @@ impl Finished {
     #[must_use]
     pub fn restore(cols: u16, rows: u16, replay: &[u8]) -> Option<Self> {
         if !(MIN_COLS..=MAX_COLS).contains(&cols)
-            || !(1..=MAX_ROWS).contains(&rows)
+            || !(MIN_ROWS..=MAX_ROWS).contains(&rows)
             || replay.len() > SNAPSHOT_MAX
         {
             return None;

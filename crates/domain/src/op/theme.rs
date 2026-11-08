@@ -18,6 +18,15 @@ pub struct ThemeSettings {
     pub mode: Appearance,
 }
 
+impl Default for ThemeSettings {
+    fn default() -> Self {
+        Self {
+            theme: "fjord".into(),
+            mode: Appearance::System,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Subcommand)]
 #[serde(rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum ThemeOp {

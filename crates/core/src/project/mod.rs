@@ -261,14 +261,7 @@ fn removable(project: &Project, threads: &[kg_domain::Thread]) -> Result<()> {
     if project.kind == ProjectKind::Personal {
         return Err(OpError::Invalid("Personal cannot be removed".into()));
     }
-    if threads.iter().any(|thread| {
-        matches!(
-            thread.status,
-            kg_domain::ThreadStatus::Starting
-                | kg_domain::ThreadStatus::Active
-                | kg_domain::ThreadStatus::Stopping
-        )
-    }) {
+    if threads.iter().any(|thread| thread.status.running()) {
         return Err(OpError::Invalid(format!(
             "Stop the programs in “{}” first.",
             project.name

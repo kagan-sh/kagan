@@ -1,7 +1,5 @@
 use std::time::Instant;
 
-use kg_domain::ThreadStatus;
-
 pub struct Project {
     pub(crate) record: kg_domain::Project,
 }
@@ -57,9 +55,6 @@ impl Thread {
 
     #[must_use]
     pub fn running(&self) -> bool {
-        match self.record.status {
-            ThreadStatus::Pending | ThreadStatus::Idle | ThreadStatus::Error => false,
-            ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping => true,
-        }
+        self.record.status.running()
     }
 }
