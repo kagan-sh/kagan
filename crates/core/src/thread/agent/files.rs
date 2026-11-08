@@ -194,6 +194,10 @@ fn write_workspace_rule(folder: &Path, rule: &str) -> std::io::Result<()> {
 }
 
 fn exclude_cursor_rule(folder: &Path) -> std::io::Result<()> {
+    let _turn = LINKS
+        .get_or_init(|| std::sync::Mutex::new(()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let Some(exclude) = git_exclude(folder) else {
         return Ok(());
     };

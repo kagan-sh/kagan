@@ -120,6 +120,50 @@ fn has_pair(args: &[String], left: &str, right: &str) -> bool {
 }
 
 #[cfg(unix)]
+async fn other_project(fixture: &Fixture, cx: &mut TestAppContext) -> (ProjectId, PathBuf) {
+    let checkout = fixture.dir.path().join("checkout");
+    std::fs::create_dir_all(&checkout).unwrap();
+    let OpResult::Project(project) = op(
+        Op::Project(ProjectOp::Add {
+            path: checkout.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("project")
+    };
+    (project.id, dunce::canonicalize(&checkout).unwrap())
+}
+
+#[cfg(unix)]
+async fn started_on(
+    project: &ProjectId,
+    program: &str,
+    cx: &mut TestAppContext,
+) -> (ThreadId, super::Reap) {
+    let OpResult::Thread(started) = op(
+        Op::Thread(ThreadOp::Run(Run {
+            project_id: project.clone(),
+            program: program.into(),
+            title: None,
+            environment: EnvironmentSpec::ProjectDefault,
+            visibility: None,
+            parent_thread_id: None,
+            lifecycle_owner_thread_id: None,
+            metadata: None,
+        })),
+        cx,
+    )
+    .await
+    .unwrap() else {
+        panic!("thread")
+    };
+    let pid = super::pid_of(&started.id, cx).expect("the host started the program");
+    (started.id, super::Reap(pid))
+}
+
+#[cfg(unix)]
 #[gpui_kit::test]
 async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext) {
     cx.update(|cx| cx.set_global(crate::SocketLocation("/tmp/kagan-test.sock".into())));
@@ -168,11 +212,13 @@ async fn a_claude_thread_gets_kagan_flags_env_and_skills(cx: &mut TestAppContext
 #[gpui_kit::test]
 async fn instructions_join_the_note_and_stop_at_the_cap(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
+    let (project, checkout) = other_project(&fixture, cx).await;
+    std::fs::write(checkout.join("instructions.md"), "FROM_FOLDER\n").unwrap();
     let mut body = "a".repeat(4096);
     body.push_str("TAIL");
     std::fs::write(fixture.dir.path().join("instructions.md"), body).unwrap();
     let run = fixture.dir.path().join("capped");
-    let (id, _reap) = started(&fixture, &claude_line(&run), cx).await;
+    let (id, _reap) = started_on(&project, &claude_line(&run), cx).await;
     ran(&run);
     let note = std::fs::read_to_string(
         dunce::canonicalize(fixture.dir.path())
@@ -189,6 +235,7 @@ async fn instructions_join_the_note_and_stop_at_the_cap(cx: &mut TestAppContext)
     );
     assert!(note.contains(&"a".repeat(4096)), "{note}");
     assert!(!note.contains("TAIL"), "{note}");
+    assert!(!note.contains("FROM_FOLDER"), "{note}");
     let OpResult::Tools { instructions, .. } =
         op(Op::Thread(ThreadOp::Tools { id: id.clone() }), cx)
             .await
@@ -200,6 +247,7 @@ async fn instructions_join_the_note_and_stop_at_the_cap(cx: &mut TestAppContext)
     assert!(instructions.contains("Instructions from your kagan instructions file:"));
     assert!(instructions.contains(&"a".repeat(4096)));
     assert!(!instructions.contains("TAIL"));
+    assert!(!instructions.contains("FROM_FOLDER"));
 }
 
 #[cfg(unix)]
@@ -321,10 +369,11 @@ async fn a_codex_thread_gets_the_server_and_note_as_overrides(cx: &mut TestAppCo
 #[gpui_kit::test]
 async fn a_cursor_agent_thread_receives_the_threads_skill(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
+    let (project, checkout) = other_project(&fixture, cx).await;
     assert!(
         std::process::Command::new("git")
             .args(["init"])
-            .current_dir(fixture.dir.path())
+            .current_dir(&checkout)
             .status()
             .unwrap()
             .success()
@@ -334,9 +383,11 @@ async fn a_cursor_agent_thread_receives_the_threads_skill(cx: &mut TestAppContex
         "Cursor standing line.\n",
     )
     .unwrap();
+    std::fs::write(checkout.join("instructions.md"), "FROM_FOLDER\n").unwrap();
     let run = fixture.dir.path().join("cursor");
     let program = fake_agent(&run, "cursor-agent");
-    let (id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
+    let (id, _reap) =
+        started_on(&project, &format!("{} --person-arg", program.display()), cx).await;
     let (args, env) = ran(&run);
     let agent = dunce::canonicalize(fixture.dir.path())
         .unwrap()
@@ -353,7 +404,9 @@ async fn a_cursor_agent_thread_receives_the_threads_skill(cx: &mut TestAppContex
     assert!(rule.contains("kg-threads"), "{rule}");
     assert!(rule.contains("Task, Agent"), "{rule}");
     assert!(rule.contains("Cursor standing line."), "{rule}");
+    assert!(!rule.contains("FROM_FOLDER"), "{rule}");
     assert!(!rule.contains(&id.0), "{rule}");
+    assert!(!fixture.dir.path().join(".cursor/rules/kagan.mdc").exists());
     let record = thread(&id, cx).await;
     let OpResult::Environment(environment) = op(
         Op::Environment(EnvironmentOp::Get {
@@ -708,8 +761,11 @@ async fn pi_gets_the_composed_skill_root_as_an_explicit_option(cx: &mut TestAppC
     write_skill(&bb.join("skills"), "bb-user", "user body");
     let run = fixture.dir.path().join("pi-bb");
     let program = fake_agent(&run, "pi");
+    let (project, checkout) = other_project(&fixture, cx).await;
     std::fs::write(fixture.dir.path().join("instructions.md"), "Call me Ada.\n").unwrap();
-    let (id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
+    std::fs::write(checkout.join("instructions.md"), "FROM_FOLDER\n").unwrap();
+    let (id, _reap) =
+        started_on(&project, &format!("{} --person-arg", program.display()), cx).await;
     let (args, _env) = ran(&run);
     assert_eq!(args[0], "--skill");
     let skills = PathBuf::from(&args[1]);
@@ -725,6 +781,7 @@ async fn pi_gets_the_composed_skill_root_as_an_explicit_option(cx: &mut TestAppC
     let written = std::fs::read_to_string(&note).unwrap();
     assert!(written.contains(&id.0), "{written}");
     assert!(written.contains("Call me Ada."), "{written}");
+    assert!(!written.contains("FROM_FOLDER"), "{written}");
     assert!(skills.join("bb-user/SKILL.md").exists());
     assert!(!fixture.dir.path().join(".agents").exists());
     assert!(!fixture.dir.path().join(".opencode").exists());

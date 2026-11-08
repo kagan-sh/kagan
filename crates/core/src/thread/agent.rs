@@ -355,7 +355,11 @@ async fn configure(
     } = input;
     let id = record.id.0.as_str();
     let extra = collect_instruct(this, record, cx).await;
-    let instructions = note::read_instructions(data_dir);
+    let instructions = {
+        let data_dir = data_dir.to_owned();
+        cx.background_spawn(async move { note::read_instructions(&data_dir) })
+            .await
+    };
     let agent = data_dir.join("agent");
     let (skills_root, skills, skill_errors) = skill::mirror(
         this,

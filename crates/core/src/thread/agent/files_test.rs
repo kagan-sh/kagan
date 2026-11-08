@@ -289,9 +289,12 @@ fn a_cursor_rule_exclude_survives_a_real_file() {
     let rule = work.join(".cursor/rules/kagan.mdc");
     std::fs::create_dir_all(rule.parent().unwrap()).unwrap();
     std::fs::write(&rule, "rule\n").unwrap();
+    let stale = work.join(".agents/skills/stale");
+    std::fs::create_dir_all(&stale).unwrap();
+    std::fs::write(work.join(".git/info/exclude"), ".agents/skills/stale\n").unwrap();
     exclude_cursor_rule(&work).unwrap();
     exclude_cursor_rule(&work).unwrap();
-    hide_from_git(&work, ".agents/skills", &[]).unwrap();
+    hide_from_git(&work, ".agents/skills", &names(&["kg-threads"])).unwrap();
     let exclude = std::fs::read_to_string(work.join(".git/info/exclude")).unwrap();
     assert_eq!(
         exclude
@@ -299,6 +302,13 @@ fn a_cursor_rule_exclude_survives_a_real_file() {
             .filter(|line| line.trim() == ".cursor/rules/kagan.mdc")
             .count(),
         1,
+        "{exclude}"
+    );
+    assert!(exclude.contains(".agents/skills/kg-threads"), "{exclude}");
+    assert!(
+        !exclude
+            .lines()
+            .any(|line| line.trim() == ".agents/skills/stale"),
         "{exclude}"
     );
 }

@@ -301,11 +301,10 @@ pub(crate) async fn tools(
     let data_dir = this
         .update(cx, |workspace, _| workspace.data_dir.clone())
         .map_err(closed)?;
-    let note = crate::thread::note_with(
-        &id.0,
-        &crate::thread::read_instructions(&data_dir),
-        instruct.as_deref().unwrap_or(""),
-    );
+    let instructions = cx
+        .background_spawn(async move { crate::thread::read_instructions(&data_dir) })
+        .await;
+    let note = crate::thread::note_with(&id.0, &instructions, instruct.as_deref().unwrap_or(""));
     let result =
         crate::dispatch::forward(this, crate::PluginRequest::Tools { thread_id: id }, cx).await?;
     let OpResult::Tools {
