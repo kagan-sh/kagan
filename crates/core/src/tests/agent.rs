@@ -743,7 +743,9 @@ async fn opencode_gets_the_composed_skills_in_its_own_folder(cx: &mut TestAppCon
     let program = fake_agent(&run, "opencode");
     let (_id, _reap) = started(&fixture, &format!("{} --person-arg", program.display()), cx).await;
     let (args, _env) = ran(&run);
-    assert_eq!(args, vec!["--person-arg"]);
+    assert_eq!(args[0], "--session");
+    assert!(!args[1].is_empty());
+    assert_eq!(args[2], "--person-arg");
     let root = dunce::canonicalize(fixture.dir.path()).unwrap();
     let visible = std::fs::read_to_string(run.join("out/opencode-skills")).unwrap();
     assert!(visible.lines().any(|line| line == "kg-cli"), "{visible}");
@@ -777,7 +779,9 @@ async fn pi_gets_the_composed_skill_root_as_an_explicit_option(cx: &mut TestAppC
         .join("note.txt");
     assert_eq!(args[2], "--append-system-prompt");
     assert_eq!(args[3], note.display().to_string());
-    assert_eq!(args[4], "--person-arg");
+    assert_eq!(args[4], "--session-id");
+    assert!(!args[5].is_empty());
+    assert_eq!(args[6], "--person-arg");
     let written = std::fs::read_to_string(&note).unwrap();
     assert!(written.contains(&id.0), "{written}");
     assert!(written.contains("Call me Ada."), "{written}");

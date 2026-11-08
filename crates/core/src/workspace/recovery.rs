@@ -195,7 +195,12 @@ async fn note_unresumed(
         thread.record = record;
         cx.notify();
     });
-    this.update(cx, |_, cx| {
+    this.update(cx, |workspace, cx| {
+        if let Some(end) = crate::end::End::from_newest(&[EventKind::Failed {
+            error: Some(error.to_owned()),
+        }]) {
+            workspace.ends.insert(id.clone(), end);
+        }
         cx.emit(crate::WorkspaceEvent::Changed);
         cx.notify();
     })
