@@ -273,7 +273,6 @@ pub(crate) struct Loaded {
 pub enum MountError {
     /// The plugin does not declare this export. The generation stays mounted.
     Missing(String),
-    /// The runtime refused the view.
     Failed(String),
 }
 

@@ -91,7 +91,6 @@ impl Store {
         }
     }
 
-    /// The warning a person sees once secrets are known to go to the file.
     pub(crate) fn warning(&self) -> Option<String> {
         let missing = self.keychain.is_none() || self.known().is_ok_and(|known| known.no_keychain);
         missing.then(|| {
@@ -211,7 +210,6 @@ impl Store {
         problems
     }
 
-    /// Keeps `text`, and returns the warning when it went to the file.
     pub(crate) fn set(
         &self,
         id: &PluginId,

@@ -17,7 +17,6 @@ const MAX_LIST_NAME_BYTES: usize = 1024 * 1024;
 
 pub(crate) const DECLARATIONS: &str = "export function read(path: string, options: { offset: number; maxBytes: number }): Promise<{ text: string; next: number; size: number }>;\nexport function list(dir: string): Promise<{ path: string; size: number; modifiedMs: number }[]>;";
 
-/// Why a `kagan/files` call failed.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{path}: {source}", path = .path.display())]

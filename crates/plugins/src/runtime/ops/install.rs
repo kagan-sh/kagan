@@ -206,7 +206,6 @@ pub(in crate::runtime::ops) async fn update(
     keep(host, fetched, record.source, grant, &plugins, false, cx).await
 }
 
-/// Records approved code with its grant and makes it active.
 pub(in crate::runtime::ops) async fn keep(
     host: &Entity<PluginHost>,
     fetched: Fetched,

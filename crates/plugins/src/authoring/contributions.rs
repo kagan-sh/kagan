@@ -23,7 +23,6 @@ pub struct Contributions {
     pub(crate) file_opener: Option<IgnoredAny>,
 }
 
-/// Why a manifest's UI contributions cannot be used.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error(

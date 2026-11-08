@@ -4,7 +4,6 @@ use gpui_shell::HttpRequestGrant;
 use kg_domain::PluginId;
 use serde::{Deserialize, Serialize};
 
-/// The most loopback fetch entries a manifest may declare.
 pub(crate) const LOCAL_FETCH_CAP: usize = 8;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,7 +40,6 @@ pub(crate) enum Env {
     Inherit,
 }
 
-/// Why a fetch host cannot be granted.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum FetchError {
     #[error("fetch host {0:?} must be http://127.0.0.1:<port> or http://localhost:<port>")]

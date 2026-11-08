@@ -14,7 +14,6 @@ use crate::ui_host::{self, HostUiEvent};
 
 /// The largest JSON text `kagan.post` or `post` accepts, in bytes.
 pub const MESSAGE_CAP: usize = 1024 * 1024;
-// The largest file the page may read from the plugin folder.
 pub(crate) const FILE_CAP: u64 = 8 * 1024 * 1024;
 
 /// The URL scheme for plugin pages. A page's origin is `kagan-plugin://<plugin-id>`.
@@ -29,7 +28,6 @@ pub enum PageFileError {
     TooBig,
 }
 
-/// Why a declared `web` file cannot be the panel's page.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("web {relative:?} cannot be the panel page: {source}")]
@@ -67,7 +65,6 @@ pub fn read_plugin_file(root: &Path, relative: &str) -> Result<Vec<u8>, PageFile
     read_in(&dir, &relative)
 }
 
-// Checks the declared `web` file when the manifest is read.
 pub(crate) fn require_html(root: &Path, relative: &str) -> Result<(), Error> {
     read_plugin_file(root, relative).map_err(|source| Error::File {
         relative: relative.to_owned(),

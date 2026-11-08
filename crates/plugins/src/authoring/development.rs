@@ -192,7 +192,6 @@ fn constructs_button(source: &str) -> bool {
     })
 }
 
-// Whether any script calls `.store(true)` on a chain that starts at `new WebView(...)`.
 pub(crate) fn calls_webview_store(root: &Path) -> bool {
     plugin_scripts(root).is_ok_and(|scripts| {
         scripts

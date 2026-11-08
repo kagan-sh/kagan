@@ -237,7 +237,6 @@ impl Fetched {
     }
 }
 
-/// Removes checkouts a stopped install left behind.
 pub(crate) fn clear_staging(plugins: &Path) {
     let Ok(entries) = std::fs::read_dir(plugins) else {
         return;

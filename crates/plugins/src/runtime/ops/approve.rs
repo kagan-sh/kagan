@@ -65,7 +65,6 @@ pub(in crate::runtime::ops) async fn choose(
     }
 }
 
-/// Asks a person before a folder setting names a folder; returns that folder.
 pub(in crate::runtime::ops) async fn approve_folder(
     setting: &Setting,
     value: &Value,

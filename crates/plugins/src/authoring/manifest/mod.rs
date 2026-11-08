@@ -21,7 +21,6 @@ pub use settings::{AgentChoice, Setting};
 
 pub(crate) const FILE: &str = "kagan.json";
 
-/// Why `kagan.json` is refused or a grant cannot be used.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("cannot read it: {source}")]

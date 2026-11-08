@@ -95,7 +95,6 @@ impl Job<'_> {
     }
 }
 
-/// Why a plugin gave no reply.
 pub(crate) enum Unanswered {
     NotLoaded(OpError),
     Unloaded(OpError),

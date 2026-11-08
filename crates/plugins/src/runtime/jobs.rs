@@ -23,9 +23,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-// A page job is refused once this many are waiting for `next()`.
 pub(crate) const PAGE_PENDING_CAP: usize = 32;
-// A page job is refused if it would take waiting bytes past this.
 pub(crate) const PAGE_PENDING_BYTES: usize = MESSAGE_CAP;
 
 pub(crate) enum Ended {
@@ -109,7 +107,6 @@ impl Jobs {
         })
     }
 
-    // Bytes held for `next()`: not yet timed out or taken.
     pub(crate) fn pending_page_bytes(&self) -> usize {
         self.bounds.bytes()
     }
@@ -129,7 +126,6 @@ impl Jobs {
         Some((id, replied))
     }
 
-    // Queues a page job, dropped once `alive` is gone. None when the page cap is full.
     pub(crate) fn send_page(
         &self,
         job: &Job<'_>,
