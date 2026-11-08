@@ -194,31 +194,19 @@ fn write_workspace_rule(folder: &Path, rule: &str) -> std::io::Result<()> {
 }
 
 fn exclude_cursor_rule(folder: &Path) -> std::io::Result<()> {
-    let _turn = LINKS
-        .get_or_init(|| std::sync::Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(exclude) = git_exclude(folder) else {
-        return Ok(());
-    };
-    if let Some(parent) = exclude.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let text = match std::fs::read_to_string(&exclude) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(error),
-    };
-    if text.lines().any(|line| line.trim() == CURSOR_RULE) {
-        return Ok(());
-    }
-    let mut next = text;
-    if !next.is_empty() && !next.ends_with('\n') {
+    let _turn = links_turn();
+    edit_exclude(folder, |text| {
+        if text.lines().any(|line| line.trim() == CURSOR_RULE) {
+            return None;
+        }
+        let mut next = text.to_owned();
+        if !next.is_empty() && !next.ends_with('\n') {
+            next.push('\n');
+        }
+        next.push_str(CURSOR_RULE);
         next.push('\n');
-    }
-    next.push_str(CURSOR_RULE);
-    next.push('\n');
-    std::fs::write(exclude, next)
+        Some(next)
+    })
 }
 
 fn note_path(agent: &Path, id: &str) -> PathBuf {
@@ -264,10 +252,7 @@ pub(super) async fn link_skills(
         .map(|root| (*root).to_owned())
         .collect::<Vec<_>>();
     cx.background_spawn(async move {
-        let _turn = LINKS
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _turn = links_turn();
         for root in &roots {
             let owned = link_root(&folder, &skills_root, &owned_root, &names, root)?;
             hide_from_git(&folder, root, &owned)?;
@@ -285,10 +270,7 @@ pub(super) async fn retire_legacy(
     let folder = folder.to_owned();
     let legacy = agent.join("skills");
     cx.background_spawn(async move {
-        let _turn = LINKS
-            .get_or_init(|| std::sync::Mutex::new(()))
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _turn = links_turn();
         let root = folder.join(".agents").join("skills");
         let entries = match std::fs::read_dir(&root) {
             Ok(entries) => entries,
@@ -306,7 +288,12 @@ pub(super) async fn retire_legacy(
     .await
 }
 
-static LINKS: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+fn links_turn() -> std::sync::MutexGuard<'static, ()> {
+    static LINKS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LINKS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 fn link_root(
     folder: &Path,
@@ -383,6 +370,46 @@ fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
 }
 
 fn hide_from_git(folder: &Path, root: &str, owned: &[String]) -> std::io::Result<()> {
+    edit_exclude(folder, |text| {
+        let prefix = format!("{root}/");
+        let mut lines = Vec::new();
+        let mut changed = false;
+        for line in text.lines() {
+            let keep = match line.trim().strip_prefix(&prefix) {
+                Some(name) if !name.is_empty() && !name.contains('/') => {
+                    let link = folder.join(root).join(name);
+                    !matches!(
+                        std::fs::symlink_metadata(&link),
+                        Ok(meta) if !meta.file_type().is_symlink()
+                    )
+                }
+                _ => true,
+            };
+            if keep {
+                lines.push(line.to_owned());
+            } else {
+                changed = true;
+            }
+        }
+        for name in owned {
+            let line = format!("{root}/{name}");
+            if !lines.iter().any(|existing| existing.trim() == line) {
+                lines.push(line);
+                changed = true;
+            }
+        }
+        changed.then(|| {
+            let mut text = lines.join("\n");
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text
+        })
+    })
+}
+
+/// Rewrites the folder's git exclude file when `edit` returns new text. A folder with no git does nothing.
+fn edit_exclude(folder: &Path, edit: impl FnOnce(&str) -> Option<String>) -> std::io::Result<()> {
     let Some(exclude) = git_exclude(folder) else {
         return Ok(());
     };
@@ -394,41 +421,10 @@ fn hide_from_git(folder: &Path, root: &str, owned: &[String]) -> std::io::Result
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(error),
     };
-    let prefix = format!("{root}/");
-    let mut lines = Vec::new();
-    let mut changed = false;
-    for line in text.lines() {
-        let keep = match line.trim().strip_prefix(&prefix) {
-            Some(name) if !name.is_empty() && !name.contains('/') => {
-                let link = folder.join(root).join(name);
-                !matches!(
-                    std::fs::symlink_metadata(&link),
-                    Ok(meta) if !meta.file_type().is_symlink()
-                )
-            }
-            _ => true,
-        };
-        if keep {
-            lines.push(line.to_owned());
-        } else {
-            changed = true;
-        }
+    match edit(&text) {
+        Some(next) => std::fs::write(exclude, next),
+        None => Ok(()),
     }
-    for name in owned {
-        let line = format!("{root}/{name}");
-        if !lines.iter().any(|existing| existing.trim() == line) {
-            lines.push(line);
-            changed = true;
-        }
-    }
-    if changed {
-        let mut text = lines.join("\n");
-        if !text.is_empty() {
-            text.push('\n');
-        }
-        std::fs::write(exclude, text)?;
-    }
-    Ok(())
 }
 
 fn git_exclude(folder: &Path) -> Option<PathBuf> {
