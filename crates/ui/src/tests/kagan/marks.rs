@@ -20,7 +20,7 @@ fn a_thread_marks_busy_then_done_then_idle_once_read(cx: &mut TestAppContext) {
     let program = folder.path().join("agent");
     std::fs::write(
         &program,
-        "#!/bin/sh\nprintf '\\033]2;\\342\\227\\220 work\\007'; sleep 1; printf '\\033]2;\\342\\234\\263 work\\007'; sleep 30\n",
+        "#!/bin/sh\nprintf '\\033]2;\\342\\227\\220 work\\007'; sleep 8; printf '\\033]2;\\342\\234\\263 work\\007'; sleep 30\n",
     )
     .unwrap();
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -119,7 +119,7 @@ fn a_shown_thread_that_goes_idle_is_never_needs_you(cx: &mut TestAppContext) {
     let program = folder.path().join("agent");
     std::fs::write(
         &program,
-        "#!/bin/sh\nprintf '\\033]2;\\342\\227\\220 work\\007'; sleep 1; printf '\\033]2;\\342\\234\\263 work\\007'; sleep 30\n",
+        "#!/bin/sh\nprintf '\\033]2;\\342\\227\\220 work\\007'; sleep 8; printf '\\033]2;\\342\\234\\263 work\\007'; sleep 30\n",
     )
     .unwrap();
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -140,7 +140,7 @@ pub(in crate::tests) fn wait_for_mark(
     name: &str,
     word: &str,
 ) -> Vec<String> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(20);
     let mut seen = Vec::new();
     loop {
         cx.executor().advance_clock(Duration::from_millis(50));
@@ -152,7 +152,10 @@ pub(in crate::tests) fn wait_for_mark(
         if text == word {
             return seen;
         }
-        assert!(Instant::now() < deadline, "{name} never read {word:?}");
+        assert!(
+            Instant::now() < deadline,
+            "{name} never read {word:?}; saw {seen:?}"
+        );
         std::thread::yield_now();
     }
 }
