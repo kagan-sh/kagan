@@ -305,7 +305,7 @@ impl Drop for Terminal {
             return;
         };
         #[cfg(unix)]
-        crate::tree::kill_tree(self.process_id);
+        kg_process::kill_tree(self.process_id);
         if let Err(error) = std::thread::Builder::new().spawn(move || ending.finish()) {
             eprintln!("kg: could not end the program's pty: {error}");
         }

@@ -4,6 +4,33 @@ use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use crate::Process;
+#[cfg(unix)]
+use crate::{kill_tree, pid_of};
+
+#[cfg(unix)]
+#[test]
+fn pids_that_are_not_ours_are_refused() {
+    assert!(pid_of(0).is_none());
+    assert!(pid_of(1).is_none());
+    assert!(pid_of(u32::MAX).is_none());
+    assert!(pid_of(2).is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn killing_a_tree_walks_every_process_and_spares_the_rest() {
+    let mut running = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .unwrap();
+    kill_tree(running.id());
+    assert!(
+        running.try_wait().unwrap().is_none(),
+        "the sleep leads no sid of its own"
+    );
+    running.kill().unwrap();
+    running.wait().unwrap();
+}
 
 #[test]
 fn spawn_keeps_the_stdio_the_caller_set() -> std::io::Result<()> {

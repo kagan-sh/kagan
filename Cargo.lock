@@ -5457,6 +5457,7 @@ name = "kg-process"
 version = "0.1.0"
 dependencies = [
  "async-process",
+ "libc",
  "rustix",
  "tempfile",
  "windows-sys 0.61.2",
