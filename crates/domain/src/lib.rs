@@ -21,7 +21,7 @@ pub use event::{
 };
 pub use id::{
     Conversation, EnvironmentId, PendingInteractionId, PluginId, ProjectId, SectionId, ThreadId,
-    Timestamp, plain_identifier,
+    Timestamp,
 };
 pub use op::{
     Appearance, BranchList, BrowserControl, BrowserOp, BrowserSnapshot, BrowserView, CommandGroup,
