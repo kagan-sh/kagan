@@ -52,10 +52,7 @@ impl Kagan {
     }
 
     pub(super) fn note_shown(&mut self, cx: &App) {
-        let Some(id) = (match self.screen.shown() {
-            Shown::Thread(view) => Some(view.read(cx).thread().clone()),
-            Shown::Nothing | Shown::Start(_) => None,
-        }) else {
+        let Some(id) = self.screen.covered_thread(cx) else {
             self.open_thread = None;
             return;
         };
@@ -111,13 +108,17 @@ impl Kagan {
         self.focus_work(window, cx);
         self.typed_watch = Some(cx.subscribe(&view, |this, _, _: &Typed, cx| this.typed(cx)));
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
+        self.shown_changed(window, cx);
+        self.note_shown(cx);
+        Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
+        cx.notify();
+    }
+
+    pub(super) fn shown_changed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.load_changes(cx);
         self.load_details(cx);
         self.sync_tabs(window, cx);
         self.tell_host(window, cx);
-        self.note_shown(cx);
-        Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
-        cx.notify();
     }
 
     pub(super) fn show_start(

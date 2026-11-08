@@ -13,7 +13,7 @@ use kg_domain::{Op, OpResult, TerminalOp, ThreadId, ThreadOp, WindowOp};
 
 use super::controls::{control, dispatch, tip};
 use super::right::{ActivatePanelHeader, Tab};
-use super::{Kagan, Shown, window};
+use super::{Kagan, window};
 use crate::terminal::{TerminalView, Typed};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -73,15 +73,8 @@ impl Tabs {
 }
 
 impl Kagan {
-    fn tabbed_thread(&self, cx: &App) -> Option<ThreadId> {
-        match self.screen.shown() {
-            Shown::Thread(view) => Some(view.read(cx).thread().clone()),
-            Shown::Nothing | Shown::Start(_) => None,
-        }
-    }
-
     pub(super) fn sync_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let thread = self.tabbed_thread(cx);
+        let thread = self.screen.covered_thread(cx);
         if self.tabs.thread != thread {
             self.tabs = Tabs {
                 thread: thread.clone(),

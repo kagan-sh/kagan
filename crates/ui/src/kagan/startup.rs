@@ -175,11 +175,8 @@ impl Kagan {
         if self.shows_archived() {
             self.load_retired(cx);
         }
-        self.load_changes(cx);
-        self.load_details(cx);
-        self.sync_tabs(window, cx);
         self.refresh_plugins(cx);
-        self.tell_host(window, cx);
+        self.shown_changed(window, cx);
         cx.notify();
     }
 }

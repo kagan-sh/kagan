@@ -1,7 +1,7 @@
 use gpui_kit::{App, Context, Window, actions};
 use kg_domain::WindowOp;
 
-use super::{Kagan, Shown, window};
+use super::{Kagan, window};
 
 actions!(
     kagan,
@@ -43,10 +43,7 @@ pub(super) fn perform(op: WindowOp, cx: &mut App) {
 impl Kagan {
     fn navigate(&mut self, op: WindowOp, window: &mut Window, cx: &mut Context<Self>) {
         let rows = self.sidebar.read(cx).thread_ids(&self.shows(cx), cx);
-        let covered = match self.screen.shown() {
-            Shown::Thread(view) => Some(view.read(cx).thread().clone()),
-            Shown::Nothing | Shown::Start(_) => None,
-        };
+        let covered = self.screen.covered_thread(cx);
         let shown = self.shown_thread(cx);
         let position = rows.iter().position(|id| Some(id) == covered.as_ref());
         let id = match op {
