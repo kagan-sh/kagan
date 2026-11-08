@@ -388,3 +388,14 @@ fn a_declared_item_that_is_never_set_draws_nothing(cx: &mut TestAppContext) {
     open(cx, &[installed_at(plugin.path())]);
     assert!(items(cx).is_empty());
 }
+
+#[test]
+fn every_tone_name_parses() {
+    use crate::StatusTone::{Busy, Failed, Needs, Quiet};
+    let parse = crate::strip::StatusTone::parse;
+    assert_eq!(parse("quiet"), Some(Quiet));
+    assert_eq!(parse("busy"), Some(Busy));
+    assert_eq!(parse("needs"), Some(Needs));
+    assert_eq!(parse("failed"), Some(Failed));
+    assert_eq!(parse("loud"), None);
+}

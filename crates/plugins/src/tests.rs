@@ -1,3 +1,4 @@
+mod browser;
 mod call;
 mod contributions;
 mod files;
