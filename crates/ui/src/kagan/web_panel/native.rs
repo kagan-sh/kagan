@@ -489,8 +489,12 @@ fn paint_theme(view: &Entity<gpui_webview::WebView>, cx: &mut App) {
     };
     let script = web::theme_refresh(cx);
     view.update(cx, |view, _| {
-        let _ = view.set_theme(native);
-        let _ = view.evaluate_script(&script);
+        if let Err(error) = view.set_theme(native) {
+            eprintln!("kg: a web panel could not take the theme: {error}");
+        }
+        if let Err(error) = view.evaluate_script(&script) {
+            eprintln!("kg: a web panel could not refresh its colors: {error}");
+        }
     });
 }
 

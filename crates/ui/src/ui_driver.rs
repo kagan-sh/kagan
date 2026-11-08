@@ -312,6 +312,7 @@ mod macos {
             .map_err(|error| OpError::Failed(error.to_string()));
         let finished = output.and_then(|output| finish(&output, &staged, path));
         if finished.is_err() {
+            // Best effort: the staged file is temporary, and the error to report is `finished`.
             let _ = std::fs::remove_file(&staged);
         }
         finished

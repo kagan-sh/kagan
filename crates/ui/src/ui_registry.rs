@@ -125,6 +125,7 @@ pub(crate) struct Registration {
 }
 impl Drop for Registration {
     fn drop(&mut self) {
+        // The thread-local is gone once its thread exits; then nothing is left to remove.
         let _ = REGISTRY.try_with(|registry| {
             if let Ok(mut registry) = registry.try_borrow_mut()
                 && let Some(entries) = registry.get_mut(&self.window)

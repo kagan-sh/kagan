@@ -53,6 +53,7 @@ fn encoded(plugin: &PluginId, id: &str) -> String {
             command.push(byte as char);
         } else {
             use std::fmt::Write as _;
+            // Writing to a String cannot fail.
             let _ = write!(command, "%{byte:02X}");
         }
     }
