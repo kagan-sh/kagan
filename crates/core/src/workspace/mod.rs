@@ -28,7 +28,7 @@ mod recovery;
 mod screens;
 mod state;
 
-pub(crate) use clock::{closed, database, id, missing, now, time};
+pub(crate) use clock::{changed, closed, database, id, missing, now, time};
 pub(crate) use data::open_data;
 pub use plugins::Permit;
 pub(crate) use questions::{Waiting, approve};

@@ -40,11 +40,7 @@ pub(crate) async fn theme(
             database
                 .call(move |store| store.set_setting("theme", &value))
                 .await?;
-            this.update(cx, |_, cx| {
-                cx.emit(crate::WorkspaceEvent::Changed);
-                cx.notify();
-            })
-            .map_err(closed)?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Theme(settings))
         }
         ThemeOp::New { id, from } => {
@@ -178,11 +174,7 @@ pub(crate) async fn preference(
             database
                 .call(move |store| store.set_setting(&key, &saved))
                 .await?;
-            this.update(cx, |_, cx| {
-                cx.emit(crate::WorkspaceEvent::Changed);
-                cx.notify();
-            })
-            .map_err(closed)?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Setting(value))
         }
     }

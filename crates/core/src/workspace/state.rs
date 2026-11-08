@@ -47,9 +47,7 @@ impl Workspace {
         self.environments.get(id)
     }
     pub(crate) async fn refresh(this: &WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
-        let database = this
-            .update(cx, |workspace, _| workspace.database.clone())
-            .map_err(closed)?;
+        let database = crate::workspace::database(this, cx)?;
         let (projects, environments, threads, sections, endings, screens) = database
             .call(|store| {
                 let projects = store.projects()?;
@@ -148,9 +146,7 @@ impl Workspace {
         kinds: Vec<kg_domain::EventKind>,
         cx: &mut AsyncApp,
     ) -> Result<()> {
-        let database = this
-            .update(cx, |workspace, _| workspace.database.clone())
-            .map_err(closed)?;
+        let database = crate::workspace::database(this, cx)?;
         let started = kinds
             .iter()
             .any(|kind| matches!(kind, kg_domain::EventKind::Started));

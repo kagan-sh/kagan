@@ -113,11 +113,7 @@ pub(crate) async fn dispatch_thread(
             database
                 .call(move |store| store.set_thread_metadata(&id, &plugin_id, &value))
                 .await?;
-            this.update(cx, |_, cx| {
-                cx.emit(crate::WorkspaceEvent::Changed);
-                cx.notify();
-            })
-            .map_err(closed)?;
+            crate::workspace::changed(this, cx)?;
             Ok(OpResult::Done)
         }
         ThreadOp::StartAgain { id } => terminal::start_again(this, id, cx).await,

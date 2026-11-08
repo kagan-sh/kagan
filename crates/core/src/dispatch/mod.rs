@@ -45,26 +45,12 @@ pub(crate) async fn execute(
             project_id,
             environment_id,
         } => crate::dispatch::guide::status(this, thread_id, project_id, environment_id, cx).await,
-        Op::Open => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::Open))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
-        }
-        Op::Settings(SettingsOp::Open) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::Settings))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
-        }
+        Op::Open => announce(this, crate::WorkspaceEvent::Open, cx),
+        Op::Settings(SettingsOp::Open) => announce(this, crate::WorkspaceEvent::Settings, cx),
         Op::Settings(SettingsOp::Plugins) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::SettingsPlugins))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
+            announce(this, crate::WorkspaceEvent::SettingsPlugins, cx)
         }
-        Op::Window(op) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::Window(op)))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
-        }
+        Op::Window(op) => announce(this, crate::WorkspaceEvent::Window(op), cx),
         Op::Sidebar => database.call(read_sidebar).await,
         Op::Project(op) => project_op(this, &database, op, requester, cx).await,
         Op::Environment(EnvironmentOp::Get { id }) => {
@@ -106,9 +92,7 @@ pub(crate) async fn execute(
         Op::Thread(op) => dispatch_thread(this, database, op, requester, cx).await,
         Op::Section(op) => section(this, database, op, cx).await,
         Op::Plugin(kg_domain::PluginOp::Start) => {
-            this.update(cx, |_, cx| cx.emit(crate::WorkspaceEvent::NewPlugin))
-                .map_err(closed)?;
-            Ok(OpResult::Done)
+            announce(this, crate::WorkspaceEvent::NewPlugin, cx)
         }
         Op::Plugin(op) => forward(this, PluginRequest::Plugin(op, requester), cx).await,
     }
@@ -155,6 +139,15 @@ async fn project_op(
             Ok(result)
         }
     }
+}
+
+fn announce(
+    this: &WeakEntity<Workspace>,
+    event: crate::WorkspaceEvent,
+    cx: &mut AsyncApp,
+) -> Result<OpResult> {
+    this.update(cx, |_, cx| cx.emit(event)).map_err(closed)?;
+    Ok(OpResult::Done)
 }
 
 /// Whether `op` runs on the one-at-a-time request queue.

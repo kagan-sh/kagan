@@ -32,11 +32,7 @@ pub(crate) async fn status(
     database
         .call(move |store| store.set_thread_status(&record.id, record.status, record.updated_at))
         .await?;
-    this.update(cx, |_, cx| {
-        cx.emit(crate::WorkspaceEvent::Changed);
-        cx.notify();
-    })
-    .map_err(closed)
+    crate::workspace::changed(this, cx)
 }
 
 pub(crate) async fn stop(
@@ -60,11 +56,7 @@ pub(super) async fn settle(
     })
     .map_err(closed)?;
     clear_interactions(this, thread, cx).await?;
-    this.update(cx, |_, cx| {
-        cx.emit(crate::WorkspaceEvent::Changed);
-        cx.notify();
-    })
-    .map_err(closed)
+    crate::workspace::changed(this, cx)
 }
 
 pub(super) async fn halt(

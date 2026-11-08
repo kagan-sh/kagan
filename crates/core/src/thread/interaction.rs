@@ -327,11 +327,7 @@ pub(crate) async fn withdraw(
         })
         .await?;
     Workspace::refresh(this, cx).await?;
-    this.update(cx, |_, cx| {
-        cx.emit(crate::WorkspaceEvent::Changed);
-        cx.notify();
-    })
-    .map_err(closed)
+    crate::workspace::changed(this, cx)
 }
 
 pub(crate) async fn remove_interactions(
@@ -425,11 +421,7 @@ pub(crate) async fn answer(
         cx,
     )
     .await?;
-    this.update(cx, |_, cx| {
-        cx.emit(crate::WorkspaceEvent::Changed);
-        cx.notify();
-    })
-    .map_err(closed)?;
+    crate::workspace::changed(this, cx)?;
     Ok(OpResult::Done)
 }
 
