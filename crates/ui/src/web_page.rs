@@ -58,8 +58,7 @@ fn sweep_page_dirs(data: &std::path::Path) {
     for entry in entries.flatten() {
         let name = entry.file_name();
         if name.to_string_lossy().starts_with("page-") {
-            // Best effort: a folder still in use stays until a later cleanup.
-            let _ = std::fs::remove_dir_all(entry.path());
+            let _ = std::fs::remove_dir_all(entry.path()); // Best effort: a folder still in use stays until a later cleanup.
         }
     }
 }
@@ -100,7 +99,7 @@ impl WebPage {
             .read(cx)
             .raw()
             .evaluate_script_with_callback(script, move |value| {
-                let _ = reply.try_send(Some(value));
+                let _ = reply.try_send(Some(value)); // The caller may have stopped waiting; then no one reads the reply.
             })
             .map_err(|error| error.to_string())
     }
@@ -223,7 +222,7 @@ fn with_loads(
     builder.with_on_page_load_handler(move |event, _| match event {
         wry::PageLoadEvent::Started => mark.started.store(mark.armed.load(Relaxed), Relaxed),
         wry::PageLoadEvent::Finished => {
-            let _ = loads.try_send(mark.started.load(Relaxed));
+            let _ = loads.try_send(mark.started.load(Relaxed)); // The watcher may have ended; then no one waits for the mark.
         }
     })
 }
@@ -254,8 +253,7 @@ fn open_windows(
     let mut view = match build_view(with_loads(builder, loads), window, cx) {
         Ok(view) => view,
         Err(error) => {
-            // Best effort: the storage folder is temporary, from this failed build.
-            let _ = std::fs::remove_dir_all(&storage);
+            let _ = std::fs::remove_dir_all(&storage); // Best effort: the storage folder is temporary, from this failed build.
             return Err(error);
         }
     };

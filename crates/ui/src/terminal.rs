@@ -292,7 +292,7 @@ impl TerminalView {
             let Ok(sent) = view.update(cx, |_, cx| Self::submit(paste, cx)) else {
                 return;
             };
-            _ = reply.try_send(sent.await);
+            _ = reply.try_send(sent.await); // The paste's caller may have stopped waiting; then nothing reads it.
         })
         .detach();
     }
@@ -410,7 +410,7 @@ fn cell_size(font: &Font, font_size: Pixels, window: &Window) -> gpui_kit::Size<
     let advance = text
         .advance(text.resolve_font(font), font_size, 'm')
         .map(|advance| advance.width)
-        .ok();
+        .ok(); // No width: the font measures nothing, so the caller uses 0.6 em.
     cell_size_from(advance, font_size)
 }
 
@@ -578,7 +578,7 @@ fn paint_glyphs(
             Some(cell.width),
         );
         let origin = bounds.origin + point(px(0.), cell.height * steps(index));
-        let _ = shaped.paint(origin, cell.height, TextAlign::Left, None, window, cx);
+        let _ = shaped.paint(origin, cell.height, TextAlign::Left, None, window, cx); // A line that fails to paint is drawn again on the next frame.
     }
 }
 

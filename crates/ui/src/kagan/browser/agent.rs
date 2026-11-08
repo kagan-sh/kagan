@@ -193,8 +193,7 @@ async fn act(
     })??;
     let script = super::act::script(&op).map_err(OpError::Invalid)?;
     let text = super::chrome::evaluate(&page, &script, handle, WAIT, cx).await?;
-    // The page's answer is checked for its shape here; its value is not used.
-    let _ = parse_info(&text)?;
+    parse_info(&text)?; // Checks the answer's shape; its value is not used.
     touch(kagan, handle, &page, cx)?;
     Ok(OpResult::Done)
 }
@@ -224,8 +223,7 @@ async fn wait_for_load(
     };
     cx.spawn(async move |cx| {
         cx.background_executor().timer(WAIT).await;
-        // The waiter may have stopped listening; then there is nothing to signal.
-        let _ = signal.try_send(epoch);
+        let _ = signal.try_send(epoch); // The waiter may have stopped listening; then there is nothing to signal.
     })
     .detach();
     while let Ok(got) = wait.recv().await {

@@ -80,7 +80,7 @@ impl Kagan {
         match event {
             HostUiEvent::OpenThread { id, reply } => {
                 self.select(id.clone(), window, cx);
-                let _ = reply.try_send(Ok(()));
+                let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.
             }
             HostUiEvent::OpenPanel {
                 plugin,
@@ -100,17 +100,17 @@ impl Kagan {
                 );
                 match step {
                     Ok(SurfaceCommit::Ready(_)) => {
-                        let _ = reply.try_send(Ok(()));
+                        let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.
                     }
                     Ok(SurfaceCommit::Paint) => {
                         let kagan = cx.entity();
                         surface::schedule_settle(kagan, window, cx, move |settled| {
                             let _ = reply
-                                .try_send(settled.map(|_| ()).map_err(|error| error.to_string()));
+                                .try_send(settled.map(|_| ()).map_err(|error| error.to_string())); // A caller that gave up reads no reply.
                         });
                     }
                     Err(error) => {
-                        let _ = reply.try_send(Err(error.to_string()));
+                        let _ = reply.try_send(Err(error.to_string())); // A caller that gave up reads no reply.
                     }
                 }
             }
@@ -132,7 +132,7 @@ impl Kagan {
                     },
                     cx,
                 );
-                let _ = reply.try_send(Ok(()));
+                let _ = reply.try_send(Ok(())); // A caller that gave up reads no reply.
             }
             HostUiEvent::Comment {
                 plugin,
@@ -141,7 +141,7 @@ impl Kagan {
             } => {
                 let window = window.window_handle().window_id();
                 if let Some(saved) = self.plugin_comment(plugin, comment, window, cx) {
-                    let _ = reply.try_send(saved);
+                    let _ = reply.try_send(saved); // A caller that gave up reads no reply.
                 }
             }
             HostUiEvent::PostPage {
@@ -150,7 +150,7 @@ impl Kagan {
                 message,
                 reply,
             } => {
-                let _ = reply.try_send(web_panel::deliver(plugin, panel, message, cx));
+                let _ = reply.try_send(web_panel::deliver(plugin, panel, message, cx)); // A caller that gave up reads no reply.
             }
         }
     }

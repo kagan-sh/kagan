@@ -54,7 +54,7 @@ fn encoded(plugin: &PluginId, id: &str) -> String {
         } else {
             use std::fmt::Write as _;
             // Writing to a String cannot fail.
-            let _ = write!(command, "%{byte:02X}");
+            let _ = write!(command, "%{byte:02X}"); // Writing to a String cannot fail.
         }
     }
     // Plugin ids are reverse-DNS, so they contain neither '/' nor '%'.

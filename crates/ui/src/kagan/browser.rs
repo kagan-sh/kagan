@@ -102,7 +102,7 @@ impl Browser {
                     .timer(std::time::Duration::from_millis(80))
                     .await;
                 cx.update(|_, cx| page.update(cx, |page, cx| page.load_url(&url, cx)))
-                    .ok();
+                    .ok(); // The app is gone; there is no page to load.
             })
             .detach();
     }
