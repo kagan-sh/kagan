@@ -371,7 +371,7 @@ jobs:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: for result in $RESULTS; do echo "$result"; [ "$result" = success ] || exit 1; done
 
-  # GitHub caps a repo at 10 GB of caches and evicts the least recently used. Each main push with a new lockfile saves a new cache generation for every job, so keep only the newest cache per job on main.
+  # GitHub caps a repo at 10 GB of caches and evicts the least recently used. Each main push with a new lockfile saves a new copy of every job's cache, so this job keeps only the newest cache per job on main.
   cache-prune:
     needs: [linux, macos, windows]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

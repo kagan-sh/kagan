@@ -52,7 +52,7 @@ jobs:
           SHA: ${{ steps.next.outputs.sha }}
         run: |
           set -eu
-          # The three checks main requires. A skipped one is a docs-only change, which the ruleset also passes.
+          # The three checks main requires. A skipped check means a docs-only change, and the ruleset passes that too.
           results=$(gh api --paginate "repos/$GH_REPO/commits/$SHA/check-runs" \
             --jq '.check_runs[] | select(.name == "linux" or .name == "macos" or .name == "windows") | "\(.name) \(.conclusion)"')
           for name in linux macos windows; do
