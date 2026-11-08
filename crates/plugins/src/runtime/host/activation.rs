@@ -105,27 +105,25 @@ pub(crate) async fn activate(
         )));
     }
     let mut grant = approved.intersect(&asked);
-    host.update(cx, |host, _| host.end_activation(&record.id));
+    let paused = host.update(cx, |host, _| host.pause_activation(&record.id));
     let workspace = cx.update(|cx| Workspace::global(cx));
     grant.keep_paths(&stored_grant(&record.id, &workspace, cx).await?);
     let declared = &discovered.manifest.settings;
-    let (settings, agents) = stored_settings(host, &record.id, declared, &workspace, cx).await?;
+    let (settings, agents) = stored_settings(&record.id, declared, &workspace, cx).await?;
     load_secrets(host, &record.id, discovered.manifest.settings.secrets(), cx).await;
-    let bindings = plugin_setting(host, &record.id, &workspace, commands::BINDINGS, cx).await?;
-    let bindings = match bindings.map(serde_json::from_value).transpose() {
-        Ok(bindings) => bindings.unwrap_or_default(),
-        Err(error) => {
-            host.update(cx, |host, _| host.resume_activation(&record.id));
-            return Err(OpError::Failed(error.to_string()));
-        }
-    };
+    let bindings = plugin_setting(&record.id, &workspace, commands::BINDINGS, cx).await?;
+    let bindings = bindings
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|error| OpError::Failed(error.to_string()))?
+        .unwrap_or_default();
     host.update(cx, |host, cx| {
         host.unload(&record.id, cx);
         let generation = host
             .active
             .get(&record.id)
             .map_or(0, |active| active.generation);
-        let activation = host.begin_activation(&record.id);
+        host.begin_activation(&record.id);
         host.warnings.remove(&record.id);
         let manifest = &discovered.manifest;
         let identity = (manifest.name.clone(), manifest.version.clone());
@@ -146,12 +144,12 @@ pub(crate) async fn activate(
                 fault: None,
                 loaded: None,
                 generation,
-                activation,
                 _schedules: schedules,
             },
         );
         cx.notify();
     });
+    paused.commit();
     pause_for_activation(host, cx).await;
     Ok(())
 }
@@ -195,7 +193,6 @@ async fn stored_grant(
 
 /// The stored settings, with the agent picks kept apart from them.
 async fn stored_settings(
-    host: &Entity<PluginHost>,
     id: &PluginId,
     declared: &manifest::Settings,
     workspace: &Entity<Workspace>,
@@ -204,7 +201,7 @@ async fn stored_settings(
     let mut settings = Map::new();
     let mut agents = BTreeMap::new();
     for (key, setting) in declared.iter() {
-        let stored = plugin_setting(host, id, workspace, key, cx).await?;
+        let stored = plugin_setting(id, workspace, key, cx).await?;
         match setting {
             Setting::Provider { .. } => {
                 let choice = stored.and_then(|value| serde_json::from_value(value).ok());
@@ -213,15 +210,11 @@ async fn stored_settings(
             Setting::Secret { .. } => {
                 // A key that was a plain setting before keeps no copy of its value in the database.
                 if stored.is_some_and(|value| !value.is_null()) {
-                    let cleared = workspace
+                    workspace
                         .read_with(cx, |workspace, _| {
                             workspace.set_plugin_value(id.clone(), key.clone(), Value::Null)
                         })
-                        .await;
-                    if let Err(error) = cleared {
-                        host.update(cx, |host, _| host.resume_activation(id));
-                        return Err(error);
-                    }
+                        .await?;
                 }
                 settings.insert(key.clone(), Value::Null);
             }
@@ -282,24 +275,16 @@ async fn load_secrets(
 }
 
 async fn plugin_setting(
-    host: &Entity<PluginHost>,
     id: &PluginId,
     workspace: &Entity<Workspace>,
     key: &str,
     cx: &mut AsyncApp,
 ) -> Result<Option<Value>> {
-    match workspace
+    workspace
         .read_with(cx, |workspace, _| {
             workspace.plugin_value(id.clone(), key.to_owned())
         })
         .await
-    {
-        Ok(stored) => Ok(stored),
-        Err(error) => {
-            host.update(cx, |host, _| host.resume_activation(id));
-            Err(error)
-        }
-    }
 }
 type Prepared = (Policy, Entity<process::Processes>);
 

@@ -221,7 +221,7 @@ pub(in crate::runtime::ops) async fn keep(
         .background_spawn(async move { fetched.keep(&plugins) })
         .await?;
     let id = discovered.manifest.id.clone();
-    host.update(cx, |host, _| host.end_activation(&id));
+    let paused = host.update(cx, |host, _| host.pause_activation(&id));
     #[cfg(test)]
     if let Some(hold) = host.read_with(cx, |host, _| host.keep_hold.clone()) {
         let _ = hold.recv().await;
@@ -262,6 +262,7 @@ pub(in crate::runtime::ops) async fn keep(
         host.records.insert(record.id.clone(), record.clone());
         cx.notify();
     });
+    paused.commit();
     if record.enabled {
         start(host, &record, Some(discovered), cx).await?;
     }

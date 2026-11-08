@@ -24,18 +24,16 @@ pub(in crate::runtime::ops) async fn config(
         ConfigOp::Get { key } | ConfigOp::Set { key, .. } | ConfigOp::Clear { key } => key.clone(),
     };
     let found = host.read_with(cx, |host, _| {
-        host.activation(id).map(|activation| {
-            let active = host.active.get(id)?;
-            Some((
-                active.manifest.name.clone(),
-                active.manifest.settings.get(&key).cloned(),
-                host.value(id, &key),
-                activation,
-                host.permit(id)?,
-            ))
-        })
+        let permit = host.permit(id)?;
+        let active = host.active.get(id)?;
+        Some((
+            active.manifest.name.clone(),
+            active.manifest.settings.get(&key).cloned(),
+            host.value(id, &key),
+            permit,
+        ))
     });
-    let Some((name, setting, current, activation, permit)) = found.flatten() else {
+    let Some((name, setting, current, permit)) = found else {
         return Err(OpError::Invalid(format!(
             "plugin {} is disabled; enable it to change its settings",
             record.id
@@ -58,7 +56,7 @@ pub(in crate::runtime::ops) async fn config(
             keep_secret(host, id, &key, None, cx).await
         }
         ConfigOp::Clear { .. } if matches!(setting, Setting::Project { .. }) => {
-            write_setting(host, id, &key, Value::Null, None, (activation, permit), cx).await
+            write_setting(host, id, &key, Value::Null, None, permit, cx).await
         }
         ConfigOp::Clear { .. } => Err(OpError::Invalid(format!(
             "setting {key} is not a secret or project; set it instead"
@@ -85,16 +83,7 @@ pub(in crate::runtime::ops) async fn config(
             let asked = format!("Let {name} ({id}) read a folder?");
             let folder = approve_folder(&setting, &value, asked, thread_id, requester, cx).await?;
             host.read_with(cx, |host, _| stage(host, id, &key, folder.as_ref()))?;
-            write_setting(
-                host,
-                id,
-                &key,
-                value,
-                folder.as_ref(),
-                (activation, permit),
-                cx,
-            )
-            .await
+            write_setting(host, id, &key, value, folder.as_ref(), permit, cx).await
         }
     }
 }
@@ -105,13 +94,12 @@ pub(in crate::runtime::ops) async fn write_setting(
     key: &str,
     value: Value,
     folder: Option<&PathBuf>,
-    (activation, permit): (u64, std::sync::Arc<std::sync::Mutex<Option<u64>>>),
+    permit: kg_core::Permit,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
+    let activation = permit.activation();
     if host.read_with(cx, |host, _| host.activation(id)) != Some(activation) {
-        return Err(OpError::Invalid(format!(
-            "plugin {id} changed while this was saving"
-        )));
+        return Err(PluginHost::changed_while_saving(id));
     }
     #[cfg(test)]
     if let Some(hold) = host.update(cx, |host, _| host.commit_hold.take()) {
@@ -129,7 +117,7 @@ pub(in crate::runtime::ops) async fn write_setting(
                 key.to_owned(),
                 value.clone(),
                 folder.map(|path| path.display().to_string()),
-                kg_core::Permit::new(activation, permit),
+                permit,
             )
         })
         .await?;
@@ -204,9 +192,7 @@ pub(in crate::runtime::ops) fn stage(
     folder: Option<&PathBuf>,
 ) -> Result<()> {
     if host.activation(id).is_none() {
-        return Err(OpError::Invalid(format!(
-            "plugin {id} changed while this was saving"
-        )));
+        return Err(PluginHost::changed_while_saving(id));
     }
     if folder.is_none() {
         return Ok(());

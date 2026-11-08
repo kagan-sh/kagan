@@ -589,6 +589,30 @@ fn a_folder_save_queued_across_reload_does_not_persist(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
+fn a_failed_update_leaves_a_running_plugin_active(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let before = activation_of(cx);
+    assert!(before.is_some());
+    let removed = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .remove_plugin(PluginId(ID.into()))
+    });
+    cx.foreground_executor().block_test(removed).unwrap();
+    let error = run(
+        cx,
+        Op::Plugin(PluginOp::Update {
+            id: PluginId(ID.into()),
+            thread_id: None,
+        }),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("plugin was removed"), "{error}");
+    assert_eq!(activation_of(cx), before);
+}
+
+#[gpui_kit::test]
 fn a_folder_save_queued_across_update_does_not_persist(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);

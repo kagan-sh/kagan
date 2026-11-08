@@ -293,17 +293,9 @@ async fn store_bindings(
     bindings: &BTreeMap<String, Option<String>>,
     cx: &mut AsyncApp,
 ) -> Result<()> {
-    let permit = host.read_with(cx, |host, _| {
-        Some(kg_core::Permit::new(
-            host.activation(&plugin)?,
-            host.permit(&plugin)?,
-        ))
-    });
-    let Some(permit) = permit else {
-        return Err(kg_domain::OpError::Invalid(format!(
-            "plugin {plugin} changed while this was saving"
-        )));
-    };
+    let permit = host
+        .read_with(cx, |host, _| host.permit(&plugin))
+        .ok_or_else(|| PluginHost::changed_while_saving(&plugin))?;
     let value = serde_json::to_value(bindings)?;
     let workspace = cx.update(|cx| Workspace::global(cx));
     workspace

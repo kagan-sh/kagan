@@ -169,15 +169,13 @@ pub(in crate::runtime::ops) async fn remove(
             .map(|active| active.manifest.settings.secrets())
             .unwrap_or_default()
     });
-    host.update(cx, |host, _| host.end_activation(&id));
+    let paused = host.update(cx, |host, _| host.pause_activation(&id));
     let workspace = cx.update(|cx| Workspace::global(cx));
-    if let Err(error) = workspace
+    workspace
         .read_with(cx, |workspace, _| workspace.remove_plugin(id.clone()))
-        .await
-    {
-        host.update(cx, |host, _| host.resume_activation(&id));
-        return Err(error);
-    }
+        .await?;
+    paused.commit();
+    host.update(cx, |host, _| host.end_activation(&id));
     let data = host.read_with(cx, |host, _| host.plugin_data(&id));
     let store_ids = crate::web_store::read_store_ids(&data);
     host.update(cx, |host, cx| {

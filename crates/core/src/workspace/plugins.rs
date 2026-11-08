@@ -20,6 +20,11 @@ impl Permit {
     pub fn new(activation: u64, gate: Arc<Mutex<Option<u64>>>) -> Self {
         Self { activation, gate }
     }
+
+    #[must_use]
+    pub fn activation(&self) -> u64 {
+        self.activation
+    }
 }
 fn write_plugin_config(
     store: &mut Store,

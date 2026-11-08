@@ -13,7 +13,7 @@ use gpui_kit::{
 };
 use gpui_shell::{LoadedApplication, ScriptView, ShellRuntime};
 use kg_core::{PluginRequest, Workspace};
-use kg_domain::{Event, OpResult, PluginId, ThemeFile, ThreadId};
+use kg_domain::{Event, OpError, OpResult, PluginId, ThemeFile, ThreadId};
 use serde_json::{Map, Value};
 
 use crate::ask::{Job, post};
@@ -236,7 +236,6 @@ pub(crate) struct Active {
     pub(crate) loaded: Option<Loaded>,
     /// Counts each load of this plugin, so a view from an older load can be told apart.
     pub(crate) generation: u64,
-    pub(crate) activation: u64,
     /// Dropping these stops the plugin's schedules.
     pub(crate) _schedules: Vec<Task<()>>,
 }
@@ -344,34 +343,82 @@ impl PluginHost {
             .map(|global| global.0.clone())
     }
 }
+/// No activation is numbered 0, so no write matches a paused gate.
+const PAUSED: u64 = 0;
+
+pub(crate) struct Paused {
+    gate: Arc<Mutex<Option<u64>>>,
+    was: Option<u64>,
+    armed: bool,
+}
+
+impl Paused {
+    pub(crate) fn commit(mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for Paused {
+    fn drop(&mut self) {
+        let mut gate = self
+            .gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.armed && *gate == Some(PAUSED) {
+            *gate = self.was;
+        }
+    }
+}
+
 impl PluginHost {
     #[must_use]
     pub fn activation(&self, id: &PluginId) -> Option<u64> {
-        self.permits.get(id).and_then(|permit| {
-            *permit
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-        })
+        self.permits
+            .get(id)
+            .and_then(|permit| {
+                *permit
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+            })
+            .filter(|activation| *activation != PAUSED)
     }
 
-    pub(crate) fn permit(&self, id: &PluginId) -> Option<Arc<Mutex<Option<u64>>>> {
-        self.permits.get(id).cloned()
+    pub(crate) fn permit(&self, id: &PluginId) -> Option<kg_core::Permit> {
+        let gate = self.permits.get(id)?;
+        Some(kg_core::Permit::new(self.activation(id)?, gate.clone()))
+    }
+
+    pub(crate) fn changed_while_saving(id: &PluginId) -> OpError {
+        OpError::Invalid(format!("plugin {id} changed while this was saving"))
     }
 
     pub(crate) fn end_activation(&mut self, id: &PluginId) {
         self.retarget(id, None);
     }
 
-    pub(crate) fn begin_activation(&mut self, id: &PluginId) -> u64 {
+    /// Stops writes for the plugin until the guard is committed or dropped. Dropping puts back
+    /// what was there, so an early return cannot leave the plugin looking disabled.
+    pub(crate) fn pause_activation(&mut self, id: &PluginId) -> Paused {
+        let gate = self
+            .permits
+            .entry(id.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(None)))
+            .clone();
+        let was = gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .replace(PAUSED);
+        Paused {
+            gate,
+            was,
+            armed: true,
+        }
+    }
+
+    pub(crate) fn begin_activation(&mut self, id: &PluginId) {
         self.next_activation = self.next_activation.saturating_add(1);
         let activation = self.next_activation;
         self.retarget(id, Some(activation));
-        activation
-    }
-
-    pub(crate) fn resume_activation(&mut self, id: &PluginId) {
-        let activation = self.active.get(id).map(|active| active.activation);
-        self.retarget(id, activation);
     }
 
     fn retarget(&mut self, id: &PluginId, activation: Option<u64>) {
