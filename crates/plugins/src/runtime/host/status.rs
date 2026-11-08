@@ -230,7 +230,7 @@ impl PluginHost {
 impl PluginHost {
     #[must_use]
     pub fn plugin_data(&self, id: &PluginId) -> PathBuf {
-        self.data_dir.join("plugins").join(&id.0).join("data")
+        kg_core::plugin_data_dir(&self.data_dir, id)
     }
 
     /// The plugin folder, for serving that plugin's own page.

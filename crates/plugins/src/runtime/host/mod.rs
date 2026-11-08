@@ -57,12 +57,11 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
     let workspace = Workspace::global(cx);
     let records = workspace.read(cx).plugins();
     let data_dir = workspace.read(cx).data_dir().to_owned();
-    let identity_dir = data_dir.clone();
     let host = cx.new(|cx: &mut Context<PluginHost>| PluginHost {
         secrets: secret::Store::new(keyring_core::get_default_store(), data_dir.clone()),
-        data_dir,
+        data_dir: data_dir.clone(),
         installing: Rc::default(),
-        indexes: index::load(&identity_dir),
+        indexes: index::load(&data_dir),
         install_stop: Rc::default(),
         identities: BTreeMap::new(),
         warnings: BTreeMap::new(),
@@ -112,19 +111,16 @@ pub fn init(cx: &mut App, components: gpui_shell::FrozenComponentRegistry) -> Ta
     workspace.update(cx, |workspace, _| {
         workspace.set_plugin_host(Rc::new(dispatch));
     });
-    let plugins = workspace.read(cx).data_dir().join("plugins");
-    let data_dir = workspace.read(cx).data_dir().to_owned();
-    cx.spawn(async move |cx| boot(host, records, identity_dir, data_dir, plugins, cx).await)
+    cx.spawn(async move |cx| boot(host, records, data_dir, cx).await)
 }
 
 async fn boot(
     host: Entity<PluginHost>,
     records: impl std::future::Future<Output = Result<Vec<kg_domain::Plugin>>>,
-    identity_dir: PathBuf,
     data_dir: PathBuf,
-    plugins: PathBuf,
     cx: &mut AsyncApp,
 ) -> Result<()> {
+    let plugins = kg_core::plugins_dir(&data_dir);
     cx.background_spawn(async move { source::clear_staging(&plugins) })
         .await;
     let records = records.await?;
@@ -132,7 +128,7 @@ async fn boot(
     web_store::retry_orphan_stores(&data_dir, &known, cx).await;
     for record in records {
         let root = record.root.clone();
-        let data = identity_dir.clone();
+        let data = data_dir.clone();
         if let Ok(manifest) = cx
             .background_spawn(async move { manifest::read(&root, &data) })
             .await

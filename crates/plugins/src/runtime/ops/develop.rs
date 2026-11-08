@@ -78,9 +78,7 @@ pub(in crate::runtime::ops) async fn develop(
         PluginOp::Dev { path, thread_id } => dev(host, path, thread_id, requester, cx).await,
         PluginOp::Logs { id, after, .. } => {
             record(host, &id, cx)?;
-            let path = host.read_with(cx, |host, _| {
-                host.data_dir.join("plugins").join(&id.0).join("logs.jsonl")
-            });
+            let path = host.read_with(cx, |host, _| kg_core::plugin_log_file(&host.data_dir, &id));
             cx.background_spawn(async move { crate::development::logs(&path, after.unwrap_or(0)) })
                 .await
         }
@@ -263,7 +261,7 @@ pub(in crate::runtime::ops) async fn reload(
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
     let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-    let plugins = data_dir.join("plugins");
+    let plugins = kg_core::plugins_dir(&data_dir);
     let root = record.root.clone();
     let mut fetched = cx
         .background_spawn(async move {

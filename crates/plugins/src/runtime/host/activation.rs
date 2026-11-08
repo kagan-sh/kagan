@@ -423,7 +423,7 @@ impl PluginHost {
         };
         let runtime = ShellRuntime::new_isolated_with_components(self.components.clone())
             .map_err(|e| failed(&e))?;
-        let data = self.data_dir.join("plugins").join(&id.0).join("data");
+        let data = self.plugin_data(id);
         std::fs::create_dir_all(&data)?;
         let active = self
             .active

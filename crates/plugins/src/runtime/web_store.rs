@@ -280,8 +280,7 @@ pub(crate) async fn retry_orphan_stores(
     known: &BTreeSet<PluginId>,
     cx: &mut AsyncApp,
 ) {
-    let plugins = data_dir.join("plugins");
-    let Ok(entries) = std::fs::read_dir(&plugins) else {
+    let Ok(entries) = std::fs::read_dir(kg_core::plugins_dir(data_dir)) else {
         return;
     };
     for entry in entries.flatten() {
@@ -289,10 +288,11 @@ pub(crate) async fn retry_orphan_stores(
         let Some(name) = name.to_str() else {
             continue;
         };
-        if known.contains(&PluginId(name.into())) {
+        let id = PluginId(name.into());
+        if known.contains(&id) {
             continue;
         }
-        let data = entry.path().join("data");
+        let data = kg_core::plugin_data_dir(data_dir, &id);
         let ids = read_store_ids(&data);
         if ids.is_empty() {
             continue;

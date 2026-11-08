@@ -69,7 +69,7 @@ pub(in crate::runtime::ops) async fn install(
     }
     let (data_dir, indexes) =
         host.read_with(cx, |host, _| (host.data_dir.clone(), host.indexes.clone()));
-    let plugins = data_dir.join("plugins");
+    let plugins = kg_core::plugins_dir(&data_dir);
     let (stop, stopped) = async_channel::bounded::<()>(1);
     let by_name = crate::index::names_an_index(&source);
     if by_name || source.starts_with("git:") {
@@ -147,7 +147,7 @@ pub(in crate::runtime::ops) async fn update(
 ) -> Result<OpResult> {
     let record = record(host, id, cx)?;
     let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-    let plugins = data_dir.join("plugins");
+    let plugins = kg_core::plugins_dir(&data_dir);
     let fetched = {
         let (plugins, record, data_dir) = (plugins.clone(), record.clone(), data_dir.clone());
         cx.background_spawn(async move {

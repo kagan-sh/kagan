@@ -519,9 +519,7 @@ mod tests {
             .unwrap();
         });
         assert!(roots.is_empty());
-        let text =
-            std::fs::read_to_string(data.path().join("plugins").join(&id.0).join("logs.jsonl"))
-                .unwrap();
+        let text = std::fs::read_to_string(kg_core::plugin_log_file(data.path(), &id)).unwrap();
         assert!(text.contains(&reason.to_string()), "{text}");
     }
 }
