@@ -8,7 +8,7 @@ use crate::manifest::Grant;
 use crate::source::{Source, fetch};
 use crate::{PluginHost, Result};
 
-use super::approve::{approve, choose, removal_options};
+use super::approve::{approve, choose, options};
 use super::install::keep;
 use super::{approved, record, start};
 
@@ -150,7 +150,7 @@ pub(in crate::runtime::ops) async fn remove(
         requester,
         question.clone(),
         &question,
-        removal_options(),
+        options("Remove"),
         cx,
     )
     .await?;
@@ -287,7 +287,7 @@ pub(in crate::runtime::ops) async fn reload(
             ),
             Vec::new(),
             grant.added(&approved),
-            false,
+            "Approve",
             cx,
         )
         .await?;

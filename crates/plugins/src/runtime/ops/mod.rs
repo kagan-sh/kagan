@@ -13,7 +13,7 @@ use crate::host::activate;
 use crate::manifest::Grant;
 use crate::{Discovered, PluginHost, Result};
 
-use approve::{choose, permission_options};
+use approve::{choose, options};
 use config::config;
 use develop::{check, dev, disable, enable, logs, new, reload_enabled, remove, share, types};
 use install::{install, update};
@@ -147,7 +147,7 @@ async fn use_slot(
                 requester,
                 question.clone(),
                 &question,
-                permission_options(),
+                options("Approve"),
                 cx,
             )
             .await?;

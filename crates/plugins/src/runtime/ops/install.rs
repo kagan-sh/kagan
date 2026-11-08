@@ -122,7 +122,7 @@ pub(in crate::runtime::ops) async fn install(
             indexes.as_deref().unwrap_or_default(),
         ),
         grant.lines(),
-        true,
+        "Install",
         cx,
     )
     .await?;
@@ -197,7 +197,7 @@ pub(in crate::runtime::ops) async fn update(
                 indexes.as_deref().unwrap_or_default(),
             ),
             grant.added(&approved),
-            false,
+            "Approve",
             cx,
         )
         .await?;

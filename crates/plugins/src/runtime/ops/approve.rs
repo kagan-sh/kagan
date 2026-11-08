@@ -15,7 +15,7 @@ pub(in crate::runtime::ops) async fn approve(
     question: String,
     about: Vec<String>,
     lines: Vec<String>,
-    install: bool,
+    verb: &str,
     cx: &mut AsyncApp,
 ) -> Result<()> {
     let head = std::iter::once(question.clone())
@@ -30,14 +30,11 @@ pub(in crate::runtime::ops) async fn approve(
         let lines: Vec<String> = lines.iter().map(|line| format!("- {line}")).collect();
         format!("{head}\nIt:\n{}", lines.join("\n"))
     };
-    let mut options = permission_options();
-    if install {
-        options[1].label = "Install".into();
-    }
-    choose(thread_id, requester, title, &question, options, cx).await
+    choose(thread_id, requester, title, &question, options(verb), cx).await
 }
 
-pub(in crate::runtime::ops) fn permission_options() -> Vec<InteractionOption> {
+/// Cancel, and the one thing a person can agree to.
+pub(in crate::runtime::ops) fn options(verb: &str) -> Vec<InteractionOption> {
     vec![
         InteractionOption {
             id: InteractionOption::DECLINE.into(),
@@ -45,20 +42,7 @@ pub(in crate::runtime::ops) fn permission_options() -> Vec<InteractionOption> {
         },
         InteractionOption {
             id: InteractionOption::APPROVE.into(),
-            label: "Approve".into(),
-        },
-    ]
-}
-
-pub(in crate::runtime::ops) fn removal_options() -> Vec<InteractionOption> {
-    vec![
-        InteractionOption {
-            id: InteractionOption::DECLINE.into(),
-            label: "Cancel".into(),
-        },
-        InteractionOption {
-            id: InteractionOption::APPROVE.into(),
-            label: "Remove".into(),
+            label: verb.into(),
         },
     ]
 }
@@ -100,7 +84,7 @@ pub(in crate::runtime::ops) async fn approve_folder(
         question,
         Vec::new(),
         reads,
-        false,
+        "Approve",
         cx,
     )
     .await?;
