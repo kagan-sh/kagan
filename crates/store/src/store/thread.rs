@@ -169,6 +169,45 @@ impl super::Store {
         found(changed, "thread", id)
     }
 
+    pub fn conversation_ids(&self) -> Result<Vec<Conversation>> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT conversation FROM threads WHERE conversation IS NOT NULL")?;
+        let ids = statement
+            .query_map([], |row| Ok(row.get::<_, Text<_>>(0)?.0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
+    }
+
+    /// Sets the conversation when this start is still current, the row is still running, and the
+    /// column is still `expect`. An id another thread holds is left where it is.
+    pub fn claim_conversation(
+        &self,
+        id: &ThreadId,
+        conversation: Conversation,
+        expect: Option<Conversation>,
+        since: Timestamp,
+    ) -> Result<bool> {
+        let changed = self.conn.execute(
+            "UPDATE threads SET conversation = ?1
+             WHERE id = ?2
+               AND status IN ('active', 'starting')
+               AND ((?3 IS NULL AND conversation IS NULL) OR conversation = ?3)
+               AND NOT EXISTS (
+                 SELECT 1 FROM threads AS other
+                 WHERE other.conversation = ?1 AND other.id != ?2
+               )
+               AND (
+                 SELECT at FROM events
+                 WHERE thread_id = ?2
+                   AND json_extract(kind, '$.type') = 'started'
+                 ORDER BY seq DESC LIMIT 1
+               ) = ?4",
+            params![Text(conversation), Text(id), Text(expect), since.0],
+        )?;
+        Ok(changed == 1)
+    }
+
     pub fn set_pinned(&self, id: &ThreadId, pinned: bool) -> Result<()> {
         let changed = self.conn.execute(
             "UPDATE threads SET pinned = ?2 WHERE id = ?1",

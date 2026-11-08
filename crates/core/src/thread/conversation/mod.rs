@@ -379,16 +379,24 @@ fn kimi_kept(root: &Path, conversation: Conversation) -> bool {
 }
 
 fn kimi_started(root: &Path, folder: &Path, since: kg_domain::Timestamp) -> Option<Conversation> {
+    let found = kimi_matches(root, folder, since);
+    (found.len() == 1).then(|| found[0])
+}
+
+pub(super) fn kimi_matches(
+    root: &Path,
+    folder: &Path,
+    since: kg_domain::Timestamp,
+) -> Vec<Conversation> {
     let folder = dunce::canonicalize(folder).ok();
-    let mut found = entries(&root.join("sessions"))
+    entries(&root.join("sessions"))
         .flat_map(|workspace| entries(&workspace))
         .filter_map(|dir| kimi_state(&dir.join("state.json")))
         .filter(move |(_, cwd, created_at)| {
             *created_at >= since.0 && dunce::canonicalize(cwd).ok() == folder
         })
-        .map(|(id, _, _)| id);
-    let one = found.next()?;
-    found.next().is_none().then_some(one)
+        .map(|(id, _, _)| id)
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -440,18 +448,29 @@ fn codex_kept(sessions: &Path, conversation: Conversation) -> bool {
 // each file names its folder and its start in UTC; the folder names are local dates, so the day
 // before the start is read too. Two candidates, or none, find nothing.
 fn codex_started(sessions: &Path, folder: &Path, since: Timestamp) -> Option<Conversation> {
-    let folder = dunce::canonicalize(folder).ok()?;
-    let since = DateTime::<Utc>::from_timestamp_millis(since.0)?;
-    let mut found = days(sessions, since.date_naive().pred_opt()?)
+    let found = codex_matches(sessions, folder, since);
+    (found.len() == 1).then(|| found[0])
+}
+
+pub(super) fn codex_matches(sessions: &Path, folder: &Path, since: Timestamp) -> Vec<Conversation> {
+    let Some(folder) = dunce::canonicalize(folder).ok() else {
+        return Vec::new();
+    };
+    let Some(since) = DateTime::<Utc>::from_timestamp_millis(since.0) else {
+        return Vec::new();
+    };
+    let Some(first) = since.date_naive().pred_opt() else {
+        return Vec::new();
+    };
+    days(sessions, first)
         .flat_map(|day| entries(&day))
         .filter(|file| file.extension() == Some(OsStr::new("jsonl")))
         .filter_map(|file| codex_meta(&file))
         .filter(|(meta, started)| {
             *started >= since && dunce::canonicalize(&meta.cwd).is_ok_and(|cwd| cwd == folder)
         })
-        .map(|(meta, _)| meta.id);
-    let one = found.next()?;
-    found.next().is_none().then_some(one)
+        .map(|(meta, _)| meta.id)
+        .collect()
 }
 
 fn codex_meta(file: &Path) -> Option<(CodexMeta, DateTime<Utc>)> {

@@ -1,11 +1,11 @@
 use std::path::Path;
 
 use gpui_kit::{AppContext as _, AsyncApp, WeakEntity};
-use kg_domain::ThreadId;
+use kg_domain::{Conversation, ThreadId};
 
 use crate::Workspace;
 
-use super::{codex_started, home, kimi_root, kimi_started};
+use super::{codex_kept, codex_matches, home, kimi_kept, kimi_matches, kimi_root};
 
 pub(super) fn note_when_written(
     this: &WeakEntity<Workspace>,
@@ -29,18 +29,11 @@ pub(super) fn note_when_written(
                 return;
             }
             let thread = id.clone();
-            if !matches!(
-                database
-                    .call(move |store| store.conversation(&thread))
-                    .await,
-                Ok(None)
-            ) {
-                return;
-            }
-            let Ok((codex_home, kimi_home)) = this.update(cx, |workspace, _| {
-                (workspace.codex_home.clone(), workspace.kimi_home.clone())
-            }) else {
-                return;
+            let Ok(stored) = database
+                .call(move |store| store.conversation(&thread))
+                .await
+            else {
+                continue;
             };
             let thread = id.clone();
             let Ok(Some(since)) = database
@@ -49,29 +42,69 @@ pub(super) fn note_when_written(
             else {
                 continue;
             };
+            let Ok((codex_home, kimi_home)) = this.update(cx, |workspace, _| {
+                (workspace.codex_home.clone(), workspace.kimi_home.clone())
+            }) else {
+                return;
+            };
             let folder = folder.clone();
-            let found = cx
+            let look = cx
                 .background_spawn(async move {
                     if kimi {
-                        kimi_started(&kimi_root(kimi_home)?, &folder, since)
+                        let Some(root) = kimi_root(kimi_home) else {
+                            return Look::Missing;
+                        };
+                        if stored.is_some_and(|conversation| kimi_kept(&root, conversation)) {
+                            return Look::Kept;
+                        }
+                        Look::Files(kimi_matches(&root, &folder, since))
                     } else {
-                        let sessions = codex_home
-                            .or_else(|| home("CODEX_HOME", ".codex"))?
-                            .join("sessions");
-                        codex_started(&sessions, &folder, since)
+                        let Some(root) = codex_home.or_else(|| home("CODEX_HOME", ".codex")) else {
+                            return Look::Missing;
+                        };
+                        let sessions = root.join("sessions");
+                        if stored.is_some_and(|conversation| codex_kept(&sessions, conversation)) {
+                            return Look::Kept;
+                        }
+                        Look::Files(codex_matches(&sessions, &folder, since))
                     }
                 })
                 .await;
-            if let Some(conversation) = found {
-                let thread = id.clone();
-                let _ = database
-                    .call(move |store| store.set_conversation(&thread, conversation))
-                    .await;
+            let Look::Files(matches) = look else {
+                if matches!(look, Look::Kept) {
+                    return;
+                }
+                continue;
+            };
+            let Ok(taken) = database.call(|store| store.conversation_ids()).await else {
+                continue;
+            };
+            let mut free = matches
+                .into_iter()
+                .filter(|conversation| !taken.contains(conversation));
+            let Some(conversation) = free.next() else {
+                continue;
+            };
+            if free.next().is_some() {
+                continue;
+            }
+            let thread = id.clone();
+            if database
+                .call(move |store| store.claim_conversation(&thread, conversation, stored, since))
+                .await
+                == Ok(true)
+            {
                 return;
             }
         }
     })
     .detach();
+}
+
+enum Look {
+    Missing,
+    Kept,
+    Files(Vec<Conversation>),
 }
 
 fn running(this: &WeakEntity<Workspace>, id: &ThreadId, cx: &mut AsyncApp) -> bool {
