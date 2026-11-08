@@ -96,15 +96,7 @@ impl Kagan {
             WindowOp::NextThreadNeedingYou => self
                 .listed(cx)
                 .filter(|thread| Some(&thread.id) != shown.as_ref())
-                .filter(|thread| {
-                    thread.unread()
-                        || self
-                            .questions
-                            .read(cx)
-                            .questions
-                            .iter()
-                            .any(|question| question.thread_id == thread.id)
-                })
+                .filter(|thread| self.questions.read(cx).needs_you(thread))
                 .min_by_key(|thread| (thread.latest_attention_at, &thread.id))
                 .map(|thread| thread.id.clone()),
             _ => return,

@@ -162,16 +162,13 @@ impl Kagan {
         self.activity.needs(&title);
     }
 
-    /// The threads `NextThreadNeedingYou` reaches. The Dock badge is wider, because it counts the
-    /// shown thread too.
+    // The threads `NextThreadNeedingYou` reaches. The Dock badge is wider, because it counts the
+    // shown thread too.
     fn needs_you(&self, cx: &App) -> usize {
         let shown = self.shown_thread(cx);
-        let questions = self.questions.read(cx).questions.clone();
         self.listed(cx)
             .filter(|thread| Some(&thread.id) != shown.as_ref())
-            .filter(|thread| {
-                thread.unread() || questions.iter().any(|asked| asked.thread_id == thread.id)
-            })
+            .filter(|thread| self.questions.read(cx).needs_you(thread))
             .count()
     }
 

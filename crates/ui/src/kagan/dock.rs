@@ -1,6 +1,6 @@
 use super::attention;
 use gpui_kit::{App, Global, Subscription};
-use kg_core::{Workspace, WorkspaceEvent};
+use kg_core::Workspace;
 use objc2::MainThreadMarker;
 use objc2_app_kit::NSApplication;
 use objc2_foundation::NSString;
@@ -25,10 +25,7 @@ pub(super) fn watch(cx: &mut App) {
         update(attention.read(cx).count(cx));
     });
     let workspace = cx.subscribe(&workspace, |_, event, cx| {
-        if matches!(
-            event,
-            WorkspaceEvent::Changed | WorkspaceEvent::Event { .. } | WorkspaceEvent::Waiting(_)
-        ) {
+        if attention::refreshes(event) {
             update(attention::global(cx).read(cx).count(cx));
         }
     });
