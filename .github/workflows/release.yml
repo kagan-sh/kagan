@@ -187,7 +187,7 @@ jobs:
           bin=target/release/kg
           if [ "$RUNNER_OS" = Windows ]; then bin=$bin.exe; fi
           echo "\`kg\` on $RUNNER_OS: $(wc -c < "$bin" | tr -d ' ') bytes" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ matrix.os }}
           path: |
@@ -233,7 +233,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: cargo build --release -p kg --target "$TARGET"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kg-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/kg
@@ -398,7 +398,7 @@ jobs:
             echo "::error::kg is $size bytes, over its $BUDGET byte budget"
             exit 1
           fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-macos
           path: |
