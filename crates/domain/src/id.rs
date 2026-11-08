@@ -84,6 +84,14 @@ impl Conversation {
     }
 }
 
+impl FromStr for Conversation {
+    type Err = uuid::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse().map(Self)
+    }
+}
+
 impl fmt::Display for Conversation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.hyphenated().fmt(f)

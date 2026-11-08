@@ -32,6 +32,24 @@ const CODEX_SUBCOMMANDS: &[&str] = &["resume", "fork"];
 
 const CURSOR_FLAGS: &[&str] = &["--continue", "--new-session-id", "--resume"];
 
+const OPENCODE_FLAGS: &[&str] = &["--session", "-s", "--continue", "-c"];
+
+const PI_FLAGS: &[&str] = &[
+    "--session",
+    "--session-id",
+    "--continue",
+    "-c",
+    "--resume",
+    "-r",
+    "--fork",
+    "--no-session",
+];
+
+const KIMI_FLAGS: &[&str] = &["--session", "-S", "--continue", "-c"];
+
+const KIMI_FRESH: &str =
+    "kagan could not tell which Kimi conversation was this thread's, so Kimi starts a new one.";
+
 const CODEX_FRESH: &str =
     "kagan could not tell which Codex conversation was this thread's, so Codex starts a new one.";
 
@@ -85,7 +103,12 @@ pub(super) async fn args(
         Known::Codex => codex(this, record, folder, cx).await,
         Known::Cursor if picks_cursor(args) => Ok((Vec::new(), None)),
         Known::Cursor => cursor(this, record, folder, start, cx).await,
-        Known::Kimi | Known::OpenCode | Known::Pi => Ok((Vec::new(), None)),
+        Known::OpenCode if picks(args, OPENCODE_FLAGS) => Ok((Vec::new(), None)),
+        Known::OpenCode => named(this, record, "--session", start, cx).await,
+        Known::Pi if picks(args, PI_FLAGS) => Ok((Vec::new(), None)),
+        Known::Pi => named(this, record, "--session-id", start, cx).await,
+        Known::Kimi if picks(args, KIMI_FLAGS) || start == Start::First => Ok((Vec::new(), None)),
+        Known::Kimi => kimi(this, record, folder, cx).await,
     }
 }
 
@@ -213,8 +236,79 @@ async fn remember(
     ))
 }
 
+async fn named(
+    this: &WeakEntity<Workspace>,
+    record: &kg_domain::Thread,
+    flag: &str,
+    start: Start,
+    cx: &mut AsyncApp,
+) -> Result<(Vec<OsString>, Option<&'static str>)> {
+    let database = crate::workspace::database(this, cx)?;
+    let id = record.id.clone();
+    let stored = database.call(move |store| store.conversation(&id)).await?;
+    let conversation = stored.unwrap_or_else(Conversation::fresh);
+    if stored.is_none() {
+        let id = record.id.clone();
+        database
+            .call(move |store| store.set_conversation(&id, conversation))
+            .await?;
+    }
+    Ok((
+        resume(flag, conversation),
+        (stored.is_none() && start == Start::Again).then_some(NO_CONVERSATION),
+    ))
+}
+
+async fn kimi(
+    this: &WeakEntity<Workspace>,
+    record: &kg_domain::Thread,
+    folder: &Path,
+    cx: &mut AsyncApp,
+) -> Result<(Vec<OsString>, Option<&'static str>)> {
+    let (database, home) = this
+        .update(cx, |workspace, _| {
+            (workspace.database.clone(), workspace.kimi_home.clone())
+        })
+        .map_err(closed)?;
+    let id = record.id.clone();
+    let (stored, since) = database
+        .call(move |store| Ok((store.conversation(&id)?, store.last_started(&id)?)))
+        .await?;
+    let folder = folder.to_owned();
+    let found = cx
+        .background_spawn(async move {
+            let root = kimi_root(home)?;
+            stored
+                .filter(|conversation| kimi_kept(&root, *conversation))
+                .or_else(|| kimi_started(&root, &folder, since?))
+        })
+        .await;
+    let Some(conversation) = found else {
+        let notice = if stored.is_some() {
+            LOST_CONVERSATION
+        } else {
+            KIMI_FRESH
+        };
+        return Ok((Vec::new(), Some(notice)));
+    };
+    if stored != Some(conversation) {
+        let id = record.id.clone();
+        database
+            .call(move |store| store.set_conversation(&id, conversation))
+            .await?;
+    }
+    Ok((kimi_resume(conversation), None))
+}
+
 fn resume(word: &str, conversation: Conversation) -> Vec<OsString> {
     vec![OsString::from(word), conversation.to_string().into()]
+}
+
+fn kimi_resume(conversation: Conversation) -> Vec<OsString> {
+    vec![
+        OsString::from("--session"),
+        format!("session_{conversation}").into(),
+    ]
 }
 
 fn picks(args: &[OsString], flags: &[&str]) -> bool {
@@ -253,6 +347,47 @@ fn cursor_root(set: Option<PathBuf>) -> Option<PathBuf> {
         return Some(PathBuf::from(dir).join("cursor"));
     }
     home("CURSOR_CONFIG_DIR", ".cursor")
+}
+
+fn kimi_root(set: Option<PathBuf>) -> Option<PathBuf> {
+    set.or_else(|| home("KIMI_CODE_HOME", ".kimi-code"))
+}
+
+// Kimi Code writes `sessions/<workspace>/session_<uuid>/state.json`. `--session` resumes that id
+// and does not create one, so the id has to be read from the file. The layout is what Kimi Code
+// 2.4 writes, and what herdr resumes with `kimi --session <id>`.
+fn kimi_kept(root: &Path, conversation: Conversation) -> bool {
+    let name = format!("session_{conversation}");
+    entries(&root.join("sessions"))
+        .any(|workspace| workspace.join(&name).join("state.json").is_file())
+}
+
+fn kimi_started(root: &Path, folder: &Path, since: kg_domain::Timestamp) -> Option<Conversation> {
+    let folder = dunce::canonicalize(folder).ok();
+    let mut found = entries(&root.join("sessions"))
+        .flat_map(|workspace| entries(&workspace))
+        .filter_map(|dir| kimi_state(&dir.join("state.json")))
+        .filter(move |(_, cwd, created_at)| {
+            *created_at >= since.0 && dunce::canonicalize(cwd).ok() == folder
+        })
+        .map(|(id, _, _)| id);
+    let one = found.next()?;
+    found.next().is_none().then_some(one)
+}
+
+#[derive(Deserialize)]
+struct KimiState {
+    id: String,
+    cwd: PathBuf,
+    #[serde(rename = "createdAt")]
+    created_at: i64,
+}
+
+fn kimi_state(file: &Path) -> Option<(Conversation, PathBuf, i64)> {
+    let text = std::fs::read_to_string(file).ok()?;
+    let state: KimiState = serde_json::from_str(&text).ok()?;
+    let id = state.id.strip_prefix("session_")?.parse().ok()?;
+    Some((id, state.cwd, state.created_at))
 }
 
 fn home(variable: &str, folder: &str) -> Option<PathBuf> {

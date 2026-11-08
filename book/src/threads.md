@@ -62,7 +62,7 @@ What **Start again** continues:
 - If two Codex threads share a folder, or the line has other words after `codex`, Codex starts a new conversation, and the thread's events say so.
 - With agent integration off in Settings, the program starts fresh.
 
-Restarting kagan starts a program again when it was still running, and continues a Claude Code, Codex, or Cursor Agent conversation the same way Start again does. A program you stopped stays stopped.
+Restarting kagan starts a program again when it was still running, and continues a Claude Code, Codex, Cursor Agent, OpenCode, Pi, or Kimi Code conversation the same way Start again does. A program you stopped stays stopped.
 
 ## When a program ends
 

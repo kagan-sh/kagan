@@ -294,6 +294,9 @@ async fn a_line_that_picks_its_conversation_gets_none_from_kagan(cx: &mut TestAp
         ("cursor-agent", "--continue"),
         ("agent", "--new-session-id abc"),
         ("agent", "login"),
+        ("opencode", "--session abc"),
+        ("pi", "--continue"),
+        ("kimi", "--session abc"),
     ];
     for (number, (agent, rest)) in lines.into_iter().enumerate() {
         let run = fixture.dir.path().join(format!("run-{number}"));
@@ -622,4 +625,117 @@ async fn start_again_on_codex_starts_a_new_conversation_when_none_or_two_match(
         "{notices:?}"
     );
     assert_eq!(notices.len(), 2);
+}
+
+fn kimi_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
+    let home = fixture.dir.path().join("kimi-home");
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.kimi_home = Some(home.clone());
+    });
+    home
+}
+
+fn kimi_session(home: &Path, folder: &Path) -> String {
+    let conversation = Conversation::fresh().to_string();
+    let dir = home
+        .join("sessions")
+        .join("wd")
+        .join(format!("session_{conversation}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let state = json!({
+        "id": format!("session_{conversation}"),
+        "cwd": folder,
+        "createdAt": i64::try_from(now).unwrap() + 3_600_000,
+    });
+    std::fs::write(dir.join("state.json"), format!("{state}\n")).unwrap();
+    conversation
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_keeps_the_opencode_and_pi_session_it_named(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let open = fixture.dir.path().join("opencode-run");
+    let program = fake_agent(&open, "opencode");
+    let (open_id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    let open_session = after(&ran(&open).0, "--session").unwrap();
+    stop(&open_id, cx).await;
+    assert_eq!(
+        after(&start_again(&open_id, &open, cx).await, "--session"),
+        Some(open_session.clone())
+    );
+
+    let pi = fixture.dir.path().join("pi-run");
+    let program = fake_agent(&pi, "pi");
+    let (pi_id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    let pi_session = after(&ran(&pi).0, "--session-id").unwrap();
+    stop(&pi_id, cx).await;
+    assert_eq!(
+        after(&start_again(&pi_id, &pi, cx).await, "--session-id"),
+        Some(pi_session.clone())
+    );
+
+    std::fs::remove_file(open.join("out").join("env")).unwrap();
+    std::fs::remove_file(pi.join("out").join("env")).unwrap();
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(after(&ran(&open).0, "--session"), Some(open_session));
+    assert_eq!(after(&ran(&pi).0, "--session-id"), Some(pi_session));
+    drop(fixture);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_resumes_the_one_kimi_conversation_in_its_folder(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-run");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    let conversation = kimi_session(&home, fixture.dir.path());
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(
+        again.ends_with(&["--session".to_owned(), format!("session_{conversation}")]),
+        "{again:?}"
+    );
+    assert!(notices(&id, cx).await.is_empty());
+
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _home = EnvVar::set("KIMI_CODE_HOME", &home);
+    let fixture = fixture.restart(cx, |_| {}).await;
+    cx.run_until_parked();
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert_eq!(
+        after(&ran(&run).0, "--session"),
+        Some(format!("session_{conversation}"))
+    );
+    drop(fixture);
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn start_again_on_kimi_starts_a_new_conversation_when_two_match(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = kimi_home(&fixture, cx);
+    let run = fixture.dir.path().join("kimi-two");
+    let program = fake_agent(&run, "kimi");
+    let (id, _reap) = started(&fixture, &program.display().to_string(), cx).await;
+    ran(&run);
+    kimi_session(&home, fixture.dir.path());
+    kimi_session(&home, fixture.dir.path());
+    stop(&id, cx).await;
+    let again = start_again(&id, &run, cx).await;
+    assert!(after(&again, "--session").is_none(), "{again:?}");
+    assert!(
+        notices(&id, cx)
+            .await
+            .iter()
+            .any(|text| text.contains("could not tell which Kimi conversation"))
+    );
 }

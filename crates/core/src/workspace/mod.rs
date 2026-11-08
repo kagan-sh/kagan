@@ -143,6 +143,8 @@ pub struct Workspace {
     pub(crate) codex_home: Option<std::path::PathBuf>,
     /// Where Cursor keeps its conversations, when a test has set it; None is `CURSOR_CONFIG_DIR`, `$XDG_CONFIG_HOME/cursor`, or `~/.cursor`
     pub(crate) cursor_config: Option<std::path::PathBuf>,
+    /// Where Kimi Code keeps its sessions, when a test has set it; None is `KIMI_CODE_HOME` or `~/.kimi-code`
+    pub(crate) kimi_home: Option<std::path::PathBuf>,
     /// Where BB keeps its skills, when a test has set it; None is `BB_DATA_DIR` or `~/.bb`
     pub(crate) bb_data_dir: Option<std::path::PathBuf>,
     pub(crate) ui: Option<crate::dispatch::ui::UiDispatch>,
@@ -269,6 +271,7 @@ impl Workspace {
                         claude_config: None,
                         codex_home: None,
                         cursor_config: None,
+                        kimi_home: None,
                         bb_data_dir: None,
                         ui: None,
                         requests,
