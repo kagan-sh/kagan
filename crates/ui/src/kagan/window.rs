@@ -76,6 +76,9 @@ pub(crate) fn open_thread(id: &ThreadId, cx: &mut App) {
 }
 
 pub(crate) fn show_preview(thread: Option<ThreadId>, path: String, cx: &mut App) {
+    if front(cx).is_none() {
+        return;
+    }
     cx.activate(true);
     with_front(cx, |kagan, window, cx| {
         if let Some(id) = thread.as_ref()
