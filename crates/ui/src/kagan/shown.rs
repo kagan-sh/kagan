@@ -11,7 +11,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Window, div,
 };
 use kg_core::{Color, Workspace};
-use kg_domain::{Op, Thread, ThreadId, ThreadOp, ThreadStatus};
+use kg_domain::{Op, Thread, ThreadId, ThreadOp};
 use kg_plugins::RunCommand;
 
 use super::controls::{bound_keys, control, dispatch, menu_item, menu_popup, tip};
@@ -37,13 +37,6 @@ fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
         line.push_str(note);
     }
     line
-}
-
-pub(super) fn running(thread: &Thread) -> bool {
-    matches!(
-        thread.status,
-        ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping
-    )
 }
 
 impl Kagan {
@@ -314,7 +307,7 @@ impl Kagan {
 
     pub(super) fn thread_controls(&self, thread: &Thread, cx: &mut Context<Self>) -> AnyElement {
         let archived = thread.archived_at.is_some();
-        let live = running(thread);
+        let live = thread.status.running();
         h_flex()
             .gap_2()
             .children(super::header::buttons(cx))
@@ -358,7 +351,7 @@ impl Kagan {
             return Self::render_empty("This thread is gone.", cx);
         };
         let archived = thread.archived_at.is_some();
-        let live = running(&thread);
+        let live = thread.status.running();
         // The terminal stays on screen after its program ends, so the last output stays readable.
         let strip = self.render_strip(cx);
         let ended = (!live).then(|| Self::ended_notice(&id, archived, cx));

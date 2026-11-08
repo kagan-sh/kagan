@@ -136,15 +136,7 @@ pub(super) async fn resume_programs(this: &WeakEntity<Workspace>, cx: &mut Async
                         .map(|thread| thread.read(cx).record.status);
                     let live =
                         matches!(workspace.shown(id), Some(crate::thread::Shown::Running(_)));
-                    !live
-                        && matches!(
-                            status,
-                            Some(
-                                ThreadStatus::Active
-                                    | ThreadStatus::Starting
-                                    | ThreadStatus::Stopping
-                            )
-                        )
+                    !live && status.is_some_and(ThreadStatus::running)
                 })
                 .map_err(closed)?;
             if failed {
@@ -220,7 +212,7 @@ fn close_left_turn(
     at: kg_domain::Timestamp,
     resume: &BTreeSet<ThreadId>,
 ) -> kg_store::Result<()> {
-    let left_running = matches!(record.status, ThreadStatus::Starting | ThreadStatus::Active)
+    let left_running = record.status.live()
         || (record.status == ThreadStatus::Stopping && resume.contains(&record.id));
     if record.archived_at.is_none() && left_running {
         return Ok(());

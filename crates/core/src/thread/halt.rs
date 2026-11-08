@@ -15,12 +15,7 @@ pub(crate) async fn status(
 ) -> Result<()> {
     let at = time(this, cx)?;
     let record = thread.update(cx, |thread, cx| {
-        if status == ThreadStatus::Error
-            && matches!(
-                thread.record.status,
-                ThreadStatus::Active | ThreadStatus::Starting
-            )
-        {
+        if status == ThreadStatus::Error && thread.record.status.live() {
             thread.record.latest_attention_at = at;
         }
         thread.record.status = status;

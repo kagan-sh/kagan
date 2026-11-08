@@ -190,10 +190,7 @@ fn program_is_live(workspace: &Workspace, id: &ThreadId, cx: &gpui_kit::App) -> 
         .threads
         .get(id)
         .map(|thread| thread.read(cx).record.status);
-    matches!(
-        status,
-        Some(ThreadStatus::Active | ThreadStatus::Starting | ThreadStatus::Stopping)
-    ) && shown.is_some()
+    status.is_some_and(ThreadStatus::running) && shown.is_some()
 }
 
 fn close_turn(

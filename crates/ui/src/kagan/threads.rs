@@ -465,10 +465,7 @@ fn confirm_archive(
 
 pub(crate) fn description(status: ThreadStatus, extra: usize) -> String {
     let mut sentences = Vec::new();
-    if matches!(
-        status,
-        ThreadStatus::Starting | ThreadStatus::Active | ThreadStatus::Stopping
-    ) {
+    if status.running() {
         sentences.push("This will stop current work.".to_owned());
     }
     sentences.extend(match extra {

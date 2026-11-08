@@ -113,12 +113,10 @@ enum Look {
 
 fn running(this: &WeakEntity<Workspace>, id: &ThreadId, cx: &mut AsyncApp) -> bool {
     this.update(cx, |workspace, cx| {
-        workspace.threads.get(id).is_some_and(|thread| {
-            matches!(
-                thread.read(cx).record.status,
-                kg_domain::ThreadStatus::Active | kg_domain::ThreadStatus::Starting
-            )
-        })
+        workspace
+            .threads
+            .get(id)
+            .is_some_and(|thread| thread.read(cx).record.status.live())
     })
     .unwrap_or(false)
 }
