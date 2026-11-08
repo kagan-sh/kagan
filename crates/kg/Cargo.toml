@@ -11,6 +11,7 @@ async-channel.workspace = true
 clap.workspace = true
 gpui-kit.workspace = true
 gpui-shell.workspace = true
+hex.workspace = true
 interprocess.workspace = true
 kg-domain.workspace = true
 kg-core.workspace = true
@@ -45,7 +46,7 @@ windows-native-keyring-store = { version = "=1.1.0", default-features = false }
 zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["rt-async-io-crypto-rust"] }
 
 [build-dependencies]
-embed-resource = "=3.0.11"
+embed-resource = "=3.0.12"
 
 [dev-dependencies]
 sha2.workspace = true
