@@ -13,9 +13,7 @@ pub fn user_path() -> Option<OsString> {
 
 /// Resolves [`user_path`] on its own thread so no later caller waits on the login shell.
 pub fn warm_user_path() {
-    std::thread::spawn(|| {
-        let _ = user_path();
-    });
+    std::thread::spawn(user_path);
 }
 
 static USER_PATH: std::sync::OnceLock<Option<OsString>> = std::sync::OnceLock::new();

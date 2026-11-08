@@ -355,18 +355,21 @@ fn read_capped(mut reader: impl std::io::Read, noun: &str) -> Result<Vec<u8>, Op
 }
 
 pub(crate) fn format_browser_snapshot(snapshot: &BrowserSnapshot) -> String {
+    use std::fmt::Write as _;
+
     let mut out = String::new();
-    let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{}\n", snapshot.url));
+    let _ = writeln!(out, "{}", snapshot.url);
     if !snapshot.title.is_empty() {
-        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{}\n", snapshot.title));
+        let _ = writeln!(out, "{}", snapshot.title);
     }
     for control in &snapshot.controls {
-        let _ = std::fmt::Write::write_fmt(
-            &mut out,
-            format_args!("[{}] {} {:?}", control.ref_id, control.role, control.name),
+        let _ = write!(
+            out,
+            "[{}] {} {:?}",
+            control.ref_id, control.role, control.name
         );
         if let Some(value) = &control.value {
-            let _ = std::fmt::Write::write_fmt(&mut out, format_args!(" value={value:?}"));
+            let _ = write!(out, " value={value:?}");
         }
         out.push('\n');
     }
@@ -379,37 +382,37 @@ pub(crate) fn format_browser_snapshot(snapshot: &BrowserSnapshot) -> String {
 }
 
 fn format_ui_snapshot(snapshot: &UiSnapshot) -> String {
+    use std::fmt::Write as _;
+
     let mut out = String::new();
     for element in &snapshot.elements {
-        let _ = std::fmt::Write::write_fmt(
-            &mut out,
-            format_args!(
-                "{} role={} label={:?} value={:?} bounds=({:.1},{:.1},{:.1},{:.1}) focused={} disabled={} selected={} visible={}\n",
-                element.id,
-                element.role.as_deref().unwrap_or("-"),
-                element.label,
-                element.value,
-                element.bounds.x,
-                element.bounds.y,
-                element.bounds.width,
-                element.bounds.height,
-                element
-                    .focused
-                    .map(|focused| focused.to_string())
-                    .as_deref()
-                    .unwrap_or("-"),
-                element
-                    .disabled
-                    .map(|disabled| disabled.to_string())
-                    .as_deref()
-                    .unwrap_or("-"),
-                element
-                    .selected
-                    .map(|selected| selected.to_string())
-                    .as_deref()
-                    .unwrap_or("-"),
-                element.visible,
-            ),
+        let _ = writeln!(
+            out,
+            "{} role={} label={:?} value={:?} bounds=({:.1},{:.1},{:.1},{:.1}) focused={} disabled={} selected={} visible={}",
+            element.id,
+            element.role.as_deref().unwrap_or("-"),
+            element.label,
+            element.value,
+            element.bounds.x,
+            element.bounds.y,
+            element.bounds.width,
+            element.bounds.height,
+            element
+                .focused
+                .map(|focused| focused.to_string())
+                .as_deref()
+                .unwrap_or("-"),
+            element
+                .disabled
+                .map(|disabled| disabled.to_string())
+                .as_deref()
+                .unwrap_or("-"),
+            element
+                .selected
+                .map(|selected| selected.to_string())
+                .as_deref()
+                .unwrap_or("-"),
+            element.visible,
         );
     }
     out

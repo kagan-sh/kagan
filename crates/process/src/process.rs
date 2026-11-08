@@ -66,6 +66,7 @@ impl Process {
         if std::mem::replace(&mut self.killed, true) {
             return;
         }
+        // The tree may already have exited; nothing is left to report to.
         #[cfg(unix)]
         if let Some(pid) = rustix::process::Pid::from_raw(self.child.id().cast_signed()) {
             let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);

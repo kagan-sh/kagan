@@ -83,6 +83,7 @@ pub(crate) fn run() -> Result<()> {
                     }
                 });
                 while let Ok((_, _, reply)) = incoming.recv().await {
+                    // The client may have hung up already.
                     let _ = reply.send(Err(error.clone())).await;
                 }
                 return;
