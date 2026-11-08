@@ -15,9 +15,6 @@ use serde_json::Value;
 
 use crate::area::{awaited, from_host, to_host, with_app};
 
-/// Same cap as `kg thread paste` (`crates/kg/src/development.rs`).
-const PASTE_CAP: usize = 1024 * 1024;
-
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HostContext {
@@ -362,12 +359,6 @@ fn paste_into_thread(
     let text = arguments.string(1)?.to_owned();
     if text.is_empty() {
         return Err(HostError::new("paste needs text"));
-    }
-    if text.len() > PASTE_CAP {
-        return Err(HostError::new(format!(
-            "paste is {} bytes; the cap is 1 MiB",
-            text.len()
-        )));
     }
     let pasted = with_app(|cx| {
         if Workspace::global(cx).read(cx).thread(&id).is_none() {

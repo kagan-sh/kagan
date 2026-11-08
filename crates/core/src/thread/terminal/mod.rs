@@ -174,8 +174,6 @@ fn is_utf8(locale: &str) -> bool {
         .contains("utf8")
 }
 
-const TEXT_CAP: usize = 1024 * 1024;
-
 pub(crate) async fn submit(
     this: &WeakEntity<Workspace>,
     id: &ThreadId,
@@ -185,7 +183,7 @@ pub(crate) async fn submit(
     if text.is_empty() {
         return Err(OpError::Invalid("send needs text".into()));
     }
-    if text.len() > TEXT_CAP {
+    if text.len() > kg_domain::TEXT_MAX {
         return Err(OpError::Invalid(format!(
             "send is {} bytes; the cap is 1 MiB",
             text.len()
@@ -248,20 +246,6 @@ pub(crate) fn run(
     op: ThreadOp,
     cx: &mut AsyncApp,
 ) -> Result<OpResult> {
-    if let ThreadOp::Paste { text, file, .. } = &op {
-        if file.is_some() {
-            return Err(OpError::Invalid("paste carries text, not a path".into()));
-        }
-        let Some(text) = text else {
-            return Err(OpError::Invalid("paste needs text".into()));
-        };
-        if text.len() > TEXT_CAP {
-            return Err(OpError::Invalid(format!(
-                "paste is {} bytes; the cap is 1 MiB",
-                text.len()
-            )));
-        }
-    }
     let (ThreadOp::Input { id, terminal, .. }
     | ThreadOp::Resize { id, terminal, .. }
     | ThreadOp::Screen { id, terminal, .. }
