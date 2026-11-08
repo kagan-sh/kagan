@@ -4,8 +4,8 @@ use serde_json::{Value, json};
 use crate::manifest::Grant;
 
 use super::{
-    ID, check_plugin, home, installed, plugin_dir, read_manifest, sample_manifest, unique,
-    write_plugin, write_theme_files,
+    ID, check_plugin, home, plugin_dir, read_manifest, sample_manifest, unique, write_plugin,
+    write_theme_files,
 };
 
 #[test]
@@ -615,23 +615,6 @@ fn a_manifest_declares_theme_files_inside_the_plugin() {
 
 /// One good theme and one of each bad kind. The returned folder holds the target of a symlink
 /// that leaves the plugin.
-
-#[test]
-fn an_approved_grant_reads_as_plain_lines() {
-    let plugin = plugin_dir();
-    let mut value = sample_manifest();
-    value["powers"] = json!({ "areas": ["threads"] });
-    write_plugin(plugin.path(), &value);
-    let approved = installed(plugin.path()).approved;
-    assert_eq!(
-        crate::power_lines(&approved).unwrap(),
-        [
-            "reads, starts and changes your threads, can type into threads and press Enter, reads their screen text, and reads their changed files",
-            "reads a folder you choose (Notes)",
-        ]
-    );
-    assert!(crate::power_lines(&json!("x")).is_err());
-}
 
 #[test]
 fn instruct_is_an_install_line_and_needs_approval_again() {

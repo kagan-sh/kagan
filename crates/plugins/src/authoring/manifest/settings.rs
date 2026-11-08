@@ -75,8 +75,8 @@ pub enum Setting {
     },
 }
 
-/// The person's pick for a `provider` setting. Only kagan reads it; the plugin passes the
-/// setting's key to `spawn` and never sees the value.
+/// The person's pick for a `provider` setting. Only kagan reads it; the plugin never
+/// sees the value.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentChoice {

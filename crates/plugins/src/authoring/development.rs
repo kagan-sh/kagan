@@ -7,6 +7,7 @@ use kg_domain::{OpError, OpResult, PluginId};
 use serde_json::Value;
 use tree_sitter::Node;
 
+use super::script::shown;
 use crate::{Result, discover};
 
 fn name_too_long(error: std::io::Error) -> OpError {
@@ -81,7 +82,6 @@ pub(crate) fn types(
             secrets: crate::secret::Store::new(None, root.to_path_buf()),
             status: None,
         },
-        &std::rc::Rc::default(),
         &jobs,
         None,
         root,
@@ -144,14 +144,7 @@ fn plain_buttons(root: &Path) -> Result<Vec<String>> {
     for script in plugin_scripts(root)? {
         let source = std::fs::read_to_string(&script)?;
         if constructs_button(&source) {
-            // Plugin paths use `/` on every platform, as in the manifest.
-            let shown = script
-                .strip_prefix(root)
-                .unwrap_or(&script)
-                .components()
-                .map(|part| part.as_os_str().to_string_lossy())
-                .collect::<Vec<_>>()
-                .join("/");
+            let shown = shown(root, &script);
             warnings.push(format!(
                 "{shown} uses Button, which kg ui cannot find or click; use KgButton"
             ));
@@ -199,7 +192,6 @@ fn constructs_button(source: &str) -> bool {
     })
 }
 
-// Whether any script calls `.store(true)` on a chain that starts at `new WebView(...)`.
 pub(crate) fn calls_webview_store(root: &Path) -> bool {
     plugin_scripts(root).is_ok_and(|scripts| {
         scripts

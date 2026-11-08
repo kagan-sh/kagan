@@ -7,15 +7,15 @@ use kg_core::Workspace;
 use kg_domain::{ConfigOp, Op, OpError, OpResult, Plugin, PluginId, PluginOp, ThreadOp};
 use serde_json::json;
 
-use crate::PluginHostGlobal;
+use crate::host::Hold;
 use crate::manifest::Grant;
 use crate::source;
 
 use super::{
     ID, activation_of, answer, answer_standalone, assert_folder_did_not_land, assert_folder_landed,
-    call, git, hold_activation, hold_commits, hold_lifecycle, hold_writes, install, installed,
-    installing_now, loaded, open, open_kept, plugin_dir, plugin_op, queue_folder, records, run,
-    sample_manifest, save_notes_now, stored_value, thread, tool_names, unique, write_plugin,
+    call, git, hold_at, install, installed, installing_now, loaded, open, open_kept, plugin_dir,
+    plugin_op, queue_folder, records, run, sample_manifest, save_notes_now, stored_value, thread,
+    tool_names, unique, write_plugin,
 };
 
 #[cfg(unix)]
@@ -477,7 +477,7 @@ fn a_save_held_across_reload_does_not_persist(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
     let before = activation_of(cx);
-    let release = hold_writes(cx);
+    let release = hold_at(cx, Hold::Write);
     let setting = plugin_op(
         cx,
         PluginOp::Config {
@@ -525,7 +525,7 @@ fn a_save_held_across_reload_does_not_persist(cx: &mut TestAppContext) {
 fn a_save_held_across_disable_and_enable_does_not_persist(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
-    let release = hold_writes(cx);
+    let release = hold_at(cx, Hold::Write);
     let setting = plugin_op(
         cx,
         PluginOp::Config {
@@ -589,6 +589,30 @@ fn a_folder_save_queued_across_reload_does_not_persist(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
+fn a_failed_update_leaves_a_running_plugin_active(cx: &mut TestAppContext) {
+    let plugin = plugin_dir();
+    open(cx, &[installed(plugin.path())]);
+    let before = activation_of(cx);
+    assert!(before.is_some());
+    let removed = cx.update(|cx| {
+        Workspace::global(cx)
+            .read(cx)
+            .remove_plugin(PluginId(ID.into()))
+    });
+    cx.foreground_executor().block_test(removed).unwrap();
+    let error = run(
+        cx,
+        Op::Plugin(PluginOp::Update {
+            id: PluginId(ID.into()),
+            thread_id: None,
+        }),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("plugin was removed"), "{error}");
+    assert_eq!(activation_of(cx), before);
+}
+
+#[gpui_kit::test]
 fn a_folder_save_queued_across_update_does_not_persist(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
@@ -638,7 +662,7 @@ fn a_folder_save_on_the_new_activation_survives_enable(cx: &mut TestAppContext) 
     let mut installed = installed(plugin.path());
     installed.enabled = false;
     open(cx, &[installed]);
-    let release = hold_activation(cx);
+    let release = hold_at(cx, Hold::Activation);
     let enabling = plugin_op(
         cx,
         PluginOp::Enable {
@@ -658,7 +682,7 @@ fn a_folder_save_on_the_new_activation_survives_reload(cx: &mut TestAppContext) 
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
     let before = activation_of(cx);
-    let release = hold_activation(cx);
+    let release = hold_at(cx, Hold::Activation);
     let reloading = plugin_op(
         cx,
         PluginOp::Reload {
@@ -677,7 +701,7 @@ fn a_folder_save_on_the_new_activation_survives_reload(cx: &mut TestAppContext) 
 fn a_folder_save_on_the_new_activation_survives_disable(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
-    let release = hold_lifecycle(cx);
+    let release = hold_at(cx, Hold::Lifecycle);
     let disabling = plugin_op(
         cx,
         PluginOp::Disable {
@@ -703,7 +727,7 @@ fn a_folder_save_held_across_remove_and_reinstall_does_not_persist(cx: &mut Test
     let notes = tempfile::tempdir().unwrap();
     let path = dunce::canonicalize(notes.path()).unwrap();
     open(cx, &[installed(plugin.path())]);
-    let release = hold_commits(cx);
+    let release = hold_at(cx, Hold::Commit);
     let setting = plugin_op(
         cx,
         PluginOp::Config {
@@ -976,7 +1000,9 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
         "remove_data_store waits for the native release after drop"
     );
     assert!(
-        crate::store_dir(&data, "board").join("store.id").is_file(),
+        crate::web_store::store_dir(&data, "board")
+            .join("store.id")
+            .is_file(),
         "store.id stays until WebKit accepts the delete"
     );
     cx.executor().advance_clock(
@@ -990,7 +1016,9 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
     cx.run_until_parked();
     assert_eq!(attempts.get(), 1, "first attempt after the release wait");
     assert!(
-        crate::store_dir(&data, "board").join("store.id").is_file(),
+        crate::web_store::store_dir(&data, "board")
+            .join("store.id")
+            .is_file(),
         "InUse keeps store.id for a retry"
     );
     cx.executor().advance_clock(Duration::from_secs(3));
@@ -1001,7 +1029,9 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
     );
     assert_eq!(attempts.get(), 3, "retries InUse until Removed");
     assert!(
-        !crate::store_dir(&data, "board").join("store.id").is_file(),
+        !crate::web_store::store_dir(&data, "board")
+            .join("store.id")
+            .is_file(),
         "store.id clears only after WebKit accepts the delete"
     );
 }
@@ -1010,11 +1040,7 @@ fn removing_a_plugin_defers_and_retries_store_delete_past_the_drop_turn(cx: &mut
 fn reload_stops_when_the_plugin_was_removed(cx: &mut TestAppContext) {
     let plugin = plugin_dir();
     open(cx, &[installed(plugin.path())]);
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.keep_hold = Some(hold));
-    });
+    let release = hold_at(cx, Hold::Keep);
     let reloading = plugin_op(
         cx,
         PluginOp::Reload {

@@ -1,3 +1,4 @@
+mod browser;
 mod call;
 mod contributions;
 mod files;
@@ -320,38 +321,11 @@ fn activation_of(cx: &mut TestAppContext) -> Option<u64> {
     })
 }
 
-fn hold_commits(cx: &mut TestAppContext) -> async_channel::Sender<()> {
+fn hold_at(cx: &mut TestAppContext, which: crate::host::Hold) -> async_channel::Sender<()> {
     let (release, hold) = async_channel::bounded(1);
     cx.update(|cx| {
         let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.commit_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_writes(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.write_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_activation(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.activation_hold = Some(hold));
-    });
-    release
-}
-
-fn hold_lifecycle(cx: &mut TestAppContext) -> async_channel::Sender<()> {
-    let (release, hold) = async_channel::bounded(1);
-    cx.update(|cx| {
-        let host = cx.global::<PluginHostGlobal>().0.clone();
-        host.update(cx, |host, _| host.lifecycle_hold = Some(hold));
+        host.update(cx, |host, _| host.holds.insert(which, hold));
     });
     release
 }
@@ -548,7 +522,7 @@ fn queue_folder(
     tempfile::TempDir,
 ) {
     let notes = tempfile::tempdir().unwrap();
-    let release = hold_writes(cx);
+    let release = hold_at(cx, crate::host::Hold::Write);
     let setting = plugin_op(
         cx,
         PluginOp::Config {
@@ -1082,6 +1056,32 @@ fn start_tree(
     }
     assert!(pids.iter().all(|pid| alive(pid)), "{pids:?}");
     (pids, receive)
+}
+
+fn example_roots() -> Vec<std::path::PathBuf> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins");
+    let mut roots: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.join(crate::manifest::FILE).is_file())
+        .collect();
+    roots.sort();
+    roots
+}
+
+#[test]
+fn bundled_examples_pass_check() {
+    let roots = example_roots();
+    assert_eq!(roots.len(), 10);
+    for root in &roots {
+        let data = tempfile::tempdir().unwrap();
+        crate::development::check(
+            root,
+            data.path(),
+            &gpui_shell::components::components().unwrap(),
+        )
+        .unwrap();
+    }
 }
 
 fn installed_example(root: &Path) -> Plugin {

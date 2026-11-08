@@ -239,6 +239,36 @@ fn ui_manifest_rejects_unknown_spots_and_duplicate_panels() {
 }
 
 #[test]
+fn a_web_panel_must_name_a_plain_html_file_inside_the_plugin() {
+    let plugin = plugin_dir();
+    std::fs::create_dir_all(plugin.path().join("ui")).unwrap();
+    std::fs::write(plugin.path().join("ui/index.html"), "<p>hi</p>").unwrap();
+    for web in [
+        "../index.html",
+        "/index.html",
+        "ui\\index.html",
+        "ui//index.html",
+        "ui/__KAGAN/index.html",
+        "ui/index.txt",
+        "",
+    ] {
+        let mut declared = sample_manifest();
+        declared["ui"] = json!({"panels": [{"id":"p","title":"P","web":web,"placement":"right"}]});
+        write_plugin(plugin.path(), &declared);
+        let error = read_manifest(plugin.path()).unwrap_err().to_string();
+        assert!(
+            error.contains("must be an .html file inside the plugin"),
+            "{web:?}: {error}"
+        );
+    }
+    let mut declared = sample_manifest();
+    declared["ui"] =
+        json!({"panels": [{"id":"p","title":"P","web":"ui/index.html","placement":"right"}]});
+    write_plugin(plugin.path(), &declared);
+    read_manifest(plugin.path()).unwrap();
+}
+
+#[test]
 fn a_file_opener_is_refused_with_a_reason() {
     let plugin = plugin_dir();
     let mut declared = sample_manifest();
@@ -291,15 +321,6 @@ fn status_bar_points_to_the_status_item() {
             plugin.path().display()
         )
     );
-}
-
-#[test]
-fn a_status_item_names_its_capability() {
-    let kinds = crate::capabilities_in(&json!({ "ui": { "status": { "title": "Usage" } } }));
-    assert_eq!(kinds.len(), 1);
-    assert_eq!(kinds[0].id, "status");
-    assert_eq!(kinds[0].name, "Status item");
-    assert_eq!(kinds[0].detail, "adds a line to the activity strip");
 }
 
 #[gpui_kit::test]

@@ -108,10 +108,7 @@ fn report(store: &Store, data_dir: &Path) -> kg_store::Result<String> {
                 version = version,
             ),
         );
-        let log = data_dir
-            .join("plugins")
-            .join(&plugin.id.0)
-            .join("logs.jsonl");
+        let log = crate::plugin_log_file(data_dir, &plugin.id);
         out.push_str("  log: ");
         out.push_str(&log_counts(&log));
         out.push('\n');

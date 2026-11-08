@@ -1,6 +1,5 @@
 use std::path::{Component, Path, PathBuf};
 
-/// Why a `powers.read` entry is refused.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ReadRootError {
     #[error("read path {0:?} must be a folder under home, written as ~/")]

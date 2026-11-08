@@ -12,6 +12,7 @@ use crate::{PluginHost, Result};
 
 use super::approve::approve;
 use super::{approved, record, start};
+use crate::host::{Hold, hold};
 
 /// Holds the install slot. Dropping it frees the slot, even when the install is cancelled, and
 /// tells the windows, which read the slot from the host.
@@ -69,7 +70,7 @@ pub(in crate::runtime::ops) async fn install(
     }
     let (data_dir, indexes) =
         host.read_with(cx, |host, _| (host.data_dir.clone(), host.indexes.clone()));
-    let plugins = data_dir.join("plugins");
+    let plugins = kg_core::plugins_dir(&data_dir);
     let (stop, stopped) = async_channel::bounded::<()>(1);
     let by_name = crate::index::names_an_index(&source);
     if by_name || source.starts_with("git:") {
@@ -122,7 +123,7 @@ pub(in crate::runtime::ops) async fn install(
             indexes.as_deref().unwrap_or_default(),
         ),
         grant.lines(),
-        true,
+        "Install",
         cx,
     )
     .await?;
@@ -147,7 +148,7 @@ pub(in crate::runtime::ops) async fn update(
 ) -> Result<OpResult> {
     let record = record(host, id, cx)?;
     let data_dir = host.read_with(cx, |host, _| host.data_dir.clone());
-    let plugins = data_dir.join("plugins");
+    let plugins = kg_core::plugins_dir(&data_dir);
     let fetched = {
         let (plugins, record, data_dir) = (plugins.clone(), record.clone(), data_dir.clone());
         cx.background_spawn(async move {
@@ -197,7 +198,7 @@ pub(in crate::runtime::ops) async fn update(
                 indexes.as_deref().unwrap_or_default(),
             ),
             grant.added(&approved),
-            false,
+            "Approve",
             cx,
         )
         .await?;
@@ -205,7 +206,6 @@ pub(in crate::runtime::ops) async fn update(
     keep(host, fetched, record.source, grant, &plugins, false, cx).await
 }
 
-/// Records approved code with its grant and makes it active.
 pub(in crate::runtime::ops) async fn keep(
     host: &Entity<PluginHost>,
     fetched: Fetched,
@@ -221,11 +221,8 @@ pub(in crate::runtime::ops) async fn keep(
         .background_spawn(async move { fetched.keep(&plugins) })
         .await?;
     let id = discovered.manifest.id.clone();
-    host.update(cx, |host, _| host.end_activation(&id));
-    #[cfg(test)]
-    if let Some(hold) = host.read_with(cx, |host, _| host.keep_hold.clone()) {
-        let _ = hold.recv().await;
-    }
+    let paused = host.update(cx, |host, _| host.pause_activation(&id));
+    hold(host, Hold::Keep, cx).await;
     let approved = serde_json::to_value(&grant)?;
     let workspace = cx.update(|cx| Workspace::global(cx));
     let kept = workspace
@@ -262,6 +259,7 @@ pub(in crate::runtime::ops) async fn keep(
         host.records.insert(record.id.clone(), record.clone());
         cx.notify();
     });
+    paused.commit();
     if record.enabled {
         start(host, &record, Some(discovered), cx).await?;
     }

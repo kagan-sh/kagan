@@ -1,4 +1,5 @@
 pub(crate) mod area;
+pub(crate) mod ask;
 pub(crate) mod browser;
 pub(crate) mod clipboard;
 pub(crate) mod commands;

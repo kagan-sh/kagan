@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use gpui_kit::{App, AppContext as _, Context, Entity, Global};
-use gpui_shell::{HostArguments, HostError, HostValue, with_current_app};
+use gpui_shell::{HostArguments, HostError, HostValue};
+
+use crate::area::with_app;
 use kg_domain::PluginId;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -103,7 +105,7 @@ pub(crate) fn set_status(
         text,
         tone,
     });
-    with_current_app(|cx| {
+    with_app(|cx| {
         let strip = crate::PluginStrip::global(cx)
             .ok_or_else(|| HostError::new("the activity strip is unavailable"))?;
         strip.update(cx, |strip, cx| match item {
@@ -111,8 +113,7 @@ pub(crate) fn set_status(
             None => strip.clear(plugin, cx),
         });
         Ok(HostValue::Null)
-    })
-    .ok_or_else(|| HostError::new("the application context is unavailable"))?
+    })?
 }
 
 fn status_text(text: &str) -> Result<String, HostError> {

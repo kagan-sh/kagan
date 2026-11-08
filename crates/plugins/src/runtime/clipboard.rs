@@ -1,5 +1,5 @@
 #[cfg(not(target_os = "linux"))]
-use gpui_shell::with_current_app;
+use crate::area::with_app;
 use gpui_shell::{HostArguments, HostError, HostValue};
 use kg_domain::PluginId;
 
@@ -23,7 +23,7 @@ fn write_png(_plugin: &PluginId, _bytes: Vec<u8>) -> Result<HostValue, HostError
 #[cfg(not(target_os = "linux"))]
 fn write_png(plugin: &PluginId, bytes: Vec<u8>) -> Result<HostValue, HostError> {
     let plugin = plugin.clone();
-    with_current_app(|cx| {
+    with_app(|cx| {
         let allowed = PluginHost::try_global(cx)
             .is_some_and(|host| host.read(cx).allows_clipboard_write(&plugin));
         if !allowed {
@@ -32,8 +32,7 @@ fn write_png(plugin: &PluginId, bytes: Vec<u8>) -> Result<HostValue, HostError> 
         let image = gpui_kit::Image::from_bytes(gpui_kit::ImageFormat::Png, bytes);
         cx.write_to_clipboard(gpui_kit::ClipboardItem::new_image(&image));
         Ok(HostValue::Null)
-    })
-    .ok_or_else(|| HostError::new("the application context is unavailable"))?
+    })?
 }
 
 fn png(text: &str) -> Result<Vec<u8>, HostError> {

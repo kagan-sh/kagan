@@ -1,14 +1,13 @@
 use std::collections::BTreeSet;
-use std::time::Duration;
 
 use gpui_kit::{AsyncApp, Entity};
 use kg_core::Workspace;
 use kg_domain::{AgentTool, Op, OpError, OpResult, PluginId, ProjectId, ThreadId, ThreadOp};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-use crate::jobs::{Ended, Reply};
+use crate::ask::{Job, ask};
 use crate::manifest::Scope;
-use crate::{INSTRUCT_CAP, INSTRUCT_TIMEOUT, INSTRUCT_TOTAL, Result, TOOL_TIMEOUT};
+use crate::{INSTRUCT_CAP, INSTRUCT_TOTAL, Result};
 
 use super::PluginHost;
 
@@ -98,33 +97,6 @@ pub(super) async fn tools(
     }))
 }
 
-/// Sends one job to a plugin and waits for its reply, or says why the reply never came.
-pub(crate) async fn call(
-    host: &Entity<PluginHost>,
-    plugin: &PluginId,
-    name: &str,
-    job: Map<String, Value>,
-    timeout: Duration,
-    cx: &mut AsyncApp,
-) -> Result<Reply> {
-    let jobs = host.update(cx, |host, cx| host.load(plugin, cx))?;
-    let unloaded = || {
-        OpError::Failed(format!(
-            "plugin {plugin} was unloaded before it answered {name}"
-        ))
-    };
-    let (id, replied) = jobs.send(job).ok_or_else(unloaded)?;
-    let timer = cx.background_executor().timer(timeout);
-    match jobs.settled(&id, &replied, timer).await {
-        Ok(reply) => Ok(reply),
-        Err(Ended::Unloaded) => Err(unloaded()),
-        Err(Ended::TimedOut) => Err(OpError::Failed(format!(
-            "plugin {plugin} did not answer {name} within {} s",
-            timeout.as_secs()
-        ))),
-    }
-}
-
 pub(super) async fn call_tool(
     host: &Entity<PluginHost>,
     thread_id: &ThreadId,
@@ -159,17 +131,14 @@ pub(super) async fn call_tool(
             errors.join("; ")
         )));
     }
-    let job = Map::from_iter([
-        ("kind".to_owned(), "tool".into()),
-        ("name".to_owned(), name.into()),
-        ("input".to_owned(), input),
-        ("threadId".to_owned(), thread_id.0.clone().into()),
-    ]);
-    let reply = call(host, &plugin, name, job, TOOL_TIMEOUT, cx).await?;
-    let secrets = host.read_with(cx, |host, _| host.secrets.clone());
-    match reply {
+    let job = Job::Tool {
+        name,
+        input: &input,
+        thread_id,
+    };
+    match ask(host, &plugin, &job, cx).await.map_err(OpError::from)? {
         Err(message) => Ok(OpResult::ToolReply {
-            text: secrets.redact(&plugin, &message),
+            text: message,
             is_error: true,
         }),
         Ok(value) => {
@@ -179,7 +148,7 @@ pub(super) async fn call_tool(
                 )));
             };
             Ok(OpResult::ToolReply {
-                text: secrets.redact(&plugin, text),
+                text: text.to_owned(),
                 is_error: value["isError"].as_bool().unwrap_or(false),
             })
         }
@@ -202,31 +171,21 @@ pub(crate) async fn instruct(
     if plugins.is_empty() {
         return Ok(OpResult::Output(Some(String::new())));
     }
-    let secrets = host.read_with(cx, |host, _| host.secrets.clone());
     let mut tasks = Vec::with_capacity(plugins.len());
     for plugin in plugins {
-        let Ok(jobs) = host.update(cx, |host, cx| host.load(&plugin, cx)) else {
-            continue;
-        };
-        let job = Map::from_iter([
-            ("kind".to_owned(), "instruct".into()),
-            ("threadId".to_owned(), thread_id.0.clone().into()),
-            ("projectId".to_owned(), project_id.0.clone().into()),
-        ]);
-        let Some((id, replied)) = jobs.send(job) else {
-            continue;
-        };
-        let timer = cx.background_executor().timer(INSTRUCT_TIMEOUT);
-        let secrets = secrets.clone();
+        let (host, mut cx) = (host.clone(), cx.clone());
         tasks.push(async move {
-            let Ok(Ok(reply)) = jobs.settled(&id, &replied, timer).await else {
+            let job = Job::Instruct {
+                thread_id,
+                project_id,
+            };
+            let Ok(Ok(reply)) = ask(&host, &plugin, &job, &mut cx).await else {
                 return String::new();
             };
             let text = instruct_text(&reply);
             if text.is_empty() {
                 return String::new();
             }
-            let text = secrets.redact(&plugin, &text);
             let text = truncate(&text, INSTRUCT_CAP);
             format!("Plugin {plugin}:\n{text}")
         });

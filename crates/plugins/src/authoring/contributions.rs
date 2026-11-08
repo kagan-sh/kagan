@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::path::{Component, Path};
 
 use kg_domain::Slot;
 use serde::Deserialize;
@@ -24,7 +23,6 @@ pub struct Contributions {
     pub(crate) file_opener: Option<IgnoredAny>,
 }
 
-/// Why a manifest's UI contributions cannot be used.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error(
@@ -65,42 +63,6 @@ pub(crate) enum Error {
     WebShape(String),
     #[error("UI view {0:?} must name an exported class")]
     ViewShape(String),
-}
-
-/// One thing a plugin can add. The ids are the `ui` keys on [`Contributions`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Capability {
-    pub id: &'static str,
-    pub name: &'static str,
-    pub detail: &'static str,
-}
-
-impl Contributions {
-    #[must_use]
-    pub fn kinds() -> &'static [Capability] {
-        &[
-            Capability {
-                id: "panels",
-                name: "Panel",
-                detail: "adds a panel",
-            },
-            Capability {
-                id: "settings",
-                name: "Settings page",
-                detail: "adds a settings page",
-            },
-            Capability {
-                id: "overlay",
-                name: "Overlay",
-                detail: "draws over the terminal",
-            },
-            Capability {
-                id: "status",
-                name: "Status item",
-                detail: "adds a line to the activity strip",
-            },
-        ]
-    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -268,21 +230,7 @@ fn check_body(panel: &PanelContribution) -> Result<(), Error> {
 }
 
 fn check_web(web: &str) -> Result<(), Error> {
-    let path = Path::new(web);
-    if path
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("html"))
-        && !web.starts_with('/')
-        && !web.contains('\\')
-        && !web.contains('\0')
-        && !path.is_absolute()
-        && path
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
-        && !web
-            .split('/')
-            .any(|part| part.is_empty() || part.eq_ignore_ascii_case("__kagan"))
-    {
+    if crate::page::is_page_path(web) {
         Ok(())
     } else {
         Err(Error::WebShape(web.to_owned()))

@@ -34,7 +34,7 @@ impl std::str::FromStr for Level {
 }
 
 pub(crate) fn log(data_dir: &Path, id: &PluginId, level: Level, message: &str) -> Result<()> {
-    let directory = data_dir.join("plugins").join(&id.0);
+    let directory = kg_core::plugin_dir(data_dir, id);
     std::fs::create_dir_all(&directory)?;
     let at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -50,7 +50,7 @@ pub(crate) fn log(data_dir: &Path, id: &PluginId, level: Level, message: &str) -
     let _writer = WRITER
         .lock()
         .map_err(|error| OpError::Failed(error.to_string()))?;
-    let path = directory.join("logs.jsonl");
+    let path = kg_core::plugin_log_file(data_dir, id);
     match std::fs::metadata(&path) {
         Ok(metadata) if metadata.len() + size > LIMIT => {
             let previous = directory.join("logs.1.jsonl");

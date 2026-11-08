@@ -178,6 +178,7 @@ fn check_host(source: &str, timeout: Duration, proxy: bool) -> Result<()> {
     if proxy {
         return Ok(());
     }
+    // A source that is not a URL, such as an SSH address, has no host to reach here.
     let parsed = url::Url::parse(source).ok();
     let target = match parsed.as_ref() {
         Some(url) if url.scheme() == "https" => {
@@ -236,13 +237,13 @@ impl Fetched {
     }
 }
 
-/// Removes checkouts a stopped install left behind.
 pub(crate) fn clear_staging(plugins: &Path) {
     let Ok(entries) = std::fs::read_dir(plugins) else {
         return;
     };
     for entry in entries.flatten() {
         if entry.file_name().to_string_lossy().starts_with(STAGING) {
+            // Staging that cannot be removed now is cleared at the next start.
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }

@@ -1,82 +1,100 @@
-//! `kagan/browser`: the same verbs as `kg browser`, for a plugin that names the thread.
-
 use gpui_shell::{HostArguments, HostError, HostModule};
 use kg_domain::{BrowserOp, Op, ThreadId};
 
-use crate::area::from_host;
-use crate::threads::{argument, dispatch, error};
+use crate::area::{argument, dispatch, error, from_host};
 
-const CALLS: [&str; 14] = [
-    "open", "status", "snapshot", "goto", "back", "forward", "reload", "click", "fill", "type",
-    "press", "select", "scroll", "close",
+type Build = fn(&HostArguments) -> Result<BrowserOp, HostError>;
+
+pub(crate) const CALLS: [(&str, Build); 14] = [
+    ("open", |a| {
+        Ok(BrowserOp::Open {
+            thread_id: thread_id(a)?,
+            url: a.string(1)?.to_owned(),
+        })
+    }),
+    ("status", |a| {
+        Ok(BrowserOp::Status {
+            thread_id: thread_id(a)?,
+        })
+    }),
+    ("snapshot", |a| {
+        Ok(BrowserOp::Snapshot {
+            thread_id: thread_id(a)?,
+        })
+    }),
+    ("goto", |a| {
+        Ok(BrowserOp::Goto {
+            thread_id: thread_id(a)?,
+            url: a.string(1)?.to_owned(),
+        })
+    }),
+    ("back", |a| {
+        Ok(BrowserOp::Back {
+            thread_id: thread_id(a)?,
+        })
+    }),
+    ("forward", |a| {
+        Ok(BrowserOp::Forward {
+            thread_id: thread_id(a)?,
+        })
+    }),
+    ("reload", |a| {
+        Ok(BrowserOp::Reload {
+            thread_id: thread_id(a)?,
+        })
+    }),
+    ("click", |a| {
+        Ok(BrowserOp::Click {
+            thread_id: thread_id(a)?,
+            ref_id: whole(a, 1)?,
+        })
+    }),
+    ("fill", |a| {
+        Ok(BrowserOp::Fill {
+            thread_id: thread_id(a)?,
+            ref_id: whole(a, 1)?,
+            text: Some(a.string(2)?.to_owned()),
+            file: None,
+        })
+    }),
+    ("type", |a| {
+        Ok(BrowserOp::Type {
+            thread_id: thread_id(a)?,
+            text: a.string(1)?.to_owned(),
+        })
+    }),
+    ("press", |a| {
+        Ok(BrowserOp::Press {
+            thread_id: thread_id(a)?,
+            key: a.string(1)?.to_owned(),
+        })
+    }),
+    ("select", |a| {
+        Ok(BrowserOp::Select {
+            thread_id: thread_id(a)?,
+            ref_id: whole(a, 1)?,
+            option: a.string(2)?.to_owned(),
+        })
+    }),
+    ("scroll", |a| {
+        Ok(BrowserOp::Scroll {
+            thread_id: thread_id(a)?,
+            dy: distance(a, 1)?,
+        })
+    }),
+    ("close", |a| {
+        Ok(BrowserOp::Close {
+            thread_id: thread_id(a)?,
+        })
+    }),
 ];
 
 pub(crate) fn module() -> HostModule {
     let mut module = HostModule::new("kagan/browser").declarations(include_str!("browser.d.ts"));
-    for name in CALLS {
-        module = module.async_function(name, move |args| dispatch(operation(name, args)?));
+    for (name, build) in CALLS {
+        module = module.async_function(name, move |args| dispatch(Op::Browser(build(args)?)));
     }
     module
-}
-
-fn operation(name: &str, args: &HostArguments) -> Result<Op, HostError> {
-    let op = match name {
-        "open" => BrowserOp::Open {
-            thread_id: thread_id(args)?,
-            url: args.string(1)?.to_owned(),
-        },
-        "status" => BrowserOp::Status {
-            thread_id: thread_id(args)?,
-        },
-        "snapshot" => BrowserOp::Snapshot {
-            thread_id: thread_id(args)?,
-        },
-        "goto" => BrowserOp::Goto {
-            thread_id: thread_id(args)?,
-            url: args.string(1)?.to_owned(),
-        },
-        "back" => BrowserOp::Back {
-            thread_id: thread_id(args)?,
-        },
-        "forward" => BrowserOp::Forward {
-            thread_id: thread_id(args)?,
-        },
-        "reload" => BrowserOp::Reload {
-            thread_id: thread_id(args)?,
-        },
-        "click" => BrowserOp::Click {
-            thread_id: thread_id(args)?,
-            ref_id: whole(args, 1)?,
-        },
-        "fill" => BrowserOp::Fill {
-            thread_id: thread_id(args)?,
-            ref_id: whole(args, 1)?,
-            text: Some(args.string(2)?.to_owned()),
-            file: None,
-        },
-        "type" => BrowserOp::Type {
-            thread_id: thread_id(args)?,
-            text: args.string(1)?.to_owned(),
-        },
-        "press" => BrowserOp::Press {
-            thread_id: thread_id(args)?,
-            key: args.string(1)?.to_owned(),
-        },
-        "select" => BrowserOp::Select {
-            thread_id: thread_id(args)?,
-            ref_id: whole(args, 1)?,
-            option: args.string(2)?.to_owned(),
-        },
-        "scroll" => BrowserOp::Scroll {
-            thread_id: thread_id(args)?,
-            dy: distance(args, 1)?,
-        },
-        "close" => BrowserOp::Close {
-            thread_id: thread_id(args)?,
-        },
-        _ => return Err(error(format!("unknown browser function {name}"))),
-    };
-    Ok(Op::Browser(op))
 }
 
 fn thread_id(args: &HostArguments) -> Result<ThreadId, HostError> {

@@ -21,7 +21,6 @@ pub use settings::{AgentChoice, Setting};
 
 pub(crate) const FILE: &str = "kagan.json";
 
-/// Why `kagan.json` is refused or a grant cannot be used.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("cannot read it: {source}")]
@@ -229,7 +228,6 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
     check_setting_fields(&value).map_err(invalid)?;
     let mut manifest: Manifest =
         serde_json::from_str(&text).map_err(|error| invalid(error.into()))?;
-    manifest.check(root, data_dir).map_err(invalid)?;
     for key in manifest
         .commands
         .iter_mut()
@@ -238,6 +236,7 @@ pub(crate) fn read(root: &Path, data_dir: &Path) -> Result<Manifest, OpError> {
         *key = crate::commands::checked_key(key)
             .map_err(|error| invalid(Error::CommandKey(error.to_string())))?;
     }
+    manifest.check(root, data_dir).map_err(invalid)?;
     Ok(manifest)
 }
 
@@ -308,10 +307,6 @@ impl Manifest {
             }
             if command.menu && command.when != crate::commands::CommandWhen::Thread {
                 return Err(Error::MenuCommand);
-            }
-            if let Some(key) = &command.key {
-                crate::commands::checked_key(key)
-                    .map_err(|error| Error::CommandKey(error.to_string()))?;
             }
         }
         Ok(())

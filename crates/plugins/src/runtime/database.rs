@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use gpui_shell::{HostError, HostModule};
+use gpui_shell::{HostArguments, HostError, HostModule};
 use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
 use rusqlite::types::{Value as SqlValue, ValueRef};
 use rusqlite::{Connection, TransactionBehavior, params_from_iter};
@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use crate::area::to_host;
-use crate::threads::{argument, error};
+use crate::area::{argument, error};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -26,6 +26,22 @@ enum Request {
     Transaction(Vec<Statement>),
 }
 
+type Build = fn(&HostArguments) -> Result<Request, HostError>;
+
+fn statement(args: &HostArguments) -> Result<Statement, HostError> {
+    Ok(Statement {
+        sql: args.string(0)?.into(),
+        params: argument(args, 1)?,
+    })
+}
+
+const CALLS: [(&str, Build); 4] = [
+    ("migrate", |a| Ok(Request::Migrate(argument(a, 0)?))),
+    ("query", |a| Ok(Request::Query(statement(a)?))),
+    ("run", |a| Ok(Request::Run(statement(a)?))),
+    ("transaction", |a| Ok(Request::Transaction(argument(a, 0)?))),
+];
+
 pub(crate) fn module(path: &Path) -> HostModule {
     let mut module = HostModule::new("kagan/database").declarations(
         "export type Parameter = null | boolean | number | string | number[];\n\
@@ -35,25 +51,10 @@ pub(crate) fn module(path: &Path) -> HostModule {
          export function run(sql: string, params: Parameter[]): Promise<{ changes: number; lastId: number }>;\n\
          export function transaction(statements: Statement[]): Promise<void>;",
     );
-    for name in ["migrate", "query", "run", "transaction"] {
+    for (name, build) in CALLS {
         let path = path.to_owned();
         module = module.async_function(name, move |args| {
-            let request = match name {
-                "migrate" => Request::Migrate(argument(args, 0)?),
-                "transaction" => Request::Transaction(argument(args, 0)?),
-                "query" | "run" => {
-                    let statement = Statement {
-                        sql: args.string(0)?.into(),
-                        params: argument(args, 1)?,
-                    };
-                    if name == "query" {
-                        Request::Query(statement)
-                    } else {
-                        Request::Run(statement)
-                    }
-                }
-                _ => unreachable!("only database functions are registered"),
-            };
+            let request = build(args)?;
             let path = path.clone();
             Ok(async move { execute(&path, request).map(to_host) })
         });

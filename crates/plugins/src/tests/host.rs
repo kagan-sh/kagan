@@ -12,9 +12,10 @@ use crate::PluginHostGlobal;
 
 use super::{
     AREAS_PROBE, COMMAND_PROBE, ID, MAIN, RENAME_PROBE, THREAD, THREAD_OPS, THREADS_FORWARD,
-    answered, call, call_and_approve, dispatched, forward, forwarded, forwarded_reply, forwarding,
-    hides_agent, installed, installed_example, loaded, open, pick_worker, plugin_dir, probe_plugin,
-    real_call, run, sample_manifest, settled, shell, sleeping, thread, write_plugin,
+    answered, call, call_and_approve, dispatched, example_roots, forward, forwarded,
+    forwarded_reply, forwarding, hides_agent, installed, installed_example, loaded, open,
+    pick_worker, plugin_dir, probe_plugin, real_call, run, sample_manifest, settled, shell,
+    sleeping, thread, write_plugin,
 };
 #[cfg(unix)]
 use super::{alive, start_tree};
@@ -1204,12 +1205,11 @@ fn unloading_a_plugin_ends_a_running_command_with_an_unloaded_error(cx: &mut Tes
 
 #[gpui_kit::test]
 fn bundled_examples_run_through_the_host(cx: &mut TestAppContext) {
-    let examples = crate::examples();
-    let plugins: Vec<_> = examples
+    let plugins: Vec<_> = example_roots()
         .iter()
-        .map(|example| installed_example(&example.root))
+        .map(|root| installed_example(root))
         .collect();
-    assert!(plugins.len() >= 2, "{:?}", examples.len());
+    assert!(plugins.len() >= 2, "{}", plugins.len());
     open(cx, &plugins);
     let handle = cx.add_window(|_, _| gpui_kit::EmptyView);
     let mounted = cx.update(|cx| {
