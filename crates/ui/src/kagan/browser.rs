@@ -39,7 +39,6 @@ mod chrome;
 #[cfg(any(test, desktop))]
 pub(super) mod snapshot;
 
-/// A thread's hold on the Browser's one page, while it drives it.
 #[cfg(desktop)]
 pub(super) struct Agent {
     pub(super) thread: ThreadId,
@@ -107,14 +106,30 @@ impl Browser {
             page.update(cx, |page, cx| page.load_url(url.as_str(), cx));
             return Ok(page.clone());
         }
-        // Links and redirects inside the page are held to the same rule as the address field.
-        // Private: cookies and logins end with the page, and nothing lands outside kagan's data.
         let url = url.as_str().to_owned();
-        crate::web_page::open(window, cx, move |builder| {
+        #[cfg(target_os = "linux")]
+        let again = url.clone();
+        let page = crate::web_page::open(window, cx, move |builder| {
             builder
                 .with_url(&url)
                 .with_navigation_handler(|target| is_web(&target))
-        })
+        })?;
+        #[cfg(target_os = "linux")]
+        Self::load_sized(page.clone(), again, window, cx);
+        Ok(page)
+    }
+    // The view is built at empty bounds. WebKitGTK drops a navigation that starts there.
+    #[cfg(target_os = "linux")]
+    fn load_sized(page: Entity<WebPage>, url: String, window: &mut Window, cx: &mut App) {
+        window
+            .spawn(cx, async move |cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(80))
+                    .await;
+                cx.update(|_, cx| page.update(cx, |page, cx| page.load_url(&url, cx)))
+                    .ok();
+            })
+            .detach();
     }
 
     #[cfg(not(desktop))]
@@ -160,7 +175,6 @@ impl Browser {
         });
     }
 
-    /// Showing another thread drops the person's page. A thread's page stays loaded and hidden.
     pub(super) fn leave_thread(&mut self, window: &mut Window, cx: &mut App) {
         #[cfg(desktop)]
         {
