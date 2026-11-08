@@ -13,6 +13,7 @@ use alacritty_terminal::vte::ansi::{Color, NamedColor, Processor, Rgb};
 
 pub const MIN_COLS: u16 = 2;
 pub const MAX_COLS: u16 = 1000;
+pub const MIN_ROWS: u16 = 1;
 pub const MAX_ROWS: u16 = 500;
 /// The whole saved replay: history, the newlines that push it into scrollback, and the visible
 /// redraw. History is dropped first. A visible redraw that does not fit is not stored.
