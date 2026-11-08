@@ -58,14 +58,20 @@ impl super::Store {
         Ok(events)
     }
 
-    /// Newest ending events per thread, four at most, newest first.
+    /// Newest ending events of the current run, four at most, newest first.
+    /// An ending older than the latest start belongs to the previous run.
     pub fn endings(&self) -> Result<Vec<(ThreadId, Vec<EventKind>)>> {
         let mut statement = self.conn.prepare(
             "SELECT thread_id, kind FROM ( \
-                SELECT thread_id, kind, \
-                    ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY seq DESC) AS n \
-                FROM events \
-                WHERE json_extract(kind, '$.type') IN ('stopped', 'exited', 'failed') \
+                SELECT e.thread_id, e.kind, \
+                    ROW_NUMBER() OVER (PARTITION BY e.thread_id ORDER BY e.seq DESC) AS n \
+                FROM events e \
+                WHERE json_extract(e.kind, '$.type') IN ('stopped', 'exited', 'failed') \
+                    AND e.seq > COALESCE(( \
+                        SELECT MAX(s.seq) FROM events s \
+                        WHERE s.thread_id = e.thread_id \
+                            AND json_extract(s.kind, '$.type') = 'started' \
+                    ), 0) \
              ) WHERE n <= 4 ORDER BY thread_id, n",
         )?;
         let rows = statement.query_map([], |row| {

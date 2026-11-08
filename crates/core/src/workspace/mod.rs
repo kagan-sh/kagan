@@ -353,14 +353,15 @@ impl Workspace {
             }
         }
     }
-    /// Picks up what the previous process left: interrupted removals.
+    /// Picks up what the previous process left: interrupted removals, then programs it left running.
     async fn resume(this: &WeakEntity<Self>, cx: &mut AsyncApp) -> Result<()> {
         Self::refresh(this, cx).await?;
         crate::settings::remember_keymap(this, cx).await?;
         let submitted = this
             .update(cx, |workspace, _| workspace.submit(Request::Leftovers))
             .map_err(closed)?;
-        submitted.await.map(drop)
+        submitted.await?;
+        recovery::resume_programs(this, cx).await
     }
     #[must_use]
     pub fn global(cx: &App) -> Entity<Self> {

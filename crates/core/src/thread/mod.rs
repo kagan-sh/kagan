@@ -23,6 +23,7 @@ pub(crate) use terminal::exited;
 #[cfg(test)]
 pub(crate) use terminal::remember;
 pub(crate) use terminal::start as start_terminal;
+pub(crate) use terminal::start_again;
 pub(crate) use terminal::{Shown, release_ended};
 
 use gpui_kit::{AsyncApp, Entity, WeakEntity};

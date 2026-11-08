@@ -189,6 +189,7 @@ impl Workspace {
                 workspace.runs.insert(thread_id.clone(), seq);
                 workspace.saved.retain(|(thread, _)| thread != &thread_id);
                 workspace.losses.remove(&thread_id);
+                workspace.ends.remove(&thread_id);
             }
             if let Some(end) = crate::end::End::from_newest(&newest) {
                 workspace.ends.insert(thread_id, end);

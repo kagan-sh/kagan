@@ -184,22 +184,47 @@ async fn agent_integration_off_adds_no_conversation_on_start_again(cx: &mut Test
 
 #[cfg(unix)]
 #[gpui_kit::test]
-async fn a_restart_waits_for_start_again_and_then_resumes(cx: &mut TestAppContext) {
+async fn a_restart_resumes_the_conversation_without_start_again(cx: &mut TestAppContext) {
     let fixture = Fixture::new(cx).await;
     let config = claude_config(&fixture, cx);
     let run = fixture.dir.path().join("claude-run");
     let (id, _reap) = started(&fixture, &claude_line(&run), cx).await;
     let conversation = after(&ran(&run).0, "--session-id").unwrap();
     said(&config, &conversation);
+    std::fs::remove_file(run.join("out").join("env")).unwrap();
+    let _config_dir = ClaudeConfig::set(&config);
     let fixture = fixture.restart(cx, |_| {}).await;
-    claude_config(&fixture, cx);
     cx.run_until_parked();
-    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Error);
-    assert!(super::pid_of(&id, cx).is_none());
-    assert_eq!(
-        after(&start_again(&id, &run, cx).await, "--resume"),
-        Some(conversation)
-    );
+    assert_eq!(super::thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(super::pid_of(&id, cx).is_some());
+    assert_eq!(after(&ran(&run).0, "--resume"), Some(conversation));
+    drop(fixture);
+}
+
+struct ClaudeConfig {
+    previous: Option<std::ffi::OsString>,
+}
+
+impl ClaudeConfig {
+    fn set(dir: &Path) -> Self {
+        let previous = std::env::var_os("CLAUDE_CONFIG_DIR");
+        // SAFETY: nextest runs each test in its own process, so this test owns the variable
+        // while the guard is alive and restores it on drop.
+        unsafe { std::env::set_var("CLAUDE_CONFIG_DIR", dir) };
+        Self { previous }
+    }
+}
+
+impl Drop for ClaudeConfig {
+    fn drop(&mut self) {
+        // SAFETY: see `ClaudeConfig::set`.
+        unsafe {
+            match self.previous.take() {
+                Some(value) => std::env::set_var("CLAUDE_CONFIG_DIR", value),
+                None => std::env::remove_var("CLAUDE_CONFIG_DIR"),
+            }
+        }
+    }
 }
 
 #[cfg(unix)]

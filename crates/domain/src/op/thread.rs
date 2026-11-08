@@ -261,7 +261,7 @@ pub enum ThreadOp {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         fields: Option<Vec<AskField>>,
     },
-    /// Run a stopped or recovered thread's program again, in its folder. Only a request does this.
+    /// Run a stopped or recovered thread's program again, in its folder. Opening kagan does this for a thread that was still running.
     ///
     /// A claude, cursor-agent, or agent thread, and a plain codex thread, resume their conversation;
     /// when kagan cannot find it, the agent starts a new one and the thread says so.

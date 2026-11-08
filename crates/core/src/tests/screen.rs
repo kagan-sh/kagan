@@ -36,14 +36,16 @@ async fn confirmed_quit_stops_and_saves_the_screen(cx: &mut TestAppContext) {
         .advance_clock(std::time::Duration::from_millis(100));
     cx.run_until_parked();
     stopping.await.unwrap();
-    let fixture = fixture.restart(cx, |_| {}).await;
     assert_eq!(thread(&id, cx).await.status, ThreadStatus::Idle);
     assert!(screen_of(&id, true, cx).await.contains("QUIT-MARKER"));
-    assert_eq!(
+    let fixture = fixture.restart(cx, |_| {}).await;
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(pid_of(&id, cx).is_some());
+    assert!(
         fixture
             .workspace
-            .read_with(cx, |workspace, _| workspace.end_line(&id)),
-        Some("Stopped.".into())
+            .read_with(cx, |workspace, _| workspace.end_line(&id))
+            .is_none()
     );
 }
 
@@ -64,13 +66,13 @@ async fn a_crash_while_a_program_runs_keeps_no_screen(cx: &mut TestAppContext) {
     cx.executor()
         .advance_clock(std::time::Duration::from_secs(1));
     cx.run_until_parked();
-    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Error);
-    assert!(pid_of(&id, cx).is_none());
-    assert_eq!(
+    assert_eq!(thread(&id, cx).await.status, ThreadStatus::Active);
+    assert!(pid_of(&id, cx).is_some());
+    assert!(
         fixture
             .workspace
-            .read_with(cx, |workspace, _| workspace.end_line(&id)),
-        Some("Ended when kagan quit. No output was saved for that run. Use Start again to restart it.".into())
+            .read_with(cx, |workspace, _| workspace.end_line(&id))
+            .is_none()
     );
     assert!(
         fixture
@@ -78,25 +80,19 @@ async fn a_crash_while_a_program_runs_keeps_no_screen(cx: &mut TestAppContext) {
             .read_with(cx, |workspace, _| workspace.screen_note(&id))
             .is_none()
     );
-    let missing = op(
-        Op::Thread(ThreadOp::Screen {
-            id: id.clone(),
-            scrollback: true,
-            lines: None,
-            terminal: None,
-        }),
-        cx,
-    )
-    .await;
-    assert!(missing.is_err(), "{missing:?}");
     let store = kg_store::Store::open(fixture.dir.path().join("kagan.sqlite3")).unwrap();
-    assert!(
-        store
-            .screens()
-            .unwrap()
-            .iter()
-            .all(|row| row.thread_id != id)
-    );
+    for row in store
+        .screens()
+        .unwrap()
+        .iter()
+        .filter(|row| row.thread_id == id)
+    {
+        let text = String::from_utf8_lossy(&row.replay);
+        assert!(
+            !text.contains("CRASH-MARKER"),
+            "the screen from the crashed run was kept"
+        );
+    }
     drop(fixture);
 }
 
