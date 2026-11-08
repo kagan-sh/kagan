@@ -3,7 +3,7 @@ use crate::ThreadId;
 use super::browser::browser_check;
 use super::{
     DiffOp, EnvironmentOp, Op, PluginOp, PreviewOp, SEARCH_LIMIT, SEARCH_TEXT_MAX, SectionOp,
-    SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TerminalOp, ThreadOp, WindowOp,
+    SurfaceOp, TERMINAL_COLS, TERMINAL_ROWS, TEXT_MAX, TerminalOp, ThreadOp, WindowOp,
 };
 
 /// Rejects an op a client must not send.
@@ -25,7 +25,11 @@ pub fn check(op: &Op) -> Result<(), &'static str> {
             .into_iter()
             .try_for_each(plain)
             .and_then(|()| terminal_size(op))
-            .and_then(|()| search(op)),
+            .and_then(|()| search(op))
+            .and_then(|()| match op {
+                ThreadOp::Paste { text, file, .. } => carried_text(text.as_ref(), file.as_ref()),
+                _ => Ok(()),
+            }),
         Op::Environment(op) => environment_thread(op),
         Op::Plugin(op) => plain_opt(plugin_thread(op)),
         Op::Browser(op) => plain(op.thread()).and_then(|()| browser_check(op)),
@@ -86,6 +90,17 @@ fn terminal_size(op: &ThreadOp) -> Result<(), &'static str> {
             Err("terminal size must be 2 to 1000 columns and 1 to 500 rows")
         }
         _ => Ok(()),
+    }
+}
+
+/// Text a paste or a fill carries. A client reads `--file` and sends the text, never the path.
+pub(super) fn carried_text<P>(text: Option<&String>, file: Option<&P>) -> Result<(), &'static str> {
+    match (text, file) {
+        (Some(_), Some(_)) => Err("pass the text or --file, not both"),
+        (None, None) => Err("pass the text or --file"),
+        (None, Some(_)) => Err("send the text, not a path"),
+        (Some(text), None) if text.len() > TEXT_MAX => Err("text is over 1 MiB"),
+        (Some(_), None) => Ok(()),
     }
 }
 

@@ -411,6 +411,8 @@ pub const SEARCH_LIMIT: u32 = 200;
 pub const SEARCH_DEFAULT: u32 = 50;
 /// The longest search text, in characters. Its refusal names this number.
 pub const SEARCH_TEXT_MAX: usize = 256;
+/// The most bytes a paste, a send or a browser fill carries.
+pub const TEXT_MAX: usize = 1024 * 1024;
 
 fn parse_option(raw: &str) -> Result<InteractionOption, &'static str> {
     let (id, label) = raw.split_once('=').ok_or("an option is id=label")?;
