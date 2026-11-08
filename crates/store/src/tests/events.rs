@@ -201,3 +201,38 @@ fn old_experiment_rows_and_the_predict_setting_still_load() {
         }
     );
 }
+
+#[test]
+fn endings_are_the_newest_ends_since_the_latest_start() {
+    let mut store = store();
+    store.put_thread(&thread("thr_1", 1)).unwrap();
+    store.put_thread(&thread("thr_2", 1)).unwrap();
+    let exited = EventKind::Exited {
+        code: Some(1),
+        signal: None,
+    };
+    let failed = EventKind::Failed {
+        error: Some("boom".into()),
+    };
+    store
+        .append_events(
+            &id("thr_1"),
+            Timestamp(1),
+            [EventKind::Started, EventKind::Stopped, EventKind::Started],
+        )
+        .unwrap();
+    store
+        .append_events(
+            &id("thr_1"),
+            Timestamp(2),
+            [exited.clone(), EventKind::Idle, failed.clone()],
+        )
+        .unwrap();
+    store
+        .append_events(&id("thr_2"), Timestamp(1), [EventKind::Started])
+        .unwrap();
+    assert_eq!(
+        store.endings().unwrap(),
+        vec![(id("thr_1"), vec![failed, exited])]
+    );
+}
