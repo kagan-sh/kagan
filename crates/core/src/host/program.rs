@@ -196,3 +196,35 @@ fn read_environment(
         ),
     }
 }
+
+/// The folder `variable` names, when it is set and not empty.
+pub(crate) fn home_set(variable: &str) -> Option<PathBuf> {
+    std::env::var_os(variable)
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+}
+
+pub(crate) fn user_home() -> Option<PathBuf> {
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
+}
+
+impl Workspace {
+    /// Where a program keeps its files: a test's folder, else the folder `variable` names.
+    #[cfg_attr(
+        not(any(test, feature = "test")),
+        expect(clippy::unused_self, reason = "only tests keep a folder per workspace")
+    )]
+    pub(crate) fn home_set(&self, variable: &'static str) -> Option<PathBuf> {
+        #[cfg(any(test, feature = "test"))]
+        if let Some(set) = self.homes.get(variable) {
+            return Some(set.clone());
+        }
+        home_set(variable)
+    }
+
+    /// `home_set`, else `folder` under the user's home.
+    pub(crate) fn home(&self, variable: &'static str, folder: &str) -> Option<PathBuf> {
+        self.home_set(variable)
+            .or_else(|| user_home().map(|home| home.join(folder)))
+    }
+}

@@ -10,6 +10,7 @@ use super::{Known, cursor_rule, note_with};
 
 const CURSOR_RULE: &str = ".cursor/rules/kagan.mdc";
 
+#[derive(Clone, Copy)]
 pub(super) struct AgentFiles<'a> {
     pub(super) agent: &'a Path,
     pub(super) id: &'a str,
@@ -19,6 +20,7 @@ pub(super) struct AgentFiles<'a> {
     pub(super) instructions: &'a str,
     pub(super) extra: &'a str,
     pub(super) skills_root: &'a Path,
+    pub(super) kimi_home: Option<&'a Path>,
 }
 
 pub(super) async fn write_agent_files(
@@ -35,6 +37,7 @@ pub(super) async fn write_agent_files(
         instructions,
         extra,
         skills_root,
+        kimi_home: _,
     } = files;
     match known {
         Known::Claude => {
@@ -67,15 +70,17 @@ fn cursor_dir(agent: &Path, id: &str) -> PathBuf {
     agent.join("threads").join(id).join("cursor")
 }
 
-pub(super) fn flags(
-    known: &Known,
-    id: &str,
-    cli: &Path,
-    socket: Option<&OsStr>,
-    agent: &Path,
-    skills_root: &Path,
-    folder: &Path,
-) -> Vec<OsString> {
+pub(super) fn flags(known: &Known, files: &AgentFiles) -> Vec<OsString> {
+    let AgentFiles {
+        agent,
+        id,
+        folder,
+        cli,
+        socket,
+        skills_root,
+        kimi_home,
+        ..
+    } = *files;
     match known {
         Known::Claude => {
             let thread = agent.join("threads").join(id);
@@ -105,7 +110,7 @@ pub(super) fn flags(
             flags.extend(codex_overrides(id, cli, socket));
             flags
         }
-        Known::Kimi => kimi_skills(skills_root, folder),
+        Known::Kimi => kimi_skills(skills_root, folder, kimi_home),
         Known::Pi => vec![
             OsString::from("--skill"),
             skills_root.to_owned().into_os_string(),
@@ -116,16 +121,12 @@ pub(super) fn flags(
     }
 }
 
-fn kimi_skills(skills_root: &Path, folder: &Path) -> Vec<OsString> {
+fn kimi_skills(skills_root: &Path, folder: &Path, kimi_home: Option<&Path>) -> Vec<OsString> {
     let mut native = Vec::new();
-    if let Some(home) = std::env::var_os("KIMI_CODE_HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-    {
+    if let Some(home) = kimi_home {
         native.push(home.join("skills"));
     }
-    if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
-        let home = PathBuf::from(home);
+    if let Some(home) = crate::host::program::user_home() {
         native.push(home.join(".kimi-code/skills"));
         native.push(home.join(".kimi/skills"));
         native.push(home.join(".agents/skills"));

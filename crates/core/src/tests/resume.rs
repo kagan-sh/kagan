@@ -11,7 +11,7 @@ use super::{claude_line, fake_agent, ran};
 fn claude_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let config = fixture.dir.path().join("claude");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.claude_config = Some(config.clone());
+        workspace.homes.insert("CLAUDE_CONFIG_DIR", config.clone());
     });
     config
 }
@@ -354,7 +354,7 @@ fn person(rest: &str) -> Vec<String> {
 fn cursor_config(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let config = fixture.dir.path().join("cursor");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.cursor_config = Some(config.clone());
+        workspace.homes.insert("CURSOR_CONFIG_DIR", config.clone());
     });
     config
 }
@@ -375,7 +375,7 @@ fn wrote(config: &Path, folder: &Path, conversation: &str) {
 fn codex_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let home = fixture.dir.path().join("codex-home");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.codex_home = Some(home.clone());
+        workspace.homes.insert("CODEX_HOME", home.clone());
     });
     home
 }
@@ -630,7 +630,7 @@ async fn start_again_on_codex_starts_a_new_conversation_when_none_or_two_match(
 fn kimi_home(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let home = fixture.dir.path().join("kimi-home");
     fixture.workspace.update(cx, |workspace, _| {
-        workspace.kimi_home = Some(home.clone());
+        workspace.homes.insert("KIMI_CODE_HOME", home.clone());
     });
     home
 }

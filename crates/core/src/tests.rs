@@ -83,7 +83,7 @@ impl Fixture {
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.bb_data_dir = Some(dir.path().join("bb"));
+                workspace.homes.insert("BB_DATA_DIR", dir.path().join("bb"));
             });
         });
         Self {
@@ -116,7 +116,7 @@ impl Fixture {
             .unwrap();
         cx.update(|cx| {
             workspace.update(cx, |workspace, _| {
-                workspace.bb_data_dir = Some(dir.path().join("bb"));
+                workspace.homes.insert("BB_DATA_DIR", dir.path().join("bb"));
             });
         });
         Self {

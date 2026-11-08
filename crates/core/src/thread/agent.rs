@@ -361,6 +361,9 @@ async fn configure(
             .await
     };
     let agent = data_dir.join("agent");
+    let kimi_home = this
+        .update(cx, |workspace, _| workspace.home_set("KIMI_CODE_HOME"))
+        .map_err(closed)?;
     let (skills_root, skills, skill_errors) = skill::mirror(
         this,
         agent.clone(),
@@ -369,21 +372,18 @@ async fn configure(
         cx,
     )
     .await?;
-    write_agent_files(
-        known,
-        files::AgentFiles {
-            agent: &agent,
-            id,
-            folder,
-            cli,
-            socket,
-            instructions: &instructions,
-            extra: &extra,
-            skills_root: &skills_root,
-        },
-        cx,
-    )
-    .await?;
+    let files = files::AgentFiles {
+        agent: &agent,
+        id,
+        folder,
+        cli,
+        socket,
+        instructions: &instructions,
+        extra: &extra,
+        skills_root: &skills_root,
+        kimi_home: kimi_home.as_deref(),
+    };
+    write_agent_files(known, files, cx).await?;
     let roots: &[&str] = match known {
         Known::Codex => &[".agents/skills"],
         Known::OpenCode => &[".opencode/skills"],
@@ -406,10 +406,7 @@ async fn configure(
                 .collect::<Vec<_>>()
                 .join("; ")
         );
-        warning = Some(match warning {
-            Some(previous) => format!("{previous}; {text}"),
-            None => text,
-        });
+        warning = Some(joined(warning, text));
     }
     if !roots.is_empty()
         && let Err(error) =
@@ -419,16 +416,20 @@ async fn configure(
             "kagan could not offer the composed skills in {}: {error}",
             folder.display()
         );
-        warning = Some(match warning {
-            Some(previous) => format!("{previous}; {text}"),
-            None => text,
-        });
+        warning = Some(joined(warning, text));
     }
-    let mut args = flags(known, id, cli, socket, &agent, &skills_root, folder);
+    let mut args = flags(known, &files);
     let (conversation, notice) =
         conversation::args(this, known, record, &program.args, folder, start, cx).await?;
     args.extend(conversation);
     Ok((args, notice, warning))
+}
+
+fn joined(warning: Option<String>, text: String) -> String {
+    match warning {
+        Some(previous) => format!("{previous}; {text}"),
+        None => text,
+    }
 }
 
 fn known(program: &Path) -> Option<Known> {
@@ -458,23 +459,28 @@ fn subcommand(known: &Known, args: &[OsString]) -> bool {
             })
             .and_then(|arg| arg.to_str())
             .is_some_and(|arg| CLAUDE_SUBCOMMANDS.contains(&arg)),
-        Known::Cursor => cursor_subcommand(args),
-        Known::Kimi => {
-            first_word(args, KIMI_VALUE_FLAGS).is_some_and(|arg| KIMI_SUBCOMMANDS.contains(&arg))
-        }
-        Known::OpenCode => first_word(args, OPENCODE_VALUE_FLAGS)
+        Known::Cursor => first_word(args, CURSOR_VALUE_FLAGS, true)
+            .is_some_and(|arg| CURSOR_SUBCOMMANDS.contains(&arg)),
+        Known::Kimi => first_word(args, KIMI_VALUE_FLAGS, false)
+            .is_some_and(|arg| KIMI_SUBCOMMANDS.contains(&arg)),
+        Known::OpenCode => first_word(args, OPENCODE_VALUE_FLAGS, false)
             .is_some_and(|arg| OPENCODE_SUBCOMMANDS.contains(&arg)),
         Known::Pi => {
-            first_word(args, PI_VALUE_FLAGS).is_some_and(|arg| PI_SUBCOMMANDS.contains(&arg))
+            first_word(args, PI_VALUE_FLAGS, false).is_some_and(|arg| PI_SUBCOMMANDS.contains(&arg))
         }
         Known::Codex => false,
     }
 }
 
-fn first_word<'a>(args: &'a [OsString], value_flags: &[&str]) -> Option<&'a str> {
+// The first argument that is not a flag, past the values of `value_flags`. An argument that is not
+// UTF-8 is skipped, or ends the search when `strict`.
+fn first_word<'a>(args: &'a [OsString], value_flags: &[&str], strict: bool) -> Option<&'a str> {
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         let Some(text) = arg.to_str() else {
+            if strict {
+                return None;
+            }
             continue;
         };
         if text == "--" {
@@ -489,29 +495,6 @@ fn first_word<'a>(args: &'a [OsString], value_flags: &[&str]) -> Option<&'a str>
         return Some(text);
     }
     None
-}
-
-fn cursor_subcommand(args: &[OsString]) -> bool {
-    let mut args = args.iter();
-    while let Some(arg) = args.next() {
-        let Some(arg) = arg.to_str() else {
-            return false;
-        };
-        if arg == "--" {
-            return args.next().is_some_and(|arg| {
-                arg.to_str()
-                    .is_some_and(|arg| CURSOR_SUBCOMMANDS.contains(&arg))
-            });
-        }
-        if arg.starts_with('-') {
-            if !arg.contains('=') && CURSOR_VALUE_FLAGS.contains(&arg) {
-                args.next();
-            }
-            continue;
-        }
-        return CURSOR_SUBCOMMANDS.contains(&arg);
-    }
-    false
 }
 
 async fn collect_instruct(

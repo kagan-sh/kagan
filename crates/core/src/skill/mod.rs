@@ -77,15 +77,15 @@ pub(crate) async fn mirror(
     cx: &mut AsyncApp,
 ) -> Result<(PathBuf, Vec<String>, Vec<String>)> {
     let mut resolved = catalog(this, Some(project_id), cx).await?;
-    let bb_data_dir = this
-        .update(cx, |workspace, _| workspace.bb_data_dir.clone())
+    let bb = this
+        .update(cx, |workspace, _| workspace.home("BB_DATA_DIR", ".bb"))
         .map_err(closed)?;
     cx.background_spawn(async move {
         let mut external = Catalog {
             skills: BTreeMap::new(),
             errors: Vec::new(),
         };
-        if let Some(bb) = bb_data_dir.or_else(bb_root) {
+        if let Some(bb) = bb {
             external.folder(&bb.join("skills"), SkillSource::External);
         }
         external.folder(&folder.join(".bb/skills"), SkillSource::External);
@@ -156,16 +156,6 @@ fn hash_tree(root: &Path) -> std::io::Result<String> {
     Ok(format!("{:x}", hash.finalize()))
 }
 
-// shortcut: reads BB's cross-app data folder; remove when kagan has its own shared skill catalog.
-fn bb_root() -> Option<PathBuf> {
-    std::env::var_os("BB_DATA_DIR")
-        .filter(|dir| !dir.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-                .map(|home| PathBuf::from(home).join(".bb"))
-        })
-}
 pub(crate) async fn run(
     this: &WeakEntity<Workspace>,
     op: SkillOp,

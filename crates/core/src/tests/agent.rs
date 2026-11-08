@@ -611,7 +611,7 @@ fn bb_root(fixture: &Fixture, cx: &mut TestAppContext) -> PathBuf {
     let root = fixture.dir.path().join("bb");
     cx.update(|cx| {
         Workspace::global(cx).update(cx, |workspace, _| {
-            workspace.bb_data_dir = Some(root.clone());
+            workspace.homes.insert("BB_DATA_DIR", root.clone());
         });
     });
     root
@@ -1007,6 +1007,28 @@ async fn kimi_uses_skills_dir_without_a_git_root(cx: &mut TestAppContext) {
     );
     assert!(!fixture.dir.path().join(".agents").exists());
     assert!(!fixture.dir.path().join(".kimi-code").exists());
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+async fn kimi_reads_skills_from_the_folder_its_workspace_names(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let home = fixture.dir.path().join("kimi-home");
+    write_skill(&home.join("skills"), "from-home", "home body");
+    cx.update(|cx| {
+        Workspace::global(cx).update(cx, |workspace, _| {
+            workspace.homes.insert("KIMI_CODE_HOME", home.clone());
+        });
+    });
+    let run = fixture.dir.path().join("kimi-home-run");
+    let program = fake_agent(&run, "kimi");
+    let (_id, _reap) = started(&fixture, program.to_str().unwrap(), cx).await;
+    let (args, _env) = ran(&run);
+    assert!(
+        args.chunks(2)
+            .any(|pair| pair[0] == "--skills-dir" && Path::new(&pair[1]) == home.join("skills")),
+        "{args:?}"
+    );
 }
 
 #[cfg(unix)]

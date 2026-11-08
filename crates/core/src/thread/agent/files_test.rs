@@ -162,7 +162,7 @@ fn kimi_re_adds_its_user_roots() {
         std::env::set_var(home_var, dir.path());
         std::env::remove_var("KIMI_CODE_HOME");
     }
-    let args = super::kimi_skills(&dir.path().join("catalog"), dir.path());
+    let args = super::kimi_skills(&dir.path().join("catalog"), dir.path(), None);
     // SAFETY: see above.
     unsafe {
         match previous_home {

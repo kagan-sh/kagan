@@ -98,7 +98,7 @@ pub(super) async fn args(
     cx: &mut AsyncApp,
 ) -> Result<(Vec<OsString>, Option<&'static str>)> {
     match known {
-        Known::Claude if picks_claude(args) => Ok((Vec::new(), None)),
+        Known::Claude if picks(args, CLAUDE_FLAGS) => Ok((Vec::new(), None)),
         Known::Claude => claude(this, record, start, cx).await,
         Known::Codex if picks_codex(args) || start == Start::First => {
             if start == Start::First && !picks_codex(args) {
@@ -108,7 +108,7 @@ pub(super) async fn args(
         }
         Known::Codex if !args.is_empty() => Ok((Vec::new(), Some(CODEX_FRESH))),
         Known::Codex => codex(this, record, folder, cx).await,
-        Known::Cursor if picks_cursor(args) => Ok((Vec::new(), None)),
+        Known::Cursor if picks(args, CURSOR_FLAGS) => Ok((Vec::new(), None)),
         Known::Cursor => cursor(this, record, folder, start, cx).await,
         Known::OpenCode if picks(args, OPENCODE_FLAGS) => Ok((Vec::new(), None)),
         Known::OpenCode => named(this, record, "--session", start, cx).await,
@@ -132,7 +132,10 @@ async fn claude(
 ) -> Result<(Vec<OsString>, Option<&'static str>)> {
     let (database, config) = this
         .update(cx, |workspace, _| {
-            (workspace.database.clone(), workspace.claude_config.clone())
+            (
+                workspace.database.clone(),
+                workspace.home("CLAUDE_CONFIG_DIR", ".claude"),
+            )
         })
         .map_err(closed)?;
     let id = record.id.clone();
@@ -141,7 +144,6 @@ async fn claude(
         None => Last::None,
         Some(conversation) => {
             cx.background_spawn(async move {
-                let config = config.or_else(|| home("CLAUDE_CONFIG_DIR", ".claude"));
                 if config.is_some_and(|config| claude_kept(&config, conversation)) {
                     Last::Kept(conversation)
                 } else {
@@ -162,7 +164,10 @@ async fn codex(
 ) -> Result<(Vec<OsString>, Option<&'static str>)> {
     let (database, codex_home) = this
         .update(cx, |workspace, _| {
-            (workspace.database.clone(), workspace.codex_home.clone())
+            (
+                workspace.database.clone(),
+                workspace.home("CODEX_HOME", ".codex"),
+            )
         })
         .map_err(closed)?;
     let id = record.id.clone();
@@ -173,9 +178,7 @@ async fn codex(
     let scan = folder.clone();
     let found = cx
         .background_spawn(async move {
-            let sessions = codex_home
-                .or_else(|| home("CODEX_HOME", ".codex"))?
-                .join("sessions");
+            let sessions = codex_home?.join("sessions");
             stored
                 .filter(|conversation| codex_kept(&sessions, *conversation))
                 .or_else(|| codex_started(&sessions, &scan, since?))
@@ -203,7 +206,7 @@ async fn cursor(
 ) -> Result<(Vec<OsString>, Option<&'static str>)> {
     let (database, config) = this
         .update(cx, |workspace, _| {
-            (workspace.database.clone(), workspace.cursor_config.clone())
+            (workspace.database.clone(), workspace.cursor_root())
         })
         .map_err(closed)?;
     let id = record.id.clone();
@@ -212,10 +215,8 @@ async fn cursor(
     let last = match stored {
         None => Last::None,
         Some(conversation) => {
-            let config = config.clone();
             cx.background_spawn(async move {
-                let root = cursor_root(config);
-                if root.is_some_and(|root| cursor_kept(&root, conversation, &folder)) {
+                if config.is_some_and(|root| cursor_kept(&root, conversation, &folder)) {
                     Last::Kept(conversation)
                 } else {
                     Last::Gone
@@ -279,9 +280,12 @@ async fn kimi(
     folder: &Path,
     cx: &mut AsyncApp,
 ) -> Result<(Vec<OsString>, Option<&'static str>)> {
-    let (database, home) = this
+    let (database, root) = this
         .update(cx, |workspace, _| {
-            (workspace.database.clone(), workspace.kimi_home.clone())
+            (
+                workspace.database.clone(),
+                workspace.home("KIMI_CODE_HOME", ".kimi-code"),
+            )
         })
         .map_err(closed)?;
     let id = record.id.clone();
@@ -292,7 +296,7 @@ async fn kimi(
     let scan = folder.clone();
     let found = cx
         .background_spawn(async move {
-            let root = kimi_root(home)?;
+            let root = root?;
             stored
                 .filter(|conversation| kimi_kept(&root, *conversation))
                 .or_else(|| kimi_started(&root, &scan, since?))
@@ -336,14 +340,6 @@ fn picks(args: &[OsString], flags: &[&str]) -> bool {
     })
 }
 
-fn picks_claude(args: &[OsString]) -> bool {
-    picks(args, CLAUDE_FLAGS)
-}
-
-fn picks_cursor(args: &[OsString]) -> bool {
-    picks(args, CURSOR_FLAGS)
-}
-
 fn picks_codex(args: &[OsString]) -> bool {
     args.iter().any(|arg| {
         CODEX_SUBCOMMANDS
@@ -352,21 +348,14 @@ fn picks_codex(args: &[OsString]) -> bool {
     })
 }
 
-fn cursor_root(set: Option<PathBuf>) -> Option<PathBuf> {
-    if let Some(set) = set {
-        return Some(set);
+impl Workspace {
+    fn cursor_root(&self) -> Option<PathBuf> {
+        self.home_set("CURSOR_CONFIG_DIR")
+            .or_else(|| {
+                crate::host::program::home_set("XDG_CONFIG_HOME").map(|dir| dir.join("cursor"))
+            })
+            .or_else(|| crate::host::program::user_home().map(|home| home.join(".cursor")))
     }
-    if let Some(dir) = std::env::var_os("CURSOR_CONFIG_DIR").filter(|dir| !dir.is_empty()) {
-        return Some(PathBuf::from(dir));
-    }
-    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME").filter(|dir| !dir.is_empty()) {
-        return Some(PathBuf::from(dir).join("cursor"));
-    }
-    home("CURSOR_CONFIG_DIR", ".cursor")
-}
-
-fn kimi_root(set: Option<PathBuf>) -> Option<PathBuf> {
-    set.or_else(|| home("KIMI_CODE_HOME", ".kimi-code"))
 }
 
 // Kimi Code writes `sessions/<workspace>/session_<uuid>/state.json`. `--session` resumes that id
@@ -412,16 +401,6 @@ fn kimi_state(file: &Path) -> Option<(Conversation, PathBuf, i64)> {
     let state: KimiState = serde_json::from_str(&text).ok()?;
     let id = state.id.strip_prefix("session_")?.parse().ok()?;
     Some((id, state.cwd, state.created_at))
-}
-
-fn home(variable: &str, folder: &str) -> Option<PathBuf> {
-    std::env::var_os(variable)
-        .filter(|dir| !dir.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-                .map(|home| PathBuf::from(home).join(folder))
-        })
 }
 
 // Claude Code writes a conversation to `projects/<folder>/<id>.jsonl` once something is said, and
@@ -542,11 +521,11 @@ mod tests {
 
     #[test]
     fn a_flag_picks_a_conversation_only_as_a_whole_flag() {
-        assert!(picks_claude(&args(&["--resume", "abc"])));
-        assert!(picks_claude(&args(&["--resume=abc"])));
-        assert!(picks_claude(&args(&["-c"])));
-        assert!(!picks_claude(&args(&["--resume-from", "abc"])));
-        assert!(!picks_claude(&args(&["--person-arg"])));
+        assert!(picks(&args(&["--resume", "abc"]), CLAUDE_FLAGS));
+        assert!(picks(&args(&["--resume=abc"]), CLAUDE_FLAGS));
+        assert!(picks(&args(&["-c"]), CLAUDE_FLAGS));
+        assert!(!picks(&args(&["--resume-from", "abc"]), CLAUDE_FLAGS));
+        assert!(!picks(&args(&["--person-arg"]), CLAUDE_FLAGS));
     }
 
     #[test]
@@ -558,9 +537,9 @@ mod tests {
 
     #[test]
     fn a_cursor_resume_or_new_id_picks_a_conversation() {
-        assert!(picks_cursor(&args(&["--resume", "abc"])));
-        assert!(picks_cursor(&args(&["--continue"])));
-        assert!(picks_cursor(&args(&["--new-session-id=abc"])));
-        assert!(!picks_cursor(&args(&["--plugin-dir", "x"])));
+        assert!(picks(&args(&["--resume", "abc"]), CURSOR_FLAGS));
+        assert!(picks(&args(&["--continue"]), CURSOR_FLAGS));
+        assert!(picks(&args(&["--new-session-id=abc"]), CURSOR_FLAGS));
+        assert!(!picks(&args(&["--plugin-dir", "x"]), CURSOR_FLAGS));
     }
 }

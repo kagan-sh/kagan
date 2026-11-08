@@ -139,16 +139,9 @@ pub struct Workspace {
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
     pub(crate) program_environment: Option<crate::host::program::ProgramEnvironment>,
-    /// Where Claude Code keeps its conversations, when a test has set it; None is `CLAUDE_CONFIG_DIR` or `~/.claude`
-    pub(crate) claude_config: Option<std::path::PathBuf>,
-    /// Where Codex keeps its conversations, when a test has set it; None is `CODEX_HOME` or `~/.codex`
-    pub(crate) codex_home: Option<std::path::PathBuf>,
-    /// Where Cursor keeps its conversations, when a test has set it; None is `CURSOR_CONFIG_DIR`, `$XDG_CONFIG_HOME/cursor`, or `~/.cursor`
-    pub(crate) cursor_config: Option<std::path::PathBuf>,
-    /// Where Kimi Code keeps its sessions, when a test has set it; None is `KIMI_CODE_HOME` or `~/.kimi-code`
-    pub(crate) kimi_home: Option<std::path::PathBuf>,
-    /// Where BB keeps its skills, when a test has set it; None is `BB_DATA_DIR` or `~/.bb`
-    pub(crate) bb_data_dir: Option<std::path::PathBuf>,
+    /// Where a test says a program keeps its files, by the variable that names the folder.
+    #[cfg(any(test, feature = "test"))]
+    pub(crate) homes: BTreeMap<&'static str, PathBuf>,
     pub(crate) ui: Option<crate::dispatch::ui::UiDispatch>,
     sections: Vec<kg_domain::Section>,
     requests: Sender<Envelope>,
@@ -251,11 +244,8 @@ impl Workspace {
                         keymap: kg_domain::Keymap::default(),
                         plugins: None,
                         program_environment: None,
-                        claude_config: None,
-                        codex_home: None,
-                        cursor_config: None,
-                        kimi_home: None,
-                        bb_data_dir: None,
+                        #[cfg(any(test, feature = "test"))]
+                        homes: BTreeMap::new(),
                         ui: None,
                         requests,
                         clock: (now(), cx.background_executor().now()),
