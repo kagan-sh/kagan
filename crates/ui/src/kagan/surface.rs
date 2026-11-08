@@ -1,4 +1,4 @@
-use gpui_kit::{Action, App, Context, Entity, FocusHandle, KeyBinding, Window, actions};
+use gpui_kit::{App, Context, Entity, FocusHandle, KeyBinding, Window, actions};
 use gpui_shell::ScriptView;
 use kg_domain::{OpError, OpResult, PluginId, SurfacePlacement};
 use kg_plugins::{Placement, PluginHost};
@@ -9,10 +9,9 @@ use super::right::{self};
 
 actions!(surface, [ClosePage]);
 
-#[derive(Clone, PartialEq, Eq, Action)]
-#[action(namespace = surface, no_json)]
+#[derive(Clone)]
 pub(super) struct OpenSurface {
-    pub plugin: String,
+    pub plugin: PluginId,
     pub id: String,
 }
 
@@ -135,7 +134,7 @@ pub(super) fn row_id(plugin: &PluginId, id: &str) -> String {
 }
 
 pub(super) fn nav_items(cx: &App) -> Vec<NavItem> {
-    destinations(cx)
+    panels(cx)
         .into_iter()
         .filter_map(|item| {
             let placement = item.placement;
@@ -166,10 +165,6 @@ fn panels(cx: &App) -> Vec<Declared> {
                 .collect::<Vec<_>>()
         })
         .collect()
-}
-
-fn destinations(cx: &App) -> Vec<Declared> {
-    panels(cx)
 }
 
 fn drawn(placement: Placement) -> Option<SurfacePlacement> {

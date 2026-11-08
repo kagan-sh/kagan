@@ -1,7 +1,7 @@
 use gpui_kit::{Context, Focusable as _, Window};
 use kg_domain::SurfacePlacement;
 
-use super::{Declared, destinations, row_id};
+use super::{Declared, panels, row_id};
 use crate::kagan::Kagan;
 use crate::kagan::Shown;
 
@@ -82,7 +82,7 @@ impl Kagan {
             .filter(|id| sidebar.row_focus(id).is_some())
             .or(closed.filter(|id| sidebar.row_focus(id).is_some()))
             .or_else(|| {
-                destinations(cx).into_iter().find_map(|item| {
+                panels(cx).into_iter().find_map(|item| {
                     (item.placement == SurfacePlacement::Left)
                         .then(|| row_id(&item.plugin, &item.id))
                 })

@@ -8,7 +8,7 @@ use kg_domain::ProjectOp;
 
 use gpui_kit::{App, AppContext as _, Context, Window};
 use kg_core::Workspace;
-use kg_domain::{Op, PluginId, ProjectId, SurfaceOp};
+use kg_domain::{Op, ProjectId, SurfaceOp};
 
 impl Kagan {
     pub(super) fn sidebar_event(
@@ -53,7 +53,7 @@ impl Kagan {
             }
             Event::OpenSurface(open) => {
                 let op = SurfaceOp::Open {
-                    plugin: PluginId(open.plugin.clone()),
+                    plugin: open.plugin.clone(),
                     id: open.id.clone(),
                 };
                 self.run_surface(op, window, cx);

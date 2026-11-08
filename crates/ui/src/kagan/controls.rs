@@ -28,11 +28,6 @@ pub(super) fn menu_item(id: &'static str, label: &'static str) -> impl IntoEleme
     )
 }
 
-/// A container `kg ui` can find by id. It has no role or state of its own.
-pub(super) fn container(id: &'static str, child: impl IntoElement) -> impl IntoElement {
-    div().id(id).ui_container().child(child)
-}
-
 /// A control `kg ui` can find by id. Its facts are required: see `Facts`.
 pub(super) fn control(
     id: impl Into<gpui_kit::ElementId>,

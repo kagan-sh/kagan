@@ -11,7 +11,7 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Window,
     div, px,
 };
-use kg_domain::{PluginId, Thread};
+use kg_domain::Thread;
 
 use crate::kagan::surface::{self, OpenSurface};
 
@@ -33,14 +33,16 @@ pub(in crate::kagan) fn rail(
         .row_focus
         .insert("plugins-manage".into(), manage_focus.clone());
     let mut plugins = BTreeSet::new();
-    let tools: Vec<_> = surface::nav_items(cx)
+    let (pages, tools): (Vec<_>, Vec<_>) = surface::nav_items(cx)
         .into_iter()
-        .filter(|item| !item.page && plugins.insert(item.plugin.clone()))
+        .partition(|item| item.page);
+    let tools: Vec<_> = tools
+        .into_iter()
+        .filter(|item| plugins.insert(item.plugin.clone()))
         .map(|item| rail_tool(sidebar, shows, item, window, cx))
         .collect();
-    let pages: Vec<_> = surface::nav_items(cx)
+    let pages: Vec<_> = pages
         .into_iter()
-        .filter(|item| item.page)
         .map(|item| rail_tool(sidebar, shows, item, window, cx))
         .collect();
     let top = v_flex()
@@ -127,7 +129,7 @@ pub(super) fn rail_tool(
         })
         .unwrap_or_else(|| Icon::new(IconName::PanelLeft));
     let action = OpenSurface {
-        plugin: item.plugin.0,
+        plugin: item.plugin,
         id: item.id,
     };
     let keyboard = action.clone();
@@ -154,7 +156,7 @@ pub(super) fn rail_tool(
         .child(
             Button::new(SharedString::from(format!(
                 "{}-button",
-                surface::row_id(&PluginId(action.plugin.clone()), &action.id)
+                surface::row_id(&action.plugin, &action.id)
             )))
             .small()
             .rounded(px(radius_xs(cx)))
@@ -162,7 +164,7 @@ pub(super) fn rail_tool(
             .selected(selected)
             .icon(icon)
             .accessibility_label(title.clone())
-            .tooltip(tip(&title, &action, cx))
+            .tooltip(title.clone())
             .tab_stop(false)
             .on_click(cx.listener(move |_, _, _, cx| {
                 cx.emit(surface_event(page, selected, &action));

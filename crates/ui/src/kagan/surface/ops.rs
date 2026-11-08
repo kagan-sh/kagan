@@ -2,7 +2,7 @@ use gpui_kit::{App, Context, Window};
 use kg_domain::{SurfaceItem, SurfaceOp};
 
 use super::mount::{body_id, matching_slot, painted};
-use super::{ClosePage, destinations};
+use super::{ClosePage, panels};
 use crate::kagan::Kagan;
 
 impl Kagan {
@@ -15,7 +15,7 @@ impl Kagan {
     }
 
     pub(super) fn surface_list(&self, window: &Window, cx: &App) -> Vec<SurfaceItem> {
-        destinations(cx)
+        panels(cx)
             .into_iter()
             .map(|declared| {
                 let placement = declared.placement;
