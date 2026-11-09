@@ -53,6 +53,7 @@ pub(crate) async fn raise(
         attention_before,
     };
     this.update(cx, |workspace, cx| {
+        super::notify::asked(workspace, &thread_id, cx);
         waiting.thread = Some(thread_id);
         workspace.pending.insert(interaction_id, waiting);
         thread.update(cx, |thread, cx| {

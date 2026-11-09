@@ -190,6 +190,7 @@ impl Workspace {
             if let Some(end) = crate::end::End::from_newest(&newest) {
                 workspace.run_mut(&thread_id).end = Some(end);
             }
+            crate::thread::notify::after(workspace, &thread_id, &events, cx);
             for event in events {
                 cx.emit(WorkspaceEvent::Event {
                     event,

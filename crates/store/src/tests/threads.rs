@@ -371,6 +371,7 @@ fn archive_takes_lifecycle_dependents_and_unarchive_does_not() {
     store
         .put_thread(&Thread {
             parent_thread_id: Some(id("thr_1")),
+            quiet: false,
             ..thread("thr_4", 4)
         })
         .unwrap();
@@ -434,6 +435,7 @@ fn delete_removes_dependents_and_history() {
     store
         .put_thread(&Thread {
             parent_thread_id: Some(id("thr_1")),
+            quiet: false,
             ..thread("thr_3", 3)
         })
         .unwrap();

@@ -265,6 +265,7 @@ fn seed_thread(dir: &std::path::Path) {
             status: ThreadStatus::Idle,
             visibility: Visibility::Visible,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             section_id: None,
             pinned: false,

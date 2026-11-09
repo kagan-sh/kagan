@@ -418,6 +418,7 @@ pub(in crate::tests) fn repo_thread(
         environment: EnvironmentSpec::ProjectDefault,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -439,6 +440,7 @@ pub(in crate::tests) fn run_hidden_shell(cx: &mut TestAppContext) -> ThreadId {
         environment: EnvironmentSpec::Personal,
         visibility: Some(Visibility::Hidden),
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };

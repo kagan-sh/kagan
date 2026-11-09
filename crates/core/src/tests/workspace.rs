@@ -35,6 +35,7 @@ fn a_stop_waits_in_the_queue_and_a_run_does_not() {
             },
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         },

@@ -55,6 +55,7 @@ impl Kagan {
                         environment: EnvironmentSpec::Personal,
                         visibility: None,
                         parent_thread_id: None,
+                        quiet: false,
                         lifecycle_owner_thread_id: None,
                         metadata: None,
                     })),

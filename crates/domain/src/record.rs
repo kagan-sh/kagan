@@ -165,6 +165,9 @@ pub struct Thread {
     pub status: ThreadStatus,
     pub visibility: Visibility,
     pub parent_thread_id: Option<ThreadId>,
+    /// The parent is not told when this thread's turn ends, waits, exits or fails.
+    #[serde(default)]
+    pub quiet: bool,
     pub lifecycle_owner_thread_id: Option<ThreadId>,
     pub section_id: Option<SectionId>,
     pub pinned: bool,

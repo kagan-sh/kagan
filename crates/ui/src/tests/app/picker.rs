@@ -436,6 +436,7 @@ fn an_archived_program_stays_the_recent_default(cx: &mut TestAppContext) {
         environment: EnvironmentSpec::Personal,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -849,6 +850,7 @@ fn an_offscreen_default_program_is_visible_when_the_picker_opens(cx: &mut TestAp
         environment: EnvironmentSpec::Personal,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -931,6 +933,7 @@ fn a_selected_program_below_the_cap_is_in_view_on_every_open(cx: &mut TestAppCon
         environment: EnvironmentSpec::Personal,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };

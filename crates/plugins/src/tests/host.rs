@@ -1074,6 +1074,7 @@ fn threads_output_reads_scrollback_plain_text(cx: &mut TestAppContext) {
             environment: EnvironmentSpec::ProjectDefault,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         })),

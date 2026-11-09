@@ -9,6 +9,8 @@ mod environment;
 #[cfg(unix)]
 mod extra;
 mod guide;
+#[cfg(unix)]
+mod notify;
 mod plugin;
 mod preview;
 mod program;
@@ -148,6 +150,7 @@ impl Fixture {
             environment: EnvironmentSpec::ProjectDefault,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         }))
@@ -364,6 +367,7 @@ fn personal_run(fixture: &Fixture, title: &str, environment: EnvironmentSpec) ->
         environment,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }))
@@ -1512,6 +1516,7 @@ fn idle_thread(id: &str, project: ProjectId) -> Thread {
         status: ThreadStatus::Idle,
         visibility: Visibility::Visible,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         section_id: None,
         pinned: false,
@@ -1661,6 +1666,7 @@ fn worktree_run(fixture: &Fixture, title: Option<&str>, base: Option<&str>) -> O
         },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }))

@@ -141,6 +141,7 @@ pub(in crate::tests) fn run_program(cx: &mut TestAppContext, program: &str) -> T
         environment: EnvironmentSpec::Personal,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -161,6 +162,7 @@ pub(in crate::tests) fn run_child(cx: &mut TestAppContext, parent: &ThreadId) ->
         environment: EnvironmentSpec::Personal,
         visibility: Some(Visibility::Visible),
         parent_thread_id: Some(parent.clone()),
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
