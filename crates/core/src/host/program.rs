@@ -175,6 +175,7 @@ pub(crate) fn search_path(environment: Option<&ProgramEnvironment>) -> Option<Os
     environment.map_or_else(user_path, |environment| Some(environment.path.clone()))
 }
 
+#[cfg(any(test, feature = "test"))]
 pub(crate) fn program_environment_of(
     this: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,
@@ -184,11 +185,19 @@ pub(crate) fn program_environment_of(
         .flatten()
 }
 
+#[cfg(not(any(test, feature = "test")))]
+pub(crate) fn program_environment_of(
+    _: &WeakEntity<Workspace>,
+    _: &mut AsyncApp,
+) -> Option<ProgramEnvironment> {
+    None
+}
+
 fn read_environment(
     environment: Option<ProgramEnvironment>,
 ) -> (Option<OsString>, Option<OsString>, Option<OsString>) {
     match environment {
-        Some(environment) => (Some(environment.path), None, Some(environment.shell)),
+        Some(environment) => (Some(environment.path), pathext(), Some(environment.shell)),
         None => (
             search_path(None),
             pathext(),

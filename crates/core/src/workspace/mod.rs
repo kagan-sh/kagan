@@ -143,6 +143,7 @@ pub struct Workspace {
     keymap: kg_domain::Keymap,
     pub(crate) plugins: Option<PluginDispatch>,
     /// Where this workspace finds programs, when a test has set it; None is the login PATH
+    #[cfg(any(test, feature = "test"))]
     pub(crate) program_environment: Option<crate::host::program::ProgramEnvironment>,
     /// Where a test says a program keeps its files, by the variable that names the folder.
     #[cfg(any(test, feature = "test"))]
@@ -253,6 +254,7 @@ impl Workspace {
                         diffs: crate::diff::Cache::new(),
                         keymap: kg_domain::Keymap::default(),
                         plugins: None,
+                        #[cfg(any(test, feature = "test"))]
                         program_environment: None,
                         #[cfg(any(test, feature = "test"))]
                         homes: BTreeMap::new(),
