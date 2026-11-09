@@ -70,7 +70,7 @@ pub(super) fn toggle(open: bool, focus: &FocusHandle, cx: &App) -> impl IntoElem
             value: Some(if open { "shown" } else { "hidden" }.into()),
             disabled: false,
             selected: Some(open),
-            focus: None,
+            focus: Some(focus.clone()),
             hint: None,
         })
         .flex_none()

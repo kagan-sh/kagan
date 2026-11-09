@@ -1,12 +1,12 @@
 use super::*;
 
-fn strip() -> Strip {
-    Strip::new()
+fn strip(cx: &mut gpui_kit::TestAppContext) -> Strip {
+    cx.update(Strip::new)
 }
 
 #[gpui_kit::test]
-fn the_log_keeps_the_last_hundred_lines() {
-    let mut strip = strip();
+fn the_log_keeps_the_last_hundred_lines(cx: &mut gpui_kit::TestAppContext) {
+    let mut strip = strip(cx);
     for line in 0..120 {
         strip.say(line.to_string());
     }
@@ -18,8 +18,8 @@ fn the_log_keeps_the_last_hundred_lines() {
 }
 
 #[gpui_kit::test]
-fn the_log_shows_the_last_seven_oldest_first() {
-    let mut strip = strip();
+fn the_log_shows_the_last_seven_oldest_first(cx: &mut gpui_kit::TestAppContext) {
+    let mut strip = strip(cx);
     for line in 1..=10 {
         strip.say(line.to_string());
     }
@@ -32,8 +32,8 @@ fn the_log_shows_the_last_seven_oldest_first() {
 }
 
 #[gpui_kit::test]
-fn a_repeated_update_or_install_line_is_written_once() {
-    let mut strip = strip();
+fn a_repeated_update_or_install_line_is_written_once(cx: &mut gpui_kit::TestAppContext) {
+    let mut strip = strip(cx);
     let ready = UpdateState::Ready {
         version: "2.0.0".into(),
         notes: String::new(),

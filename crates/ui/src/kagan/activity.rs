@@ -8,7 +8,7 @@ use gpui_kit::{
     SharedString, Styled as _, Subscription, Window, px,
 };
 use kg_core::{Updater, Workspace};
-use kg_domain::{Event, EventKind, ThreadId, UpdateState};
+use kg_domain::{Event, EventKind, PluginId, ThreadId, UpdateState};
 use kg_plugins::{PluginStrip, StatusItem};
 
 use super::Kagan;
@@ -32,9 +32,26 @@ const PLUGIN_ITEMS: usize = 4;
 
 pub(super) const CONTEXT: &str = "ActivityStrip";
 
+fn control_focus(cx: &mut App) -> FocusHandle {
+    cx.focus_handle().tab_stop(true)
+}
+
+/// The strip's own controls. Each keeps one focus handle, so Tab order and focus see the same one.
+#[derive(Clone, Copy)]
+pub(crate) enum Part {
+    Needs,
+    Update,
+    Install,
+    Log,
+}
+
 pub(super) struct Strip {
     open: bool,
-    focus: BTreeMap<String, FocusHandle>,
+    needs_focus: FocusHandle,
+    update_focus: FocusHandle,
+    install_focus: FocusHandle,
+    log_focus: FocusHandle,
+    plugins: BTreeMap<PluginId, FocusHandle>,
     next: u64,
     lines: VecDeque<(u64, SharedString)>,
     update: Option<SharedString>,
@@ -42,10 +59,14 @@ pub(super) struct Strip {
 }
 
 impl Strip {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(cx: &mut App) -> Self {
         Self {
             open: false,
-            focus: BTreeMap::new(),
+            needs_focus: control_focus(cx),
+            update_focus: control_focus(cx),
+            install_focus: control_focus(cx),
+            log_focus: control_focus(cx),
+            plugins: BTreeMap::new(),
             next: 0,
             lines: VecDeque::new(),
             update: None,
@@ -53,17 +74,28 @@ impl Strip {
         }
     }
 
-    // One focus handle per strip control, made on first use and kept, so Tab order and focus see the same handle.
-    fn focus(&mut self, name: &str, cx: &mut App) -> FocusHandle {
-        self.focus
-            .entry(name.to_owned())
-            .or_insert_with(|| cx.focus_handle().tab_stop(true))
-            .clone()
+    fn focus_of(&self, part: Part) -> FocusHandle {
+        match part {
+            Part::Needs => &self.needs_focus,
+            Part::Update => &self.update_focus,
+            Part::Install => &self.install_focus,
+            Part::Log => &self.log_focus,
+        }
+        .clone()
     }
 
-    #[cfg(test)]
-    fn focus_of(&self, name: &str) -> Option<FocusHandle> {
-        self.focus.get(name).cloned()
+    // A handle for each plugin item the host has, and none for an item that is gone.
+    fn sync_plugins(&mut self, ids: &[PluginId], cx: &mut App) {
+        self.plugins.retain(|id, _| ids.contains(id));
+        for id in ids {
+            self.plugins
+                .entry(id.clone())
+                .or_insert_with(|| control_focus(cx));
+        }
+    }
+
+    fn plugin_focus(&self, id: &PluginId) -> Option<FocusHandle> {
+        self.plugins.get(id).cloned()
     }
 
     fn open(&self) -> bool {
@@ -186,9 +218,18 @@ impl Kagan {
             .count()
     }
 
+    pub(super) fn sync_plugin_focus(&mut self, ids: &[PluginId], cx: &mut Context<Self>) {
+        self.activity.sync_plugins(ids, cx);
+    }
+
     #[cfg(test)]
-    pub(crate) fn activity_focus(&self, name: &str) -> Option<FocusHandle> {
-        self.activity.focus_of(name)
+    pub(crate) fn activity_focus(&self, part: Part) -> FocusHandle {
+        self.activity.focus_of(part)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn activity_plugin_focus(&self, id: &PluginId) -> Option<FocusHandle> {
+        self.activity.plugin_focus(id)
     }
 
     pub(super) fn toggle_log(&mut self, cx: &mut Context<Self>) {

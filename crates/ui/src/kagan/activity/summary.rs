@@ -11,7 +11,7 @@ use kg_plugins::StatusItem;
 
 use super::log;
 use super::plugins::{more_part, plugin_item};
-use super::{DOT, HEIGHT, Kagan};
+use super::{DOT, HEIGHT, Kagan, Part};
 
 const INSTALL_MAX: f32 = 240.;
 use crate::kagan::controls::control;
@@ -32,14 +32,14 @@ impl Kagan {
     ) -> impl IntoElement + use<> {
         let needs = self.needs_you(cx);
         let open = self.activity.open();
-        let needs_focus = self.activity.focus("needs", cx);
-        let update_focus = self.activity.focus("update", cx);
-        let install_focus = self.activity.focus("install", cx);
-        let toggle_focus = self.activity.focus("toggle", cx);
-        let plugins: Vec<(StatusItem, FocusHandle)> = plugins
+        let needs_focus = self.activity.focus_of(Part::Needs);
+        let update_focus = self.activity.focus_of(Part::Update);
+        let install_focus = self.activity.focus_of(Part::Install);
+        let toggle_focus = self.activity.focus_of(Part::Log);
+        let plugins: Vec<(StatusItem, Option<FocusHandle>)> = plugins
             .into_iter()
             .map(|item| {
-                let focus = self.activity.focus(&format!("plugin-{}", item.id.0), cx);
+                let focus = self.activity.plugin_focus(&item.id);
                 (item, focus)
             })
             .collect();
@@ -91,7 +91,7 @@ impl Kagan {
                     .children(
                         plugins
                             .into_iter()
-                            .map(|(item, focus)| plugin_item(item, &focus, cx)),
+                            .map(|(item, focus)| plugin_item(item, focus.as_ref(), cx)),
                     )
                     .children(more_part(hidden, cx)),
             )
@@ -109,7 +109,7 @@ impl Kagan {
                     value: None,
                     disabled: false,
                     selected: None,
-                    focus: None,
+                    focus: Some(focus.clone()),
                     hint: Some("Show the installed plugins in Settings".into()),
                 },
                 Button::new("activity-install-button")
@@ -137,7 +137,7 @@ fn needs_part(needs: usize, focus: &FocusHandle, cx: &Context<Kagan>) -> Option<
                 value: Some(needs.to_string().into()),
                 disabled: false,
                 selected: None,
-                focus: None,
+                focus: Some(focus.clone()),
                 hint: Some("Go to the next thread that needs you".into()),
             },
             Button::new("activity-needs-button")
@@ -174,7 +174,7 @@ fn update_part(focus: &FocusHandle, cx: &Context<Kagan>) -> Option<AnyElement> {
                 value: None,
                 disabled: false,
                 selected: None,
-                focus: None,
+                focus: Some(focus.clone()),
                 hint: Some(update::primary_label(cx).into()),
             },
             Button::new("activity-update-button")

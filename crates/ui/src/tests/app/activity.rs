@@ -7,6 +7,7 @@ use kg_domain::{
     WindowOp,
 };
 
+use crate::kagan::ActivityPart;
 use crate::kagan::screen_read;
 use crate::tests::kagan::{
     click, focused_of, label, open, open_with_plugins_then, role_of, run_shell, selected_of, shown,
@@ -413,9 +414,7 @@ fn the_log_button_opens_the_log_and_escape_closes_it(cx: &mut TestAppContext) {
     assert!((height - 168.).abs() < 0.5, "the open strip is {height}");
 
     // A person's click focuses the toggle; the test click does not, so focus it the same way.
-    let focus = cx
-        .update(|cx| kagan.read(cx).activity_focus("toggle"))
-        .expect("the toggle has a focus handle");
+    let focus = cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Log));
     cx.update_window(window, |_, window, cx| window.focus(&focus, cx))
         .unwrap();
     crate::tests::kagan::press_key(cx, window, "escape");
@@ -737,17 +736,27 @@ fn each_strip_control_is_one_tab_stop_in_tab_order(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "activity-needs"));
     assert!(shows(cx, window, "activity-update"));
 
-    let names = ["needs", "update", "plugin-dev.test.status", "toggle"];
-    let handles: Vec<(&str, FocusHandle)> = names
-        .iter()
-        .map(|name| {
-            let focus = cx.update(|cx| kagan.read(cx).activity_focus(name));
-            (
-                *name,
-                focus.unwrap_or_else(|| panic!("{name} has no focus handle")),
-            )
-        })
-        .collect();
+    let plugin = PluginId(STATUS.into());
+    let handles: Vec<(&str, FocusHandle)> = vec![
+        (
+            "needs",
+            cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Needs)),
+        ),
+        (
+            "update",
+            cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Update)),
+        ),
+        (
+            "plugin",
+            cx.update(|cx| kagan.read(cx).activity_plugin_focus(&plugin))
+                .expect("the plugin item has a focus handle"),
+        ),
+        (
+            "toggle",
+            cx.update(|cx| kagan.read(cx).activity_focus(ActivityPart::Log)),
+        ),
+    ];
+    let names = ["needs", "update", "plugin", "toggle"];
 
     let mut seen: Vec<&str> = Vec::new();
     for _ in 0..600 {

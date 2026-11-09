@@ -15,7 +15,7 @@ use crate::theme::{Tone, TypeScale as _};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 
-pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> AnyElement {
+pub(super) fn plugin_item(item: StatusItem, focus: Option<&FocusHandle>, cx: &App) -> AnyElement {
     let color = match item.tone {
         StatusTone::Quiet => cx.theme().muted_foreground,
         StatusTone::Busy => Tone::Busy.color(cx),
@@ -89,9 +89,12 @@ pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> An
         .outline()
         .max_w(px(PLUGIN_ITEM_MAX))
         .child(body)
-        .track_focus(focus)
         .tooltip(tooltip)
         .on_click(controls::dispatch(run));
+    let button = match focus {
+        Some(focus) => button.track_focus(focus),
+        None => button,
+    };
     control(ElementId::Name(id.into()), facts, button).into_any_element()
 }
 
