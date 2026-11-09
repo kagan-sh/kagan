@@ -6,10 +6,11 @@ use gpui_kit::{
     AnyElement, App, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
 };
-use kg_plugins::{RunCommand, StatusItem, StatusTone};
+use kg_domain::PluginId;
+use kg_plugins::{PluginHost, RunCommand, StatusItem, StatusTone};
 
 use super::PLUGIN_ITEM_MAX;
-use crate::kagan::controls::control;
+use crate::kagan::controls::{self, control};
 use crate::theme::{Tone, TypeScale as _};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -67,13 +68,19 @@ pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> An
             None => line.into_any_element(),
         };
     };
-    let plugin = item.id.clone();
+    let title = command_title(&item.id, &command, cx);
+    let run = RunCommand::new(item.id.clone(), command);
+    let command_tip = controls::tip(&title, &run, cx);
+    let tooltip = match item.tooltip {
+        Some(text) => format!("{text} — {command_tip}"),
+        None => command_tip,
+    };
     let facts = Facts {
         role: Role::Button,
         name: item.title.clone().into(),
         value: Some(item.text.clone().into()),
         focus: None,
-        hint: item.tooltip.clone().map(SharedString::from),
+        hint: Some(SharedString::from(tooltip.clone())),
         disabled: false,
         selected: None,
     };
@@ -83,15 +90,20 @@ pub(super) fn plugin_item(item: StatusItem, focus: &FocusHandle, cx: &App) -> An
         .max_w(px(PLUGIN_ITEM_MAX))
         .child(body)
         .track_focus(focus)
-        .on_click(move |_, window, cx| {
-            window.dispatch_action(
-                Box::new(RunCommand::new(plugin.clone(), command.clone())),
-                cx,
-            );
-        });
-    let button = match item.tooltip {
-        Some(tip) => button.tooltip(tip),
-        None => button,
-    };
+        .tooltip(tooltip)
+        .on_click(controls::dispatch(run));
     control(ElementId::Name(id.into()), facts, button).into_any_element()
+}
+
+// The title the plugin gave the command, so the button can say what a click runs.
+fn command_title(plugin: &PluginId, command: &str, cx: &App) -> String {
+    PluginHost::try_global(cx)
+        .and_then(|host| {
+            host.read(cx)
+                .commands()
+                .into_iter()
+                .find(|item| item.plugin == *plugin && item.id == command)
+                .map(|item| item.title)
+        })
+        .unwrap_or_else(|| command.to_owned())
 }

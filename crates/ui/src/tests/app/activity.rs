@@ -705,6 +705,17 @@ fn clicking_a_status_line_with_a_command_runs_that_command(cx: &mut TestAppConte
     );
     assert_eq!(label(cx, window, STATUS_ITEM), "Usage");
     assert_eq!(value_of(cx, window, STATUS_ITEM).as_deref(), Some("42%"));
+    let hint = cx
+        .update_window(window, |_, window, _| {
+            crate::ui_registry::find(window, &ElementId::Name(STATUS_ITEM.to_owned().into()))
+                .and_then(|element| element.hint.map(|hint| hint.to_string()))
+        })
+        .unwrap()
+        .unwrap_or_default();
+    assert!(
+        hint.contains("Refresh usage"),
+        "the button says what it runs: {hint:?}"
+    );
 
     click(cx, window, STATUS_ITEM);
     click(cx, window, "activity-toggle");
