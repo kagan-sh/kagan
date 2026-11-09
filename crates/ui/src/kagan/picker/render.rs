@@ -47,6 +47,9 @@ impl RenderOnce for ProgramRow {
             .child(
                 div()
                     .id(format!("program-{}", self.program.command))
+                    .when_some(full_version, |row, full| {
+                        row.tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx))
+                    })
                     .ui_observe_as(Facts {
                         role: Role::ListBoxOption,
                         selected: Some(self.selected),
@@ -93,11 +96,6 @@ impl RenderOnce for ProgramRow {
                                             .type_caption(cx)
                                             .text_color(muted)
                                             .whitespace_nowrap()
-                                            .when_some(full_version, |tag, full| {
-                                                tag.tooltip(move |window, cx| {
-                                                    Tooltip::new(full.clone()).build(window, cx)
-                                                })
-                                            })
                                             .ui_container()
                                             .aria_label(version.clone())
                                             .child(version),
