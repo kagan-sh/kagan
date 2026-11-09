@@ -56,8 +56,8 @@ struct Known {
     no_keychain: bool,
 }
 
-/// `<data>/secrets/<plugin id>.json`: the keys the keychain holds, by name only, and the
-/// text of any key kept in the file instead.
+// `<data>/secrets/<plugin id>.json`: the keys the keychain holds, by name only, and the
+// text of any key kept in the file instead.
 #[derive(Default, Serialize, Deserialize)]
 struct Kept {
     #[serde(default)]
@@ -71,8 +71,8 @@ impl Kept {
         self.keychain.iter().chain(self.file.keys())
     }
 
-    /// The keychain item, or `None` when the key goes to the file. A key the keychain holds
-    /// is never moved to the file or forgotten while the keychain cannot be reached.
+    // The keychain item, or `None` when the key goes to the file. A key the keychain holds
+    // is never moved to the file or forgotten while the keychain cannot be reached.
     fn entry(&self, store: &Store, id: &PluginId, key: &str) -> Result<Option<Entry>, Error> {
         match store.entry(id, key)? {
             None if self.keychain.contains(key) => Err(Error::Unreachable),

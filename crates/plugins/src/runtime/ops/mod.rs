@@ -256,7 +256,7 @@ async fn cli(host: &Entity<PluginHost>, call: CliCall, cx: &mut AsyncApp) -> Res
     })
 }
 
-/// Starts a plugin. A start that fails leaves its reason on the plugin, in place of any older one.
+// Starts a plugin. A start that fails leaves its reason on the plugin, in place of any older one.
 async fn start(
     host: &Entity<PluginHost>,
     record: &Plugin,

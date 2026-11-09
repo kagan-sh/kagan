@@ -169,7 +169,7 @@ async fn stored_grant(
     Ok(serde_json::from_value(plugin.approved).unwrap_or_default())
 }
 
-/// The stored settings, with the agent picks kept apart from them.
+// The stored settings, with the agent picks kept apart from them.
 async fn stored_settings(
     id: &PluginId,
     declared: &manifest::Settings,
@@ -235,7 +235,7 @@ fn number_value(value: Value) -> Option<Value> {
     }
 }
 
-/// A secret the keychain will not give is left unset and named in the plugin log.
+// A secret the keychain will not give is left unset and named in the plugin log.
 async fn load_secrets(
     host: &Entity<PluginHost>,
     id: &PluginId,

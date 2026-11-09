@@ -264,8 +264,8 @@ pub(crate) fn take_file_text(mut op: Op, stdin: impl std::io::Read) -> Result<Op
     Ok(op)
 }
 
-/// A setting value left off the command line comes from a prompt that does not show it, or
-/// from stdin, so a secret stays out of shell history.
+// A setting value left off the command line comes from a prompt that does not show it, or
+// from stdin, so a secret stays out of shell history.
 fn take_value(op: Op) -> Result<Op, OpError> {
     use std::io::IsTerminal as _;
     let stdin = std::io::stdin();

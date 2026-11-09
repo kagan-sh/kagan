@@ -60,7 +60,7 @@ pub struct Shortcut {
     pub settings_group: ShortcutGroup,
 }
 
-/// Built-in shortcuts. A saved override uses `name`, so those names stay.
+// Built-in shortcuts. A saved override uses `name`, so those names stay.
 const fn bind(
     name: &'static str,
     action: &'static str,

@@ -6,8 +6,8 @@ pub(crate) fn use_keychain() {
     keyring_core::set_default_store(std::sync::Arc::new(Keychain(std::sync::OnceLock::new())));
 }
 
-/// The system keychain, opened by the first secret read or write and kept for the whole run.
-/// Without one, it answers `NoDefaultStore`, and the plugin host keeps secrets in a file.
+// The system keychain, opened by the first secret read or write and kept for the whole run.
+// Without one, it answers `NoDefaultStore`, and the plugin host keeps secrets in a file.
 struct Keychain(std::sync::OnceLock<Option<std::sync::Arc<keyring_core::CredentialStore>>>);
 
 impl keyring_core::api::CredentialStoreApi for Keychain {

@@ -48,7 +48,7 @@ enum Command {
     Plugin(Vec<OsString>),
 }
 
-/// The built-in command clap would suggest for a mistyped first word.
+// The built-in command clap would suggest for a mistyped first word.
 fn suggestion(arguments: &[OsString]) -> Option<String> {
     let error = Op::augment_subcommands(clap::Command::new("kg"))
         .try_get_matches_from(
@@ -108,7 +108,7 @@ fn id_hint(error: &clap::Error, argv: &[String]) -> Option<String> {
     ))
 }
 
-/// The command the arguments name: the subcommands read from the front, skipping flags.
+// Walks the subcommands from the front and skips flags, so `kg --json thread get` names `get`.
 fn named_command(argv: &[String]) -> clap::Command {
     let mut command = Cli::command();
     command.build();

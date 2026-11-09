@@ -181,8 +181,8 @@ impl Contributions {
             .find(|panel| panel.replaces == Some(slot))
     }
 
-    /// The spots kagan does not draw yet. A manifest that declares one is refused, so a plugin never
-    /// loads as if its spot worked.
+    // The spots kagan does not draw yet. A manifest that declares one is refused, so a plugin never
+    // loads as if its spot worked.
     fn check_spots(&self) -> Result<(), Error> {
         let spots = [
             ("toolbar", !self.toolbar.is_empty()),

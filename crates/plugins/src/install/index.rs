@@ -15,8 +15,8 @@ const SAVED: &str = "indexes.json";
 const LIMIT: usize = 1024 * 1024;
 const DESCRIPTION: usize = 300;
 
-/// Index and plugin names show on the approval card, so only plain lowercase ASCII is allowed:
-/// no line breaks that could fake card lines, and no lookalike letters.
+// Index and plugin names show on the approval card, so only plain lowercase ASCII is allowed:
+// no line breaks that could fake card lines, and no lookalike letters.
 fn plain(name: &str) -> bool {
     (1..=64).contains(&name.len())
         && name.bytes().all(|byte| {

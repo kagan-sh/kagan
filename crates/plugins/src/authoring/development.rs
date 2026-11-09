@@ -138,7 +138,7 @@ pub(crate) fn check(
     plain_buttons(root)
 }
 
-/// A plain `Button` is not one `kg ui` can find or click. `KgButton` takes the same calls and can.
+// A plain `Button` is not one `kg ui` can find or click. `KgButton` takes the same calls and can.
 fn plain_buttons(root: &Path) -> Result<Vec<String>> {
     let mut warnings = Vec::new();
     for script in plugin_scripts(root)? {

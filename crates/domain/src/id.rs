@@ -65,7 +65,6 @@ impl ThreadId {
     }
 }
 
-/// A path segment: letters, digits, `_` and `-` only.
 #[must_use]
 fn plain_identifier(value: &str) -> bool {
     let mut chars = value.chars();

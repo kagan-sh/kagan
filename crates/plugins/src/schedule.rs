@@ -34,7 +34,7 @@ pub(crate) fn start(
         .collect()
 }
 
-/// `None` once kagan has dropped the host.
+// `None` once kagan has dropped the host.
 async fn tick(
     host: &WeakEntity<PluginHost>,
     plugin: &PluginId,

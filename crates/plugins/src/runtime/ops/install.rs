@@ -14,8 +14,8 @@ use super::approve::approve;
 use super::{approved, record, start};
 use crate::host::{Hold, hold};
 
-/// Holds the install slot. Dropping it frees the slot, even when the install is cancelled, and
-/// tells the windows, which read the slot from the host.
+// Holds the install slot. Dropping it frees the slot, even when the install is cancelled, and
+// tells the windows, which read the slot from the host.
 struct Claim {
     slot: Rc<RefCell<Option<String>>>,
     stops: Rc<RefCell<Option<async_channel::Sender<()>>>>,
