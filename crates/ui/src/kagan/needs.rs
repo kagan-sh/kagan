@@ -1,6 +1,5 @@
 use crate::theme::TypeScale as _;
 use std::collections::BTreeSet;
-use std::time::Duration;
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::v_flex;
@@ -13,10 +12,6 @@ use kg_domain::{InteractionOption, OptionRole, PendingInteractionId};
 use super::changes::line;
 use super::screen::{Activation, Side};
 use super::{Kagan, question};
-
-// How long the person must stop typing before held questions show. A design value, not a number
-// from the research.
-pub(crate) const QUIET: Duration = Duration::from_millis(1500);
 
 fn opening_option(options: &[InteractionOption]) -> Option<&InteractionOption> {
     options
@@ -188,7 +183,7 @@ impl Kagan {
         }
         self.typing = true;
         self.quiet = cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(QUIET).await;
+            cx.background_executor().timer(kg_core::TYPING_QUIET).await;
             _ = this.update(cx, |this, cx| {
                 this.typing = false;
                 this.on_screen.clear();

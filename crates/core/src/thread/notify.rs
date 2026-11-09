@@ -6,8 +6,6 @@ use kg_domain::{Event, EventKind, OpResult, ThreadId, TurnOutcome, WaitOutcome};
 use super::terminal::{self, Shown};
 use crate::Workspace;
 
-// The window's typing quiet (crates/ui/src/kagan/needs.rs QUIET). Core cannot read it from ui.
-const TYPING_QUIET: Duration = Duration::from_millis(1500);
 // A parent that just got a line may still be starting its turn; hold the next line this long.
 const SETTLE: Duration = Duration::from_secs(2);
 // Text the person has not sent yet may still be a draft; wait this long after its last key.
@@ -41,7 +39,7 @@ pub(crate) fn asked(workspace: &mut Workspace, id: &ThreadId, cx: &mut Context<W
 
 pub(crate) fn typed(workspace: &mut Workspace, id: &ThreadId, text: &str, now: Instant) {
     if text.ends_with('\r') {
-        workspace.run_mut(id).held_until = Some(now + TYPING_QUIET);
+        workspace.run_mut(id).held_until = Some(now + crate::TYPING_QUIET);
     } else {
         hold(workspace, id, now + DRAFT_HOLD);
     }

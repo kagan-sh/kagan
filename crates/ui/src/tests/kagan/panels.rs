@@ -5,8 +5,8 @@ use kg_domain::{InteractionOption, Op, OpResult, PluginId, PluginOp, PreferenceO
 
 use kg_plugins::HostUi;
 
-use crate::kagan::QUIET;
 use crate::kagan::changes::POLL;
+use kg_core::TYPING_QUIET;
 
 use super::{
     PAGE, click, open, open_lines, open_surface, open_with_plugins, pending, repo_thread,
@@ -63,7 +63,7 @@ fn a_question_waits_while_the_person_types(cx: &mut TestAppContext) {
     assert!(shows(cx, window, "needs-held"));
     assert!(!shows(cx, window, &format!("answer-{question}-yes")));
 
-    cx.executor().advance_clock(QUIET);
+    cx.executor().advance_clock(TYPING_QUIET);
     cx.run_until_parked();
     assert!(!shows(cx, window, "needs-held"));
     assert!(shows(cx, window, &format!("answer-{question}-yes")));
@@ -296,7 +296,7 @@ fn a_question_already_on_screen_stays_up_while_the_person_types(cx: &mut TestApp
     assert!(!shows(cx, window, &format!("answer-{second}-yes")));
     assert!(shows(cx, window, "needs-held"));
 
-    cx.executor().advance_clock(QUIET);
+    cx.executor().advance_clock(TYPING_QUIET);
     cx.run_until_parked();
     assert!(shows(cx, window, &format!("answer-{second}-yes")));
 }
