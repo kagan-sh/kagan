@@ -72,7 +72,7 @@ impl Kagan {
             let thread = self
                 .record(&asked.thread_id, cx)
                 .map_or_else(String::new, |thread| thread.title.clone());
-            let draft = self.ask_drafts.get(&asked.id).cloned();
+            let draft = self.asks.drafts.get(&asked.id).cloned();
             cards.push(
                 v_flex()
                     .gap_1()
