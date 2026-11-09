@@ -127,7 +127,6 @@ impl Workspace {
                 unshown
             })
             .map_err(closed)?;
-        crate::environment::drop_expired_screens(this, cx).await?;
         restore_unshown(this, unshown, cx).await
     }
     pub(crate) async fn events(
