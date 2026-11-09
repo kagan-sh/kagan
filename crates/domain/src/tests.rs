@@ -56,6 +56,7 @@ fn run_op() {
         },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }));
@@ -166,7 +167,7 @@ fn a_branch_slug_comes_from_the_title() {
 #[test]
 fn thread_unread_when_attention_is_newer_than_read() {
     let wire = json!({
-        "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false,
+        "id": "thr_1", "projectId": "prj_1", "environmentId": null, "title": "t", "titleLocked": false, "quiet": false,
         "provider": "claude-code", "status": "idle", "visibility": "visible",
         "parentThreadId": null, "lifecycleOwnerThreadId": null, "sectionId": null,
         "pinned": false, "lastReadAt": 5, "latestAttentionAt": 5, "mark": "none", "archivedAt": null,
@@ -1077,6 +1078,7 @@ fn sample(
         status: ThreadStatus::Idle,
         visibility,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: owner,
         section_id: None,
         pinned: false,
@@ -1108,6 +1110,7 @@ fn a_stop_rejects_a_thread_id_with_a_space_and_a_run_has_none() {
         },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }));

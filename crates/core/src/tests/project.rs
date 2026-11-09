@@ -211,6 +211,7 @@ async fn a_project_in_a_personal_folder_keeps_it_when_its_thread_is_deleted(
             environment: EnvironmentSpec::ProjectDefault,
             visibility: None,
             parent_thread_id: None,
+            quiet: false,
             lifecycle_owner_thread_id: None,
             metadata: None,
         })),

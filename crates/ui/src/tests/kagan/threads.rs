@@ -117,6 +117,7 @@ pub(in crate::tests) fn run_owned(cx: &mut TestAppContext, owner: &ThreadId) -> 
         environment: EnvironmentSpec::Personal,
         visibility: Some(Visibility::Visible),
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: Some(owner.clone()),
         metadata: None,
     };

@@ -5,6 +5,7 @@ mod details;
 mod extra;
 mod halt;
 mod interaction;
+pub(crate) mod notify;
 mod read;
 mod run;
 mod search;

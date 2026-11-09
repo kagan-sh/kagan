@@ -555,6 +555,7 @@ fn sidebar_nests_and_collapses_child_threads(cx: &mut TestAppContext) {
         environment: EnvironmentSpec::Personal,
         visibility: Some(Visibility::Visible),
         parent_thread_id: Some(parent.clone()),
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };

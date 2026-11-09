@@ -213,6 +213,8 @@ struct PluginSpawn {
     environment: EnvironmentSpec,
     visibility: Option<Visibility>,
     parent_thread_id: Option<ThreadId>,
+    #[serde(default)]
+    quiet: bool,
     lifecycle_owner_thread_id: Option<ThreadId>,
     metadata: Option<Value>,
 }
@@ -226,6 +228,7 @@ fn spawn_thread(args: &HostArguments, plugin: &PluginId) -> Result<Op, HostError
         environment: spawn.environment,
         visibility: spawn.visibility,
         parent_thread_id: spawn.parent_thread_id,
+        quiet: spawn.quiet,
         lifecycle_owner_thread_id: spawn.lifecycle_owner_thread_id,
         metadata: spawn.metadata.map(|value| Metadata {
             plugin_id: plugin.clone(),
@@ -336,6 +339,7 @@ impl<'a> From<&'a kg_domain::Thread> for PluginThread<'a> {
             status,
             visibility,
             parent_thread_id,
+            quiet: _,
             lifecycle_owner_thread_id,
             section_id,
             pinned,

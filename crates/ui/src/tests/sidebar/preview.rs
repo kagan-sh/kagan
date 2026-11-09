@@ -112,6 +112,7 @@ fn a_thread_switch_closes_the_preview(cx: &mut TestAppContext) {
                 environment: kg_domain::EnvironmentSpec::Personal,
                 visibility: None,
                 parent_thread_id: None,
+                quiet: false,
                 lifecycle_owner_thread_id: None,
                 metadata: None,
             })),

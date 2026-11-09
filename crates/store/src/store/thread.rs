@@ -13,7 +13,7 @@ use crate::{Error, Result};
 
 const THREAD_COLUMNS: &str = "id, project_id, environment_id, title, provider, status, \
     visibility, parent_thread_id, lifecycle_owner_thread_id, section_id, pinned, last_read_at, \
-    latest_attention_at, archived_at, created_at, updated_at, title_locked, done";
+    latest_attention_at, archived_at, created_at, updated_at, title_locked, done, quiet";
 
 const OWNED_THREADS: &str = "WITH RECURSIVE owned(id) AS ( \
     SELECT id FROM threads WHERE id = ?1 \
@@ -439,6 +439,7 @@ fn thread_row(row: &Row) -> rusqlite::Result<Thread> {
         created_at: Timestamp(row.get("created_at")?),
         updated_at: Timestamp(row.get("updated_at")?),
         title_locked: row.get("title_locked")?,
+        quiet: row.get("quiet")?,
     })
 }
 
@@ -464,6 +465,7 @@ fn put_thread(conn: &Connection, thread: &Thread) -> Result<()> {
             ":updated_at": thread.updated_at.0,
             ":title_locked": thread.title_locked,
             ":done": thread.mark == ThreadMark::Done,
+            ":quiet": thread.quiet,
         },
     )?;
     Ok(())

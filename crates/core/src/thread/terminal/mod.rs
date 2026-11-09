@@ -266,6 +266,9 @@ pub(crate) fn run(
         {
             workspace.run_mut(&id).size = Some((*cols, *rows));
         }
+        if number.is_none() && matches!(op, ThreadOp::Input { .. } | ThreadOp::Paste { .. }) {
+            super::notify::typed(workspace, &id, cx.background_executor().now());
+        }
         let result = if let Some(number) = number {
             super::extra::find(workspace, &id, number)
                 .ok_or_else(|| missing("terminal", &number))
@@ -300,6 +303,10 @@ pub(crate) struct Run {
     pub(crate) stopping: Option<StopReason>,
     /// Its exit is queued for the request loop, so the watcher reports each once.
     pub(crate) exiting: bool,
+    /// Lines for this thread's parent wait until this instant, so they do not land mid-keystroke.
+    pub(crate) held_until: Option<std::time::Instant>,
+    /// Lines queued for this thread, by child, to type into it once it is idle.
+    pub(crate) notes: std::collections::BTreeMap<ThreadId, String>,
 }
 
 impl Run {

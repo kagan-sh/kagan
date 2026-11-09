@@ -87,8 +87,12 @@ fn a_schema_one_database_gains_the_conversation_and_keeps_its_threads() {
         ],
     )
     .unwrap();
+    conn.execute(
+        "INSERT INTO threads (id, project_id, title, provider, status, visibility, pinned, latest_attention_at, created_at, updated_at) VALUES ('thr_1', 'prj_1', 't', 'claude-code', 'idle', 'visible', 0, 1, 1, 1)",
+        [],
+    )
+    .unwrap();
     let store = Store { conn };
-    store.put_thread(&thread("thr_1", 1)).unwrap();
     assert_eq!(store.schema_version().unwrap(), 1);
     drop(store);
     let store = Store::open(&path).unwrap();

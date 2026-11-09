@@ -1084,6 +1084,7 @@ fn project_on(fixture: &Fixture, title: Option<&str>, branch: ProjectBranch) -> 
         environment: EnvironmentSpec::ProjectOn { branch },
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     }))

@@ -254,6 +254,7 @@ fn switching_scope_selects_a_file_in_the_new_list(cx: &mut TestAppContext) {
         environment: EnvironmentSpec::ProjectDefault,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -366,6 +367,7 @@ fn a_delayed_list_for_the_old_scope_does_not_replace_the_branch_list(cx: &mut Te
         environment: EnvironmentSpec::ProjectDefault,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
@@ -449,6 +451,7 @@ fn open_review_after_a_scope_switch_opens_a_listed_file(cx: &mut TestAppContext)
         environment: EnvironmentSpec::ProjectDefault,
         visibility: None,
         parent_thread_id: None,
+        quiet: false,
         lifecycle_owner_thread_id: None,
         metadata: None,
     };
