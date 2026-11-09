@@ -4,6 +4,7 @@ use super::{
     ArchiveThread, Kagan, NewThread, RenameThread, RestoreThread, SaveDiagnostics, Shown,
     StartAgain, StopThread, TogglePinned, toast::Toast,
 };
+use crate::kagan::dispatch;
 use std::collections::BTreeSet;
 
 use crate::terminal::{TerminalView, Typed};
@@ -78,7 +79,7 @@ impl Kagan {
     pub(super) fn waited(&mut self, id: &ThreadId, window: &mut Window, cx: &mut Context<Self>) {
         if matches!(self.screen.current(), screen::Center::Work(Shown::Thread(view)) if view.read(cx).thread() == id)
         {
-            Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx).detach();
+            dispatch::logged(Op::Thread(ThreadOp::MarkRead { id: id.clone() }), cx);
         } else {
             self.refresh(window, cx);
         }
@@ -92,7 +93,7 @@ impl Kagan {
                 .thread(&id)
                 .is_some_and(|thread| thread.read(cx).record().mark == kg_domain::ThreadMark::Done)
             {
-                Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
+                dispatch::logged(Op::Thread(ThreadOp::MarkRead { id }), cx);
             }
         }
     }
@@ -111,7 +112,7 @@ impl Kagan {
         self.sidebar.update(cx, |sidebar, _| sidebar.choose(None));
         self.shown_changed(window, cx);
         self.note_shown(cx);
-        Workspace::dispatch(Op::Thread(ThreadOp::MarkRead { id }), cx).detach();
+        dispatch::logged(Op::Thread(ThreadOp::MarkRead { id }), cx);
         cx.notify();
     }
 

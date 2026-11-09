@@ -402,7 +402,7 @@ impl Render for TerminalView {
 }
 
 pub(super) fn dispatch(op: ThreadOp, cx: &mut App) {
-    Workspace::dispatch(Op::Thread(op), cx).detach();
+    crate::kagan::dispatch::logged(Op::Thread(op), cx);
 }
 
 fn cell_size(font: &Font, font_size: Pixels, window: &Window) -> gpui_kit::Size<Pixels> {

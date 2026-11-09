@@ -1,3 +1,4 @@
+use crate::kagan::dispatch;
 use gpui_kit::component::Selectable as _;
 use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -8,7 +9,6 @@ use gpui_kit::{
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled as _, Window, anchored,
     deferred, div, px,
 };
-use kg_core::Workspace;
 use kg_domain::{Op, SettingsOp, WindowOp};
 
 use super::{ActivateRow, EnterRow, Sidebar};
@@ -49,7 +49,7 @@ impl Sidebar {
 
 fn item(id: &'static str, label: &'static str, op: Op) -> PopupMenuItem {
     PopupMenuItem::element(move |_, _| menu_item(id, label)).on_click(move |_, _, cx| {
-        Workspace::dispatch(op.clone(), cx).detach();
+        dispatch::logged(op.clone(), cx);
     })
 }
 

@@ -12,6 +12,7 @@ pub(crate) mod changes;
 pub(crate) mod commands;
 mod controls;
 mod details;
+pub(crate) mod dispatch;
 #[cfg(target_os = "macos")]
 mod dock;
 pub(crate) mod header;

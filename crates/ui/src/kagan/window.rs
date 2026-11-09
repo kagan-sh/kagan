@@ -1,13 +1,13 @@
-#[cfg(target_os = "macos")]
 use super::dock;
 use super::{Kagan, MIN_HEIGHT, TITLE, attention, layout, notify, web_panel};
+#[cfg(target_os = "macos")]
+use crate::kagan::dispatch;
 
 use gpui_kit::component::TitleBar;
 use gpui_kit::{
     Action, AnyWindowHandle, App, AppContext as _, Context, Entity, Global, WeakEntity, Window,
     WindowBounds, WindowOptions, px, size,
 };
-use kg_core::Workspace;
 use kg_domain::{Op, ThreadId, WindowOp};
 use kg_plugins::HostUi;
 
@@ -109,7 +109,7 @@ pub(crate) fn with_front(
 }
 
 pub(super) fn dispatch(op: WindowOp, cx: &mut App) {
-    Workspace::dispatch(Op::Window(op), cx).detach();
+    dispatch::logged(Op::Window(op), cx);
 }
 
 pub(super) fn bind<A: Action>(cx: &mut App, op: WindowOp) {

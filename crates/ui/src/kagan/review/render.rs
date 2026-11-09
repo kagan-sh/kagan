@@ -1,3 +1,4 @@
+use crate::kagan::dispatch;
 use crate::theme::TypeScale as _;
 
 use gpui_kit::component::button::ButtonVariants as _;
@@ -8,7 +9,6 @@ use gpui_kit::{
     AnyElement, ClipboardItem, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     Role, StatefulInteractiveElement as _, Styled as _, Window, div,
 };
-use kg_core::Workspace;
 use kg_domain::Op;
 
 use super::{
@@ -59,7 +59,7 @@ impl Kagan {
             .on_action(cx.listener(|this, _: &PrevFile, _, cx| this.review_file(false, cx)))
             .on_action(cx.listener(|this, _: &ToggleViewed, _, cx| this.toggle_viewed(cx)))
             .on_action(cx.listener(|_, _: &ToggleWrap, _, cx| {
-                Workspace::dispatch(Op::Window(kg_domain::WindowOp::ToggleReviewWrap), cx).detach();
+                dispatch::logged(Op::Window(kg_domain::WindowOp::ToggleReviewWrap), cx);
             }))
             .on_action(cx.listener(|this, _: &SendReview, window, cx| {
                 if this.draft_focused(window, cx) {
