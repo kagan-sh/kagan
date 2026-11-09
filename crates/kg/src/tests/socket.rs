@@ -12,18 +12,21 @@ fn test_dir(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("kg-{label}-{}-{}", std::process::id(), test_seq()))
 }
 
-fn test_name(label: &str) -> Name<'static> {
+fn test_name(label: &str) -> (tempfile::TempDir, Name<'static>) {
+    let dir = tempfile::Builder::new()
+        .prefix(&format!("kg-{label}-"))
+        .tempdir()
+        .unwrap();
     #[cfg(unix)]
-    {
-        socket::name(&socket::location_in(&test_dir(label)).unwrap()).unwrap()
-    }
+    let name = socket::name(&socket::location_in(dir.path()).unwrap()).unwrap();
     #[cfg(windows)]
-    {
+    let name = {
         use interprocess::local_socket::{GenericNamespaced, ToNsName};
         std::ffi::OsString::from(format!("kg-{label}-{}-{}", std::process::id(), test_seq()))
             .to_ns_name::<GenericNamespaced>()
             .unwrap()
-    }
+    };
+    (dir, name)
 }
 
 #[cfg(unix)]
@@ -68,9 +71,8 @@ fn socket_dir_is_private_and_stale_socket_is_replaced() {
 #[test]
 fn a_bare_socket_name_replaces_a_stale_socket() {
     let _cwd = Cwd::stay();
-    let dir = test_dir("bare-sock");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::env::set_current_dir(&dir).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
     let _socket = set_env("KG_SOCKET", std::ffi::OsStr::new("kg.sock"));
     drop(std::os::unix::net::UnixListener::bind("kg.sock").unwrap());
     let location = socket::location().unwrap_or_else(|error| panic!("{error}"));
@@ -97,7 +99,7 @@ fn a_bare_socket_name_replaces_a_stale_socket() {
 
 #[test]
 fn socket_round_trip() {
-    let name = test_name("round-trip");
+    let (_dir, name) = test_name("round-trip");
     let listener = socket::bind(name.borrow()).unwrap().unwrap();
     socket::serve(listener, |op, _| match op {
         Op::Sidebar => Ok(OpResult::Done),
@@ -124,7 +126,7 @@ fn a_client_that_leaves_closes_its_requester_while_the_op_waits() {
 
     use interprocess::local_socket::traits::Stream as _;
 
-    let name = test_name("requester-gone");
+    let (_dir, name) = test_name("requester-gone");
     let listener = socket::bind(name.borrow()).unwrap().unwrap();
     let (started, waiting) = mpsc::channel();
     let (ended, gone) = mpsc::channel();
@@ -152,8 +154,8 @@ fn a_client_that_leaves_closes_its_requester_while_the_op_waits() {
 #[cfg(unix)]
 #[test]
 fn connect_or_start_uses_the_socket_that_is_already_listening() {
-    let dir = test_dir("live");
-    let location = socket::location_in(&dir).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let location = socket::location_in(dir.path()).unwrap();
     let name = socket::name(&location).unwrap();
     let listener = socket::bind(name.borrow()).unwrap().unwrap();
     socket::serve(listener, |_, _| Ok(OpResult::Done));
@@ -165,8 +167,8 @@ fn connect_or_start_uses_the_socket_that_is_already_listening() {
 #[cfg(unix)]
 #[test]
 fn a_socket_that_appears_is_accepted_and_a_missed_deadline_is_not() {
-    let dir = test_dir("late");
-    let location = socket::location_in(&dir).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let location = socket::location_in(dir.path()).unwrap();
     let Err(missed) = socket::wait_for_socket(&location, std::time::Duration::ZERO) else {
         panic!("a missing socket answered");
     };
@@ -188,8 +190,8 @@ fn a_socket_that_appears_is_accepted_and_a_missed_deadline_is_not() {
 #[cfg(unix)]
 #[test]
 fn no_start_refuses_to_spawn_an_app() {
-    let dir = test_dir("no-start");
-    let location = socket::location_in(&dir).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let location = socket::location_in(dir.path()).unwrap();
     let _socket = socket_var(&location);
     let _no_start = set_env("KG_NO_START", std::ffi::OsStr::new("1"));
     let started = std::time::Instant::now();
