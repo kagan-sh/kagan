@@ -32,30 +32,33 @@ impl Kagan {
             && self.setup_ready()
             && !self.start.starting
             && self.picker.read(cx).command(cx).is_ok();
+        // The column is as tall as the window, less its top offset, so the fields scroll inside it
+        // and the actions stay its last child, under the fields.
         v_flex()
             .id("start-form")
             .size_full()
+            .items_center()
             .child(
                 v_flex()
-                    .id("start-fields")
-                    .ui_container()
                     .w_full()
-                    .overflow_y_scroll()
-                    .flex_1()
+                    .max_w(rems(40.))
+                    .h_full()
                     .min_h_0()
+                    .pt_16()
+                    .px_4()
+                    .pb_4()
                     .child(
                         v_flex()
+                            .id("start-fields")
+                            .ui_container()
                             .w_full()
-                            .min_h_full()
-                            .flex_shrink_0()
-                            .items_center()
-                            .justify_center()
+                            .min_h_0()
+                            .overflow_y_scroll()
                             .child(
                                 v_flex()
-                                    .w_full()
-                                    .max_w(rems(40.))
+                                    .flex_shrink_0()
                                     .gap_4()
-                                    .p_4()
+                                    .pb_4()
                                     .child(
                                         v_flex()
                                             .gap_4()
@@ -73,22 +76,8 @@ impl Kagan {
                                     .children(kind.map(|kind| self.render_folder(kind, cx)))
                                     .children(self.setup_block(cx)),
                             ),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .w_full()
-                    .items_center()
-                    .border_t_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        v_flex()
-                            .w_full()
-                            .max_w(rems(40.))
-                            .px_4()
-                            .py_3()
-                            .child(self.start_actions(kind, ready, cx)),
-                    ),
+                    )
+                    .child(self.start_actions(kind, ready, cx)),
             )
             .into_any_element()
     }
@@ -136,6 +125,7 @@ impl Kagan {
                 .on_click(cx.listener(|this, _, window, cx| this.start(window, cx))),
         );
         v_flex()
+            .flex_shrink_0()
             .gap_4()
             .children(reason.map(|text| note("start-reason", text, muted, cx)))
             .child(

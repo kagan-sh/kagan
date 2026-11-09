@@ -9,7 +9,7 @@ use crate::kagan::Kagan;
 use crate::tests::kagan::{add_project, click, label, open, shows, wait_until};
 #[cfg(unix)]
 use crate::tests::kagan::{
-    focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of,
+    committed_repo, focused_of, role_of, selected_of, shown, thread_record, threads_in, value_of,
 };
 #[cfg(unix)]
 use gpui_kit::Entity;
@@ -311,6 +311,38 @@ fn a_known_agent_row_shows_its_version_and_a_shell_row_shows_its_command(cx: &mu
         label(cx, window, &format!("program-command-{shell}")),
         shell
     );
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn the_start_title_stays_put_when_the_custom_command_opens(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let _bin = fixture_programs(cx, data.path(), &["codex"]);
+    start_in_plain_folder(cx, window, data.path());
+    let (_, closed_y, _, _) = bounds(cx, window, "start-prompt").unwrap();
+    click(cx, window, "custom-command-toggle");
+    wait_until(cx, |cx| shows(cx, window, "custom-program"));
+    let (_, open_y, _, _) = bounds(cx, window, "start-prompt").unwrap();
+    assert_close(open_y, closed_y, "the title");
+}
+
+#[cfg(unix)]
+#[gpui_kit::test]
+fn start_sits_under_the_last_field_and_on_screen_in_a_worktree(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "worktree-hint"));
+    let (_, hint_y, _, hint_height) = bounds(cx, window, "worktree-hint").unwrap();
+    let (_, start_y, _, start_height) = bounds(cx, window, "start").unwrap();
+    let gap = start_y - (hint_y + hint_height);
+    assert!((0. ..=24.).contains(&gap), "gap {gap}");
+    assert!(
+        start_y + start_height <= 720.,
+        "start ends at {}",
+        start_y + start_height
+    );
+    assert!(shows(cx, window, "start"));
 }
 
 #[gpui_kit::test]
