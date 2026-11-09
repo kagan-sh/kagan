@@ -100,14 +100,13 @@ fn saved_or<T>(read: Result<Option<T>, OpError>, fallback: T) -> T {
 
 pub(super) fn save(key: &str, value: impl Serialize, cx: &mut App) {
     if let Ok(value) = serde_json::to_value(value) {
-        Workspace::dispatch(
+        super::dispatch::logged(
             Op::Preference(PreferenceOp::Set {
                 key: key.into(),
                 value,
             }),
             cx,
-        )
-        .detach();
+        );
     }
 }
 
