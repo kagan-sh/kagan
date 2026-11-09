@@ -225,3 +225,6 @@ fn parameters(values: Vec<Value>) -> Result<Vec<SqlValue>, HostError> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;
