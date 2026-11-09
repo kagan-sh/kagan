@@ -213,6 +213,7 @@ pub(crate) struct Integration {
     pub(crate) args: Vec<OsString>,
 }
 
+#[derive(Clone)]
 pub(super) enum Known {
     Claude,
     Codex,
@@ -429,16 +430,22 @@ fn joined(warning: Option<String>, text: String) -> String {
     }
 }
 
+const AGENTS: &[(&str, Known)] = &[
+    ("claude", Known::Claude),
+    ("codex", Known::Codex),
+    ("cursor-agent", Known::Cursor),
+    ("agent", Known::Cursor),
+    ("kimi", Known::Kimi),
+    ("opencode", Known::OpenCode),
+    ("pi", Known::Pi),
+];
+
 fn known(program: &Path) -> Option<Known> {
-    match program.file_stem()?.to_str()? {
-        "claude" => Some(Known::Claude),
-        "codex" => Some(Known::Codex),
-        "cursor-agent" | "agent" => Some(Known::Cursor),
-        "kimi" => Some(Known::Kimi),
-        "opencode" => Some(Known::OpenCode),
-        "pi" => Some(Known::Pi),
-        _ => None,
-    }
+    let stem = program.file_stem()?.to_str()?;
+    AGENTS
+        .iter()
+        .find(|(name, _)| *name == stem)
+        .map(|(_, kind)| kind.clone())
 }
 
 // Claude takes no flag before a subcommand, so kagan adds nothing to a line that names one. Codex
