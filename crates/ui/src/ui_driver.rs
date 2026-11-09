@@ -375,23 +375,39 @@ mod windows {
         if width <= 0 || height <= 0 {
             return Err(OpError::Failed("window has no size".into()));
         }
+        let bi_size = u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>())
+            .map_err(|_| OpError::Failed("bitmap header is too large".into()))?;
         // SAFETY: `hwnd` is a live window handle; the DC is released below.
         let hdc = unsafe { GetWindowDC(Some(hwnd)) };
         if hdc.is_invalid() {
             return Err(OpError::Failed("GetWindowDC failed".into()));
         }
-        // SAFETY: `hdc` was checked above and the memory DC is deleted below.
+        // SAFETY: `hdc` was checked above; each handle made here is released below.
         let mem_dc = unsafe { CreateCompatibleDC(Some(hdc)) };
-        // SAFETY: both handles are live and the bitmap is deleted below.
+        // SAFETY: `hdc` was checked above; the bitmap is released below.
         let bitmap = unsafe { CreateCompatibleBitmap(hdc, width, height) };
-        // SAFETY: both handles are live and the bitmap is compatible with the DC.
-        let _ = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) }; // Returns the old object, which is not needed.
+        if mem_dc.is_invalid() || bitmap.is_invalid() {
+            // SAFETY: each handle that exists was created above and is released once here.
+            unsafe {
+                if !bitmap.is_invalid() {
+                    let _ = DeleteObject(HGDIOBJ(bitmap.0));
+                }
+                if !mem_dc.is_invalid() {
+                    let _ = DeleteDC(mem_dc);
+                }
+                let _ = ReleaseDC(Some(hwnd), hdc);
+            }
+            return Err(OpError::Failed(
+                "could not create the capture buffers".into(),
+            ));
+        }
+        // SAFETY: both handles were checked above and the bitmap is compatible with the DC.
+        let old_bitmap = unsafe { SelectObject(mem_dc, HGDIOBJ(bitmap.0)) };
         let printed =
             // SAFETY: `hwnd` is live and `mem_dc` is a compatible memory DC.
             unsafe { PrintWindow(hwnd, mem_dc, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT)) };
         let header = BITMAPINFOHEADER {
-            biSize: u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>())
-                .map_err(|_| OpError::Failed("bitmap header is too large".into()))?,
+            biSize: bi_size,
             biWidth: width,
             biHeight: -height,
             biPlanes: 1,
@@ -417,8 +433,10 @@ mod windows {
                 windows::Win32::Graphics::Gdi::DIB_RGB_COLORS,
             )
         };
-        // SAFETY: each handle was created above and is released exactly once here.
+        // SAFETY: each handle was created above and is released exactly once here. Windows will
+        // not delete a bitmap that is still selected, so the old object goes back in first.
         unsafe {
+            let _ = SelectObject(mem_dc, old_bitmap);
             let _ = DeleteObject(HGDIOBJ(bitmap.0)); // Cleanup: nothing to undo if it fails.
             let _ = DeleteDC(mem_dc); // Cleanup: nothing to undo if it fails.
             let _ = ReleaseDC(Some(hwnd), hdc); // Cleanup: nothing to undo if it fails.
