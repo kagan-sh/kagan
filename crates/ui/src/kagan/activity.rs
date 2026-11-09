@@ -216,18 +216,25 @@ impl Kagan {
             count => format!("{count} agents working").into(),
         };
         let prefs = self.prefs.read(cx);
-        let plugins: Vec<StatusItem> = if prefs.loaded
-            && prefs.plugin_status
-            && f32::from(window.viewport_size().width) >= PLUGIN_WIDTH
-        {
+        let mut plugins: Vec<StatusItem> = if prefs.loaded && prefs.plugin_status {
             PluginStrip::global(cx)
-                .map(|strip| strip.read(cx).items().take(PLUGIN_ITEMS).cloned().collect())
+                .map(|strip| strip.read(cx).items().cloned().collect())
                 .unwrap_or_default()
         } else {
             Vec::new()
         };
+        let shown = if f32::from(window.viewport_size().width) >= PLUGIN_WIDTH {
+            PLUGIN_ITEMS
+        } else {
+            0
+        };
+        let hidden: Vec<String> = plugins
+            .split_off(shown.min(plugins.len()))
+            .iter()
+            .map(|item| format!("{}: {}", item.title, item.text))
+            .collect();
         let log = strip_log(self.activity.tail(), cx);
-        let summary_row = self.strip_summary(summary, plugins, working, cx);
+        let summary_row = self.strip_summary(summary, plugins, &hidden, working, cx);
         let height = px(if open {
             HEIGHT + f32::from(ROWS) * ROW
         } else {

@@ -107,3 +107,32 @@ fn command_title(plugin: &PluginId, command: &str, cx: &App) -> String {
         })
         .unwrap_or_else(|| command.to_owned())
 }
+
+// Plugin items the strip does not draw, as a count that names them, so a hidden action still shows.
+pub(super) fn more_part(hidden: &[String], cx: &App) -> Option<AnyElement> {
+    if hidden.is_empty() {
+        return None;
+    }
+    let names = hidden.join(", ");
+    let count = hidden.len();
+    let tip = names.clone();
+    Some(
+        div()
+            .id("activity-plugins-more")
+            .ui_observe_as(Facts {
+                role: Role::Status,
+                name: "More plugin status".into(),
+                value: Some(count.to_string().into()),
+                focus: None,
+                hint: Some(names.into()),
+                disabled: false,
+                selected: None,
+            })
+            .flex_none()
+            .type_small(cx)
+            .text_color(cx.theme().muted_foreground)
+            .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+            .child(format!("+{count}"))
+            .into_any_element(),
+    )
+}

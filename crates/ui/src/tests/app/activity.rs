@@ -841,3 +841,42 @@ fn a_long_install_source_keeps_the_log_toggle_inside_the_window(cx: &mut TestApp
     assert!(shows(cx, window, "activity-install"));
     assert_log_toggle_inside(cx, window);
 }
+
+#[gpui_kit::test]
+fn plugin_items_past_the_four_show_as_a_count(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        for number in 1..=5 {
+            install_status_plugin(
+                data,
+                &format!("dev.test.count{number}"),
+                &format!("Usage {number}"),
+                "x",
+            );
+        }
+    });
+    cx.simulate_window_resize(window, size(px(720.), px(800.)));
+    cx.run_until_parked();
+    wait_until(cx, |cx| {
+        shows(cx, window, "activity-plugin-dev.test.count4")
+    });
+    assert_eq!(
+        value_of(cx, window, "activity-plugins-more").as_deref(),
+        Some("1")
+    );
+}
+
+#[gpui_kit::test]
+fn a_narrow_window_says_how_many_plugin_items_it_hides(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open_with_plugins_then(cx, |data| {
+        install_status_plugin(data, "dev.test.narrow1", "Usage 1", "x");
+        install_status_plugin(data, "dev.test.narrow2", "Usage 2", "x");
+    });
+    cx.simulate_window_resize(window, size(px(528.), px(800.)));
+    cx.run_until_parked();
+    wait_until(cx, |cx| shows(cx, window, "activity-plugins-more"));
+    assert_eq!(
+        value_of(cx, window, "activity-plugins-more").as_deref(),
+        Some("2")
+    );
+    assert!(!shows(cx, window, "activity-plugin-dev.test.narrow1"));
+}

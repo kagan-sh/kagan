@@ -10,7 +10,7 @@ use kg_domain::UpdateState;
 use kg_plugins::StatusItem;
 
 use super::log;
-use super::plugins::plugin_item;
+use super::plugins::{more_part, plugin_item};
 use super::{DOT, HEIGHT, Kagan};
 
 const INSTALL_MAX: f32 = 240.;
@@ -26,6 +26,7 @@ impl Kagan {
         &mut self,
         summary: SharedString,
         plugins: Vec<StatusItem>,
+        hidden: &[String],
         working: usize,
         cx: &mut Context<Self>,
     ) -> impl IntoElement + use<> {
@@ -91,7 +92,8 @@ impl Kagan {
                         plugins
                             .into_iter()
                             .map(|(item, focus)| plugin_item(item, &focus, cx)),
-                    ),
+                    )
+                    .children(more_part(hidden, cx)),
             )
             .child(log::toggle(open, &toggle_focus, cx))
     }
