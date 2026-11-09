@@ -1,15 +1,15 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::Context;
-use kg_domain::{Event, EventKind, ThreadId, TurnOutcome};
+use kg_domain::{Event, EventKind, OpResult, ThreadId, TurnOutcome, WaitOutcome};
 
 use super::terminal::{self, Shown};
 use crate::Workspace;
 
-// The window's typing quiet (crates/ui/src/kagan/needs.rs QUIET). Core cannot read it from ui.
-const TYPING_QUIET: Duration = Duration::from_millis(1500);
 // A parent that just got a line may still be starting its turn; hold the next line this long.
 const SETTLE: Duration = Duration::from_secs(2);
+// Text the person has not sent yet may still be a draft; wait this long after its last key.
+const DRAFT_HOLD: Duration = Duration::from_secs(30);
 
 enum Report {
     Finished,
@@ -37,8 +37,26 @@ pub(crate) fn asked(workspace: &mut Workspace, id: &ThreadId, cx: &mut Context<W
     tell(workspace, id, "needs you", cx);
 }
 
-pub(crate) fn typed(workspace: &mut Workspace, id: &ThreadId, now: Instant) {
-    hold(workspace, id, now + TYPING_QUIET);
+pub(crate) fn typed(workspace: &mut Workspace, id: &ThreadId, text: &str, now: Instant) {
+    if text.ends_with('\r') {
+        workspace.run_mut(id).held_until = Some(now + crate::TYPING_QUIET);
+    } else {
+        hold(workspace, id, now + DRAFT_HOLD);
+    }
+}
+
+pub(crate) fn reports_end(result: &OpResult) -> bool {
+    match result {
+        OpResult::Wait(outcome) => *outcome != WaitOutcome::Timeout,
+        OpResult::Event(Some(event)) => report(&[&event.kind]).is_some(),
+        _ => false,
+    }
+}
+
+pub(crate) fn heard(workspace: &mut Workspace, parent: &ThreadId, child: &ThreadId) {
+    if let Some(run) = workspace.runs.get_mut(parent) {
+        run.notes.remove(child);
+    }
 }
 
 fn report(kinds: &[&EventKind]) -> Option<Report> {
@@ -116,11 +134,15 @@ fn tell(workspace: &mut Workspace, child: &ThreadId, what: &str, cx: &mut Contex
     let Some(parent) = parent else {
         return;
     };
-    let line = format!(
-        "[kagan] child {child} \"{}\" {what}. Read it: kg thread screen {child}",
-        record.title
-    );
-    workspace.run_mut(&parent).notes.insert(child.clone(), line);
+    let line = format!("[kagan] child {child} {what}. Read it: kg thread screen {child}");
+    let Some(run) = workspace
+        .runs
+        .get_mut(&parent)
+        .filter(|run| matches!(run.shown, Some(Shown::Running(_))))
+    else {
+        return;
+    };
+    run.notes.insert(child.clone(), line);
     schedule(workspace, &parent, cx);
 }
 
@@ -129,7 +151,7 @@ fn hold(workspace: &mut Workspace, id: &ThreadId, until: Instant) {
     run.held_until = Some(run.held_until.map_or(until, |held| held.max(until)));
 }
 
-/// Types the queued lines into the parent as one message once it is idle and the person is not typing.
+// Types the queued lines into the parent as one message once it is idle and the person is not typing.
 fn schedule(workspace: &mut Workspace, parent: &ThreadId, cx: &mut Context<Workspace>) {
     let Some(run) = workspace.runs.get_mut(parent) else {
         return;

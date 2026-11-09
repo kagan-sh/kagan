@@ -606,6 +606,42 @@ fn database_refuses_external_files_and_transaction_control_in_statements() {
         call("query", vec![json!("SELECT * FROM notes"), json!([])]).unwrap(),
         json!([])
     );
+    assert!(
+        call(
+            "transaction",
+            vec![json!([
+                { "sql": "INSERT INTO notes VALUES ('a')" },
+                { "sql": "ROLLBACK" },
+                { "sql": "INSERT INTO notes VALUES ('b')" }
+            ])]
+        )
+        .is_err()
+    );
+    assert_eq!(
+        call("query", vec![json!("SELECT * FROM notes"), json!([])]).unwrap(),
+        json!([])
+    );
+    assert!(
+        call(
+            "migrate",
+            vec![json!([
+                "CREATE TABLE notes (text TEXT NOT NULL)",
+                "CREATE TABLE y (z); COMMIT"
+            ])]
+        )
+        .is_err()
+    );
+    assert_eq!(
+        call(
+            "query",
+            vec![
+                json!("SELECT name FROM sqlite_master WHERE name = 'y'"),
+                json!([])
+            ]
+        )
+        .unwrap(),
+        json!([])
+    );
     call(
         "transaction",
         vec![json!([{ "sql": "INSERT INTO notes VALUES (?)", "params": ["kept"] }])],

@@ -4,7 +4,6 @@ use gpui_kit::{App, Entity, Window};
 pub(crate) use super::keys::{chord_for, is_chord};
 pub(crate) use super::layout::read as layout_read;
 pub(crate) use super::layout::tests as layout_read;
-pub(crate) use super::needs::QUIET;
 pub(crate) use super::replace::tests as replace_read;
 pub(crate) use super::review::tests as review_read;
 pub(crate) use super::screen::tests as screen_read;

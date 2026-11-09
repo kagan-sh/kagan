@@ -33,10 +33,21 @@ def is_test_file(path: pathlib.Path) -> bool:
     )
 
 
+def test_lines(path: pathlib.Path) -> tuple[int, list[str]]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if is_test_file(path):
+        return 1, lines
+    for index, line in enumerate(lines):
+        if line.strip() == "#[cfg(test)]":
+            return index + 1, lines[index:]
+    return 1, []
+
+
 for path in sorted(pathlib.Path("crates").rglob("*.rs")):
-    if "target" in path.parts or not is_test_file(path):
+    if "target" in path.parts:
         continue
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    first, lines = test_lines(path)
+    for number, line in enumerate(lines, first):
         for match in read.finditer(line):
             name = match.group(1)
             if name not in REVIEWED:

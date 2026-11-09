@@ -26,3 +26,7 @@ pub use workspace::approval::{Approval, Requester};
 pub use workspace::entity::{Environment, Project, Thread};
 
 pub use workspace::{Permit, PluginDispatch, PluginRequest, Workspace, WorkspaceEvent};
+
+// How long the person must stop typing before held questions show, and before a child's line
+// follows their Enter. A design value, not a number from the research.
+pub const TYPING_QUIET: std::time::Duration = std::time::Duration::from_millis(1500);

@@ -267,8 +267,13 @@ pub(crate) fn run(
         {
             workspace.run_mut(&id).size = Some((*cols, *rows));
         }
-        if number.is_none() && matches!(op, ThreadOp::Input { .. } | ThreadOp::Paste { .. }) {
-            super::notify::typed(workspace, &id, cx.background_executor().now());
+        if number.is_none() {
+            let now = cx.background_executor().now();
+            match &op {
+                ThreadOp::Input { text, .. } => super::notify::typed(workspace, &id, text, now),
+                ThreadOp::Paste { .. } => super::notify::typed(workspace, &id, "", now),
+                _ => {}
+            }
         }
         let result = if let Some(number) = number {
             super::extra::find(workspace, &id, number)

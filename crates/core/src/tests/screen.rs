@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use gpui_kit::TestAppContext;
 use kg_domain::*;
+use kg_store::{ScreenRow, Store};
 
 use crate::Workspace;
 
@@ -535,4 +538,101 @@ async fn an_unsafe_screen_is_a_limit_after_reopening(cx: &mut TestAppContext) {
             .is_none()
     );
     drop(fixture);
+}
+
+fn saved_screen(dir: &Path, id: &ThreadId) -> Option<ScreenRow> {
+    Store::open(dir.join("kagan.sqlite3"))
+        .ok()?
+        .screens()
+        .ok()?
+        .into_iter()
+        .find(|row| &row.thread_id == id)
+}
+
+#[gpui_kit::test]
+async fn a_sweep_deletes_saved_screens_only_when_it_releases_one(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let line = if cfg!(windows) {
+        "cmd.exe /c echo KEEP-MARKER"
+    } else {
+        "/bin/sh -c \"printf 'KEEP-MARKER\\n'\""
+    };
+    let OpResult::Thread(started) = op(fixture.run(line), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    wait_saved(fixture.dir.path(), &started.id, cx);
+    let row = saved_screen(fixture.dir.path(), &started.id).expect("the saved screen");
+    op(
+        Op::Thread(ThreadOp::Archive {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(12));
+    cx.run_until_parked();
+    for _ in 0..400 {
+        if saved_screen(fixture.dir.path(), &started.id).is_none() {
+            break;
+        }
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(saved_screen(fixture.dir.path(), &started.id).is_none());
+    Store::open(fixture.dir.path().join("kagan.sqlite3"))
+        .unwrap()
+        .put_screen(&row)
+        .unwrap();
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(3));
+    cx.run_until_parked();
+    assert!(saved_screen(fixture.dir.path(), &started.id).is_some());
+}
+
+#[gpui_kit::test]
+async fn starting_a_thread_does_not_delete_an_old_saved_screen(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let line = if cfg!(windows) {
+        "cmd.exe /c echo KEEP-MARKER"
+    } else {
+        "/bin/sh -c \"printf 'KEEP-MARKER\\n'\""
+    };
+    let OpResult::Thread(started) = op(fixture.run(line), cx).await.unwrap() else {
+        panic!("thread")
+    };
+    wait_for_status(&started.id, ThreadStatus::Idle, cx).await;
+    wait_saved(fixture.dir.path(), &started.id, cx);
+    let row = saved_screen(fixture.dir.path(), &started.id).expect("the saved screen");
+    op(
+        Op::Thread(ThreadOp::Archive {
+            id: started.id.clone(),
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(12));
+    cx.run_until_parked();
+    for _ in 0..400 {
+        if saved_screen(fixture.dir.path(), &started.id).is_none() {
+            break;
+        }
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(50));
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    Store::open(fixture.dir.path().join("kagan.sqlite3"))
+        .unwrap()
+        .put_screen(&row)
+        .unwrap();
+    op(fixture.run(line), cx).await.unwrap();
+    cx.run_until_parked();
+    assert!(saved_screen(fixture.dir.path(), &started.id).is_some());
 }

@@ -24,7 +24,7 @@ use snapshot::{Snapshot, ends, snapshot_key};
 pub(super) const PATCH_LIMIT: usize = 1024 * 1024;
 pub(super) const FILE_LIMIT: u64 = 1024 * 1024;
 
-/// Scopes kept at once. Past this the cache starts over, since git can rebuild every diff.
+// Scopes kept at once. Past this the cache starts over, since git can rebuild every diff.
 const MAX_ENTRIES: usize = 64;
 
 struct Entry {

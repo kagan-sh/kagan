@@ -12,11 +12,62 @@ use crate::{PluginRequest, Workspace};
 
 use crate::dispatch::forward;
 
-use super::thread;
+use super::{notify, thread};
 
 const ARM: Duration = Duration::from_secs(2);
 
 pub(crate) fn wait_event(
+    workspace: &Entity<Workspace>,
+    id: ThreadId,
+    kind: &str,
+    after_seq: Option<u64>,
+    timeout_ms: u64,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let child = id.clone();
+    let task = wait_event_in(workspace, id, kind, after_seq, timeout_ms, cx);
+    told_by_wait(workspace, child, task, cx)
+}
+
+pub(crate) fn wait(
+    workspace: &Entity<Workspace>,
+    id: ThreadId,
+    timeout_ms: u64,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let child = id.clone();
+    let task = wait_in(workspace, id, timeout_ms, cx);
+    told_by_wait(workspace, child, task, cx)
+}
+
+// A wait that returns the child's end already told the parent, so its queued line goes.
+fn told_by_wait(
+    workspace: &Entity<Workspace>,
+    child: ThreadId,
+    task: Task<Result<OpResult>>,
+    cx: &mut App,
+) -> Task<Result<OpResult>> {
+    let parent = workspace
+        .read(cx)
+        .threads
+        .get(&child)
+        .and_then(|thread| thread.read(cx).record.parent_thread_id.clone());
+    let this = workspace.downgrade();
+    cx.spawn(async move |cx| {
+        let result = task.await;
+        if let Some(parent) = parent
+            && let Ok(outcome) = &result
+            && notify::reports_end(outcome)
+        {
+            _ = this.update(cx, |workspace, _| {
+                notify::heard(workspace, &parent, &child);
+            });
+        }
+        result
+    })
+}
+
+fn wait_event_in(
     workspace: &Entity<Workspace>,
     id: ThreadId,
     kind: &str,
@@ -88,7 +139,7 @@ pub(crate) fn wait_event(
     })
 }
 
-pub(crate) fn wait(
+fn wait_in(
     workspace: &Entity<Workspace>,
     id: ThreadId,
     timeout_ms: u64,

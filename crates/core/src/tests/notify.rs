@@ -6,8 +6,8 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, Reap, ask_options, busy_of, events, op, script, sent_text, started, wait_for_status,
-    wait_for_waiting, wait_until_busy,
+    Fixture, Reap, ask_options, begin_wait, busy_of, events, finish_wait, op, outcome, script,
+    sent_text, started, wait_for_status, wait_for_waiting, wait_until_busy,
 };
 
 const SLEEP: &str = r#"/bin/sh -c "sleep 30""#;
@@ -27,10 +27,21 @@ async fn child(
     quiet: bool,
     cx: &mut TestAppContext,
 ) -> (ThreadId, Reap) {
+    titled_child(fixture, program, parent, None, quiet, cx).await
+}
+
+async fn titled_child(
+    fixture: &Fixture,
+    program: &str,
+    parent: &ThreadId,
+    title: Option<&str>,
+    quiet: bool,
+    cx: &mut TestAppContext,
+) -> (ThreadId, Reap) {
     let request = Op::Thread(ThreadOp::Run(Run {
         project_id: fixture.project.clone(),
         program: program.into(),
-        title: None,
+        title: title.map(str::to_owned),
         environment: EnvironmentSpec::ProjectDefault,
         visibility: None,
         parent_thread_id: Some(parent.clone()),
@@ -194,4 +205,169 @@ async fn a_question_from_a_child_is_typed_as_needs_you(cx: &mut TestAppContext) 
     assert_eq!(sent.len(), 1, "{sent:?}");
     assert!(sent[0].contains("needs you"), "{}", sent[0]);
     assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}
+
+fn parent_until(dir: &std::path::Path, flag: &std::path::Path) -> String {
+    script(
+        dir,
+        "parent",
+        &format!(
+            "printf '\\033]0;\\342\\240\\213 working\\007'\nwhile [ ! -f '{}' ]; do sleep 0.1; done\nprintf '\\033]0;ready\\007'\nsleep 30",
+            flag.display()
+        ),
+    )
+}
+
+async fn typed(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
+    op(
+        Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text: text.into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+}
+
+fn wait_until_idle(fixture: &Fixture, id: &ThreadId, cx: &mut TestAppContext) {
+    for _ in 0..400 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        if !busy_of(fixture, id, cx) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("the parent did not end its turn");
+}
+
+#[gpui_kit::test]
+async fn a_line_waits_while_the_person_has_an_unsent_draft(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    typed(&parent, "half", cx).await;
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    cx.executor().advance_clock(Duration::from_secs(3));
+    cx.run_until_parked();
+    assert!(sent_text(&events(&parent, cx).await).is_empty());
+    cx.executor().advance_clock(Duration::from_secs(30));
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}
+
+#[gpui_kit::test]
+async fn enter_ends_the_wait_for_a_draft(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    typed(&parent, "half", cx).await;
+    cx.executor().advance_clock(Duration::from_secs(3));
+    typed(&parent, "\r", cx).await;
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    cx.executor().advance_clock(Duration::from_secs(2));
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}
+
+#[gpui_kit::test]
+async fn a_wait_on_the_child_drops_the_line_it_already_told_the_parent(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_until_busy(&fixture, &child_id, cx);
+    let waited = begin_wait(&child_id, 20_000, cx);
+    finish_wait(&waited, cx);
+    assert_eq!(outcome(&waited.await.unwrap()), WaitOutcome::Waiting);
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    let sent = sent_to(&parent, cx).await;
+    assert!(sent.is_empty(), "{sent:?}");
+}
+
+#[gpui_kit::test]
+async fn a_wait_for_the_child_exit_drops_the_line_it_already_told_the_parent(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let (child_id, _child_run) =
+        child(&fixture, r#"/bin/sh -c "exit 0""#, &parent, false, cx).await;
+    wait_for_status(&child_id, ThreadStatus::Idle, cx).await;
+    op(
+        Op::Thread(ThreadOp::WaitEvent {
+            id: child_id.clone(),
+            kind: "exited".into(),
+            after_seq: None,
+            timeout_ms: 1_000,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    let sent = sent_to(&parent, cx).await;
+    assert!(sent.is_empty(), "{sent:?}");
+}
+
+#[gpui_kit::test]
+async fn a_child_title_stays_out_of_the_parent_line(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (parent, _parent_run) = started(&fixture, SLEEP, cx).await;
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = titled_child(
+        &fixture,
+        &program,
+        &parent,
+        Some("x\" ; $(echo hi) ; \""),
+        false,
+        cx,
+    )
+    .await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(!sent[0].contains("echo hi"), "{}", sent[0]);
+    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}
+
+#[gpui_kit::test]
+async fn a_child_end_under_a_parent_with_no_run_adds_no_run(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let (parent, _parent_run) = started(&fixture, SLEEP, cx).await;
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    fixture.workspace.update(cx, |workspace, _| {
+        workspace.runs.remove(&parent);
+    });
+    wait_for_waiting(&child_id, 1, cx).await;
+    assert!(
+        !fixture
+            .workspace
+            .read_with(cx, |workspace, _| workspace.runs.contains_key(&parent))
+    );
 }
