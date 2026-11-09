@@ -81,7 +81,7 @@ Each rule came from a real failure. A rule with a script names it; the others ar
 
 - A `fix:` commit carries a regression test that fails on the code before the fix. Check: review.
 - A test must be able to fail when its behaviour breaks. Delete a test that repeats the implementation or cannot fail. Check: review, with the surviving mutants from `scripts/mutants-diff.sh` as evidence.
-- A test reads a `KG_*` or `KAGAN_*` variable only when it sets that variable itself: a child process it starts, or a value it saves and restores. Check: `scripts/test-env-check.sh`.
+- A test reads a `KG_*` or `KAGAN_*` variable only when it sets that variable itself: a child process it starts, or a value it saves and restores. Check: `scripts/test-env-check.sh` finds a direct `var`/`var_os` read in test code. A read through clap `env =` or a product helper (`socket::location`, `data_dir_from_env`) is checked in review.
 - A test matches an error by its typed kind, never by another crate's message text. Check: review.
 
 ## Decisions
