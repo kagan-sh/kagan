@@ -1212,13 +1212,15 @@ fn the_thread_menu_opens_without_showing_its_row(cx: &mut TestAppContext) {
 fn a_nested_row_keeps_its_actions_inside_the_narrow_sidebar(cx: &mut TestAppContext) {
     let (_kagan, window, _data) = open(cx);
     set_preference(cx, "main.left-width", json!(200));
-    let parent = run_shell(cx);
-    let child = run_child(cx, &parent);
-    let grandchild = run_child(cx, &child);
+    let mut chain = vec![run_shell(cx)];
+    for _ in 0..5 {
+        let child = run_child(cx, chain.last().expect("parent"));
+        chain.push(child);
+    }
     cx.run_until_parked();
     let (sidebar_x, sidebar_w) = span(cx, window, "sidebar-pane").expect("sidebar-pane");
     let right = sidebar_x + sidebar_w;
-    for thread in [&child, &grandchild] {
+    for thread in chain.iter().skip(1) {
         hover_row(cx, window, &format!("thread-{thread}"));
         cx.run_until_parked();
         for control in [

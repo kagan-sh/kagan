@@ -90,9 +90,16 @@ pub(super) fn row_actions<
     .on_click(cx.listener(move |_, _, _, cx| cx.emit(activate_event(&click))))
 }
 
+// At the narrowest sidebar a row is 175 points wide. Past three levels the indent alone would push
+// the row's actions off the edge, so deeper threads share the third level's indent.
+const INDENT_STEP: f32 = 24.;
+const MAX_INDENT_LEVELS: u16 = 3;
+
 pub(super) fn thread_indent(kind: &Kind) -> Option<f32> {
     match kind {
-        Kind::Thread { depth, .. } if *depth > 0 => Some(24. * f32::from(*depth)),
+        Kind::Thread { depth, .. } if *depth > 0 => {
+            Some(INDENT_STEP * f32::from((*depth).min(MAX_INDENT_LEVELS)))
+        }
         _ => None,
     }
 }
