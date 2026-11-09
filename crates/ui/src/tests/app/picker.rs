@@ -894,6 +894,19 @@ fn the_custom_command_label_starts_on_the_program_names(cx: &mut TestAppContext)
     assert_close(label_x, name_x, "the custom command label");
 }
 
+#[cfg(unix)]
+#[gpui_kit::test]
+fn reopening_the_screen_closes_the_custom_command(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let _bin = fixture_programs(cx, data.path(), &["codex"]);
+    let project = start_in_plain_folder(cx, window, data.path());
+    click(cx, window, "custom-command-toggle");
+    wait_until(cx, |cx| shows(cx, window, "custom-program"));
+    click(cx, window, &format!("project-new-{}", project.0));
+    wait_until(cx, |cx| shows(cx, window, "program-search"));
+    assert!(!shows(cx, window, "custom-program"));
+}
+
 /// Whether the row sits fully inside the program list's visible rows.
 #[cfg(unix)]
 fn in_program_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {
