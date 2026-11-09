@@ -88,16 +88,11 @@ fn paint_document(syntax: &mut Syntax, side: DiffSide, language: &str, source: &
 
 fn paint_hunks(syntax: &mut Syntax, side: DiffSide, language: &str, hunks: &[DiffHunk]) {
     for hunk in hunks {
-        let lines: Vec<&DiffLine> = hunk
-            .lines
-            .iter()
-            .filter(|line| keeps(line.kind, side))
-            .collect();
-        paint_lines(syntax, side, language, &lines);
+        paint_lines(syntax, side, language, &hunk.lines);
     }
 }
 
-fn paint_lines(syntax: &mut Syntax, side: DiffSide, language: &str, lines: &[&DiffLine]) {
+fn paint_lines(syntax: &mut Syntax, side: DiffSide, language: &str, lines: &[DiffLine]) {
     let mut source = String::new();
     let mut numbered = Vec::new();
     for line in lines {
@@ -117,13 +112,6 @@ fn paint_lines(syntax: &mut Syntax, side: DiffSide, language: &str, lines: &[&Di
         return;
     }
     place(syntax, side, &numbered, &highlight(language, &source));
-}
-
-fn keeps(kind: DiffLineKind, side: DiffSide) -> bool {
-    !matches!(
-        (side, kind),
-        (DiffSide::Old, DiffLineKind::Add) | (DiffSide::New, DiffLineKind::Remove)
-    )
 }
 
 fn line_number(line: &DiffLine, side: DiffSide) -> Option<u32> {
@@ -208,9 +196,6 @@ fn place(
 ) {
     for (capture, name) in captures {
         for (number, line) in lines {
-            if line.end <= capture.start || line.start >= capture.end {
-                continue;
-            }
             let start = capture.start.max(line.start);
             let end = capture.end.min(line.end);
             if start >= end {
@@ -464,18 +449,11 @@ fn with_background(
         points.push(range.start);
         points.push(range.end);
     }
-    points.retain(|point| *point <= text.len());
     points.sort_unstable();
     points.dedup();
     let mut runs = Vec::new();
     for pair in points.windows(2) {
         let range = pair[0]..pair[1];
-        if range.is_empty()
-            || !text.is_char_boundary(range.start)
-            || !text.is_char_boundary(range.end)
-        {
-            continue;
-        }
         let mut style = syntax
             .iter()
             .find(|(span, _)| span.start <= range.start && range.end <= span.end)
