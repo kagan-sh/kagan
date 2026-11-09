@@ -195,3 +195,82 @@ async fn a_question_from_a_child_is_typed_as_needs_you(cx: &mut TestAppContext) 
     assert!(sent[0].contains("needs you"), "{}", sent[0]);
     assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
 }
+
+fn parent_until(dir: &std::path::Path, flag: &std::path::Path) -> String {
+    script(
+        dir,
+        "parent",
+        &format!(
+            "printf '\\033]0;\\342\\240\\213 working\\007'\nwhile [ ! -f '{}' ]; do sleep 0.1; done\nprintf '\\033]0;ready\\007'\nsleep 30",
+            flag.display()
+        ),
+    )
+}
+
+async fn typed(id: &ThreadId, text: &str, cx: &mut TestAppContext) {
+    op(
+        Op::Thread(ThreadOp::Input {
+            id: id.clone(),
+            text: text.into(),
+            terminal: None,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+}
+
+fn wait_until_idle(fixture: &Fixture, id: &ThreadId, cx: &mut TestAppContext) {
+    for _ in 0..400 {
+        cx.executor().advance_clock(Duration::from_millis(50));
+        cx.run_until_parked();
+        if !busy_of(fixture, id, cx) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("the parent did not end its turn");
+}
+
+#[gpui_kit::test]
+async fn a_line_waits_while_the_person_has_an_unsent_draft(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    typed(&parent, "half", cx).await;
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    cx.executor().advance_clock(Duration::from_secs(3));
+    cx.run_until_parked();
+    assert!(sent_text(&events(&parent, cx).await).is_empty());
+    cx.executor().advance_clock(Duration::from_secs(30));
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}
+
+#[gpui_kit::test]
+async fn enter_ends_the_wait_for_a_draft(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_for_waiting(&child_id, 1, cx).await;
+    typed(&parent, "half", cx).await;
+    cx.executor().advance_clock(Duration::from_secs(3));
+    typed(&parent, "\r", cx).await;
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    cx.executor().advance_clock(Duration::from_secs(2));
+    let sent = sent_to(&parent, cx).await;
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}

@@ -10,6 +10,8 @@ use crate::Workspace;
 const TYPING_QUIET: Duration = Duration::from_millis(1500);
 // A parent that just got a line may still be starting its turn; hold the next line this long.
 const SETTLE: Duration = Duration::from_secs(2);
+// Text the person has not sent yet may still be a draft; wait this long after its last key.
+const DRAFT_HOLD: Duration = Duration::from_secs(30);
 
 enum Report {
     Finished,
@@ -37,8 +39,12 @@ pub(crate) fn asked(workspace: &mut Workspace, id: &ThreadId, cx: &mut Context<W
     tell(workspace, id, "needs you", cx);
 }
 
-pub(crate) fn typed(workspace: &mut Workspace, id: &ThreadId, now: Instant) {
-    hold(workspace, id, now + TYPING_QUIET);
+pub(crate) fn typed(workspace: &mut Workspace, id: &ThreadId, text: &str, now: Instant) {
+    if text.ends_with('\r') {
+        workspace.run_mut(id).held_until = Some(now + TYPING_QUIET);
+    } else {
+        hold(workspace, id, now + DRAFT_HOLD);
+    }
 }
 
 fn report(kinds: &[&EventKind]) -> Option<Report> {
