@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 use kg_domain::ProgramSource;
 
-use super::list::{ProgramRow, status_line};
+use super::list::{ProgramRow, Version, version_of};
 use super::{CONTEXT, Close, LIST_ROWS, Mode, Picker, Programs, Rows};
 use super::{CloseCustomCommand, RetryPrograms, ToggleCustomCommand};
 use crate::kagan::controls::{control, dispatch, note};
@@ -27,7 +27,10 @@ impl RenderOnce for ProgramRow {
         // A known agent's command is implied by its name, so only a shell or a recent program shows it.
         let command = (!matches!(self.program.source, ProgramSource::Known))
             .then(|| self.program.command.clone());
-        let (version, full_version) = status_line(&self.program);
+        let Version {
+            shown: version,
+            full: full_version,
+        } = version_of(&self.program);
         // The selected row says so in words too, not only by its fill.
         let name = if self.selected {
             format!("{}, selected", self.program.label)
@@ -88,7 +91,6 @@ impl RenderOnce for ProgramRow {
                                             .id(format!("program-version-{}", self.program.command))
                                             .flex_shrink_0()
                                             .type_caption(cx)
-                                            .font_family(cx.theme().mono_font_family.clone())
                                             .text_color(muted)
                                             .whitespace_nowrap()
                                             .when_some(full_version, |tag, full| {

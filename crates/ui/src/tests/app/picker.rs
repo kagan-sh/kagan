@@ -861,6 +861,28 @@ fn an_offscreen_default_program_is_visible_when_the_picker_opens(cx: &mut TestAp
     assert_eq!(selected_of(cx, window, &row), Some(true));
 }
 
+#[cfg(unix)]
+#[gpui_kit::test]
+fn a_version_shows_its_number_without_its_build_suffix_or_full_stop(cx: &mut TestAppContext) {
+    let (_kagan, window, data) = open(cx);
+    let bin = fixture_programs(cx, data.path(), &["codex", "copilot"]);
+    std::fs::write(
+        bin.join("codex"),
+        "#!/bin/sh\necho \"codex-cli 0.16.0-beta+build.7\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        bin.join("copilot"),
+        "#!/bin/sh\necho \"GitHub Copilot 1.0.10.\"\n",
+    )
+    .unwrap();
+    start_in_plain_folder(cx, window, data.path());
+    wait_until(cx, |cx| {
+        label(cx, window, "program-version-copilot") == "1.0.10"
+    });
+    assert_eq!(label(cx, window, "program-version-codex"), "0.16.0");
+}
+
 /// Whether the row sits fully inside the program list's visible rows.
 #[cfg(unix)]
 fn in_program_list(cx: &mut TestAppContext, window: AnyWindowHandle, row: &str) -> bool {
