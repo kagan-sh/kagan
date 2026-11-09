@@ -6,8 +6,8 @@ use kg_domain::*;
 use crate::Workspace;
 
 use super::{
-    Fixture, Reap, ask_options, busy_of, events, op, script, sent_text, started, wait_for_status,
-    wait_for_waiting, wait_until_busy,
+    Fixture, Reap, ask_options, begin_wait, busy_of, events, finish_wait, op, outcome, script,
+    sent_text, started, wait_for_status, wait_for_waiting, wait_until_busy,
 };
 
 const SLEEP: &str = r#"/bin/sh -c "sleep 30""#;
@@ -273,4 +273,52 @@ async fn enter_ends_the_wait_for_a_draft(cx: &mut TestAppContext) {
     let sent = sent_to(&parent, cx).await;
     assert_eq!(sent.len(), 1, "{sent:?}");
     assert!(sent[0].contains(&child_id.to_string()), "{}", sent[0]);
+}
+
+#[gpui_kit::test]
+async fn a_wait_on_the_child_drops_the_line_it_already_told_the_parent(cx: &mut TestAppContext) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let program = finishing(fixture.dir.path(), "finish");
+    let (child_id, _child_run) = child(&fixture, &program, &parent, false, cx).await;
+    wait_until_busy(&fixture, &child_id, cx);
+    let waited = begin_wait(&child_id, 20_000, cx);
+    finish_wait(&waited, cx);
+    assert_eq!(outcome(&waited.await.unwrap()), WaitOutcome::Waiting);
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    let sent = sent_to(&parent, cx).await;
+    assert!(sent.is_empty(), "{sent:?}");
+}
+
+#[gpui_kit::test]
+async fn a_wait_for_the_child_exit_drops_the_line_it_already_told_the_parent(
+    cx: &mut TestAppContext,
+) {
+    let fixture = Fixture::new(cx).await;
+    let flag = fixture.dir.path().join("parent-done");
+    let (parent, _parent_run) =
+        started(&fixture, &parent_until(fixture.dir.path(), &flag), cx).await;
+    wait_until_busy(&fixture, &parent, cx);
+    let (child_id, _child_run) =
+        child(&fixture, r#"/bin/sh -c "exit 0""#, &parent, false, cx).await;
+    wait_for_status(&child_id, ThreadStatus::Idle, cx).await;
+    op(
+        Op::Thread(ThreadOp::WaitEvent {
+            id: child_id.clone(),
+            kind: "exited".into(),
+            after_seq: None,
+            timeout_ms: 1_000,
+        }),
+        cx,
+    )
+    .await
+    .unwrap();
+    std::fs::write(&flag, "").unwrap();
+    wait_until_idle(&fixture, &parent, cx);
+    let sent = sent_to(&parent, cx).await;
+    assert!(sent.is_empty(), "{sent:?}");
 }

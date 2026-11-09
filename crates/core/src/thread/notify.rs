@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::Context;
-use kg_domain::{Event, EventKind, ThreadId, TurnOutcome};
+use kg_domain::{Event, EventKind, OpResult, ThreadId, TurnOutcome, WaitOutcome};
 
 use super::terminal::{self, Shown};
 use crate::Workspace;
@@ -44,6 +44,20 @@ pub(crate) fn typed(workspace: &mut Workspace, id: &ThreadId, text: &str, now: I
         workspace.run_mut(id).held_until = Some(now + TYPING_QUIET);
     } else {
         hold(workspace, id, now + DRAFT_HOLD);
+    }
+}
+
+pub(crate) fn reports_end(result: &OpResult) -> bool {
+    match result {
+        OpResult::Wait(outcome) => *outcome != WaitOutcome::Timeout,
+        OpResult::Event(Some(event)) => report(&[&event.kind]).is_some(),
+        _ => false,
+    }
+}
+
+pub(crate) fn heard(workspace: &mut Workspace, parent: &ThreadId, child: &ThreadId) {
+    if let Some(run) = workspace.runs.get_mut(parent) {
+        run.notes.remove(child);
     }
 }
 
