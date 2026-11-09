@@ -50,8 +50,9 @@ fn a_delayed_screen_cannot_replace_a_newer_run() {
     );
     let saved = store.screens().unwrap();
     assert_eq!(saved.len(), 1);
-    assert_eq!(saved[0].replay, b"new");
+    assert!(saved[0].replay.is_empty());
     assert_eq!(saved[0].started_seq, second[0].seq);
+    assert_eq!(store.screen_replay(&id).unwrap(), Some(b"new".to_vec()));
 }
 
 #[test]

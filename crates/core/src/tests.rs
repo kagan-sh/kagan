@@ -1533,8 +1533,11 @@ fn wait_saved(dir: &Path, id: &ThreadId, cx: &mut TestAppContext) {
         if let Ok(store) = kg_store::Store::open(dir.join("kagan.sqlite3"))
             && store.screens().is_ok_and(|rows| {
                 rows.iter()
-                    .any(|row| &row.thread_id == id && row.screen_kept && !row.replay.is_empty())
+                    .any(|row| &row.thread_id == id && row.screen_kept)
             })
+            && store
+                .screen_replay(id)
+                .is_ok_and(|replay| replay.is_some_and(|replay| !replay.is_empty()))
         {
             return;
         }

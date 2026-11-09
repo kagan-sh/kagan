@@ -3,7 +3,7 @@ use kg_domain::{EnvironmentId, ProjectId, ThreadId};
 
 use crate::host::database::Result;
 use crate::workspace::clock::{closed, time};
-use crate::workspace::screens::remember;
+use crate::workspace::screens::{remember, restore_unshown};
 use crate::{Environment, Project, Thread};
 
 use super::{Workspace, WorkspaceEvent};
@@ -68,67 +68,70 @@ impl Workspace {
                 ))
             })
             .await?;
-        this.update(cx, |workspace, cx| {
-            workspace.sections = sections;
-            workspace
-                .projects
-                .retain(|id, _| projects.iter().any(|record| &record.id == id));
-            workspace
-                .environments
-                .retain(|id, _| environments.iter().any(|record| &record.id == id));
-            for record in projects {
-                if let Some(entity) = workspace.projects.get(&record.id) {
-                    entity.update(cx, |project, cx| {
-                        project.record = record;
-                        cx.notify();
-                    });
-                } else {
-                    workspace
-                        .projects
-                        .insert(record.id.clone(), cx.new(|_| Project { record }));
+        let unshown = this
+            .update(cx, |workspace, cx| {
+                workspace.sections = sections;
+                workspace
+                    .projects
+                    .retain(|id, _| projects.iter().any(|record| &record.id == id));
+                workspace
+                    .environments
+                    .retain(|id, _| environments.iter().any(|record| &record.id == id));
+                for record in projects {
+                    if let Some(entity) = workspace.projects.get(&record.id) {
+                        entity.update(cx, |project, cx| {
+                            project.record = record;
+                            cx.notify();
+                        });
+                    } else {
+                        workspace
+                            .projects
+                            .insert(record.id.clone(), cx.new(|_| Project { record }));
+                    }
                 }
-            }
-            for record in environments {
-                if let Some(entity) = workspace.environments.get(&record.id) {
-                    entity.update(cx, |environment, cx| {
-                        environment.record = record;
-                        cx.notify();
-                    });
-                } else {
-                    workspace
-                        .environments
-                        .insert(record.id.clone(), cx.new(|_| Environment { record }));
+                for record in environments {
+                    if let Some(entity) = workspace.environments.get(&record.id) {
+                        entity.update(cx, |environment, cx| {
+                            environment.record = record;
+                            cx.notify();
+                        });
+                    } else {
+                        workspace
+                            .environments
+                            .insert(record.id.clone(), cx.new(|_| Environment { record }));
+                    }
                 }
-            }
-            workspace
-                .threads
-                .retain(|id, _| threads.iter().any(|record| &record.id == id));
-            for record in threads {
-                if let Some(entity) = workspace.threads.get(&record.id) {
-                    entity.update(cx, |thread, cx| {
-                        thread.record = record;
-                        cx.notify();
-                    });
-                } else {
-                    workspace
-                        .threads
-                        .insert(record.id.clone(), cx.new(|_| Thread::new(record)));
+                workspace
+                    .threads
+                    .retain(|id, _| threads.iter().any(|record| &record.id == id));
+                for record in threads {
+                    if let Some(entity) = workspace.threads.get(&record.id) {
+                        entity.update(cx, |thread, cx| {
+                            thread.record = record;
+                            cx.notify();
+                        });
+                    } else {
+                        workspace
+                            .threads
+                            .insert(record.id.clone(), cx.new(|_| Thread::new(record)));
+                    }
                 }
-            }
-            for run in workspace.runs.values_mut() {
-                run.end = None;
-                run.loss = None;
-            }
-            for (id, kinds) in endings {
-                if let Some(end) = crate::end::End::from_newest(&kinds) {
-                    workspace.run_mut(&id).end = Some(end);
+                for run in workspace.runs.values_mut() {
+                    run.end = None;
+                    run.loss = None;
                 }
-            }
-            remember(workspace, screens);
-            cx.emit(WorkspaceEvent::Changed);
-            cx.notify();
-        })
-        .map_err(closed)
+                for (id, kinds) in endings {
+                    if let Some(end) = crate::end::End::from_newest(&kinds) {
+                        workspace.run_mut(&id).end = Some(end);
+                    }
+                }
+                let unshown = remember(workspace, screens);
+                cx.emit(WorkspaceEvent::Changed);
+                cx.notify();
+                unshown
+            })
+            .map_err(closed)?;
+        restore_unshown(this, unshown, cx).await
     }
     pub(crate) async fn events(
         this: &WeakEntity<Self>,

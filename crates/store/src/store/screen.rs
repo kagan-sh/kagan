@@ -1,10 +1,11 @@
 use kg_domain::{SCREEN_MAX_BYTES, TERMINAL_COLS, TERMINAL_ROWS, ThreadId};
-use rusqlite::{Row, params};
+use rusqlite::{OptionalExtension, Row, params};
 
 use crate::column::Text;
 use crate::{Error, Result};
 
-/// `started_seq` is the `Started` event of the run that produced the screen.
+/// `started_seq` is the `Started` event of the run that produced the screen. `replay` is empty
+/// in the rows from [`super::Store::screens`]; [`super::Store::screen_replay`] reads it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScreenRow {
     pub thread_id: ThreadId,
@@ -75,16 +76,32 @@ impl super::Store {
         Ok(())
     }
 
-    /// Screens whose run is still the latest `Started`. A row outside the bound comes back with an
-    /// empty replay and `screen_kept` clear, so a reader never builds a terminal from it.
+    /// Screens whose run is still the latest `Started`, without their replay. A row outside the
+    /// bound comes back with `screen_kept` clear, so a reader never builds a terminal from it.
     pub fn screens(&self) -> Result<Vec<ScreenRow>> {
         let mut statement = self.conn.prepare(&format!(
-            "SELECT thread_id, started_seq, cols, rows, replay, history_dropped, screen_kept \
+            "SELECT thread_id, started_seq, cols, rows, length(replay) AS replay_len, \
+                history_dropped, screen_kept \
              FROM terminal_screens WHERE started_seq = {}",
             super::latest_start("terminal_screens.thread_id")
         ))?;
         let rows = statement.query_map([], screen_row)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Error::from)
+    }
+
+    /// The replay of the thread's latest run, or none when no screen is saved for it.
+    pub fn screen_replay(&self, id: &ThreadId) -> Result<Option<Vec<u8>>> {
+        Ok(self
+            .conn
+            .query_row(
+                &format!(
+                    "SELECT replay FROM terminal_screens WHERE thread_id = ?1 AND started_seq = {}",
+                    super::latest_start("terminal_screens.thread_id")
+                ),
+                [Text(id)],
+                |row| row.get(0),
+            )
+            .optional()?)
     }
 }
 
@@ -100,9 +117,9 @@ fn screen_row(row: &Row<'_>) -> rusqlite::Result<ScreenRow> {
     let started_seq = row.get("started_seq")?;
     let cols = u16::try_from(row.get::<_, i64>("cols")?).unwrap_or(0);
     let rows = u16::try_from(row.get::<_, i64>("rows")?).unwrap_or(0);
-    let replay: Vec<u8> = row.get("replay")?;
+    let replay_len = usize::try_from(row.get::<_, i64>("replay_len")?).unwrap_or(usize::MAX);
     let screen_kept: bool = row.get("screen_kept")?;
-    if !screen_in_bounds(cols, rows, replay.len(), screen_kept) {
+    if !screen_in_bounds(cols, rows, replay_len, screen_kept) {
         return Ok(ScreenRow {
             thread_id,
             started_seq,
@@ -123,7 +140,7 @@ fn screen_row(row: &Row<'_>) -> rusqlite::Result<ScreenRow> {
         started_seq,
         cols,
         rows,
-        replay,
+        replay: Vec::new(),
         history_dropped,
         screen_kept,
     })
