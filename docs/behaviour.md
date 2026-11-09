@@ -46,6 +46,8 @@ A thread is one program running in one environment, with a status (`pending`, `i
 - **Shows**: the thread, now `starting` or `active` [op/].
 - **Refused when**: a running thread — `the program is still running` — `invalid`. An archived thread — `restore the thread before starting it again` — `invalid`. A folder that is not ready — `invalid` [op/].
 
+- **New thread here… (the ended line, not an op)**: shown for an ended thread that is not archived and has a folder. It opens the new-thread screen with the thread's folder as the only choice, shown as one line with its path and title. Start runs `ThreadOp::Run` with `environment: reuse:<environment id>` and the program the person picks [decision NNN]. Cancel and Escape return to the ended thread.
+
 ### `Input`, `Paste`, `Send`, `Report`, `Resize`, `Scroll`, `Select`, `Copy`, `Screen`
 
 - **Allowed when**: the thread's program is running in the host [decision 46].
