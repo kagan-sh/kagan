@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use gpui_kit::{App, AppContext as _, AsyncApp, Entity, WeakEntity};
 use kg_domain::{EnvironmentId, ProjectId, ThreadId};
 
@@ -50,17 +52,9 @@ impl Workspace {
         let database = crate::workspace::database(this, cx)?;
         let (projects, environments, threads, sections, endings, screens) = database
             .call(|store| {
-                let projects = store.projects()?;
-                let environments = projects
-                    .iter()
-                    .map(|project| store.environments(&project.id))
-                    .collect::<kg_store::Result<Vec<_>>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>();
                 Ok((
-                    projects,
-                    environments,
+                    store.projects()?,
+                    store.all_environments()?,
                     store.all_threads()?,
                     store.sections()?,
                     store.endings()?,
@@ -71,12 +65,14 @@ impl Workspace {
         let unshown = this
             .update(cx, |workspace, cx| {
                 workspace.sections = sections;
-                workspace
-                    .projects
-                    .retain(|id, _| projects.iter().any(|record| &record.id == id));
+                let project_ids: BTreeSet<&ProjectId> =
+                    projects.iter().map(|record| &record.id).collect();
+                workspace.projects.retain(|id, _| project_ids.contains(id));
+                let environment_ids: BTreeSet<&EnvironmentId> =
+                    environments.iter().map(|record| &record.id).collect();
                 workspace
                     .environments
-                    .retain(|id, _| environments.iter().any(|record| &record.id == id));
+                    .retain(|id, _| environment_ids.contains(id));
                 for record in projects {
                     if let Some(entity) = workspace.projects.get(&record.id) {
                         entity.update(cx, |project, cx| {
@@ -101,9 +97,9 @@ impl Workspace {
                             .insert(record.id.clone(), cx.new(|_| Environment { record }));
                     }
                 }
-                workspace
-                    .threads
-                    .retain(|id, _| threads.iter().any(|record| &record.id == id));
+                let thread_ids: BTreeSet<&ThreadId> =
+                    threads.iter().map(|record| &record.id).collect();
+                workspace.threads.retain(|id, _| thread_ids.contains(id));
                 for record in threads {
                     if let Some(entity) = workspace.threads.get(&record.id) {
                         entity.update(cx, |thread, cx| {

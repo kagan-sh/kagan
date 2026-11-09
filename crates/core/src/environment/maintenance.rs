@@ -1,9 +1,10 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{AsyncApp, WeakEntity};
 use kg_domain::{
     Environment, EnvironmentId, EnvironmentProvider as Provider, EnvironmentStatus, EventKind,
-    NoticeSeverity, OpError,
+    NoticeSeverity, OpError, ProjectId,
 };
 
 use crate::Workspace;
@@ -26,12 +27,19 @@ pub(crate) async fn sweep(
     let database = crate::workspace::database(this, cx)?;
     let (records, environments) = database
         .call(|store| {
-            let mut environments = Vec::new();
-            for project in store.projects()? {
-                for environment in store.environments(&project.id)? {
-                    environments.push((environment, project.path.clone()));
-                }
-            }
+            let paths: BTreeMap<ProjectId, PathBuf> = store
+                .projects()?
+                .into_iter()
+                .map(|project| (project.id, project.path))
+                .collect();
+            let environments: Vec<(Environment, PathBuf)> = store
+                .all_environments()?
+                .into_iter()
+                .filter_map(|environment| {
+                    let path = paths.get(&environment.project_id)?.clone();
+                    Some((environment, path))
+                })
+                .collect();
             Ok((store.all_threads()?, environments))
         })
         .await?;

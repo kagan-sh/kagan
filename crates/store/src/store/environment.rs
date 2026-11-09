@@ -48,6 +48,10 @@ impl super::Store {
             .optional()?)
     }
 
+    pub fn all_environments(&self) -> Result<Vec<Environment>> {
+        all_environments(&self.conn)
+    }
+
     pub fn environments(&self, project_id: &ProjectId) -> Result<Vec<Environment>> {
         let mut statement = self.conn.prepare(&format!(
             "SELECT {ENVIRONMENT_COLUMNS} FROM environments WHERE project_id = ?1 ORDER BY id"
