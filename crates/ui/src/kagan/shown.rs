@@ -8,7 +8,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, AppContext as _, Context, DismissEvent, Entity, Focusable as _,
     InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
 };
 use kg_core::{Color, Workspace};
 use kg_domain::{Op, Thread, ThreadId, ThreadOp};
@@ -37,6 +37,13 @@ fn ended_text(id: &ThreadId, cx: &gpui_kit::App) -> String {
         line.push_str(note);
     }
     line
+}
+
+#[derive(Default)]
+pub(super) struct TitleState {
+    pub(super) menu: Option<(Entity<PopupMenu>, Subscription)>,
+    pub(super) rename: Option<Entity<InputState>>,
+    pub(super) rename_watch: Option<Subscription>,
 }
 
 #[derive(Clone, Copy)]
@@ -89,7 +96,7 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.actions_menu.is_some() {
+        if self.title.menu.is_some() {
             return;
         }
         // Settings covers the terminal, so a thread only has a menu when it is visibly shown.
@@ -133,18 +140,18 @@ impl Kagan {
             this.close_thread_actions(window, cx);
         });
         menu.read(cx).focus_handle(cx).focus(window, cx);
-        self.actions_menu = Some((menu, dismiss));
+        self.title.menu = Some((menu, dismiss));
         cx.notify();
     }
 
     pub(super) fn dismiss_thread_menus(&mut self, cx: &mut Context<Self>) {
-        self.actions_menu = None;
+        self.title.menu = None;
         self.sidebar
             .update(cx, |sidebar, _| sidebar.close_row_menu());
     }
 
     pub(super) fn close_thread_actions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.actions_menu = None;
+        self.title.menu = None;
         self.focus_work(window, cx);
         cx.notify();
     }
@@ -177,8 +184,8 @@ impl Kagan {
             },
         );
         window.focus(&input.focus_handle(cx), cx);
-        self.title_input = Some(input);
-        self.title_watch = Some(watch);
+        self.title.rename = Some(input);
+        self.title.rename_watch = Some(watch);
         cx.notify();
     }
 
@@ -192,11 +199,11 @@ impl Kagan {
             return;
         };
         let title = input.read(cx).value().to_string();
-        self.title_input = None;
+        self.title.rename = None;
         self.focus_work(window, cx);
         cx.notify();
         cx.spawn(async move |this, cx| {
-            _ = this.update(cx, |this, _| this.title_watch = None);
+            _ = this.update(cx, |this, _| this.title.rename_watch = None);
         })
         .detach();
         self.run_then(
@@ -213,12 +220,12 @@ impl Kagan {
     }
 
     pub(super) fn close_rename(&mut self) {
-        self.title_input = None;
-        self.title_watch = None;
+        self.title.rename = None;
+        self.title.rename_watch = None;
     }
 
     fn cancel_rename(&mut self, cx: &mut Context<Self>) {
-        if self.title_input.is_none() {
+        if self.title.rename.is_none() {
             return;
         }
         self.close_rename();
@@ -226,7 +233,7 @@ impl Kagan {
     }
 
     fn cancel_rename_to_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.title_input.is_none() {
+        if self.title.rename.is_none() {
             return;
         }
         self.close_rename();
@@ -236,7 +243,7 @@ impl Kagan {
 
     // A click on the title does not start a rename.
     pub(super) fn title_line(&self, thread: &Thread, cx: &mut Context<Self>) -> AnyElement {
-        let Some(input) = &self.title_input else {
+        let Some(input) = &self.title.rename else {
             return div()
                 .id("thread-title")
                 .ui_container()
@@ -275,7 +282,7 @@ impl Kagan {
                     .tooltip(tip("Thread actions", &ThreadActions, cx))
                     .on_click(dispatch(ThreadActions)),
             ))
-            .when_some(self.actions_menu.as_ref(), |wrap, (menu, _)| {
+            .when_some(self.title.menu.as_ref(), |wrap, (menu, _)| {
                 wrap.child(menu_popup(
                     menu,
                     "thread-menu-layer",

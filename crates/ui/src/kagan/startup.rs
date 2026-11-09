@@ -1,7 +1,7 @@
 use super::{Changes, Kagan, Layout, Plugins, Shown, TITLE, window::release_window};
 use super::{
     activity, archived, attention, browser, changes, details, layout, picker, replace, review,
-    right, screen, settings, sidebar, start, surface, tabs,
+    right, screen, settings, shown, sidebar, start, surface, tabs,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -79,14 +79,12 @@ impl Kagan {
             settling: false,
             columns,
             window: window.window_handle(),
-            actions_menu: None,
+            title: shown::TitleState::default(),
             open_thread: None,
             retired_load: Task::ready(()),
             _archive_watch: archived::watch(&archive_query, cx),
             archive_query,
             browser: browser::Browser::new(window, cx),
-            title_input: None,
-            title_watch: None,
             _subscriptions: subscriptions,
             _sidebar_watch: sidebar_watch,
             _appearance: crate::theme::watch_system(window, cx),

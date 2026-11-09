@@ -68,7 +68,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::terminal::TerminalView;
 use gpui_kit::component::input::InputState;
-use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::resizable::ResizableState;
 use gpui_kit::{
     AnyWindowHandle, App, ElementId, Entity, FocusHandle, ScrollHandle, SharedString, Subscription,
@@ -174,14 +173,12 @@ pub(crate) struct Kagan {
     settings_views: BTreeMap<kg_domain::PluginId, (u64, Entity<gpui_shell::ScriptView>)>,
     columns: Entity<ResizableState>,
     window: AnyWindowHandle,
-    actions_menu: Option<(Entity<PopupMenu>, Subscription)>,
+    title: shown::TitleState,
     open_thread: Option<Thread>,
     retired_load: Task<()>,
     archive_query: Entity<InputState>,
     _archive_watch: Subscription,
     browser: browser::Browser,
-    title_input: Option<Entity<InputState>>,
-    title_watch: Option<Subscription>,
     _subscriptions: [Subscription; 5],
     _sidebar_watch: [Subscription; 2],
     _appearance: Subscription,

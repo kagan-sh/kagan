@@ -39,7 +39,7 @@ impl Kagan {
                 else {
                     return;
                 };
-                self.actions_menu = None;
+                self.title.menu = None;
                 self.sidebar
                     .update(cx, |sidebar, cx| sidebar.open_row_menu(&thread, window, cx));
             }
