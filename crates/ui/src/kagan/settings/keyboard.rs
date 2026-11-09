@@ -15,7 +15,7 @@ use kg_domain::{KeymapAction, KeymapOp, Op, OpResult, PluginId, SHORTCUTS, Short
 use kg_plugins::{CommandContribution, PluginHost, RunCommand};
 
 use super::Kagan;
-use super::row::{Group, Row, group, row};
+use super::row::{Group, GroupStyle, Row, group, row};
 use crate::plugins::{Refused, Why, refused};
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
@@ -73,13 +73,19 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
     let mut out: Vec<Group> = ["Window", "Thread", "New thread", "Review"]
         .into_iter()
         .zip(built_in)
-        .map(|(title, shortcuts)| {
+        .enumerate()
+        .map(|(at, (title, shortcuts))| {
             let key = format!("shortcuts-{}", title.to_lowercase().replace(' ', "-"));
             let rows = shortcuts
                 .iter()
                 .map(|shortcut| shortcut_row(kagan, shortcut, &refused, &labels, window, cx))
                 .collect();
-            headed(group(key, title, rows))
+            let style = if at == 0 {
+                GroupStyle::FirstShortcuts
+            } else {
+                GroupStyle::Shortcuts
+            };
+            shortcut_group(group(key, title, rows), style)
         })
         .collect();
     for (plugin, name, commands) in plugin_commands(cx) {
@@ -105,11 +111,10 @@ pub(super) fn groups(kagan: &Kagan, window: &mut Window, cx: &mut Context<Kagan>
                 shortcut_row(kagan, &shortcut, &refused, &labels, window, cx)
             })
             .collect();
-        out.push(headed(group(
-            format!("shortcuts-plugin-{}", plugin.0),
-            name,
-            rows,
-        )));
+        out.push(shortcut_group(
+            group(format!("shortcuts-plugin-{}", plugin.0), name, rows),
+            GroupStyle::Shortcuts,
+        ));
     }
     out
 }
@@ -118,8 +123,9 @@ pub(super) fn count(cx: &App) -> usize {
     4 + plugin_commands(cx).len()
 }
 
-fn headed(mut group: Group) -> Group {
+fn shortcut_group(mut group: Group, style: GroupStyle) -> Group {
     group.headed = true;
+    group.style = style;
     group
 }
 

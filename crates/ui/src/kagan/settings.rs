@@ -40,6 +40,9 @@ actions!(
 pub(super) const CONTEXT: &str = "KaganSettings";
 
 pub(super) const ITEM: &str = "SettingsItem";
+// Items in order: header, Questions, Appearance, Agents, Updates, then the shortcut groups.
+pub(super) const QUESTIONS_ITEM: usize = 1;
+const FIRST_SHORTCUT_ITEM: usize = 5;
 
 const CLOSE: &str = "SettingsClose";
 
@@ -119,7 +122,7 @@ impl Kagan {
         window.defer(cx, move |_, cx| {
             kagan.update(cx, |this, cx| {
                 this.settings_scroll
-                    .scroll_to_top_of_item(5 + keyboard::count(cx));
+                    .scroll_to_top_of_item(FIRST_SHORTCUT_ITEM + keyboard::count(cx));
                 cx.notify();
             });
         });
@@ -361,8 +364,8 @@ fn group_block(group: row::Group, cx: &App) -> AnyElement {
     let card = cx.theme().group_box;
     let muted = cx.theme().muted_foreground;
     let rows = group.rows.len();
-    let shortcut = group.key.starts_with("shortcuts-");
-    let first_shortcut = group.key == "shortcuts-window";
+    let shortcut = group.style != row::GroupStyle::Plain;
+    let first_shortcut = group.style == row::GroupStyle::FirstShortcuts;
     let title = group.title.clone();
     let block =
         v_flex()
