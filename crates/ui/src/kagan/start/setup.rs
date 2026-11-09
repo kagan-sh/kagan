@@ -90,7 +90,7 @@ impl Kagan {
     }
 
     pub(super) fn setup_block(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.chosen_folder() != Some(StartFolder::Worktree) {
+        if self.start.reuse.is_some() || self.chosen_folder() != Some(StartFolder::Worktree) {
             return None;
         }
         let muted = cx.theme().muted_foreground;

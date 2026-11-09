@@ -239,6 +239,11 @@ fn listen(
                 cx.notify();
                 return;
             }
+            if let Some(thread) = this.start.take_reuse_thread() {
+                this.select(thread, window, cx);
+                cx.notify();
+                return;
+            }
             this.show_work(Shown::Nothing, window, cx);
             window.focus(&this.focus, cx);
             this.tell_host(window, cx);

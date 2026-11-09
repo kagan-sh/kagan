@@ -258,6 +258,12 @@ impl Kagan {
     fn ended_notice(id: &ThreadId, archived: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let line = ended_text(id, cx);
         let recovery = Workspace::global(cx).read(cx).recovery(id);
+        // A thread with no folder has nothing to run in, so it cannot offer a new thread there.
+        let reusable = !archived
+            && Workspace::global(cx)
+                .read(cx)
+                .thread(id)
+                .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
         h_flex()
             .id("ended")
             .w_full()
@@ -279,9 +285,23 @@ impl Kagan {
                     Facts::button("Start again"),
                     Button::new("start-again-button")
                         .small()
-                        .outline()
+                        .primary()
                         .label("Start again")
                         .on_click(dispatch(StartAgain)),
+                ))
+            })
+            .when(reusable, |row| {
+                let thread = id.clone();
+                row.child(control(
+                    "new-thread-here",
+                    Facts::button("New thread here…"),
+                    Button::new("new-thread-here-button")
+                        .small()
+                        .outline()
+                        .label("New thread here…")
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.new_thread_here(&thread, window, cx);
+                        })),
                 ))
             })
             .when(recovery, |row| {

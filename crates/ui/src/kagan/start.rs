@@ -1,12 +1,12 @@
 use gpui_kit::component::input::InputState;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, AsyncApp, Entity, FocusHandle, Subscription, Task,
-    WeakEntity,
+    AnyWindowHandle, App, AppContext as _, AsyncApp, Context, Entity, FocusHandle, Subscription,
+    Task, WeakEntity, Window,
 };
 use kg_core::Workspace;
 use kg_domain::{
-    BranchList, EnvironmentOp, Op, OpResult, PinnedSetup, ProjectId, ProjectKind, ThreadId,
-    ThreadOp,
+    BranchList, EnvironmentId, EnvironmentOp, Op, OpResult, PinnedSetup, ProjectId, ProjectKind,
+    ThreadId, ThreadOp,
 };
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -67,8 +67,16 @@ fn setup_script(setup: &PinnedSetup) -> Option<(&str, bool)> {
     (!setup.text.is_empty()).then_some((setup.text.as_str(), setup.truncated))
 }
 
+// A new thread that runs in the folder of an ended thread. Its folder is not chosen here.
+#[derive(Clone)]
+pub(super) struct Reuse {
+    thread: ThreadId,
+    environment: EnvironmentId,
+}
+
 #[derive(Default)]
 pub(super) struct StartState {
+    reuse: Option<Reuse>,
     folder: Option<StartFolder>,
     pick: BranchPick,
     intent: ProjectIntent,
@@ -92,6 +100,7 @@ pub(super) struct StartState {
 
 impl StartState {
     pub(super) fn reset(&mut self) {
+        self.reuse = None;
         self.folder = None;
         self.pick = BranchPick::Current;
         self.intent = ProjectIntent::Current;
@@ -104,6 +113,13 @@ impl StartState {
         self.setup = None;
         self.setup_open = false;
         self.setup_failure = None;
+    }
+}
+
+impl StartState {
+    // The ended thread the screen came from, so leaving the screen returns to it.
+    pub(super) fn take_reuse_thread(&mut self) -> Option<ThreadId> {
+        self.reuse.take().map(|reuse| reuse.thread)
     }
 }
 
@@ -218,3 +234,29 @@ mod render;
 mod setup;
 
 pub(super) use menu::{BRANCH_CONTEXT, CloseBranchMenu};
+
+impl Kagan {
+    pub(in crate::kagan) fn new_thread_here(
+        &mut self,
+        thread: &ThreadId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(record) = Workspace::global(cx)
+            .read(cx)
+            .thread(thread)
+            .map(|thread| thread.read(cx).record().clone())
+        else {
+            return;
+        };
+        let Some(environment) = record.environment_id.clone() else {
+            return;
+        };
+        self.show_start(record.project_id.clone(), window, cx);
+        self.start.reuse = Some(Reuse {
+            thread: thread.clone(),
+            environment,
+        });
+        cx.notify();
+    }
+}

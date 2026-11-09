@@ -6,7 +6,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, ElementId, TestAppContext, WindowBounds, px, size,
 };
 use kg_core::Workspace;
-use kg_domain::{EnvironmentProvider, ProjectId, ThreadStatus};
+use kg_domain::{EnvironmentProvider, ProjectId, ThreadId, ThreadStatus};
 
 use crate::kagan::{NewThread, StopThread};
 
@@ -185,6 +185,64 @@ fn cancel_leaves_the_new_thread_screen(cx: &mut TestAppContext) {
             .is_none()
     });
     assert!(!shows(cx, window, "start"));
+}
+
+fn end_shell_thread(cx: &mut TestAppContext, window: AnyWindowHandle) -> ThreadId {
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    cx.dispatch_action(window, StopThread);
+    wait_until(cx, |cx| shows(cx, window, "ended"));
+    id
+}
+
+#[gpui_kit::test]
+fn new_thread_here_is_offered_only_by_an_ended_thread(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    let id = run_shell(cx);
+    click(cx, window, &format!("thread-{}", id.0));
+    assert!(!shows(cx, window, "new-thread-here"));
+    cx.dispatch_action(window, StopThread);
+    wait_until(cx, |cx| shows(cx, window, "new-thread-here"));
+}
+
+#[gpui_kit::test]
+fn new_thread_here_opens_the_start_screen_with_the_folder_fixed(cx: &mut TestAppContext) {
+    let (_kagan, window, _data) = open(cx);
+    end_shell_thread(cx, window);
+    click(cx, window, "new-thread-here");
+    wait_until(cx, |cx| shows(cx, window, "reuse-hint"));
+    let hint = label(cx, window, "reuse-hint");
+    assert!(hint.starts_with("Runs in "), "{hint}");
+    assert!(hint.contains("the folder of “"), "{hint}");
+    assert!(!shows(cx, window, "folder-worktree"));
+    assert!(!shows(cx, window, "folder-project"));
+    assert!(!shows(cx, window, "branch-from"));
+}
+
+#[gpui_kit::test]
+fn start_in_new_thread_here_runs_in_the_ended_threads_folder(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let ended = end_shell_thread(cx, window);
+    let folder = environment_of(cx, &ended).id;
+    click(cx, window, "new-thread-here");
+    wait_until(cx, |cx| shows(cx, window, "reuse-hint"));
+    set_program(cx, window, &kagan, shell());
+    click(cx, window, "start");
+    wait_until(cx, |cx| {
+        shown(cx, &kagan).is_some_and(|started| started != ended)
+    });
+    let started = shown(cx, &kagan).unwrap();
+    assert_eq!(environment_of(cx, &started).id, folder);
+}
+
+#[gpui_kit::test]
+fn escape_in_new_thread_here_goes_back_to_the_ended_thread(cx: &mut TestAppContext) {
+    let (kagan, window, _data) = open(cx);
+    let ended = end_shell_thread(cx, window);
+    click(cx, window, "new-thread-here");
+    wait_until(cx, |cx| shows(cx, window, "reuse-hint"));
+    press_key(cx, window, "escape");
+    wait_until(cx, |cx| shown(cx, &kagan) == Some(ended.clone()));
 }
 
 /// Whether the element named `name` is checked, and whether it has focus.

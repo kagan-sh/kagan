@@ -7,7 +7,7 @@ use gpui_kit::{
     Styled as _, div,
 };
 
-use super::{BranchPick, Branches, StartFolder, base_label};
+use super::{BranchPick, Branches, Reuse, StartFolder, base_label};
 use crate::kagan::controls::{Selected, control, dispatch, note};
 use crate::kagan::{Kagan, RetryBranches, UseProjectFolder, UseWorktreeFolder};
 use crate::ui_registry::Facts;
@@ -32,6 +32,9 @@ fn shown_path(path: &Path) -> String {
 impl Kagan {
     pub(super) fn render_folder(&self, kind: ProjectKind, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
+        if let Some(reuse) = &self.start.reuse {
+            return Self::reuse_hint(reuse, cx);
+        }
         if kind == ProjectKind::Personal {
             return note("folder", "Runs in your Personal folder.", muted, cx);
         }
@@ -100,6 +103,25 @@ impl Kagan {
         format!(
             "A new folder on its own branch from {base}, under {}. Your project folder stays as it is.",
             shown_path(&root)
+        )
+    }
+
+    // The folder of the ended thread is the only choice, so one line says where the run writes.
+    fn reuse_hint(reuse: &Reuse, cx: &App) -> AnyElement {
+        let workspace = Workspace::global(cx).read(cx);
+        let folder = workspace
+            .environment(&reuse.environment)
+            .map(|environment| shown_path(&environment.read(cx).record().path))
+            .unwrap_or_default();
+        let title = workspace
+            .thread(&reuse.thread)
+            .map(|thread| thread.read(cx).record().title.clone())
+            .unwrap_or_default();
+        note(
+            "reuse-hint",
+            format!("Runs in {folder}, the folder of “{title}”. Changes land there."),
+            cx.theme().muted_foreground,
+            cx,
         )
     }
 
