@@ -1,6 +1,6 @@
+#[cfg(target_os = "macos")]
 use super::dock;
 use super::{Kagan, MIN_HEIGHT, TITLE, attention, layout, notify, web_panel};
-#[cfg(target_os = "macos")]
 use crate::kagan::dispatch;
 
 use gpui_kit::component::TitleBar;
