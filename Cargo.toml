@@ -65,7 +65,7 @@ gpui-kit = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c
 gpui-shell = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", default-features = false, features = ["quickjs", "components"] }
 gpui-webview = { git = "https://github.com/kagan-sh/gpui-kit", rev = "cbba719b24571c7b01d16dcc9e8887871be32b3a", default-features = false, features = ["gpui-fast"] }
 hex = "=0.4.3"
-interprocess = "=2.4.7"
+interprocess = "=2.4.8"
 keyring-core = "=1.0.1"
 libc = "=0.2.191"
 objc2 = "=0.6.5"
@@ -76,8 +76,8 @@ semver = "=1.0.28"
 sha2 = "=0.11.1"
 tempfile = "=3.27.0"
 url = "=2.5.8"
-uuid = { version = "=1.29.0", features = ["v4"] }
-rusqlite = { version = "=0.41.0", features = ["bundled", "fallible_uint"] }
+uuid = { version = "=1.29.2", features = ["v4"] }
+rusqlite = { version = "=0.41.1", features = ["bundled", "fallible_uint"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 thiserror = "=2.0.21"
@@ -107,7 +107,7 @@ unwrap_used = "deny"
 disallowed_types = "deny"
 
 [workspace.metadata.bin]
-cargo-nextest = { version = "=0.9.148", locked = true }
+cargo-nextest = { version = "=0.9.151", locked = true }
 
 # The Browser's web view. Camera and microphone are refused, and Windows hosts the page in a composition visual (decision 131).
 # A lost DirectX device is logged and the window stays, and a panic in the window procedure does not abort the process (decisions 166 and 168).
