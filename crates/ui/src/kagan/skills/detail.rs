@@ -1,3 +1,4 @@
+use gpui_kit::component::Disableable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::text::TextView;
@@ -88,15 +89,6 @@ fn title(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> 
 // Edit and Delete are for skills kagan owns. Other skills say why they are read-only, where
 // they live, and what to do instead.
 fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -> AnyElement {
-    if !editable {
-        let text = match shown.skill.source {
-            SkillSource::Bundled => {
-                "Built into kagan. It is read-only here. Make your own skill with New skill."
-            }
-            _ => "Comes from a plugin. It is read-only here. Make your own skill with New skill.",
-        };
-        return note("skills-read-only", text, cx.theme().muted_foreground, cx);
-    }
     if page.confirming {
         return h_flex()
             .gap_2()
@@ -130,30 +122,62 @@ fn actions(page: &Page, shown: &Shown, editable: bool, cx: &mut Context<Page>) -
             ))
             .into_any_element();
     }
-    h_flex()
-        .gap_2()
-        .child(control(
-            "skills-edit",
-            Facts::button("Edit"),
-            Button::new("skills-edit-button")
-                .small()
-                .outline()
-                .label("Edit")
-                .on_click(cx.listener(|this, _, window, cx| this.start_edit(window, cx))),
-        ))
-        .child(control(
-            "skills-delete",
-            Facts::button("Delete"),
-            Button::new("skills-delete-button")
-                .small()
-                .danger()
-                .label("Delete")
-                .on_click(cx.listener(|this, _, _, cx| {
-                    this.confirming = true;
-                    cx.notify();
-                })),
-        ))
-        .into_any_element()
+    let mut row = h_flex().gap_2().items_center();
+    if editable {
+        row = row
+            .child(control(
+                "skills-edit",
+                Facts::button("Edit"),
+                Button::new("skills-edit-button")
+                    .small()
+                    .outline()
+                    .label("Edit")
+                    .on_click(cx.listener(|this, _, window, cx| this.start_edit(window, cx))),
+            ))
+            .child(control(
+                "skills-delete",
+                Facts::button("Delete"),
+                Button::new("skills-delete-button")
+                    .small()
+                    .danger()
+                    .label("Delete")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.confirming = true;
+                        cx.notify();
+                    })),
+            ));
+    } else {
+        let text = match shown.skill.source {
+            SkillSource::Bundled => "Built into kagan, so it is read-only here.",
+            _ => "Comes from a plugin, so it is read-only here.",
+        };
+        row = row.child(note(
+            "skills-read-only",
+            text,
+            cx.theme().muted_foreground,
+            cx,
+        ));
+    }
+    let ready = page.project.is_some();
+    row = row.child(control(
+        "skills-fork",
+        Facts::button("Fork"),
+        Button::new("skills-fork-button")
+            .small()
+            .outline()
+            .label("Fork")
+            .disabled(!ready)
+            .on_click(cx.listener(|this, _, _, cx| this.fork(cx))),
+    ));
+    if !ready {
+        row = row.child(note(
+            "skills-fork-reason",
+            "Pick a project first. Fork opens a new thread in it.",
+            cx.theme().muted_foreground,
+            cx,
+        ));
+    }
+    row.into_any_element()
 }
 
 fn editor_view(

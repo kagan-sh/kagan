@@ -81,7 +81,7 @@ impl Kagan {
                     this.select(id.clone(), window, cx);
                     let handle = window.window_handle();
                     this.start.plugin_start = Some(cx.spawn(async move |this, cx| {
-                        follow_plugin_prompt(this, handle, id, cx).await;
+                        follow_plugin_prompt(this, handle, id, PLUGIN_PROMPT.into(), cx).await;
                     }));
                 });
             });
@@ -94,20 +94,22 @@ impl Kagan {
             && self.plugin_prompt_notice.as_ref() == self.shown_thread(cx).as_ref()
     }
 
-    pub(in crate::kagan) fn plugin_prompt_notice(cx: &mut Context<Self>) -> impl IntoElement {
+    pub(in crate::kagan) fn plugin_prompt_notice(
+        text: &str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let copied = text.to_owned();
         h_flex()
             .id("plugin-prompt-notice")
             .ui_container()
             .px_4()
             .py_2()
-            .child(format!("Copy this prompt: {PLUGIN_PROMPT}"))
+            .child(format!("Copy this prompt: {text}"))
             .child(
                 Button::new("copy-plugin-prompt")
                     .label("Copy")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
-                            PLUGIN_PROMPT.into(),
-                        ));
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(copied.clone()));
                         this.plugin_prompt_notice = None;
                         cx.notify();
                     })),

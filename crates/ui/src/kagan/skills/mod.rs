@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use gpui_kit::component::input::{InputEvent, InputState, TextareaState};
-use gpui_kit::{AppContext as _, Context, Entity, IntoElement, Render, Subscription, Task, Window};
+use gpui_kit::{
+    AppContext as _, Context, Entity, EventEmitter, IntoElement, Render, Subscription, Task, Window,
+};
 use kg_core::Workspace;
 use kg_domain::{Op, OpResult, ProjectId, Skill, SkillOp, SkillSource};
 
@@ -33,6 +35,20 @@ pub(in crate::kagan) enum Sort {
     Name,
     Source,
 }
+
+// The center slot: the page, and the subscription that keeps its fork requests coming.
+pub(in crate::kagan) struct Open {
+    pub(super) page: Entity<Page>,
+    _fork: Subscription,
+}
+
+// The page asks the window to start a new thread in this project with this prompt.
+pub(crate) struct ForkSkill {
+    project: ProjectId,
+    prompt: String,
+}
+
+impl EventEmitter<ForkSkill> for Page {}
 
 pub(super) struct Shown {
     skill: Skill,
@@ -116,6 +132,16 @@ impl Page {
                 cx.notify();
             });
         }));
+    }
+
+    fn fork(&mut self, cx: &mut Context<Self>) {
+        let (Some(project), Some(shown)) = (self.project.clone(), self.selected.as_ref()) else {
+            return;
+        };
+        cx.emit(ForkSkill {
+            project,
+            prompt: fork_prompt(&shown.skill),
+        });
     }
 
     fn back(&mut self, cx: &mut Context<Self>) {
@@ -290,6 +316,21 @@ impl Page {
     }
 }
 
+// The prompt a new thread gets: it makes its own skill and leaves this one alone.
+fn fork_prompt(skill: &Skill) -> String {
+    let source = match &skill.path {
+        Some(path) => format!("Read its instructions first: {}.", path.display()),
+        None => format!(
+            "Read its instructions first with `kg skill show {}`.",
+            skill.name
+        ),
+    };
+    format!(
+        "Make a new skill with its own name, based on the skill `{}`. {source} Do not edit or copy the source skill. Give the new skill its own folder and SKILL.md in the user skills folder, with `kg skill new <name>` and then `kg skill update <name> <text>`.",
+        skill.name
+    )
+}
+
 pub(in crate::kagan) fn source_rank(source: SkillSource) -> u8 {
     match source {
         SkillSource::Bundled => 0,
@@ -311,7 +352,13 @@ impl Render for Page {
 
 impl Kagan {
     pub(super) fn shows_skills(&self) -> bool {
-        matches!(self.screen.current(), Center::Skills(_))
+        matches!(self.screen.current(), Center::Skills(..))
+    }
+
+    fn fork_skill(&mut self, request: &ForkSkill, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_start(&request.project, window, cx);
+        self.start.prompt = Some(request.prompt.clone());
+        cx.notify();
     }
 
     pub(crate) fn show_skills(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -321,7 +368,10 @@ impl Kagan {
         self.close_rename();
         let project = self.shown_project(cx);
         let page = cx.new(|cx| Page::new(project, window, cx));
-        self.open_center(Center::Skills(page), window, cx);
+        let fork = cx.subscribe_in(&page, window, |this, _, request: &ForkSkill, window, cx| {
+            this.fork_skill(request, window, cx);
+        });
+        self.open_center(Center::Skills(Open { page, _fork: fork }), window, cx);
         cx.notify();
     }
 }

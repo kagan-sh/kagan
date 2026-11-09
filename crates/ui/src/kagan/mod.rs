@@ -146,6 +146,7 @@ pub(crate) struct Kagan {
     _questions_watch: Subscription,
     note: Option<SharedString>,
     plugin_prompt_notice: Option<ThreadId>,
+    plugin_prompt_text: String,
     focus: FocusHandle,
     surface_close_focus: FocusHandle,
     slots: surface::SlotState,

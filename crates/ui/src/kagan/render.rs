@@ -60,7 +60,7 @@ impl Kagan {
                 }
                 screen::Center::Work(_)
                 | screen::Center::Archived(_)
-                | screen::Center::Skills(_) => {}
+                | screen::Center::Skills(..) => {}
             }
         }
         ids
@@ -230,7 +230,7 @@ impl Kagan {
                     .children(update::notice(cx))
                     .children(
                         self.plugin_prompt_visible(cx)
-                            .then(|| Self::plugin_prompt_notice(cx)),
+                            .then(|| Self::plugin_prompt_notice(&self.plugin_prompt_text, cx)),
                     )
                     .child(main)
                     .children(overlays::render(self, cx))
@@ -254,7 +254,7 @@ impl Kagan {
                 self.render_review(replaced, window, cx)
             }
             screen::Center::Archived(_) => archived::list(self, window, cx).into_any_element(),
-            screen::Center::Skills(page) => page.clone().into_any_element(),
+            screen::Center::Skills(open) => open.page.clone().into_any_element(),
             screen::Center::Work(Shown::Thread(view)) => {
                 self.render_thread(view, cx).into_any_element()
             }

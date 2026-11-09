@@ -29,7 +29,7 @@ pub(super) enum Center {
     Page(Box<surface::Slot>),
     Settings,
     Archived(archived::List),
-    Skills(gpui_kit::Entity<skills::Page>),
+    Skills(skills::Open),
 }
 
 struct Pending {

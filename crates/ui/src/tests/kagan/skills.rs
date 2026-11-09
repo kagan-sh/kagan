@@ -66,3 +66,17 @@ fn a_user_skill_opens_an_editor(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(shows(cx, window, "skills-save"));
 }
+
+#[gpui_kit::test]
+fn fork_opens_the_new_thread_screen_with_the_prompt_line(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    click(cx, window, "project-prj_kagan");
+    cx.run_until_parked();
+    write_user_skill(data.path(), "mine");
+    show_skills(cx, &kagan, window);
+    click(cx, window, "skill-row-mine");
+    cx.run_until_parked();
+    click(cx, window, "skills-fork");
+    cx.run_until_parked();
+    assert!(shows(cx, window, "start-fork-note"));
+}

@@ -1,4 +1,5 @@
 use crate::theme::TypeScale as _;
+use gpui_kit::Role;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::kbd::Kbd;
@@ -98,6 +99,17 @@ impl Kagan {
                                             ),
                                     )
                                     .children(kind.map(|kind| self.render_folder(kind, window, cx)))
+                                    .children(self.start.prompt.is_some().then(|| {
+                                        div()
+                                            .id("start-fork-note")
+                                            .type_caption(cx)
+                                            .text_color(cx.theme().muted_foreground)
+                                            .ui_observe_as(Facts {
+                                                role: Role::Status,
+                                                ..Facts::button("Fork prompt")
+                                            })
+                                            .child("The skill's fork prompt is typed into the program after Start.")
+                                    }))
                                     .children(self.setup_block(cx)),
                             ),
                     )

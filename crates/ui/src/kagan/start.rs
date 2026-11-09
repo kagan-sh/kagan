@@ -149,6 +149,8 @@ pub(super) struct StartState {
     pub(super) plugin_opening: bool,
     pub(super) plugin_start: Option<Task<()>>,
     pub(super) plugin_thread: Option<kg_domain::ThreadId>,
+    // Text to type into the new thread's program after Start, such as a skill's fork prompt.
+    pub(super) prompt: Option<String>,
 }
 
 impl StartState {
@@ -158,6 +160,7 @@ impl StartState {
         self.pick = BranchPick::Current;
         self.intent = ProjectIntent::Current;
         self.panel = Panel::Closed;
+        self.prompt = None;
         self.branch_query = None;
         self.branch_watch = None;
         self.branches = Branches::Loading;
@@ -226,6 +229,7 @@ async fn follow_plugin_prompt(
     this: WeakEntity<Kagan>,
     window: AnyWindowHandle,
     id: ThreadId,
+    text: String,
     cx: &mut AsyncApp,
 ) {
     let started = Instant::now();
@@ -251,7 +255,7 @@ async fn follow_plugin_prompt(
                     Workspace::dispatch(
                         Op::Thread(ThreadOp::Paste {
                             id: id.clone(),
-                            text: Some(PLUGIN_PROMPT.into()),
+                            text: Some(text.clone()),
                             file: None,
                             terminal: None,
                         }),
@@ -269,6 +273,7 @@ async fn follow_plugin_prompt(
     _ = cx.update_window(window, |_, _, cx| {
         _ = this.update(cx, |this, cx| {
             this.plugin_prompt_notice = Some(id);
+            this.plugin_prompt_text = text;
             this.cancel_plugin_start();
             cx.notify();
         });
