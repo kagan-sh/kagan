@@ -1272,6 +1272,7 @@ async fn unarchive_waits_for_an_archived_lifecycle_owner(cx: &mut TestAppContext
             parent_thread_id: None,
             lifecycle_owner_thread_id: Some(owner.id.clone()),
             metadata: None,
+            quiet: false,
         })),
         cx,
     )
