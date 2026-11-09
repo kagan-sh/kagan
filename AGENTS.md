@@ -24,7 +24,13 @@ Read a crate's own `AGENTS.md` before you change it. It adds to the rules here:
 - `crates/plugins/AGENTS.md`: powers and approval.
 - `crates/kg/AGENTS.md`: the CLI and the `cli.md` regeneration.
 
-Claude Code and Cursor load a nested `AGENTS.md` on their own when they work in its folder. Other tools may not, so this list is the pointer.
+How each tool finds these files, from its docs:
+
+- Claude Code loads a folder's `AGENTS.md` when it reads a file there. It reads `AGENTS.md` only if no `CLAUDE.md` or `CLAUDE.local.md` is in the working folder or above it. Keep those files out of this repo.
+- Cursor and Amp load a subfolder's `AGENTS.md` when they work in that folder.
+- opencode reads the `instructions` list in `opencode.json`, which names these files.
+- Codex reads one `AGENTS.md` per folder from the repo root down to the folder it starts in, so it sees these files only when started in a crate. This list is its pointer.
+- Gemini CLI reads `GEMINI.md`, not `AGENTS.md`, by default. This list is its pointer.
 
 ## Build and test
 
@@ -35,6 +41,7 @@ Claude Code and Cursor load a nested `AGENTS.md` on their own when they work in 
 ## Crates
 
 - `kg` is the binary (CLI, app start, socket, MCP); `kg-ui` the GPUI window; `kg-plugins` the plugin host; `kg-core` the `Workspace`, entities, and thread lifecycle; `kg-store` SQLite; `kg-domain` ids, records, and `Op`; `kg-terminal` the terminal; `kg-process` the process tree.
+- Every user-visible feature is an `Op` dispatched by `Workspace::dispatch`, and a changed `Op` updates `docs/behaviour.md`. Check: review.
 - `scripts/crate-boundaries.sh` enforces the graph in its `EXPECTED` table. The diagram in `docs/architecture.md` is a picture of that table, and review checks that they match.
 
 ## Skills
