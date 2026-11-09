@@ -82,9 +82,9 @@ impl Kagan {
             )
         };
         v_flex()
-            .gap_1()
+            .gap_2()
             .items_start()
-            .child(div().type_small(cx).text_color(muted).child("Runs in"))
+            .child(div().type_caption(cx).text_color(muted).child("Runs in"))
             .child(self.folder_toggles(chosen, cx))
             .child(self.branch_control(branches, cx))
             .child(note(hint.0, hint.1, muted, cx))

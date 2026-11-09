@@ -261,6 +261,7 @@ fn a_changed_script_hides_retry_and_leaves_start(cx: &mut TestAppContext) {
     wait_until(cx, |cx| shows(cx, window, "setup-script"));
     set_program(cx, window, &kagan, shell());
     click(cx, window, "start");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-retry"));
     let old = only_worktree(data.path());
     std::fs::write(old.join(".kagan/setup"), "echo edited\n").unwrap();
@@ -275,7 +276,24 @@ fn a_changed_script_hides_retry_and_leaves_start(cx: &mut TestAppContext) {
     assert!(!old.exists());
     assert!(worktree_dirs(data.path()).is_empty());
     click(cx, window, "start");
+    scroll_form_to_end(cx, window);
     wait_until(cx, |cx| shows(cx, window, "setup-retry"));
     let fresh = only_worktree(data.path());
     assert_eq!(fresh, old);
+}
+
+// In a short window the setup controls sit below the fold, so a person scrolls the form to them.
+fn scroll_form_to_end(cx: &mut TestAppContext, window: AnyWindowHandle) {
+    cx.update_window(window, |_, window, cx| {
+        crate::ui_dispatch::scroll_within(
+            window,
+            &ElementId::Name("start-fields".into()),
+            None,
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(-1000.))),
+            cx,
+        )
+        .unwrap();
+    })
+    .unwrap();
+    cx.run_until_parked();
 }

@@ -1,17 +1,19 @@
 use crate::theme::TypeScale as _;
+use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Disableable as _, h_flex, v_flex};
+use gpui_kit::component::{Disableable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, Window, div, rems,
 };
 use kg_core::Workspace;
-use kg_domain::{Op, OpResult, ProjectId, ProjectOp};
+use kg_domain::{Op, OpResult, ProjectId, ProjectKind, ProjectOp};
 use std::path::PathBuf;
 
 use super::project_kind;
 use crate::kagan::Kagan;
-use crate::kagan::controls::control;
+use crate::kagan::controls::{control, note};
+use crate::kagan::picker::Close;
 use crate::ui_observe::UiObserveExt as _;
 use crate::ui_registry::Facts;
 impl Kagan {
@@ -30,19 +32,6 @@ impl Kagan {
             && self.setup_ready()
             && !self.start.starting
             && self.picker.read(cx).command(cx).is_ok();
-        let start = control(
-            "start",
-            Facts {
-                disabled: !ready,
-                ..Facts::button("Start")
-            },
-            Button::new("start-button-control")
-                .primary()
-                .label("Start")
-                .loading(self.start.starting)
-                .disabled(!ready)
-                .on_click(cx.listener(|this, _, window, cx| this.start(window, cx))),
-        );
         v_flex()
             .id("start-form")
             .size_full()
@@ -58,29 +47,104 @@ impl Kagan {
                         v_flex()
                             .w_full()
                             .min_h_full()
+                            .flex_shrink_0()
                             .items_center()
                             .justify_center()
                             .child(
                                 v_flex()
                                     .w_full()
-                                    .max_w(rems(32.))
-                                    .gap_3()
+                                    .max_w(rems(40.))
+                                    .gap_4()
                                     .p_4()
                                     .child(
-                                        div()
-                                            .id("start-prompt")
-                                            .ui_container()
-                                            .aria_label(format!("New thread in {name}"))
-                                            .type_title(cx)
-                                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
-                                            .child(format!("New thread in {name}")),
+                                        v_flex()
+                                            .gap_4()
+                                            .child(
+                                                div()
+                                                    .id("start-prompt")
+                                                    .ui_container()
+                                                    .aria_label(format!("New thread in {name}"))
+                                                    .type_title(cx)
+                                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                                                    .child(format!("New thread in {name}")),
+                                            )
+                                            .child(self.picker.clone()),
                                     )
-                                    .child(self.picker.clone())
                                     .children(kind.map(|kind| self.render_folder(kind, cx)))
-                                    .children(self.setup_block(cx))
-                                    .child(h_flex().justify_end().child(start)),
+                                    .children(self.setup_block(cx)),
                             ),
                     ),
+            )
+            .child(
+                v_flex()
+                    .w_full()
+                    .items_center()
+                    .border_t_1()
+                    .border_color(cx.theme().border)
+                    .child(
+                        v_flex()
+                            .w_full()
+                            .max_w(rems(40.))
+                            .px_4()
+                            .py_3()
+                            .child(self.start_actions(kind, ready, cx)),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    // Cancel leaves the screen the way Escape does. Start is the default commit, so it keeps its key.
+    fn start_actions(
+        &self,
+        kind: Option<ProjectKind>,
+        ready: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        // Start waits for the branch's setup script, so say so while it is missing.
+        let reason = (kind.is_some() && !self.setup_ready())
+            .then_some("Start is off until kagan reads this branch’s setup script.");
+        let cancel = control(
+            "start-cancel",
+            Facts::button("Cancel"),
+            Button::new("start-cancel-button")
+                .small()
+                .outline()
+                .label("Cancel")
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.picker.update(cx, |_, cx| cx.emit(Close));
+                })),
+        );
+        let start = control(
+            "start",
+            Facts {
+                disabled: !ready,
+                ..Facts::button("Start")
+            },
+            Button::new("start-button-control")
+                .primary()
+                .small()
+                .loading(self.start.starting)
+                .disabled(!ready)
+                .child(
+                    h_flex()
+                        .gap_2()
+                        .items_center()
+                        .child("Start")
+                        .child(div().opacity(0.7).type_caption(cx).child("Enter")),
+                )
+                .on_click(cx.listener(|this, _, window, cx| this.start(window, cx))),
+        );
+        v_flex()
+            .gap_4()
+            .children(reason.map(|text| note("start-reason", text, muted, cx)))
+            .child(
+                h_flex()
+                    .w_full()
+                    .justify_end()
+                    .gap_2()
+                    .child(cancel)
+                    .child(start),
             )
             .into_any_element()
     }

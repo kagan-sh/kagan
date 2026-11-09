@@ -306,8 +306,8 @@ fn the_program_form_keeps_a_readable_width_and_reads_top_down(cx: &mut TestAppCo
         cx.simulate_window_resize(window, size(px(width), px(720.)));
         cx.run_until_parked();
         let (list_x, list_y, list_width, _) = bounds(cx, window, "program-list").unwrap();
-        // The form is capped at 32rem, so it never stretches across a wide window.
-        assert!(list_width <= 32. * 16. + 1., "list {list_width} at {width}");
+        // The form is capped at 40rem, so it never stretches across a wide window.
+        assert!(list_width <= 40. * 16. + 1., "list {list_width} at {width}");
         assert!(
             list_x + list_width <= width + 0.5,
             "list leaves the window at {width}"

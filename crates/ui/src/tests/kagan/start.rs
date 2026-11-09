@@ -173,6 +173,20 @@ fn the_runs_in_sentence_says_where_each_choice_writes(cx: &mut TestAppContext) {
     );
 }
 
+#[gpui_kit::test]
+fn cancel_leaves_the_new_thread_screen(cx: &mut TestAppContext) {
+    let (kagan, window, data) = open(cx);
+    let (_repo, project) = committed_repo(cx, data.path());
+    click(cx, window, &format!("project-new-{}", project.id.0));
+    wait_until(cx, |cx| shows(cx, window, "start-cancel"));
+    click(cx, window, "start-cancel");
+    wait_until(cx, |cx| {
+        cx.update(|cx| screen_read::start_project(kagan.read(cx)))
+            .is_none()
+    });
+    assert!(!shows(cx, window, "start"));
+}
+
 /// Whether the element named `name` is checked, and whether it has focus.
 pub(in crate::tests) fn choice_checked(
     cx: &mut TestAppContext,
