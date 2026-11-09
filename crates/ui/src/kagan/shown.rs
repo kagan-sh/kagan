@@ -258,12 +258,8 @@ impl Kagan {
     fn ended_notice(id: &ThreadId, archived: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let line = ended_text(id, cx);
         let recovery = Workspace::global(cx).read(cx).recovery(id);
-        // A thread with no folder has nothing to run in, so it cannot offer a new thread there.
-        let reusable = !archived
-            && Workspace::global(cx)
-                .read(cx)
-                .thread(id)
-                .is_some_and(|thread| thread.read(cx).record().environment_id.is_some());
+        // Offered only where the new-thread screen can run in the folder, by the same test.
+        let reusable = !archived && crate::kagan::start::Reuse::of(id, cx).is_some();
         h_flex()
             .id("ended")
             .w_full()

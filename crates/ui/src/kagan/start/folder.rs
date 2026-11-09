@@ -14,7 +14,6 @@ use super::{BranchPick, Branches, Reuse, StartFolder, base_label};
 use crate::kagan::controls::{Selected, control, dispatch, note};
 use crate::kagan::{Kagan, RetryBranches, UseProjectFolder, UseWorktreeFolder};
 use crate::ui_registry::Facts;
-use kg_core::Workspace;
 use kg_domain::{BranchList, ProjectKind};
 use std::path::{Path, PathBuf};
 
@@ -135,17 +134,8 @@ impl Kagan {
 
     // The folder of the ended thread is the only choice, so one line says where the run writes.
     fn reuse_hint(reuse: &Reuse, cx: &App) -> AnyElement {
-        let workspace = Workspace::global(cx).read(cx);
-        let path = workspace
-            .environment(&reuse.environment)
-            .map(|environment| environment.read(cx).record().path.clone())
-            .unwrap_or_default();
-        let name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let text = format!("Runs in {name}. Changes land there.");
-        let tip = shown_path(&path);
+        let text = format!("Runs in {}. Changes land there.", reuse.name);
+        let tip = reuse.shown.clone();
         div()
             .id("reuse-hint")
             .ui_container()

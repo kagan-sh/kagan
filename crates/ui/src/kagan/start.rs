@@ -5,8 +5,8 @@ use gpui_kit::{
 };
 use kg_core::Workspace;
 use kg_domain::{
-    BranchList, EnvironmentId, EnvironmentOp, Op, OpResult, PinnedSetup, ProjectId, ProjectKind,
-    ThreadId, ThreadOp,
+    BranchList, EnvironmentId, EnvironmentOp, EnvironmentStatus, Op, OpResult, PinnedSetup,
+    ProjectId, ProjectKind, ThreadId, ThreadOp,
 };
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -70,8 +70,41 @@ fn setup_script(setup: &PinnedSetup) -> Option<(&str, bool)> {
 // A new thread that runs in the folder of an ended thread. Its folder is not chosen here.
 #[derive(Clone)]
 pub(super) struct Reuse {
+    project: ProjectId,
     thread: ThreadId,
     environment: EnvironmentId,
+    title: String,
+    name: String,
+    shown: String,
+}
+
+impl Reuse {
+    // The ended thread's folder, when core would run a new thread in it: the folder must exist,
+    // belong to the thread's project, and be ready.
+    pub(super) fn of(thread: &ThreadId, cx: &App) -> Option<Self> {
+        let workspace = Workspace::global(cx).read(cx);
+        let record = workspace.thread(thread)?.read(cx).record().clone();
+        let environment_id = record.environment_id.clone()?;
+        let environment = workspace.environment(&environment_id)?.read(cx).record();
+        if environment.project_id != record.project_id
+            || environment.status != EnvironmentStatus::Ready
+        {
+            return None;
+        }
+        let name = environment
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Some(Self {
+            project: record.project_id,
+            thread: thread.clone(),
+            environment: environment_id,
+            title: record.title,
+            name,
+            shown: folder::shown_path(&environment.path),
+        })
+    }
 }
 
 #[derive(Default)]
@@ -267,16 +300,9 @@ impl Kagan {
             .is_some_and(|failure| !script_changed(failure))
     }
 
-    pub(super) fn start_heading(&self, project_name: &str, cx: &App) -> String {
+    pub(super) fn start_heading(&self, project_name: &str) -> String {
         match &self.start.reuse {
-            Some(reuse) => {
-                let title = Workspace::global(cx)
-                    .read(cx)
-                    .thread(&reuse.thread)
-                    .map(|thread| thread.read(cx).record().title.clone())
-                    .unwrap_or_default();
-                format!("New thread beside “{title}”")
-            }
+            Some(reuse) => format!("New thread beside “{}”", reuse.title),
             None => format!("New thread in {project_name}"),
         }
     }
@@ -292,21 +318,12 @@ impl Kagan {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(record) = Workspace::global(cx)
-            .read(cx)
-            .thread(thread)
-            .map(|thread| thread.read(cx).record().clone())
-        else {
+        let Some(reuse) = Reuse::of(thread, cx) else {
             return;
         };
-        let Some(environment) = record.environment_id.clone() else {
-            return;
-        };
-        self.show_start(record.project_id.clone(), window, cx);
-        self.start.reuse = Some(Reuse {
-            thread: thread.clone(),
-            environment,
-        });
+        // The folder is the only choice here, so the branches are not read.
+        self.open_start(&reuse.project, window, cx);
+        self.start.reuse = Some(reuse);
         cx.notify();
     }
 }
